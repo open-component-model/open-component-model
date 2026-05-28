@@ -156,9 +156,33 @@ get_release_version() {
 
     if [[ -n "${OCM_VERSION}" ]]; then
         info "Using ${OCM_VERSION} as release"
+        # Disclaimer: This logic is added so it works with the new _single_ canonical release.
+        # This means that the `cli` prefix for the CLI release dropped in the new release version.
+        # Therefore, for any version install that is 8 or above we strip the TAG_PREFIX='cli' from
+        # the constructed download URL.
+        if ! version_below "${OCM_VERSION}" 8; then
+          TAG_PREFIX=''
+        fi
     else
         fatal "Unable to determine release version"
     fi
+}
+
+# Returns 0 (true) if a "v0.x" version has x strictly below THRESHOLD.
+# Accepts: cli/v0.5, v0.5.0, v0.5.0-rc.1, cli/v0.12.3 ...
+version_below() {
+    local version="$1" threshold="$2"
+
+    [[ "$version" == *0.* ]] || fatal "Not a v0.x version: ${version}"
+
+    # Strip everything up to and including the last "v0." -> "5.0-rc.1"
+    local rest="${version##*0.}"
+
+    # Grab only the leading digits -> "5"
+    [[ "$rest" =~ ^([0-9]+) ]] || fatal "Cannot parse minor from: ${version}"
+    local minor="${BASH_REMATCH[1]}"
+
+    (( minor < threshold ))
 }
 
 # Download file from URL
