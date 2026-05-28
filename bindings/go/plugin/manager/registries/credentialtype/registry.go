@@ -6,7 +6,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// compile-time assertion: Registry satisfies the credential type scheme provider interface.
 var _ credentials.CredentialTypeSchemeProvider = (*Registry)(nil)
 
 // Registry holds the credential type scheme used by the credential graph to deserialize
@@ -19,29 +18,26 @@ type Registry struct {
 	scheme *runtime.Scheme
 }
 
-// NewRegistry creates a new credential type registry with an empty scheme.
 func NewRegistry() *Registry {
 	return &Registry{
 		scheme: runtime.NewScheme(),
 	}
 }
 
-// GetCredentialTypeScheme implements credentials.CredentialTypeSchemeProvider.
-// The credential graph calls this to obtain the scheme used during ingestion.
+// GetCredentialTypeScheme - The credential graph calls this to obtain the scheme used during ingestion.
 func (r *Registry) GetCredentialTypeScheme() *runtime.Scheme {
 	return r.scheme
 }
 
 // Register calls fn with the registry's scheme, allowing a built-in binding to register
-// its credential types. Follows the same self-registration pattern used by all other
-// plugin type registries.
+// its credential types.
 func (r *Registry) Register(fn func(*runtime.Scheme)) {
 	fn(r.scheme)
 }
 
 // RegisterFromPlugin registers credential types declared in an external plugin's CapabilitySpec.
-// External plugin types are registered as *runtime.Raw (since their Go structs are not compiled
-// into the host process). The credential graph will resolve them as *runtime.Raw instead of
+// External plugin types are registered as *runtime.Raw.
+// The credential graph will resolve them as *runtime.Raw instead of
 // falling back to *DirectCredentials — consumers use scheme.Convert to get typed structs.
 func (r *Registry) RegisterFromPlugin(capSpec *credentialrepositoryv1.CapabilitySpec) {
 	for _, t := range capSpec.SupportedCredentialTypes {

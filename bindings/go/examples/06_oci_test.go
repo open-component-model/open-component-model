@@ -31,6 +31,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -349,8 +350,9 @@ func TestExample_PrivateOCIRegistry(t *testing.T) {
 	// 5. Verify the credential resolver can resolve credentials for this registry.
 	resolvedCreds, err := credResolver.Resolve(ctx, identity)
 	r.NoError(err)
-	r.Equal(username, resolvedCreds["username"])
-	r.Equal(password, resolvedCreds["password"])
+	ociCreds := resolvedCreds.(*v1.DirectCredentials)
+	r.Equal(username, ociCreds.Properties["username"])
+	r.Equal(password, ociCreds.Properties["password"])
 
 	// 6. Retrieve the component version to confirm authentication succeeded.
 	got, err := repo.GetComponentVersion(ctx, component, version)
