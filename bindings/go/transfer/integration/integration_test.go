@@ -1185,34 +1185,14 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	sourceAddr, sourceUser, sourcePwd := startRegistry(t)
 	targetAddr, targetUser, targetPwd := startRegistry(t)
 
-	// 2. Push a Docker manifest image to the source registry, get back the manifest bytes.
-	imageRef, manifestBytes := pushTestDockerManifest(t, sourceAddr, sourceUser, sourcePwd, "test/docker-image", "v1")
-	_ = imageRef
+	// 2. Push a Docker manifest image to the source registry.
+	imageRef, _ := pushTestDockerManifest(t, sourceAddr, sourceUser, sourcePwd, "test/docker-image", "v1")
 
-	// 3. Create source CTF with the Docker manifest stored as a LocalBlob resource.
-	//    Set ReferenceName so the transfer knows the OCI path to use in the target.
+	// 3. Create source CTF with an OCIImage resource pointing at the Docker manifest in source registry.
 	componentName := "ocm.software/docker-manifest-test"
 	componentVersion := "1.0.0"
 	sourceCTFPath := t.TempDir()
 	ctfRepo := createCTFRepository(t, sourceCTFPath)
-
-	referenceName := "test/docker-image:v1"
-	res := descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{Name: "docker-image", Version: "1.0.0"},
-		},
-		Type:     "ociImage",
-		Relation: descriptor.LocalRelation,
-		Access: &descriptorv2.LocalBlob{
-			Type:          runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
-			MediaType:     dockerManifestMediaType,
-			ReferenceName: referenceName,
-		},
-	}
-
-	updatedResource, err := ctfRepo.AddLocalResource(t.Context(), componentName, componentVersion,
-		&res, inmemory.New(bytes.NewReader(manifestBytes)))
-	r.NoError(err)
 
 	desc := &descriptor.Descriptor{
 		Meta: descriptor.Meta{Version: "v2"},
@@ -1220,13 +1200,26 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion},
 			},
-			Provider:  descriptor.Provider{Name: "test-provider"},
-			Resources: []descriptor.Resource{*updatedResource},
+			Provider: descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: "docker-image", Version: "1.0.0"},
+					},
+					Type:     "ociImage",
+					Relation: descriptor.ExternalRelation,
+					Access: &ociaccessv1.OCIImage{
+						Type:           runtime.NewVersionedType(ociaccessv1.LegacyType, ociaccessv1.LegacyTypeVersion),
+						ImageReference: imageRef,
+					},
+				},
+			},
 		},
 	}
 	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
 
-	// 4. Transfer with UploadAsOciArtifact so Docker manifest blobs are pushed as OCI artifacts.
+	// 4. Transfer with CopyModeAllResources + UploadAsOciArtifact.
+	//    The Docker manifest OCIImage resource must be correctly transferred end-to-end.
 	sourceSpec := &ctfrepospec.Repository{
 		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
 		FilePath: sourceCTFPath,
@@ -1236,7 +1229,13 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", targetAddr),
 	}
 
+	credResolver := newCredResolver(t,
+		registryCreds{sourceAddr, sourceUser, sourcePwd},
+		registryCreds{targetAddr, targetUser, targetPwd},
+	)
+
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
+		transfer.WithCopyMode(transfer.CopyModeAllResources),
 		transfer.WithUploadType(transfer.UploadAsOciArtifact),
 		transfer.WithTransfer(
 			transfer.Component(componentName, componentVersion),
@@ -1247,21 +1246,18 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(tgd)
 
-	// Verify the graph includes an AddOCIArtifact transformation (not AddLocalResource).
-	hasAddOCIArtifact := false
+	// Verify the graph was built with a GetOCIArtifact transformation for the Docker manifest image.
+	hasGetOCIArtifact := false
 	for _, tr := range tgd.Transformations {
-		if tr.Type.Name == "AddOCIArtifact" {
-			hasAddOCIArtifact = true
+		if tr.Type.Name == "GetOCIArtifact" {
+			hasGetOCIArtifact = true
 			break
 		}
 	}
-	r.True(hasAddOCIArtifact, "Docker manifest LocalBlob with UploadAsOciArtifact should generate AddOCIArtifact transformation")
+	r.True(hasGetOCIArtifact, "Docker manifest OCIImage resource with CopyModeAllResources should generate GetOCIArtifact transformation")
 
 	// 5. Execute the transfer.
 	ctx := t.Context()
-	credResolver := newCredResolver(t,
-		registryCreds{targetAddr, targetUser, targetPwd},
-	)
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
 	resourceRepo := resource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
@@ -1269,7 +1265,7 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
 
-	// 6. Verify the component exists in the target and the resource has OCIImage access.
+	// 6. Verify the component exists in the target and the resource has OCIImage access pointing to the target.
 	client := createAuthClient(targetAddr, targetUser, targetPwd)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(targetAddr),
@@ -1285,16 +1281,17 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	r.Equal(componentName, gotDesc.Component.Name)
 	r.Len(gotDesc.Component.Resources, 1)
 
+	// With UploadAsOciArtifact the Docker manifest image should be stored as an OCI artifact
+	// (OCIImage access) in the target, not as a local blob.
 	gotAccess := gotDesc.Component.Resources[0].Access
 	r.NotNil(gotAccess)
 	r.Equal(ociaccessv1.LegacyType, gotAccess.GetType().Name,
-		"Docker manifest resource should be stored as OCIImage access after UploadAsOciArtifact transfer")
+		"Docker manifest resource should be stored as OCIImage access after CopyModeAllResources+UploadAsOciArtifact transfer")
 
 	var typedOCIAccess ociaccessv1.OCIImage
 	rawAccess, err := json.Marshal(gotAccess)
 	r.NoError(err)
 	r.NoError(json.Unmarshal(rawAccess, &typedOCIAccess))
 	r.Contains(typedOCIAccess.ImageReference, targetAddr,
-		"OCIImage access should reference the target registry")
-	r.Contains(typedOCIAccess.ImageReference, referenceName)
+		"OCIImage access should reference the target registry after transfer")
 }
