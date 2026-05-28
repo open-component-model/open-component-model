@@ -47,7 +47,7 @@
     "globals": "17.6.0",
     "hugo-extended": "0.161.1",
     "jiti": "2.7.0",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "4.1.1",
     "sass-embedded": "1.100.0",
     "shx": "0.4.0",
     "typescript": "6.0.3",
