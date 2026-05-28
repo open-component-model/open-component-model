@@ -70,7 +70,9 @@ type Config struct {
 	// +ocm:jsonschema-gen:enum=Never
 	Policy Policy `json:"policy,omitempty"`
 
-	// Repositories overrides Policy for specific repositories.
+	// Repositories overrides Policy for specific repositories. Entries are
+	// evaluated top-down and the first one whose repository matches the target
+	// wins.
 	Repositories []*RepositoryPolicy `json:"repositories,omitempty"`
 }
 

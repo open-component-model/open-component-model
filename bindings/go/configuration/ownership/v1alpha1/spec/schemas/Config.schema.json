@@ -20,7 +20,7 @@
     },
     "repositories": {
       "type": "array",
-      "description": "Repositories overrides Policy for specific repositories.",
+      "description": "Repositories overrides Policy for specific repositories. Entries are\nevaluated top-down and the first one whose repository matches the target\nwins.",
       "items": {
         "anyOf": [
           {

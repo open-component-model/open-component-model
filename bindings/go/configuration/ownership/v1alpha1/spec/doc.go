@@ -7,6 +7,9 @@
 // feature is off by default: when no configuration is supplied, the effective
 // policy is "Never".
 //
+// Repository entries are evaluated top-down and the first match wins, so the
+// most specific entries must be listed first.
+//
 // For example:
 //
 //	type: ownership.config.ocm.software/v1alpha1
@@ -14,10 +17,10 @@
 //	repositories:
 //	- repository:
 //	    type: OCIRepository/v1
-//	  policy: Never
-//	- repository:
-//	    type: OCIRepository/v1
 //	    baseUrl: ghcr.io
 //	    subPath: my-org/components
 //	  policy: AddIfSupported
+//	- repository:
+//	    type: OCIRepository/v1
+//	  policy: Never
 package spec
