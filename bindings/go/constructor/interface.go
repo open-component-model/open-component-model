@@ -126,7 +126,10 @@ type TargetRepository interface {
 	// Thus it is mandatory to add a component version to permanently persist a resource added with AddLocalResource.
 	// The Resource given is identified later on by its own Identity and a collection of a set of reserved identity values
 	// that can have a special meaning.
-	AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error)
+	// Optional [repository.AddLocalResourceOption]s carry construction-time
+	// directives (e.g. ADR-0016 ownership-referrer creation) that are not part of
+	// the descriptor.
+	AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob, opts ...repository.AddLocalResourceOption) (newRes *descriptor.Resource, err error)
 
 	// AddLocalSource adds a local source to the repository.
 	// The source must be referenced in the component descriptor.
@@ -167,6 +170,18 @@ type ResourceRepository interface {
 	ResourceConsumerIdentityProvider
 	// DownloadResource downloads a resource from the repository.
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (content blob.ReadOnlyBlob, err error)
+}
+
+// OwnershipReferrerAwareRepository is an optional capability of a [ResourceRepository]:
+// attaching an asset-to-owner ownership referrer (ADR 0016) that links a
+// relation=local resource kept by reference back to the owning component version
+// in the registry that hosts it. It is intentionally kept off [ResourceRepository]
+// so that repositories which cannot host referrers — notably the out-of-process
+// plugin bridge — stay valid resource repositories without implementing anything.
+// The constructor type-asserts a [ResourceRepository] for it and treats its
+// absence as "ownership referrers are not supported here".
+type OwnershipReferrerAwareRepository interface {
+	AddOwnershipReferrer(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error
 }
 
 type ResourceRepositoryProvider interface {

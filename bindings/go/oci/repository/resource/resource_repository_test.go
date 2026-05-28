@@ -42,6 +42,35 @@ func TestProcessResourceDigest_RawAccessType(t *testing.T) {
 		"ProcessResourceDigest must convert *runtime.Raw access to typed before passing to the inner repository")
 }
 
+func TestAddOwnershipReferrer_RawAccessType(t *testing.T) {
+	// As with ProcessResourceDigest, a resource coming from a component descriptor
+	// carries *runtime.Raw access. AddOwnershipReferrer must convert it to the typed
+	// spec before handing off to the inner repository's AddOwnershipReferrer, whose
+	// type-switch only matches the typed access.
+	raw := &runtime.Raw{}
+	require.NoError(t, ociaccess.Scheme.Convert(&v1.OCIImage{
+		Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+		ImageReference: "nonexistent.invalid/test:v1.0.0",
+	}, raw))
+
+	res := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "test", Version: "1.0.0"},
+		},
+		Type:   "ociArtifact",
+		Access: raw,
+	}
+
+	repo := NewResourceRepository(nil)
+	err := repo.AddOwnershipReferrer(t.Context(), "ocm.software/test", "1.0.0", res, nil)
+
+	// Conversion succeeded only if execution reached the inner AddOwnershipReferrer
+	// and failed resolving the unreachable host. Assert that positively so a reworded
+	// conversion error can't make this pass for the wrong reason.
+	require.ErrorContains(t, err, "nonexistent.invalid",
+		"AddOwnershipReferrer must convert *runtime.Raw access to typed and reach the inner repository")
+}
+
 func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 	r := require.New(t)
 

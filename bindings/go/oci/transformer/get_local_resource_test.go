@@ -40,7 +40,7 @@ func (m *mockRepositoryForGet) ListComponentVersions(ctx context.Context, compon
 	return nil, nil
 }
 
-func (m *mockRepositoryForGet) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+func (m *mockRepositoryForGet) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob, opts ...repository.AddLocalResourceOption) (*descriptor.Resource, error) {
 	return nil, nil
 }
 

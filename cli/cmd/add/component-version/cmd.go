@@ -150,6 +150,28 @@ Example:
             type: ociArtifact
             imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
 
+Ownership Referrers (ADR 0016):
+
+A resource can opt into an asset-to-owner ownership referrer so consumers can trace the
+artifact back to the component version that owns it. Set "options.ownershipPolicy" to
+"Always" on the resource (the default is "Never"):
+
+  resources:
+    - name: my-image
+      type: ociImage
+      version: ${COMPONENT_VERSION}
+      options:
+        ownershipPolicy: Always
+      access:
+        type: ociArtifact
+        imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
+
+When enabled, a referrer manifest (artifact type "application/vnd.ocm.software.ownership.v1+json")
+is attached to the resource's manifest: pushed into the component repository for by-value
+resources, or next to the image in its hosting registry for by-reference resources (the image
+bytes are left unchanged, so existing signatures stay valid). The policy is a construction-time
+directive and is not persisted to the component descriptor.
+
 Repository Reference Format:
 	[type::]{repository}
 
@@ -463,6 +485,14 @@ func (prov *constructorProvider) GetResourceRepository(ctx context.Context, reso
 	return &constructorPlugin{plugin: plugin}, nil
 }
 
+var (
+	_ constructor.ResourceRepository               = (*constructorPlugin)(nil)
+	_ constructor.OwnershipReferrerAwareRepository = (*constructorPlugin)(nil)
+)
+
+// constructorPlugin adapts a resolved [resource.Repository] plugin to the
+// constructor's [constructor.ResourceRepository] interface, including the optional
+// asset-to-owner ownership-referrer capability (ADR 0016) when the plugin supports it.
 type constructorPlugin struct {
 	plugin resource.Repository
 }
@@ -473,6 +503,21 @@ func (c *constructorPlugin) GetResourceCredentialConsumerIdentity(ctx context.Co
 
 func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (content blob.ReadOnlyBlob, err error) {
 	return c.plugin.DownloadResource(ctx, res, credentials)
+}
+
+// AddOwnershipReferrer attaches an asset-to-owner ownership referrer (ADR 0016) by
+// delegating to the resolved plugin when it implements
+// [repository.OwnershipReferrerRepository] (the in-process OCI resource repository
+// does). When it does not (e.g. the out-of-process plugin bridge), it warns and skips
+// rather than silently no-opping, so an opted-in resource on a repository that cannot
+// host referrers degrades visibly.
+func (c *constructorPlugin) AddOwnershipReferrer(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error {
+	attacher, ok := c.plugin.(repository.OwnershipReferrerRepository)
+	if !ok {
+		slog.WarnContext(ctx, "resource repository does not support ownership referrers, skipping", "resource", res.ToIdentity())
+		return nil
+	}
+	return attacher.AddOwnershipReferrer(ctx, component, version, res, credentials)
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {

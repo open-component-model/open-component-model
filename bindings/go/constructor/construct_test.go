@@ -32,7 +32,8 @@ type mockTargetRepository struct {
 	mu                     sync.Mutex
 	components             map[string]*descriptor.Descriptor
 	addedLocalResources    []*descriptor.Resource
-	addedLocalResourceData map[string]blob.ReadOnlyBlob // resource identity -> blob data
+	addedLocalResourceData map[string]blob.ReadOnlyBlob                  // resource identity -> blob data
+	addedLocalResourceOpts map[string]repository.AddLocalResourceOptions // resource identity -> applied add options
 	addedSources           []*descriptor.Source
 	addedVersions          []*descriptor.Descriptor
 }
@@ -41,6 +42,7 @@ func newMockTargetRepository() *mockTargetRepository {
 	return &mockTargetRepository{
 		components:             make(map[string]*descriptor.Descriptor),
 		addedLocalResourceData: make(map[string]blob.ReadOnlyBlob),
+		addedLocalResourceOpts: make(map[string]repository.AddLocalResourceOptions),
 	}
 }
 
@@ -58,12 +60,15 @@ func (m *mockTargetRepository) GetTargetRepository(ctx context.Context, componen
 	return m, nil
 }
 
-func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob, opts ...repository.AddLocalResourceOption) (*descriptor.Resource, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.addedLocalResources = append(m.addedLocalResources, resource)
 	// Store the blob data so we can verify it later
 	m.addedLocalResourceData[resource.ToIdentity().String()] = data
+	// Capture the applied add options so tests can assert construction-time
+	// directives (e.g. ownership-referrer opt-in) reached the repository.
+	m.addedLocalResourceOpts[resource.ToIdentity().String()] = repository.ApplyAddLocalResourceOptions(opts...)
 	return resource, nil
 }
 
@@ -115,8 +120,8 @@ func (t *targetRepoWrapper) AddComponentVersion(ctx context.Context, desc *descr
 	return t.repo.AddComponentVersion(ctx, desc)
 }
 
-func (t *targetRepoWrapper) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	return t.repo.AddLocalResource(ctx, component, version, resource, data)
+func (t *targetRepoWrapper) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob, opts ...repository.AddLocalResourceOption) (*descriptor.Resource, error) {
+	return t.repo.AddLocalResource(ctx, component, version, resource, data, opts...)
 }
 
 func (t *targetRepoWrapper) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {

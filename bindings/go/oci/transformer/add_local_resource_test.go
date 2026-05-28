@@ -29,7 +29,7 @@ type mockRepository struct {
 	version       string
 }
 
-func (m *mockRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+func (m *mockRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob, opts ...repository.AddLocalResourceOption) (*descriptor.Resource, error) {
 	m.component = component
 	m.version = version
 	m.addedResource = res

@@ -214,13 +214,13 @@ func (f *FallbackRepository) ListComponentVersions(ctx context.Context, componen
 // and only added for backwards compatibility.
 // Use the path matcher resolver (ocm.software/open-component-model/bindings/go/repository/component/pathmatcher)
 // with "resolvers.ocm.software/v1alpha1" configuration instead.
-func (f *FallbackRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+func (f *FallbackRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob, opts ...repository.AddLocalResourceOption) (*descriptor.Resource, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
 		if err != nil {
 			return nil, fmt.Errorf("getting repository for component %s failed: %w", component, err)
 		}
-		return repo.AddLocalResource(ctx, component, version, res, content)
+		return repo.AddLocalResource(ctx, component, version, res, content, opts...)
 	}
 	return nil, fmt.Errorf("no repository found for component %s to add local resource", component)
 }

@@ -61,7 +61,13 @@ func (c *componentVersionRepositoryWrapper) ListComponentVersions(ctx context.Co
 	return c.externalPlugin.ListComponentVersions(ctx, request, c.credentials)
 }
 
-func (c *componentVersionRepositoryWrapper) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (_ *descriptor.Resource, err error) {
+// AddLocalResource forwards the add to the out-of-process plugin. Ownership
+// referrers (ADR 0016) are an in-process OCI capability, so any
+// [repository.AddLocalResourceOption] such as ownership-referrer creation is
+// intentionally dropped here: the plugin bridge cannot host referrers, mirroring
+// how the by-reference path treats plugin-backed repositories as lacking the
+// OwnershipReferrerAttacher capability.
+func (c *componentVersionRepositoryWrapper) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob, _ ...repository.AddLocalResourceOption) (_ *descriptor.Resource, err error) {
 	resources, err := descriptor.ConvertToV2Resources(c.scheme, []descriptor.Resource{*res})
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert resource: %w", err)

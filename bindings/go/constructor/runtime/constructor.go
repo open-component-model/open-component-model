@@ -56,6 +56,19 @@ const (
 	ExternalRelation ResourceRelation = "external"
 )
 
+// OwnershipPolicy controls whether an asset-to-owner ownership referrer (ADR
+// 0016) is created for a resource during construction (ocm add/create). It is a
+// construction-time directive: transfer never consults it, it only copies an
+// ownership referrer that already exists on the source.
+type OwnershipPolicy int
+
+const (
+	// OwnershipPolicyNever is the default: no ownership referrer is created.
+	OwnershipPolicyNever OwnershipPolicy = iota
+	// OwnershipPolicyAlways creates an ownership referrer for the resource.
+	OwnershipPolicyAlways
+)
+
 // A Resource is a delivery artifact, intended for deployment into a runtime environment, or describing additional content,
 // relevant for a deployment mechanism.
 // For example, installation procedures or meta-model descriptions controlling orchestration and/or deployment mechanisms.
@@ -72,11 +85,24 @@ type Resource struct {
 	// Relation describes the relation of the resource to the component.
 	// Can be a local or external resource.
 	Relation ResourceRelation `json:"-"`
+	// Options bundles optional, construction-time directives for the resource.
+	Options ResourceOptions `json:"-"`
 	// AccessOrInput defines the access or input information of the resource.
 	// In a component constructor, there is only one access or input information.
 	AccessOrInput `json:"-"`
 
 	ConstructorAttributes `json:"-"`
+}
+
+// ResourceOptions bundles optional, construction-time directives for a resource.
+// These options influence how the resource is handled during construction
+// (ocm add/create) but are not themselves persisted to the component descriptor.
+// +k8s:deepcopy-gen=true
+type ResourceOptions struct {
+	// OwnershipPolicy controls whether an asset-to-owner ownership referrer
+	// (ADR 0016) is created for this resource during construction. Defaults to
+	// OwnershipPolicyNever when unset.
+	OwnershipPolicy OwnershipPolicy `json:"-"`
 }
 
 // ConstructorAttributes defines additional attributes used during component construction.

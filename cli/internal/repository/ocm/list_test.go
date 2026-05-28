@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -58,7 +59,7 @@ func (m *mockComponentVersionRepository) GetComponentVersion(ctx context.Context
 	return desc, nil
 }
 
-func (m *mockComponentVersionRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+func (m *mockComponentVersionRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob, opts ...repository.AddLocalResourceOption) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 

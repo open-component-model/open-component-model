@@ -22,6 +22,7 @@ type OCIResourceStream struct {
 	CopyOpts   oras.CopyGraphOptions
 	TempDir    string
 	Tags       []string
+	Referrers  []ocispec.Descriptor
 }
 
 var _ ResourceStream = (*OCIResourceStream)(nil)
@@ -35,5 +36,6 @@ func (s *OCIResourceStream) Materialize(ctx context.Context) (blob.ReadOnlyBlob,
 		CopyGraphOptions: s.CopyOpts,
 		Tags:             s.Tags,
 		TempDir:          s.TempDir,
+		Referrers:        s.Referrers,
 	})
 }

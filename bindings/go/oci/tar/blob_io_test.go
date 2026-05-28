@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"testing"
 
@@ -15,6 +16,7 @@ import (
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/memory"
+	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 )
@@ -256,7 +258,7 @@ func TestCopyOCILayoutWithIndex_ReferrersFunc(t *testing.T) {
 	dst := memory.New()
 	returnedTop, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutBytes}, CopyOCILayoutWithIndexOptions{
 		MutateParentFunc: func(d *ociImageSpecV1.Descriptor) error { return nil },
-		ReferrersFunc:    []ReferrersFunc{referrerFn},
+		Referrer:         ReferrerSource{CreateFunc: referrerFn},
 	})
 	require.NoError(t, err)
 
@@ -289,6 +291,94 @@ func TestCopyOCILayoutWithIndex_NilReferrersFunc(t *testing.T) {
 	predecessors, err := dst.Predecessors(t.Context(), returnedTop)
 	require.NoError(t, err)
 	assert.Empty(t, predecessors)
+}
+
+// buildLayoutWithSourceReferrer produces an OCI layout (one layer + manifest,
+// tagged) that also carries a referrer manifest of artifactType in its index —
+// i.e. what an incoming layout looks like on transfer once the source referrer
+// has been pulled into it.
+func buildLayoutWithSourceReferrer(t *testing.T, artifactType string) []byte {
+	t.Helper()
+	r := require.New(t)
+	ctx := t.Context()
+
+	var buf bytes.Buffer
+	w, err := NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	r.NoError(err)
+
+	layerData := []byte("layer content")
+	layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerData)
+	r.NoError(w.Push(ctx, layer, bytes.NewReader(layerData)))
+
+	main, err := oras.PackManifest(ctx, w, oras.PackManifestVersion1_1, "application/artifact", oras.PackManifestOptions{
+		Layers: []ociImageSpecV1.Descriptor{layer},
+	})
+	r.NoError(err)
+
+	empty := ociImageSpecV1.DescriptorEmptyJSON
+	if err := w.Push(ctx, empty, bytes.NewReader(empty.Data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		r.NoError(err)
+	}
+	refBody, err := json.Marshal(ociImageSpecV1.Manifest{
+		Versioned:    specs.Versioned{SchemaVersion: 2},
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: artifactType,
+		Config:       empty,
+		Layers:       []ociImageSpecV1.Descriptor{empty},
+		Subject:      &main,
+	})
+	r.NoError(err)
+	refDesc := ociImageSpecV1.Descriptor{
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: artifactType,
+		Digest:       digest.FromBytes(refBody),
+		Size:         int64(len(refBody)),
+	}
+	r.NoError(w.Push(ctx, refDesc, bytes.NewReader(refBody)))
+
+	r.NoError(w.Tag(ctx, main, "latest"))
+	r.NoError(w.Close())
+	return buf.Bytes()
+}
+
+// TestCopyOCILayoutWithIndex_SuppressesCreationWhenSourceCarriesReferrer pins the
+// mutual exclusion between creating and copying referrers of the same type: when
+// the incoming layout already carries a referrer of the source's ArtifactType
+// (the transfer case), Create must not run, so the copied referrer is the only one
+// and no near-duplicate is created. When the layout carries no such referrer (the
+// fresh-add case), Create must run.
+func TestCopyOCILayoutWithIndex_SuppressesCreationWhenSourceCarriesReferrer(t *testing.T) {
+	const artifactType = "application/test.referrer.v1+json"
+
+	newOpts := func(called *bool) CopyOCILayoutWithIndexOptions {
+		return CopyOCILayoutWithIndexOptions{
+			MutateParentFunc: func(*ociImageSpecV1.Descriptor) error { return nil },
+			Referrer: ReferrerSource{
+				ArtifactType: artifactType,
+				CreateFunc: func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error) {
+					*called = true
+					return nil, nil
+				},
+			},
+		}
+	}
+
+	t.Run("suppressed when source already carries a referrer of that type", func(t *testing.T) {
+		var called bool
+		_, err := CopyOCILayoutWithIndex(t.Context(), memory.New(),
+			&testReadOnlyBlob{data: buildLayoutWithSourceReferrer(t, artifactType)}, newOpts(&called))
+		require.NoError(t, err)
+		assert.False(t, called, "creation must be suppressed when the source layout already carries the referrer")
+	})
+
+	t.Run("invoked when source carries no referrer of that type", func(t *testing.T) {
+		var called bool
+		layoutBytes, _, _ := buildSingleLayerOCILayout(t)
+		_, err := CopyOCILayoutWithIndex(t.Context(), memory.New(),
+			&testReadOnlyBlob{data: layoutBytes}, newOpts(&called))
+		require.NoError(t, err)
+		assert.True(t, called, "creation must run when there is nothing to copy")
+	})
 }
 
 func TestCopyOCILayoutWithIndex_ErrorCases(t *testing.T) {

@@ -81,6 +81,27 @@ func ConvertToV1ElementMeta(meta ElementMeta) v1.ElementMeta {
 
 // Resource conversion
 
+// ConvertFromV1ResourceOptions maps the optional v1 resource options block to
+// the runtime resource options, defaulting to the zero value
+// (OwnershipPolicyNever) when no options block is present.
+func ConvertFromV1ResourceOptions(opts *v1.ResourceOptions) ResourceOptions {
+	if opts != nil && opts.OwnershipPolicy == v1.OwnershipPolicyAlways {
+		return ResourceOptions{OwnershipPolicy: OwnershipPolicyAlways}
+	}
+	return ResourceOptions{}
+}
+
+// ConvertToV1ResourceOptions builds the optional v1 resource options block from
+// the runtime resource options. The zero value (OwnershipPolicyNever) yields nil
+// so the options block is omitted from the spec rather than emitting an empty
+// object on every resource.
+func ConvertToV1ResourceOptions(o ResourceOptions) *v1.ResourceOptions {
+	if o.OwnershipPolicy == OwnershipPolicyAlways {
+		return &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicyAlways}
+	}
+	return nil
+}
+
 // ConvertFromV1Resource converts a v1 Resource to runtime Resource.
 // Returns an empty Resource if the input is nil.
 func ConvertFromV1Resource(resource *v1.Resource) Resource {
@@ -92,6 +113,7 @@ func ConvertFromV1Resource(resource *v1.Resource) Resource {
 		ElementMeta: ConvertFromV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    ResourceRelation(resource.Relation),
+		Options:     ConvertFromV1ResourceOptions(resource.Options),
 		ConstructorAttributes: ConstructorAttributes{
 			CopyPolicy: CopyPolicy(resource.CopyPolicy),
 		},
@@ -128,6 +150,7 @@ func ConvertToV1Resource(resource *Resource) (*v1.Resource, error) {
 		ElementMeta: ConvertToV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    v1.ResourceRelation(resource.Relation),
+		Options:     ConvertToV1ResourceOptions(resource.Options),
 		ConstructorAttributes: v1.ConstructorAttributes{
 			CopyPolicy: v1.CopyPolicy(resource.CopyPolicy),
 		},
@@ -305,6 +328,7 @@ func ConvertToRuntimeConstructorResource(resource v1.Resource) Resource {
 		ElementMeta: ConvertFromV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    ResourceRelation(resource.Relation),
+		Options:     ConvertFromV1ResourceOptions(resource.Options),
 		ConstructorAttributes: ConstructorAttributes{
 			CopyPolicy: CopyPolicy(resource.CopyPolicy),
 		},

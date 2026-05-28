@@ -465,7 +465,7 @@ func (m MockRepository) ListComponentVersions(ctx context.Context, component str
 	panic("implement me")
 }
 
-func (m MockRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+func (m MockRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob, opts ...repository.AddLocalResourceOption) (*descriptor.Resource, error) {
 	// TODO implement me
 	panic("implement me")
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"runtime"
 	"sync"
 
@@ -430,6 +431,15 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 					}
 				}
 			}
+
+			// A resource kept by reference still belongs to this component version;
+			// attach an asset-to-owner ownership referrer (ADR 0016) in the hosting
+			// registry. attachOwnershipReferrer decides whether the resource opted in
+			// (OwnershipPolicyAlways) and whether the repository can host one, so this
+			// call is unconditional.
+			if err = c.attachOwnershipReferrer(ctx, resource, res, component, version); err != nil {
+				return nil, err
+			}
 		}
 	default:
 		return nil, fmt.Errorf("resource %q has no access type and no input method", resource.ToIdentity())
@@ -470,6 +480,64 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 		return nil, fmt.Errorf("error downloading resource: %w", err)
 	}
 	return addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, data)
+}
+
+// attachOwnershipReferrer attaches an asset-to-owner ownership referrer (ADR
+// 0016) for a relation=local resource that is kept by reference. It is a no-op
+// when the resource does not opt in via OwnershipPolicyAlways, when no resource
+// repository provider is configured, or when the resolved repository does not
+// implement the optional [OwnershipReferrerAwareRepository] capability (e.g. the
+// out-of-process plugin bridge, which cannot host referrers).
+func (c *DefaultConstructor) attachOwnershipReferrer(ctx context.Context, resource *constructor.Resource, res *descriptor.Resource, component, version string) error {
+	logger := log.Base().With("component", component, "version", version, "resource", resource.ToIdentity())
+
+	// Only resources that opt in via OwnershipPolicyAlways get an ownership
+	// referrer. The OCI binding's AddOwnershipReferrer is authoritative about
+	// actually building one (mirroring the by-value configureOwnershipReferrer),
+	// but gating here too keeps non-opted-in resources — including by-reference
+	// accesses that are not OCI images — out of the OCI-specific repository and
+	// credential resolution below.
+	if resource.Options.OwnershipPolicy != constructor.OwnershipPolicyAlways {
+		logger.Debug("resource does not opt into ownership referrers, skipping")
+		return nil
+	}
+
+	if c.opts.ResourceRepositoryProvider == nil {
+		logger.Debug("no resource repository provider configured, skipping ownership referrer")
+		return nil
+	}
+
+	repo, err := c.opts.GetResourceRepository(ctx, resource)
+	if err != nil {
+		return fmt.Errorf("error getting resource repository for ownership referrer of %q: %w", resource.ToIdentity(), err)
+	}
+
+	// Attaching an ownership referrer is an optional capability: a repository that
+	// cannot host one (e.g. the out-of-process plugin bridge) does not implement
+	// [OwnershipReferrerAttacher], and the attach is skipped for it.
+	attacher, ok := repo.(OwnershipReferrerAwareRepository)
+	if !ok {
+		logger.Warn("resource repository does not support ownership referrers, skipping.", "resource", resource.ToIdentity(), "type", reflect.TypeOf(repo))
+		return nil
+	}
+
+	// best effort to resolve credentials for the hosting registry; if no
+	// identity is resolved, attachment proceeds without credentials.
+	var creds ocmruntime.Typed
+	if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err != nil {
+		// Not just "no identity": a transient or config error lands here too, so
+		// log it rather than dropping it silently — otherwise it resurfaces later
+		// as a confusing auth failure with no breadcrumb.
+		logger.Debug("could not resolve credential consumer identity for ownership referrer; proceeding without credentials", "error", err)
+	} else if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
+		return fmt.Errorf("error resolving credentials for ownership referrer of %q: %w", resource.ToIdentity(), err)
+	}
+
+	if err := attacher.AddOwnershipReferrer(ctx, component, version, res, creds); err != nil {
+		return fmt.Errorf("error attaching ownership referrer for resource %q: %w", resource.ToIdentity(), err)
+	}
+	logger.Debug("ownership referrer attached")
+	return nil
 }
 
 func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo TargetRepository, src *constructor.Source, component, version string) (*descriptor.Source, error) {
@@ -709,7 +777,14 @@ func addColocatedResourceLocalBlob(
 	descResource := constructor.ConvertToDescriptorResource(resource)
 	descResource.Access = localBlob
 
-	uploaded, err := repo.AddLocalResource(ctx, component, version, descResource, data)
+	// The ownership-referrer opt-in is a construction-time directive carried on the
+	// runtime resource options, not on the descriptor; pass it explicitly so the
+	// repository can create an ADR-0016 referrer for an opted-in by-value resource.
+	var opts []repository.AddLocalResourceOption
+	if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
+		opts = append(opts, repository.WithOwnershipReferrerCreation())
+	}
+	uploaded, err := repo.AddLocalResource(ctx, component, version, descResource, data, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error adding local resource %q based on input type %q as local resource to component %q : %w", resource.ToIdentity(), resource.Input.GetType(), component, err)
 	}

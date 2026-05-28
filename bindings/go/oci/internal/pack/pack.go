@@ -49,11 +49,12 @@ type Options struct {
 	// Set policy.GlobalAccessPolicyAuto to auto-detect based on whether the storage backend is globally reachable.
 	GlobalAccessPolicy policy.GlobalAccessPolicy
 
-	// Referrers is a list of callbacks that yield extra descriptors and bytes
-	// to be copied alongside the artifact root in the same oras.CopyGraph
-	// traversal — e.g. OCI referrer manifests, which CopyGraph does not follow
-	// via the subject field by default.
-	Referrers []tar.ReferrersFunc
+	// Referrer describes the referrer to attach to a packed OCI-layout artifact.
+	// An existing referrer of its ArtifactType in the incoming layout is copied
+	// through; only when none is present is a fresh one created (e.g. an ADR 0016
+	// ownership referrer — copied on transfer, created on add). Only applies to the
+	// OCI-layout path; ignored for single-layer blobs. The zero value attaches nothing.
+	Referrer tar.ReferrerSource
 }
 
 // ArtifactBlob packs a [ociblob.ArtifactBlob] into an OCI Storage
@@ -119,7 +120,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
 			return identity.Adopt(idx, b.Artifact)
 		},
-		ReferrersFunc: opts.Referrers,
+		Referrer: opts.Referrer,
 	})
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
