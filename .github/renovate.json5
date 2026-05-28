@@ -180,7 +180,7 @@
         'ocm.software/open-component-model/**',
       ],
       matchCurrentValue: '/^v0\\.0\\.0-/',
-      allowedVersions: '/^v0\\.0\\.0-/',
+      allowedVersions: '/^v0\\.0\\./',
     },
   ],
   customDatasources: {
