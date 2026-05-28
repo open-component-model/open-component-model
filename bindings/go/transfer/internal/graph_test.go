@@ -219,10 +219,10 @@ func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsOciArtifact)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.GetOCIArtifactV1alpha1, tgd.Transformations[0].Type)
-	addOCIType := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
-	assert.Equal(t, addOCIType, tgd.Transformations[1].Type)
+	assert.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferOCIArtifactV1alpha1, tgd.Transformations[0].Type)
+	assert.Contains(t, tgd.Transformations[0].ID, "Transfer")
+	assert.Nil(t, findCleanupTransformation(tgd), "streaming OCI path should produce no FileCleanup node")
 }
 
 func TestBuildGraphDefinition_HelmResource(t *testing.T) {
@@ -536,6 +536,22 @@ func TestBuildGraphDefinition_CleanupReferencesAddSpec_OCIArtifact(t *testing.T)
 	assert.Contains(t, exprs[0], "Add")
 	assert.Contains(t, exprs[0], ".spec.file")
 	assert.NotContains(t, exprs[0], ".output.")
+}
+
+func TestBuildGraphDefinition_NoCleanupForStreamingOCIArtifact(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsOciArtifact)
+	require.NoError(t, err)
+
+	// TransferOCIArtifact streams blobs directly — no temp file is ever created.
+	cleanup := findCleanupTransformation(tgd)
+	assert.Nil(t, cleanup, "streaming OCI path should not produce a FileCleanup node")
 }
 
 func TestBuildGraphDefinition_CleanupReferencesConvertAndAddSpec_Helm(t *testing.T) {

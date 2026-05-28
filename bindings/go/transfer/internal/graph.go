@@ -296,6 +296,10 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
 			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
 		}
+		if uploadAsArtifact {
+			// Streaming path: TransferOCIArtifact has no spec.file — no temp file to clean up.
+			return nil, nil
+		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *helmv1.Helm:
 		convertResourceID := fmt.Sprintf("%sConvert%s", id, resourceID)
