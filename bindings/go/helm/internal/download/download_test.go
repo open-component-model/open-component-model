@@ -278,6 +278,67 @@ func TestNewReadOnlyChartFromRemote_BasicAuthAccessTokenFallback(t *testing.T) {
 	}
 }
 
+// TestNewReadOnlyChartFromRemote_HTTPRepoResolvesViaIndexYAML verifies that when
+// NewReadOnlyChartFromRemote receives an HTTP repo reference of the form
+// <repo>/<chartName>:<version> (the output of (*v1.Helm).ChartReference()), it
+// fetches index.yaml, resolves the canonical chart URL from the index, and
+// downloads the chart from that URL.
+//
+// Before the fix this test fails because Helm v4's DownloadTo GETs the
+// constructed URL directly without consulting index.yaml, returning 404.
+func TestNewReadOnlyChartFromRemote_HTTPRepoResolvesViaIndexYAML(t *testing.T) {
+	r := require.New(t)
+
+	workDir, err := os.Getwd()
+	r.NoError(err)
+	testDataDir := filepath.Join(workDir, "..", "..", "testdata")
+
+	// The server URL is not known until after httptest.NewServer returns, so we
+	// capture it via a pointer that is populated before any request arrives.
+	var srvURL string
+
+	mux := http.NewServeMux()
+
+	// /mychart/mychart-0.1.0.tgz — the canonical archive URL advertised in index.yaml
+	mux.HandleFunc("/mychart/mychart-0.1.0.tgz", func(w http.ResponseWriter, req *http.Request) {
+		http.ServeFile(w, req, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
+	})
+
+	// /index.yaml — dynamically built so the urls field contains the real server address
+	mux.HandleFunc("/index.yaml", func(w http.ResponseWriter, req *http.Request) {
+		index := "apiVersion: v1\n" +
+			"generated: \"2024-01-01T00:00:00.000Z\"\n" +
+			"entries:\n" +
+			"  mychart:\n" +
+			"  - name: mychart\n" +
+			"    version: 0.1.0\n" +
+			"    apiVersion: v2\n" +
+			"    urls:\n" +
+			"    - " + srvURL + "/mychart/mychart-0.1.0.tgz\n"
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write([]byte(index))
+	})
+
+	// Anything else (including the naïvely-constructed <repo>/mychart:0.1.0) → 404
+	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		http.NotFound(w, req)
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	srvURL = srv.URL
+
+	// This is exactly what (*v1.Helm).ChartReference() produces for an HTTP repo:
+	//   url.JoinPath(repoURL, chartName) + ":" + version
+	helmRepoRef := srv.URL + "/mychart:0.1.0"
+
+	chart, err := NewReadOnlyChartFromRemote(t.Context(), helmRepoRef, t.TempDir())
+	r.NoError(err)
+	r.NotNil(chart)
+	assert.Equal(t, "mychart", chart.Name)
+	assert.Equal(t, "0.1.0", chart.Version)
+}
+
 // newBasicAuthChartServer returns an httptest server that serves files from dir
 // only when the request carries matching HTTP Basic Auth credentials.
 func newBasicAuthChartServer(t *testing.T, dir, user, pass string) *httptest.Server {
