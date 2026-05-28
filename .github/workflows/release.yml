@@ -680,7 +680,7 @@ jobs:
           add-paths: |
             website/config/
           branch: website/version-release/auto
-          branch-suffix: timestamp
+          branch-suffix: ${{ needs.prepare.outputs.base_version }}
           delete-branch: true
           sign-commits: true
           body: |
