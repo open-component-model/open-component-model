@@ -54,13 +54,6 @@ func ConvertToGPGCredentials(creds runtime.Typed) (*GPGCredentials, error) {
 	return nil, fmt.Errorf("unsupported credential type %v", typed.GetType())
 }
 
-// FromDirectCredentials converts a DirectCredentials properties map into typed GPGCredentials.
-// This supports .ocmconfig files that use Credentials/v1 with GPG properties.
-// A nil map is safe and returns a GPGCredentials with only the type set.
-func FromDirectCredentials(properties map[string]string) *GPGCredentials {
-	return fromDirectCredentials(properties)
-}
-
 func fromDirectCredentials(properties map[string]string) *GPGCredentials {
 	return &GPGCredentials{
 		Type:              runtime.NewVersionedType(GPGCredentialsType, Version),
