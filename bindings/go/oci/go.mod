@@ -12,7 +12,7 @@ require (
 	github.com/veqryn/slog-context v0.9.0
 	golang.org/x/sync v0.20.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/configuration v0.0.13
+	ocm.software/open-component-model/bindings/go/configuration v0.0.14
 	ocm.software/open-component-model/bindings/go/credentials v0.0.12
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260521121644-2be2fc986501
@@ -35,5 +35,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 )
-
-replace ocm.software/open-component-model/bindings/go/configuration => github.com/piotrjanik/open-component-model/bindings/go/configuration v0.0.0-20260526184548-fa1423eb0d48

@@ -20,8 +20,6 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
-github.com/piotrjanik/open-component-model/bindings/go/configuration v0.0.0-20260526184548-fa1423eb0d48 h1:MDcuQPiVZbt5RHlBN0RYdK7MyNXYXeeogaIYFFK/QWE=
-github.com/piotrjanik/open-component-model/bindings/go/configuration v0.0.0-20260526184548-fa1423eb0d48/go.mod h1:UF5HzB5QbNap6oHx0/ul7FRPSMSl0dyobMV3vhYQGZc=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
@@ -51,6 +49,8 @@ gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 ocm.software/open-component-model/bindings/go/blob v0.0.13 h1:hLM+KUV9QbLVC5rQvCFwPiQLkjuNLjrtVdZc4A8mGZA=
 ocm.software/open-component-model/bindings/go/blob v0.0.13/go.mod h1:nJqz2QmNoODFNFGDtd4d577RQ+vvlLI1u9G2O1sRmNc=
+ocm.software/open-component-model/bindings/go/configuration v0.0.14 h1:+Rbgg9sy68Grf1xVmJwDQazhUd8kCxCYJrE+u8DlHUY=
+ocm.software/open-component-model/bindings/go/configuration v0.0.14/go.mod h1:UF5HzB5QbNap6oHx0/ul7FRPSMSl0dyobMV3vhYQGZc=
 ocm.software/open-component-model/bindings/go/credentials v0.0.12 h1:GMedcclw/Nu7G8EJREIdXmAk/78j9xAQAIlRpd8QQO4=
 ocm.software/open-component-model/bindings/go/credentials v0.0.12/go.mod h1:XH9GR0kG2p5iaqBAAxTE1rX0fBE86Q2hCD7QodWRTpc=
 ocm.software/open-component-model/bindings/go/ctf v0.4.0 h1:E2kDGJk/ZR2wMK6fk3yFr2Uv6AhfLdMmvdvQ7Y64/2s=
