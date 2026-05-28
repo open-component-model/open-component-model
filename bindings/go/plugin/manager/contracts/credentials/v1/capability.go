@@ -27,9 +27,6 @@ type CapabilitySpec struct {
 	//  to credentials specifically.
 	SupportedCredentialRepositorySpecTypes []types.Type `json:"supportedCredentialRepositorySpecTypes"`
 	// SupportedCredentialTypes declares the typed consumer credential structs this plugin
-	// can return from Resolve. The PluginManager registers these into the CredentialTypeRegistry
-	// during plugin discovery so the credential graph can deserialize them at ingestion time
-	// (ADR 0021 §Type Registries). External plugin types are registered as *runtime.Raw since
-	// their Go structs are not compiled into the host process.
+	// can return from Resolve.
 	SupportedCredentialTypes []types.Type `json:"supportedCredentialTypes,omitempty"`
 }
