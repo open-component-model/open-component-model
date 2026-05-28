@@ -172,6 +172,21 @@
       ],
       minimumReleaseAge: null,
     },
+    {
+      matchManagers: [
+        'gomod',
+      ],
+      matchPackageNames: [
+        'ocm.software/open-component-model/**',
+      ],
+      matchCurrentValue: '/^v0\\.0\\.0-/',
+      matchUpdateTypes: [
+        'major',
+        'minor',
+        'patch',
+      ],
+      enabled: false,
+    },
   ],
   customDatasources: {
     envtest: {
