@@ -1,17 +1,17 @@
-name: Label Pull Request
+name: Pull Request
 # pull_request_target is required to allow labeling on fork PRs (needs write access).
 # No PR code is executed — only the base repository's labeler config is read.
-# Title validation (read-only) is handled separately in validate-pr-title.yaml using
-# the pull_request trigger.
 on:
-  pull_request_target: # zizmor: ignore[dangerous-triggers] intentional: no PR code executed, only base repo config read for labeling
+  pull_request_target: # zizmor: ignore[dangerous-triggers] intentional: no PR code executed, only base repo config read
+    # make sure that when the PR changes, we also update
     types:
       - opened
       - edited
       - synchronize
       - reopened
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   conventional-commit-labeler:
@@ -21,6 +21,11 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-24.04-arm
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          sparse-checkout: |
+            .github/scripts/label-pr.js
+          persist-credentials: false
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           TYPE_TO_LABEL: |
@@ -39,45 +44,8 @@ jobs:
           BREAKING_CHANGE_LABEL: "!BREAKING-CHANGE!"
         with:
           script: |
-            // Title validation (format enforcement) is handled by validate-pr-title.yaml.
-            // This job only applies labels based on the parsed title.
-            const typeToLabel = JSON.parse(process.env.TYPE_TO_LABEL);
-            const scopeToLabel = JSON.parse(process.env.SCOPE_TO_LABEL);
-
-            const allowedTypes = Object.keys(typeToLabel).join('|');
-            const prTitle = context.payload.pull_request.title;
-            console.log(`PR Title: ${prTitle}`);
-
-            // NOTE: this regex is intentionally duplicated in validate-pr-title.yaml.
-            // If you change the format rules here, update that workflow's regex too.
-            const regex = new RegExp(
-              `^(((Initial commit)|(Merge [^\\r\\n]+(\\s)[^\\r\\n]+((\\s)((\\s)[^\\r\\n]+)+)*(\\s)?)|^((?<type>${allowedTypes})(\\((?<scope>[\\w\\-]+)\\))?(?<breaking>!?): (?<subject>[^\\r\\n]+((\\s)((\\s)[^\\r\\n]+)+)*))(\\s)?)$)`
-            );
-
-            const match = prTitle.match(regex);
-            if (!match || !match.groups) {
-              console.log("Title does not match conventional commit format — no labels applied (validate-pr-title.yaml enforces the format).");
-              return;
-            }
-
-            const { type, scope, breaking } = match.groups;
-            const labels = [];
-
-            if (breaking) labels.push(process.env.BREAKING_CHANGE_LABEL);
-            if (type && typeToLabel[type]) labels.push(typeToLabel[type]);
-            if (scope && scopeToLabel[scope]) labels.push(scopeToLabel[scope]);
-
-            if (labels.length > 0) {
-              console.log(`Adding labels: ${labels}`);
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                labels: labels,
-              });
-            } else {
-              console.log("No labels to add.");
-            }
+            const script = await import('${{ github.workspace }}/.github/scripts/label-pr.js')
+            await script.labelPR({ github, context })
   labeler:
     needs: [conventional-commit-labeler]
     name: Label PR based on Config
