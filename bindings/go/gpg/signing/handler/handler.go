@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
@@ -217,33 +218,15 @@ func packetConfigForHash(alg v1alpha1.HashAlgorithm) (*packet.Config, error) {
 // selectEntityByFingerprint finds the entity whose primary key fingerprint or
 // long key ID (last 8 bytes) matches fp (case-insensitive hex).
 func selectEntityByFingerprint(keyring openpgp.EntityList, fp string) (*openpgp.Entity, error) {
+	upper := strings.ToUpper(fp)
 	for _, e := range keyring {
 		full := fmt.Sprintf("%X", e.PrimaryKey.Fingerprint)
 		keyID := fmt.Sprintf("%016X", e.PrimaryKey.KeyId)
-		if equalFold(full, fp) || equalFold(keyID, fp) {
+		if full == upper || keyID == upper {
 			return e, nil
 		}
 	}
 	return nil, fmt.Errorf("no key matching fingerprint %q found in keyring", fp)
-}
-
-func equalFold(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		ca, cb := a[i], b[i]
-		if ca >= 'a' && ca <= 'f' {
-			ca -= 32
-		}
-		if cb >= 'a' && cb <= 'f' {
-			cb -= 32
-		}
-		if ca != cb {
-			return false
-		}
-	}
-	return true
 }
 
 // parseDigest validates and hex-decodes the digest value.
