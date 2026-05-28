@@ -51,7 +51,10 @@ func (h *Handler) Sign(
 	cfg runtime.Typed,
 	creds runtime.Typed,
 ) (descruntime.SignatureInfo, error) {
-	sigCfg := configFrom(cfg)
+	var sigCfg v1alpha1.Config
+	if err := h.GetSigningHandlerScheme().Convert(cfg, &sigCfg); err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
+	}
 
 	var typedCreds *gpgcredentialsv1.GPGCredentials
 	if creds != nil {
@@ -110,7 +113,10 @@ func (h *Handler) Verify(
 		return fmt.Errorf("unsupported media type %q for GPG verification", signed.Signature.MediaType)
 	}
 
-	sigCfg := configFrom(cfg)
+	var sigCfg v1alpha1.Config
+	if err := h.GetSigningHandlerScheme().Convert(cfg, &sigCfg); err != nil {
+		return fmt.Errorf("convert config: %w", err)
+	}
 
 	var typedCreds *gpgcredentialsv1.GPGCredentials
 	if creds != nil {
@@ -190,14 +196,6 @@ func gpgIdentityToMap(id *identityv1.GPGIdentity) runtime.Identity {
 	}
 	m.SetType(id.Type)
 	return m
-}
-
-// configFrom extracts a *v1alpha1.Config from the typed value, falling back to defaults.
-func configFrom(cfg runtime.Typed) *v1alpha1.Config {
-	if c, ok := cfg.(*v1alpha1.Config); ok {
-		return c
-	}
-	return &v1alpha1.Config{}
 }
 
 // packetConfigForHash maps a HashAlgorithm to an openpgp packet.Config.
