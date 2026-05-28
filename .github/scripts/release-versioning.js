@@ -53,6 +53,9 @@ export default async function computeRcVersion({ core }) {
     const cliModulePromotionTag = `cli/${promotionTag}`;
     const controllerModuleRcTag = `kubernetes/controller/${rcTag}`;
     const controllerModulePromotionTag = `kubernetes/controller/${promotionTag}`;
+    // Website has no RC artifacts to validate (docs site, not a binary), so
+    // only the promotion tag is emitted — no RC counterpart by design.
+    const websiteModulePromotionTag = `website/${promotionTag}`;
 
     // Find previous canonical release tag for the changelog range.
     const allTags = run(core, "git", [
@@ -73,6 +76,7 @@ export default async function computeRcVersion({ core }) {
     core.setOutput("cli_module_promotion_tag", cliModulePromotionTag);
     core.setOutput("controller_module_rc_tag", controllerModuleRcTag);
     core.setOutput("controller_module_promotion_tag", controllerModulePromotionTag);
+    core.setOutput("website_module_promotion_tag", websiteModulePromotionTag);
     core.setOutput("changelog_range", changelogRange);
 
     core.info(`Previous release tag: ${previousTag || "(none — first release)"}`);
@@ -89,6 +93,7 @@ export default async function computeRcVersion({ core }) {
             ["CLI Module Release Tag", cliModulePromotionTag],
             ["Controller Module RC Tag", controllerModuleRcTag],
             ["Controller Module Release Tag", controllerModulePromotionTag],
+            ["Website Module Release Tag", websiteModulePromotionTag],
             ["Previous Release Tag", previousTag || "(none — first release)"],
             ["Changelog Range", changelogRange || "(full history)"],
         ])

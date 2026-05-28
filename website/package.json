@@ -11,7 +11,7 @@
     "clean:lint": "shx rm -rf .eslintcache .stylelintcache",
     "clean": "npm run clean:build && npm run clean:lint && npm run clean:install",
     "create": "./node_modules/.bin/hugo new",
-    "cutoff": "node scripts/cutoff-version.js",
+    "register-docs-version": "node scripts/register-docs-version.js",
     "dev:drafts": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --baseURL=http://localhost --noHTTPCache --buildDrafts",
     "dev": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --noHTTPCache",
     "hugo": "./node_modules/.bin/hugo",
@@ -28,7 +28,7 @@
     "preinfo": "npm version",
     "preview": "http-server --gzip --brotli --ext=html --cors",
     "postinstall": "node scripts/link-dart-sass.js",
-    "test": "node --test scripts/cutoff-version.test.js"
+    "test": "node --test scripts/register-docs-version.test.js"
   },
   "dependencies": {
     "@tabler/icons": "^3.41.0",
@@ -36,7 +36,6 @@
     "@thulite/images": "^3.3.4",
     "@thulite/inline-svg": "^1.2.2",
     "@thulite/seo": "^2.4.3",
-    "js-yaml": "^4.1.1",
     "preact": "^10.29.0",
     "thulite": "^2.6.5"
   },
@@ -48,9 +47,9 @@
     "globals": "17.6.0",
     "hugo-extended": "0.161.1",
     "jiti": "2.7.0",
+    "js-yaml": "^4.1.1",
     "sass-embedded": "1.100.0",
     "shx": "0.4.0",
-    "smol-toml": "1.6.1",
     "typescript": "6.0.3",
     "typescript-eslint": "8.59.4"
   },
