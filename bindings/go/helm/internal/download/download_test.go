@@ -319,7 +319,7 @@ func TestNewReadOnlyChartFromRemote_HTTPRepoResolvesViaIndexYAML(t *testing.T) {
 		_, _ = w.Write([]byte(index))
 	})
 
-	// Anything else (including the naïvely-constructed <repo>/mychart:0.1.0) → 404
+	// Anything else (including the constructed <repo>/mychart:0.1.0) → 404
 	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		http.NotFound(w, req)
 	})
