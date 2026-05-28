@@ -46,6 +46,7 @@ Building from source is not officially supported. Use the pre-built binaries via
 
 - [Git](https://git-scm.com/)
 - [Go](https://go.dev/)
+- [Task](https://taskfile.dev)
 
 ### Clone and build
 
