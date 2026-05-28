@@ -20,6 +20,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 		if err := scheme.Convert(toSpec, &ociTarget); err == nil {
 			return processOCIArtifactStreaming(resource, id, tgd, toSpec, resourceTransformIDs, i)
 		}
+		// toSpec is not an OCI repository — fall through to the legacy Get+Add path.
 	}
 
 	component := val.Descriptor.Component.Name
