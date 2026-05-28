@@ -10,8 +10,7 @@ on:
       - synchronize
       - reopened
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   validate-title:
