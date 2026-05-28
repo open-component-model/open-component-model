@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/file"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/helm"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/utf8"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin/gpg"
 	ociplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/oci"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/oidc"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/rsa"
@@ -65,6 +66,9 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	}
 	if err := oidc.RegisterCredentialPlugin(manager.CredentialPluginRegistry); err != nil {
 		return fmt.Errorf("could not register OIDC credential plugin: %w", err)
+	}
+	if err := gpg.Register(manager.SigningRegistry, filesystemConfig); err != nil {
+		return fmt.Errorf("could not register GPG signing plugin: %w", err)
 	}
 
 	return nil
