@@ -943,3 +943,160 @@ func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T
 	r.NoError(err)
 	r.NotEmpty(content, "local blob content should not be empty")
 }
+
+// Test_Integration_TransferOCIArtifact_OCIToOCI verifies the streaming TransferOCIArtifact path:
+// an OCIImage resource is transferred directly from one OCI registry to another without
+// intermediate tar materialisation. The resource access in the target descriptor must
+// be an OCI image reference, not a local blob.
+func Test_Integration_TransferOCIArtifact_OCIToOCI(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	// 1. Start source and target OCI registries.
+	sourceAddr, sourceUser, sourcePwd := startRegistry(t)
+	targetAddr, targetUser, targetPwd := startRegistry(t)
+
+	// 2. Push a test OCI image into the source registry.
+	imageRef := pushTestOCIImage(t, sourceAddr, sourceUser, sourcePwd, "test/image", "v1")
+
+	// 3. Build a component with an external OCIImage resource pointing at that image
+	//    and push it to a source OCI registry (not a CTF).
+	componentName := "ocm.software/streaming-transfer-test"
+	componentVersion := "1.0.0"
+
+	credResolver := newCredResolver(t,
+		registryCreds{sourceAddr, sourceUser, sourcePwd},
+		registryCreds{targetAddr, targetUser, targetPwd},
+	)
+
+	// Push the component descriptor to the source OCI registry.
+	sourceSpec := &ocirepospec.Repository{
+		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+		BaseUrl: fmt.Sprintf("http://%s", sourceAddr),
+	}
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	resourceRepo := resource.NewResourceRepository(nil)
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+
+	// Seed the source registry via the transfer builder itself.
+	sourceCTFPath := t.TempDir()
+	ctfRepo := createCTFRepository(t, sourceCTFPath)
+	ctfSpec := &ctfrepospec.Repository{
+		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath: sourceCTFPath,
+	}
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    componentName,
+					Version: componentVersion,
+				},
+			},
+			Provider: descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: "streamed-image", Version: "1.0.0"},
+					},
+					Type:     "ociImage",
+					Relation: descriptor.ExternalRelation,
+					Access: &ociaccessv1.OCIImage{
+						Type:           runtime.NewVersionedType(ociaccessv1.LegacyType, ociaccessv1.LegacyTypeVersion),
+						ImageReference: imageRef,
+					},
+				},
+			},
+		},
+	}
+	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
+
+	// CTF → source OCI (seed).
+	seedTGD, err := transfer.BuildGraphDefinition(t.Context(),
+		transfer.WithTransfer(
+			transfer.Component(componentName, componentVersion),
+			transfer.ToRepositorySpec(sourceSpec),
+			transfer.FromRepository(ctfRepo, ctfSpec),
+		),
+	)
+	r.NoError(err)
+	seedGraph, err := b.BuildAndCheck(seedTGD)
+	r.NoError(err)
+	r.NoError(seedGraph.Process(t.Context()))
+
+	// 4. Transfer OCI → OCI with UploadAsOciArtifact (streaming path).
+	targetSpec := &ocirepospec.Repository{
+		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+		BaseUrl: fmt.Sprintf("http://%s", targetAddr),
+	}
+
+	// Build a live repo client for the source OCI registry so it can be used as FromRepository.
+	sourceClient := createAuthClient(sourceAddr, sourceUser, sourcePwd)
+	sourceURLRes, err := urlresolver.New(
+		urlresolver.WithBaseURL(sourceAddr),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(sourceClient),
+	)
+	r.NoError(err)
+	sourceRepo, err := oci.NewRepository(oci.WithResolver(sourceURLRes), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	tgd, err := transfer.BuildGraphDefinition(t.Context(),
+		transfer.WithCopyMode(transfer.CopyModeAllResources),
+		transfer.WithUploadType(transfer.UploadAsOciArtifact),
+		transfer.WithTransfer(
+			transfer.Component(componentName, componentVersion),
+			transfer.ToRepositorySpec(targetSpec),
+			transfer.FromRepository(sourceRepo, sourceSpec),
+		),
+	)
+	r.NoError(err)
+
+	// Verify the graph contains a TransferOCIArtifact node, not GetOCIArtifact.
+	hasTransfer := false
+	for _, tr := range tgd.Transformations {
+		if tr.Type.Name == "TransferOCIArtifact" {
+			hasTransfer = true
+		}
+		r.NotEqual("GetOCIArtifact", tr.Type.Name,
+			"streaming path must not emit GetOCIArtifact")
+	}
+	r.True(hasTransfer, "UploadAsOciArtifact OCI→OCI must emit TransferOCIArtifact")
+
+	// Execute the graph.
+	streamGraph, err := b.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(streamGraph.Process(t.Context()))
+
+	// 5. Verify the resource in the target has an OCI image reference (not a local blob).
+	client := createAuthClient(targetAddr, targetUser, targetPwd)
+	urlRes, err := urlresolver.New(
+		urlresolver.WithBaseURL(targetAddr),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+	targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	gotDesc, err := targetRepo.GetComponentVersion(t.Context(), componentName, componentVersion)
+	r.NoError(err, "component must be present in target registry")
+	r.Len(gotDesc.Component.Resources, 1)
+
+	gotAccess := gotDesc.Component.Resources[0].Access
+	r.NotNil(gotAccess)
+
+	// Streaming transfer must produce an OCI image reference in the target, not a local blob.
+	r.Equal(ociaccessv1.LegacyType, gotAccess.GetType().Name,
+		"resource access must be OCIImage (not local blob) after streaming OCI-to-OCI transfer")
+
+	// Unmarshal the raw access to verify the image reference points at the target registry.
+	rawAccess, ok := gotAccess.(*runtime.Raw)
+	r.True(ok, "access must be a *runtime.Raw")
+	var ociAccess ociaccessv1.OCIImage
+	r.NoError(json.Unmarshal(rawAccess.Data, &ociAccess),
+		"resource access must unmarshal to OCIImage after streaming transfer")
+	r.Contains(ociAccess.ImageReference, targetAddr,
+		"image reference must point to the target registry")
+}
