@@ -5,9 +5,9 @@ import (
 	"log/slog"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	helmcredentials "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
+	helmcredentials "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	rsacredentials "ocm.software/open-component-model/bindings/go/rsa/spec/credentials"
@@ -24,8 +24,7 @@ import (
 
 func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, logger *slog.Logger) error {
 	// Register consumer credential types into the PluginManager's credential type scheme so
-	// the credential graph can deserialize typed credentials from .ocmconfig at ingestion time
-	// (ADR 0021 §Type Registries and Graph Independence).
+	// the credential graph can deserialize typed credentials from .ocmconfig at ingestion time.
 	manager.CredentialTypeRegistry.Register(ocicredentials.MustAddToScheme)
 	manager.CredentialTypeRegistry.Register(helmcredentials.MustRegisterCredentialType)
 	manager.CredentialTypeRegistry.Register(rsacredentials.MustRegisterCredentialType)
