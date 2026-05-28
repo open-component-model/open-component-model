@@ -1,0 +1,131 @@
+# Module Configuration File
+#
+# This file configures Hugo module settings, particularly module mounts which
+# define how content is organized within the project.
+#
+# Mounts specify file paths in your project that Hugo should use when building
+# the site. They allow for custom directory structures and integrating content
+# from different locations.
+#
+# At the end of this file, there are per-version mounts and imports for
+# reference documentation, allowing different versions of content to be
+# served based on the site's versioning strategy.
+
+mounts:
+  ## data
+  - source: node_modules/@thulite/doks-core/data
+    target: data
+
+  - source: data
+    target: data
+
+  ## layouts
+  - source: layouts
+    target: layouts
+
+  # Exclude 'home.html' to avoid conflicts with a custom home page layout defined in the local 'layouts' directory.
+  # Hugo >= 0.153 deprecates `excludeFiles`; use `files` glob slice instead.
+  - files: ["**", "!home.html"]
+    source: node_modules/@thulite/doks-core/layouts
+    target: layouts
+
+  - source: node_modules/@thulite/core/layouts
+    target: layouts
+
+  - source: node_modules/@thulite/seo/layouts
+    target: layouts
+
+  - source: node_modules/@thulite/images/layouts
+    target: layouts
+
+  - source: node_modules/@thulite/inline-svg/layouts
+    target: layouts
+
+  ## i18n
+  - source: node_modules/@thulite/doks-core/i18n
+    target: i18n
+
+  - source: i18n
+    target: i18n
+
+  ## archetypes
+  - source: node_modules/@thulite/doks-core/archetypes
+    target: archetypes
+
+  - source: archetypes
+    target: archetypes
+
+  ## assets
+  - source: node_modules/@thulite/core/assets
+    target: assets
+
+  - source: node_modules/@thulite/doks-core/assets
+    target: assets
+
+  - source: node_modules/@tabler/icons/icons
+    target: assets/svgs/tabler-icons
+
+  - source: node_modules/@thulite/images/assets
+    target: assets
+
+  - source: assets
+    target: assets
+
+  ## static
+  - source: node_modules/@thulite/doks-core/static
+    target: static
+
+  - source: static
+    target: static
+
+  # Versioning content with mounts and imports
+  ## per-version mounts of content folders
+  ## per-version imports of reference docs using module imports
+  ### legacy: no import (uses embedded reference docs in content folder)
+  ### main: tracks HEAD via sibling-path mounts (monorepo-local, no module import)
+  ### x.y: uses module imports pinned to release tags
+
+  # Shared blog content (single source of truth across all site versions)
+  - source: content/blog
+    target: content/blog
+
+  # legacy (only mount, no imports)
+  - files: ["**", "!blog/**"]
+    source: content_versioned/version-legacy
+    target: content
+    sites:
+      matrix:
+        versions: ["legacy"]
+
+  # main (tracks HEAD of monorepo via sibling-path mounts; CRDs are regenerated
+  # from kubernetes/controller/api/v1alpha1 into bin/gen/crd at build time)
+  - files: ["**", "!blog/**"]
+    source: content
+    target: content
+    sites:
+      matrix:
+        versions: ["main"]
+
+  - source: ../cli/docs/reference
+    target: content/docs/reference/ocm-cli
+    sites:
+      matrix:
+        versions: ["main"]
+
+  - source: ../bindings/go/constructor/spec/v1/resources
+    target: static/main/schemas/bindings/go/constructor
+    sites:
+      matrix:
+        versions: ["main"]
+
+  - source: ../bindings/go/descriptor/v2/resources
+    target: static/main/schemas/bindings/go/descriptor/v2
+    sites:
+      matrix:
+        versions: ["main"]
+
+  - source: ../kubernetes/controller/bin/gen/crd
+    target: static/main/schemas/kubernetes/controller
+    sites:
+      matrix:
+        versions: ["main"]
