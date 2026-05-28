@@ -180,12 +180,7 @@
         'ocm.software/open-component-model/**',
       ],
       matchCurrentValue: '/^v0\\.0\\.0-/',
-      matchUpdateTypes: [
-        'major',
-        'minor',
-        'patch',
-      ],
-      enabled: false,
+      allowedVersions: '/^v0\\.0\\.0-/',
     },
   ],
   customDatasources: {
