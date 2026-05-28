@@ -36,11 +36,11 @@ flowchart LR
         A[Component Version] --> C[Sign with GPG Private Key]
         C --> D[Signed Component Version]
     end
-    
+
     D --> T["Share Component"]
-    
+
     T --> verify
-    
+
     subgraph verify ["Verify (Consumer)"]
         direction TB
         E[Signed Component Version] --> H[Verify with GPG Public Key]
@@ -48,7 +48,7 @@ flowchart LR
         I -->|Yes| VALID["✓ Trusted"]
         I -->|No| INVALID["✗ Rejected"]
     end
-    
+
     style VALID fill:#dcfce7,color:#166534
     style INVALID fill:#fee2e2,color:#991b1b
 ```
@@ -73,9 +73,13 @@ Consumers verify using the corresponding public key to confirm authenticity and 
 If you already have a component version in a CTF archive,
 e.g. by following our [Create a Component Version]({{< relref "create-component-version.md" >}}) guide, skip to the next step.
 
+Create a simple helloworld component:
+
 ```bash
+# Create a directory for the tutorial
 mkdir -p /tmp/ocm-gpg-tutorial && cd /tmp/ocm-gpg-tutorial
 
+# Create a basic `component-constructor.yaml` without any resources:
 cat > component-constructor.yaml << 'EOF'
 components:
 - name: github.com/acme.org/helloworld
@@ -84,24 +88,35 @@ components:
     name: acme.org
 EOF
 
+# Create component version in a CTF archive located at ./transport-archive
 ocm add cv
 ```
 
+You should see that the component version was created successfully.
+
+<details>
+<summary>Expected output</summary>
+
+```text
+ COMPONENT                      │ VERSION │ PROVIDER
+────────────────────────────────┼─────────┼──────────
+ github.com/acme.org/helloworld │ 1.0.0   │ acme.org
+```
+
+</details>
 {{< /step >}}
 
 {{< step >}}
 
 ### Generate a GPG key pair
 
-Create a dedicated signing key for OCM components:
+Create a directory for your keys and generate a GPG key pair:
 
 ```bash
+# Create a directory for the generated keys
 mkdir -p /tmp/ocm-gpg-tutorial/keys
 
-# Interactive — answer the prompts (RSA 4096, no expiry for this tutorial)
-gpg --full-generate-key
-
-# Or non-interactive batch generation:
+# Non-interactive batch generation (RSA 4096, no expiry, no passphrase protection)
 gpg --batch --gen-key << 'EOF'
 %no-protection
 Key-Type: RSA
@@ -115,7 +130,7 @@ Expire-Date: 0
 EOF
 ```
 
-Verify the key was created:
+Verify the key was created and note the fingerprint:
 
 ```bash
 gpg --list-secret-keys --keyid-format=long
@@ -131,7 +146,8 @@ uid           [ultimate] OCM Tutorial Key <ocm-tutorial@example.com>
 ssb   rsa4096/1122334455667788 2026-01-01 [E]
 ```
 
-Note the key fingerprint (`AABBCCDDEEFF00112233445566778899AABBCCDD`) — you'll need it for pinning.
+The 40-character string (`AABBCCDDEEFF00112233445566778899AABBCCDD`) is your key fingerprint.
+You'll need it if you want to pin a specific key when your keyring contains multiple keys.
 
 </details>
 
@@ -139,16 +155,17 @@ Note the key fingerprint (`AABBCCDDEEFF00112233445566778899AABBCCDD`) — you'll
 Never commit it to version control or share it.
 {{< /callout >}}
 
+For more details, see [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}).
 {{< /step >}}
 
 {{< step >}}
 
 ### Export the keys to files
 
-Export the private and public keys as ASCII-armored files:
+Export the private and public keys as ASCII-armored files that OCM can load:
 
 ```bash
-# Export private key (replace FINGERPRINT with your key fingerprint)
+# Export private key — replace FINGERPRINT with the fingerprint from the previous step
 gpg --export-secret-keys --armor FINGERPRINT > /tmp/ocm-gpg-tutorial/keys/signing-key.asc
 
 # Export public key
@@ -158,10 +175,10 @@ gpg --export --armor FINGERPRINT > /tmp/ocm-gpg-tutorial/keys/verify-key.asc
 chmod 600 /tmp/ocm-gpg-tutorial/keys/signing-key.asc
 ```
 
-Verify both files:
+Verify both files exist:
 
 ```bash
-ls -la /tmp/ocm-gpg-tutorial/keys/
+ls -la /tmp/ocm-gpg-tutorial/keys/*.asc
 ```
 
 {{< /step >}}
@@ -170,10 +187,17 @@ ls -la /tmp/ocm-gpg-tutorial/keys/
 
 ### Configure signing credentials
 
-Create a `.ocmconfig` that tells OCM where to find your GPG keys.
-If you already have a `$HOME/.ocmconfig`, add the consumer block to your existing file.
+Create a new `.ocmconfig` in the current directory and copy the content below to it, to tell OCM where to find your keys.
+If you already have a `$HOME/.ocmconfig` file you can skip creating a new one and just add the credential configuration to your existing file.
+
+Also create a `signer-spec.yaml` file that tells OCM to use the GPG signing handler.
+Unlike RSA (which is the default when no signer spec is given), GPG requires an explicit signer spec.
+
+A detailed How-To guide is available here: [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}).
 
 ```bash
+touch /tmp/ocm-gpg-tutorial/.ocmconfig
+
 cat > /tmp/ocm-gpg-tutorial/.ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
@@ -188,11 +212,16 @@ configurations:
               privateKeyPGPFile: /tmp/ocm-gpg-tutorial/keys/signing-key.asc
               publicKeyPGPFile: /tmp/ocm-gpg-tutorial/keys/verify-key.asc
 EOF
+
+# Signer spec: selects the GPG signing handler
+cat > /tmp/ocm-gpg-tutorial/signer-spec.yaml << 'EOF'
+type: GPGSigningConfiguration/v1alpha1
+EOF
 ```
 
 > 👉 The `signature: default` name is used when you don't specify `--signature` on the command line.
 
-To pin a specific key when the keyring contains multiple keys, add `keyFingerprint` to a `GPGSigningConfiguration` signer spec:
+To pin a specific key when the keyring contains multiple keys, add `keyFingerprint` to the signer spec:
 
 ```yaml
 # signer-spec.yaml
@@ -200,20 +229,19 @@ type: GPGSigningConfiguration/v1alpha1
 keyFingerprint: AABBCCDDEEFF00112233445566778899AABBCCDD
 ```
 
-Then pass it with `--signer-spec signer-spec.yaml`.
-
 For more details, see [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}).
-
 {{< /step >}}
 
 {{< step >}}
 
 ### Sign the component version
 
+Sign your component with the GPG private key, passing the signer spec to select the GPG handler:
+
 ```bash
-ocm sign cv \
-  /tmp/ocm-gpg-tutorial/transport-archive//github.com/acme.org/helloworld:1.0.0 \
-  --config /tmp/ocm-gpg-tutorial/.ocmconfig
+ocm sign cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 \
+  --config /tmp/ocm-gpg-tutorial/.ocmconfig \
+  --signer-spec /tmp/ocm-gpg-tutorial/signer-spec.yaml
 ```
 
 <details>
@@ -228,15 +256,23 @@ name: default
 signature:
   algorithm: GPG
   mediaType: application/vnd.ocm.signature.gpg
-  value: |
+  value: |-
     -----BEGIN PGP SIGNATURE-----
     ...
     -----END PGP SIGNATURE-----
 
-signed successfully name=default digest=4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
+time=... level=INFO msg="signed successfully" name=default digest=4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha1
 ```
 
 </details>
+
+Verify the signature was added:
+
+```bash
+ocm get cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 -o yaml | grep -A 10 signatures:
+```
+
+You should see a `signatures:` section with algorithm `GPG` and a PGP signature block.
 
 {{< /step >}}
 
@@ -244,17 +280,21 @@ signed successfully name=default digest=4e376182b3d535143e8e009b1e467df3a5b0c1f9
 
 ### Verify the signature
 
+Verify the signature using the public key, passing the same signer spec as the verifier spec:
+
 ```bash
-ocm verify cv \
-  /tmp/ocm-gpg-tutorial/transport-archive//github.com/acme.org/helloworld:1.0.0 \
-  --config /tmp/ocm-gpg-tutorial/.ocmconfig
+ocm verify cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 \
+  --config /tmp/ocm-gpg-tutorial/.ocmconfig \
+  --verifier-spec /tmp/ocm-gpg-tutorial/signer-spec.yaml
 ```
 
 <details>
 <summary>Expected output</summary>
 
 ```text
-SIGNATURE VERIFICATION SUCCESSFUL
+time=... level=INFO msg="verifying signature" name=default
+time=... level=INFO msg="signature verification completed" name=default duration=...
+time=... level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"
 ```
 
 </details>
@@ -270,20 +310,30 @@ SIGNATURE VERIFICATION SUCCESSFUL
 Congratulations! You've successfully:
 
 - ✅ Generated a GPG key pair for signing and verification
+- ✅ Exported the keys to ASCII-armored files
 - ✅ Configured OCM to use your keys via `.ocmconfig`
+- ✅ Created a GPG signer spec to select the GPG handler
 - ✅ Signed a component version with your GPG private key
 - ✅ Verified the signature using the public key
 
 ## Best Practices for Production
+
+Now that you understand the workflow, here are key practices for production environments:
 
 - **Reuse existing GPG keys** — If you already sign Git tags or release artifacts with a GPG key, the same key works for OCM.
 - **Protect private keys** — Use a hardware token (YubiKey, OpenPGP card) or a passphrase-protected key; OCM supports the `passphrase` credential property.
 - **Rotate keys periodically** — OCM supports multiple signatures per component version to ease key transitions.
 - **Distribute public keys securely** — Publish your public key to a key server (e.g. `keys.openpgp.org`) or share via a trusted channel.
 - **Verify before deployment** — Make signature verification a mandatory step in your deployment pipeline.
-- **Pin key fingerprints** — Use `keyFingerprint` in a signer spec to prevent accidentally signing or verifying with a different key.
+- **Pin key fingerprints** — Use `keyFingerprint` in a signer spec to prevent accidentally signing or verifying with a different key from a shared keyring.
 
 ## Check Your Understanding
+
+{{< details "Why do I need a signer spec for GPG but not for RSA?" >}}
+The OCM CLI defaults to the RSA handler when no `--signer-spec` is provided.
+GPG has a different configuration type (`GPGSigningConfiguration/v1alpha1`) that must be specified explicitly.
+A minimal signer spec file with just the type is enough to select the GPG handler.
+{{< /details >}}
 
 {{< details "How is GPG signing different from RSA signing in OCM?" >}}
 Both sign the component descriptor digest, but they differ in key format and signature encoding:
@@ -315,6 +365,8 @@ Yes. Each signature has a distinct `name`. Use `--signature <name>` when signing
 
 ## Cleanup
 
+Remove the tutorial artifacts:
+
 ```bash
 rm -rf /tmp/ocm-gpg-tutorial
 ```
@@ -323,7 +375,8 @@ rm -rf /tmp/ocm-gpg-tutorial
 
 - [Tutorial: Plain RSA Signatures]({{< relref "plain.md" >}}) — Sign with raw RSA keys instead of GPG.
 - [Tutorial: PEM-encoded Signatures]({{< relref "pem.md" >}}) — Use X.509 certificate chains with RSA for enterprise PKI trust.
-- [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}) — Full reference for credential configuration.
+- [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) — Step-by-step creating key pairs.
+- [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}) — Set up OCM to use your keys for signing and verification.
 
 ## Related Documentation
 

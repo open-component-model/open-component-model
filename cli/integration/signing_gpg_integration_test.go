@@ -68,6 +68,10 @@ configurations:
 	cfgPath := filepath.Join(dir, "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
+	gpgSpec := "type: GPGSigningConfiguration/v1alpha1\n"
+	gpgSpecPath := filepath.Join(dir, "gpg-spec.yaml")
+	r.NoError(os.WriteFile(gpgSpecPath, []byte(gpgSpec), os.ModePerm))
+
 	client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
 
 	resolver, err := urlresolver.New(
@@ -105,6 +109,14 @@ configurations:
 			"sign", "cv",
 			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--config", cfgPath,
+			"--signer-spec", gpgSpecPath,
+		}
+
+		verifyArgs := []string{
+			"verify", "cv",
+			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
+			"--config", cfgPath,
+			"--verifier-spec", gpgSpecPath,
 		}
 
 		// dry-run: signature not persisted — verify must fail
@@ -113,11 +125,7 @@ configurations:
 		r.NoError(dryRunCMD.ExecuteContext(t.Context()))
 
 		verifyCMD := cmd.New()
-		verifyCMD.SetArgs([]string{
-			"verify", "cv",
-			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
-			"--config", cfgPath,
-		})
+		verifyCMD.SetArgs(verifyArgs)
 		r.Error(verifyCMD.ExecuteContext(t.Context()), "verify must fail after dry-run only")
 
 		// real sign — verify must succeed
@@ -126,11 +134,7 @@ configurations:
 		r.NoError(signCMD.ExecuteContext(t.Context()))
 
 		verifyCMD = cmd.New()
-		verifyCMD.SetArgs([]string{
-			"verify", "cv",
-			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
-			"--config", cfgPath,
-		})
+		verifyCMD.SetArgs(verifyArgs)
 		r.NoError(verifyCMD.ExecuteContext(t.Context()))
 	})
 
@@ -161,6 +165,7 @@ configurations:
 			"sign", "cv",
 			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--config", cfgPath,
+			"--signer-spec", gpgSpecPath,
 		})
 		r.NoError(signCMD.ExecuteContext(t.Context()))
 
@@ -201,6 +206,7 @@ configurations:
 			"verify", "cv",
 			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--config", wrongKeyCfgPath,
+			"--verifier-spec", gpgSpecPath,
 		})
 		r.Error(verifyCMD.ExecuteContext(t.Context()), "verify must fail with mismatched public key")
 	})
