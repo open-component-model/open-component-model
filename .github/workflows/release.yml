@@ -7,6 +7,8 @@ name: Release
 #   v0.X.Y                              This is the main release version that will get released.
 #   kubernetes/controller/v0.X.Y        Go-module tag for controller API so we don't break people who import it.
 #   cli/v0.X.Y                          CLI tags for consumption on from the website.
+#   website/v0.X.Y                      Website tag, used by Hugo module imports for versioned docs.
+#                                       Final-only — no RC counterpart, since the docs site has no RC artifacts to validate.
 #
 # Flow remains the same. Release manager selects a release branch, hits release, then gates will take
 # care of the rest.
@@ -60,6 +62,7 @@ jobs:
       cli_module_promotion_tag: ${{ steps.compute.outputs.cli_module_promotion_tag }}
       controller_module_rc_tag: ${{ steps.compute.outputs.controller_module_rc_tag }}
       controller_module_promotion_tag: ${{ steps.compute.outputs.controller_module_promotion_tag }}
+      website_module_promotion_tag: ${{ steps.compute.outputs.website_module_promotion_tag }}
       changelog_artifact: changelog-${{ steps.compute.outputs.new_version }}
       changelog_range: ${{ steps.compute.outputs.changelog_range }}
       set_latest: ${{ steps.latest.outputs.set_latest }}
@@ -440,7 +443,7 @@ jobs:
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
-          ADDITIONAL_TAGS: ${{ needs.prepare.outputs.cli_module_promotion_tag }},${{ needs.prepare.outputs.controller_module_promotion_tag }}
+          ADDITIONAL_TAGS: ${{ needs.prepare.outputs.cli_module_promotion_tag }},${{ needs.prepare.outputs.controller_module_promotion_tag }},${{ needs.prepare.outputs.website_module_promotion_tag }}
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |
@@ -608,3 +611,80 @@ jobs:
             const script = await import('${{ github.workspace }}/.github/scripts/publish-final-release.js');
             await script.default({ github, context, core });
   # === controller-release.yml::promote_and_release_final + cli-release.yml::promote_final + cli-release.yml::release_final ===
+
+  # === Website version release ===
+  # Replaces the old standalone website-version-release.yml. Runs after the
+  # final promotion succeeded, when the website/v0.X.Y tag exists. Opens a PR
+  # to main pinning Hugo module imports to the just-created website tag, with
+  # binding versions resolved from the released CLI module's go.mod.
+  create_website_update_pr:
+    name: Open website update PR
+    needs: [prepare, promote_and_release_final]
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # Docs PR targets main, so we check out main rather than the release branch.
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: cli/go.mod
+          cache: false
+
+      - name: Fetch CLI go.mod at release tag
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+        run: |
+          set -euo pipefail
+          git fetch origin "refs/tags/cli/v${VERSION}:refs/tags/cli/v${VERSION}" --no-tags
+          git show "cli/v${VERSION}:cli/go.mod" > "${{ runner.temp }}/cli-go.mod"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Release docs version
+        working-directory: website
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+        run: node scripts/register-docs-version.js "$VERSION" --cli-gomod "${{ runner.temp }}/cli-go.mod"
+
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          base: main
+          token: ${{ steps.get_token.outputs.token }}
+          title: "chore(website): release docs version ${{ needs.prepare.outputs.base_version }}"
+          commit-message: "[github-actions] automated change"
+          add-paths: |
+            website/config/
+          branch: website/version-release/auto
+          branch-suffix: ${{ needs.prepare.outputs.base_version }}
+          delete-branch: true
+          sign-commits: true
+          body: |
+            Automated docs release for version ${{ needs.prepare.outputs.base_version }}.
+
+            Triggered by tag `website/v${{ needs.prepare.outputs.base_version }}`.
+  # === Website version release ===
