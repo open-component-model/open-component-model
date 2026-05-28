@@ -16,7 +16,10 @@ import (
 
 func processOCIArtifact(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
 	if uploadAsOCIArtifact {
-		return processOCIArtifactStreaming(resource, id, tgd, toSpec, resourceTransformIDs, i)
+		var ociTarget ocirepo.Repository
+		if err := scheme.Convert(toSpec, &ociTarget); err == nil {
+			return processOCIArtifactStreaming(resource, id, tgd, toSpec, resourceTransformIDs, i)
+		}
 	}
 
 	component := val.Descriptor.Component.Name
