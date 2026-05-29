@@ -13,7 +13,7 @@ require (
 	golang.org/x/crypto v0.50.0
 	helm.sh/helm/v4 v4.1.4
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/configuration v0.0.13
+	ocm.software/open-component-model/bindings/go/configuration v0.0.14
 	ocm.software/open-component-model/bindings/go/credentials v0.0.12
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260526150939-f40aef55435e
