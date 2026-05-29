@@ -17,7 +17,7 @@ jobs:
     name: Create new "Release Publish Event"
     runs-on: ubuntu-24.04-arm
     environment:
-      name: release
+      name: automation
       deployment: false
     steps:
     - name: Generate token

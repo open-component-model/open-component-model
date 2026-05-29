@@ -155,7 +155,7 @@ jobs:
     name: Create and Push RC Tags
     runs-on: ubuntu-24.04-arm
     environment:
-      name: release
+      name: automation
       deployment: false
     needs: [prepare]
     if: ${{ github.event.inputs.dry_run == 'false' }}
@@ -392,7 +392,7 @@ jobs:
     needs: [prepare, build_and_test, verify_attestations]
     runs-on: ubuntu-24.04-arm
     environment:
-      name: release
+      name: automation
       deployment: false
     permissions:
       contents: write
@@ -629,7 +629,7 @@ jobs:
     if: ${{ github.event.inputs.dry_run == 'false' }}
     runs-on: ubuntu-24.04-arm
     environment:
-      name: release
+      name: automation
       deployment: false
     permissions:
       contents: read

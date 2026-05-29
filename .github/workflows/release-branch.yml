@@ -19,7 +19,7 @@ jobs:
     name: Create Release Branch from ${{ github.event.inputs.source_branch }} to ${{ github.event.inputs.target_branch }}
     runs-on: ubuntu-24.04-arm
     environment:
-      name: release
+      name: automation
       deployment: false
     steps:
       - name: Checkout repository
