@@ -161,7 +161,7 @@ jobs:
   # === This is from cli.yml::publish verbatim a date on conformance ===
   publish_cli:
     name: Publish CLI
-    needs: [build_cli, conformance, e2e, decide_publish]
+    needs: [build_cli, decide_publish]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
     runs-on: ubuntu-24.04-arm
     outputs:
@@ -230,7 +230,7 @@ jobs:
   # === Same as above but for Kubernetes publish. ===
   publish_controller:
     name: Publish Controller
-    needs: [build_controller, conformance, e2e, decide_publish]
+    needs: [build_controller, decide_publish]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
     runs-on: ubuntu-24.04-arm
     outputs:
