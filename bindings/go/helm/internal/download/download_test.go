@@ -339,6 +339,58 @@ func TestNewReadOnlyChartFromRemote_HTTPRepoResolvesViaIndexYAML(t *testing.T) {
 	assert.Equal(t, "0.1.0", chart.Version)
 }
 
+// TestNewReadOnlyChartFromRemote_VersionOverrideTakesPrecedenceInIndexLookup verifies
+// that when opt.Version is set, resolveHTTPChartURL uses it for the index.yaml lookup
+// rather than the tag embedded in the repo URL. Without the fix, the index lookup would
+// use the URL tag (which doesn't exist in the index) and return an error.
+func TestNewReadOnlyChartFromRemote_VersionOverrideTakesPrecedenceInIndexLookup(t *testing.T) {
+	r := require.New(t)
+
+	workDir, err := os.Getwd()
+	r.NoError(err)
+	testDataDir := filepath.Join(workDir, "..", "..", "testdata")
+
+	var srvURL string
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/mychart/mychart-0.1.0.tgz", func(w http.ResponseWriter, req *http.Request) {
+		http.ServeFile(w, req, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
+	})
+
+	mux.HandleFunc("/index.yaml", func(w http.ResponseWriter, req *http.Request) {
+		index := "apiVersion: v1\n" +
+			"generated: \"2024-01-01T00:00:00.000Z\"\n" +
+			"entries:\n" +
+			"  mychart:\n" +
+			"  - name: mychart\n" +
+			"    version: 0.1.0\n" +
+			"    apiVersion: v2\n" +
+			"    urls:\n" +
+			"    - " + srvURL + "/mychart/mychart-0.1.0.tgz\n"
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write([]byte(index))
+	})
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		http.NotFound(w, req)
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	srvURL = srv.URL
+
+	// URL tag is "wrong-tag" — only 0.1.0 exists in the index.
+	// opt.Version = "0.1.0" must win so the index lookup succeeds.
+	helmRepoRef := srv.URL + "/mychart:wrong-tag"
+
+	chart, err := NewReadOnlyChartFromRemote(t.Context(), helmRepoRef, t.TempDir(), WithVersion("0.1.0"))
+	r.NoError(err)
+	r.NotNil(chart)
+	assert.Equal(t, "mychart", chart.Name)
+	assert.Equal(t, "0.1.0", chart.Version)
+}
+
 // newBasicAuthChartServer returns an httptest server that serves files from dir
 // only when the request carries matching HTTP Basic Auth credentials.
 func newBasicAuthChartServer(t *testing.T, dir, user, pass string) *httptest.Server {

@@ -136,7 +136,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 	}
 
 	resolvedRepo := helmRepo
-	if resolved, resolveErr := resolveHTTPChartURL(ctx, helmRepo, targetDir, GetterProviders(), getterOpts); resolveErr != nil {
+	if resolved, resolveErr := resolveHTTPChartURL(ctx, helmRepo, opt.Version, targetDir, GetterProviders(), getterOpts); resolveErr != nil {
 		return nil, fmt.Errorf("error resolving chart URL %q via index.yaml: %w", helmRepo, resolveErr)
 	} else if resolved != "" {
 		resolvedRepo = resolved
@@ -223,7 +223,7 @@ func getVersion(versionOverride, helmRepo string) (string, error) {
 //
 // Returns ("", nil) when helmRepo is not an HTTP/S repo reference (OCI, direct .tgz
 // URLs, etc.) so the caller can use the original value unchanged.
-func resolveHTTPChartURL(ctx context.Context, helmRepo, tmpDir string, providers getter.Providers, getterOpts []getter.Option) (string, error) {
+func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir string, providers getter.Providers, getterOpts []getter.Option) (string, error) {
 	if !strings.HasPrefix(helmRepo, "http://") && !strings.HasPrefix(helmRepo, "https://") {
 		return "", nil
 	}
@@ -247,6 +247,9 @@ func resolveHTTPChartURL(ctx context.Context, helmRepo, tmpDir string, providers
 		repoBase += "/" + repoPath
 	}
 	chartVersion := ref.Tag
+	if requestedVersion != "" {
+		chartVersion = requestedVersion
+	}
 
 	indexURL, err := helmrepo.ResolveReferenceURL(repoBase, "index.yaml")
 	if err != nil {
