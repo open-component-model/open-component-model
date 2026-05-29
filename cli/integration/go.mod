@@ -5,6 +5,7 @@ go 1.26.3
 replace ocm.software/open-component-model/cli => ../
 
 require (
+	github.com/ProtonMail/go-crypto v1.4.1
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.11.1
@@ -35,7 +36,6 @@ require (
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/ProtonMail/go-crypto v1.4.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
@@ -175,6 +175,7 @@ require (
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260526121250-aae701a4aa9b // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.9 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
+	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260528112443-9cd4df811eb4 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260526121250-aae701a4aa9b // indirect
