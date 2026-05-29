@@ -25,6 +25,7 @@ var VersionedType = runtime.NewVersionedType(OCIRegistryIdentityType, Version)
 type OCIRegistryIdentity struct {
 	// +ocm:jsonschema-gen:enum=OCIRegistry/v1
 	// +ocm:jsonschema-gen:enum:deprecated=OCIRegistry
+	// +ocm:jsonschema-gen:enum:deprecated=OCIRepository
 	Type runtime.Type `json:"type"`
 	// Hostname is the registry hostname (e.g. "ghcr.io", "registry.example.com").
 	// Primary matching attribute when resolving credentials for a registry request.

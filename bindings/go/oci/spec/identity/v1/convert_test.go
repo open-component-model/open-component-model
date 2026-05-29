@@ -22,6 +22,11 @@ func TestMustRegisterIdentityType(t *testing.T) {
 	obj, err = scheme.NewObject(Type)
 	require.NoError(t, err)
 	assert.IsType(t, &OCIRegistryIdentity{}, obj)
+
+	// Should resolve pre-#1964 legacy alias
+	obj, err = scheme.NewObject(LegacyType)
+	require.NoError(t, err)
+	assert.IsType(t, &OCIRegistryIdentity{}, obj)
 }
 
 func TestOCIRegistryIdentity_SchemeConvert(t *testing.T) {

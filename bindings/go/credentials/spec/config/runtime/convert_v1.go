@@ -24,10 +24,28 @@ func convertConsumers(consumers []v1.Consumer) []Consumer {
 	return entries
 }
 
+// legacyConsumerIdentityTypes maps deprecated consumer identity type names to
+// their current equivalents. Normalization happens at config-load time so that
+// credentials stored under an old type name are still found when the runtime
+// looks them up under the new name.
+//
+// History:
+//   - "OCIRepository" was renamed to "OCIRegistry" in
+//     https://github.com/open-component-model/open-component-model/pull/1964
+var legacyConsumerIdentityTypes = map[string]string{
+	"OCIRepository": "OCIRegistry",
+}
+
 func convertIdentities(identities []runtime.Identity) []runtime.Identity {
 	nidentities := make([]runtime.Identity, len(identities))
 	for i, identity := range identities {
-		nidentities[i] = identity.DeepCopy()
+		id := identity.DeepCopy()
+		if typ, ok := id[runtime.IdentityAttributeType]; ok {
+			if normalized, ok := legacyConsumerIdentityTypes[typ]; ok {
+				id[runtime.IdentityAttributeType] = normalized
+			}
+		}
+		nidentities[i] = id
 	}
 	return nidentities
 }
