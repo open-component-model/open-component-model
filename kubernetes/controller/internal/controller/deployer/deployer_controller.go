@@ -509,7 +509,7 @@ func (r *Reconciler) resolveComponentAndMatchResource(
 		return nil, nil, err
 	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 		// Ignore error, but log event
-		event.New(r.EventRecorder, deployer, nil, deliveryv1alpha1.EventSeverityError, err.Error())
+		event.New(r.EventRecorder, deployer, nil, deliveryv1alpha1.EventSeverityError, "%s", err.Error())
 	default:
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
