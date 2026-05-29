@@ -31,7 +31,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/configuration v0.0.13 // indirect
+	ocm.software/open-component-model/bindings/go/configuration v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 )
