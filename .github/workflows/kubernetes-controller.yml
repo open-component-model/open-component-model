@@ -249,24 +249,25 @@ jobs:
         run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
 
       - name: Extract image for E2E testing
-        # Skopeo can extract by platform (--override-arch) AND convert to docker-archive.
-        # Skopeo is pre-installed on ubuntu-latest but may be missing on ARM runners.
-        # Set tag to "latest" to match the controller's Helm chart default for E2E testing
+        # Load directly into the Docker daemon instead of producing a docker-archive.
+        # Docker 29+ (containerd-snapshotter) + newer kind (--all-platforms --digests)
+        # can produce a digest mismatch where a layer is referenced in the archive
+        # manifest but absent from the blob store, causing ctr import to hard-fail.
+        # Going via docker-daemon bypasses the intermediate archive entirely.
         working-directory: ${{ env.LOCATION }}
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          mkdir -p tmp/docker
           skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
             oci:tmp/oci-dir:${VERSION} \
-            docker-archive:tmp/docker/controller.tar:${IMAGE_NAME}:latest
+            docker-daemon:${IMAGE_NAME}:latest
           echo "CONTROLLER_IMG=${IMAGE_NAME}:${VERSION}" >> "$GITHUB_ENV"
 
       - name: Run E2E tests
         run: |
           set -a && source ${{ env.LOCATION }}/.env && set +a
           bash ${{ env.LOCATION }}/test/e2e/hacks/setup.sh
-          kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller.tar"
+          kind load docker-image "${IMAGE_NAME}:latest"
           task ${{ env.LOCATION }}:test/e2e
 
       - name: Debug cluster state
