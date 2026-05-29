@@ -195,8 +195,8 @@ github.com/moby/go-archive v0.2.0 h1:zg5QDUM2mi0JIM9fdQZWC7U8+2ZfixfTYoHL7rWUcP8
 github.com/moby/go-archive v0.2.0/go.mod h1:mNeivT14o8xU+5q1YnNrkQVpK+dnNe/K6fHqnTg4qPU=
 github.com/moby/moby/api v1.54.2 h1:wiat9QAhnDQjA7wk1kh/TqHz2I1uUA7M7t9SAl/JNXg=
 github.com/moby/moby/api v1.54.2/go.mod h1:+RQ6wluLwtYaTd1WnPLykIDPekkuyD/ROWQClE83pzs=
-github.com/moby/moby/client v0.4.0 h1:S+2XegzHQrrvTCvF6s5HFzcrywWQmuVnhOXe2kiWjIw=
-github.com/moby/moby/client v0.4.0/go.mod h1:QWPbvWchQbxBNdaLSpoKpCdf5E+WxFAgNHogCWDoa7g=
+github.com/moby/moby/client v0.4.1 h1:DMQgisVoMkmMs7fp3ROSdiBnoAu8+vo3GggFl06M/wY=
+github.com/moby/moby/client v0.4.1/go.mod h1:z52C9O2POPOsnxZAy//WtKcQ32P+jT/NGeXu/7nfjGQ=
 github.com/moby/patternmatcher v0.6.1 h1:qlhtafmr6kgMIJjKJMDmMWq7WLkKIo23hsrpR3x084U=
 github.com/moby/patternmatcher v0.6.1/go.mod h1:hDPoyOpDY7OrrMDLaYoY3hf52gNCR/YOUYxkhApJIxc=
 github.com/moby/sys/sequential v0.6.0 h1:qrx7XFUd/5DxtqcoH1h438hF5TmOvzC/lspjy7zgvCU=
@@ -414,8 +414,8 @@ ocm.software/open-component-model/bindings/go/blob v0.0.13 h1:hLM+KUV9QbLVC5rQvC
 ocm.software/open-component-model/bindings/go/blob v0.0.13/go.mod h1:nJqz2QmNoODFNFGDtd4d577RQ+vvlLI1u9G2O1sRmNc=
 ocm.software/open-component-model/bindings/go/cel v0.0.0-20260526091718-cfe4d0a3cfcc h1:t+dM340VuiUQ0xkz+A0EMdsqzcGWClwFvpWZSArI2QY=
 ocm.software/open-component-model/bindings/go/cel v0.0.0-20260526091718-cfe4d0a3cfcc/go.mod h1:yxoaw2Mle79QWBAAfk7IPvpIvIEH5Hm9N01oqgadfS4=
-ocm.software/open-component-model/bindings/go/configuration v0.0.13 h1:fARaCEkyBvuZ8/3nUDMb0LZF3YuohBbJXCTkOqqUmkw=
-ocm.software/open-component-model/bindings/go/configuration v0.0.13/go.mod h1:B8rEZoPPL4bAYhsi5I4IZJ8EJSOwMupd95Lw/N0TBRA=
+ocm.software/open-component-model/bindings/go/configuration v0.0.14 h1:+Rbgg9sy68Grf1xVmJwDQazhUd8kCxCYJrE+u8DlHUY=
+ocm.software/open-component-model/bindings/go/configuration v0.0.14/go.mod h1:UF5HzB5QbNap6oHx0/ul7FRPSMSl0dyobMV3vhYQGZc=
 ocm.software/open-component-model/bindings/go/credentials v0.0.12 h1:GMedcclw/Nu7G8EJREIdXmAk/78j9xAQAIlRpd8QQO4=
 ocm.software/open-component-model/bindings/go/credentials v0.0.12/go.mod h1:XH9GR0kG2p5iaqBAAxTE1rX0fBE86Q2hCD7QodWRTpc=
 ocm.software/open-component-model/bindings/go/ctf v0.4.0 h1:E2kDGJk/ZR2wMK6fk3yFr2Uv6AhfLdMmvdvQ7Y64/2s=

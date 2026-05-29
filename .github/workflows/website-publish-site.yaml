@@ -27,6 +27,9 @@ jobs:
     name: Publish Site
     # peaceiris/actions-hugo v3 produces wrong filename casing for Hugo >= v0.103.0 on ARM64.
     runs-on: ubuntu-latest
+    environment:
+      name: release
+      deployment: false
 
     permissions:
       contents: write
