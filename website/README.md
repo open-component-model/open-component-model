@@ -13,7 +13,7 @@ This repository contains the sources used to build the Open Component Model webs
     - [Internal Links](#internal-links)
   - [Section Overview Pages](#section-overview-pages)
 - [Run Site Locally](#run-site-locally)
-- [Cut-off New Versions](#cut-off-new-versions)
+- [Versioning](#versioning)
 - [Contributing](#contributing)
 - [Licensing](#licensing)
 <!-- /TOC -->
@@ -121,31 +121,12 @@ npm run dev
 
 The site will be available at [http://localhost:1313][website_local] with live reload.
 
-## Cut-off New Versions
+## Versioning
 
-Versioning is performed via a script that snapshots the current `content/` and updates all necessary configuration files.
-By default it also sets the new version as the `defaultContentVersion`, which is the version served at the site root.
-As long as we don't have stable product releases, we have a version "latest" that serves as the default and points to the most recent release.
-When cutting off a new version, we want to keep "latest" as the default until we have a stable release to point it to.
+Versioning is managed automatically by the release workflow, which opens a PR to register a new docs version after each final release.
 
-Examples:
-
-```sh
-# Create version 0.0.2 and keep the current defaultContentVersion
-npm run cutoff -- 0.0.2 --keepDefault
-
-# Create version 0.0.2 and set it as the defaultContentVersion
-npm run cutoff -- 0.0.2
-```
-
-What the script does (brief):
-
-- Copies `content/` to `content_versioned/version-x.y.z`.
-- Appends a `[versions."x.y.z"]` stanza (without weight) to `config/_default/hugo.toml` and optionally keeps
-  `defaultContentVersion` unchanged when `--keepDefault` is supplied.
-- Appends a grouped, per-version section to `config/_default/module.toml`.
-
-The script keeps versioning configuration minimal and consistent. Authors only need to run the script; no manual edits of config files are required.
+The registration script updates all necessary configuration files (`config/_default/hugo.yaml` and `config/_default/module.yaml`).
+By default it sets the new version as the `defaultContentVersion`, which is the version served at the site root.
 
 ## Contributing
 
