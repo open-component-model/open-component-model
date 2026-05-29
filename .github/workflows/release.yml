@@ -254,19 +254,21 @@ jobs:
           path: ${{ runner.temp }}/chart-assets
 
       - name: Create RC pre-release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
-        with:
-          name: OCM ${{ needs.prepare.outputs.new_version }}
-          tag_name: ${{ needs.prepare.outputs.new_tag }}
-          body_path: ${{ runner.temp }}/CHANGELOG.md
-          fail_on_unmatched_files: true
-          prerelease: true
-          files: |
-            ${{ runner.temp }}/cli-assets/bin/ocm-*
-            ${{ runner.temp }}/cli-assets/oci/*
-            ${{ runner.temp }}/chart-assets/chart-*.tgz
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.prepare.outputs.new_tag }}
+          VERSION: ${{ needs.prepare.outputs.new_version }}
+        run: |
+          set -euo pipefail
+          shopt -s failglob
+          gh release create "${TAG_NAME}" \
+            --repo "$GH_REPO" \
+            --title "OCM ${VERSION}" \
+            --notes-file "$RUNNER_TEMP/CHANGELOG.md" \
+            --prerelease \
+            "$RUNNER_TEMP"/cli-assets/bin/ocm-* \
+            "$RUNNER_TEMP"/cli-assets/oci/* \
+            "$RUNNER_TEMP"/chart-assets/chart-*.tgz
 
       - name: Summarize RC release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
