@@ -135,11 +135,9 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
 	}
 
-	resolvedRepo := helmRepo
-	if resolved, resolveErr := resolveHTTPChartURL(ctx, helmRepo, opt.Version, targetDir, GetterProviders(), getterOpts); resolveErr != nil {
-		return nil, fmt.Errorf("error resolving chart URL %q via index.yaml: %w", helmRepo, resolveErr)
-	} else if resolved != "" {
-		resolvedRepo = resolved
+	resolvedRepo, err := resolveHTTPChartURL(ctx, helmRepo, opt.Version, targetDir, GetterProviders(), getterOpts)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving chart URL %q via index.yaml: %w", helmRepo, err)
 	}
 
 	version, err := getVersion(opt.Version, resolvedRepo)
@@ -221,22 +219,21 @@ func getVersion(versionOverride, helmRepo string) (string, error) {
 // (*v1.Helm).ChartReference(). It fetches index.yaml, looks up the chart entry, and
 // returns the absolute URL from urls[0].
 //
-// Returns ("", nil) when helmRepo is not an HTTP/S repo reference (OCI, direct .tgz
-// URLs, etc.) so the caller can use the original value unchanged.
+// Returns helmRepo unchanged when no resolution was possible.
 func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir string, providers getter.Providers, getterOpts []getter.Option) (string, error) {
 	if !strings.HasPrefix(helmRepo, "http://") && !strings.HasPrefix(helmRepo, "https://") {
-		return "", nil
+		return helmRepo, nil
 	}
 
 	ref, err := looseref.ParseReference(helmRepo)
 	if err != nil {
-		return "", nil // not a structured repo reference; let the caller pass it through
+		return helmRepo, nil // not a structured repo reference; pass through as-is
 	}
 
 	// Tag holds the version; Repository holds "<host>/<repoPath>/<chartName>".
 	// If either is absent this isn't a ChartReference()-style URL.
 	if ref.Tag == "" || ref.Repository == "" {
-		return "", nil
+		return helmRepo, nil
 	}
 
 	// chartName is the last path segment of the repository, repoPath is everything before it.
