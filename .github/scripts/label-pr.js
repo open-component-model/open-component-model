@@ -1,5 +1,8 @@
 // @ts-check
 
+/** Allowed conventional commit types. Single source of truth shared by validate and label. */
+export const ALLOWED_TYPES = ['feat', 'fix', 'chore', 'docs', 'test', 'perf'];
+
 /**
  * Parses a PR title against the Conventional Commit format.
  *
@@ -27,11 +30,10 @@ export function parsePRTitle(title, allowedTypes) {
  * @param {{ core: any, context: any }} opts
  */
 export function validatePRTitle({ core, context }) {
-  const allowedTypes = (process.env.ALLOWED_TYPES ?? '').trim().split('\n').join('|');
   const prTitle = context.payload.pull_request.title;
   console.log(`PR Title: ${prTitle}`);
 
-  if (!parsePRTitle(prTitle, allowedTypes)) {
+  if (!parsePRTitle(prTitle, ALLOWED_TYPES.join('|'))) {
     core.setFailed(
       `PR title "${prTitle}" does not follow the Conventional Commit format. ` +
       `Expected: <type>[(<scope>)][!]: <subject> — see https://www.conventionalcommits.org/en/v1.0.0/`
@@ -93,7 +95,9 @@ export async function labelPR({ github, context }) {
       console.log("No labels to add.");
     }
   } else {
-    console.log("Invalid PR title format. Make sure you named the PR after the specification at https://www.conventionalcommits.org/en/v1.0.0/#specification. Exiting...");
-    process.exit(1);
+    throw new Error(
+      "Invalid PR title format. Make sure you named the PR after the specification at " +
+      "https://www.conventionalcommits.org/en/v1.0.0/#specification."
+    );
   }
 }

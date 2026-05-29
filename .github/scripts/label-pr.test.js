@@ -45,26 +45,19 @@ function makeMocks(title) {
 }
 
 /**
- * Runs labelPR and expects process.exit(1) to be called.
+ * Runs labelPR and expects an Error to be thrown for an invalid title.
  * @param {string} title
  */
-async function expectExit1(title) {
+async function expectLabelPRError(title) {
   const { github, context } = makeMocks(title);
-  const originalExit = process.exit;
-  let exitCode = /** @type {number | null} */ (null);
-  // @ts-ignore — intentional override for testing
-  process.exit = (/** @type {number} */ code) => {
-    exitCode = code;
-    throw new Error(`process.exit(${code})`);
-  };
-  try {
-    await labelPR({ github, context });
-    assert.fail("Expected process.exit to be called");
-  } catch (e) {
-    assert.strictEqual(exitCode, 1, "Should exit with code 1");
-  } finally {
-    process.exit = originalExit;
-  }
+  await assert.rejects(
+    () => labelPR({ github, context }),
+    (err) => {
+      assert.ok(err instanceof Error, "Should throw an Error");
+      assert.ok(err.message.includes("Invalid PR title"), "Should throw with invalid title message");
+      return true;
+    }
+  );
 }
 
 // ----------------------------------------------------------
@@ -119,8 +112,6 @@ assert.strictEqual(parsePRTitle("feat : space before colon", ALLOWED_TYPES), nul
 // ----------------------------------------------------------
 console.log("Testing validatePRTitle...");
 
-process.env.ALLOWED_TYPES = "feat\nfix\nchore\ndocs\ntest\nperf";
-
 /**
  * @param {string} title
  * @returns {string | null} The failure message, or null if setFailed was not called.
@@ -144,13 +135,8 @@ console.log("Testing validatePRTitle invalid titles...");
 assert.ok(runValidate("this is not valid")?.includes("Conventional Commit"), "invalid title should call setFailed");
 assert.ok(runValidate("WIP: something")?.includes("Conventional Commit"), "unknown type should call setFailed");
 
-// Type not in ALLOWED_TYPES should fail even if it is a real commit type
-{
-  const saved = process.env.ALLOWED_TYPES;
-  process.env.ALLOWED_TYPES = "feat\nfix";
-  assert.ok(runValidate("chore: cleanup")?.includes("Conventional Commit"), "type not in ALLOWED_TYPES should fail");
-  process.env.ALLOWED_TYPES = saved;
-}
+// Type not in a restricted allowed set should fail
+assert.strictEqual(parsePRTitle("chore: cleanup", "feat|fix"), null, "type not in allowed set should fail");
 
 // ----------------------------------------------------------
 // labelPR — type labels
@@ -219,8 +205,8 @@ console.log("Testing labelPR special titles...");
 // ----------------------------------------------------------
 console.log("Testing labelPR invalid titles...");
 
-await expectExit1("this is not a conventional commit");
-await expectExit1("");
+await expectLabelPRError("this is not a conventional commit");
+await expectLabelPRError("");
 
 // ----------------------------------------------------------
 // labelPR — type with no label mapping adds no labels
