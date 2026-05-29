@@ -1,6 +1,7 @@
 package download
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -389,6 +390,128 @@ func TestNewReadOnlyChartFromRemote_VersionOverrideTakesPrecedenceInIndexLookup(
 	r.NotNil(chart)
 	assert.Equal(t, "mychart", chart.Name)
 	assert.Equal(t, "0.1.0", chart.Version)
+}
+
+func TestResolveHTTPChartURL(t *testing.T) {
+	makeIndex := func(srvURL string) string {
+		return "apiVersion: v1\n" +
+			"generated: \"2024-01-01T00:00:00.000Z\"\n" +
+			"entries:\n" +
+			"  mychart:\n" +
+			"  - name: mychart\n" +
+			"    version: 0.1.0\n" +
+			"    apiVersion: v2\n" +
+			"    urls:\n" +
+			"    - " + srvURL + "/mychart/mychart-0.1.0.tgz\n"
+	}
+
+	tests := []struct {
+		name             string
+		helmRepo         string // %s is replaced with srv.URL when setupMux != nil
+		requestedVersion string
+		setupMux         func(mux *http.ServeMux, getSrvURL func() string)
+		wantSuffix       string // expected result = srv.URL + wantSuffix (server cases only)
+		wantErr          string
+	}{
+		{
+			name:     "OCI URL passes through unchanged",
+			helmRepo: "oci://registry.example.com/charts/mychart:1.0.0",
+		},
+		{
+			name:     "direct tgz URL without version tag passes through",
+			helmRepo: "https://example.com/charts/mychart-1.0.0.tgz",
+		},
+		{
+			name:     "HTTP/S URL without tag passes through",
+			helmRepo: "https://example.com/mychart",
+		},
+		{
+			name:     "resolves chart URL from index.yaml",
+			helmRepo: "%s/mychart:0.1.0",
+			setupMux: func(mux *http.ServeMux, getSrvURL func() string) {
+				mux.HandleFunc("/index.yaml", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/yaml")
+					_, _ = w.Write([]byte(makeIndex(getSrvURL())))
+				})
+			},
+			wantSuffix: "/mychart/mychart-0.1.0.tgz",
+		},
+		{
+			name:             "requestedVersion overrides URL tag in index lookup",
+			helmRepo:         "%s/mychart:wrong-tag",
+			requestedVersion: "0.1.0",
+			setupMux: func(mux *http.ServeMux, getSrvURL func() string) {
+				mux.HandleFunc("/index.yaml", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/yaml")
+					_, _ = w.Write([]byte(makeIndex(getSrvURL())))
+				})
+			},
+			wantSuffix: "/mychart/mychart-0.1.0.tgz",
+		},
+		{
+			name:     "chart not found in index returns error",
+			helmRepo: "%s/notexist:9.9.9",
+			setupMux: func(mux *http.ServeMux, getSrvURL func() string) {
+				mux.HandleFunc("/index.yaml", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/yaml")
+					_, _ = w.Write([]byte(makeIndex(getSrvURL())))
+				})
+			},
+			wantErr: "not found in index",
+		},
+		{
+			name:     "index fetch failure returns error",
+			helmRepo: "%s/mychart:0.1.0",
+			setupMux: func(mux *http.ServeMux, _ func() string) {
+				mux.HandleFunc("/index.yaml", func(w http.ResponseWriter, r *http.Request) {
+					http.Error(w, "internal error", http.StatusInternalServerError)
+				})
+			},
+			wantErr: "error fetching index.yaml",
+		},
+		{
+			name:     "chart entry with no URLs returns error",
+			helmRepo: "%s/mychart:0.1.0",
+			setupMux: func(mux *http.ServeMux, _ func() string) {
+				mux.HandleFunc("/index.yaml", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/yaml")
+					_, _ = w.Write([]byte("apiVersion: v1\ngenerated: \"2024-01-01T00:00:00.000Z\"\nentries:\n  mychart:\n  - name: mychart\n    version: 0.1.0\n    apiVersion: v2\n    urls: []\n"))
+				})
+			},
+			wantErr: "no download URLs",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			helmRepo := tt.helmRepo
+			wantResult := helmRepo
+
+			if tt.setupMux != nil {
+				var srvURL string
+				mux := http.NewServeMux()
+				tt.setupMux(mux, func() string { return srvURL })
+				srv := httptest.NewServer(mux)
+				t.Cleanup(srv.Close)
+				srvURL = srv.URL
+
+				helmRepo = fmt.Sprintf(helmRepo, srvURL)
+				if tt.wantErr == "" {
+					wantResult = srvURL + tt.wantSuffix
+				}
+			}
+
+			result, err := resolveHTTPChartURL(t.Context(), helmRepo, tt.requestedVersion, t.TempDir(), GetterProviders(), nil)
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, wantResult, result)
+		})
+	}
 }
 
 // newBasicAuthChartServer returns an httptest server that serves files from dir

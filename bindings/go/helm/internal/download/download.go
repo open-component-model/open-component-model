@@ -227,7 +227,7 @@ func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir
 
 	ref, err := looseref.ParseReference(helmRepo)
 	if err != nil {
-		return helmRepo, nil // not a structured repo reference; pass through as-is
+		return helmRepo, nil
 	}
 
 	// Tag holds the version; Repository holds "<host>/<repoPath>/<chartName>".
