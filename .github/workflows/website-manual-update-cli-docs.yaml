@@ -16,6 +16,9 @@ jobs:
   retrigger:
     name: Create new "Release Publish Event"
     runs-on: ubuntu-24.04-arm
+    environment:
+      name: release
+      deployment: false
     steps:
     - name: Generate token
       id: generate_token
