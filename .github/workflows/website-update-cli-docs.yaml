@@ -19,7 +19,7 @@ jobs:
     if: github.event.client_payload != '' || github.event.inputs.tag != ''
     runs-on: ubuntu-24.04-arm
     environment:
-      name: release
+      name: automation
       deployment: false
     env:
       TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
