@@ -28,7 +28,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260526121250-aae701a4aa9b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260528112443-9cd4df811eb4
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260526121250-aae701a4aa9b
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260601150938-fdc040441934
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260526121250-aae701a4aa9b
