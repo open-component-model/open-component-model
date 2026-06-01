@@ -7,10 +7,12 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtype"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 )
@@ -23,6 +25,7 @@ func Register(
 	digRegistry *digestprocessor.RepositoryRegistry,
 	blobTransformerRegistry *blobtransformer.Registry,
 	compListRegistry *componentlister.ComponentListerRegistry,
+	credentialTypeRegistry *credentialtype.Registry,
 	filesystemConfig *filesystemv1alpha1.Config,
 	logger *slog.Logger,
 ) error {
@@ -30,6 +33,7 @@ func Register(
 
 	resourceRepoPlugin := ocires.NewResourceRepository(filesystemConfig, ocires.WithUserAgent(creator))
 	ociBlobTransformerPlugin := transformer.New(logger)
+	credentialTypeRegistry.Register(ocicredentials.Scheme)
 
 	return errors.Join(
 		compverRegistry.RegisterInternalComponentVersionRepositoryPlugin(

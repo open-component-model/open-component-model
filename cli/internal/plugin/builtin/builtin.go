@@ -7,10 +7,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
-	helmcredentials "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
-	ocicredentials "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	rsacredentials "ocm.software/open-component-model/bindings/go/rsa/spec/credentials"
 	ocicredentialplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/credentials/oci"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/gpg"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/dir"
@@ -23,12 +20,6 @@ import (
 )
 
 func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, logger *slog.Logger) error {
-	// Register consumer credential types into the PluginManager's credential type scheme so
-	// the credential graph can deserialize typed credentials from .ocmconfig at ingestion time.
-	manager.CredentialTypeRegistry.Register(ocicredentials.MustAddToScheme)
-	manager.CredentialTypeRegistry.Register(helmcredentials.MustRegisterCredentialType)
-	manager.CredentialTypeRegistry.Register(rsacredentials.MustRegisterCredentialType)
-
 	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}
@@ -39,6 +30,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.DigestProcessorRegistry,
 		manager.BlobTransformerRegistry,
 		manager.ComponentListerRegistry,
+		manager.CredentialTypeRegistry,
 		filesystemConfig,
 		logger,
 	); err != nil {
@@ -54,7 +46,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := dir.Register(manager.InputRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register dir input plugin: %w", err)
 	}
-	if err := helm.Register(manager.InputRegistry, filesystemConfig); err != nil {
+	if err := helm.Register(manager.InputRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register helm input plugin: %w", err)
 	}
 	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(
@@ -67,7 +59,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	); err != nil {
 		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
 	}
-	if err := rsa.Register(manager.SigningRegistry, filesystemConfig); err != nil {
+	if err := rsa.Register(manager.SigningRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register RSA signing plugin: %w", err)
 	}
 	if err := oidc.Register(manager.SigningRegistry, filesystemConfig); err != nil {

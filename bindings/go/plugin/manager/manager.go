@@ -51,11 +51,6 @@ type PluginManager struct {
 	ComponentListerRegistry            *componentlister.ComponentListerRegistry
 	CredentialPluginRegistry           *credentialplugin.Registry
 	CredentialRepositoryRegistry       *credentialrepository.RepositoryRegistry
-	// CredentialTypeRegistry holds typed consumer credential structs (e.g. OCICredentials/v1,
-	// HelmHTTPCredentials/v1, RSACredentials/v1). Built-in bindings register their types here
-	// via builtin.Register; external plugins register via plugin discovery from their capability
-	// spec. The credential graph reads it as a CredentialTypeSchemeProvider to deserialize typed
-	// credentials from .ocmconfig at ingestion time (ADR 0021 §Type Registries).
 	CredentialTypeRegistry             *credentialtype.Registry
 	InputRegistry                      *input.RepositoryRegistry
 	DigestProcessorRegistry            *digestprocessor.RepositoryRegistry
@@ -80,7 +75,7 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 		ComponentListerRegistry:            componentlister.NewComponentListerRegistry(ctx),
 		CredentialPluginRegistry:           credentialplugin.NewRegistry(ctx),
 		CredentialRepositoryRegistry:       credentialrepository.NewCredentialRepositoryRegistry(ctx),
-		CredentialTypeRegistry:             credentialtype.NewRegistry(),
+		CredentialTypeRegistry:             credentialtype.NewRegistry(ctx),
 		InputRegistry:                      input.NewInputRepositoryRegistry(ctx),
 		DigestProcessorRegistry:            digestprocessor.NewDigestProcessorRegistry(ctx),
 		ResourcePluginRegistry:             resource.NewResourceRegistry(ctx),
@@ -319,8 +314,6 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 			if err := pm.CredentialRepositoryRegistry.AddPlugin(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
-			// Register any credential types declared by this plugin into the credential type
-			// scheme so the graph can deserialize them at ingestion time.
 			pm.CredentialTypeRegistry.RegisterFromPlugin(capability.CustomCredentialTypes)
 		case *componentlisterv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding component lister plugin", "id", plugin.ID)
