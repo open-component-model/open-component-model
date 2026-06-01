@@ -2,6 +2,7 @@ package credentialtype
 
 import (
 	"context"
+	"log/slog"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -37,7 +38,14 @@ func (r *Registry) Register(scheme *runtime.Scheme) {
 }
 
 func (r *Registry) RegisterFromPlugin(credentialTypes []types.Type) {
+	var failed []runtime.Type
 	for _, t := range credentialTypes {
-		_ = r.scheme.RegisterWithAlias(&runtime.Raw{}, t.Type)
+		if err := r.scheme.RegisterWithAlias(&runtime.Raw{}, t.Type); err != nil {
+			failed = append(failed, t.Type)
+			slog.Error("failed to register credential type from plugin", "type", t.Type, "error", err)
+		}
+	}
+	if len(failed) > 0 {
+		slog.Error("some credential types could not be registered", "types", failed)
 	}
 }
