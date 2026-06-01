@@ -1,13 +1,14 @@
 name: monorepo shared build & publish
 
 # Reusable build & publish chain for the whole monorepo. Owns the dependency
-# order across CLI and controller: build (in parallel) → conformance gate →
-# publish to GHCR. Drives daily CI on main/release branches and is reused by
-# release.yml for tagged releases.
+# order across CLI and controller: build (in parallel) → conformance + e2e
+# gates (in parallel) → publish to GHCR. Drives daily CI on main/release
+# branches and is reused by release.yml for tagged releases.
 #
 # It has the following stages: build_cli, build_controller (these are executed in parallel)
-# from here, if success, goes on to conformance and then finally, if required, publish_*.
-# Conformance is _ALWAYS_ a gate to pushing: if it failed there will be nothing in GHCR.
+# from here, if success, conformance and e2e run concurrently, and then finally,
+# if required, publish_*. Conformance and e2e are _BOTH_ gates to pushing: if
+# either fails there will be nothing in GHCR.
 
 on:
   push:
@@ -112,11 +113,27 @@ jobs:
       toolkit_version: ${{ needs.build_controller.outputs.version }}
   # === end replace ===
 
+  # === New: E2E lifted out of kubernetes-controller.yml so it runs concurrently
+  # with conformance instead of serializing ahead of it. Needs only the
+  # controller build; gates publish alongside conformance. ===
+  e2e:
+    name: E2E
+    needs: [build_controller]
+    uses: ./.github/workflows/e2e.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      ref: ${{ inputs.ref }}
+      controller_image_artifact: ${{ needs.build_controller.outputs.artifact_name }}
+      controller_version: ${{ needs.build_controller.outputs.version }}
+  # === end ===
+
   # === New this part is a copy from cli.yml::build::branch-check + kubernetes-controller.yml::build::branch-check ===
   # Changes include things for the modified tag regex.
   decide_publish:
     name: Decide Publish
-    needs: conformance
+    needs: [conformance, e2e]
     runs-on: ubuntu-24.04-arm
     outputs:
       publish: ${{ steps.check.outputs.publish }}
@@ -144,7 +161,7 @@ jobs:
   # === This is from cli.yml::publish verbatim a date on conformance ===
   publish_cli:
     name: Publish CLI
-    needs: [build_cli, conformance, decide_publish]
+    needs: [build_cli, decide_publish]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
     runs-on: ubuntu-24.04-arm
     outputs:
@@ -213,7 +230,7 @@ jobs:
   # === Same as above but for Kubernetes publish. ===
   publish_controller:
     name: Publish Controller
-    needs: [build_controller, conformance, decide_publish]
+    needs: [build_controller, decide_publish]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
     runs-on: ubuntu-24.04-arm
     outputs:
