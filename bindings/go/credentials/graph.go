@@ -104,10 +104,8 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (runtime
 		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
 	}
 
-	if creds == nil {
-		if _, ok := creds.(*v1.DirectCredentials); ok {
-			slog.Warn("resolved credentials for identity using direct credential resolution, consider configuring a CredentialTypeSchemeProvider", "identity", identity.String())
-		}
+	if _, ok := creds.(*v1.DirectCredentials); ok {
+		slog.Warn("resolved credentials for identity using direct credential resolution, consider configuring a CredentialTypeSchemeProvider", "identity", identity.String())
 	}
 
 	return creds, nil
