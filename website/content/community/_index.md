@@ -41,18 +41,25 @@ Join [neonephos-ocm-support](https://linuxfoundation.zulipchat.com/#narrow/chann
 
 Stay up to date with the latest OCM blog posts and announcements by subscribing to our [RSS feed](https://ocm.software/blog/index.xml).
 
-## Community Calls
+## Community Calendar
 
-We hold regular community calls open to everyone:
+All OCM meetings are public. Click any event for the join link, or
+[open the calendar on LFX](https://zoom-lfx.platform.linuxfoundation.org/meetings/open-component-model?view=month)
+to subscribe to the whole feed.
 
-- **Frequency**: Every first Wednesday of the month
-- **Time**: 17:00-18:00 (Europe/Berlin)
-- **Duration**: 1 hour
-- **Location**: [Zoom Link](https://zoom-lfx.platform.linuxfoundation.org/meeting/97987153840?password=fe2c3bf0-6a99-4e75-b62d-f1918154254e)
+{{< community-calendar >}}
 
-[Call history and recordings](https://github.com/open-component-model/open-component-model/blob/main/docs/community/README.md) are available on GitHub.
+For an explanation of each meeting, see [How We Work]({{< relref "how-we-work.md" >}}#meetings).
 
-These calls are moderated by at least one OCM Core Maintainer. Bring anything you like - ideas, issues, concepts, or questions about upcoming work.
+### Community Call
+
+We hold a public community call open to everyone, every first Wednesday of the month
+(17:00-18:00 Europe/Berlin, 1 hour). Join via the
+[Zoom link](https://zoom-lfx.platform.linuxfoundation.org/meeting/97987153840?password=fe2c3bf0-6a99-4e75-b62d-f1918154254e),
+or click the event in the calendar above.
+[Call history and recordings](https://github.com/open-component-model/open-component-model/blob/main/docs/community/README.md)
+are available on GitHub. These calls are moderated by at least one OCM Core Maintainer -
+bring anything you like: ideas, issues, concepts, or questions about upcoming work.
 
 ## Code of Conduct
 

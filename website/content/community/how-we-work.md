@@ -55,9 +55,9 @@ Anyone can propose work for an upcoming sprint. The process is:
 ## Meetings
 
 {{<callout context="note" title="Joining meetings" icon="outline/info-circle">}}
-We are working on making all meeting links publicly discoverable. In the meantime, reach out on
-[Zulip](/community/#zulip) or
-[Slack](/community/#slack) to receive a calendar invite.
+All public meetings are listed on the [community calendar](/community/#community-calendar) -
+subscribe once and every change shows up in your calendar app. Join links are attached to
+each event.
 {{</callout>}}
 
 | Meeting | Cadence | Purpose |
