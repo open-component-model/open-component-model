@@ -3,7 +3,7 @@ module ocm.software/open-component-model/bindings/go/oci
 go 1.26.3
 
 require (
-	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/nlepage/go-tarfs v1.2.1
 	github.com/opencontainers/go-digest v1.0.0
@@ -12,7 +12,7 @@ require (
 	github.com/veqryn/slog-context v0.9.0
 	golang.org/x/sync v0.20.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/configuration v0.0.13
+	ocm.software/open-component-model/bindings/go/configuration v0.0.14
 	ocm.software/open-component-model/bindings/go/credentials v0.0.12
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260521121644-2be2fc986501

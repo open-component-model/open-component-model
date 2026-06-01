@@ -61,6 +61,13 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 	}
 
+	// Streaming OCI-to-OCI transfer transformer
+	ociTransferOCIArtifact := &ocitransformer.TransferOCIArtifact{
+		Scheme:             transformerScheme,
+		Repository:         resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
 	// Helm transformers
 	getHelmChart := &helmtransformer.GetHelmChart{
 		Scheme:             transformerScheme,
@@ -88,6 +95,7 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
 		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact).
+		WithTransformer(&ociv1alpha1.TransferOCIArtifact{}, ociTransferOCIArtifact).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
