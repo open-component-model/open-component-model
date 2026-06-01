@@ -959,9 +959,6 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
 	}
-	if err := ref.ValidateReferenceAsTag(); err != nil {
-		return nil, fmt.Errorf("can only upload %q if it is tagged: %w", access.ImageReference, err)
-	}
 
 	store, err := repo.resolver.StoreForReference(ctx, access.ImageReference)
 	if err != nil {
