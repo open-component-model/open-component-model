@@ -35,7 +35,6 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
-	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -289,8 +288,8 @@ func TestExample_PrivateOCIRegistry(t *testing.T) {
 	identity, err := credidentity.IdentityFromOCIRepository(repoSpec)
 	r.NoError(err)
 
-	credResolver := credentials.NewStaticTypedCredentialsResolver(map[string]runtime.Typed{
-		identity.String(): &ocicredsv1.OCICredentials{Username: username, Password: password},
+	credResolver := credentials.NewStaticCredentialsResolver(map[string]map[string]string{
+		identity.String(): {"username": username, "password": password},
 	})
 
 	// 3. Create the OCI repository client using the credentials for authentication.
@@ -350,9 +349,8 @@ func TestExample_PrivateOCIRegistry(t *testing.T) {
 	// 5. Verify the credential resolver can resolve credentials for this registry.
 	resolvedCreds, err := credResolver.Resolve(ctx, identity)
 	r.NoError(err)
-	ociCreds := resolvedCreds.(*ocicredsv1.OCICredentials)
-	r.Equal(username, ociCreds.Username)
-	r.Equal(password, ociCreds.Password)
+	r.Equal(username, resolvedCreds["username"])
+	r.Equal(password, resolvedCreds["password"])
 
 	// 6. Retrieve the component version to confirm authentication succeeded.
 	got, err := repo.GetComponentVersion(ctx, component, version)

@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
-	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -29,23 +28,24 @@ func TestExample_StaticCredentialResolver(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
 
-	identity := runtime.Identity{
-		"type":     "OCIRegistry",
-		"hostname": "registry.example.com",
+	// Define a credential map keyed by identity attributes.
+	credMap := map[string]map[string]string{
+		"hostname=registry.example.com,type=OCIRegistry": {
+			"username": "test-user",
+			"password": "test-password",
+		},
 	}
 
-	resolver := credentials.NewStaticTypedCredentialsResolver(map[string]runtime.Typed{
-		identity.String(): &ocicredsv1.OCICredentials{
-			Username: "test-user",
-			Password: "test-password",
-		},
-	})
+	resolver := credentials.NewStaticCredentialsResolver(credMap)
 
-	creds, err := resolver.Resolve(ctx, identity)
+	// Resolve credentials for a matching identity.
+	creds, err := resolver.Resolve(ctx, runtime.Identity{
+		"type":     "OCIRegistry",
+		"hostname": "registry.example.com",
+	})
 	r.NoError(err)
-	ociCreds := creds.(*ocicredsv1.OCICredentials)
-	r.Equal("test-user", ociCreds.Username)
-	r.Equal("test-password", ociCreds.Password)
+	r.Equal("test-user", creds["username"])
+	r.Equal("test-password", creds["password"])
 }
 
 // TestExample_CredentialResolutionNotFound shows how credential resolution
@@ -54,7 +54,7 @@ func TestExample_CredentialResolutionNotFound(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
 
-	resolver := credentials.NewStaticTypedCredentialsResolver(map[string]runtime.Typed{})
+	resolver := credentials.NewStaticCredentialsResolver(map[string]map[string]string{})
 
 	_, err := resolver.Resolve(ctx, runtime.Identity{
 		"type":     "OCIRegistry",

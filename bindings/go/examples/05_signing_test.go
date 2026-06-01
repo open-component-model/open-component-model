@@ -36,7 +36,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	rsahandler "ocm.software/open-component-model/bindings/go/rsa/signing/handler"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
-	v1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
 
@@ -238,9 +237,8 @@ func TestExample_RSASignAndVerifyPlain(t *testing.T) {
 		SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
 		SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain,
 	}
-	sigInfo, err := handler.Sign(ctx, *dig, cfg, &v1.RSACredentials{
-		Type: v1.VersionedType,
-		PrivateKeyPEMFile: privPath,
+	sigInfo, err := handler.Sign(ctx, *dig, cfg, map[string]string{
+		"private_key_pem_file": privPath,
 	})
 	r.NoError(err)
 	r.NotEmpty(sigInfo.Value)
@@ -251,9 +249,8 @@ func TestExample_RSASignAndVerifyPlain(t *testing.T) {
 		Digest:    *dig,
 		Signature: sigInfo,
 	}
-	err = handler.Verify(ctx, fullSig, nil, &v1.RSACredentials{
-		Type: v1.VersionedType,
-		PublicKeyPEMFile: pubPath,
+	err = handler.Verify(ctx, fullSig, nil, map[string]string{
+		"public_key_pem_file": pubPath,
 	})
 	r.NoError(err)
 }
@@ -297,10 +294,9 @@ func TestExample_RSASignAndVerifyPEM(t *testing.T) {
 		SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
 		SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
 	}
-	sigInfo, err := handler.Sign(ctx, *dig, cfg, &v1.RSACredentials{
-		Type: v1.VersionedType,
-		PrivateKeyPEMFile: privPath,
-		PublicKeyPEMFile:  pubPath,
+	sigInfo, err := handler.Sign(ctx, *dig, cfg, map[string]string{
+		"private_key_pem_file": privPath,
+		"public_key_pem_file":  pubPath,
 	})
 	r.NoError(err)
 	r.Equal(v1alpha1.MediaTypePEM, sigInfo.MediaType)
@@ -311,9 +307,8 @@ func TestExample_RSASignAndVerifyPEM(t *testing.T) {
 		Digest:    *dig,
 		Signature: sigInfo,
 	}
-	err = handler.Verify(ctx, fullSig, nil, &v1.RSACredentials{
-		Type: v1.VersionedType,
-		PublicKeyPEMFile: pubPath,
+	err = handler.Verify(ctx, fullSig, nil, map[string]string{
+		"public_key_pem_file": pubPath,
 	})
 	r.NoError(err)
 }
@@ -353,9 +348,8 @@ func TestExample_RSAVerifyTamperedDigest(t *testing.T) {
 		SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
 		SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain,
 	}
-	sigInfo, err := handler.Sign(ctx, *dig, cfg, &v1.RSACredentials{
-		Type: v1.VersionedType,
-		PrivateKeyPEMFile: privPath,
+	sigInfo, err := handler.Sign(ctx, *dig, cfg, map[string]string{
+		"private_key_pem_file": privPath,
 	})
 	r.NoError(err)
 
@@ -380,9 +374,8 @@ func TestExample_RSAVerifyTamperedDigest(t *testing.T) {
 		Digest:    *tamperedDig,
 		Signature: sigInfo,
 	}
-	err = handler.Verify(ctx, fullSig, nil, &v1.RSACredentials{
-		Type: v1.VersionedType,
-		PublicKeyPEMFile: pubPath,
+	err = handler.Verify(ctx, fullSig, nil, map[string]string{
+		"public_key_pem_file": pubPath,
 	})
 	r.Error(err)
 	r.ErrorContains(err, "verification error")
@@ -427,9 +420,8 @@ func TestExample_RSAVerifyWrongKey(t *testing.T) {
 		SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
 		SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain,
 	}
-	sigInfo, err := handler.Sign(ctx, *dig, cfg, &v1.RSACredentials{
-		Type: v1.VersionedType,
-		PrivateKeyPEMFile: privPathA,
+	sigInfo, err := handler.Sign(ctx, *dig, cfg, map[string]string{
+		"private_key_pem_file": privPathA,
 	})
 	r.NoError(err)
 
@@ -439,9 +431,8 @@ func TestExample_RSAVerifyWrongKey(t *testing.T) {
 		Digest:    *dig,
 		Signature: sigInfo,
 	}
-	err = handler.Verify(ctx, fullSig, nil, &v1.RSACredentials{
-		Type: v1.VersionedType,
-		PublicKeyPEMFile: pubPathB,
+	err = handler.Verify(ctx, fullSig, nil, map[string]string{
+		"public_key_pem_file": pubPathB,
 	})
 	r.Error(err)
 	r.ErrorContains(err, "verification error")
