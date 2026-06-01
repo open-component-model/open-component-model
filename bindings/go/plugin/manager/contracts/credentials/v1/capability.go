@@ -26,4 +26,5 @@ type CapabilitySpec struct {
 	//  currently, it uses the general types.Type, but we might want to tailor this
 	//  to credentials specifically.
 	SupportedCredentialRepositorySpecTypes []types.Type `json:"supportedCredentialRepositorySpecTypes"`
+	CustomCredentialTypes []types.Type `json:"customCredentialTypes,omitempty"`
 }
