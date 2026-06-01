@@ -3,7 +3,7 @@ module ocm.software/open-component-model/bindings/go/transform
 go 1.26.3
 
 require (
-	github.com/google/cel-go v0.28.0
+	github.com/google/cel-go v0.28.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260505072254-1c17fcd5c971
@@ -21,6 +21,7 @@ require (
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
