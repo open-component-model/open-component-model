@@ -972,8 +972,11 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		return nil, fmt.Errorf("failed to stream resource via copy: %w", err)
 	}
 
-	if err := store.Tag(ctx, rs.Root(), ref.Tag); err != nil {
-		return nil, fmt.Errorf("failed to tag artifact with tag %q: %w", ref.Tag, err)
+	if ref.Tag != "" {
+		// if we have a tag, we should also tag in the upload
+		if err := store.Tag(ctx, rs.Root(), ref.Tag); err != nil {
+			return nil, fmt.Errorf("failed to tag artifact with tag %q: %w", ref.Tag, err)
+		}
 	}
 
 	res = res.DeepCopy()
@@ -983,6 +986,12 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	if err := internaldigest.Apply(res.Digest, rs.Root().Digest); err != nil {
 		return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
+
+	// if we don't have a pinned access we can pin it now.
+	if ref.Reference.Reference == "" {
+		ref.Reference.Reference = rs.Root().Digest.String()
+	}
+
 	access.ImageReference = ref.String()
 	res.Access = &access
 
