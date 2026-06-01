@@ -28,8 +28,8 @@ func (in *CapabilitySpec) DeepCopyInto(out *CapabilitySpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.SupportedCredentialTypes != nil {
-		in, out := &in.SupportedCredentialTypes, &out.SupportedCredentialTypes
+	if in.CustomCredentialTypes != nil {
+		in, out := &in.CustomCredentialTypes, &out.CustomCredentialTypes
 		*out = make([]types.Type, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])

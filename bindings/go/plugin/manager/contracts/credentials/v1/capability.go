@@ -26,7 +26,7 @@ type CapabilitySpec struct {
 	//  currently, it uses the general types.Type, but we might want to tailor this
 	//  to credentials specifically.
 	SupportedCredentialRepositorySpecTypes []types.Type `json:"supportedCredentialRepositorySpecTypes"`
-	// SupportedCredentialTypes declares the typed consumer credential structs this plugin
-	// can return from Resolve.
-	SupportedCredentialTypes []types.Type `json:"supportedCredentialTypes,omitempty"`
+	// CustomCredentialTypes declares custom credential types introduced by this plugin
+	// that are not already registered in the credential type scheme.
+	CustomCredentialTypes []types.Type `json:"customCredentialTypes,omitempty"`
 }
