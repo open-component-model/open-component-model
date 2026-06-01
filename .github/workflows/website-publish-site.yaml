@@ -99,7 +99,7 @@ jobs:
           cp schema-v2.html schema_doc.css schema_doc.min.js public/docs/overview/specification
 
       - name: Publish as GitHub Pages
-        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e #v4
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
         env:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         with:
