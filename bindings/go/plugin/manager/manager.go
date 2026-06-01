@@ -25,11 +25,11 @@ import (
 	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	signinghandlerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtype"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialplugin"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtype"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
@@ -320,8 +320,8 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 			// Register any credential types declared by this plugin into the credential type
-			// scheme so the graph can deserialize them at ingestion time (ADR 0021 §Type Registries).
-			pm.CredentialTypeRegistry.RegisterFromPlugin(capability)
+			// scheme so the graph can deserialize them at ingestion time.
+			pm.CredentialTypeRegistry.RegisterFromPlugin(capability.CustomCredentialTypes)
 		case *componentlisterv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding component lister plugin", "id", plugin.ID)
 			if err := pm.ComponentListerRegistry.AddPlugin(plugin, capability); err != nil {
