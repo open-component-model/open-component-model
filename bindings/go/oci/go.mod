@@ -3,7 +3,7 @@ module ocm.software/open-component-model/bindings/go/oci
 go 1.26.3
 
 require (
-	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/nlepage/go-tarfs v1.2.1
 	github.com/opencontainers/go-digest v1.0.0

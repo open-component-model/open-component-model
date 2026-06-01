@@ -45,7 +45,7 @@
     "@types/node": "25.9.1",
     "eslint": "10.4.0",
     "globals": "17.6.0",
-    "hugo-extended": "0.161.1",
+    "hugo-extended": "0.162.1",
     "jiti": "2.7.0",
     "js-yaml": "4.1.1",
     "sass-embedded": "1.100.0",
@@ -65,5 +65,5 @@
     "node": ">=25.8.0",
     "npm": ">=11.11.0"
   },
-  "packageManager": "npm@11.15.0"
+  "packageManager": "npm@11.16.0"
 }
