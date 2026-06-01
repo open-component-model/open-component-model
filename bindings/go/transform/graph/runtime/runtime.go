@@ -9,6 +9,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph"
 	"ocm.software/open-component-model/bindings/go/transform/graph/runtime/resolver"
@@ -20,6 +21,16 @@ type Transformer interface {
 		ctx context.Context,
 		step runtime.Typed,
 	) (runtime.Typed, error)
+}
+
+// TransformerWithCredentials is an opt-in extension for Transformer implementations
+// that require typed credential resolution per step. The runtime resolves credentials
+// via GetConsumerIdentity and passes them to TransformWithCredentials.
+// Transformers that hold a credentials.Resolver directly (legacy path) do not need
+// to implement this interface.
+type TransformerWithCredentials interface {
+	GetConsumerIdentity(ctx context.Context, step runtime.Typed) (runtime.Identity, error)
+	TransformWithCredentials(ctx context.Context, step runtime.Typed, credentials runtime.Typed) (runtime.Typed, error)
 }
 
 // State represents the state of a transformation node.
@@ -59,8 +70,9 @@ type Runtime struct {
 	EvaluatedExpressionCache map[string]any
 	EvaluatedTransformations map[string]any
 
-	Transformers map[runtime.Type]Transformer
-	Events       chan<- ProgressEvent
+	Transformers      map[runtime.Type]Transformer
+	CredentialResolver credentials.Resolver
+	Events             chan<- ProgressEvent
 }
 
 func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transformation) error {
@@ -131,7 +143,23 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 		return fmt.Errorf("no transformer runtime registered for type %s", runtimeType)
 	}
 
-	transformed, err := transformer.Transform(ctx, transformation.AsRaw())
+	var transformed runtime.Typed
+	if twc, ok := transformer.(TransformerWithCredentials); ok {
+		var creds runtime.Typed
+		if b.CredentialResolver != nil {
+			identity, err := twc.GetConsumerIdentity(ctx, transformation.AsRaw())
+			if err != nil {
+				return fmt.Errorf("failed to get consumer identity for transformation %q: %w", transformation.ID, err)
+			}
+			creds, err = b.CredentialResolver.Resolve(ctx, identity)
+			if err != nil && !errors.Is(err, credentials.ErrNotFound) {
+				return fmt.Errorf("failed to resolve credentials for transformation %q: %w", transformation.ID, err)
+			}
+		}
+		transformed, err = twc.TransformWithCredentials(ctx, transformation.AsRaw(), creds)
+	} else {
+		transformed, err = transformer.Transform(ctx, transformation.AsRaw())
+	}
 	if err != nil {
 		return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
 	}
