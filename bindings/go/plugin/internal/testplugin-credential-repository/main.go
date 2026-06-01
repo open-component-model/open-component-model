@@ -14,6 +14,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -57,18 +58,39 @@ func main() {
 	dummytype.MustAddToScheme(scheme)
 	capabilities := endpoints.NewEndpoints(scheme)
 
-	if err := credentialrepository.RegisterCredentialRepository(&dummyv1.Repository{}, &TestCredentialRepositoryPlugin{}, capabilities); err != nil {
-		logger.Error("failed to register credential repository plugin", "error", err.Error())
+	handler := &TestCredentialRepositoryPlugin{}
+	proto := &dummyv1.Repository{}
+
+	typ, err := capabilities.Scheme.TypeForPrototype(proto)
+	if err != nil {
+		logger.Error("failed to get type for prototype", "error", err)
+		os.Exit(1)
+	}
+	schema, err := plugins.GenerateJSONSchemaForType(proto)
+	if err != nil {
+		logger.Error("failed to generate json schema", "error", err)
 		os.Exit(1)
 	}
 
-	// Declare the custom credential type that this plugin introduces so the orchestrator
-	// can wire it into the credential type scheme via credentialtype.Registry.RegisterFromPlugin.
-	if last, ok := capabilities.PluginSpec.CapabilitySpecs[len(capabilities.PluginSpec.CapabilitySpecs)-1].(*v1.CapabilitySpec); ok {
-		last.CustomCredentialTypes = []types.Type{
+	capabilities.Handlers = append(capabilities.Handlers,
+		endpoints.Handler{
+			Handler:  credentialrepository.ConsumerIdentityForConfigHandlerFunc(handler.ConsumerIdentityForConfig, capabilities.Scheme, proto),
+			Location: credentialrepository.ConsumerIdentityForConfig,
+		},
+		endpoints.Handler{
+			Handler:  credentialrepository.ResolveHandlerFunc(handler.Resolve, capabilities.Scheme, proto),
+			Location: credentialrepository.Resolve,
+		},
+	)
+	capabilities.PluginSpec.CapabilitySpecs = append(capabilities.PluginSpec.CapabilitySpecs, &v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.CredentialRepositoryPluginType)),
+		SupportedCredentialRepositorySpecTypes: []types.Type{
+			{Type: typ, JSONSchema: schema},
+		},
+		CustomCredentialTypes: []types.Type{
 			{Type: customCredentialType},
-		}
-	}
+		},
+	})
 
 	if len(args) > 0 && args[0] == "capabilities" {
 		content, err := capabilities.MarshalJSON()

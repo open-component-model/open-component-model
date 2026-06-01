@@ -386,3 +386,26 @@ func TestPluginManagerWithNoPlugins(t *testing.T) {
 	pm := NewPluginManager(context.Background())
 	require.ErrorContains(t, pm.RegisterPlugins(context.Background(), filepath.Join(".")), "no plugins found")
 }
+
+func TestCredentialTypeRegistryPopulatedFromPlugin(t *testing.T) {
+	config := &genericv1.Config{
+		Type: runtime.Type{Name: "custom.config", Version: "v1"},
+		Configurations: []*runtime.Raw{
+			{
+				Type: runtime.Type{Name: "custom.config", Version: "v1"},
+				Data: []byte(`{}`),
+			},
+		},
+	}
+	pm := NewPluginManager(context.Background())
+	require.NoError(t, pm.RegisterPlugins(t.Context(), filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
+	t.Cleanup(func() {
+		require.NoError(t, pm.Shutdown(t.Context()))
+		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
+	})
+
+	scheme := pm.CredentialTypeRegistry.GetCredentialTypeScheme()
+	require.True(t, scheme.IsRegistered(runtime.NewVersionedType("DummyToken", "v1")))
+}
