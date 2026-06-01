@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -221,6 +222,9 @@ func getVersion(versionOverride, helmRepo string) (string, error) {
 //
 // Returns helmRepo unchanged when no resolution was possible.
 func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir string, providers getter.Providers, getterOpts []getter.Option) (string, error) {
+	// resolveHTTPChartURL is called speculatively: helmRepo may be a direct .tgz URL,
+	// an OCI reference, or any form not produced by ChartReference(). All of those are
+	// passed through unchanged so that helm's DownloadTo can handle them directly.
 	if !strings.HasPrefix(helmRepo, "http://") && !strings.HasPrefix(helmRepo, "https://") {
 		return helmRepo, nil
 	}
@@ -239,10 +243,14 @@ func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir
 	// chartName is the last path segment of the repository, repoPath is everything before it.
 	chartName := path.Base(ref.Repository)
 	repoPath := path.Dir(ref.Repository)
-	repoBase := ref.Scheme + "://" + ref.Registry
-	if repoPath != "." {
-		repoBase += "/" + repoPath
+	base := &url.URL{
+		Scheme: ref.Scheme,
+		Host:   ref.Registry,
 	}
+	if repoPath != "." {
+		base.Path = "/" + repoPath
+	}
+	repoBase := base.String()
 	chartVersion := ref.Tag
 	if requestedVersion != "" {
 		chartVersion = requestedVersion
