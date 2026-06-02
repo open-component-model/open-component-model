@@ -15,14 +15,9 @@ func TestNewRegistry(t *testing.T) {
 	r := require.New(t)
 	reg := NewRegistry(t.Context())
 	r.NotNil(reg)
-	r.NotNil(reg.GetCredentialTypeScheme())
-}
-
-func TestGetCredentialTypeScheme_EmptyOnStart(t *testing.T) {
-	reg := NewRegistry(t.Context())
 	scheme := reg.GetCredentialTypeScheme()
-	require.NotNil(t, scheme)
-	require.Empty(t, scheme.GetTypes())
+	r.NotNil(scheme)
+	r.Empty(scheme.GetTypes())
 }
 
 func TestRegister(t *testing.T) {
@@ -56,19 +51,6 @@ func TestRegister_MultipleSchemesAreMerged(t *testing.T) {
 	r.True(scheme.IsRegistered(runtime.NewVersionedType("CredB", "v1")))
 }
 
-func TestRegisterFromPlugin(t *testing.T) {
-	r := require.New(t)
-	reg := NewRegistry(t.Context())
-
-	customType := runtime.NewVersionedType("MyCredential", "v1")
-	reg.RegisterFromPlugin([]types.Type{
-		{Type: customType},
-	})
-
-	scheme := reg.GetCredentialTypeScheme()
-	r.True(scheme.IsRegistered(customType))
-}
-
 func TestRegisterFromPlugin_MultipleTypes(t *testing.T) {
 	r := require.New(t)
 	reg := NewRegistry(t.Context())
@@ -85,15 +67,10 @@ func TestRegisterFromPlugin_MultipleTypes(t *testing.T) {
 	r.True(scheme.IsRegistered(typeB))
 }
 
-func TestRegisterFromPlugin_EmptySlice(t *testing.T) {
-	reg := NewRegistry(t.Context())
-	reg.RegisterFromPlugin([]types.Type{})
-	require.NotNil(t, reg.GetCredentialTypeScheme())
-}
-
-func TestRegisterFromPlugin_Nil(t *testing.T) {
+func TestRegisterFromPlugin_NoTypes(t *testing.T) {
 	reg := NewRegistry(t.Context())
 	reg.RegisterFromPlugin(nil)
+	reg.RegisterFromPlugin([]types.Type{})
 	require.NotNil(t, reg.GetCredentialTypeScheme())
 }
 
@@ -167,25 +144,22 @@ func TestRegisterFromPlugin_MultipleTypesDoNotConflictWithRaw(t *testing.T) {
 		r.True(s.IsRegistered(aliasType))
 		r.True(s.IsRegistered(unrelated))
 
-		// unrelated must still resolve to its own Raw, not to aliasedType's canonical
 		obj, err := s.NewObject(unrelated)
-		r.NoError(err)
-		_, ok := obj.(*runtime.Raw)
-		r.True(ok)
-		r.Equal(unrelated, obj.(*runtime.Raw).GetType())
-
-		// aliasedType must resolve to its own Raw, not to aliasType's canonical
-		obj, err = s.NewObject(aliasedType)
 		r.NoError(err)
 		raw, ok := obj.(*runtime.Raw)
 		r.True(ok)
+		r.Equal(unrelated, raw.GetType())
+
+		obj, err = s.NewObject(aliasedType)
+		r.NoError(err)
+		raw, ok = obj.(*runtime.Raw)
+		r.True(ok)
 		r.Equal(aliasedType, raw.GetType())
 
-		// aliasType must resolve to the same Raw as aliasedType, but with its own type identity
 		obj, err = s.NewObject(aliasType)
 		r.NoError(err)
-		_, ok = obj.(*runtime.Raw)
+		raw, ok = obj.(*runtime.Raw)
 		r.True(ok)
-		r.Equal(aliasType, obj.GetType())
+		r.Equal(aliasType, raw.GetType())
 	})
 }
