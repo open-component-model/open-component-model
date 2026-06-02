@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -20,6 +21,7 @@ var _ credentials.CredentialTypeSchemeProvider = (*Registry)(nil)
 // External plugins register their custom credential types from capability specs during plugin
 // discovery via RegisterFromPlugin.
 type Registry struct {
+	sync.RWMutex
 	ctx    context.Context
 	scheme *runtime.Scheme
 }
@@ -32,14 +34,20 @@ func NewRegistry(ctx context.Context) *Registry {
 }
 
 func (r *Registry) GetCredentialTypeScheme() *runtime.Scheme {
+	r.RLock()
+	defer r.RUnlock()
 	return r.scheme
 }
 
 func (r *Registry) Register(scheme *runtime.Scheme) {
+	r.Lock()
+	defer r.Unlock()
 	r.scheme.MustRegisterScheme(scheme)
 }
 
 func (r *Registry) RegisterFromPlugin(credentialTypes []types.Type) error {
+	r.Lock()
+	defer r.Unlock()
 	var errs []error
 	for _, t := range credentialTypes {
 		typed := &runtime.Raw{}
