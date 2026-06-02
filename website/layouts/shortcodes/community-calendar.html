@@ -9,13 +9,18 @@
 
   Why FullCalendar (and not vanilla JS):
   - Battle-tested RRULE expansion — we don't reimplement timezone math.
-  - LFX uses the exact same library; matching their visual is just neutral
-    styling on top of fc-list-* class names.
+  - LFX's own UI is built on the same library; their production SPA bundle
+    references @fullcalendar/list, @fullcalendar/daygrid, @fullcalendar/timegrid
+    and ships the full fc-list-* / fc-* class surface (verified 2026-06).
+    Matching their visual is therefore straightforward neutral styling via
+    the public --fc-* custom properties and .fc-list-* classes.
   - One library to update; the iCalendar plugin handles edge cases (DTSTART
     timezones, EXDATE, modified instances) we'd otherwise have to track.
 
-  Versions are pinned (not "@latest") so a breaking upstream release does
-  not silently break this page.
+  The behavior, denylist, and styling live with the rest of the website's
+  pipeline:
+    assets/js/community-calendar.ts
+    assets/scss/components/_community-calendar.scss
 
   Usage: {{< community-calendar >}}
          {{< community-calendar feed="https://…/lfx/<id>" >}}
@@ -38,229 +43,15 @@
   </noscript>
 </div>
 
-<!-- ical.js must load before the iCalendar plugin: the plugin's IIFE expects
-     window.ICAL to already exist, otherwise it parses zero events silently.
-     `defer` preserves source order while still letting the browser download
-     all three in parallel. -->
-<script defer
-        src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"
-        integrity="sha384-6SU9o/kopjziIukGhxSpfo75dojAj0O1JWZ+Z/2FdC6rLs6pJvDmRntnUdMS7ht2"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script defer
-        src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"
-        integrity="sha384-B1OFx8Gy9GjPu8UbUyXbGQpzll9ubAUQ9agInFJ8NnD7nYG1u/CLR+Sqr5yifl4q"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script defer
-        src="https://cdn.jsdelivr.net/npm/@fullcalendar/icalendar@6.1.15/index.global.min.js"
-        integrity="sha384-W60KsvPL03ESAv5MSeKqrO542obNqffSWC8oJ7/wPY+GH3LABlmzQbiG/jIona96"
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-
-<script>
-(function () {
-  'use strict';
-
-  // Meetings that linger in the upstream LFX feed after they've been retired
-  // get filtered out client-side by their Zoom meeting ID. That ID is the
-  // prefix of each VEVENT's UID (and is duplicated in X-MEETING-ID and the
-  // join URL), so it's a stable identifier even if the SUMMARY is renamed.
-  // Recurring events produce three UID shapes — master ("<id>"), modified
-  // occurrence ("<id>:<recurrence-date>"), and rrule expansions inheriting
-  // the master id — splitting on ":" normalizes all three.
-  // Drop an entry once LFX cleans up the source feed.
-  var BLOCKED_MEETING_IDS = new Set([
-    '93093370350', // OCM Daily Stand-Up — meeting retired, feed entry stale
-  ]);
-  function isBlocked(ev) {
-    var id = ev.id || '';
-    return BLOCKED_MEETING_IDS.has(id.split(':')[0]);
-  }
-
-  function init() {
-    var root = document.querySelector('.ocm-calendar');
-    if (!root || root.dataset.rendered === '1') return;
-    if (typeof FullCalendar === 'undefined' || typeof ICAL === 'undefined') {
-      // CDN failed; SRI mismatch already logged a console error.
-      return;
-    }
-    root.dataset.rendered = '1';
-
-    var mount   = root.querySelector('.ocm-calendar-mount');
-    var loading = root.querySelector('.ocm-calendar-loading');
-    mount.removeAttribute('aria-hidden');
-    if (loading) loading.remove();
-
-    var calendar = new FullCalendar.Calendar(mount, {
-      // List of upcoming events grouped by day — same primitive LFX uses.
-      initialView: 'listMonth',
-      // Two months of upcoming events visible. listMonth respects the calendar
-      // date; we set a duration so users see roughly 60 days at once instead
-      // of a single calendar month that may end in 3 days.
-      duration: { days: 60 },
-      headerToolbar: {
-        left:  'prev,next today',
-        center: 'title',
-        right: '',
-      },
-      // Reduces visual weight of days with no events.
-      noEventsContent: 'No upcoming meetings in the next 60 days.',
-      // Show day-of-week before the date in headers (LFX style: "Wednesday, June 3").
-      listDayFormat: { weekday: 'long', month: 'long', day: 'numeric' },
-      listDaySideFormat: false, // hide redundant secondary date
-      eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
-      displayEventEnd: true,
-      events: { url: root.dataset.feed, format: 'ics' },
-      // Strip retired meetings still present in the upstream feed. Runs after
-      // every fetch/nav; removing from the model also removes the day-header
-      // row when the day becomes empty, which a CSS hide could not do.
-      eventsSet: function (events) {
-        events.forEach(function (ev) { if (isBlocked(ev)) ev.remove(); });
-      },
-      eventDidMount: function (info) {
-        // LFX puts join URLs in DESCRIPTION; expose the first one as the
-        // event's click target so users can join with one click. If none
-        // is found, fall back to the LFX event URL.
-        var d = info.event.extendedProps.description;
-        if (d) {
-          var m = d.match(/https:\/\/zoom-lfx\.platform\.linuxfoundation\.org\/meeting\/[^\s<>"']+/);
-          if (!m) m = d.match(/https:\/\/[a-z0-9-]+\.zoom\.us\/j\/[0-9]+[^\s<>"']*/i);
-          if (m) {
-            info.el.style.cursor = 'pointer';
-            info.el.addEventListener('click', function (e) {
-              // Only intercept plain clicks; let modifier-clicks open in new tab via default
-              if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
-              e.preventDefault();
-              window.open(m[0], '_blank', 'noopener');
-            });
-            // Brief tooltip with truncated description
-            var trimmed = d.replace(/\s+/g, ' ').trim();
-            info.el.title = trimmed.length > 200 ? trimmed.slice(0, 200) + '…' : trimmed;
-          }
-        }
-      },
-    });
-    calendar.render();
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
-</script>
-
-<style>
-  /*
-   * OCM Calendar — minimal listMonth styling matching LFX's visual neutrals.
-   *
-   * Strategy: only theme through FullCalendar's public --fc-* custom
-   * properties; keep a tiny amount of typography polish on top. No grid view,
-   * no event-fill colors — list view + colored dots is exactly what LFX does.
-   */
-
-  .ocm-calendar {
-    margin: 1.5rem 0;
-    min-height: 360px;
-    contain: layout;
-  }
-  .ocm-calendar-loading {
-    padding: 1rem;
-    color: var(--bs-secondary-color);
-    font-size: 0.875rem;
-  }
-
-  .ocm-calendar .fc {
-    --fc-border-color: var(--bs-border-color);
-    --fc-page-bg-color: var(--bs-body-bg);
-    --fc-neutral-bg-color: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.025));
-    --fc-list-event-hover-bg-color: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.04));
-    --fc-event-bg-color: #257ddc;       /* --brand-blue-dark — used for the dot */
-    --fc-event-border-color: #257ddc;
-    --fc-button-bg-color: transparent;
-    --fc-button-border-color: var(--bs-border-color);
-    --fc-button-text-color: var(--bs-body-color);
-    --fc-button-hover-bg-color: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.04));
-    --fc-button-hover-border-color: var(--bs-border-color);
-    --fc-button-active-bg-color: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.06));
-    --fc-button-active-border-color: var(--bs-border-color);
-
-    font-family: inherit;
-    font-size: 0.9rem;
-  }
-
-  /* Toolbar: keep it quiet. Title left, prev/next/today right, no view switcher. */
-  .ocm-calendar .fc .fc-toolbar.fc-header-toolbar {
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-  .ocm-calendar .fc .fc-toolbar-title {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--bs-body-color);
-  }
-  .ocm-calendar .fc .fc-button {
-    padding: 0.3rem 0.7rem;
-    font-size: 0.8rem;
-    font-weight: 500;
-    text-transform: capitalize;
-    box-shadow: none !important;
-    border-radius: 0.25rem;
-  }
-  .ocm-calendar .fc .fc-button:focus,
-  .ocm-calendar .fc .fc-button:focus-visible {
-    outline: 2px solid #4cc9f0;
-    outline-offset: 2px;
-  }
-
-  /* List rows — LFX-style spacing and divider weight */
-  .ocm-calendar .fc-list {
-    border: 1px solid var(--fc-border-color);
-    border-radius: 0.375rem;
-    overflow: hidden;
-  }
-  .ocm-calendar .fc-list-day-cushion {
-    background: var(--fc-neutral-bg-color);
-    padding: 0.65rem 1rem !important;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--bs-secondary-color);
-  }
-  .ocm-calendar .fc-list-event > td {
-    padding: 0.75rem 1rem;
-  }
-  .ocm-calendar .fc-list-event-time {
-    font-variant-numeric: tabular-nums;
-    color: var(--bs-secondary-color);
-    font-size: 0.85rem;
-  }
-  .ocm-calendar .fc-list-event-title a {
-    color: var(--bs-body-color);
-    font-weight: 500;
-  }
-  .ocm-calendar .fc-list-event:hover .fc-list-event-title a {
-    color: #257ddc;
-  }
-  .ocm-calendar .fc-list-empty {
-    padding: 2rem 1rem;
-    color: var(--bs-secondary-color);
-    background: var(--fc-page-bg-color);
-  }
-
-  /* Dark mode: lift the dot and link colors to brand-cyan */
-  [data-bs-theme="dark"] .ocm-calendar .fc {
-    --fc-event-bg-color: #4cc9f0;
-    --fc-event-border-color: #4cc9f0;
-  }
-  [data-bs-theme="dark"] .ocm-calendar .fc-list-event:hover .fc-list-event-title a {
-    color: #4cc9f0;
-  }
-
-  /* Mobile compaction */
-  @media (max-width: 480px) {
-    .ocm-calendar .fc { font-size: 0.85rem; }
-    .ocm-calendar .fc-list-event > td { padding: 0.6rem 0.75rem; }
-    .ocm-calendar .fc-list-day-cushion { padding: 0.55rem 0.75rem !important; }
-    .ocm-calendar .fc .fc-toolbar-title { font-size: 0.95rem; }
-  }
-</style>
+{{- $asset := resources.Get "js/community-calendar.ts" -}}
+{{- if not $asset -}}
+  {{- errorf "community-calendar shortcode: entry asset 'js/community-calendar.ts' not found" -}}
+{{- end -}}
+{{- $opts := dict
+  "minify" (not hugo.IsDevelopment)
+  "sourceMap" (cond hugo.IsDevelopment "inline" "none")
+  "target" "es2020"
+-}}
+{{- with $asset | js.Build $opts -}}
+  <script src="{{ .RelPermalink }}" defer></script>
+{{- end -}}

@@ -1,0 +1,147 @@
+// Community Calendar — minimal dayGridMonth styling matching LFX's
+// visual neutrals.
+//
+// Strategy: only theme through FullCalendar's public --fc-* custom
+// properties; reuse the Doks theme's --bs-* tokens for everything else
+// so the calendar inherits typography, borders, and dark-mode colors
+// from the surrounding page automatically. No custom palette, no
+// override of FullCalendar internals.
+//
+// Verified against LFX's production SPA bundle (2026-06): they use the
+// same library and the same --fc-* / .fc-daygrid-* class surface.
+
+.ocm-calendar {
+  margin: 1.5rem 0;
+  contain: layout;
+}
+
+.ocm-calendar-loading {
+  padding: 1rem;
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+}
+
+// Theme FullCalendar through its public custom properties. Anything
+// not listed here inherits the library's defaults — which already look
+// neutral on top of Bootstrap.
+.ocm-calendar .fc {
+  --fc-border-color: var(--bs-border-color);
+  --fc-page-bg-color: var(--bs-body-bg);
+  --fc-neutral-bg-color: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.025));
+  --fc-event-bg-color: #257ddc;       // --brand-blue-dark
+  --fc-event-border-color: #257ddc;
+  --fc-event-text-color: #fff;
+  --fc-today-bg-color: rgba(76, 201, 240, 0.08);
+  --fc-button-bg-color: transparent;
+  --fc-button-border-color: var(--bs-border-color);
+  --fc-button-text-color: var(--bs-body-color);
+  --fc-button-hover-bg-color: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.04));
+  --fc-button-hover-border-color: var(--bs-border-color);
+  --fc-button-active-bg-color: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.06));
+  --fc-button-active-border-color: var(--bs-border-color);
+
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+// Toolbar polish: title weight + button sizing. Everything else uses
+// FullCalendar's defaults driven by the --fc-button-* vars above.
+.ocm-calendar .fc .fc-toolbar.fc-header-toolbar {
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ocm-calendar .fc .fc-toolbar-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.ocm-calendar .fc .fc-button {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  text-transform: capitalize;
+  box-shadow: none !important;
+}
+
+// Column headers (Mon, Tue, ...) — uppercase small caps, secondary tone
+.ocm-calendar .fc-col-header-cell-cushion {
+  padding: 0.35rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--bs-secondary-color);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+// Day numbers — secondary tone, brand-blue when "today"
+.ocm-calendar .fc-daygrid-day-number {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+}
+
+.ocm-calendar .fc-day-today .fc-daygrid-day-number {
+  color: #257ddc;
+  font-weight: 600;
+}
+
+.ocm-calendar .fc-day-other .fc-daygrid-day-number {
+  opacity: 0.4;
+}
+
+// Event chips — brand-blue fill, hover lifts brightness slightly
+.ocm-calendar .fc-daygrid-event {
+  padding: 0.15rem 0.4rem;
+  margin: 0.1rem 0.25rem;
+  border-radius: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: none;
+
+  &:hover {
+    filter: brightness(1.08);
+  }
+}
+
+// "+N more" overflow link — match the secondary tone of day numbers
+.ocm-calendar .fc-daygrid-more-link {
+  font-size: 0.72rem;
+  color: var(--bs-secondary-color);
+  font-weight: 500;
+  padding: 0 0.25rem;
+
+  &:hover {
+    color: #257ddc;
+    text-decoration: underline;
+  }
+}
+
+// Dark mode: flip event chip + today markers to brand-cyan. Everything
+// else cascades automatically from Bootstrap's --bs-* token theme.
+[data-bs-theme="dark"] .ocm-calendar .fc {
+  --fc-event-bg-color: #4cc9f0;
+  --fc-event-border-color: #4cc9f0;
+  --fc-event-text-color: #051a2e;
+  --fc-today-bg-color: rgba(76, 201, 240, 0.12);
+}
+
+[data-bs-theme="dark"] .ocm-calendar .fc-day-today .fc-daygrid-day-number,
+[data-bs-theme="dark"] .ocm-calendar .fc-daygrid-more-link:hover {
+  color: #4cc9f0;
+}
+
+// Mobile compaction
+@media (max-width: 480px) {
+  .ocm-calendar .fc {
+    font-size: 0.85rem;
+  }
+  .ocm-calendar .fc-daygrid-event {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.3rem;
+  }
+  .ocm-calendar .fc-col-header-cell-cushion {
+    font-size: 0.7rem;
+  }
+}
