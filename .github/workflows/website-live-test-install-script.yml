@@ -55,7 +55,7 @@ jobs:
 
   install:
     needs: resolve
-    name: Install + verify (${{ matrix.runner }})
+    name: Install + verify (${{ matrix.runner }}, v${{ matrix.ocm_version || 'autodetect' }})
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -63,8 +63,17 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-latest, ubuntu-24.04-arm]
+        # Pin both legacy (cli/v-prefixed) and modern (bare) URL shapes so each
+        # release-tag scheme is verified end-to-end. The empty string opts into
+        # the script's own autodetect path (extract_stable_version) - without
+        # this cell, prior regressions in the regex/prefix logic shipped because
+        # every cell pre-pinned OCM_VERSION and the autodetect logic never ran.
+        # The resolver provides the oracle for that cell's version assertion.
+        ocm_version: ["0.7.0", "0.8.0", ""]
     env:
-      OCM_VERSION: ${{ needs.resolve.outputs.version }}
+      OCM_VERSION: ${{ matrix.ocm_version }}
+      # Falls back to the resolver-computed version when OCM_VERSION is empty.
+      EXPECTED_VERSION: ${{ matrix.ocm_version || needs.resolve.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
@@ -94,11 +103,11 @@ jobs:
         run: |
           version_json=$(ocm version 2>/dev/null)
           actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
-          if [[ "${actual}" != "${OCM_VERSION}" ]]; then
-            echo "::error::Version mismatch: expected ${OCM_VERSION}, got ${actual}"
+          if [[ "${actual}" != "${EXPECTED_VERSION}" ]]; then
+            echo "::error::Version mismatch: expected ${EXPECTED_VERSION}, got ${actual}"
             exit 1
           fi
-          echo "Installed version ${actual} matches expected ${OCM_VERSION}"
+          echo "Installed version ${actual} matches expected ${EXPECTED_VERSION}"
           ocm --help > /dev/null
 
   install-without-auth:
