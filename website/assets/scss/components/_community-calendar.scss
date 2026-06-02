@@ -105,7 +105,7 @@
 [data-bs-theme="dark"] .ocm-calendar .fc {
   --fc-event-bg-color: var(--brand-cyan);
   --fc-event-border-color: var(--brand-cyan);
-  --fc-event-text-color: #051a2e;
+  --fc-event-text-color: var(--bs-black);
   --fc-today-bg-color: rgba(76, 201, 240, 0.12);
 }
 
