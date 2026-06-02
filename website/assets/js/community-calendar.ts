@@ -46,8 +46,26 @@ async function fetchEvents(feed: string, range: {start: Date; end: Date}): Promi
     if (!response.ok) {
         throw new Error(`fetch ${feed}: ${response.status} ${response.statusText}`);
     }
-    const jcal = ICAL.parse(await response.text());
-    const vcalendar = new ICAL.Component(jcal);
+    const text = await response.text();
+
+    // Parse the feed. A malformed feed throws here; we surface a clear
+    // error so the eventual FullCalendar failure UI has something
+    // diagnosable in the console.
+    let vcalendar: ICAL.Component;
+    try {
+        vcalendar = new ICAL.Component(ICAL.parse(text));
+    } catch (cause) {
+        console.error("community-calendar: failed to parse iCal feed", {feed, cause});
+        const message = cause instanceof Error ? cause.message : String(cause);
+        // Attach cause as a property — the Error(message, {cause}) form
+        // is ES2022; this project's TS lib target is ES2020. Runtime
+        // engines have supported the property for years and ESLint's
+        // preserve-caught-error rule accepts this shape.
+        const err = new Error(`parse ${feed}: ${message}`);
+        (err as Error & {cause: unknown}).cause = cause;
+        throw err;
+    }
+
     const events: CommunityEvent[] = [];
 
     // Pad the expansion window ±1 day. RRULE expansion across timezones
@@ -60,21 +78,29 @@ async function fetchEvents(feed: string, range: {start: Date; end: Date}): Promi
     const rangeEnd = ICAL.Time.fromJSDate(addDays(range.end, 1), false);
 
     for (const vevent of vcalendar.getAllSubcomponents("vevent")) {
-        const ev = new ICAL.Event(vevent);
-        if (isBlocked(ev.uid)) continue;
+        // Per-event try/catch: one malformed VEVENT (bad DTSTART, broken
+        // RRULE, etc.) shouldn't drop the whole calendar. Skip the bad
+        // one, log it, render the rest.
+        try {
+            const ev = new ICAL.Event(vevent);
+            if (isBlocked(ev.uid)) continue;
 
-        if (ev.isRecurring()) {
-            const iter = ev.iterator();
-            let next: ICAL.Time | null;
-            while ((next = iter.next()) && next.compare(rangeEnd) <= 0) {
-                if (next.compare(rangeStart) < 0) continue;
-                const o = ev.getOccurrenceDetails(next);
-                events.push(buildEvent(o.item, o.startDate, o.endDate));
+            if (ev.isRecurring()) {
+                const iter = ev.iterator();
+                let next: ICAL.Time | null;
+                while ((next = iter.next()) && next.compare(rangeEnd) <= 0) {
+                    if (next.compare(rangeStart) < 0) continue;
+                    const o = ev.getOccurrenceDetails(next);
+                    events.push(buildEvent(o.item, o.startDate, o.endDate));
+                }
+            } else if (!vevent.hasProperty("recurrence-id")) {
+                // Skip top-level RECURRENCE-ID overrides; they're already
+                // emitted by their master's getOccurrenceDetails.
+                events.push(buildEvent(ev, ev.startDate, ev.endDate));
             }
-        } else if (!vevent.hasProperty("recurrence-id")) {
-            // Skip top-level RECURRENCE-ID overrides; they're already
-            // emitted by their master's getOccurrenceDetails.
-            events.push(buildEvent(ev, ev.startDate, ev.endDate));
+        } catch (cause) {
+            const uid = vevent.getFirstPropertyValue("uid");
+            console.warn("community-calendar: skipping malformed VEVENT", {uid, cause});
         }
     }
 
@@ -87,7 +113,7 @@ function buildEvent(ev: ICAL.Event, start: ICAL.Time, end: ICAL.Time | null): Co
         id,
         title: ev.summary,
         start: start.toJSDate(),
-        end: end ? end.toJSDate() : null,
+        end: end ? end.toJSDate() : undefined,
         url: extractEventUrl(ev) || undefined,
         extendedProps: {
             uid: ev.uid,
