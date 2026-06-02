@@ -21,6 +21,11 @@ const BLOCKED_MEETING_IDS = new Set<string>([
     "93093370350", // OCM Daily Stand-Up — meeting retired, feed entry stale
 ]);
 
+// Bound the feed request. LFX normally responds in <500ms; anything past
+// 15s is almost certainly a network issue the user wants surfaced, not a
+// slow-but-OK response we should keep waiting on.
+const FETCH_TIMEOUT_MS = 15_000;
+
 function meetingId(uid: string): string {
     return uid.split(":")[0];
 }
@@ -42,7 +47,25 @@ interface CommunityEvent extends EventInput {
 // Fetch the iCal feed and expand recurring events into FullCalendar
 // inputs, preserving UID in `id` for downstream filtering.
 async function fetchEvents(feed: string, range: {start: Date; end: Date}): Promise<CommunityEvent[]> {
-    const response = await fetch(feed, {method: "GET"});
+    // Bound the request: a hung LFX endpoint would otherwise leave the
+    // calendar's loading state forever. AbortSignal.timeout auto-aborts
+    // after the duration without the manual setTimeout/clearTimeout
+    // dance; it's baseline-supported in every browser past 2022.
+    let response: Response;
+    try {
+        response = await fetch(feed, {method: "GET", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)});
+    } catch (cause) {
+        // AbortSignal.timeout fires with name "TimeoutError"; manual
+        // aborts (none today, but future-proof) fire "AbortError".
+        const name = (cause as Error)?.name;
+        if (name === "TimeoutError" || name === "AbortError") {
+            console.error("community-calendar: feed request timed out", {feed, timeoutMs: FETCH_TIMEOUT_MS});
+            const err = new Error(`fetch ${feed}: timed out after ${FETCH_TIMEOUT_MS}ms`);
+            (err as Error & {cause: unknown}).cause = cause;
+            throw err;
+        }
+        throw cause;
+    }
     if (!response.ok) {
         throw new Error(`fetch ${feed}: ${response.status} ${response.statusText}`);
     }
