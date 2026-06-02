@@ -1,14 +1,6 @@
-// Community Calendar — minimal dayGridMonth styling matching LFX's
-// visual neutrals.
-//
-// Strategy: only theme through FullCalendar's public --fc-* custom
-// properties; reuse the Doks theme's --bs-* tokens for everything else
-// so the calendar inherits typography, borders, and dark-mode colors
-// from the surrounding page automatically. No custom palette, no
-// override of FullCalendar internals.
-//
-// Verified against LFX's production SPA bundle (2026-06): they use the
-// same library and the same --fc-* / .fc-daygrid-* class surface.
+// Community calendar — dayGridMonth styling matching LFX's visual neutrals.
+// Themes FullCalendar through its public --fc-* properties; everything else
+// inherits the Doks/Bootstrap --bs-* tokens (typography, borders, dark mode).
 
 .ocm-calendar {
   margin: 1.5rem 0;
@@ -21,9 +13,6 @@
   font-size: 0.875rem;
 }
 
-// Theme FullCalendar through its public custom properties. Anything
-// not listed here inherits the library's defaults — which already look
-// neutral on top of Bootstrap.
 .ocm-calendar .fc {
   --fc-border-color: var(--bs-border-color);
   --fc-page-bg-color: var(--bs-body-bg);
@@ -44,8 +33,6 @@
   font-size: 0.9rem;
 }
 
-// Toolbar polish: title weight + button sizing. Everything else uses
-// FullCalendar's defaults driven by the --fc-button-* vars above.
 .ocm-calendar .fc .fc-toolbar.fc-header-toolbar {
   margin-bottom: 1rem;
   flex-wrap: wrap;
@@ -64,7 +51,6 @@
   box-shadow: none !important;
 }
 
-// Column headers (Mon, Tue, ...) — uppercase small caps, secondary tone
 .ocm-calendar .fc-col-header-cell-cushion {
   padding: 0.35rem 0.4rem;
   font-size: 0.7rem;
@@ -74,7 +60,6 @@
   letter-spacing: 0.04em;
 }
 
-// Day numbers — secondary tone, brand-blue when "today"
 .ocm-calendar .fc-daygrid-day-number {
   padding: 0.2rem 0.4rem;
   font-size: 0.75rem;
@@ -91,7 +76,6 @@
   opacity: 0.4;
 }
 
-// Event chips — brand-blue fill, hover lifts brightness slightly
 .ocm-calendar .fc-daygrid-event {
   padding: 0.15rem 0.4rem;
   margin: 0.1rem 0.25rem;
@@ -105,7 +89,6 @@
   }
 }
 
-// "+N more" overflow link — match the secondary tone of day numbers
 .ocm-calendar .fc-daygrid-more-link {
   font-size: 0.72rem;
   color: var(--bs-secondary-color);
@@ -118,8 +101,7 @@
   }
 }
 
-// Dark mode: flip event chip + today markers to brand-cyan. Everything
-// else cascades automatically from Bootstrap's --bs-* token theme.
+// Dark mode: flip the brand colors; Bootstrap tokens cascade the rest.
 [data-bs-theme="dark"] .ocm-calendar .fc {
   --fc-event-bg-color: #4cc9f0;
   --fc-event-border-color: #4cc9f0;
@@ -132,7 +114,6 @@
   color: #4cc9f0;
 }
 
-// Mobile compaction
 @media (max-width: 480px) {
   .ocm-calendar .fc {
     font-size: 0.85rem;

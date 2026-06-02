@@ -1,24 +1,8 @@
 {{- /*
-  community-calendar shortcode
+  community-calendar shortcode — embeds the live OCM project calendar
+  (LFX webcal feed) using FullCalendar's dayGridMonth view.
 
-  Renders the live OCM project calendar using FullCalendar's listMonth view —
-  the same primitive LFX itself uses on
-  https://zoom-lfx.platform.linuxfoundation.org/. We embed the LFX webcal feed
-  directly (CORS is `*`); FullCalendar's iCalendar plugin parses it and
-  expands recurrences. No build-time snapshot, no manual sync.
-
-  Why FullCalendar (and not vanilla JS):
-  - Battle-tested RRULE expansion — we don't reimplement timezone math.
-  - LFX's own UI is built on the same library; their production SPA bundle
-    references @fullcalendar/list, @fullcalendar/daygrid, @fullcalendar/timegrid
-    and ships the full fc-list-* / fc-* class surface (verified 2026-06).
-    Matching their visual is therefore straightforward neutral styling via
-    the public --fc-* custom properties and .fc-list-* classes.
-  - One library to update; the iCalendar plugin handles edge cases (DTSTART
-    timezones, EXDATE, modified instances) we'd otherwise have to track.
-
-  The behavior, denylist, and styling live with the rest of the website's
-  pipeline:
+  Behavior, retired-meeting denylist, and styling live in:
     assets/js/community-calendar.ts
     assets/scss/components/_community-calendar.scss
 

@@ -1,43 +1,22 @@
 /*
- * Community calendar — entrypoint loaded by the {{< community-calendar >}}
- * Hugo shortcode. Renders the live OCM project calendar (LFX webcal feed)
- * using FullCalendar's dayGridMonth view, the same primitive LFX itself
- * uses on https://zoom-lfx.platform.linuxfoundation.org/. Their production
- * SPA bundle references @fullcalendar/daygrid (verified 2026-06), so
- * matching their visual is straightforward neutral styling on top of the
- * public --fc-* / .fc-daygrid-* hooks.
+ * Community calendar — entrypoint for the {{< community-calendar >}}
+ * shortcode. Renders the LFX webcal feed using the same FullCalendar
+ * dayGridMonth view LFX shows on
+ * https://zoom-lfx.platform.linuxfoundation.org/.
  *
- * Why a custom event source instead of @fullcalendar/icalendar:
- * The plugin's buildNonDateProps() drops the iCalendar UID — events come
- * out with only {title, url, extendedProps:{location, organizer,
- * description}}. That makes UID-based filtering (the right way to hide
- * retired meetings without title-string fragility) impossible. The plugin
- * is a thin wrapper around ical.js's IcalExpander; we use ical.js directly
- * instead, which is ~30 lines and gives us full VEVENT access including
- * UID.
- *
- * Why bundle these from npm via Hugo's asset pipeline (and not <script
- * src="https://cdn..."> tags):
- * - Renovate watches package.json automatically; pinned CDN URLs are
- *   invisible to the bot and silently age out.
- * - One same-origin asset replaces three cross-origin CDN requests, no
- *   SRI to maintain, no defer-ordering between scripts (esbuild fixes
- *   dependency order at bundle time).
- * - Tree-shaking drops unused FullCalendar views (list, timegrid) we
- *   never touch.
+ * We use ical.js directly instead of @fullcalendar/icalendar because the
+ * plugin drops the iCalendar UID, which we need for stable filtering of
+ * retired meetings (see BLOCKED_MEETING_IDS).
  */
 
 import {Calendar, type EventInput} from "@fullcalendar/core";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import ICAL from "ical.js";
 
-// Meetings that linger in the upstream LFX feed after they've been retired
-// get filtered out client-side by their Zoom meeting ID. That ID is the
-// prefix of each VEVENT's UID (and is duplicated in X-MEETING-ID and the
-// join URL), so it's a stable identifier even if the SUMMARY is renamed.
-// Recurring events produce two UID shapes — master ("<id>") and modified
-// occurrences ("<id>:<recurrence-date>") — splitting on ":" normalizes
-// both. Drop an entry once LFX cleans up the source feed.
+// Retired meetings that linger in the LFX feed. Filter by Zoom meeting ID
+// (the UID prefix), which survives SUMMARY edits. Recurring events have
+// two UID shapes — "<id>" and "<id>:<recurrence-date>" — split on ":".
+// Drop entries once LFX cleans up the source.
 const BLOCKED_MEETING_IDS = new Set<string>([
     "93093370350", // OCM Daily Stand-Up — meeting retired, feed entry stale
 ]);
@@ -60,34 +39,23 @@ interface CommunityEvent extends EventInput {
     };
 }
 
-/**
- * Fetch the iCal feed and expand recurring events into FullCalendar
- * EventInput[]. Each event carries the iCalendar UID in `id` so callers
- * can filter by stable identity rather than fragile title matching.
- *
- * Mirrors what @fullcalendar/icalendar does internally (IcalExpander +
- * date stringification) but preserves UID, which the plugin drops.
- */
+// Fetch the iCal feed and expand recurring events into FullCalendar
+// inputs, preserving UID in `id` for downstream filtering.
 async function fetchEvents(feed: string, range: {start: Date; end: Date}): Promise<CommunityEvent[]> {
     const response = await fetch(feed, {method: "GET"});
     if (!response.ok) {
         throw new Error(`fetch ${feed}: ${response.status} ${response.statusText}`);
     }
-    const text = await response.text();
-    const jcal = ICAL.parse(text);
+    const jcal = ICAL.parse(await response.text());
     const vcalendar = new ICAL.Component(jcal);
     const events: CommunityEvent[] = [];
 
-    // Walk every VEVENT. Recurring events have RRULE (master) or
-    // RECURRENCE-ID (modified occurrence override).
-    const vevents = vcalendar.getAllSubcomponents("vevent");
-
-    // Pad the range — RRULE expansion can produce instances slightly
-    // outside our nominal window when DTSTART is on a boundary day.
+    // Pad ±1 day: RRULE expansion can yield instances slightly outside
+    // the nominal range when DTSTART sits on a boundary.
     const rangeStart = ICAL.Time.fromJSDate(addDays(range.start, -1), false);
     const rangeEnd = ICAL.Time.fromJSDate(addDays(range.end, 1), false);
 
-    for (const vevent of vevents) {
+    for (const vevent of vcalendar.getAllSubcomponents("vevent")) {
         const ev = new ICAL.Event(vevent);
         if (isBlocked(ev.uid)) continue;
 
@@ -96,13 +64,12 @@ async function fetchEvents(feed: string, range: {start: Date; end: Date}): Promi
             let next: ICAL.Time | null;
             while ((next = iter.next()) && next.compare(rangeEnd) <= 0) {
                 if (next.compare(rangeStart) < 0) continue;
-                const occurrence = ev.getOccurrenceDetails(next);
-                events.push(buildEvent(occurrence.item, occurrence.startDate, occurrence.endDate));
+                const o = ev.getOccurrenceDetails(next);
+                events.push(buildEvent(o.item, o.startDate, o.endDate));
             }
-        } else {
-            // Skip modified-occurrence overrides at the top level — they
-            // were already emitted by the master's getOccurrenceDetails.
-            if (vevent.hasProperty("recurrence-id")) continue;
+        } else if (!vevent.hasProperty("recurrence-id")) {
+            // Skip top-level RECURRENCE-ID overrides; they're already
+            // emitted by their master's getOccurrenceDetails.
             events.push(buildEvent(ev, ev.startDate, ev.endDate));
         }
     }
@@ -154,64 +121,35 @@ function init(): void {
 
     const calendar = new Calendar(mount, {
         plugins: [dayGridPlugin],
-        // Month grid — the same default view LFX shows on
-        // https://zoom-lfx.platform.linuxfoundation.org/.
         initialView: "dayGridMonth",
-        // Week starts Monday — matches the European cadence of the
-        // project's working week and how LFX renders for Europe/Berlin.
-        firstDay: 1,
-        // Hide Sat/Sun: no project meetings happen on weekends, and a
-        // five-column grid gives the remaining days more horizontal room.
-        weekends: false,
-        // Render only the weeks that belong to the displayed month.
-        // FullCalendar's default is a fixed 6-row grid (42 cells), which
-        // pads short months with leading/trailing days from neighboring
-        // months — visually distracting and not what LFX shows.
-        fixedWeekCount: false,
-        headerToolbar: {
-            left: "prev,next today",
-            center: "title",
-            right: "",
-        },
+        firstDay: 1,           // Monday-first, matching Europe/Berlin
+        weekends: false,       // no project meetings on weekends
+        fixedWeekCount: false, // don't pad short months with neighbor days
+        headerToolbar: {left: "prev,next today", center: "title", right: ""},
         height: "auto",
-        // Flatten the grid: default aspectRatio is 1.35 (wider than tall),
-        // which makes the month feel oversized inside a content page. 2.0
-        // gives the calendar roughly half its default height while keeping
-        // chips readable.
-        aspectRatio: 2,
-        // Cap stacked events per cell; FullCalendar adds a "+N more" link
-        // that opens the daily popover.
+        aspectRatio: 2,        // flatten the grid (default 1.35 is too tall)
         dayMaxEventRows: 2,
         eventTimeFormat: {hour: "2-digit", minute: "2-digit", hour12: false},
         displayEventEnd: false,
-        events: (info, successCallback, failureCallback) => {
-            fetchEvents(feed, {start: info.start, end: info.end})
-                .then(successCallback)
-                .catch(failureCallback);
+        events: (info, success, failure) => {
+            fetchEvents(feed, {start: info.start, end: info.end}).then(success).catch(failure);
         },
-        // Click an event → open its Zoom join URL in a new tab. LFX puts
-        // join URLs in DESCRIPTION; we extract the first one.
         eventClick(info) {
             const url = extractJoinUrl(info.event.extendedProps.description as string | undefined);
             if (!url) return;
             const e = info.jsEvent;
-            // Only intercept plain clicks; modifier-clicks fall through
-            // to default browser behavior.
+            // Let modifier-clicks fall through to default browser behavior.
             if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
             e.preventDefault();
             window.open(url, "_blank", "noopener");
         },
-        // Hover tooltip with truncated description + clickable cursor
-        // when a join URL is present.
         eventDidMount(info) {
             const d = info.event.extendedProps.description as string | undefined;
             if (!d) return;
             const trimmed = d.replace(/\s+/g, " ").trim();
             const el = info.el as HTMLElement;
             el.title = trimmed.length > 200 ? trimmed.slice(0, 200) + "…" : trimmed;
-            if (extractJoinUrl(d)) {
-                el.style.cursor = "pointer";
-            }
+            if (extractJoinUrl(d)) el.style.cursor = "pointer";
         },
     });
     calendar.render();
