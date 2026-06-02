@@ -381,3 +381,27 @@ func (s *repository) Tags(ctx context.Context, _ string, fn func(tags []string) 
 	s.mu.RUnlock()
 	return fn(tags)
 }
+
+func (s *repository) Untag(ctx context.Context, reference string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.untag(ctx, reference)
+}
+
+func (s *repository) untag(ctx context.Context, reference string) error {
+	tag := reference
+	if ref, err := looseref.ParseReference(reference); err == nil && ref.Tag != "" {
+		tag = ref.Tag
+	}
+	idx, err := s.archive.GetIndex(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to get index: %w", err)
+	}
+	if err := idx.RemoveArtifactByTag(s.repo, tag); err != nil {
+		if errors.Is(err, v1.ErrArtifactNotFound) {
+			return errdef.ErrNotFound
+		}
+		return fmt.Errorf("unable to remove tag %q: %w", tag, err)
+	}
+	return s.archive.SetIndex(ctx, idx)
+}

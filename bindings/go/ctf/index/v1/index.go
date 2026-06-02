@@ -2,6 +2,7 @@ package v1
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -13,7 +14,10 @@ const (
 	ArtifactIndexFileName = "artifact-index.json"
 )
 
-var ErrSchemaVersionMismatch = fmt.Errorf("schema version mismatch, only %v is supported", SchemaVersion)
+var (
+	ErrSchemaVersionMismatch = fmt.Errorf("schema version mismatch, only %v is supported", SchemaVersion)
+	ErrArtifactNotFound      = errors.New("artifact not found in index")
+)
 
 // Index is a collection of artifacts that can be serialized to disk.
 // It is used to store metadata about the artifacts in a CTF and used for discovery purposes
@@ -31,6 +35,10 @@ type Index interface {
 	// GetArtifacts returns a slice of ArtifactMetadata that are stored in the index at the time of the call.
 	// It is not guaranteed to be consistent with later calls as it is a snapshot of the current state.
 	GetArtifacts() []ArtifactMetadata
+	// RemoveArtifactByTag removes the entry with the given tag from the given repository.
+	// Returns ErrArtifactNotFound if no matching entry exists.
+	// The underlying blob is NOT garbage-collected.
+	RemoveArtifactByTag(repository, tag string) error
 }
 
 type index struct {
@@ -131,4 +139,16 @@ func (i *index) GetArtifacts() []ArtifactMetadata {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 	return slices.Clone(i.Artifacts)
+}
+
+func (i *index) RemoveArtifactByTag(repository, tag string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	for idx, art := range i.Artifacts {
+		if art.Repository == repository && art.Tag == tag {
+			i.Artifacts = slices.Delete(i.Artifacts, idx, idx+1)
+			return nil
+		}
+	}
+	return ErrArtifactNotFound
 }
