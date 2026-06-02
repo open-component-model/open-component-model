@@ -50,8 +50,12 @@ async function fetchEvents(feed: string, range: {start: Date; end: Date}): Promi
     const vcalendar = new ICAL.Component(jcal);
     const events: CommunityEvent[] = [];
 
-    // Pad ±1 day: RRULE expansion can yield instances slightly outside
-    // the nominal range when DTSTART sits on a boundary.
+    // Pad the expansion window ±1 day. RRULE expansion across timezones
+    // and DST transitions can yield instances whose UTC timestamp lies
+    // just outside the nominal range even though the user sees them as
+    // "in" the month. The extra day absorbs that drift; FullCalendar's
+    // own range filter discards the surplus before render. Mirrors what
+    // the @fullcalendar/icalendar plugin does internally.
     const rangeStart = ICAL.Time.fromJSDate(addDays(range.start, -1), false);
     const rangeEnd = ICAL.Time.fromJSDate(addDays(range.end, 1), false);
 
