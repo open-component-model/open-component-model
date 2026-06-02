@@ -137,7 +137,11 @@ function buildEvent(ev: ICAL.Event, start: ICAL.Time, end: ICAL.Time | null): Co
         title: ev.summary,
         start: start.toJSDate(),
         end: end ? end.toJSDate() : undefined,
-        url: extractEventUrl(ev) || undefined,
+        // Deliberately not setting `url`. FullCalendar would render the
+        // VEVENT URL property as an <a href> on the chip without
+        // validation; a malicious feed could ship `javascript:` or other
+        // dangerous schemes. Navigation goes through eventClick(), which
+        // extracts and regex-validates a Zoom join URL from DESCRIPTION.
         extendedProps: {
             uid: ev.uid,
             meetingId: id,
@@ -145,11 +149,6 @@ function buildEvent(ev: ICAL.Event, start: ICAL.Time, end: ICAL.Time | null): Co
             location: ev.location || "",
         },
     };
-}
-
-function extractEventUrl(ev: ICAL.Event): string {
-    const urlProp = ev.component.getFirstProperty("url");
-    return urlProp ? String(urlProp.getFirstValue() ?? "") : "";
 }
 
 function addDays(d: Date, n: number): Date {
