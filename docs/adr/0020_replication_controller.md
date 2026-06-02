@@ -68,7 +68,7 @@ spec:
     inlined:
       type: generic.config.ocm.software/v1
       configurations:
-        - type: GlobalTransferOptions/v1alpha1 # Current not existing configuration type.
+        - type: TransferConfiguration/v1alpha1 # Current not existing configuration type.
           spec:
             recursive: -1 # -1 means infinitely recursive. 
             copyMode: localBlob
@@ -94,7 +94,7 @@ data:
   transferConfig: |
     type: generic.config.ocm.software/v1
     configurations:
-      - type: GlobalTransferOptions/v1alpha1 # Current not existing configuration type.
+      - type: TransferConfiguration/v1alpha1 # Current not existing configuration type.
         spec:
           recursive: -1
           copyMode: localBlob

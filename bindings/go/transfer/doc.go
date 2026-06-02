@@ -85,7 +85,7 @@
 // runtime-only mappings:
 //
 //	cfg := &transferv1alpha1.Config{
-//	    Recursive:  ptr.To(true), // *bool, see GetRecursive() for the default
+//	    Recursive:  int,
 //	    CopyMode:   transferv1alpha1.CopyModeAllResources,
 //	    UploadType: transferv1alpha1.UploadAsOciArtifact,
 //	}

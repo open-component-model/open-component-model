@@ -115,7 +115,8 @@ func testResolverFor(component, version string, repoSpec runtime.Typed, desc *de
 func testMultiComponentResolver(entries map[string]struct {
 	spec runtime.Typed
 	desc *descriptor.Descriptor
-}) *mockCVRepoResolver {
+},
+) *mockCVRepoResolver {
 	specs := make(map[string]runtime.Typed)
 	allDescs := make(map[string]*descriptor.Descriptor)
 	for key, entry := range entries {
@@ -367,7 +368,7 @@ func TestBuildGraphDefinition_Recursive(t *testing.T) {
 			ToRepositorySpec(targetRepo),
 			FromResolver(resolver),
 		),
-		WithRecursive(true),
+		WithRecursive(-1),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)

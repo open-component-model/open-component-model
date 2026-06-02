@@ -701,7 +701,7 @@ func Test_Integration_TransferRecursive_CTFToOCI(t *testing.T) {
 	}
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithRecursive(true),
+		transfer.WithRecursive(-1),
 		transfer.WithTransfer(
 			transfer.Component(parentName, parentVersion),
 			transfer.ToRepositorySpec(targetSpec),

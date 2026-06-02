@@ -10,8 +10,10 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.CopyMode"
     },
     "recursive": {
-      "type": "boolean",
-      "description": "Pointer-typed so an explicit \"false\" in the wire format is distinguishable\nfrom \"unset\", which lets the controller's CRD spec turn recursion off without\nambiguity."
+      "type": "integer",
+      "description": "Recursive configures transferring component references with the parent component.\n-1 means infinite recursion, 0 means no recursion.",
+      "minimum": -9223372036854776000,
+      "maximum": 9223372036854776000
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

@@ -30,10 +30,9 @@ type Config struct {
 	// +ocm:jsonschema-gen:enum:deprecated=TransferConfiguration
 	Type runtime.Type `json:"type"`
 
-	// Pointer-typed so an explicit "false" in the wire format is distinguishable
-	// from "unset", which lets the controller's CRD spec turn recursion off without
-	// ambiguity.
-	Recursive *bool `json:"recursive,omitempty"`
+	// Recursive configures transferring component references with the parent component.
+	// -1 means infinite recursion, 0 means no recursion.
+	Recursive int `json:"recursive,omitempty"`
 
 	CopyMode CopyMode `json:"copyMode,omitempty"`
 
@@ -50,11 +49,12 @@ func (cfg *Config) GetCopyMode() CopyMode {
 // GetRecursive collapses the *bool tri-state to a plain bool. Use this rather
 // than reading [Config.Recursive] directly so callers don't have to think about
 // the nil case the wire format needs.
-func (cfg *Config) GetRecursive() bool {
-	if cfg == nil || cfg.Recursive == nil {
-		return false
+func (cfg *Config) GetRecursive() int {
+	if cfg == nil {
+		return 0
 	}
-	return *cfg.Recursive
+
+	return cfg.Recursive
 }
 
 func (cfg *Config) GetUploadType() UploadType {

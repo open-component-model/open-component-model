@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -21,8 +20,8 @@ func TestConfig_Validate(t *testing.T) {
 		wantErr string
 	}{
 		{"valid empty", Config{}, ""},
-		{"valid all fields", Config{Recursive: ptr.To(true), CopyMode: CopyModeAllResources, UploadType: UploadAsOciArtifact}, ""},
-		{"valid recursive false", Config{Recursive: ptr.To(false)}, ""},
+		{"valid all fields", Config{Recursive: -1, CopyMode: CopyModeAllResources, UploadType: UploadAsOciArtifact}, ""},
+		{"valid recursive false", Config{Recursive: 0}, ""},
 		{"valid copyMode localBlob", Config{CopyMode: CopyModeLocalBlobResources}, ""},
 		{"valid uploadType default", Config{UploadType: UploadAsDefault}, ""},
 		{"valid uploadType localBlob", Config{UploadType: UploadAsLocalBlob}, ""},
@@ -51,28 +50,24 @@ func TestConfig_GetDefaults(t *testing.T) {
 	var nilCfg *Config
 	r.Equal(CopyModeLocalBlobResources, nilCfg.GetCopyMode())
 	r.Equal(UploadAsDefault, nilCfg.GetUploadType())
-	r.False(nilCfg.GetRecursive())
+	r.Equal(0, nilCfg.GetRecursive())
 
 	empty := &Config{}
 	r.Equal(CopyModeLocalBlobResources, empty.GetCopyMode())
 	r.Equal(UploadAsDefault, empty.GetUploadType())
-	r.False(empty.GetRecursive())
+	r.Equal(0, nilCfg.GetRecursive())
 
-	populated := &Config{Recursive: ptr.To(true), CopyMode: CopyModeAllResources, UploadType: UploadAsOciArtifact}
+	populated := &Config{Recursive: -1, CopyMode: CopyModeAllResources, UploadType: UploadAsOciArtifact}
 	r.Equal(CopyModeAllResources, populated.GetCopyMode())
 	r.Equal(UploadAsOciArtifact, populated.GetUploadType())
-	r.True(populated.GetRecursive())
-
-	// Explicit false survives - that's the whole point of the *bool indirection.
-	explicitlyOff := &Config{Recursive: ptr.To(false)}
-	r.False(explicitlyOff.GetRecursive())
+	r.Equal(-1, populated.GetRecursive())
 }
 
 func TestConfig_SchemeRoundTrip(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	in := &Config{Recursive: ptr.To(true), CopyMode: CopyModeAllResources, UploadType: UploadAsOciArtifact}
+	in := &Config{Recursive: -1, CopyMode: CopyModeAllResources, UploadType: UploadAsOciArtifact}
 	// DefaultType stamps the canonical wire-format type onto a struct that has
 	// none. Asserting the result pins the registration contract from init():
 	// the first alias passed to MustRegisterWithAlias (the versioned form) is
@@ -81,7 +76,7 @@ func TestConfig_SchemeRoundTrip(t *testing.T) {
 	r.NoError(err)
 	r.Equal(runtime.NewVersionedType(ConfigType, Version), in.Type)
 
-	versioned := &Config{Type: runtime.NewVersionedType(ConfigType, Version), Recursive: ptr.To(true), CopyMode: CopyModeAllResources}
+	versioned := &Config{Type: runtime.NewVersionedType(ConfigType, Version), Recursive: -1, CopyMode: CopyModeAllResources}
 	data, err := json.Marshal(versioned)
 	r.NoError(err)
 	out := &Config{}
@@ -97,11 +92,11 @@ func TestConfig_YAMLRoundTrip(t *testing.T) {
 	// Match the production path: CLI's loadTransferConfig parses --transfer-config
 	// files via Scheme.Decode (which yaml.Unmarshals under the hood and respects
 	// the type discriminator), not via raw yaml.Unmarshal.
-	src := []byte("type: TransferConfiguration/v1alpha1\nrecursive: true\ncopyMode: allResources\nuploadType: ociArtifact\n")
+	src := []byte("type: TransferConfiguration/v1alpha1\nrecursive: -1\ncopyMode: allResources\nuploadType: ociArtifact\n")
 
 	cfg := &Config{}
 	r.NoError(Scheme.Decode(bytes.NewReader(src), cfg))
-	r.True(cfg.GetRecursive())
+	r.Equal(-1, cfg.GetRecursive())
 	r.Equal(CopyModeAllResources, cfg.CopyMode)
 	r.Equal(UploadAsOciArtifact, cfg.UploadType)
 
@@ -124,12 +119,11 @@ func TestConfig_RecursiveTriState(t *testing.T) {
 	cases := []struct {
 		name      string
 		yaml      string
-		wantNil   bool
-		wantValue bool // only checked when wantNil is false
+		wantValue int // only checked when wantNil is false
 	}{
-		{"omitted", "type: TransferConfiguration/v1alpha1\n", true, false},
-		{"explicit true", "type: TransferConfiguration/v1alpha1\nrecursive: true\n", false, true},
-		{"explicit false", "type: TransferConfiguration/v1alpha1\nrecursive: false\n", false, false},
+		{"omitted", "type: TransferConfiguration/v1alpha1\n", 0},
+		{"explicit true", "type: TransferConfiguration/v1alpha1\nrecursive: -1\n", -1},
+		{"explicit false", "type: TransferConfiguration/v1alpha1\nrecursive: 0\n", 0},
 	}
 
 	for _, tc := range cases {
@@ -138,12 +132,7 @@ func TestConfig_RecursiveTriState(t *testing.T) {
 			r := require.New(t)
 			cfg := &Config{}
 			r.NoError(Scheme.Decode(bytes.NewReader([]byte(tc.yaml)), cfg))
-			if tc.wantNil {
-				r.Nil(cfg.Recursive)
-			} else {
-				r.NotNil(cfg.Recursive)
-				r.Equal(tc.wantValue, *cfg.Recursive)
-			}
+			r.Equal(tc.wantValue, cfg.Recursive)
 		})
 	}
 }

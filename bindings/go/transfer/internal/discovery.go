@@ -133,7 +133,7 @@ func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValu
 // Thread safety: all map mutations are guarded by mu since the DAG discoverer runs concurrently.
 type discoverer struct {
 	mu        sync.Mutex
-	recursive bool
+	recursive int
 
 	// discoveredDigests stores expected digests from component references.
 	// When a parent references a child with a pinned digest, the digest is recorded here
@@ -159,7 +159,7 @@ type discoverer struct {
 //     another parent with a different resolver, an error is returned — the ambiguity must
 //     be resolved by the caller via an explicit WithTransfer mapping for that component.
 func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]string, error) {
-	if !d.recursive {
+	if d.recursive == 0 {
 		return nil, nil
 	}
 

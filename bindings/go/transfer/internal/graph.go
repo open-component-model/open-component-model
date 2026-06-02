@@ -68,7 +68,7 @@ type TransferRoot struct {
 func BuildGraphDefinition(
 	ctx context.Context,
 	roots map[string]TransferRoot,
-	recursive bool,
+	recursive int,
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
@@ -102,7 +102,7 @@ func BuildGraphDefinition(
 		expectedDigest: func(id runtime.Identity) *descruntime.Digest {
 			disc.mu.Lock()
 			defer disc.mu.Unlock()
-			if !disc.recursive {
+			if disc.recursive == 0 {
 				return nil
 			}
 			dig, ok := disc.discoveredDigests[id.String()]

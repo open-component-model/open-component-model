@@ -13,11 +13,6 @@ import (
 func (in *Config) DeepCopyInto(out *Config) {
 	*out = *in
 	out.Type = in.Type
-	if in.Recursive != nil {
-		in, out := &in.Recursive, &out.Recursive
-		*out = new(bool)
-		**out = **in
-	}
 	return
 }
 
