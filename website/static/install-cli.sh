@@ -133,11 +133,17 @@ setup_tmp() {
 
 # Extract a stable CLI version from a releases JSON file.
 # Returns the version string (e.g. "0.3.0") or empty if none found.
+# The trailing `"` in the regex anchors the match to the JSON quote, so it
+# implicitly excludes pre-releases like `"v0.8.0-rc.1"`. We then `sort -V` and
+# pick the highest semver rather than relying on GitHub's API order, which is
+# created_at-desc and would mis-rank a back-patched release on an older minor
+# (e.g. a v0.7.1 hotfix created after v0.8.0 has shipped).
 extract_stable_version() {
     grep '"tag_name":' "$1" \
         | grep -E "\"v[0-9]+\.[0-9]+\.[0-9]+\"" \
-        | head -1 \
         | sed -E "s|.*\"v([^\"]+)\".*|\1|" \
+        | sort -V \
+        | tail -1 \
         || true # grep returns non-zero when no lines match; prevent set -e from killing the subshell
 }
 
@@ -155,23 +161,6 @@ get_release_version() {
 
     [[ -n "${OCM_VERSION}" ]] || fatal "Unable to determine release version"
     info "Using ${OCM_VERSION} as release"
-}
-
-# Returns 0 (true) if a "v0.x" version has x strictly below THRESHOLD.
-# Accepts: cli/v0.5, v0.5.0, v0.5.0-rc.1, cli/v0.12.3 ...
-version_below() {
-    local version="$1" threshold="$2"
-
-    [[ "$version" == *0.* ]] || fatal "Not a v0.x version: ${version}"
-
-    # Strip everything up to and including the last "v0." -> "5.0-rc.1"
-    local rest="${version##*0.}"
-
-    # Grab only the leading digits -> "5"
-    [[ "$rest" =~ ^([0-9]+) ]] || fatal "Cannot parse minor from: ${version}"
-    local minor="${BASH_REMATCH[1]}"
-
-    (( minor < threshold ))
 }
 
 # Download file from URL
@@ -194,9 +183,11 @@ download() {
 # Download binary from Github URL
 # Assets follow the naming scheme: ocm-{OS}-{ARCH} (no version, no archive).
 # The `cli/` tag prefix was dropped in v0.8.0; older versions still live under it.
+# Legacy iff major==0 AND minor<8 - any 1.x+ release uses the modern bare tag.
 download_binary() {
-    local tag_prefix=''
-    if version_below "${OCM_VERSION}" 8; then
+    local major minor tag_prefix=''
+    IFS='.' read -r major minor _ <<< "${OCM_VERSION}"
+    if (( major == 0 && minor < 8 )); then
         tag_prefix='cli/'
     fi
     BIN_URL="https://github.com/${GITHUB_REPO}/releases/download/${tag_prefix}v${OCM_VERSION}/ocm-${OS}-${ARCH}"
