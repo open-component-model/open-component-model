@@ -36,7 +36,7 @@ jobs:
         with:
           script: |
             const { extractHighestPreviousReleaseVersion } = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
-            const tagPrefix = 'cli/v';
+            const tagPrefix = 'v';
 
             const releases = (await github.rest.repos.listReleases({
               owner: context.repo.owner,
@@ -55,7 +55,7 @@ jobs:
 
   install:
     needs: resolve
-    name: Install + verify (${{ matrix.runner }}, v${{ matrix.ocm_version || 'autodetect' }})
+    name: Install + verify (${{ matrix.runner }}, ${{ matrix.ocm_version || 'autodetect' }})
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
