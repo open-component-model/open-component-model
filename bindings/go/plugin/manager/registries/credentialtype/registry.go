@@ -38,14 +38,15 @@ func (r *Registry) Register(scheme *runtime.Scheme) {
 }
 
 func (r *Registry) RegisterFromPlugin(credentialTypes []types.Type) {
-	var failed []runtime.Type
 	for _, t := range credentialTypes {
-		if err := r.scheme.RegisterWithAlias(&runtime.Raw{}, t.Type); err != nil {
-			failed = append(failed, t.Type)
-			slog.Error("failed to register credential type from plugin", "type", t.Type, "error", err)
+		sub := runtime.NewScheme()
+		allTypes := append([]runtime.Type{t.Type}, t.Aliases...)
+		if err := sub.RegisterWithAlias(&runtime.Raw{}, allTypes...); err != nil {
+			slog.Error("failed to build scheme for plugin credential type", "type", t.Type, "error", err)
+			continue
 		}
-	}
-	if len(failed) > 0 {
-		slog.Error("some credential types could not be registered", "types", failed)
+		if err := r.scheme.RegisterScheme(sub); err != nil {
+			slog.Error("failed to register plugin credential type", "type", t.Type, "error", err)
+		}
 	}
 }
