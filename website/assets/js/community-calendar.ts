@@ -171,6 +171,7 @@ function init(): void {
 
     const feed = root.dataset.feed;
     if (!feed) return;
+    const lfxUrl = root.dataset.lfxUrl ?? "";
 
     const calendar = new Calendar(mount, {
         plugins: [dayGridPlugin],
@@ -184,8 +185,17 @@ function init(): void {
         dayMaxEventRows: 2,
         eventTimeFormat: {hour: "2-digit", minute: "2-digit", hour12: false},
         displayEventEnd: false,
-        events: (info, success, failure) => {
-            fetchEvents(feed, {start: info.start, end: info.end}).then(success).catch(failure);
+        events: (info, success, _failure) => {
+            // We replace FullCalendar's default failure UI with an inline
+            // error state that links to the hosted LFX calendar — the
+            // canonical fallback when the feed/parse path is broken.
+            fetchEvents(feed, {start: info.start, end: info.end})
+                .then(success)
+                .catch(cause => {
+                    calendar.destroy();
+                    const message = cause instanceof Error ? cause.message : String(cause);
+                    renderCalendarError(root, message, lfxUrl, cause);
+                });
         },
         eventClick(info) {
             const url = extractJoinUrl(info.event.extendedProps.description as string | undefined);
@@ -206,6 +216,41 @@ function init(): void {
         },
     });
     calendar.render();
+}
+
+// Render a user-facing error state inside the calendar container,
+// replacing whatever FullCalendar had rendered. Includes a link to the
+// hosted LFX calendar so users have an immediate path forward when the
+// embedded feed/parse path fails. The original cause is logged for
+// debugging; the user-facing text is deliberately short and actionable.
+function renderCalendarError(root: HTMLElement, message: string, lfxUrl: string, cause: unknown): void {
+    console.error("community-calendar: rendering error state", {message, cause});
+    root.innerHTML = "";
+    const card = document.createElement("div");
+    card.className = "ocm-calendar-error";
+    card.setAttribute("role", "alert");
+
+    const title = document.createElement("p");
+    title.className = "ocm-calendar-error__title";
+    title.textContent = "Couldn't load the community calendar.";
+    card.appendChild(title);
+
+    const detail = document.createElement("p");
+    detail.className = "ocm-calendar-error__detail";
+    detail.textContent = message;
+    card.appendChild(detail);
+
+    if (lfxUrl) {
+        const link = document.createElement("a");
+        link.className = "ocm-calendar-error__link";
+        link.href = lfxUrl;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = "Open the calendar on LFX →";
+        card.appendChild(link);
+    }
+
+    root.appendChild(card);
 }
 
 function extractJoinUrl(description: string | undefined): string | null {
