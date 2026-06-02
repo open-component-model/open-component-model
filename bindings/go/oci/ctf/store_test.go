@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/errdef"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -634,4 +635,44 @@ func TestConcurrentBlobOperations(t *testing.T) {
 
 		wg.Wait()
 	})
+}
+
+func TestUntag(t *testing.T) {
+	archive := setupTestCTF(t)
+	provider := NewFromCTF(archive)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:v1.0.0")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	blob := inmemory.New(strings.NewReader("manifest content"))
+	digestStr, known := blob.Digest()
+	require.True(t, known)
+	require.NoError(t, archive.SaveBlob(ctx, blob))
+
+	idx := v1.NewIndex()
+	idx.AddArtifact(v1.ArtifactMetadata{Repository: "test-repo", Tag: "v1.0.0", Digest: digestStr})
+	idx.AddArtifact(v1.ArtifactMetadata{Repository: "test-repo", Tag: "latest", Digest: digestStr})
+	require.NoError(t, archive.SetIndex(ctx, idx))
+
+	require.NoError(t, store.(*repository).Untag(ctx, "latest"))
+
+	var tags []string
+	require.NoError(t, store.(*repository).Tags(ctx, "", func(ts []string) error {
+		tags = ts
+		return nil
+	}))
+	assert.ElementsMatch(t, []string{"v1.0.0"}, tags, "only the semver tag should remain")
+
+	_, err = store.Resolve(ctx, "latest")
+	assert.Error(t, err, "removed tag must not resolve")
+}
+
+func TestUntag_NotFound(t *testing.T) {
+	archive := setupTestCTF(t)
+	provider := NewFromCTF(archive)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:v1.0.0")
+	require.NoError(t, err)
+
+	err = store.(*repository).Untag(t.Context(), "nonexistent")
+	assert.ErrorIs(t, err, errdef.ErrNotFound)
 }
