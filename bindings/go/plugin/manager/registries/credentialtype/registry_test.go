@@ -172,10 +172,20 @@ func TestRegisterFromPlugin_MultipleTypesDoNotConflictWithRaw(t *testing.T) {
 		r.NoError(err)
 		_, ok := obj.(*runtime.Raw)
 		r.True(ok)
+		r.Equal(unrelated, obj.(*runtime.Raw).GetType())
 
+		// aliasedType must resolve to its own Raw, not to aliasType's canonical
+		obj, err = s.NewObject(aliasedType)
+		r.NoError(err)
+		raw, ok := obj.(*runtime.Raw)
+		r.True(ok)
+		r.Equal(aliasedType, raw.GetType())
+
+		// aliasType must resolve to the same Raw as aliasedType, but with its own type identity
 		obj, err = s.NewObject(aliasType)
 		r.NoError(err)
 		_, ok = obj.(*runtime.Raw)
 		r.True(ok)
+		r.Equal(aliasType, obj.GetType())
 	})
 }
