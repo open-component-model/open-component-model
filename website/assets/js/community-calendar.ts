@@ -48,9 +48,7 @@ interface CommunityEvent extends EventInput {
 // inputs, preserving UID in `id` for downstream filtering.
 async function fetchEvents(feed: string, range: {start: Date; end: Date}): Promise<CommunityEvent[]> {
     // Bound the request: a hung LFX endpoint would otherwise leave the
-    // calendar's loading state forever. AbortSignal.timeout auto-aborts
-    // after the duration without the manual setTimeout/clearTimeout
-    // dance; it's baseline-supported in every browser past 2022.
+    // calendar's loading state forever.
     let response: Response;
     try {
         response = await fetch(feed, {method: "GET", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)});
