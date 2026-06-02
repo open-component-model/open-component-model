@@ -7,8 +7,14 @@ on:
     paths:
       - '.github/workflows/website-live-test-install-script.yml'
       - 'website/static/install-cli.sh'
-  release:
-    types: [published]
+  schedule:
+    # Weekly smoke test against the live GitHub release state. The `release:
+    # published` trigger does NOT fire here because tags are cut from
+    # `releases/v*` branches that are not ancestors of the workflow's default
+    # branch (main); GHA silently skips release events under that condition.
+    # A weekly cron gives us a post-release safety net without depending on
+    # branching.
+    - cron: '17 6 * * 2'  # Tuesday 06:17 UTC
   workflow_dispatch:
 
 concurrency:
