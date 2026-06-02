@@ -14,7 +14,6 @@
 @import "version-warning"; // Version warning banner
 @import "landing-ord"; // Landing page & footer
 @import "../components/schema-renderer"; // Schema renderer (Preact)
-@import "../components/community-calendar"; // Community calendar (FullCalendar)
 
 // Note: Dart Sass compatibility fixes for the theme's search form @extend
 // rules are applied via assets/scss/components/_forms.scss (overrides

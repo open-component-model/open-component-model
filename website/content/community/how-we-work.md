@@ -55,9 +55,10 @@ Anyone can propose work for an upcoming sprint. The process is:
 ## Meetings
 
 {{<callout context="note" title="Joining meetings" icon="outline/info-circle">}}
-All public meetings are listed on the [community calendar](/community/#community-calendar) -
-subscribe once and every change shows up in your calendar app. Join links are attached to
-each event.
+All public meetings are listed on the
+[OCM community calendar on LFX](https://zoom-lfx.platform.linuxfoundation.org/meetings/open-component-model?view=month).
+Open the page for join links, or subscribe to the feed in your own
+calendar app and every change shows up automatically.
 {{</callout>}}
 
 | Meeting | Cadence | Purpose |

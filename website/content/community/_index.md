@@ -43,11 +43,10 @@ Stay up to date with the latest OCM blog posts and announcements by subscribing 
 
 ## Community Calendar
 
-All OCM meetings are public. Click any event for the join link, or
-[open the calendar on LFX](https://zoom-lfx.platform.linuxfoundation.org/meetings/open-component-model?view=month)
-to subscribe to the whole feed.
-
-{{< community-calendar >}}
+All OCM meetings are public and listed on the
+[OCM community calendar on LFX](https://zoom-lfx.platform.linuxfoundation.org/meetings/open-component-model?view=month).
+Open the page to see the schedule, click any event for the join link, or
+subscribe to the feed in your own calendar app.
 
 For an explanation of each meeting, see [How We Work]({{< relref "how-we-work.md" >}}#meetings).
 
@@ -55,8 +54,8 @@ For an explanation of each meeting, see [How We Work]({{< relref "how-we-work.md
 
 We hold a public community call open to everyone, every first Wednesday of the month
 (17:00-18:00 Europe/Berlin, 1 hour). Join via the
-[Zoom link](https://zoom-lfx.platform.linuxfoundation.org/meeting/97987153840?password=fe2c3bf0-6a99-4e75-b62d-f1918154254e),
-or click the event in the calendar above.
+[Zoom link](https://zoom-lfx.platform.linuxfoundation.org/meeting/97987153840?password=fe2c3bf0-6a99-4e75-b62d-f1918154254e)
+or pick it from the [calendar on LFX](https://zoom-lfx.platform.linuxfoundation.org/meetings/open-component-model?view=month).
 [Call history and recordings](https://github.com/open-component-model/open-component-model/blob/main/docs/community/README.md)
 are available on GitHub. These calls are moderated by at least one OCM Core Maintainer -
 bring anything you like: ideas, issues, concepts, or questions about upcoming work.
