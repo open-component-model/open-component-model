@@ -10,7 +10,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.28.1
-	github.com/onsi/ginkgo/v2 v2.28.1
+	github.com/onsi/ginkgo/v2 v2.28.3
 	github.com/onsi/gomega v1.40.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
