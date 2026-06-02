@@ -59,6 +59,22 @@
 (function () {
   'use strict';
 
+  // Meetings that linger in the upstream LFX feed after they've been retired
+  // get filtered out client-side by their Zoom meeting ID. That ID is the
+  // prefix of each VEVENT's UID (and is duplicated in X-MEETING-ID and the
+  // join URL), so it's a stable identifier even if the SUMMARY is renamed.
+  // Recurring events produce three UID shapes — master ("<id>"), modified
+  // occurrence ("<id>:<recurrence-date>"), and rrule expansions inheriting
+  // the master id — splitting on ":" normalizes all three.
+  // Drop an entry once LFX cleans up the source feed.
+  var BLOCKED_MEETING_IDS = new Set([
+    '93093370350', // OCM Daily Stand-Up — meeting retired, feed entry stale
+  ]);
+  function isBlocked(ev) {
+    var id = ev.id || '';
+    return BLOCKED_MEETING_IDS.has(id.split(':')[0]);
+  }
+
   function init() {
     var root = document.querySelector('.ocm-calendar');
     if (!root || root.dataset.rendered === '1') return;
@@ -93,6 +109,12 @@
       eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
       displayEventEnd: true,
       events: { url: root.dataset.feed, format: 'ics' },
+      // Strip retired meetings still present in the upstream feed. Runs after
+      // every fetch/nav; removing from the model also removes the day-header
+      // row when the day becomes empty, which a CSS hide could not do.
+      eventsSet: function (events) {
+        events.forEach(function (ev) { if (isBlocked(ev)) ev.remove(); });
+      },
       eventDidMount: function (info) {
         // LFX puts join URLs in DESCRIPTION; expose the first one as the
         // event's click target so users can join with one click. If none
