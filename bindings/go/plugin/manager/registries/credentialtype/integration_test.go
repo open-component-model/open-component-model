@@ -18,9 +18,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// TestBuiltinAndPluginCredentialTypes is a full integration test that registers
-// built-in credential schemes (OCI, Helm, RSA) alongside plugin-declared types,
-// then exercises IsRegistered, NewObject, and Convert for all of them.
 func TestBuiltinAndPluginCredentialTypes(t *testing.T) {
 	reg := credentialtype.NewRegistry(t.Context())
 
