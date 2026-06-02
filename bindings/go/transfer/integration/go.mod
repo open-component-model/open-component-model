@@ -119,8 +119,8 @@ require (
 	k8s.io/apimachinery v0.36.0 // indirect
 	k8s.io/client-go v0.36.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20260317180543-43fb72c5454a // indirect
-	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
+	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
+	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260526091718-cfe4d0a3cfcc // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
