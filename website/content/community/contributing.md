@@ -245,4 +245,4 @@ license.
 ## Code of Conduct
 
 We want OCM to be a welcoming and harassment-free experience for everyone. All participants are expected to follow the
-[NeoNephos Code of Conduct](https://github.com/neonephos/.github/blob/main/CODE_OF_CONDUCT.md).
+[Linux Foundation EU Code of Conduct](https://linuxfoundation.eu/policies/code-of-conduct).
