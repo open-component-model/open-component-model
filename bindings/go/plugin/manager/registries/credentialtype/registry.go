@@ -2,6 +2,8 @@ package credentialtype
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -37,16 +39,23 @@ func (r *Registry) Register(scheme *runtime.Scheme) {
 	r.scheme.MustRegisterScheme(scheme)
 }
 
-func (r *Registry) RegisterFromPlugin(credentialTypes []types.Type) {
+func (r *Registry) RegisterFromPlugin(credentialTypes []types.Type) error {
+	var errs []error
 	for _, t := range credentialTypes {
-		sub := runtime.NewScheme()
+		typed := &runtime.Raw{}
+		typed.SetType(t.Type)
 		allTypes := append([]runtime.Type{t.Type}, t.Aliases...)
-		if err := sub.RegisterWithAlias(&runtime.Raw{}, allTypes...); err != nil {
-			slog.Error("failed to build scheme for plugin credential type", "type", t.Type, "error", err)
+		for _, t := range allTypes {
+			if r.scheme.IsRegistered(t) {
+				errs = append(errs, fmt.Errorf("credential type %s already registered", t))
+				continue
+			}
+		}
+		if err := r.scheme.RegisterWithAlias(typed, allTypes...); err != nil {
+			slog.ErrorContext(r.ctx, "failed to build scheme for plugin credential type", "type", t.Type, "error", err)
+			errs = append(errs, err)
 			continue
 		}
-		if err := r.scheme.RegisterScheme(sub); err != nil {
-			slog.Error("failed to register plugin credential type", "type", t.Type, "error", err)
-		}
 	}
+	return errors.Join(errs...)
 }
