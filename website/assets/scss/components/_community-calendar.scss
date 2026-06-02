@@ -17,8 +17,8 @@
   --fc-border-color: var(--bs-border-color);
   --fc-page-bg-color: var(--bs-body-bg);
   --fc-neutral-bg-color: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.025));
-  --fc-event-bg-color: #257ddc;       // --brand-blue-dark
-  --fc-event-border-color: #257ddc;
+  --fc-event-bg-color: var(--brand-blue-dark);
+  --fc-event-border-color: var(--brand-blue-dark);
   --fc-event-text-color: #fff;
   --fc-today-bg-color: rgba(76, 201, 240, 0.08);
   --fc-button-bg-color: transparent;
@@ -68,7 +68,7 @@
 }
 
 .ocm-calendar .fc-day-today .fc-daygrid-day-number {
-  color: #257ddc;
+  color: var(--brand-blue-dark);
   font-weight: 600;
 }
 
@@ -96,22 +96,22 @@
   padding: 0 0.25rem;
 
   &:hover {
-    color: #257ddc;
+    color: var(--brand-blue-dark);
     text-decoration: underline;
   }
 }
 
 // Dark mode: flip the brand colors; Bootstrap tokens cascade the rest.
 [data-bs-theme="dark"] .ocm-calendar .fc {
-  --fc-event-bg-color: #4cc9f0;
-  --fc-event-border-color: #4cc9f0;
+  --fc-event-bg-color: var(--brand-cyan);
+  --fc-event-border-color: var(--brand-cyan);
   --fc-event-text-color: #051a2e;
   --fc-today-bg-color: rgba(76, 201, 240, 0.12);
 }
 
 [data-bs-theme="dark"] .ocm-calendar .fc-day-today .fc-daygrid-day-number,
 [data-bs-theme="dark"] .ocm-calendar .fc-daygrid-more-link:hover {
-  color: #4cc9f0;
+  color: var(--brand-cyan);
 }
 
 @media (max-width: 480px) {
