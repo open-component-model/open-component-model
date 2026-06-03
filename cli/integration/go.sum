@@ -476,8 +476,8 @@ ocm.software/open-component-model/bindings/go/input/file v0.0.5 h1:RbolMn7cCHiXz
 ocm.software/open-component-model/bindings/go/input/file v0.0.5/go.mod h1:AoHlDrI2DJ9eG7qYNdMjPTs57aqD/E9e/u6TbJc7N1g=
 ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260526121250-aae701a4aa9b h1:MDEdwo/y0wEEXXqBD5hK5CQ/uxece9AMja3SmiOnOb4=
 ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260526121250-aae701a4aa9b/go.mod h1:UFvM6JYCO92zvBAGWESZTmIjqtPE2oYLYaqtITbo9bs=
-ocm.software/open-component-model/bindings/go/oci v0.0.46-0.20260602093857-bfbc09c0d133 h1:jVLpWfqYZH3RPUXSMhb/HRMWqYPq7hcPPPPng90DI1k=
-ocm.software/open-component-model/bindings/go/oci v0.0.46-0.20260602093857-bfbc09c0d133/go.mod h1:IjVasmPoY2iyd1OnKqwWC1zS1BQZQIU0nqfFoQ2F3QU=
+ocm.software/open-component-model/bindings/go/oci v0.0.46-0.20260602163258-a86d98485e5d h1:UwP6tyJqe3xzW0egbADwhATj9XXYPzFK1cxM1ZKYisc=
+ocm.software/open-component-model/bindings/go/oci v0.0.46-0.20260602163258-a86d98485e5d/go.mod h1:IjVasmPoY2iyd1OnKqwWC1zS1BQZQIU0nqfFoQ2F3QU=
 ocm.software/open-component-model/bindings/go/plugin v0.0.16 h1:waSsSFvXRcKzaawZU089Bx1oIopUZSsKBUirFnow2zc=
 ocm.software/open-component-model/bindings/go/plugin v0.0.16/go.mod h1:qjYYqqFBb9IuwGwVA8okcPUE9YEbC32mtKENyJXVVcM=
 ocm.software/open-component-model/bindings/go/repository v0.0.9 h1:j6WmumbeN+m19oQ1ViZ8cWSjbpIAv+9kJhIyUSmsHL0=
