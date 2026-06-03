@@ -314,8 +314,8 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 			if err := pm.CredentialRepositoryRegistry.AddPlugin(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
-			if err := pm.CredentialTypeRegistry.RegisterFromPlugin(capability.CustomCredentialTypes); err != nil {
-				return fmt.Errorf("failed to register credential types for plugin %s: %w", plugin.ID, err)
+			if err := pm.CredentialTypeRegistry.AddPlugin(plugin, capability); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		case *componentlisterv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding component lister plugin", "id", plugin.ID)

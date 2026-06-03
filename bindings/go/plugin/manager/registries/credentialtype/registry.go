@@ -8,7 +8,8 @@ import (
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	credentialrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
+	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -19,7 +20,7 @@ var _ credentials.CredentialTypeSchemeProvider = (*Registry)(nil)
 //
 // Built-in bindings register their credential types via Register during startup.
 // External plugins register their custom credential types from capability specs during plugin
-// discovery via RegisterFromPlugin.
+// discovery via AddPlugin.
 type Registry struct {
 	sync.RWMutex
 	ctx    context.Context
@@ -45,11 +46,15 @@ func (r *Registry) Register(scheme *runtime.Scheme) {
 	r.scheme.MustRegisterScheme(scheme)
 }
 
-func (r *Registry) RegisterFromPlugin(credentialTypes []types.Type) error {
+func (r *Registry) AddPlugin(_ mtypes.Plugin, spec runtime.Typed) error {
 	r.Lock()
 	defer r.Unlock()
+	capability := credentialrepositoryv1.CapabilitySpec{}
+	if err := credentialrepositoryv1.Scheme.Convert(spec, &capability); err != nil {
+		return fmt.Errorf("failed to convert capability spec: %w", err)
+	}
 	var errs []error
-	for _, t := range credentialTypes {
+	for _, t := range capability.CustomCredentialTypes {
 		typed := &runtime.Raw{}
 		typed.SetType(t.Type)
 		allTypes := append([]runtime.Type{t.Type}, t.Aliases...)

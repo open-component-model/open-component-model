@@ -6,12 +6,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	credentialrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtype"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+// capability wraps a slice of custom credential types in a CapabilitySpec for test calls.
+func capability(customTypes ...types.Type) *credentialrepositoryv1.CapabilitySpec {
+	return &credentialrepositoryv1.CapabilitySpec{CustomCredentialTypes: customTypes}
+}
 
 func TestNewRegistry(t *testing.T) {
 	r := require.New(t)
@@ -59,10 +65,7 @@ func TestRegisterFromPlugin_MultipleTypes(t *testing.T) {
 
 	typeA := runtime.NewVersionedType("CredA", "v1")
 	typeB := runtime.NewVersionedType("CredB", "v2")
-	r.NoError(reg.RegisterFromPlugin([]types.Type{
-		{Type: typeA},
-		{Type: typeB},
-	}))
+	r.NoError(reg.AddPlugin(types.Plugin{}, capability(types.Type{Type: typeA}, types.Type{Type: typeB})))
 
 	scheme := reg.GetCredentialTypeScheme()
 	r.True(scheme.IsRegistered(typeA))
@@ -72,8 +75,8 @@ func TestRegisterFromPlugin_MultipleTypes(t *testing.T) {
 func TestRegisterFromPlugin_NoTypes(t *testing.T) {
 	r := require.New(t)
 	reg := credentialtype.NewRegistry(t.Context())
-	r.NoError(reg.RegisterFromPlugin(nil))
-	r.NoError(reg.RegisterFromPlugin([]types.Type{}))
+	r.NoError(reg.AddPlugin(types.Plugin{}, capability()))
+	r.NoError(reg.AddPlugin(types.Plugin{}, capability()))
 	r.NotNil(reg.GetCredentialTypeScheme())
 }
 
@@ -83,23 +86,23 @@ func TestRegisterFromPlugin_ConflictsBetweenPlugins(t *testing.T) {
 	typeB := runtime.NewVersionedType("CredB", "v1")
 
 	tests := []struct {
-		name    string
-		first   []types.Type
-		second  []types.Type
+		name   string
+		first  []types.Type
+		second []types.Type
 	}{
 		{
-			name:  "two plugins register the same canonical type",
-			first: []types.Type{{Type: typeA}},
+			name:   "two plugins register the same canonical type",
+			first:  []types.Type{{Type: typeA}},
 			second: []types.Type{{Type: typeA}},
 		},
 		{
-			name:  "second plugin's canonical conflicts with first plugin's alias",
-			first: []types.Type{{Type: typeA, Aliases: []runtime.Type{aliasA}}},
+			name:   "second plugin's canonical conflicts with first plugin's alias",
+			first:  []types.Type{{Type: typeA, Aliases: []runtime.Type{aliasA}}},
 			second: []types.Type{{Type: aliasA}},
 		},
 		{
-			name:  "second plugin's alias conflicts with first plugin's canonical",
-			first: []types.Type{{Type: typeA}},
+			name:   "second plugin's alias conflicts with first plugin's canonical",
+			first:  []types.Type{{Type: typeA}},
 			second: []types.Type{{Type: typeB, Aliases: []runtime.Type{typeA}}},
 		},
 	}
@@ -108,8 +111,8 @@ func TestRegisterFromPlugin_ConflictsBetweenPlugins(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			reg := credentialtype.NewRegistry(t.Context())
-			r.NoError(reg.RegisterFromPlugin(tc.first))
-			r.Error(reg.RegisterFromPlugin(tc.second))
+			r.NoError(reg.AddPlugin(types.Plugin{}, capability(tc.first...)))
+			r.Error(reg.AddPlugin(types.Plugin{}, capability(tc.second...)))
 		})
 	}
 }
@@ -142,7 +145,7 @@ func TestRegisterFromPlugin_CannotOverrideBuiltinTypes(t *testing.T) {
 			r := require.New(t)
 			reg := credentialtype.NewRegistry(t.Context())
 			reg.Register(tc.scheme)
-			r.Error(reg.RegisterFromPlugin([]types.Type{tc.plugin}))
+			r.Error(reg.AddPlugin(types.Plugin{}, capability(tc.plugin)))
 		})
 	}
 }
@@ -157,11 +160,11 @@ func TestRegisterFromPlugin_MultipleTypesDoNotConflictWithRaw(t *testing.T) {
 	typeC := runtime.NewVersionedType("PluginCredC", "v2")
 
 	reg := credentialtype.NewRegistry(t.Context())
-	require.NoError(t, reg.RegisterFromPlugin([]types.Type{
-		{Type: typeA},
-		{Type: typeB},
-		{Type: typeC},
-	}))
+	require.NoError(t, reg.AddPlugin(types.Plugin{}, capability(
+		types.Type{Type: typeA},
+		types.Type{Type: typeB},
+		types.Type{Type: typeC},
+	)))
 
 	scheme := reg.GetCredentialTypeScheme()
 
@@ -207,10 +210,10 @@ func TestRegisterFromPlugin_MultipleTypesDoNotConflictWithRaw(t *testing.T) {
 		unrelated := runtime.NewVersionedType("Unrelated", "v1")
 
 		reg2 := credentialtype.NewRegistry(t.Context())
-		r.NoError(reg2.RegisterFromPlugin([]types.Type{
-			{Type: aliasedType, Aliases: []runtime.Type{aliasType}},
-			{Type: unrelated},
-		}))
+		r.NoError(reg2.AddPlugin(types.Plugin{}, capability(
+			types.Type{Type: aliasedType, Aliases: []runtime.Type{aliasType}},
+			types.Type{Type: unrelated},
+		)))
 
 		s := reg2.GetCredentialTypeScheme()
 		r.True(s.IsRegistered(aliasedType))
@@ -249,7 +252,7 @@ func TestBuiltinAndPluginCredentialTypes(t *testing.T) {
 		{Type: runtime.NewVersionedType("PluginTokenB", "v1")},
 		{Type: runtime.NewVersionedType("PluginTokenC", "v2")},
 	}
-	require.NoError(t, reg.RegisterFromPlugin(pluginTypes))
+	require.NoError(t, reg.AddPlugin(types.Plugin{}, capability(pluginTypes...)))
 
 	scheme := reg.GetCredentialTypeScheme()
 
