@@ -2,9 +2,9 @@ package credentialtype
 
 import (
 	"context"
+	"sync"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -14,9 +14,9 @@ var _ credentials.CredentialTypeSchemeProvider = (*Registry)(nil)
 // typed consumer credentials from .ocmconfig.
 //
 // Built-in bindings register their credential types via Register during startup.
-// External plugins register their custom credential types from capability specs during plugin
-// discovery via RegisterFromPlugin.
+// Plugin credential types are registered through the credential repository registry.
 type Registry struct {
+	sync.RWMutex
 	ctx    context.Context
 	scheme *runtime.Scheme
 }
@@ -29,15 +29,13 @@ func NewRegistry(ctx context.Context) *Registry {
 }
 
 func (r *Registry) GetCredentialTypeScheme() *runtime.Scheme {
+	r.RLock()
+	defer r.RUnlock()
 	return r.scheme
 }
 
 func (r *Registry) Register(scheme *runtime.Scheme) {
+	r.Lock()
+	defer r.Unlock()
 	r.scheme.MustRegisterScheme(scheme)
-}
-
-func (r *Registry) RegisterFromPlugin(credentialTypes []types.Type) {
-	for _, t := range credentialTypes {
-		_ = r.scheme.RegisterWithAlias(&runtime.Raw{}, t.Type)
-	}
 }
