@@ -6,13 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	helmcredspec "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
-	helmcredv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
-	ocicredspec "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
-	ocicredv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
-	rsacredspec "ocm.software/open-component-model/bindings/go/rsa/spec/credentials"
-	rsacredv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
-
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtype"
@@ -129,18 +122,18 @@ func TestRegisterFromPlugin_CannotOverrideBuiltinTypes(t *testing.T) {
 	}{
 		{
 			name:   "OCI credentials",
-			scheme: ocicredspec.Scheme,
-			plugin: types.Type{Type: runtime.NewVersionedType(ocicredv1.OCICredentialsType, "v1")},
+			scheme: ociScheme,
+			plugin: types.Type{Type: ociCredentialsVersionedType},
 		},
 		{
 			name:   "Helm credentials",
-			scheme: helmcredspec.Scheme,
-			plugin: types.Type{Type: runtime.NewVersionedType(helmcredv1.HelmHTTPCredentialsType, "v1")},
+			scheme: helmScheme,
+			plugin: types.Type{Type: helmHTTPCredentialsVersionedType},
 		},
 		{
 			name:   "RSA credentials",
-			scheme: rsacredspec.Scheme,
-			plugin: types.Type{Type: rsacredv1.VersionedType},
+			scheme: rsaScheme,
+			plugin: types.Type{Type: rsaCredentialsVersionedType},
 		},
 	}
 
@@ -247,9 +240,9 @@ func TestRegisterFromPlugin_MultipleTypesDoNotConflictWithRaw(t *testing.T) {
 func TestBuiltinAndPluginCredentialTypes(t *testing.T) {
 	reg := credentialtype.NewRegistry(t.Context())
 
-	reg.Register(ocicredspec.Scheme)
-	reg.Register(helmcredspec.Scheme)
-	reg.Register(rsacredspec.Scheme)
+	reg.Register(ociScheme)
+	reg.Register(helmScheme)
+	reg.Register(rsaScheme)
 
 	pluginTypes := []types.Type{
 		{Type: runtime.NewVersionedType("PluginTokenA", "v1")},
@@ -262,22 +255,22 @@ func TestBuiltinAndPluginCredentialTypes(t *testing.T) {
 
 	t.Run("builtin OCI types are registered", func(t *testing.T) {
 		r := require.New(t)
-		r.True(scheme.IsRegistered(runtime.NewVersionedType(ocicredv1.OCICredentialsType, "v1")))
-		r.True(scheme.IsRegistered(runtime.NewUnversionedType(ocicredv1.OCICredentialsType)))
-		r.True(scheme.IsRegistered(ocicredspec.CredentialRepositoryConfigType))
-		r.True(scheme.IsRegistered(runtime.NewUnversionedType("DockerConfig")))
+		r.True(scheme.IsRegistered(ociCredentialsVersionedType))
+		r.True(scheme.IsRegistered(runtime.NewUnversionedType(ociCredentialsType)))
+		r.True(scheme.IsRegistered(dockerConfigVersionedType))
+		r.True(scheme.IsRegistered(runtime.NewUnversionedType(dockerConfigType)))
 	})
 
 	t.Run("builtin Helm types are registered", func(t *testing.T) {
 		r := require.New(t)
-		r.True(scheme.IsRegistered(runtime.NewVersionedType(helmcredv1.HelmHTTPCredentialsType, "v1")))
-		r.True(scheme.IsRegistered(runtime.NewUnversionedType(helmcredv1.HelmHTTPCredentialsType)))
+		r.True(scheme.IsRegistered(helmHTTPCredentialsVersionedType))
+		r.True(scheme.IsRegistered(runtime.NewUnversionedType(helmHTTPCredentialsType)))
 	})
 
 	t.Run("builtin RSA types are registered", func(t *testing.T) {
 		r := require.New(t)
-		r.True(scheme.IsRegistered(rsacredv1.VersionedType))
-		r.True(scheme.IsRegistered(runtime.NewUnversionedType(rsacredv1.RSACredentialsType)))
+		r.True(scheme.IsRegistered(rsaCredentialsVersionedType))
+		r.True(scheme.IsRegistered(runtime.NewUnversionedType(rsaCredentialsType)))
 	})
 
 	t.Run("plugin types are registered", func(t *testing.T) {
@@ -290,20 +283,20 @@ func TestBuiltinAndPluginCredentialTypes(t *testing.T) {
 	t.Run("NewObject returns concrete type for builtins", func(t *testing.T) {
 		r := require.New(t)
 
-		obj, err := scheme.NewObject(runtime.NewVersionedType(ocicredv1.OCICredentialsType, "v1"))
+		obj, err := scheme.NewObject(ociCredentialsVersionedType)
 		r.NoError(err)
-		_, ok := obj.(*ocicredv1.OCICredentials)
-		r.True(ok, "expected *ocicredv1.OCICredentials, got %T", obj)
+		_, ok := obj.(*ociCredentials)
+		r.True(ok, "expected *ociCredentials, got %T", obj)
 
-		obj, err = scheme.NewObject(runtime.NewVersionedType(helmcredv1.HelmHTTPCredentialsType, "v1"))
+		obj, err = scheme.NewObject(helmHTTPCredentialsVersionedType)
 		r.NoError(err)
-		_, ok = obj.(*helmcredv1.HelmHTTPCredentials)
-		r.True(ok, "expected *helmcredv1.HelmHTTPCredentials, got %T", obj)
+		_, ok = obj.(*helmHTTPCredentials)
+		r.True(ok, "expected *helmHTTPCredentials, got %T", obj)
 
-		obj, err = scheme.NewObject(rsacredv1.VersionedType)
+		obj, err = scheme.NewObject(rsaCredentialsVersionedType)
 		r.NoError(err)
-		_, ok = obj.(*rsacredv1.RSACredentials)
-		r.True(ok, "expected *rsacredv1.RSACredentials, got %T", obj)
+		_, ok = obj.(*rsaCredentials)
+		r.True(ok, "expected *rsaCredentials, got %T", obj)
 	})
 
 	t.Run("NewObject returns *runtime.Raw for plugin types", func(t *testing.T) {
@@ -319,19 +312,19 @@ func TestBuiltinAndPluginCredentialTypes(t *testing.T) {
 	t.Run("Convert round-trips builtin OCI credentials", func(t *testing.T) {
 		r := require.New(t)
 
-		ociCreds := &ocicredv1.OCICredentials{
-			Type:     runtime.NewVersionedType(ocicredv1.OCICredentialsType, "v1"),
+		creds := &ociCredentials{
+			Type:     ociCredentialsVersionedType,
 			Username: "user",
 			Password: "pass",
 		}
-		raw, err := marshalToRaw(ociCreds)
+		raw, err := marshalToRaw(creds)
 		r.NoError(err)
 
 		into, err := scheme.NewObject(raw.GetType())
 		r.NoError(err)
 		r.NoError(scheme.Convert(raw, into))
 
-		result, ok := into.(*ocicredv1.OCICredentials)
+		result, ok := into.(*ociCredentials)
 		r.True(ok)
 		r.Equal("user", result.Username)
 		r.Equal("pass", result.Password)
@@ -363,7 +356,7 @@ func TestBuiltinAndPluginCredentialTypes(t *testing.T) {
 		_, isRaw := pluginObj.(*runtime.Raw)
 		r.True(isRaw)
 
-		ociObj, err := scheme.NewObject(runtime.NewVersionedType(ocicredv1.OCICredentialsType, "v1"))
+		ociObj, err := scheme.NewObject(ociCredentialsVersionedType)
 		r.NoError(err)
 		_, isRaw = ociObj.(*runtime.Raw)
 		r.False(isRaw, "OCI builtin type should not resolve to *runtime.Raw")
