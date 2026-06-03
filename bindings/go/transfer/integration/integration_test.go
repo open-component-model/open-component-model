@@ -1246,15 +1246,16 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(tgd)
 
-	// Verify the graph was built with a GetOCIArtifact transformation for the Docker manifest image.
-	hasGetOCIArtifact := false
+	// With CopyModeAllResources + UploadAsOciArtifact targeting an OCI registry, the graph
+	// takes the streaming path and emits TransferOCIArtifact (not GetOCIArtifact).
+	hasTransferOCIArtifact := false
 	for _, tr := range tgd.Transformations {
-		if tr.Type.Name == "GetOCIArtifact" {
-			hasGetOCIArtifact = true
+		if tr.Type.Name == "TransferOCIArtifact" {
+			hasTransferOCIArtifact = true
 			break
 		}
 	}
-	r.True(hasGetOCIArtifact, "Docker manifest OCIImage resource with CopyModeAllResources should generate GetOCIArtifact transformation")
+	r.True(hasTransferOCIArtifact, "Docker manifest OCIImage resource with CopyModeAllResources+UploadAsOciArtifact to OCI target should generate TransferOCIArtifact transformation")
 
 	// 5. Execute the transfer.
 	ctx := t.Context()
