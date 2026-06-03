@@ -4,9 +4,8 @@ import (
 	nethttp "net/http"
 	"time"
 
-	"oras.land/oras-go/v2/registry/remote/retry"
-
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/http/internal/retry"
 )
 
 // Options holds configuration for New.
@@ -47,7 +46,7 @@ func (t *userAgentTransport) RoundTrip(req *nethttp.Request) (*nethttp.Response,
 	return t.base.RoundTrip(req)
 }
 
-// New builds an *http.Client on top of the oras-go retry client, applying the
+// New builds an *http.Client with retry transport, applying the
 // transport-level timeouts from the supplied HTTP configuration. It is the
 // factory counterpart to httpv1alpha1.ResolveHTTPConfig: resolve the config
 // once, then hand it here to obtain a ready-to-use client.
@@ -61,7 +60,7 @@ func (t *userAgentTransport) RoundTrip(req *nethttp.Request) (*nethttp.Response,
 //	 2. hostRouter dispatches each request to a per-host inner chain when the
 //	    URL host matches an entry in cfg.Hosts; otherwise it falls back to the
 //	    global chain. Omitted entirely when cfg has no per-host entries.
-//	 3. retry.Transport retries transient failures using oras-go's default
+//	 3. retry.Transport retries transient failures using the default retry
 //	    policy. One instance exists per host (plus one for the global fallback)
 //	    so retry attempts share the per-host context deadline.
 //	 4. http.Transport carries the configured TCP/TLS/idle timeouts, merged
@@ -73,7 +72,7 @@ func (t *userAgentTransport) RoundTrip(req *nethttp.Request) (*nethttp.Response,
 // global one.
 //
 // A nil config (WithConfig omitted, or omitted entirely) yields a plain
-// oras-go retry client with default transport timeouts.
+// retry client with default transport timeouts.
 func New(opts ...Option) *nethttp.Client {
 	options := &Options{}
 	for _, opt := range opts {

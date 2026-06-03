@@ -29,7 +29,7 @@
 //
 // New returns an *http.Client whose transport applies the TCP dial, TCP
 // keep-alive, TLS-handshake, response-header and idle-connection timeouts
-// from cfg, layered on top of oras-go's retry transport. The overall
+// from cfg, layered on top of a retry transport. The overall
 // cfg.Timeout becomes the http.Client.Timeout (the deadline for the whole
 // request, including redirects and body reads). WithUserAgent injects a
 // User-Agent header on every request. A nil config yields a plain retry
