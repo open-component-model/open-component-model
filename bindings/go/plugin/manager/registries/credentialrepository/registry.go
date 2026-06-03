@@ -22,7 +22,6 @@ func NewCredentialRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 		ctx:                                 ctx,
 		capabilities:                        make(map[string]credentialsv1.CapabilitySpec),
 		registry:                            make(map[runtime.Type]mtypes.Plugin),
-		credentialRegistry:                  make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins:                  make(map[string]*constructedPlugin), // running plugins
 		consumerTypeRegistrations:           make(map[runtime.Type]runtime.Type),
 		internalCredentialRepositoryPlugins: make(map[runtime.Type]credentials.RepositoryPlugin),
@@ -38,7 +37,6 @@ type RepositoryRegistry struct {
 	capabilities         map[string]credentialsv1.CapabilitySpec
 	registry             map[runtime.Type]mtypes.Plugin
 	scheme               *runtime.Scheme
-	credentialRegistry   map[runtime.Type]mtypes.Plugin
 	credentialTypeScheme *runtime.Scheme
 
 	constructedPlugins        map[string]*constructedPlugin // running plugins
@@ -88,12 +86,6 @@ func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, spec runtime.Typed)
 		r.registry[typ.Type] = plugin
 	}
 
-	for _, typ := range capability.CustomCredentialTypes {
-		if v, ok := r.credentialRegistry[typ.Type]; ok {
-			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ.Type, v.ID)
-		}
-		r.credentialRegistry[typ.Type] = plugin
-	}
 	if err := r.registerCustomCredentialTypes(capability); err != nil {
 		return fmt.Errorf("failed to register custom credential types: %w", err)
 	}
