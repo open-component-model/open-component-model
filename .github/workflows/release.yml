@@ -268,17 +268,23 @@ jobs:
           set -euo pipefail
 
           shopt -s nullglob
-          assets=(
-            "${{ runner.temp }}"/cli-assets/bin/*
-            "${{ runner.temp }}"/cli-assets/oci/*
-            "${{ runner.temp }}"/chart-assets/*
-          )
+          cli_bin=("${{ runner.temp }}"/cli-assets/bin/*)
+          cli_oci=("${{ runner.temp }}"/cli-assets/oci/*)
+          chart=("${{ runner.temp }}"/chart-assets/*)
           shopt -u nullglob
 
-          if [ "${#assets[@]}" -eq 0 ]; then
-            echo "::error::No release assets found"
-            exit 1
-          fi
+          # Each category must be present. A partial artifact-download failure
+          # (e.g. CLI binaries arrived but chart did not) should fail loudly
+          # rather than publish an incomplete RC release.
+          for name in cli_bin cli_oci chart; do
+            declare -n arr="$name"
+            if [ "${#arr[@]}" -eq 0 ]; then
+              echo "::error::No release assets found for category: $name"
+              exit 1
+            fi
+          done
+
+          assets=("${cli_bin[@]}" "${cli_oci[@]}" "${chart[@]}")
 
           if gh release view "$RC_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             gh release edit "$RC_TAG" \
