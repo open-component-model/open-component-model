@@ -59,4 +59,4 @@ Code contributions, feature requests, bug reports, and help requests are very we
 for more information on how to contribute to OCM.
 
 OCM Kubernetes Controller Toolkit follows the
-[NeoNephos Code of Conduct](https://github.com/neonephos/.github/blob/main/CODE_OF_CONDUCT.md)
+[Linux Foundation EU Code of Conduct](https://linuxfoundation.eu/policies/code-of-conduct)

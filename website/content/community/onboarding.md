@@ -205,7 +205,7 @@ label across our repositories.
 
 {{<callout context="tip" title="Say Hello" icon="outline/heart-handshake">}}
 The easiest way to get started is to say hello. Join our monthly
-[community call](/community/#community-calls) or ask for an invite to the
+[community call](/community/#community-call) or ask for an invite to the
 [daily standup](/community/how-we-work/#meetings) - it is a casual sync, not mandatory, and not necessarily work-related.
 You can reach us on [Slack](/community/#slack) or [Zulip](/community/#zulip) anytime.
 {{</callout>}}
