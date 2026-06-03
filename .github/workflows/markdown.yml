@@ -56,6 +56,9 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - name: Install Puppeteer Chrome
+        run: npx puppeteer browsers install chrome
       - name: Run linkspector
         uses: umbrelladocs/action-linkspector@036f295d12b67b0c4b445bc83db0538afb78db69 # v1
         with:
