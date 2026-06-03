@@ -618,10 +618,6 @@ jobs:
             await script.default({ github, context, core });
   # === controller-release.yml::promote_and_release_final + cli-release.yml::promote_final + cli-release.yml::release_final ===
 
-  # Verify the install script against the just-published version. Called as a
-  # reusable workflow rather than triggered by `release: published`, because
-  # release events from GITHUB_TOKEN do not dispatch downstream workflows (and
-  # direct invocation avoids the "latest stable" race in the resolver).
   verify_install_script:
     name: Verify install script for ${{ needs.prepare.outputs.base_version }}
     needs: [prepare, promote_and_release_final]
