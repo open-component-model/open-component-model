@@ -141,6 +141,8 @@ func (i *index) GetArtifacts() []ArtifactMetadata {
 	return slices.Clone(i.Artifacts)
 }
 
+// RemoveArtifactByTag removes the artifact with the given repository and tag from the index.
+// Returns ErrArtifactNotFound if no matching entry exists.
 func (i *index) RemoveArtifactByTag(repository, tag string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()

@@ -382,6 +382,9 @@ func (s *repository) Tags(ctx context.Context, _ string, fn func(tags []string) 
 	return fn(tags)
 }
 
+// Untag removes a reference from the CTF archive's index.
+// The reference should be in the format "repository:tag", but can also be just a tag.
+// This operation updates the index by removing the mapping for the given reference without deleting the underlying manifest.
 func (s *repository) Untag(ctx context.Context, reference string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
