@@ -6,3 +6,5 @@ modifiedFilesOnly: true
 replacementPatterns:
   - pattern: "^/"
     replacement: "{{BASEURL}}/"
+ignorePatterns:
+  - pattern: "https://github.com/neonephos/"
