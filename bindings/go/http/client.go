@@ -4,8 +4,8 @@ import (
 	nethttp "net/http"
 	"time"
 
-	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/http/internal/retry"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 )
 
 // Options holds configuration for New.

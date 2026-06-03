@@ -19,6 +19,7 @@ limitations under the License.
 package retry
 
 import (
+	"errors"
 	"hash/maphash"
 	"math"
 	"math/rand/v2"
@@ -43,7 +44,8 @@ var DefaultPolicy Policy = &GenericPolicy{
 // DefaultPredicate retries on 5xx errors, 429, 408, and network dial timeouts.
 var DefaultPredicate Predicate = func(resp *http.Response, err error) (bool, error) {
 	if err != nil {
-		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
 			return true, nil
 		}
 		return false, err
@@ -81,7 +83,7 @@ func ExponentialBackoff(backoff time.Duration, factor, jitter float64) Backoff {
 	return func(attempt int, resp *http.Response) time.Duration {
 		var h maphash.Hash
 		h.SetSeed(maphash.MakeSeed())
-		r := rand.New(rand.NewPCG(0, h.Sum64()))
+		r := rand.New(rand.NewPCG(0, h.Sum64())) //nolint:gosec // non-crypto jitter is intentional
 
 		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
 			if v := resp.Header.Get(headerRetryAfter); v != "" {
