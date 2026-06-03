@@ -715,3 +715,52 @@ func TestBuildDescriptorSpec_NoLabelsOmitted(t *testing.T) {
 		assert.Nil(t, labelsVal, "when labels is nil, the map entry must be nil (not a CEL ref)")
 	}
 }
+
+func dockerManifestLocalBlobResource(name, version string) descriptor.Resource {
+	return descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: name, Version: version},
+		},
+		Type:     "ociImage",
+		Relation: descriptor.LocalRelation,
+		Access: &descriptorv2.LocalBlob{
+			Type:           runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			LocalReference: "sha256:abc123",
+			MediaType:      mediaTypeDockerManifest,
+			ReferenceName:  "ghcr.io/org/image:v1",
+		},
+	}
+}
+
+func TestBuildGraphDefinition_DockerManifestLocalBlob_UploadedAsOCIArtifact(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{dockerManifestLocalBlobResource("my-image", "1.0.0")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsOciArtifact)
+	require.NoError(t, err)
+
+	addOCIType := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
+	require.Len(t, tgd.Transformations, 4)
+	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, addOCIType, tgd.Transformations[1].Type, "Docker manifest LocalBlob should be uploaded as OCI artifact")
+}
+
+func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithoutUploadFlag(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{dockerManifestLocalBlobResource("my-image", "1.0.0")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
+	require.NoError(t, err)
+
+	require.Len(t, tgd.Transformations, 4)
+	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
+}

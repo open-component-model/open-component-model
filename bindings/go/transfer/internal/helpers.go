@@ -13,6 +13,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// Docker manifest media types as defined by the Docker distribution spec.
+// oras-go/v2 defines these in internal/docker/mediatype.go (not importable),
+// so we redeclare them here.
+const (
+	mediaTypeDockerManifest     = "application/vnd.docker.distribution.manifest.v2+json"
+	mediaTypeDockerManifestList = "application/vnd.docker.distribution.manifest.list.v2+json"
+)
+
 func asUnstructured(typed runtime.Typed) (*runtime.Unstructured, error) {
 	var raw runtime.Raw
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(typed, &raw); err != nil {
@@ -141,10 +149,10 @@ func RepositoryEqual(a, b runtime.Typed) bool {
 //	soon anyways after which we might not need this function here anymore.
 func isOCICompliantManifest(mediaType string) bool {
 	switch mediaType {
-	// TODO(jakobmoellerdev): currently only Image Indexes and OCI manifests are supported,
-	//  but we may want to extend this down the line with additional media types such as docker manifests.
 	case ocispecv1.MediaTypeImageManifest,
-		ocispecv1.MediaTypeImageIndex:
+		ocispecv1.MediaTypeImageIndex,
+		mediaTypeDockerManifest,
+		mediaTypeDockerManifestList:
 		return true
 	default:
 		return false
