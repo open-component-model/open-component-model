@@ -53,16 +53,19 @@ func (r *Registry) RegisterFromPlugin(credentialTypes []types.Type) error {
 		typed := &runtime.Raw{}
 		typed.SetType(t.Type)
 		allTypes := append([]runtime.Type{t.Type}, t.Aliases...)
-		for _, t := range allTypes {
-			if r.scheme.IsRegistered(t) {
-				errs = append(errs, fmt.Errorf("credential type %s already registered", t))
-				continue
+		conflict := false
+		for _, alias := range allTypes {
+			if r.scheme.IsRegistered(alias) {
+				errs = append(errs, fmt.Errorf("credential type %s already registered", alias))
+				conflict = true
 			}
+		}
+		if conflict {
+			continue
 		}
 		if err := r.scheme.RegisterWithAlias(typed, allTypes...); err != nil {
 			slog.ErrorContext(r.ctx, "failed to build scheme for plugin credential type", "type", t.Type, "error", err)
 			errs = append(errs, err)
-			continue
 		}
 	}
 	return errors.Join(errs...)
