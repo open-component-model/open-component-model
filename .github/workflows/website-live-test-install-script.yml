@@ -7,15 +7,14 @@ on:
     paths:
       - '.github/workflows/website-live-test-install-script.yml'
       - 'website/static/install-cli.sh'
-  schedule:
-    # Weekly smoke test against the live GitHub release state. The `release:
-    # published` trigger does NOT fire here because tags are cut from
-    # `releases/v*` branches that are not ancestors of the workflow's default
-    # branch (main); GHA silently skips release events under that condition.
-    # A weekly cron gives us a post-release safety net without depending on
-    # branching.
-    - cron: '17 6 * * 2'  # Tuesday 06:17 UTC
   workflow_dispatch:
+  # Called from release.yml after promotion to verify the just-published version.
+  workflow_call:
+    inputs:
+      version:
+        description: "CLI version to verify (e.g. 0.8.0)."
+        type: string
+        required: true
 
 concurrency:
   group: live-test-install-${{ github.ref }}
@@ -76,6 +75,16 @@ jobs:
         # every cell pre-pinned OCM_VERSION and the autodetect logic never ran.
         # The resolver provides the oracle for that cell's version assertion.
         ocm_version: ["0.7.0", "0.8.0", ""]
+        # When invoked via workflow_call, also exercise the explicit-version
+        # download path against the caller's version (covers backports without
+        # special-casing, since `inputs.version` may differ from latest stable).
+        # On other triggers `inputs.version` is empty, so these include entries
+        # collapse into the existing autodetect cells - no-op merge.
+        include:
+          - runner: ubuntu-latest
+            ocm_version: ${{ inputs.version }}
+          - runner: ubuntu-24.04-arm
+            ocm_version: ${{ inputs.version }}
     env:
       OCM_VERSION: ${{ matrix.ocm_version }}
       # Falls back to the resolver-computed version when OCM_VERSION is empty.
