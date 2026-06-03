@@ -260,19 +260,44 @@ jobs:
           path: ${{ runner.temp }}/chart-assets
 
       - name: Create RC pre-release
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
-        with:
-          name: OCM ${{ needs.prepare.outputs.new_version }}
-          tag_name: ${{ needs.prepare.outputs.new_tag }}
-          body_path: ${{ runner.temp }}/CHANGELOG.md
-          fail_on_unmatched_files: true
-          prerelease: true
-          files: |
-            ${{ runner.temp }}/cli-assets/bin/ocm-*
-            ${{ runner.temp }}/cli-assets/oci/*
-            ${{ runner.temp }}/chart-assets/chart-*.tgz
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+          assets=(
+            "${{ runner.temp }}"/cli-assets/bin/*
+            "${{ runner.temp }}"/cli-assets/oci/*
+            "${{ runner.temp }}"/chart-assets/*
+          )
+          shopt -u nullglob
+
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "::error::No release assets found"
+            exit 1
+          fi
+
+          if gh release view "$RC_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release edit "$RC_TAG" \
+              --repo "$GH_REPO" \
+              --title "OCM $RC_VERSION" \
+              --notes-file "${{ runner.temp }}/CHANGELOG.md" \
+              --prerelease
+            gh release upload "$RC_TAG" \
+              --repo "$GH_REPO" \
+              --clobber \
+              "${assets[@]}"
+          else
+            gh release create "$RC_TAG" \
+              --repo "$GH_REPO" \
+              --title "OCM $RC_VERSION" \
+              --notes-file "${{ runner.temp }}/CHANGELOG.md" \
+              --prerelease \
+              "${assets[@]}"
+          fi
 
       - name: Summarize RC release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
