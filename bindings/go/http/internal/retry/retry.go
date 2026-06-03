@@ -138,6 +138,14 @@ type Transport struct {
 	Policy func() Policy
 }
 
+// DefaultClient is a client with the default retry policy.
+var DefaultClient = NewClient()
+
+// NewClient creates an HTTP client with the default retry policy.
+func NewClient() *http.Client {
+	return &http.Client{Transport: NewTransport(nil)}
+}
+
 // NewTransport creates an HTTP Transport with the default retry policy.
 func NewTransport(base http.RoundTripper) *Transport {
 	return &Transport{Base: base}
