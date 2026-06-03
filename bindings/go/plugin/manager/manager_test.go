@@ -14,13 +14,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
-	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -203,7 +203,7 @@ func TestPluginManagerCancelContext(t *testing.T) {
 	cancel()
 	_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
 	require.NoError(t, err)
-	//require.NoError(t, plugin.Ping(context.Background()))
+	// require.NoError(t, plugin.Ping(context.Background()))
 	t.Log("plugin is still alive, cancelling plugin context")
 	baseCancel()
 	require.Eventually(t, func() bool {
@@ -302,7 +302,7 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 		},
 	}
 	plugin, err := pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, proto, nil)
-	//plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
+	// plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
 	require.NoError(t, err)
 	_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
 	require.NoError(t, err)
@@ -406,6 +406,6 @@ func TestCredentialTypeRegistryPopulatedFromPlugin(t *testing.T) {
 		}
 	})
 
-	scheme := pm.CredentialTypeRegistry.GetCredentialTypeScheme()
+	scheme := pm.CredentialRepositoryRegistry.GetCredentialTypeScheme()
 	require.True(t, scheme.IsRegistered(runtime.NewVersionedType("DummyToken", "v1")))
 }
