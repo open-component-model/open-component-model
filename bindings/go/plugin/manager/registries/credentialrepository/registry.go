@@ -45,10 +45,13 @@ type RepositoryRegistry struct {
 	internalCredentialRepositoryPlugins map[runtime.Type]credentials.RepositoryPlugin
 }
 
+// RepositoryScheme returns the scheme used for credential repository spec types.
 func (r *RepositoryRegistry) RepositoryScheme() *runtime.Scheme {
 	return r.scheme
 }
 
+// GetCredentialTypeScheme returns the runtime scheme containing all registered
+// credential types, including built-in and plugin-declared custom types.
 func (r *RepositoryRegistry) GetCredentialTypeScheme() *runtime.Scheme {
 	return r.credentialTypeScheme
 }

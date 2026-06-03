@@ -404,6 +404,9 @@ func TestCredentialTypeRegistryPopulatedFromPlugin(t *testing.T) {
 		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
 			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
 		}
+		if err := os.Remove("/tmp/test-plugin-credential-repository-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
 	})
 
 	scheme := pm.CredentialRepositoryRegistry.GetCredentialTypeScheme()
