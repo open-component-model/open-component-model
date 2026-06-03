@@ -311,7 +311,7 @@ func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir
 	return absURL, nil
 }
 
-// sameHost reports whether two URLs share the same host (including port).
+// sameHost reports whether two URLs share the same scheme and host (including port).
 func sameHost(a, b string) bool {
 	ua, err := url.Parse(a)
 	if err != nil {
@@ -321,5 +321,5 @@ func sameHost(a, b string) bool {
 	if err != nil {
 		return false
 	}
-	return ua.Host == ub.Host
+	return ua.Scheme == ub.Scheme && ua.Host == ub.Host
 }
