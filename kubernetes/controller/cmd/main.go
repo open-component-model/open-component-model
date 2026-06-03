@@ -219,7 +219,7 @@ func main() {
 		setupLog.Error(err, "failed to register internal signing plugin")
 		os.Exit(1)
 	}
-	pm.CredentialTypeRegistry.Register(rsacredspec.Scheme)
+	pm.CredentialRepositoryRegistry.Register(rsacredspec.Scheme)
 
 	if err := pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
 		&ocicredentials.OCICredentialRepository{},
@@ -228,7 +228,7 @@ func main() {
 		setupLog.Error(err, "failed to register internal credential repository plugin")
 		os.Exit(1)
 	}
-	pm.CredentialTypeRegistry.Register(ocicredspec.Scheme)
+	pm.CredentialRepositoryRegistry.Register(ocicredspec.Scheme)
 
 	ociResourceRepoPlugin := ocires.NewResourceRepository(&filesystemv1alpha1.Config{}, ocires.WithUserAgent(creator))
 	if err := pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin); err != nil {
@@ -245,7 +245,7 @@ func main() {
 		setupLog.Error(err, "failed to register helm digest processor plugin")
 		os.Exit(1)
 	}
-	pm.CredentialTypeRegistry.Register(helmcredspec.Scheme)
+	pm.CredentialRepositoryRegistry.Register(helmcredspec.Scheme)
 
 	logHandler := logr.ToSlogHandler(setupLog)
 	ociBlobTransformerPlugin := transformer.New(slog.New(logHandler))

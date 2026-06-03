@@ -43,10 +43,7 @@ func NewCredentialGraph(ctx context.Context, config *genericv1.Config, opts Cred
 			},
 		),
 		CredentialRepositoryTypeScheme: opts.PluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
-		CredentialTypeSchemeProvider: newMergedCredentialTypeSchemeProvider(
-			opts.PluginManager.CredentialRepositoryRegistry,
-			opts.PluginManager.CredentialTypeRegistry,
-		),
+		CredentialTypeSchemeProvider:   opts.PluginManager.CredentialRepositoryRegistry,
 	}
 
 	graph, err := credentials.ToGraph(ctx, credCfg, credOpts)
@@ -55,26 +52,4 @@ func NewCredentialGraph(ctx context.Context, config *genericv1.Config, opts Cred
 	}
 
 	return graph, nil
-}
-
-// mergedCredentialTypeSchemeProvider is a helper that combines the credential repository and credential type schemes into a single provider.
-// This allows the credential graph to recognize both repository types and credential types during ingestion.
-type mergedCredentialTypeSchemeProvider struct {
-	scheme *runtime.Scheme
-}
-
-func newMergedCredentialTypeSchemeProvider(providers ...credentials.CredentialTypeSchemeProvider) *mergedCredentialTypeSchemeProvider {
-	merged := runtime.NewScheme()
-
-	for _, provider := range providers {
-		merged.MustRegisterScheme(provider.GetCredentialTypeScheme())
-	}
-
-	return &mergedCredentialTypeSchemeProvider{
-		scheme: merged,
-	}
-}
-
-func (m *mergedCredentialTypeSchemeProvider) GetCredentialTypeScheme() *runtime.Scheme {
-	return m.scheme
 }

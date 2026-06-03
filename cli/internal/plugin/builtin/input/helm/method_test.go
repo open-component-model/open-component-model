@@ -7,7 +7,7 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtype"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -15,7 +15,7 @@ import (
 func TestRegister(t *testing.T) {
 	ctx := t.Context()
 	registry := input.NewInputRepositoryRegistry(ctx)
-	credentialsRegistry := credentialtype.NewRegistry(ctx)
+	credentialsRegistry := credentialrepository.NewCredentialRepositoryRegistry(ctx)
 	cfg := &filesystemv1alpha1.Config{
 		TempFolder: t.TempDir(),
 	}

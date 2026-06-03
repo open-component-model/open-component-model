@@ -12,7 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtype"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 )
@@ -25,7 +25,7 @@ func Register(
 	digRegistry *digestprocessor.RepositoryRegistry,
 	blobTransformerRegistry *blobtransformer.Registry,
 	compListRegistry *componentlister.ComponentListerRegistry,
-	credentialTypeRegistry *credentialtype.Registry,
+	credentialTypeRegistry *credentialrepository.RepositoryRegistry,
 	filesystemConfig *filesystemv1alpha1.Config,
 	logger *slog.Logger,
 ) error {

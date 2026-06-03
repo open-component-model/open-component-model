@@ -15,7 +15,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/configuration"
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -112,10 +111,7 @@ func CredentialGraph(cmd *cobra.Command) error {
 		RepositoryPluginProvider:       pluginManager.CredentialRepositoryRegistry,
 		CredentialPluginProvider:       pluginManager.CredentialPluginRegistry,
 		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
-		CredentialTypeSchemeProvider: newMergedCredentialTypeSchemeProvider(
-			pluginManager.CredentialRepositoryRegistry,
-			pluginManager.CredentialTypeRegistry,
-		),
+		CredentialTypeSchemeProvider:   pluginManager.CredentialRepositoryRegistry,
 	}
 
 	var credCfg *credentialsRuntime.Config
@@ -138,26 +134,4 @@ func CredentialGraph(cmd *cobra.Command) error {
 	cmd.SetContext(ocmctx.WithCredentialGraph(cmd.Context(), graph))
 
 	return nil
-}
-
-// mergedCredentialTypeSchemeProvider is a helper that combines the credential repository and credential type schemes into a single provider.
-// This allows the credential graph to recognize both repository types and credential types during ingestion.
-type mergedCredentialTypeSchemeProvider struct {
-	scheme *runtime.Scheme
-}
-
-func newMergedCredentialTypeSchemeProvider(providers ...credentials.CredentialTypeSchemeProvider) *mergedCredentialTypeSchemeProvider {
-	merged := runtime.NewScheme()
-
-	for _, provider := range providers {
-		merged.MustRegisterScheme(provider.GetCredentialTypeScheme())
-	}
-
-	return &mergedCredentialTypeSchemeProvider{
-		scheme: merged,
-	}
-}
-
-func (m *mergedCredentialTypeSchemeProvider) GetCredentialTypeScheme() *runtime.Scheme {
-	return m.scheme
 }

@@ -30,7 +30,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.DigestProcessorRegistry,
 		manager.BlobTransformerRegistry,
 		manager.ComponentListerRegistry,
-		manager.CredentialTypeRegistry,
+		manager.CredentialRepositoryRegistry,
 		filesystemConfig,
 		logger,
 	); err != nil {
@@ -46,7 +46,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := dir.Register(manager.InputRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register dir input plugin: %w", err)
 	}
-	if err := helm.Register(manager.InputRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
+	if err := helm.Register(manager.InputRegistry, manager.CredentialRepositoryRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register helm input plugin: %w", err)
 	}
 	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(
@@ -59,7 +59,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	); err != nil {
 		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
 	}
-	if err := rsa.Register(manager.SigningRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
+	if err := rsa.Register(manager.SigningRegistry, manager.CredentialRepositoryRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register RSA signing plugin: %w", err)
 	}
 	if err := oidc.Register(manager.SigningRegistry, filesystemConfig); err != nil {

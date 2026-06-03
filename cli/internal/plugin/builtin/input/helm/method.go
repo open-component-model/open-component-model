@@ -6,12 +6,12 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helminput "ocm.software/open-component-model/bindings/go/helm/input"
 	helm "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtype"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 )
 
 func Register(inputRegistry *input.RepositoryRegistry,
-	credentialTypeRegistry *credentialtype.Registry,
+	credentialTypeRegistry *credentialrepository.RepositoryRegistry,
 	filesystemConfig *filesystemv1alpha1.Config,
 ) error {
 	method := &helminput.InputMethod{

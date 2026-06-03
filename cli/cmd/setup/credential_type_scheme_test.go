@@ -32,7 +32,7 @@ func TestCredentialTypeSchemePopulatedByBuiltinRegister(t *testing.T) {
 	pm := manager.NewPluginManager(context.Background())
 	r.NoError(builtin.Register(pm, &filesystemv1alpha1.Config{}, slog.Default()))
 
-	scheme := pm.CredentialTypeRegistry.GetCredentialTypeScheme()
+	scheme := pm.CredentialRepositoryRegistry.GetCredentialTypeScheme()
 	r.NotNil(scheme, "CredentialTypeRegistry scheme must not be nil after builtin.Register")
 
 	r.True(scheme.IsRegistered(runtime.NewVersionedType(ocicredsv1.OCICredentialsType, ocicredsv1.Version)),
@@ -75,7 +75,7 @@ func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
 	}
 
 	graph, err := credentials.ToGraph(ctx, cfg, credentials.Options{
-		CredentialTypeSchemeProvider: pm.CredentialTypeRegistry,
+		CredentialTypeSchemeProvider: pm.CredentialRepositoryRegistry,
 	})
 	r.NoError(err)
 

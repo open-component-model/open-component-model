@@ -29,7 +29,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialplugin"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtype"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
@@ -51,7 +50,6 @@ type PluginManager struct {
 	ComponentListerRegistry            *componentlister.ComponentListerRegistry
 	CredentialPluginRegistry           *credentialplugin.Registry
 	CredentialRepositoryRegistry       *credentialrepository.RepositoryRegistry
-	CredentialTypeRegistry             *credentialtype.Registry
 	InputRegistry                      *input.RepositoryRegistry
 	DigestProcessorRegistry            *digestprocessor.RepositoryRegistry
 	ResourcePluginRegistry             *resource.ResourceRegistry
@@ -75,7 +73,6 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 		ComponentListerRegistry:            componentlister.NewComponentListerRegistry(ctx),
 		CredentialPluginRegistry:           credentialplugin.NewRegistry(ctx),
 		CredentialRepositoryRegistry:       credentialrepository.NewCredentialRepositoryRegistry(ctx),
-		CredentialTypeRegistry:             credentialtype.NewRegistry(ctx),
 		InputRegistry:                      input.NewInputRepositoryRegistry(ctx),
 		DigestProcessorRegistry:            digestprocessor.NewDigestProcessorRegistry(ctx),
 		ResourcePluginRegistry:             resource.NewResourceRegistry(ctx),
