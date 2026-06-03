@@ -127,7 +127,7 @@ commit signing yet, follow the [GitHub signing guide](https://docs.github.com/en
 - **Discuss large changes** - If you are planning significant or potentially controversial changes, please discuss them
   with the maintainers first - either in a GitHub issue, on
   [Slack](https://kubernetes.slack.com/archives/C05UWBE8R1D), or in the
-  [community call](/community/#community-calls).
+  [community call](/community/#community-call).
 {{< /step >}}
 
 {{< step >}}
