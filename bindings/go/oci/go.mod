@@ -36,5 +36,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 )
-
-replace ocm.software/open-component-model/bindings/go/ctf => ../ctf
