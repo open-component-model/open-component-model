@@ -58,7 +58,7 @@ const (
 type Config struct {
 	// +ocm:jsonschema-gen:enum=ownership.config.ocm.software/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=ownership.config.ocm.software
-	Type runtime.Type `json:"type"`
+	Type runtime.Type `json:"type" yaml:"type"`
 
 	// Policy is the default used for any repository without a matching entry
 	// in Repositories. When omitted, it behaves as Never.
@@ -68,10 +68,10 @@ type Config struct {
 	//
 	// +ocm:jsonschema-gen:enum=AddIfSupported
 	// +ocm:jsonschema-gen:enum=Never
-	Policy Policy `json:"policy,omitempty"`
+	Policy Policy `json:"policy,omitempty" yaml:"policy,omitempty"`
 
 	// Repositories overrides Policy for specific repositories.
-	Repositories []*RepositoryPolicy `json:"repositories,omitempty"`
+	Repositories []*RepositoryPolicy `json:"repositories,omitempty" yaml:"repositories,omitempty"`
 }
 
 // RepositoryPolicy pairs a repository with the Policy to use for uploads to
@@ -81,14 +81,14 @@ type Config struct {
 // +ocm:jsonschema-gen=true
 type RepositoryPolicy struct {
 	// Repository is the repository this entry applies to.
-	Repository *runtime.Raw `json:"repository"`
+	Repository *runtime.Raw `json:"repository" yaml:"repository"`
 
 	// Policy is used for uploads to Repository. When omitted, it behaves as
 	// Never.
 	//
 	// +ocm:jsonschema-gen:enum=AddIfSupported
 	// +ocm:jsonschema-gen:enum=Never
-	Policy Policy `json:"policy,omitempty"`
+	Policy Policy `json:"policy,omitempty" yaml:"policy,omitempty"`
 }
 
 // Lookup finds every ownership config entry in cfg and merges them into one

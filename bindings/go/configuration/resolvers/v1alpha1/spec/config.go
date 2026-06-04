@@ -39,7 +39,7 @@ func init() {
 type Config struct {
 	// +ocm:jsonschema-gen:enum=resolvers.config.ocm.software/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=resolvers.config.ocm.software
-	Type runtime.Type `json:"type"`
+	Type runtime.Type `json:"type" yaml:"type"`
 
 	// Resolvers define a list of OCM repository specifications to be used to resolve
 	// dedicated component versions using glob patterns.
@@ -55,7 +55,7 @@ type Config struct {
 	//
 	// They are also used as default lookup repositories to lookup component references
 	// for recursive operations on component versions («--lookup» option).
-	Resolvers []*Resolver `json:"resolvers,omitempty"`
+	Resolvers []*Resolver `json:"resolvers,omitempty" yaml:"resolvers,omitempty"`
 }
 
 // Resolver assigns a component name pattern to a single OCM repository specification
@@ -66,7 +66,7 @@ type Config struct {
 type Resolver struct {
 	// Repository is the OCM repository specification to be used for resolving
 	// component versions.
-	Repository *runtime.Raw `json:"repository"`
+	Repository *runtime.Raw `json:"repository" yaml:"repository"`
 
 	// ComponentNamePattern specifies a glob pattern for matching component names.
 	// It limits the usage of the repository to resolve only components with names
@@ -75,12 +75,12 @@ type Resolver struct {
 	//   - "ocm.software/core/*" (matches any component in the core namespace)
 	//   - "*.software/*/test" (matches test components in any software namespace)
 	//   - "ocm.software/core/[tc]est" (matches "test" or "cest" in core namespace)
-	ComponentNamePattern string `json:"componentNamePattern,omitempty"`
+	ComponentNamePattern string `json:"componentNamePattern,omitempty" yaml:"componentNamePattern,omitempty"`
 
 	// VersionConstraint specifies an optional semver constraint for matching component versions.
 	// It limits the usage of the repository to resolve only components with versions
 	// that satisfy the given constraint (e.g. ">=1.0.0 <2.0.0", "^1.2.0", "~1.2.0").
-	VersionConstraint string `json:"versionConstraint,omitempty"`
+	VersionConstraint string `json:"versionConstraint,omitempty" yaml:"versionConstraint,omitempty"`
 }
 
 // Lookup creates a new Config from a central V1 config.

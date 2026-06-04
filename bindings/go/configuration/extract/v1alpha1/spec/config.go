@@ -30,9 +30,9 @@ func init() {
 type Config struct {
 	// +ocm:jsonschema-gen:enum=extract.oci.artifact.ocm.software/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=extract.oci.artifact.ocm.software
-	Type runtime.Type `json:"type"`
+	Type runtime.Type `json:"type" yaml:"type"`
 	// Rules defines rules for extracting layers to specific files.
-	Rules []Rule `json:"rules,omitempty"`
+	Rules []Rule `json:"rules,omitempty" yaml:"rules,omitempty"`
 }
 
 // Rule represents a rule for extracting selected layers to a target file.
@@ -42,10 +42,10 @@ type Config struct {
 // +ocm:jsonschema-gen=true
 type Rule struct {
 	// Filename is the target filename for the extracted layers.
-	Filename string `json:"filename,omitempty"`
+	Filename string `json:"filename,omitempty" yaml:"filename,omitempty"`
 	// LayerSelectors defines multiple selection criteria for layers to include in this file.
 	// Layers matching any of these selectors will be included.
-	LayerSelectors []*LayerSelector `json:"layerSelectors,omitempty"`
+	LayerSelectors []*LayerSelector `json:"layerSelectors,omitempty" yaml:"layerSelectors,omitempty"`
 }
 
 // LookupConfig creates a new extract configuration from a central V1 config.

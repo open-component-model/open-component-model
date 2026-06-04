@@ -52,13 +52,13 @@ func init() {
 type Config struct {
 	// +ocm:jsonschema-gen:enum=ocm.config.ocm.software/v1
 	// +ocm:jsonschema-gen:enum:deprecated=ocm.config.ocm.software
-	Type runtime.Type `json:"type"`
+	Type runtime.Type `json:"type" yaml:"type"`
 
 	//nolint:gocritic // Deprecated field is okay
 	// With aliases repository alias names can be mapped to a repository specification.
 	// The alias name can be used in a string notation for an OCM repository.
 	// Deprecated: Aliases are deprecated and are ignored with a warning message.
-	Aliases map[string]*runtime.Raw `json:"aliases,omitempty"`
+	Aliases map[string]*runtime.Raw `json:"aliases,omitempty" yaml:"aliases,omitempty"`
 
 	// Resolvers define a list of OCM repository specifications to be used to resolve
 	// dedicated component versions.
@@ -77,7 +77,7 @@ type Config struct {
 	//
 	// They are also used as default lookup repositories to lookup component references
 	// for recursive operations on component versions («--lookup» option).
-	Resolvers []*Resolver `json:"resolvers,omitempty"`
+	Resolvers []*Resolver `json:"resolvers,omitempty" yaml:"resolvers,omitempty"`
 }
 
 // Resolver assigns a priority and a prefix to a single OCM repository specification
@@ -91,19 +91,19 @@ type Config struct {
 type Resolver struct {
 	// Repository is the OCM repository specification to be used for resolving
 	// component versions.
-	Repository *runtime.Raw `json:"repository"`
+	Repository *runtime.Raw `json:"repository" yaml:"repository"`
 
 	// Optionally, a component name prefix can be given.
 	// It limits the usage of the repository to resolve only
 	// components with the given name prefix (always complete name segments).
-	Prefix string `json:"prefix,omitempty"`
+	Prefix string `json:"prefix,omitempty" yaml:"prefix,omitempty"`
 
 	// An optional priority can be used to influence the lookup order. Larger value
 	// means higher priority (default DefaultLookupPriority).
 	// Pointer because this is optional. To default the priority, we need to be
 	// able to distinguish between "not set" and "set to zero".
 	// +ocm:jsonschema-gen:minimum=0
-	Priority *int `json:"priority,omitempty"`
+	Priority *int `json:"priority,omitempty" yaml:"priority,omitempty"`
 }
 
 // Lookup creates a new Config from a central V1 config.

@@ -33,13 +33,13 @@ const (
 type LayerSelectorRequirement struct {
 	// Key is the property key that the selector applies to.
 	// Can be a custom annotation key or predefined keys like layer.index, layer.mediaType.
-	Key string `json:"key"`
+	Key string `json:"key" yaml:"key"`
 	// Operator represents the relationship between the key and values.
-	Operator LayerSelectorOperator `json:"operator"`
+	Operator LayerSelectorOperator `json:"operator" yaml:"operator"`
 	// Values is an array of string values. If the operator is In or NotIn,
 	// the value array must be non-empty. If the operator is Exists or DoesNotExist,
 	// the value array must be empty.
-	Values []string `json:"values,omitempty"`
+	Values []string `json:"values,omitempty" yaml:"values,omitempty"`
 }
 
 // LayerSelector allows selecting layers based on index, mediatype, and annotations.
@@ -49,10 +49,10 @@ type LayerSelector struct {
 	// MatchProperties is a map of {key,value} pairs. A single {key,value} in the matchLabels
 	// map is equivalent to an element of matchExpressions, whose key field is "key", the
 	// operator is "In", and the value array contains only "value".
-	MatchProperties map[string]string `json:"matchProperties,omitempty"`
+	MatchProperties map[string]string `json:"matchProperties,omitempty" yaml:"matchProperties,omitempty"`
 	// MatchExpressions is a list of selectors. The selectors are ANDed together.
 	// Use predefined keys like 'layer.index' and 'layer.mediaType' for built-in properties.
-	MatchExpressions []LayerSelectorRequirement `json:"matchExpressions,omitempty"`
+	MatchExpressions []LayerSelectorRequirement `json:"matchExpressions,omitempty" yaml:"matchExpressions,omitempty"`
 }
 
 // LayerInfo represents information about a layer for matching purposes.

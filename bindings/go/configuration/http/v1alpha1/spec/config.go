@@ -66,11 +66,11 @@ func init() {
 type Config struct {
 	// +ocm:jsonschema-gen:enum=http.config.ocm.software/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=http.config.ocm.software
-	Type runtime.Type `json:"type"`
+	Type runtime.Type `json:"type" yaml:"type"`
 
 	// Timeout specifies the HTTP client timeout as a Go duration string
 	// (e.g. "30s", "5m", "1h"). If not set, the default timeout of 30s is used.
-	Timeout Timeout `json:"timeout,omitempty"`
+	Timeout Timeout `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // LookupConfig creates an HTTP configuration from a central generic V1 config.
