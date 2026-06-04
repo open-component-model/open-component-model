@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+
 	extractv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -26,14 +27,12 @@ const (
 
 type EffectiveConfig struct {
 	Filesystem *filesystemv1alpha1.Config `json:"filesystem,omitempty" yaml:"filesystem,omitempty"`
-	HTTP       *httpv1alpha1.Config       `json:"http,omitempty" yaml:"http,omitempty"`
-	OCM        *ocmv1.Config              `json:"ocm,omitempty" yaml:"ocm,omitempty"` //nolint:staticcheck // displaying deprecated config for user visibility
-	Resolvers  *resolversv1alpha1.Config  `json:"resolvers,omitempty" yaml:"resolvers,omitempty"`
-	Ownership  *ownershipv1alpha1.Config  `json:"ownership,omitempty" yaml:"ownership,omitempty"`
-	Extract    *extractv1alpha1.Config    `json:"extract,omitempty" yaml:"extract,omitempty"`
-	Plugins    *pluginsv2alpha1.Config    `json:"plugins,omitempty" yaml:"plugins,omitempty"`
-	// TODO: clarify credentials usage
-	//	Credentials *credentialsRuntime.Config `json:"credentials,omitempty" yaml:"credentials,omitempty"`
+	HTTP       *httpv1alpha1.Config       `json:"http,omitempty"       yaml:"http,omitempty"`
+	OCM        *ocmv1.Config              `json:"ocm,omitempty"        yaml:"ocm,omitempty"` //nolint:staticcheck // displaying deprecated config for user visibility
+	Resolvers  *resolversv1alpha1.Config  `json:"resolvers,omitempty"  yaml:"resolvers,omitempty"`
+	Ownership  *ownershipv1alpha1.Config  `json:"ownership,omitempty"  yaml:"ownership,omitempty"`
+	Extract    *extractv1alpha1.Config    `json:"extract,omitempty"    yaml:"extract,omitempty"`
+	Plugins    *pluginsv2alpha1.Config    `json:"plugins,omitempty"    yaml:"plugins,omitempty"`
 }
 
 func New() *cobra.Command {
@@ -84,7 +83,7 @@ func GetConfig(cmd *cobra.Command, args []string) error {
 	case render.OutputFormatYAML.String():
 		enc := yaml.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent(2)
-		return enc.Encode(effectiveConfig)
+		return enc.Encode(effectiveConfig) //nolint:musttag // TODO nested types need yaml tags
 	default:
 		return fmt.Errorf("unsupported output format: %s", output)
 	}
@@ -149,7 +148,7 @@ func getEffectiveConfig(cfg *genericv1.Config) (*EffectiveConfig, error) {
 		}
 	}
 
-	//if hasEntries(cfg, credentialsv1.ConfigType, credentialsv1.Version) {
+	// if hasEntries(cfg, credentialsv1.ConfigType, credentialsv1.Version) {
 	//	if creds, err := credentialsRuntime.LookupCredentialConfig(cfg); err != nil {
 	//		return nil, fmt.Errorf("credentials: %w", err)
 	//	} else {
