@@ -119,3 +119,10 @@ configurations:
 		}
 	})
 }
+
+func TestTimeout_MarshalYAML(t *testing.T) {
+	timeout := httpspec.Timeout(1*time.Hour + 30*time.Minute + 5*time.Second)
+	node, err := timeout.MarshalYAML()
+	require.NoError(t, err)
+	assert.Equal(t, "1h30m5s", node.Value)
+}

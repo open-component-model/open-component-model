@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"gopkg.in/yaml.v3"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -24,6 +25,14 @@ type Timeout time.Duration
 
 func (d Timeout) MarshalJSON() ([]byte, error) {
 	return json.Marshal(time.Duration(d).String())
+}
+
+func (d Timeout) MarshalYAML() (*yaml.Node, error) {
+	return &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: time.Duration(d).String(),
+		Tag:   "!!str",
+	}, nil
 }
 
 func (d *Timeout) UnmarshalJSON(b []byte) error {
