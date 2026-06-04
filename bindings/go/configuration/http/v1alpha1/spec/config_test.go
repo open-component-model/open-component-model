@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	httpspec "ocm.software/open-component-model/bindings/go/configuration/http/v1alpha1/spec"
@@ -122,7 +123,7 @@ configurations:
 
 func TestTimeout_MarshalYAML(t *testing.T) {
 	timeout := httpspec.Timeout(1*time.Hour + 30*time.Minute + 5*time.Second)
-	node, err := timeout.MarshalYAML()
+	out, err := yaml.Marshal(timeout)
 	require.NoError(t, err)
-	assert.Equal(t, "1h30m5s", node.Value)
+	assert.Equal(t, "1h30m5s\n", string(out))
 }
