@@ -2030,3 +2030,232 @@ resources:
 	// Verify referenced component is still accessible
 	_ = referencedDesc
 }
+
+func Test_Get_Config(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		configYAML     string
+		expectedOutput string
+		expectedError  bool
+	}{
+		{
+			name: "no config - only default temp folder is output",
+			args: []string{"get", "config"},
+			expectedOutput: fmt.Sprintf(`filesystem:
+  type:
+    version: v1alpha1
+    name: filesystem.config.ocm.software
+  tempfolder: %s
+  workingdirectory: ""
+`, os.TempDir()),
+		},
+		{
+			name: "filesystem config - yaml output",
+			args: []string{"get", "config"},
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`,
+			expectedOutput: `filesystem:
+  type:
+    version: v1alpha1
+    name: filesystem.config.ocm.software
+  tempfolder: /tmp/custom
+  workingdirectory: /work
+`,
+		},
+		{
+			name: "filesystem config - json output",
+			args: []string{"get", "config", "--output=json"},
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`,
+			expectedOutput: `{
+  "filesystem": {
+    "type": "filesystem.config.ocm.software/v1alpha1",
+    "tempFolder": "/tmp/custom",
+    "workingDirectory": "/work"
+  }
+}`,
+		},
+		{
+			name: "multiple config types",
+			args: []string{"get", "config"},
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/test
+- type: http.config.ocm.software/v1alpha1
+  timeout: 60s`,
+			expectedOutput: `filesystem:
+  type:
+    version: v1alpha1
+    name: filesystem.config.ocm.software
+  tempfolder: /tmp/test
+  workingdirectory: ""
+http:
+  type:
+    version: v1alpha1
+    name: http.config.ocm.software
+  timeout: 60000000000
+`, // TODO: fix timeout marshalling
+		},
+		{
+			name: "all config types populated",
+			args: []string{"get", "config", "--output=json"},
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /workspace
+- type: http.config.ocm.software/v1alpha1
+  timeout: 45s
+- type: resolvers.config.ocm.software/v1alpha1
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      filePath: /some/archive
+    componentNamePattern: "ocm.software/*"
+    versionConstraint: ">=1.0.0"
+- type: ownership.config.ocm.software/v1alpha1
+  policy: AddIfSupported
+  repositories:
+  - repository:
+      type: CommonTransportFormat/v1
+      filePath: /some/repo
+    policy: Never
+- type: extract.oci.artifact.ocm.software/v1alpha1
+  rules:
+  - filename: output.tar
+    layerSelectors:
+    - matchProperties:
+        layer.mediaType: application/vnd.oci.image.layer.v1.tar+gzip
+      matchExpressions:
+      - key: layer.index
+        operator: In
+        values: ["0"]
+- type: ocm.config.ocm.software/v1
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      filePath: /legacy/archive
+    prefix: ocm.software/legacy
+`,
+			// TODO: to clear up expected behavior
+			//- type: credentials.config.ocm.software
+			//  consumers:
+			//  - identity:
+			//      type: OCIRegistry/v1
+			//      hostname: ghcr.io
+			//    credentials:
+			//    - type: Credentials/v1
+			//      properties:
+			//        username: user
+			//        password: pass
+			expectedOutput: `{
+  "filesystem": {
+    "type": "filesystem.config.ocm.software/v1alpha1",
+    "tempFolder": "/tmp/custom",
+    "workingDirectory": "/workspace"
+  },
+  "http": {
+    "type": "http.config.ocm.software/v1alpha1",
+    "timeout": "45s"
+  },
+  "ocm": {
+    "type": "ocm.config.ocm.software/v1",
+    "resolvers": [
+      {
+        "repository": {
+          "filePath": "/legacy/archive",
+          "type": "CommonTransportFormat/v1"
+        },
+        "prefix": "ocm.software/legacy"
+      }
+    ]
+  },
+  "resolvers": {
+    "type": "resolvers.config.ocm.software/v1alpha1",
+    "resolvers": [
+      {
+        "repository": {
+          "filePath": "/some/archive",
+          "type": "CommonTransportFormat/v1"
+        },
+        "componentNamePattern": "ocm.software/*",
+        "versionConstraint": ">=1.0.0"
+      }
+    ]
+  },
+  "ownership": {
+    "type": "ownership.config.ocm.software/v1alpha1",
+    "policy": "AddIfSupported",
+    "repositories": [
+      {
+        "repository": {
+          "filePath": "/some/repo",
+          "type": "CommonTransportFormat/v1"
+        },
+        "policy": "Never"
+      }
+    ]
+  },
+  "extract": {
+    "type": "extract.oci.artifact.ocm.software/v1alpha1"
+  }
+}`,
+			// TODO: unexpected empty in extract, input is:
+			//- type: extract.oci.artifact.ocm.software/v1alpha1
+			//  rules:
+			//  - filename: output.tar
+			//    layerSelectors:
+			//    - matchProperties:
+			//        layer.mediaType: application/vnd.oci.image.layer.v1.tar+gzip
+			//      matchExpressions:
+			//      - key: layer.index
+			//        operator: In
+			//        values: ["0"]
+		},
+
+		{
+			name:          "invalid output format",
+			args:          []string{"get", "config", "--output=invalid"},
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			args := tt.args
+
+			if tt.configYAML != "" {
+				tmp := t.TempDir()
+				configFilePath := filepath.Join(tmp, "ocm-config.yaml")
+				r.NoError(os.WriteFile(configFilePath, []byte(tt.configYAML), 0o600))
+				args = append(args, "--config", configFilePath)
+			}
+
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err := test.OCM(t, test.WithArgs(args...), test.WithOutput(result), test.WithErrorOutput(logs))
+
+			if tt.expectedError {
+				r.Error(err, "expected error but got none")
+				return
+			}
+
+			r.NoError(err, "failed to run command")
+
+			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()))
+		})
+	}
+}
