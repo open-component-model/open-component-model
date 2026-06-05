@@ -27,7 +27,6 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
-	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd"
 	"ocm.software/open-component-model/cli/integration/internal"
@@ -55,7 +54,7 @@ import (
 //     attached out-of-band via the Referrers API.
 //
 // Driving the real CLI command for the add cv half exercises the wired seam
-// (GetResourceRepository -> constructorPlugin.AddOwnershipReferrer) and the policy
+// (GetResourceRepository -> constructorPlugin.AddOwnership) and the policy
 // gate in constructor.processResource exactly as a user hits them.
 //
 // Verification always goes through the OCI Distribution Referrers API
@@ -194,8 +193,10 @@ components:
 						MediaType:      layout.MediaTypeOCIImageLayoutTarGzipV1,
 						LocalReference: digest.FromBytes(data).String(),
 					},
-				}, inmemory.New(bytes.NewReader(data)), repository.WithOwnershipReferrerCreation())
+				}, inmemory.New(bytes.NewReader(data)))
 				r.NoError(err)
+				// Create the by-value ownership referrer for the uploaded manifest.
+				r.NoError(repo.AddOwnership(ctx, component, version, res, nil))
 				return *res
 			}
 			backend := mkRes("backend", []byte("siblings-backend-payload"))
@@ -343,7 +344,7 @@ func assertNoReferrerOnTarget(t *testing.T, ctx context.Context, dstResolver *ur
 // --- ocm add cv: driving the real `ocm add component-version` command ---------
 //
 // The add cv half is driven end to end through the production CLI command, so the
-// wired seam (GetResourceRepository -> constructorPlugin.AddOwnershipReferrer) and
+// wired seam (GetResourceRepository -> constructorPlugin.AddOwnership) and
 // the policy gate in constructor.processResource are both exercised as a user would
 // hit them — no hand-wired constructor engine.
 
@@ -437,18 +438,14 @@ func writeOCILayoutTarball(t *testing.T, dir, name string, payload []byte) {
 
 // addOwnershipResource authors a single by-value resource (an OCI image layout
 // local blob) on repo and adds a component version holding it. When createReferrer
-// is true the AddLocalResource pack also pushes one ownership referrer next to the
-// uploaded manifest (via repository.WithOwnershipReferrerCreation), so the resource
-// becomes a transfer source that carries the referrer.
+// is true it also pushes one ownership referrer next to the uploaded manifest (via
+// repo.AddOwnership), so the resource becomes a transfer source that carries the
+// referrer.
 func addOwnershipResource(t *testing.T, ctx context.Context, repo *oci.Repository, component, version, resourceName string, createReferrer bool) {
 	t.Helper()
 	r := require.New(t)
 
 	data, _ := createSingleLayerOCIImage(t, []byte("transfer-byvalue-payload"))
-	var opts []repository.AddLocalResourceOption
-	if createReferrer {
-		opts = append(opts, repository.WithOwnershipReferrerCreation())
-	}
 	res, err := repo.AddLocalResource(ctx, component, version, &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: resourceName, Version: version}},
 		Type:        "ociArtifact",
@@ -458,8 +455,11 @@ func addOwnershipResource(t *testing.T, ctx context.Context, repo *oci.Repositor
 			MediaType:      layout.MediaTypeOCIImageLayoutTarGzipV1,
 			LocalReference: digest.FromBytes(data).String(),
 		},
-	}, inmemory.New(bytes.NewReader(data)), opts...)
+	}, inmemory.New(bytes.NewReader(data)))
 	r.NoError(err)
+	if createReferrer {
+		r.NoError(repo.AddOwnership(ctx, component, version, res, nil))
+	}
 	r.NoError(repo.AddComponentVersion(ctx, &descriptor.Descriptor{
 		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{

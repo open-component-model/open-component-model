@@ -16,8 +16,8 @@ import (
 //
 // The ownership policy is deliberately confined to the constructor types: it is a
 // construction-time directive and is never copied onto descriptor.Resource (which
-// no longer has such a field). The directive reaches the repository explicitly via
-// repository.WithOwnershipReferrerCreation, not by riding the descriptor.
+// no longer has such a field). The directive drives an explicit AddOwnership call
+// on the target repository, not riding the descriptor.
 func TestConvertV1Resource_OwnershipPolicyRoundTrip(t *testing.T) {
 	tests := []struct {
 		name        string

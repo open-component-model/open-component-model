@@ -111,6 +111,18 @@ func TestPushOwnershipReferrer(t *testing.T) {
 				"ownership referrer must not carry %s; its presence would make the manifest digest non-deterministic across re-runs",
 				ociImageSpecV1.AnnotationCreated)
 		})
+
+		t.Run("artifactType and annotation keys match the ADR-0016 literals", func(t *testing.T) {
+			// Every other assertion here routes through the annotations.* constants, so a
+			// typo in a constant would still pass. ADR 0016 fixes these exact wire strings.
+			assert.Equal(t, "application/vnd.ocm.software.ownership.v1+json", m.ArtifactType)
+			_, hasName := m.Annotations["software.ocm.component.name"]
+			_, hasVersion := m.Annotations["software.ocm.component.version"]
+			_, hasArtifact := m.Annotations["software.ocm.artifact"]
+			assert.True(t, hasName, "referrer must carry the literal software.ocm.component.name annotation")
+			assert.True(t, hasVersion, "referrer must carry the literal software.ocm.component.version annotation")
+			assert.True(t, hasArtifact, "referrer must carry the literal software.ocm.artifact annotation")
+		})
 	})
 
 	t.Run("repeated pushes with identical inputs are idempotent", func(t *testing.T) {

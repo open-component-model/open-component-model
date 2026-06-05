@@ -57,9 +57,7 @@ const (
 )
 
 // OwnershipPolicy controls whether an asset-to-owner ownership referrer (ADR
-// 0016) is created for a resource during construction (ocm add/create). It is a
-// construction-time directive: transfer never consults it, it only copies an
-// ownership referrer that already exists on the source.
+// 0016) is created for a resource during construction (ocm add).
 type OwnershipPolicy int
 
 const (
@@ -95,13 +93,12 @@ type Resource struct {
 }
 
 // ResourceOptions bundles optional, construction-time directives for a resource.
-// These options influence how the resource is handled during construction
-// (ocm add/create) but are not themselves persisted to the component descriptor.
+// These options influence how the resource is handled during construction.
 // +k8s:deepcopy-gen=true
 type ResourceOptions struct {
 	// OwnershipPolicy controls whether an asset-to-owner ownership referrer
-	// (ADR 0016) is created for this resource during construction. Defaults to
-	// OwnershipPolicyNever when unset.
+	// (ADR 0016) is created for this resource during construction.
+	// Defaults to OwnershipPolicyNever when unset.
 	OwnershipPolicy OwnershipPolicy `json:"-"`
 }
 

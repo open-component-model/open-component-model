@@ -73,9 +73,7 @@ type LocalResourceRepository interface {
 	// Resources for non-existent component versions may be stored but may be removed during garbage collection.
 	// The Resource given is identified later on by its own Identity ([descriptor.Resource.ToIdentity]) and a collection of a set of reserved identity values
 	// that can have a special meaning.
-	// Optional [AddLocalResourceOption]s carry construction-time directives (e.g.
-	// ADR-0016 ownership-referrer creation) that are not part of the descriptor.
-	AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob, opts ...AddLocalResourceOption) (*descriptor.Resource, error)
+	AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error)
 
 	// GetLocalResource retrieves and verifies the integrity of a local [descriptor.Resource] from the repository.
 	// The [runtime.Identity] must match a resource in the [descriptor.Descriptor].
@@ -116,18 +114,15 @@ type ResourceRepository interface {
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error)
 }
 
-// OwnershipReferrerRepository is an optional capability of a [ResourceRepository]:
+// OwnershipAwareRepository is an optional capability of a [ResourceRepository]:
 // attaching an asset-to-owner ownership referrer (ADR 0016) for a resource kept by
 // reference. Only repositories backed by an OCI registry — which exposes a
 // Referrers API — implement it; callers type-assert a [ResourceRepository] for it
 // and treat its absence as "ownership referrers are not supported here".
-type OwnershipReferrerRepository interface {
-	// AddOwnershipReferrer attaches an ownership referrer linking res back to the
-	// owning component version in the registry that hosts it. It is used for
-	// relation=local resources kept by reference (their access is not copied by
-	// value), so the referenced artifact records which component version owns it.
-	// The credentials must carry the authentication needed to write to the registry.
-	AddOwnershipReferrer(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error
+type OwnershipAwareRepository interface {
+	// AddOwnership attaches an ownership referrer linking res back to the
+	// owning component version in the registry that hosts it.
+	AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error
 }
 
 // SourceRepository defines the interface for storing and retrieving OCM sources

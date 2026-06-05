@@ -27,22 +27,29 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// mockTargetRepository implements TargetRepository for testing
+// mockTargetRepository implements TargetRepository for testing. It also
+// implements the optional [OwnershipAwareRepository] capability so the by-value
+// ownership-referrer attach (ADR 0016) can be asserted.
 type mockTargetRepository struct {
 	mu                     sync.Mutex
 	components             map[string]*descriptor.Descriptor
 	addedLocalResources    []*descriptor.Resource
-	addedLocalResourceData map[string]blob.ReadOnlyBlob                  // resource identity -> blob data
-	addedLocalResourceOpts map[string]repository.AddLocalResourceOptions // resource identity -> applied add options
-	addedSources           []*descriptor.Source
-	addedVersions          []*descriptor.Descriptor
+	addedLocalResourceData map[string]blob.ReadOnlyBlob // resource identity -> blob data
+
+	// ownership-referrer attach tracking (AddOwnership).
+	ownershipCalls    int
+	ownershipResource *descriptor.Resource
+	ownershipCreds    runtime.Typed
+	ownershipErr      error // returned by AddOwnership
+
+	addedSources  []*descriptor.Source
+	addedVersions []*descriptor.Descriptor
 }
 
 func newMockTargetRepository() *mockTargetRepository {
 	return &mockTargetRepository{
 		components:             make(map[string]*descriptor.Descriptor),
 		addedLocalResourceData: make(map[string]blob.ReadOnlyBlob),
-		addedLocalResourceOpts: make(map[string]repository.AddLocalResourceOptions),
 	}
 }
 
@@ -60,16 +67,25 @@ func (m *mockTargetRepository) GetTargetRepository(ctx context.Context, componen
 	return m, nil
 }
 
-func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob, opts ...repository.AddLocalResourceOption) (*descriptor.Resource, error) {
+func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.addedLocalResources = append(m.addedLocalResources, resource)
 	// Store the blob data so we can verify it later
 	m.addedLocalResourceData[resource.ToIdentity().String()] = data
-	// Capture the applied add options so tests can assert construction-time
-	// directives (e.g. ownership-referrer opt-in) reached the repository.
-	m.addedLocalResourceOpts[resource.ToIdentity().String()] = repository.ApplyAddLocalResourceOptions(opts...)
 	return resource, nil
+}
+
+// AddOwnership records the by-value ownership-referrer attach (ADR 0016) so tests
+// can assert the opt-in reached the repository. It implements the optional
+// [OwnershipAwareRepository] capability.
+func (m *mockTargetRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.ownershipCalls++
+	m.ownershipResource = resource
+	m.ownershipCreds = credentials
+	return m.ownershipErr
 }
 
 func (m *mockTargetRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
@@ -120,8 +136,8 @@ func (t *targetRepoWrapper) AddComponentVersion(ctx context.Context, desc *descr
 	return t.repo.AddComponentVersion(ctx, desc)
 }
 
-func (t *targetRepoWrapper) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob, opts ...repository.AddLocalResourceOption) (*descriptor.Resource, error) {
-	return t.repo.AddLocalResource(ctx, component, version, resource, data, opts...)
+func (t *targetRepoWrapper) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	return t.repo.AddLocalResource(ctx, component, version, resource, data)
 }
 
 func (t *targetRepoWrapper) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {

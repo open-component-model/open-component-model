@@ -51,7 +51,7 @@ var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
 // The OCI resource repository is the only implementation of the optional
 // asset-to-owner ownership-referrer capability (ADR 0016).
-var _ repository.OwnershipReferrerRepository = (*ResourceRepository)(nil)
+var _ repository.OwnershipAwareRepository = (*ResourceRepository)(nil)
 
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	options := &Options{}
@@ -150,12 +150,12 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return b, nil
 }
 
-// AddOwnershipReferrer attaches an asset-to-owner ownership referrer (ADR 0016)
+// AddOwnership attaches an asset-to-owner ownership referrer (ADR 0016)
 // to a by-reference OCI image resource, pushing the referrer into the registry
 // that hosts the image. It delegates to the inner repository's
-// [oci.Repository.AddOwnershipReferrer]. It implements
-// [repository.OwnershipReferrerRepository.AddOwnershipReferrer].
-func (p *ResourceRepository) AddOwnershipReferrer(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
+// [oci.Repository.AddOwnershipByReference]. It implements
+// [repository.OwnershipAwareRepository.AddOwnership].
+func (p *ResourceRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
 	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {
 		return err
@@ -174,7 +174,7 @@ func (p *ResourceRepository) AddOwnershipReferrer(ctx context.Context, component
 	}
 	resource.Access = obj
 
-	if err := repo.AddOwnershipReferrer(ctx, component, version, resource); err != nil {
+	if err := repo.AddOwnershipByReference(ctx, component, version, resource); err != nil {
 		return fmt.Errorf("error attaching ownership referrer: %w", err)
 	}
 	return nil

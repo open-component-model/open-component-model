@@ -486,8 +486,8 @@ func (prov *constructorProvider) GetResourceRepository(ctx context.Context, reso
 }
 
 var (
-	_ constructor.ResourceRepository               = (*constructorPlugin)(nil)
-	_ constructor.OwnershipReferrerAwareRepository = (*constructorPlugin)(nil)
+	_ constructor.ResourceRepository       = (*constructorPlugin)(nil)
+	_ constructor.OwnershipAwareRepository = (*constructorPlugin)(nil)
 )
 
 // constructorPlugin adapts a resolved [resource.Repository] plugin to the
@@ -505,19 +505,19 @@ func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descripto
 	return c.plugin.DownloadResource(ctx, res, credentials)
 }
 
-// AddOwnershipReferrer attaches an asset-to-owner ownership referrer (ADR 0016) by
+// AddOwnership attaches an asset-to-owner ownership referrer (ADR 0016) by
 // delegating to the resolved plugin when it implements
-// [repository.OwnershipReferrerRepository] (the in-process OCI resource repository
+// [repository.OwnershipAwareRepository] (the in-process OCI resource repository
 // does). When it does not (e.g. the out-of-process plugin bridge), it warns and skips
 // rather than silently no-opping, so an opted-in resource on a repository that cannot
 // host referrers degrades visibly.
-func (c *constructorPlugin) AddOwnershipReferrer(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error {
-	attacher, ok := c.plugin.(repository.OwnershipReferrerRepository)
+func (c *constructorPlugin) AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error {
+	ownershipAwareRepo, ok := c.plugin.(repository.OwnershipAwareRepository)
 	if !ok {
 		slog.WarnContext(ctx, "resource repository does not support ownership referrers, skipping", "resource", res.ToIdentity())
 		return nil
 	}
-	return attacher.AddOwnershipReferrer(ctx, component, version, res, credentials)
+	return ownershipAwareRepo.AddOwnership(ctx, component, version, res, credentials)
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {

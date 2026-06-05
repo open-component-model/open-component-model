@@ -52,7 +52,7 @@ func (p *basePlugin) UploadResource(_ context.Context, res *descriptor.Resource,
 	return res, nil
 }
 
-// ownershipPlugin additionally implements repository.OwnershipReferrerRepository,
+// ownershipPlugin additionally implements repository.OwnershipAwareRepository,
 // like the in-process OCI resource repository does, and records the delegated call.
 type ownershipPlugin struct {
 	basePlugin
@@ -61,7 +61,7 @@ type ownershipPlugin struct {
 	gotVersion   string
 }
 
-func (p *ownershipPlugin) AddOwnershipReferrer(_ context.Context, component, version string, _ *descriptor.Resource, _ runtime.Typed) error {
+func (p *ownershipPlugin) AddOwnership(_ context.Context, component, version string, _ *descriptor.Resource, _ runtime.Typed) error {
 	p.attachCalls++
 	p.gotComponent = component
 	p.gotVersion = version
@@ -77,7 +77,7 @@ func providerWithPlugin(t *testing.T, plugin resource.BuiltinResourceRepository)
 
 // TestGetResourceRepository_ForwardsOwnershipReferrer proves the CLI re-exposes the
 // optional ADR-0016 capability when the resolved plugin (e.g. the in-process OCI
-// resource repository) supports it: constructorPlugin.AddOwnershipReferrer must
+// resource repository) supports it: constructorPlugin.AddOwnership must
 // delegate to it, or `ocm add cv` silently warns "resource repository does not
 // support ownership referrers" for OCI image resources instead of attaching one.
 func TestGetResourceRepository_ForwardsOwnershipReferrer(t *testing.T) {
@@ -87,17 +87,17 @@ func TestGetResourceRepository_ForwardsOwnershipReferrer(t *testing.T) {
 	repo, err := prov.GetResourceRepository(t.Context(), &constructorruntime.Resource{AccessOrInput: constructorruntime.AccessOrInput{Access: &testAccess{Type: testAccessType}}})
 	require.NoError(t, err)
 
-	attacher, ok := repo.(constructor.OwnershipReferrerAwareRepository)
+	attacher, ok := repo.(constructor.OwnershipAwareRepository)
 	require.True(t, ok, "must forward the ownership-referrer capability for a supporting plugin")
 
-	require.NoError(t, attacher.AddOwnershipReferrer(t.Context(), "ocm.software/test", "v1.0.0", &descriptor.Resource{}, nil))
+	require.NoError(t, attacher.AddOwnership(t.Context(), "ocm.software/test", "v1.0.0", &descriptor.Resource{}, nil))
 	require.Equal(t, 1, plugin.attachCalls)
 	require.Equal(t, "ocm.software/test", plugin.gotComponent)
 	require.Equal(t, "v1.0.0", plugin.gotVersion)
 }
 
 // TestGetResourceRepository_SkipsOwnershipReferrerWhenUnsupported proves the
-// inverse: constructorPlugin always exposes AddOwnershipReferrer, but for a plugin
+// inverse: constructorPlugin always exposes AddOwnership, but for a plugin
 // that cannot host referrers (e.g. an external plugin bridge) the call warns and
 // skips — returning nil without delegating — instead of failing. That graceful
 // degradation is the designed behavior for such bridges.
@@ -107,10 +107,10 @@ func TestGetResourceRepository_SkipsOwnershipReferrerWhenUnsupported(t *testing.
 	repo, err := prov.GetResourceRepository(t.Context(), &constructorruntime.Resource{AccessOrInput: constructorruntime.AccessOrInput{Access: &testAccess{Type: testAccessType}}})
 	require.NoError(t, err)
 
-	attacher, ok := repo.(constructor.OwnershipReferrerAwareRepository)
+	attacher, ok := repo.(constructor.OwnershipAwareRepository)
 	require.True(t, ok, "constructorPlugin always exposes the optional capability")
 
 	// The underlying plugin cannot host referrers, so the attach degrades to a
 	// warn-and-skip: no delegation, no error.
-	require.NoError(t, attacher.AddOwnershipReferrer(t.Context(), "ocm.software/test", "v1.0.0", &descriptor.Resource{}, nil))
+	require.NoError(t, attacher.AddOwnership(t.Context(), "ocm.software/test", "v1.0.0", &descriptor.Resource{}, nil))
 }
