@@ -40,7 +40,7 @@ ocm get config --config ./my-ocm-config.yaml
 ```
   -h, --help          help for config
   -o, --output enum   output format
-                      (must be one of [json yaml]) (default yaml)
+                      (must be one of [json ndjson yaml]) (default yaml)
 ```
 
 ### Options inherited from parent commands

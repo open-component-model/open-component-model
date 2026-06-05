@@ -49,7 +49,7 @@ See --config for the list of configuration file locations.`,
 		DisableAutoGenTag: true,
 	}
 
-	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatYAML.String(), render.OutputFormatJSON.String()}, "output format")
+	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String()}, "output format")
 
 	return cmd
 }
@@ -79,6 +79,10 @@ func GetConfig(cmd *cobra.Command, args []string) error {
 	case render.OutputFormatJSON.String():
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
+		enc.SetEscapeHTML(false)
+		return enc.Encode(effectiveConfig)
+	case render.OutputFormatNDJSON.String():
+		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetEscapeHTML(false)
 		return enc.Encode(effectiveConfig)
 	case render.OutputFormatYAML.String():

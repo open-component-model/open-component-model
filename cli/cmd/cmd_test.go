@@ -2080,6 +2080,17 @@ configurations:
 }`,
 		},
 		{
+			name: "filesystem config - ndjson output",
+			args: []string{"get", "config", "--output=ndjson"},
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`,
+			expectedOutput: `{"filesystem":{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/tmp/custom","workingDirectory":"/work"}}`,
+		},
+		{
 			name: "multiple config types",
 			args: []string{"get", "config"},
 			configYAML: `
