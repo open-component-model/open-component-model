@@ -18,12 +18,8 @@ vars:
   BUILD_VERSION: '{{ .BUILD_VERSION | default .VERSION }}'
   COMPONENT_CONSTRUCTOR_FILE: "{{ .TASKFILE_DIR }}/tmp/component-constructor.yaml"
   CTF_LOCATION: '{{ .TASKFILE_DIR }}/tmp/transport-archive'
-  GOOS:
-    sh: |
-      go env GOOS
-  GOARCH:
-    sh: |
-      go env GOARCH
+  GOOS: '{{ .GOOS | default OS }}'
+  GOARCH: '{{ .GOARCH | default ARCH }}'
 tasks:
   test:
     cmds:
