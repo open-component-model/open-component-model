@@ -41,9 +41,7 @@ func New() *cobra.Command {
 		Aliases: []string{"configuration", "cfg"},
 		Short:   "Display the effective merged OCM configuration",
 		Long: `Evaluate the command line arguments and all explicitly or implicitly used
-configuration files and display the merged effective configuration as a single object.
-
-See --config for the list of configuration file locations.`,
+configuration files and display the merged effective configuration as a single object.`,
 		Example: `  # Display effective config in YAML (default)
   ocm get config
 

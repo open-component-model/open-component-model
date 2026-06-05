@@ -16,8 +16,6 @@ Display the effective merged OCM configuration
 Evaluate the command line arguments and all explicitly or implicitly used
 configuration files and display the merged effective configuration as a single object.
 
-See --config for the list of configuration file locations.
-
 ```
 ocm get config [flags]
 ```
