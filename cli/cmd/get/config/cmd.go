@@ -39,10 +39,11 @@ func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "config",
 		Aliases: []string{"configuration", "cfg"},
-		Short:   "Get Evaluated Config For Actual Command Call",
-		Long: `Evaluate the command line arguments and all explicitly
-  or implicitly used configuration files and provide
-  a single configuration object.`,
+		Short:   "Display the effective merged OCM configuration",
+		Long: `Evaluate the command line arguments and all explicitly or implicitly used
+configuration files and display the merged effective configuration as a single object.
+
+See --config for the list of configuration file locations.`,
 		Example:           fmt.Sprintf(`ocm get config --%s json`, FlagOutput),
 		RunE:              GetConfig,
 		DisableAutoGenTag: true,
