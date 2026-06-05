@@ -159,7 +159,7 @@ export async function uploadAssets(github, context, core, releaseId, assetsDir) 
       });
     }
     const data = fs.readFileSync(path.join(assetsDir, file));
-    await github.rest.repos.uploadReleaseAsset({
+    const res = await github.rest.repos.uploadReleaseAsset({
       ...repo,
       release_id: releaseId,
       name: file,
@@ -169,6 +169,11 @@ export async function uploadAssets(github, context, core, releaseId, assetsDir) 
         "content-length": data.length,
       },
     });
+    // A 201 alone doesn't prove the bytes landed intact. Confirm the server
+    // finished the upload and stored the exact byte count before counting it.
+    if (res.data.state !== "uploaded" || res.data.size !== data.length) {
+      throw new Error(`Asset ${file} upload unverified: state=${res.data.state}, size=${res.data.size} (expected ${data.length})`);
+    }
     core.info(`Uploaded: ${file}`);
   }
 

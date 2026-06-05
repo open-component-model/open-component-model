@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	helmrepo "helm.sh/helm/v4/pkg/repo/v1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
@@ -97,19 +98,19 @@ func TestGetVersion(t *testing.T) {
 
 func TestConstructTLSOptions(t *testing.T) {
 	t.Run("no options returns no error", func(t *testing.T) {
-		tlsOpt, err := constructTLSOptions(t.TempDir())
+		tlsOpt, _, err := constructTLSOptions(t.TempDir())
 		require.NoError(t, err)
 		assert.NotNil(t, tlsOpt)
 	})
 
 	t.Run("empty targetDir returns error", func(t *testing.T) {
-		_, err := constructTLSOptions("")
+		_, _, err := constructTLSOptions("")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "target directory")
 	})
 
 	t.Run("nil credentials returns no error", func(t *testing.T) {
-		tlsOpt, err := constructTLSOptions(t.TempDir(), withCredentials(nil))
+		tlsOpt, _, err := constructTLSOptions(t.TempDir(), withCredentials(nil))
 		require.NoError(t, err)
 		assert.NotNil(t, tlsOpt)
 	})
@@ -119,7 +120,7 @@ func TestConstructTLSOptions(t *testing.T) {
 		caFile := filepath.Join(tmpDir, "ca.pem")
 		require.NoError(t, os.WriteFile(caFile, []byte("fake-ca-cert"), 0o600))
 
-		tlsOpt, err := constructTLSOptions(tmpDir, withCACertFile(caFile))
+		tlsOpt, _, err := constructTLSOptions(tmpDir, withCACertFile(caFile))
 		require.NoError(t, err)
 		assert.NotNil(t, tlsOpt)
 	})
@@ -127,7 +128,7 @@ func TestConstructTLSOptions(t *testing.T) {
 	t.Run("CACert creates temp file", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		caCert := "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
-		tlsOpt, err := constructTLSOptions(tmpDir, withCACert(caCert))
+		tlsOpt, _, err := constructTLSOptions(tmpDir, withCACert(caCert))
 		require.NoError(t, err)
 		assert.NotNil(t, tlsOpt)
 
@@ -141,7 +142,7 @@ func TestConstructTLSOptions(t *testing.T) {
 		tmpDir := t.TempDir()
 		caFile := filepath.Join(tmpDir, "ca.pem")
 		require.NoError(t, os.WriteFile(caFile, []byte("fake-ca-cert"), 0o600))
-		_, err := constructTLSOptions(tmpDir, withCACertFile(caFile), withCACert("should-be-ignored"))
+		_, _, err := constructTLSOptions(tmpDir, withCACertFile(caFile), withCACert("should-be-ignored"))
 		require.NoError(t, err)
 
 		// No temp file should be created since CACertFile was used
@@ -151,7 +152,7 @@ func TestConstructTLSOptions(t *testing.T) {
 	})
 
 	t.Run("certFile credential that does not exist returns error", func(t *testing.T) {
-		_, err := constructTLSOptions(t.TempDir(), withCredentials(&helmcredsv1.HelmHTTPCredentials{
+		_, _, err := constructTLSOptions(t.TempDir(), withCredentials(&helmcredsv1.HelmHTTPCredentials{
 			CertFile: "/nonexistent/cert.pem",
 		}))
 		require.Error(t, err)
@@ -160,7 +161,7 @@ func TestConstructTLSOptions(t *testing.T) {
 	})
 
 	t.Run("keyFile credential that does not exist returns error", func(t *testing.T) {
-		_, err := constructTLSOptions(t.TempDir(), withCredentials(&helmcredsv1.HelmHTTPCredentials{
+		_, _, err := constructTLSOptions(t.TempDir(), withCredentials(&helmcredsv1.HelmHTTPCredentials{
 			KeyFile: "/nonexistent/key.pem",
 		}))
 		require.Error(t, err)
@@ -175,7 +176,7 @@ func TestConstructTLSOptions(t *testing.T) {
 		require.NoError(t, os.WriteFile(certFile, []byte("fake-cert"), 0o600))
 		require.NoError(t, os.WriteFile(keyFile, []byte("fake-key"), 0o600))
 
-		tlsOpt, err := constructTLSOptions(tmpDir, withCredentials(&helmcredsv1.HelmHTTPCredentials{
+		tlsOpt, _, err := constructTLSOptions(tmpDir, withCredentials(&helmcredsv1.HelmHTTPCredentials{
 			CertFile: certFile,
 			KeyFile:  keyFile,
 		}))
@@ -501,7 +502,7 @@ func TestResolveHTTPChartURL(t *testing.T) {
 				}
 			}
 
-			result, err := resolveHTTPChartURL(t.Context(), helmRepo, tt.requestedVersion, t.TempDir(), GetterProviders(), nil)
+			result, err := resolveHTTPChartURL(t.Context(), helmRepo, tt.requestedVersion, t.TempDir(), GetterProviders(), &helmrepo.Entry{})
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
