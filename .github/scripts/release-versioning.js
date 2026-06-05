@@ -108,19 +108,17 @@ export default async function computeRcVersion({ core }) {
  * @param {*} core - GitHub Actions core module
  * @param {string} executable
  * @param {string[]} args
- * @returns {string} Command output or empty string on failure
+ * @returns {string} Command output (empty string if the command produced none).
+ * @throws {Error} If the command exits non-zero. Callers treat empty output as a
+ *   meaningful "no tags" signal, so a failure must surface rather than masquerade
+ *   as no matches and restart the version sequence at a value that already exists.
  */
 export function run(core, executable, args) {
   const cmdStr = `${executable} ${args.join(" ")}`;
   core.info(`> ${cmdStr}`);
-  try {
-    const out = execFileSync(executable, args, { encoding: "utf-8" }).trim();
-    if (out) core.info(`Output: ${out}`);
-    return out;
-  } catch (err) {
-    core.warning(`Command failed: ${cmdStr}\n${err.message}`);
-    return "";
-  }
+  const out = execFileSync(executable, args, { encoding: "utf-8" }).trim();
+  if (out) core.info(`Output: ${out}`);
+  return out;
 }
 
 /**
