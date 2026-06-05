@@ -44,7 +44,14 @@ func New() *cobra.Command {
 configuration files and display the merged effective configuration as a single object.
 
 See --config for the list of configuration file locations.`,
-		Example:           fmt.Sprintf(`ocm get config --%s json`, FlagOutput),
+		Example: `  # Display effective config in YAML (default)
+  ocm get config
+
+  # Display effective config in JSON
+  ocm get config --output json
+
+  # Display effective config from a specific config file
+  ocm get config --config ./my-ocm-config.yaml`,
 		RunE:              GetConfig,
 		DisableAutoGenTag: true,
 	}

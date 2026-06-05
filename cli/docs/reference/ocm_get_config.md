@@ -1,6 +1,6 @@
 ---
 title: ocm get config
-description: Display the effective merged OCM configuration
+description: Display the effective merged OCM configuration.
 suppressTitle: true
 toc: true
 sidebar:
@@ -25,14 +25,14 @@ ocm get config [flags]
 ### Examples
 
 ```
-# Display effective config in YAML (default)
-ocm get config
+  # Display effective config in YAML (default)
+  ocm get config
 
-# Display effective config in JSON
-ocm get config --output json
+  # Display effective config in JSON
+  ocm get config --output json
 
-# Display effective config from a specific config file
-ocm get config --config ./my-ocm-config.yaml
+  # Display effective config from a specific config file
+  ocm get config --config ./my-ocm-config.yaml
 ```
 
 ### Options
