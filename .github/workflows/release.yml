@@ -468,24 +468,24 @@ jobs:
 
       - name: Promote CLI image tags
         env:
-          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          CLI_IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
           NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
         run: |
           set -euo pipefail
-          oras tag "$CLI_IMAGE:${RC_VERSION}" "${NEW_RELEASE_VERSION}"
+          oras tag "$CLI_IMAGE@${CLI_IMAGE_DIGEST}" "${NEW_RELEASE_VERSION}"
           if [ "${SET_LATEST}" = "true" ]; then
             oras tag "$CLI_IMAGE:${NEW_RELEASE_VERSION}" "latest"
           fi
 
       - name: Promote controller image tags
         env:
-          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
           NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
         run: |
           set -euo pipefail
-          oras tag "$CONTROLLER_IMAGE:${RC_VERSION}" "${NEW_RELEASE_VERSION}"
+          oras tag "$CONTROLLER_IMAGE@${IMAGE_DIGEST}" "${NEW_RELEASE_VERSION}"
           if [ "${SET_LATEST}" = "true" ]; then
             oras tag "$CONTROLLER_IMAGE:${NEW_RELEASE_VERSION}" "latest"
           fi

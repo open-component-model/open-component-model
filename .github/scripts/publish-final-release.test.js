@@ -32,7 +32,7 @@ function mockGitHub(overrides = {}) {
         updateRelease: overrides.updateRelease || (() => ({ data: { id: 1, html_url: "https://example.com/release/1" } })),
         listReleaseAssets: overrides.listReleaseAssets || (() => ({ data: [] })),
         deleteReleaseAsset: overrides.deleteReleaseAsset || (() => {}),
-        uploadReleaseAsset: overrides.uploadReleaseAsset || (() => {}),
+        uploadReleaseAsset: overrides.uploadReleaseAsset || ((opts) => ({ data: { state: "uploaded", size: opts.data.length } })),
       },
     },
   };
@@ -190,7 +190,7 @@ function mockCore() {
   const uploaded = [];
   const gh = mockGitHub({
     listReleaseAssets: async () => ({ data: [] }),
-    uploadReleaseAsset: async (opts) => uploaded.push(opts.name),
+    uploadReleaseAsset: async (opts) => { uploaded.push(opts.name); return { data: { state: "uploaded", size: opts.data.length } }; },
   });
   const count = await uploadAssets(gh, mockContext, mockCore(), 1, dir);
   assert.deepStrictEqual(uploaded, ["chart-1.0.0.tgz"]);
@@ -205,7 +205,7 @@ function mockCore() {
   const gh = mockGitHub({
     listReleaseAssets: async () => ({ data: [{ name: "chart-1.0.0.tgz", id: 99 }] }),
     deleteReleaseAsset: async (opts) => deleted.push(opts.asset_id),
-    uploadReleaseAsset: async (opts) => uploaded.push(opts.name),
+    uploadReleaseAsset: async (opts) => { uploaded.push(opts.name); return { data: { state: "uploaded", size: opts.data.length } }; },
   });
   const count = await uploadAssets(gh, mockContext, mockCore(), 1, dir);
   assert.deepStrictEqual(deleted, [99]);
@@ -219,7 +219,7 @@ function mockCore() {
   const uploaded = [];
   const gh = mockGitHub({
     listReleaseAssets: async () => ({ data: [] }),
-    uploadReleaseAsset: async (opts) => uploaded.push(opts.name),
+    uploadReleaseAsset: async (opts) => { uploaded.push(opts.name); return { data: { state: "uploaded", size: opts.data.length } }; },
   });
   const count = await uploadAssets(gh, mockContext, mockCore(), 1, dir);
   assert.strictEqual(count, 2);
@@ -234,11 +234,24 @@ function mockCore() {
   const uploaded = [];
   const gh = mockGitHub({
     listReleaseAssets: async () => ({ data: [] }),
-    uploadReleaseAsset: async (opts) => uploaded.push(opts.name),
+    uploadReleaseAsset: async (opts) => { uploaded.push(opts.name); return { data: { state: "uploaded", size: opts.data.length } }; },
   });
   const count = await uploadAssets(gh, mockContext, mockCore(), 1, dir);
   assert.strictEqual(count, 1);
   assert.deepStrictEqual(uploaded, ["chart.tgz"]);
+}
+
+// Throws when the server reports a truncated or unfinished upload
+{
+  const dir = tmpDir({ "chart.tgz": "data" });
+  const gh = mockGitHub({
+    listReleaseAssets: async () => ({ data: [] }),
+    uploadReleaseAsset: async () => ({ data: { state: "uploaded", size: 1 } }),
+  });
+  await assert.rejects(
+    () => uploadAssets(gh, mockContext, mockCore(), 1, dir),
+    /upload unverified/,
+  );
 }
 
 // ----------------------------------------------------------
