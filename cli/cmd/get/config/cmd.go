@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	extractv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -81,9 +81,12 @@ func GetConfig(cmd *cobra.Command, args []string) error {
 		enc.SetEscapeHTML(false)
 		return enc.Encode(effectiveConfig)
 	case render.OutputFormatYAML.String():
-		enc := yaml.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent(2)
-		return enc.Encode(effectiveConfig) //nolint:musttag // TODO nested types need yaml tags
+		data, err := sigsyaml.Marshal(effectiveConfig)
+		if err != nil {
+			return fmt.Errorf("failed to marshal config: %w", err)
+		}
+		_, err = cmd.OutOrStdout().Write(data)
+		return err
 	default:
 		return fmt.Errorf("unsupported output format: %s", output)
 	}

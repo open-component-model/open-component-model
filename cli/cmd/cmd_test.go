@@ -2043,11 +2043,8 @@ func Test_Get_Config(t *testing.T) {
 			name: "no config - only default temp folder is output",
 			args: []string{"get", "config"},
 			expectedOutput: fmt.Sprintf(`filesystem:
-  type:
-    version: v1alpha1
-    name: filesystem.config.ocm.software
-  tempfolder: %s
-  workingdirectory: ""
+  tempFolder: %s
+  type: filesystem.config.ocm.software/v1alpha1
 `, os.TempDir()),
 		},
 		{
@@ -2060,11 +2057,9 @@ configurations:
   tempFolder: /tmp/custom
   workingDirectory: /work`,
 			expectedOutput: `filesystem:
-  type:
-    version: v1alpha1
-    name: filesystem.config.ocm.software
-  tempfolder: /tmp/custom
-  workingdirectory: /work
+  tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /work
 `,
 		},
 		{
@@ -2095,17 +2090,12 @@ configurations:
 - type: http.config.ocm.software/v1alpha1
   timeout: 60s`,
 			expectedOutput: `filesystem:
-  type:
-    version: v1alpha1
-    name: filesystem.config.ocm.software
-  tempfolder: /tmp/test
-  workingdirectory: ""
+  tempFolder: /tmp/test
+  type: filesystem.config.ocm.software/v1alpha1
 http:
-  type:
-    version: v1alpha1
-    name: http.config.ocm.software
-  timeout: 60000000000
-`, // TODO: fix timeout marshalling
+  timeout: 1m0s
+  type: http.config.ocm.software/v1alpha1
+`,
 		},
 		{
 			name: "all config types populated",
