@@ -1,65 +1,62 @@
-// Package http builds HTTP transports and clients from the
-// http.config.ocm.software configuration type.
+// Package http builds HTTP clients from the http.config.ocm.software
+// configuration type.
 //
-// It is the construction-side companion to the configuration package
-// ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1,
-// which owns the Config type itself.
+// # Quickstart
 //
-// # Usage
+// Build a retry-enabled client from a central OCM config:
 //
-// Resolve the HTTP configuration from a central OCM config, then build a
-// client from it:
-//
-//	import (
-//		httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
-//		ocmhttp "ocm.software/open-component-model/bindings/go/http"
-//	)
-//
-//	// genericConfig is the central *genericv1.Config; it may be nil, in
-//	// which case ResolveHTTPConfig returns a Config with default timeouts.
-//	cfg, err := httpv1alpha1.ResolveHTTPConfig(genericConfig)
+//	cfg, err := httpv1alpha1.ResolveHTTPConfig(genericConfig) // nil is OK → defaults
 //	if err != nil {
-//		return err // configuration was present but invalid
+//		return err
 //	}
-//
 //	client := ocmhttp.New(
 //		ocmhttp.WithConfig(cfg),
-//		ocmhttp.WithUserAgent("my-component/1.0"),
+//		ocmhttp.WithUserAgent("my-tool/1.0"),
 //	)
 //
-// New returns an *http.Client whose transport applies the TCP dial, TCP
-// keep-alive, TLS-handshake, response-header and idle-connection timeouts
-// from cfg, layered on top of a retry transport. The overall
-// cfg.Timeout becomes the http.Client.Timeout (the deadline for the whole
-// request, including redirects and body reads). WithUserAgent injects a
-// User-Agent header on every request. A nil config yields a plain retry
-// client with library defaults.
+// # Config shape
 //
-// When the retry wrapper is not wanted, NewClient and NewTransport build a
-// bare *http.Client / *http.Transport directly from the configuration:
+// All timeout fields are pointers — nil means "keep http.DefaultTransport's
+// value", a zero duration means "no timeout":
 //
-//	transport := ocmhttp.NewTransport(&cfg.TimeoutConfig)
-//	client := ocmhttp.NewClient(cfg)
-//
-// The configuration distinguishes nil ("use the default") from a zero
-// duration ("no timeout"), matching net/http semantics, so leaving a field
-// unset preserves http.DefaultTransport's behaviour for it.
+//	cfg := &httpv1alpha1.Config{
+//		TimeoutConfig: httpv1alpha1.TimeoutConfig{
+//			Timeout:               httpv1alpha1.NewTimeout(30 * time.Second), // whole request incl. body
+//			TCPDialTimeout:        httpv1alpha1.NewTimeout(10 * time.Second),
+//			TCPKeepAlive:          httpv1alpha1.NewTimeout(30 * time.Second),
+//			TLSHandshakeTimeout:   httpv1alpha1.NewTimeout(10 * time.Second),
+//			ResponseHeaderTimeout: httpv1alpha1.NewTimeout(10 * time.Second),
+//			IdleConnTimeout:       httpv1alpha1.NewTimeout(90 * time.Second),
+//		},
+//	}
 //
 // # Per-host overrides
 //
-// When cfg.Hosts is non-empty, both New and NewClient front the transport
-// with a routing layer. Each request is dispatched to a transport built from
-// the host's merged TimeoutConfig (global + per-host overrides) when the
-// request URL's host matches an entry in cfg.Hosts; otherwise it goes to the
-// transport built from the global config.
+// Set cfg.Hosts to give individual hosts different timeouts. Fields left nil
+// inherit the global value; set fields win:
 //
-// Map keys may be either "host" or "host:port". The full Host is matched
-// first, falling back to the bare hostname when the URL carries an explicit
-// port that does not appear as a key.
+//	cfg.Hosts = map[string]*httpv1alpha1.HostConfig{
+//		"slow-registry.example.com": {
+//			TimeoutConfig: httpv1alpha1.TimeoutConfig{
+//				Timeout: httpv1alpha1.NewTimeout(120 * time.Second),
+//			},
+//		},
+//		"internal.example.com:5000": { // host:port key wins over bare hostname
+//			TimeoutConfig: httpv1alpha1.TimeoutConfig{
+//				Timeout:             httpv1alpha1.NewTimeout(5 * time.Second),
+//				ResponseHeaderTimeout: httpv1alpha1.NewTimeout(2 * time.Second),
+//			},
+//		},
+//	}
 //
-// The overall Timeout is applied per request via a context deadline so that
-// a per-host timeout can exceed the global value — setting http.Client.Timeout
-// would cap every request at the global before the host override could take
-// effect. http.Client.Timeout is therefore left zero whenever cfg.Hosts is
-// non-empty.
+// When Hosts is non-empty the per-host Timeout is enforced as a per-request
+// context deadline (covering headers + body), so a per-host value can exceed
+// the global. http.Client.Timeout is left zero in this case.
+//
+// # Lower-level constructors
+//
+// Skip the retry layer with NewClient, or get just the transport:
+//
+//	client    := ocmhttp.NewClient(cfg)
+//	transport := ocmhttp.NewTransport(&cfg.TimeoutConfig)
 package http

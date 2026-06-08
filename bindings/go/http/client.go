@@ -105,6 +105,13 @@ func New(opts ...Option) *nethttp.Client {
 // the global config. With per-host entries the result is a hostRouter that
 // dispatches to a per-host inner chain, applying the per-host overall
 // Timeout via a context deadline so a per-host timeout can exceed the global.
+//
+// All six timeout fields are applied for every host entry: the transport-level
+// fields (TCPDialTimeout, TCPKeepAlive, TLSHandshakeTimeout,
+// ResponseHeaderTimeout, IdleConnTimeout) are baked into the RoundTripper
+// returned by inner (via NewTransport). Only the overall Timeout is stored
+// separately in hostTimeouts because it must be enforced as a per-request
+// context deadline by hostRouter, covering both headers and body reads.
 func buildRoutingTransport(cfg *httpv1alpha1.Config, inner func(*httpv1alpha1.TimeoutConfig) nethttp.RoundTripper) nethttp.RoundTripper {
 	if cfg == nil {
 		return inner(nil)
