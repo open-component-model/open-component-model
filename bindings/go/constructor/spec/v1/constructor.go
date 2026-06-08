@@ -91,14 +91,14 @@ const (
 	ExternalRelation ResourceRelation = "external"
 )
 
-// OwnershipPolicy controls whether an asset-to-owner ownership referrer (ADR
-// 0016) is created for a resource during construction (ocm add/create).
+// OwnershipPolicy controls whether asset-to-owner ownership (ADR
+// 0016) is recorded for a resource during construction (ocm add/create).
 type OwnershipPolicy string
 
 const (
-	// OwnershipPolicyNever is the default: no ownership referrer is created.
+	// OwnershipPolicyNever is the default: no ownership is recorded.
 	OwnershipPolicyNever OwnershipPolicy = "Never"
-	// OwnershipPolicyAlways creates an ownership referrer for the resource.
+	// OwnershipPolicyAlways records ownership for the resource.
 	OwnershipPolicyAlways OwnershipPolicy = "Always"
 )
 
@@ -138,8 +138,8 @@ type Resource struct {
 // (ocm add/create) but are not themselves persisted to the component descriptor.
 // +k8s:deepcopy-gen=true
 type ResourceOptions struct {
-	// OwnershipPolicy controls whether an asset-to-owner ownership referrer
-	// (ADR 0016) is created for this resource during construction. Defaults to
+	// OwnershipPolicy controls whether asset-to-owner ownership
+	// (ADR 0016) is recorded for this resource during construction. Defaults to
 	// "Never" when unset.
 	OwnershipPolicy OwnershipPolicy `json:"ownershipPolicy,omitempty"`
 }

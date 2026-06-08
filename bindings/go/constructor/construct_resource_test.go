@@ -499,20 +499,20 @@ func TestConstructWithResourceByValue(t *testing.T) {
 	assert.Len(t, mockTargetRepo.addedLocalResources, 1)
 	assert.Len(t, mockTargetRepo.addedVersions, 1)
 
-	// The resource did not opt into an ownership referrer, so the by-value add must
+	// The resource did not opt into ownership, so the by-value add must
 	// not attach one: AddOwnership is never called. The opt-in lives on the runtime
 	// resource options, not on descriptor.Resource.
-	assert.Zero(t, mockTargetRepo.ownershipCalls, "a resource that did not opt in must not attach an ownership referrer")
+	assert.Zero(t, mockTargetRepo.ownershipCalls, "a resource that did not opt in must not attach ownership")
 }
 
-// TestAddColocatedResourceLocalBlob_AttachesOwnershipReferrerOptIn proves the
+// TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn proves the
 // ADR-0016 opt-in drives a by-value AddOwnership call on the target repository
 // (when it supports the capability), sourced from the runtime resource options —
 // not from descriptor.Resource, which no longer carries the policy. It also
 // asserts the uploaded resource and the resolved credentials are forwarded. This
 // is the by-value half of the opt-in wiring; the by-reference half is covered by
-// TestDefaultConstructor_attachOwnershipReferrer_CallSiteGating.
-func TestAddColocatedResourceLocalBlob_AttachesOwnershipReferrerOptIn(t *testing.T) {
+// TestDefaultConstructor_attachOwnership_CallSiteGating.
+func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 	const (
 		component = "ocm.software/test-component"
 		version   = "1.0.0"
@@ -542,7 +542,7 @@ func TestAddColocatedResourceLocalBlob_AttachesOwnershipReferrerOptIn(t *testing
 			require.NotNil(t, out)
 
 			assert.Equal(t, tt.wantCalls, repo.ownershipCalls,
-				"by-value add must attach an ownership referrer iff the runtime options opt in")
+				"by-value add must attach ownership iff the runtime options opt in")
 			if tt.wantCalls > 0 {
 				assert.Same(t, out, repo.ownershipResource, "the uploaded resource must be forwarded to AddOwnership")
 				assert.Equal(t, creds, repo.ownershipCreds, "credentials must be forwarded to AddOwnership")
@@ -975,14 +975,14 @@ func TestConstructCredentialsPassedAsDirectCredentials(t *testing.T) {
 	assert.Equal(t, "testpass", dc.Properties["password"])
 }
 
-// TestDefaultConstructor_attachOwnershipReferrer_CallSiteGating proves the gates
+// TestDefaultConstructor_attachOwnership_CallSiteGating proves the gates
 // that now live at the by-reference call site (processResource): the hosting
 // resource repository is resolved — and AddOwnership reached — only
 // when the resource opts in via OwnershipPolicyAlways and a provider is
 // configured. A non-opted-in resource must never touch the resource repository,
 // which is what keeps non-OCI by-reference accesses out of OCI-specific
 // resolution.
-func TestDefaultConstructor_attachOwnershipReferrer_CallSiteGating(t *testing.T) {
+func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 	const (
 		component = "ocm.software/test-component"
 		version   = "v1.0.0"
@@ -1044,7 +1044,7 @@ func TestDefaultConstructor_attachOwnershipReferrer_CallSiteGating(t *testing.T)
 			provider: func(*mockResourceRepository) ResourceRepositoryProvider {
 				return &mockResourceRepositoryProviderWithError{err: fmt.Errorf("boom")}
 			},
-			wantErr: "error getting resource repository for ownership referrer",
+			wantErr: "error getting resource repository for ownership",
 		},
 	}
 

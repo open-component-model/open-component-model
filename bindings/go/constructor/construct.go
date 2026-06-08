@@ -433,14 +433,14 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 			}
 
 			// A resource kept by reference still belongs to this component version;
-			// attach an asset-to-owner ownership referrer (ADR 0016) in the hosting
+			// attach asset-to-owner ownership (ADR 0016) in the hosting
 			// registry. Only resources that opt in via OwnershipPolicyAlways get one,
 			// and resolving the hosting resource repository is gated on that opt-in so
 			// non-opted-in (and non-OCI) by-reference resources never touch it.
 			if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways && c.opts.ResourceRepositoryProvider != nil {
 				repo, err := c.opts.GetResourceRepository(ctx, resource)
 				if err != nil {
-					return nil, fmt.Errorf("error getting resource repository for ownership referrer of %q: %w", resource.ToIdentity(), err)
+					return nil, fmt.Errorf("error getting resource repository for ownership of %q: %w", resource.ToIdentity(), err)
 				}
 
 				var creds ocmruntime.Typed
@@ -452,10 +452,10 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 
 				if ownershipAwareRepository, ok := repo.(OwnershipAwareRepository); ok {
 					if err := ownershipAwareRepository.AddOwnership(ctx, component, version, res, creds); err != nil {
-						return nil, fmt.Errorf("error attaching ownership referrer for resource %q: %w", resource.ToIdentity(), err)
+						return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 					}
 				} else {
-					logger.Warn("resource repository does not support ownership referrers, skipping.", "resource", resource.ToIdentity(), "type", reflect.TypeOf(repo))
+					logger.Warn("resource repository does not support ownership, skipping.", "resource", resource.ToIdentity(), "type", reflect.TypeOf(repo))
 				}
 			}
 		}
@@ -744,15 +744,15 @@ func addColocatedResourceLocalBlob(
 	}
 
 	// A by-value (or input-method) resource that opts in via OwnershipPolicyAlways
-	// gets an asset-to-owner ownership referrer (ADR 0016) pointing the uploaded
-	// artifact back at the owning component version. Attaching one is an optional
-	// capability: a target repository that cannot host referrers (e.g. the
+	// gets asset-to-owner ownership (ADR 0016) pointing the uploaded
+	// artifact back at the owning component version. Attaching it is an optional
+	// capability: a target repository that cannot record ownership (e.g. the
 	// out-of-process plugin bridge, or the deprecated fallback) does not implement
 	// [OwnershipAwareRepository], and the attach is skipped for it.
 	if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
 		if ownershipAwareRepo, ok := repo.(OwnershipAwareRepository); ok {
 			if err := ownershipAwareRepo.AddOwnership(ctx, component, version, uploaded, creds); err != nil {
-				return nil, fmt.Errorf("error attaching ownership referrer for resource %q: %w", resource.ToIdentity(), err)
+				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 			}
 		}
 	}

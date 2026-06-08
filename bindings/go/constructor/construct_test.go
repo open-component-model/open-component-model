@@ -29,14 +29,14 @@ import (
 
 // mockTargetRepository implements TargetRepository for testing. It also
 // implements the optional [OwnershipAwareRepository] capability so the by-value
-// ownership-referrer attach (ADR 0016) can be asserted.
+// ownership attach (ADR 0016) can be asserted.
 type mockTargetRepository struct {
 	mu                     sync.Mutex
 	components             map[string]*descriptor.Descriptor
 	addedLocalResources    []*descriptor.Resource
 	addedLocalResourceData map[string]blob.ReadOnlyBlob // resource identity -> blob data
 
-	// ownership-referrer attach tracking (AddOwnership).
+	// ownership attach tracking (AddOwnership).
 	ownershipCalls    int
 	ownershipResource *descriptor.Resource
 	ownershipCreds    runtime.Typed
@@ -76,7 +76,7 @@ func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, 
 	return resource, nil
 }
 
-// AddOwnership records the by-value ownership-referrer attach (ADR 0016) so tests
+// AddOwnership records the by-value ownership attach (ADR 0016) so tests
 // can assert the opt-in reached the repository. It implements the optional
 // [OwnershipAwareRepository] capability.
 func (m *mockTargetRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {

@@ -2327,10 +2327,10 @@ func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 }
 
 // TestRepository_AddOwnershipByReference proves the by-reference attach path (ADR
-// 0016): a relation=local resource that is kept by reference as an OCI image
-// gets an ownership referrer pushed into the registry that hosts the image,
-// without modifying the image itself. This is the half that backs
-// OwnershipAwareRepository.AddOwnership for by-reference local resources.
+// 0016): a resource kept by reference as an OCI image gets an ownership referrer
+// pushed into the registry that hosts the image, without modifying the image
+// itself. This is the half that backs OwnershipAwareRepository.AddOwnership for
+// by-reference resources.
 func TestRepository_AddOwnershipByReference(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -2506,7 +2506,7 @@ func TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest(t *testing.
 }
 
 // TestRepository_AddOwnership_CreatesByValueReferrer proves the by-value create
-// path (ADR 0016): after a relation=local resource is uploaded by value into the
+// path (ADR 0016): after a resource is uploaded by value into the
 // component's own store, AddOwnership resolves the uploaded manifest and pushes a
 // fresh ownership referrer for it. The incoming layout carries no referrer, so a
 // referrer landing in the store can only have come from creation. This backs the
@@ -2572,5 +2572,5 @@ func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 // The OCI-level opt-in gate was intentionally removed: AddOwnership now
 // builds a referrer unconditionally for the resource it is handed, and the
 // opt-in decision (options.ownershipPolicy: Always) lives in the constructor.
-// That gate is covered by the constructor tests (TestDefaultConstructor_attachOwnershipReferrer_CallSiteGating
+// That gate is covered by the constructor tests (TestDefaultConstructor_attachOwnership_CallSiteGating
 // and the relocated-policy-gate case in construct_resource_test.go).
