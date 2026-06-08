@@ -618,6 +618,16 @@ jobs:
             await script.default({ github, context, core });
   # === controller-release.yml::promote_and_release_final + cli-release.yml::promote_final + cli-release.yml::release_final ===
 
+  verify_install_script:
+    name: Verify install script for ${{ needs.prepare.outputs.base_version }}
+    needs: [prepare, promote_and_release_final]
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    uses: ./.github/workflows/website-live-test-install-script.yml
+    with:
+      version: ${{ needs.prepare.outputs.base_version }}
+    permissions:
+      contents: read
+
   # === Website version release ===
   # Replaces the old standalone website-version-release.yml. Runs after the
   # final promotion succeeded, when the website/v0.X.Y tag exists. Opens a PR
