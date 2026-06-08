@@ -324,8 +324,8 @@ github.com/docker/distribution v2.8.3+incompatible h1:AtKxIZ36LoNK51+Z6RpzLpddBi
 github.com/docker/distribution v2.8.3+incompatible/go.mod h1:J2gT2udsDAN96Uj4KfcMRqY0/ypR+oyYUYmja8H+y+w=
 github.com/docker/docker v28.5.2+incompatible h1:DBX0Y0zAjZbSrm1uzOkdr1onVghKaftjlSWt4AFexzM=
 github.com/docker/docker v28.5.2+incompatible/go.mod h1:eEKB0N0r5NX/I1kEveEz05bcu8tLC/8azJZsviup8Sk=
-github.com/docker/docker-credential-helpers v0.9.6 h1:cT2PbRPSlnMmNTfT2TDMXRyQ1KMWHG7xoTLBcn1ZNv0=
-github.com/docker/docker-credential-helpers v0.9.6/go.mod h1:v1S+hepowrQXITkEfw6o4+BMbGot02wiKpzWhGUZK6c=
+github.com/docker/docker-credential-helpers v0.9.7 h1:jaPIxEIDz5bQeghNAdzz0ETwMMnM4vzjZlxz3pWP4JA=
+github.com/docker/docker-credential-helpers v0.9.7/go.mod h1:v1S+hepowrQXITkEfw6o4+BMbGot02wiKpzWhGUZK6c=
 github.com/docker/go-connections v0.7.0 h1:6SsRfJddP22WMrCkj19x9WKjEDTB+ahsdiGYf0mN39c=
 github.com/docker/go-connections v0.7.0/go.mod h1:no1qkHdjq7kLMGUXYAduOhYPSJxxvgWBh7ogVvptn3Q=
 github.com/docker/go-events v0.0.0-20250808211157-605354379745 h1:yOn6Ze6IbYI/KAw2lw/83ELYvZh6hvsygTVkD0dzMC4=
@@ -658,8 +658,8 @@ github.com/magiconair/properties v1.8.10 h1:s31yESBquKXCV9a/ScB3ESkOjUYYv+X0rg8S
 github.com/magiconair/properties v1.8.10/go.mod h1:Dhd985XPs7jluiymwWYZ0G4Z61jb3vdS329zhj2hYo0=
 github.com/mandelsoft/filepath v0.0.0-20240223090642-3e2777258aa3 h1:oo9nIgnyiBgYPbcZslRT4y29siuL5EoNJ/t1tr0xEVQ=
 github.com/mandelsoft/filepath v0.0.0-20240223090642-3e2777258aa3/go.mod h1:LxhqC7khDoRENwooP6f/vWvia9ivj6TqLYrR39zqkN0=
-github.com/mandelsoft/goutils v0.0.0-20260407151801-9d4576be49b3 h1:XVuJ6Y0WSBwhad0mjOhoFWRH9pKH0Iv5F8cwUz0EEgU=
-github.com/mandelsoft/goutils v0.0.0-20260407151801-9d4576be49b3/go.mod h1:fTCyGFCMm+ugUn1FqcHeWelCjoSYtkJaqnJvSmgkx1M=
+github.com/mandelsoft/goutils v0.0.0-20260507153918-c39bb4bb4b7b h1:yEeEzZgI21WgXKLkcp9Q0SKnZxcP6xjgBtKkxa+arVw=
+github.com/mandelsoft/goutils v0.0.0-20260507153918-c39bb4bb4b7b/go.mod h1:fTCyGFCMm+ugUn1FqcHeWelCjoSYtkJaqnJvSmgkx1M=
 github.com/mandelsoft/logging v0.0.0-20260220094735-62d1006ceeb4 h1:wkcH/MKmgUiqvvq+KueAXaQ8iCoVWKghLEof7LGDPM4=
 github.com/mandelsoft/logging v0.0.0-20260220094735-62d1006ceeb4/go.mod h1:uO460C1lIB3IOOgrbXhAlz3AKsOv4T2K6ALBn3PwuSg=
 github.com/mandelsoft/spiff v1.7.0-beta-8 h1:qfQOhorydo9aeRRNtywaDwSPqzvaNEIAXfgXV9ebTEU=

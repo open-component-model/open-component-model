@@ -108,7 +108,7 @@ require (
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/cli v29.5.0+incompatible // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
-	github.com/docker/docker-credential-helpers v0.9.6 // indirect
+	github.com/docker/docker-credential-helpers v0.9.7 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/drone/envsubst v1.0.3 // indirect
@@ -205,7 +205,7 @@ require (
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mandelsoft/filepath v0.0.0-20240223090642-3e2777258aa3 // indirect
-	github.com/mandelsoft/goutils v0.0.0-20260407151801-9d4576be49b3 // indirect
+	github.com/mandelsoft/goutils v0.0.0-20260507153918-c39bb4bb4b7b // indirect
 	github.com/mandelsoft/logging v0.0.0-20260220094735-62d1006ceeb4 // indirect
 	github.com/mandelsoft/spiff v1.7.0-beta-8 // indirect
 	github.com/mandelsoft/vfs v0.4.5-0.20250514111339-d7b067920e91 // indirect
