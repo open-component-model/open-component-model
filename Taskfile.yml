@@ -88,6 +88,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/configuration/Taskfile.yml
     dir: ./bindings/go/configuration
+  bindings/go/http:
+    optional: true
+    taskfile: ./bindings/go/http/Taskfile.yml
+    dir: ./bindings/go/http
+  bindings/go/http/integration:
+    optional: true
+    taskfile: ./bindings/go/http/integration/Taskfile.yml
+    dir: ./bindings/go/http/integration
   bindings/go/repository:
     optional: true
     taskfile: ./bindings/go/repository/Taskfile.yml
