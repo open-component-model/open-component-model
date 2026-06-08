@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -61,7 +60,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		withCACert(opt.CACert),
 		withCredentials(opt.Credentials),
 	}
-	tlsOption, err := constructTLSOptions(targetDir, tlsOpts...)
+	tlsOption, caFile, err := constructTLSOptions(targetDir, tlsOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("error setting up TLS options: %w", err)
 	}
@@ -132,13 +131,25 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		password = opt.OCICredentials.AccessToken
 	}
 
-	if username != "" && password != "" {
-		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
-	}
-
-	resolvedRepo, err := resolveHTTPChartURL(ctx, helmRepo, opt.Version, targetDir, GetterProviders(), getterOpts)
+	resolvedRepo, err := resolveHTTPChartURL(ctx, helmRepo, opt.Version, targetDir, GetterProviders(), &helmrepo.Entry{
+		Name:     "index",
+		Username: username,
+		Password: password,
+		CertFile: opt.Credentials.CertFile,
+		KeyFile:  opt.Credentials.KeyFile,
+		CAFile:   caFile,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("error resolving chart URL %q via index.yaml: %w", helmRepo, err)
+	}
+
+	// Stole this from helm's httpgetter.Get guard so credentials are not
+	// leaked to a third-party host advertised in index.yaml. Works with OCI repos as well. Even though
+	// helm's own getter does this, we don't want to go through a redirect potentially with the set
+	// credentials for a malicious index file.
+	// https://github.com/helm/helm/blob/59b57c5c31a009d069f9318c9d3ba8b784f1fe97/pkg/getter/httpgetter.go#L80
+	if username != "" && password != "" && sameHost(helmRepo, resolvedRepo) {
+		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
 	}
 
 	version, err := getVersion(opt.Version, resolvedRepo)
@@ -217,11 +228,12 @@ func getVersion(versionOverride, helmRepo string) (string, error) {
 
 // resolveHTTPChartURL resolves the real download URL for an HTTP/S Helm repo reference
 // of the form <scheme>://<host>/<repoPath>/<chartName>:<version> — the output of
-// (*v1.Helm).ChartReference(). It fetches index.yaml, looks up the chart entry, and
-// returns the absolute URL from urls[0].
+// (*v1.Helm).ChartReference(). Most of this logic is replicated from `FindChartInRepoURL`.
+// Looks up the chart entry and returns the absolute URL from urls[0]. The reason for extracting
+// that logic and not using directly, is so we can set cacheDir to our configured location.
 //
 // Returns helmRepo unchanged when no resolution was possible.
-func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir string, providers getter.Providers, getterOpts []getter.Option) (string, error) {
+func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir string, providers getter.Providers, entry *helmrepo.Entry) (string, error) {
 	// resolveHTTPChartURL is called speculatively: helmRepo may be a direct .tgz URL,
 	// an OCI reference, or any form not produced by ChartReference(). All of those are
 	// passed through unchanged so that helm's DownloadTo can handle them directly.
@@ -251,45 +263,33 @@ func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir
 		base.Path = "/" + repoPath
 	}
 	repoBase := base.String()
+	entry.URL = repoBase
+
 	chartVersion := ref.Tag
 	if requestedVersion != "" {
 		chartVersion = requestedVersion
 	}
 
-	indexURL, err := helmrepo.ResolveReferenceURL(repoBase, "index.yaml")
+	cacheDir, err := os.MkdirTemp(tmpDir, "helm-index*")
 	if err != nil {
-		return "", fmt.Errorf("error constructing index.yaml URL for %q: %w", repoBase, err)
+		return "", fmt.Errorf("error creating temp dir for index.yaml: %w", err)
 	}
+	defer func() { _ = os.RemoveAll(cacheDir) }()
 
-	scheme := ref.Scheme
-	g, err := providers.ByScheme(scheme)
+	chartRepo, err := helmrepo.NewChartRepository(entry, providers)
 	if err != nil {
-		return "", fmt.Errorf("no getter for scheme %q: %w", scheme, err)
+		return "", fmt.Errorf("error creating chart repository for %q: %w", repoBase, err)
 	}
+	chartRepo.CachePath = cacheDir
 
-	slog.DebugContext(ctx, "fetching Helm repository index", "url", indexURL)
+	slog.DebugContext(ctx, "fetching Helm repository index", "url", repoBase)
 
-	buf, err := g.Get(indexURL, getterOpts...)
+	idxPath, err := chartRepo.DownloadIndexFile()
 	if err != nil {
-		return "", fmt.Errorf("error fetching index.yaml from %q: %w", indexURL, err)
+		return "", fmt.Errorf("error fetching index.yaml from %q: %w", repoBase, err)
 	}
 
-	tmpFile, err := os.CreateTemp(tmpDir, "helm-index-*.yaml")
-	if err != nil {
-		return "", fmt.Errorf("error creating temp file for index.yaml: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
-
-	if _, err = io.Copy(tmpFile, buf); err != nil {
-		_ = tmpFile.Close()
-		return "", fmt.Errorf("error writing index.yaml to temp file: %w", err)
-	}
-	if err = tmpFile.Close(); err != nil {
-		return "", fmt.Errorf("error closing index.yaml temp file: %w", err)
-	}
-
-	index, err := helmrepo.LoadIndexFile(tmpPath)
+	index, err := helmrepo.LoadIndexFile(idxPath)
 	if err != nil {
 		return "", fmt.Errorf("error parsing index.yaml from %q: %w", repoBase, err)
 	}
@@ -309,4 +309,17 @@ func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir
 	}
 
 	return absURL, nil
+}
+
+// sameHost reports whether two URLs share the same scheme and host (including port).
+func sameHost(a, b string) bool {
+	ua, err := url.Parse(a)
+	if err != nil {
+		return false
+	}
+	ub, err := url.Parse(b)
+	if err != nil {
+		return false
+	}
+	return ua.Scheme == ub.Scheme && ua.Host == ub.Host
 }

@@ -468,24 +468,24 @@ jobs:
 
       - name: Promote CLI image tags
         env:
-          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          CLI_IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
           NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
         run: |
           set -euo pipefail
-          oras tag "$CLI_IMAGE:${RC_VERSION}" "${NEW_RELEASE_VERSION}"
+          oras tag "$CLI_IMAGE@${CLI_IMAGE_DIGEST}" "${NEW_RELEASE_VERSION}"
           if [ "${SET_LATEST}" = "true" ]; then
             oras tag "$CLI_IMAGE:${NEW_RELEASE_VERSION}" "latest"
           fi
 
       - name: Promote controller image tags
         env:
-          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
           NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
         run: |
           set -euo pipefail
-          oras tag "$CONTROLLER_IMAGE:${RC_VERSION}" "${NEW_RELEASE_VERSION}"
+          oras tag "$CONTROLLER_IMAGE@${IMAGE_DIGEST}" "${NEW_RELEASE_VERSION}"
           if [ "${SET_LATEST}" = "true" ]; then
             oras tag "$CONTROLLER_IMAGE:${NEW_RELEASE_VERSION}" "latest"
           fi
@@ -499,7 +499,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
-          version: v4.1.3
+          version: v4.1.4
 
       - name: Re-package final chart
         working-directory: ${{ env.CONTROLLER_PATH }}
@@ -617,6 +617,16 @@ jobs:
             const script = await import('${{ github.workspace }}/.github/scripts/publish-final-release.js');
             await script.default({ github, context, core });
   # === controller-release.yml::promote_and_release_final + cli-release.yml::promote_final + cli-release.yml::release_final ===
+
+  verify_install_script:
+    name: Verify install script for ${{ needs.prepare.outputs.base_version }}
+    needs: [prepare, promote_and_release_final]
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    uses: ./.github/workflows/website-live-test-install-script.yml
+    with:
+      version: ${{ needs.prepare.outputs.base_version }}
+    permissions:
+      contents: read
 
   # === Website version release ===
   # Replaces the old standalone website-version-release.yml. Runs after the
