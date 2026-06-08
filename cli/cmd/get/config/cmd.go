@@ -25,16 +25,6 @@ const (
 	FlagOutput = "output"
 )
 
-type EffectiveConfig struct {
-	Filesystem *filesystemv1alpha1.Config `json:"filesystem,omitempty" yaml:"filesystem,omitempty"`
-	HTTP       *httpv1alpha1.Config       `json:"http,omitempty"       yaml:"http,omitempty"`
-	OCM        *ocmv1.Config              `json:"ocm,omitempty"        yaml:"ocm,omitempty"` //nolint:staticcheck // displaying deprecated config for user visibility
-	Resolvers  *resolversv1alpha1.Config  `json:"resolvers,omitempty"  yaml:"resolvers,omitempty"`
-	Ownership  *ownershipv1alpha1.Config  `json:"ownership,omitempty"  yaml:"ownership,omitempty"`
-	Extract    *extractv1alpha1.Config    `json:"extract,omitempty"    yaml:"extract,omitempty"`
-	Plugins    *pluginsv2alpha1.Config    `json:"plugins,omitempty"    yaml:"plugins,omitempty"`
-}
-
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "config",
@@ -102,82 +92,69 @@ func GetConfig(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func getEffectiveConfig(cfg *genericv1.Config) (*EffectiveConfig, error) {
-	effective := &EffectiveConfig{}
+func getEffectiveConfig(cfg *genericv1.Config) (*genericv1.Config, error) {
+	result := &genericv1.Config{
+		Type: runtime.NewVersionedType(genericv1.ConfigType, genericv1.Version),
+	}
 
-	if hasEntries(cfg, filesystemv1alpha1.ConfigType, filesystemv1alpha1.Version) {
-		if fs, err := filesystemv1alpha1.LookupConfig(cfg); err != nil {
-			return nil, fmt.Errorf("filesystem: %w", err)
-		} else {
-			effective.Filesystem = fs
+	entries := []struct {
+		scheme *runtime.Scheme
+		lookup func() (runtime.Typed, error)
+	}{
+		{filesystemv1alpha1.Scheme, func() (runtime.Typed, error) { return filesystemv1alpha1.LookupConfig(cfg) }},
+		{httpv1alpha1.Scheme, func() (runtime.Typed, error) { return httpv1alpha1.LookupConfig(cfg) }},
+		{ocmv1.Scheme, func() (runtime.Typed, error) { return ocmv1.Lookup(cfg) }}, //nolint:staticcheck // displaying deprecated config for user visibility
+		{resolversv1alpha1.Scheme, func() (runtime.Typed, error) { return resolversv1alpha1.Lookup(cfg) }},
+		{ownershipv1alpha1.Scheme, func() (runtime.Typed, error) { return ownershipv1alpha1.Lookup(cfg) }},
+		{extractv1alpha1.Scheme, func() (runtime.Typed, error) { return extractv1alpha1.LookupConfig(cfg) }},
+		{pluginsScheme, func() (runtime.Typed, error) { return pluginsv2alpha1.LookupConfig(cfg) }},
+		// TODO: credentials config has json:"-" on all fields, serialization expectation needs to be clarified
+		// {credentialsScheme, func() (runtime.Typed, error) { return credentialsRuntime.LookupCredentialConfig(cfg) }},
+	}
+
+	for _, e := range entries {
+		if err := appendEffective(result, cfg, e.scheme, e.lookup); err != nil {
+			return nil, err
 		}
 	}
 
-	if hasEntries(cfg, httpv1alpha1.ConfigType, httpv1alpha1.Version) {
-		if http, err := httpv1alpha1.LookupConfig(cfg); err != nil {
-			return nil, fmt.Errorf("http: %w", err)
-		} else {
-			effective.HTTP = http
-		}
-	}
-
-	if hasEntries(cfg, ocmv1.ConfigType, ocmv1.Version) {
-		if ocm, err := ocmv1.Lookup(cfg); err != nil { //nolint:staticcheck // displaying deprecated config for user visibility
-			return nil, fmt.Errorf("ocm: %w", err)
-		} else {
-			effective.OCM = ocm
-		}
-	}
-
-	if hasEntries(cfg, resolversv1alpha1.ConfigType, resolversv1alpha1.Version) {
-		if resolvers, err := resolversv1alpha1.Lookup(cfg); err != nil {
-			return nil, fmt.Errorf("resolvers: %w", err)
-		} else {
-			effective.Resolvers = resolvers
-		}
-	}
-
-	if hasEntries(cfg, ownershipv1alpha1.ConfigType, ownershipv1alpha1.Version) {
-		if ownership, err := ownershipv1alpha1.Lookup(cfg); err != nil {
-			return nil, fmt.Errorf("ownership: %w", err)
-		} else {
-			effective.Ownership = ownership
-		}
-	}
-
-	if hasEntries(cfg, extractv1alpha1.ConfigType, extractv1alpha1.Version) {
-		if extract, err := extractv1alpha1.LookupConfig(cfg); err != nil {
-			return nil, fmt.Errorf("extract: %w", err)
-		} else {
-			effective.Extract = extract
-		}
-	}
-
-	if hasEntries(cfg, pluginsv2alpha1.ConfigType, pluginsv2alpha1.Version) {
-		if plugins, err := pluginsv2alpha1.LookupConfig(cfg); err != nil {
-			return nil, fmt.Errorf("plugins: %w", err)
-		} else {
-			effective.Plugins = plugins
-		}
-	}
-
-	// if hasEntries(cfg, credentialsv1.ConfigType, credentialsv1.Version) {
-	//	if creds, err := credentialsRuntime.LookupCredentialConfig(cfg); err != nil {
-	//		return nil, fmt.Errorf("credentials: %w", err)
-	//	} else {
-	//		effective.Credentials = creds
-	//	}
-	//}
-
-	return effective, nil
+	return result, nil
 }
 
-func hasEntries(cfg *genericv1.Config, configType string, version string) bool {
+// TODO: remove once pluginsv2alpha1.Scheme is exported (currently unexported var scheme)
+var pluginsScheme = func() *runtime.Scheme {
+	s := runtime.NewScheme()
+	s.MustRegisterWithAlias(&pluginsv2alpha1.Config{}, runtime.NewVersionedType(pluginsv2alpha1.ConfigType, pluginsv2alpha1.Version))
+	return s
+}()
+
+func appendEffective(result *genericv1.Config, cfg *genericv1.Config, scheme *runtime.Scheme, lookup func() (runtime.Typed, error)) error {
+	var types []runtime.Type
+	for typ, aliases := range scheme.GetTypes() {
+		types = append(types, typ)
+		types = append(types, aliases...)
+	}
+	if !hasEntries(cfg, types) {
+		return nil
+	}
+	typed, err := lookup()
+	if err != nil {
+		return fmt.Errorf("%s: %w", types[0], err)
+	}
+	if typed == nil {
+		return nil
+	}
+	raw := &runtime.Raw{}
+	if err := scheme.Convert(typed, raw); err != nil {
+		return fmt.Errorf("failed to convert %s to raw: %w", types[0], err)
+	}
+	result.Configurations = append(result.Configurations, raw)
+	return nil
+}
+
+func hasEntries(cfg *genericv1.Config, types []runtime.Type) bool {
 	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
-		ConfigTypes: []runtime.Type{
-			runtime.NewVersionedType(configType, version),
-			runtime.NewUnversionedType(configType),
-		},
+		ConfigTypes: types,
 	})
 	if err != nil {
 		return false

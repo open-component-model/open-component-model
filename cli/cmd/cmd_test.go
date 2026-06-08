@@ -2042,9 +2042,10 @@ func Test_Get_Config(t *testing.T) {
 		{
 			name: "no config - only default temp folder is output",
 			args: []string{"get", "config"},
-			expectedOutput: fmt.Sprintf(`filesystem:
-  tempFolder: %s
+			expectedOutput: fmt.Sprintf(`configurations:
+- tempFolder: %s
   type: filesystem.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
 `, os.TempDir()),
 		},
 		{
@@ -2056,10 +2057,11 @@ configurations:
 - type: filesystem.config.ocm.software/v1alpha1
   tempFolder: /tmp/custom
   workingDirectory: /work`,
-			expectedOutput: `filesystem:
-  tempFolder: /tmp/custom
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
   type: filesystem.config.ocm.software/v1alpha1
   workingDirectory: /work
+type: generic.config.ocm.software/v1
 `,
 		},
 		{
@@ -2072,11 +2074,14 @@ configurations:
   tempFolder: /tmp/custom
   workingDirectory: /work`,
 			expectedOutput: `{
-  "filesystem": {
-    "type": "filesystem.config.ocm.software/v1alpha1",
-    "tempFolder": "/tmp/custom",
-    "workingDirectory": "/work"
-  }
+  "type": "generic.config.ocm.software/v1",
+  "configurations": [
+    {
+      "tempFolder": "/tmp/custom",
+      "type": "filesystem.config.ocm.software/v1alpha1",
+      "workingDirectory": "/work"
+    }
+  ]
 }`,
 		},
 		{
@@ -2088,7 +2093,7 @@ configurations:
 - type: filesystem.config.ocm.software/v1alpha1
   tempFolder: /tmp/custom
   workingDirectory: /work`,
-			expectedOutput: `{"filesystem":{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/tmp/custom","workingDirectory":"/work"}}`,
+			expectedOutput: `{"type":"generic.config.ocm.software/v1","configurations":[{"tempFolder":"/tmp/custom","type":"filesystem.config.ocm.software/v1alpha1","workingDirectory":"/work"}]}`,
 		},
 		{
 			name: "multiple config types",
@@ -2100,12 +2105,12 @@ configurations:
   tempFolder: /tmp/test
 - type: http.config.ocm.software/v1alpha1
   timeout: 60s`,
-			expectedOutput: `filesystem:
-  tempFolder: /tmp/test
+			expectedOutput: `configurations:
+- tempFolder: /tmp/test
   type: filesystem.config.ocm.software/v1alpha1
-http:
-  timeout: 1m0s
+- timeout: 1m0s
   type: http.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
 `,
 		},
 		{
@@ -2162,56 +2167,59 @@ configurations:
 			//        username: user
 			//        password: pass
 			expectedOutput: `{
-  "filesystem": {
-    "type": "filesystem.config.ocm.software/v1alpha1",
-    "tempFolder": "/tmp/custom",
-    "workingDirectory": "/workspace"
-  },
-  "http": {
-    "type": "http.config.ocm.software/v1alpha1",
-    "timeout": "45s"
-  },
-  "ocm": {
-    "type": "ocm.config.ocm.software/v1",
-    "resolvers": [
-      {
-        "repository": {
-          "filePath": "/legacy/archive",
-          "type": "CommonTransportFormat/v1"
-        },
-        "prefix": "ocm.software/legacy"
-      }
-    ]
-  },
-  "resolvers": {
-    "type": "resolvers.config.ocm.software/v1alpha1",
-    "resolvers": [
-      {
-        "repository": {
-          "filePath": "/some/archive",
-          "type": "CommonTransportFormat/v1"
-        },
-        "componentNamePattern": "ocm.software/*",
-        "versionConstraint": ">=1.0.0"
-      }
-    ]
-  },
-  "ownership": {
-    "type": "ownership.config.ocm.software/v1alpha1",
-    "policy": "AddIfSupported",
-    "repositories": [
-      {
-        "repository": {
-          "filePath": "/some/repo",
-          "type": "CommonTransportFormat/v1"
-        },
-        "policy": "Never"
-      }
-    ]
-  },
-  "extract": {
-    "type": "extract.oci.artifact.ocm.software/v1alpha1"
-  }
+  "type": "generic.config.ocm.software/v1",
+  "configurations": [
+    {
+      "tempFolder": "/tmp/custom",
+      "type": "filesystem.config.ocm.software/v1alpha1",
+      "workingDirectory": "/workspace"
+    },
+    {
+      "timeout": "45s",
+      "type": "http.config.ocm.software/v1alpha1"
+    },
+    {
+      "resolvers": [
+        {
+          "prefix": "ocm.software/legacy",
+          "repository": {
+            "filePath": "/legacy/archive",
+            "type": "CommonTransportFormat/v1"
+          }
+        }
+      ],
+      "type": "ocm.config.ocm.software/v1"
+    },
+    {
+      "resolvers": [
+        {
+          "componentNamePattern": "ocm.software/*",
+          "repository": {
+            "filePath": "/some/archive",
+            "type": "CommonTransportFormat/v1"
+          },
+          "versionConstraint": ">=1.0.0"
+        }
+      ],
+      "type": "resolvers.config.ocm.software/v1alpha1"
+    },
+    {
+      "policy": "AddIfSupported",
+      "repositories": [
+        {
+          "policy": "Never",
+          "repository": {
+            "filePath": "/some/repo",
+            "type": "CommonTransportFormat/v1"
+          }
+        }
+      ],
+      "type": "ownership.config.ocm.software/v1alpha1"
+    },
+    {
+      "type": "extract.oci.artifact.ocm.software/v1alpha1"
+    }
+  ]
 }`,
 			// TODO: unexpected empty in extract, input is:
 			//- type: extract.oci.artifact.ocm.software/v1alpha1
