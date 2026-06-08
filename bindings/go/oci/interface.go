@@ -78,7 +78,8 @@ type AliasComponentVersionRepository interface {
 	AddComponentVersionAlias(ctx context.Context, component, versionOrAlias, alias string) error
 	// RemoveComponentVersionAlias removes an alias (floating tag) from the given component.
 	// The alias must NOT be a semantic version — only non-semver aliases may be removed.
-	// The underlying component version manifest is NOT deleted; only the tag reference is removed.
+	// If the alias was the last reference to the underlying manifest, the manifest and all its
+	// OCI children (config, layers) are garbage-collected from the store.
 	// Returns repository.ErrNotFound if the alias does not exist.
 	RemoveComponentVersionAlias(ctx context.Context, component, alias string) error
 }
