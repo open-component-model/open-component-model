@@ -955,8 +955,8 @@ github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQ
 github.com/valyala/fasttemplate v1.2.2/go.mod h1:KHLXt3tVN2HBp8eijSv/kGJopbvo7S+qRAEEKiv+SiQ=
 github.com/vbatts/tar-split v0.12.3 h1:Cd46rkGXI3Td4yrVNwU8ripbxFaQbmesqhjBUUYAJSw=
 github.com/vbatts/tar-split v0.12.3/go.mod h1:sQOc6OlqGCr7HkGx/IDBeKiTIvqhmj8KffNhEXG4Nq0=
-github.com/wI2L/jsondiff v0.6.1 h1:ISZb9oNWbP64LHnu4AUhsMF5W0FIj5Ok3Krip9Shqpw=
-github.com/wI2L/jsondiff v0.6.1/go.mod h1:KAEIojdQq66oJiHhDyQez2x+sRit0vIzC9KeK0yizxM=
+github.com/wI2L/jsondiff v0.7.1 h1:Fg9+yj+1/x3UtPBJhR91TKEzRkrEEWcAcLbg9dzEaNM=
+github.com/wI2L/jsondiff v0.7.1/go.mod h1:yAt2W7U6Jd4HK0RA8DGSGk0zDtfEtOUUJVnH/xICpjo=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 github.com/xanzy/ssh-agent v0.3.3 h1:+/15pJfg/RsTxqYcX6fHqOXZwwMP+2VyYWJeWM2qQFM=
