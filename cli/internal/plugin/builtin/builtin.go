@@ -30,7 +30,6 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.DigestProcessorRegistry,
 		manager.BlobTransformerRegistry,
 		manager.ComponentListerRegistry,
-		manager.CredentialRepositoryRegistry,
 		filesystemConfig,
 		logger,
 	); err != nil {
