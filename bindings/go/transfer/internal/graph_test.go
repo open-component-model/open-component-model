@@ -716,6 +716,82 @@ func TestBuildDescriptorSpec_NoLabelsOmitted(t *testing.T) {
 	}
 }
 
+// Sibling of TestBuildDescriptorSpec_LabelsIncluded covering the
+// descriptor-level Signatures field, which buildDescriptorSpec gates with a
+// separate length check from the component-level slice fields. When
+// signatures are populated, the spec map must carry a CEL placeholder
+// referencing the environment signatures.
+func TestBuildDescriptorSpec_SignaturesIncluded(t *testing.T) {
+	v2desc := &descriptorv2.Descriptor{
+		Component: descriptorv2.Component{
+			ComponentMeta: descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "ocm.software/test",
+					Version: "1.0.0",
+				},
+			},
+		},
+		Signatures: []descriptorv2.Signature{
+			{
+				Name:      "test-sig",
+				Digest:    descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "jsonNormalisation/v1", Value: "deadbeef"},
+				Signature: descriptorv2.SignatureInfo{Algorithm: "RSASSA-PKCS1-V1_5", Value: "00", MediaType: "application/vnd.ocm.signature.rsa"},
+			},
+		},
+	}
+
+	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+
+	specMap, ok := spec.(map[string]any)
+	require.True(t, ok, "spec should be a map when resources are transformed")
+
+	signaturesExpr, ok := specMap["signatures"]
+	require.True(t, ok, "signatures must be present in spec map when populated")
+	require.NotNil(t, signaturesExpr, "signatures value must not be nil")
+	assert.Contains(t, signaturesExpr.(string), "signatures",
+		"signatures expression must reference environment signatures")
+}
+
+// TestBuildDescriptorSpec_EmptyOptionalFields: empty (not nil) optional
+// slice fields on a component descriptor must not produce CEL placeholders.
+// Regression for
+// https://github.com/open-component-model/open-component-model/issues/2742.
+func TestBuildDescriptorSpec_EmptyOptionalFields(t *testing.T) {
+	v2desc := &descriptorv2.Descriptor{
+		Component: descriptorv2.Component{
+			ComponentMeta: descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "ocm.software/test",
+					Version: "1.0.0",
+					Labels:  []descriptorv2.Label{},
+				},
+			},
+			RepositoryContexts: []*runtime.Raw{},
+			Sources:            []descriptorv2.Source{},
+			References:         []descriptorv2.Reference{},
+		},
+		Signatures: []descriptorv2.Signature{},
+	}
+
+	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+
+	specMap, ok := spec.(map[string]any)
+	require.True(t, ok)
+	componentMap, ok := specMap["component"].(map[string]any)
+	require.True(t, ok)
+
+	for _, field := range []string{"labels", "repositoryContexts", "sources", "componentReferences"} {
+		if val, present := componentMap[field]; present {
+			assert.Nilf(t, val, "component[%q] must be nil for empty slice, got %v", field, val)
+		}
+	}
+	if val, present := specMap["signatures"]; present {
+		assert.Nilf(t, val, "signatures must be absent for empty slice, got %v", val)
+	}
+}
+
 func dockerManifestLocalBlobResource(name, version string) descriptor.Resource {
 	return descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
