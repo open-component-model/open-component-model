@@ -69,6 +69,42 @@ func Test_Integration_CTF_Untag(t *testing.T) {
 	})
 }
 
+func Test_Integration_CTF_Untag_GC(t *testing.T) {
+	t.Parallel()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR|os.O_CREATE)
+	require.NoError(t, err)
+	archive := ctf.NewFileSystemCTF(fs)
+	provider := ocictf.NewFromCTF(archive)
+	ctx := t.Context()
+
+	store, err := provider.StoreForReference(ctx, "test-repo:only-tag")
+	require.NoError(t, err)
+
+	data := []byte(`{"schemaVersion":2}`)
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes(data),
+		Size:      int64(len(data)),
+	}
+	require.NoError(t, store.Push(ctx, desc, bytes.NewReader(data)))
+	require.NoError(t, store.Tag(ctx, desc, "only-tag"))
+
+	untagger, ok := store.(content.Untagger)
+	require.True(t, ok, "CTF store must implement content.Untagger")
+
+	t.Run("deletes orphaned blob when last tag is removed", func(t *testing.T) {
+		require.NoError(t, untagger.Untag(ctx, "only-tag"))
+
+		_, err := store.Resolve(ctx, "only-tag")
+		require.ErrorIs(t, err, errdef.ErrNotFound, "untagged reference must not resolve")
+
+		exists, err := store.Exists(ctx, desc)
+		require.NoError(t, err)
+		require.False(t, exists, "orphaned blob must be garbage-collected when last tag is removed")
+	})
+}
+
 func Test_Integration_RemoteRegistry_Untag(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
