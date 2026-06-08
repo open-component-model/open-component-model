@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/content/memory"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -31,6 +32,7 @@ import (
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -60,7 +62,8 @@ func TestRepository_AddComponentVersion(t *testing.T) {
 	repo := Repository(t, ocictf.WithCTF(store))
 
 	// Create a test component descriptor
-	desc := &descriptor.Descriptor{Meta: descriptor.Meta{Version: "v2"},
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{
 			Provider: descriptor.Provider{
 				Name: "test-provider",
@@ -106,7 +109,8 @@ func TestRepository_GetComponentVersion(t *testing.T) {
 	r.Nil(desc, "Expected nil descriptor when getting non-existent component version")
 
 	// Create a test component descriptor
-	desc = &descriptor.Descriptor{Meta: descriptor.Meta{Version: "v2"},
+	desc = &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{
 			Provider: descriptor.Provider{
 				Name: "test-provider",
@@ -126,7 +130,6 @@ func TestRepository_GetComponentVersion(t *testing.T) {
 	desc, err = repo.GetComponentVersion(ctx, "ocm.software/test-component", "1.0.0")
 	r.NoError(err, "No error expected when getting existing component version")
 	r.NotNil(desc, "Expected non-nil descriptor when getting existing component version")
-
 }
 
 func TestRepository_GetLocalResource(t *testing.T) {
@@ -147,7 +150,8 @@ func TestRepository_GetLocalResource(t *testing.T) {
 	testCases := []getLocalResourceTestCase{
 		{
 			name: "non-existent component",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "test-resource",
@@ -172,7 +176,8 @@ func TestRepository_GetLocalResource(t *testing.T) {
 		},
 		{
 			name: "non-existent resource in existing component",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "test-resource",
@@ -196,7 +201,8 @@ func TestRepository_GetLocalResource(t *testing.T) {
 		},
 		{
 			name: "resource with platform-specific identity",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "platform-resource",
@@ -227,7 +233,8 @@ func TestRepository_GetLocalResource(t *testing.T) {
 		},
 		{
 			name: "resource from legacy component version without top-level index",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "legacy-resource",
@@ -252,7 +259,8 @@ func TestRepository_GetLocalResource(t *testing.T) {
 		},
 		{
 			name: "resource with invalid identity",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "platform-resource",
@@ -279,7 +287,8 @@ func TestRepository_GetLocalResource(t *testing.T) {
 		},
 		{
 			name: "single layer image manifest",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "single-layer-manifest",
@@ -304,7 +313,8 @@ func TestRepository_GetLocalResource(t *testing.T) {
 		},
 		{
 			name: "oci layout resource",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "oci-layout-resource",
@@ -377,7 +387,8 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			repo := Repository(t, ocictf.WithCTF(store))
 
 			// Create a test component descriptor
-			desc := &descriptor.Descriptor{Meta: descriptor.Meta{Version: "v2"},
+			desc := &descriptor.Descriptor{
+				Meta: descriptor.Meta{Version: "v2"},
 				Component: descriptor.Component{
 					Provider: descriptor.Provider{
 						Name: "test-provider",
@@ -456,7 +467,8 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 	}{
 		{
 			name: "resource with valid OCI image access",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "test-resource",
@@ -474,7 +486,8 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 		},
 		{
 			name: "resource with valid OCI image layer access",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "test-layer-resource",
@@ -505,7 +518,8 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 			repo := Repository(t, ocictf.WithCTF(store))
 
 			// Create a test component descriptor
-			desc := &descriptor.Descriptor{Meta: descriptor.Meta{Version: "v2"},
+			desc := &descriptor.Descriptor{
+				Meta: descriptor.Meta{Version: "v2"},
 				Component: descriptor.Component{
 					Provider: descriptor.Provider{
 						Name: "test-provider",
@@ -623,7 +637,6 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 				r.NoError(err, "Failed to read blob content")
 				r.Equal(tc.content, downloadedContent, "Downloaded content should match original content")
 			}
-
 		})
 	}
 }
@@ -688,7 +701,8 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 			repo := Repository(t, ocictf.WithCTF(store))
 
 			// Create a test component descriptor
-			desc := &descriptor.Descriptor{Meta: descriptor.Meta{Version: "v2"},
+			desc := &descriptor.Descriptor{
+				Meta: descriptor.Meta{Version: "v2"},
 				Component: descriptor.Component{
 					Provider: descriptor.Provider{
 						Name: "test-provider",
@@ -820,7 +834,8 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 	repo := Repository(t, ocictf.WithCTF(store))
 
 	// Create a test component descriptor
-	desc := &descriptor.Descriptor{Meta: descriptor.Meta{Version: "v2"},
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{
 			Provider: descriptor.Provider{
 				Name: "test-provider",
@@ -837,7 +852,8 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 	data, _ := createSingleLayerOCIImage(t, []byte("test content"), "test-image:latest")
 
 	// Create a resource with OCI layout media type
-	resource := &descriptor.Resource{Relation: descriptor.LocalRelation,
+	resource := &descriptor.Resource{
+		Relation: descriptor.LocalRelation,
 		ElementMeta: descriptor.ElementMeta{
 			ObjectMeta: descriptor.ObjectMeta{
 				Name:    "test-resource",
@@ -891,7 +907,8 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 	repo := Repository(t, ocictf.WithCTF(store))
 
 	// Create a test component descriptor
-	desc := &descriptor.Descriptor{Meta: descriptor.Meta{Version: "v2"},
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{
 			Provider: descriptor.Provider{
 				Name: "test-provider",
@@ -909,7 +926,8 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 	contentDigest := digest.FromBytes(content)
 
 	// Create a resource with OCI image layer media type
-	resource := &descriptor.Resource{Relation: descriptor.LocalRelation,
+	resource := &descriptor.Resource{
+		Relation: descriptor.LocalRelation,
 		ElementMeta: descriptor.ElementMeta{
 			ObjectMeta: descriptor.ObjectMeta{
 				Name:    "test-layer-resource",
@@ -1002,7 +1020,8 @@ func TestRepository_ListComponentVersions(t *testing.T) {
 	// Add multiple component versions
 	versionsToAdd := []string{"1.0.0", "2.0.0", "1.1.0", "2.1.0"}
 	for _, version := range versionsToAdd {
-		desc := &descriptor.Descriptor{Meta: descriptor.Meta{Version: "v2"},
+		desc := &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
 			Component: descriptor.Component{
 				Provider: descriptor.Provider{
 					Name: "test-provider",
@@ -1036,7 +1055,8 @@ func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.
 	r.NoError(err)
 
 	// Create a descriptor for the component version
-	desc := &descriptor.Descriptor{Meta: descriptor.Meta{Version: "v2"},
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{
 			Provider: descriptor.Provider{
 				Name: "test-provider",
@@ -1080,7 +1100,8 @@ func setupLegacyComponentVersionWithSource(t *testing.T, store *ocictf.Store, ct
 	r.NoError(err)
 
 	// Create a descriptor for the component version
-	desc := &descriptor.Descriptor{Meta: descriptor.Meta{Version: "v2"},
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
@@ -1307,7 +1328,8 @@ func TestRepository_GetLocalSource(t *testing.T) {
 			repo := Repository(t, ocictf.WithCTF(store))
 
 			// Create a test component descriptor
-			desc := &descriptor.Descriptor{Meta: descriptor.Meta{Version: "v2"},
+			desc := &descriptor.Descriptor{
+				Meta: descriptor.Meta{Version: "v2"},
 				Component: descriptor.Component{
 					Provider: descriptor.Provider{
 						Name: "test-provider",
@@ -1398,7 +1420,8 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 	}{
 		{
 			name: "local blob without global access",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "test-resource",
@@ -1415,7 +1438,8 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 		},
 		{
 			name: "oci image with differing actual content and specified digest",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "test-resource",
@@ -1446,7 +1470,8 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 		},
 		{
 			name: "oci image with digest",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "test-resource",
@@ -1481,7 +1506,8 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 		},
 		{
 			name: "oci image without digest gets processed and is validated",
-			resource: &descriptor.Resource{Relation: descriptor.LocalRelation,
+			resource: &descriptor.Resource{
+				Relation: descriptor.LocalRelation,
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "test-resource",
@@ -2058,4 +2084,116 @@ func TestRepository_AddLocalSource_OwnershipPolicyEnabled_OCILayoutBody(t *testi
 
 	_, err = repo.AddLocalSource(ctx, "ocm.software/test-component", "1.0.0", source, inmemory.New(bytes.NewReader(layoutBytes)))
 	r.NoError(err, "AddLocalSource must not invoke OwnershipReferrer for sources, even when the policy is enabled")
+}
+
+func buildTestManifestStream(t *testing.T) (*memory.Store, ociImageSpecV1.Descriptor) {
+	t.Helper()
+	ctx := t.Context()
+	r := require.New(t)
+
+	store := memory.New()
+	layerBytes := []byte("stream layer content")
+	layerDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerBytes)
+	r.NoError(store.Push(ctx, layerDesc, bytes.NewReader(layerBytes)))
+	manifestDesc, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{
+		Layers: []ociImageSpecV1.Descriptor{layerDesc},
+	})
+	r.NoError(err)
+	return store, manifestDesc
+}
+
+func TestRepository_UploadResourceStream(t *testing.T) {
+	tests := []struct {
+		name        string
+		imageRef    string                                              // empty = use digest-only form built from manifest
+		refFunc     func(manifestDesc ociImageSpecV1.Descriptor) string // overrides imageRef when set
+		wantErr     bool
+		wantErrMsg  string
+		checkResult func(t *testing.T, res *descriptor.Resource, manifestDesc ociImageSpecV1.Descriptor)
+	}{
+		{
+			name:     "tag-only reference uploads and preserves tag",
+			imageRef: "test-repo:v1.0.0",
+			checkResult: func(t *testing.T, res *descriptor.Resource, manifestDesc ociImageSpecV1.Descriptor) {
+				r := require.New(t)
+				access := res.Access.(*v1.OCIImage)
+				r.Equal("test-repo:v1.0.0", access.ImageReference, "tag preserved, no digest added for tag-only form")
+				r.NotNil(res.Digest)
+				r.NotEmpty(res.Digest.Value)
+			},
+		},
+		{
+			name: "digest-only reference uploads without tagging and preserves digest",
+			checkResult: func(t *testing.T, res *descriptor.Resource, manifestDesc ociImageSpecV1.Descriptor) {
+				r := require.New(t)
+				access := res.Access.(*v1.OCIImage)
+				r.Contains(access.ImageReference, manifestDesc.Digest.String(), "digest preserved")
+				r.NotNil(res.Digest)
+			},
+		},
+		{
+			name: "tag+digest reference (OCM form) uploads and preserves both",
+			refFunc: func(manifestDesc ociImageSpecV1.Descriptor) string {
+				return "test-repo:v1.0.0@" + manifestDesc.Digest.String()
+			},
+			checkResult: func(t *testing.T, res *descriptor.Resource, manifestDesc ociImageSpecV1.Descriptor) {
+				r := require.New(t)
+				access := res.Access.(*v1.OCIImage)
+				r.Contains(access.ImageReference, "v1.0.0", "tag preserved")
+				r.Contains(access.ImageReference, manifestDesc.Digest.String(), "digest preserved")
+				r.NotNil(res.Digest)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			ctfStore := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo := Repository(t, ocictf.WithCTF(ctfStore), oci.WithScheme(testScheme))
+
+			memStore, manifestDesc := buildTestManifestStream(t)
+
+			imageRef := tc.imageRef
+			switch {
+			case tc.refFunc != nil:
+				imageRef = tc.refFunc(manifestDesc)
+			case imageRef == "":
+				// Form A: digest-only
+				imageRef = "test-repo@" + manifestDesc.Digest.String()
+			}
+
+			resource := &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "stream-res", Version: "1.0.0"},
+				},
+				Type:   "ociImage",
+				Access: &v1.OCIImage{ImageReference: imageRef},
+			}
+
+			stream := &ocistream.OCIResourceStream{
+				ReadOnlyStorage: memStore,
+				Descriptor:      manifestDesc,
+				CopyOpts:        oras.DefaultCopyGraphOptions,
+			}
+
+			res, err := repo.UploadResourceStream(ctx, resource, stream)
+			if tc.wantErr {
+				r.Error(err)
+				if tc.wantErrMsg != "" {
+					r.ErrorContains(err, tc.wantErrMsg)
+				}
+				return
+			}
+			r.NoError(err)
+			r.NotNil(res)
+			if tc.checkResult != nil {
+				tc.checkResult(t, res, manifestDesc)
+			}
+		})
+	}
 }
