@@ -764,3 +764,35 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithou
 	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
 }
+
+// TestBuildAndCheck_Reproduce2742_EmptyNonNilLabels reproduces issue #2742.
+//
+// When a descriptor from an external registry has "labels":[] in its v2 JSON,
+// json.Unmarshal produces Labels=[]v2.Label{} (non-nil empty). ConvertFromV2Labels
+// propagates this as []descriptor.Label{} (non-nil). ConvertToV2 converts back to
+// []v2.Label{} but json:"labels,omitempty" omits it from the marshaled JSON — so the
+// CEL environment has no "labels" field. But buildDescriptorSpec's old `!= nil` check
+// emits ${environment.X.component.labels}, and CEL compilation fails:
+//   "undefined field 'labels'"
+//
+// Fix: use len() != 0 instead of != nil.
+func TestBuildAndCheck_Reproduce2742_EmptyNonNilLabels(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+
+	// Descriptor with empty non-nil Labels and a resource so buildDescriptorSpec
+	// takes the per-field path (not the fast ${environment.X} single-ref path).
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{localBlobResource("blob", "1.0.0")}, nil)
+	desc.Component.Labels = []descriptor.Label{} // non-nil empty — as from external registry
+
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
+	require.NoError(t, err)
+
+	b := NewDefaultBuilder(nil, nil, nil)
+	_, err = b.BuildAndCheck(tgd)
+	require.NoError(t, err, "BuildAndCheck must not fail with 'undefined field' for empty Labels")
+}
