@@ -162,7 +162,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260526121250-aae701a4aa9b // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.9 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.10 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260528112443-9cd4df811eb4 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4 // indirect
