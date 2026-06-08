@@ -392,17 +392,17 @@ func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTra
 		"resources": resourcesArray,
 	}
 
-	setOptionalField(componentMap, "labels", id, v2desc.Component.Labels != nil)
-	setOptionalField(componentMap, "repositoryContexts", id, v2desc.Component.RepositoryContexts != nil)
-	setOptionalField(componentMap, "sources", id, v2desc.Component.Sources != nil)
-	setOptionalField(componentMap, "componentReferences", id, v2desc.Component.References != nil)
+	setOptionalField(componentMap, "labels", id, len(v2desc.Component.Labels) != 0)
+	setOptionalField(componentMap, "repositoryContexts", id, len(v2desc.Component.RepositoryContexts) != 0)
+	setOptionalField(componentMap, "sources", id, len(v2desc.Component.Sources) != 0)
+	setOptionalField(componentMap, "componentReferences", id, len(v2desc.Component.References) != 0)
 
 	descSpecMap := map[string]any{
 		"meta":      fmt.Sprintf("${environment.%s.meta}", id),
 		"component": componentMap,
 	}
 
-	if v2desc.Signatures != nil {
+	if len(v2desc.Signatures) != 0 {
 		descSpecMap["signatures"] = fmt.Sprintf("${environment.%s.signatures}", id)
 	}
 
