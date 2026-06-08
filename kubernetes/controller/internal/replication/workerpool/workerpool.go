@@ -122,6 +122,10 @@ type WorkerPool struct {
 
 	subscribersMu sync.RWMutex
 	subscribers   []chan []RequesterInfo
+	// subscribersClosed is set under subscribersMu once shutdown has closed every
+	// subscriber. A Subscribe that lands after this returns an already-closed
+	// channel rather than one that would never be closed.
+	subscribersClosed bool
 
 	// baseCtx is the parent of every per-key context. It is canceled on
 	// shutdown so all in-flight transfers stop.
@@ -171,12 +175,22 @@ func NewWorkerPool(opts PoolOptions) *WorkerPool {
 
 // Subscribe creates a new event subscription channel. Each subscriber gets its
 // own buffered channel so events are not stolen between controllers. The channel
-// is closed when the pool shuts down.
+// is closed when the pool shuts down. Subscribing after shutdown returns an
+// already-closed channel so the consumer stops immediately.
 func (wp *WorkerPool) Subscribe() <-chan []RequesterInfo {
 	wp.subscribersMu.Lock()
 	defer wp.subscribersMu.Unlock()
 
 	ch := make(chan []RequesterInfo, wp.SubscriberBufferSize)
+
+	if wp.subscribersClosed {
+		// Since we range drain this channel and the corresponding listener also uses range
+		// it's more convenient to close it rather than sending back nil.
+		close(ch)
+
+		return ch
+	}
+
 	wp.subscribers = append(wp.subscribers, ch)
 
 	return ch
@@ -212,6 +226,7 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 		wp.workersDone.Wait()
 
 		wp.subscribersMu.Lock()
+		wp.subscribersClosed = true
 		for _, ch := range wp.subscribers {
 			close(ch)
 		}

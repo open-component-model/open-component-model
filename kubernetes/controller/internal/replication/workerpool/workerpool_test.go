@@ -351,6 +351,34 @@ func TestSubmitAfterShutdownIsRejected(t *testing.T) {
 	})
 }
 
+func TestSubscribeAfterShutdownReturnsClosedChannel(t *testing.T) {
+	// A subscription that lands after shutdown must come back already closed, so
+	// the consumer terminates instead of waiting on a channel nothing will close.
+	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		_ = pool.Start(ctx)
+	}()
+
+	cancel()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pool did not stop after context cancellation")
+	}
+
+	events := pool.Subscribe()
+	select {
+	case _, open := <-events:
+		assert.False(t, open, "post-shutdown subscription must be closed")
+	case <-time.After(time.Second):
+		t.Fatal("post-shutdown subscription was not closed")
+	}
+}
+
 func TestSubmitAfterResultConsumedReRuns(t *testing.T) {
 	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
 	events := pool.Subscribe()
