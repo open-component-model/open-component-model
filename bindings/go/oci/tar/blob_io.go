@@ -104,21 +104,6 @@ func CopyReferrerRoots(ctx context.Context, src content.ReadOnlyStorage, dst con
 	return nil
 }
 
-// referrersOfType returns the manifests whose artifactType matches. An empty
-// artifactType matches nothing — copying source referrers is opt-in by type.
-func referrersOfType(manifests []ociImageSpecV1.Descriptor, artifactType string) []ociImageSpecV1.Descriptor {
-	if artifactType == "" {
-		return nil
-	}
-	var out []ociImageSpecV1.Descriptor
-	for _, m := range manifests {
-		if m.ArtifactType == artifactType {
-			out = append(out, m)
-		}
-	}
-	return out
-}
-
 // Referrer pairs a descriptor with its raw content bytes — extra content the
 // caller wants pushed alongside the artifact root that the source OCI layout
 // store does not already hold (typically an OCI referrer manifest plus the
@@ -133,44 +118,51 @@ type Referrer struct {
 // follow by default.
 type ReferrersFunc func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error)
 
-// existingReferrers fetches the manifests of artifactType already present in the
-// source layout up front and returns a [ReferrersFunc] that replays them, or nil
-// if the layout carries none. It lets referrers that travelled inside a source
-// layout (e.g. ADR 0016 ownership referrers pulled in during transfer) be copied
-// through the same resolve → proxy → [CopyReferrerRoots] path as freshly created
-// ones, instead of a parallel copy step. The returned func ignores its top
-// argument — each referrer's subject edge already points at the artifact being
-// copied.
-func existingReferrers(ctx context.Context, src content.ReadOnlyStorage, manifests []ociImageSpecV1.Descriptor, artifactType string) (ReferrersFunc, error) {
-	descs := referrersOfType(manifests, artifactType)
-	if len(descs) == 0 {
-		return nil, nil
-	}
-	refs := make([]Referrer, 0, len(descs))
-	for _, d := range descs {
+// existingReferrers fetches every referrer already present in the source layout
+// — any manifest that declares a subject (via [Subject]), e.g. an ADR 0016
+// ownership referrer or a signature pulled in during transfer — and returns a
+// [ReferrersFunc] that replays them, or nil if the layout carries none. It lets
+// such referrers be copied through the same resolve → proxy → [CopyReferrerRoots]
+// path as freshly created ones, instead of a parallel copy step. The returned
+// func ignores its top argument — each referrer's subject edge already points at
+// the artifact being copied.
+func existingReferrers(ctx context.Context, src content.ReadOnlyStorage, manifests []ociImageSpecV1.Descriptor) (ReferrersFunc, error) {
+	var refs []Referrer
+	for _, d := range manifests {
+		subject, err := Subject(ctx, src, d)
+		if err != nil {
+			return nil, fmt.Errorf("failed to inspect source manifest %s: %w", d.Digest, err)
+		}
+		if subject == nil {
+			continue
+		}
 		raw, err := content.FetchAll(ctx, src, d)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read source referrer %s: %w", d.Digest, err)
 		}
 		refs = append(refs, Referrer{Descriptor: d, Raw: raw})
 	}
+	if len(refs) == 0 {
+		return nil, nil
+	}
 	return func(context.Context, ociImageSpecV1.Descriptor) ([]Referrer, error) {
 		return refs, nil
 	}, nil
 }
 
-// ReferrerSource describes how to obtain the referrers of one artifact type for a
-// copied artifact. Copy wins over create: if the incoming layout already carries
-// referrers whose artifactType == ArtifactType, those are copied through verbatim
-// and CreateFunc is not called; otherwise CreateFunc builds fresh ones. The two are
-// mutually exclusive, so a subject never ends up with both a copied and a created
-// referrer of the same type. Both outcomes flow through the same path — see
+// ReferrerSource describes how to obtain the referrers for a copied artifact.
+// Copy wins over create: if CopyExisting is set and the incoming layout already
+// carries referrers (manifests that declare a subject), those are copied through
+// verbatim and CreateFunc is not called; otherwise CreateFunc builds fresh ones.
+// The two are mutually exclusive, so a subject never ends up with both a copied
+// and a created referrer. Both outcomes flow through the same path — see
 // [existingReferrers] and [CopyReferrerRoots].
 type ReferrerSource struct {
-	// ArtifactType selects pre-existing referrers in the source layout to copy.
-	// Empty disables copying (always create).
-	ArtifactType string
-	// CreateFunc builds fresh referrers when the source carries none of ArtifactType.
+	// CopyExisting, when true, copies through every referrer already present in
+	// the source layout — any manifest that declares a subject (e.g. an ADR 0016
+	// ownership referrer or a signature). When false, no existing referrer is copied.
+	CopyExisting bool
+	// CreateFunc builds fresh referrers when the source carries none.
 	// nil disables creation (copy-only).
 	CreateFunc ReferrersFunc
 }
@@ -178,8 +170,8 @@ type ReferrerSource struct {
 type CopyOCILayoutWithIndexOptions struct {
 	oras.CopyGraphOptions
 	MutateParentFunc func(*ociImageSpecV1.Descriptor) error
-	// Referrer describes the referrer to attach to the copied artifact. An
-	// existing referrer of its ArtifactType already in the source layout's index
+	// Referrer describes the referrers to attach to the copied artifact. When
+	// CopyExisting is set, every referrer already in the source layout's index
 	// (e.g. an ADR 0016 ownership referrer that travelled inside a by-value
 	// resource's layout) is copied through verbatim; only when none is present is a
 	// fresh one created via [ReferrerSource.CreateFunc]. Copy and create are
@@ -215,9 +207,9 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 	}()
 
 	// Resolve the referrer source to a single ReferrersFunc, choosing copy over
-	// creation. If the incoming layout already carries a referrer of the source's
-	// ArtifactType (a transfer — e.g. an ADR 0016 ownership referrer pulled in on
-	// the source), copy it verbatim and skip CreateFunc; otherwise CreateFunc builds
+	// creation. If CopyExisting is set and the incoming layout already carries
+	// referrers (a transfer — e.g. an ADR 0016 ownership referrer pulled in on the
+	// source), copy them verbatim and skip CreateFunc; otherwise CreateFunc builds
 	// a fresh one. Copy and create are mutually exclusive: a freshly created
 	// referrer and the inbound one share the same subject *digest* but can differ
 	// in the subject descriptor's serialized form — notably the
@@ -226,9 +218,11 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 	// on one subject. Both outcomes are expressed as a ReferrersFunc so they share
 	// the single path below: `ocm add` (no inbound referrer) creates and
 	// `ocm transfer` (inbound referrer) copies, each yielding exactly one.
-	copyExisting, err := existingReferrers(ctx, ociStore, ociStore.Index.Manifests, opts.Referrer.ArtifactType)
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, err
+	var copyExisting ReferrersFunc
+	if opts.Referrer.CopyExisting {
+		if copyExisting, err = existingReferrers(ctx, ociStore, ociStore.Index.Manifests); err != nil {
+			return ociImageSpecV1.Descriptor{}, err
+		}
 	}
 	var funcs []ReferrersFunc
 	switch {
@@ -380,6 +374,31 @@ func findSuccessorsForRoot(topLevelDesc ociImageSpecV1.Descriptor, rootChildren 
 	}
 }
 
+// InjectReferrersAsSuccessors returns a CopyGraph FindSuccessors that appends
+// referrers to the natural successors of root, so a single [oras.CopyGraph]
+// rooted at root copies root together with those referrers. Referrers attach to
+// their subject via a backward "subject" edge that CopyGraph's default successor
+// resolution does not follow, so they would otherwise never be reached from
+// root; injecting them as extra successors pulls them into the same traversal.
+//
+// Unlike [findSuccessorsForRoot], root's own successors are resolved live (via
+// [successorsWithoutSubject]) rather than supplied up front — root is copied
+// verbatim here, so its bytes are safe to re-fetch. Every descriptor, root or
+// not, has its subject stripped: the injected referrers' subject points back at
+// root, and emitting it would re-traverse root (the in-progress copy target).
+func InjectReferrersAsSuccessors(root ociImageSpecV1.Descriptor, referrers []ociImageSpecV1.Descriptor) func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	return func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+		successors, err := successorsWithoutSubject(ctx, fetcher, desc)
+		if err != nil {
+			return nil, err
+		}
+		if content.Equal(desc, root) {
+			return append(successors, referrers...), nil
+		}
+		return successors, nil
+	}
+}
+
 // mediaTypeOCIArtifactManifest is the deprecated OCI artifact manifest (image-spec v1.1.0-rc1/rc2); the oras-go constant lives in an internal package.
 const mediaTypeOCIArtifactManifest = "application/vnd.oci.artifact.manifest.v1+json"
 
@@ -423,6 +442,32 @@ func successorsWithoutSubject(ctx context.Context, fetcher content.Fetcher, node
 		return manifest.Blobs, nil
 	}
 	return content.Successors(ctx, fetcher, node)
+}
+
+// Subject returns the subject descriptor declared by desc, or nil if it has
+// none — a non-nil result means desc is a referrer. It decodes only the subject
+// field from the body of an image manifest, image index, or (deprecated)
+// artifact manifest; any other media type has no subject and is not fetched.
+//
+// This replicates oras-go's internal manifestutil.Subject, which is not
+// importable from outside oras-go.
+func Subject(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) (*ociImageSpecV1.Descriptor, error) {
+	switch desc.MediaType {
+	case ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.MediaTypeImageIndex, mediaTypeOCIArtifactManifest:
+		raw, err := content.FetchAll(ctx, fetcher, desc)
+		if err != nil {
+			return nil, err
+		}
+		var manifest struct {
+			Subject *ociImageSpecV1.Descriptor `json:"subject,omitempty"`
+		}
+		if err := json.Unmarshal(raw, &manifest); err != nil {
+			return nil, err
+		}
+		return manifest.Subject, nil
+	default:
+		return nil, nil
+	}
 }
 
 type descriptorStoreProxy struct {

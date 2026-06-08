@@ -5,13 +5,17 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"io"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 )
@@ -173,4 +177,126 @@ func TestReadOCILayout_Close(t *testing.T) {
 	store, err := ReadOCILayout(context.Background(), &testBlob{data: data})
 	require.NoError(t, err)
 	assert.NoError(t, store.Close())
+}
+
+// ownershipArtifactType is the ADR-0016 artifact type carried by an ownership
+// referrer. Referrer detection keys off the subject, not the artifact type, so
+// the test pairs it with a referrer carrying a different type.
+const ownershipArtifactType = "application/vnd.ocm.software.ownership.v1+json"
+
+// TestCloseableReadOnlyStore_MainArtifactsAndReferrers covers the subject-based
+// partition of the layout index: a referrer is any manifest that declares a
+// subject (regardless of artifact type), everything else is a main candidate,
+// and the mains are reduced to the top-level set. MainArtifacts and Referrers
+// are asserted to be the two halves of MainArtifactsAndReferrers.
+func TestCloseableReadOnlyStore_MainArtifactsAndReferrers(t *testing.T) {
+	t.Run("partitions referrers (by subject) from the main artifact", func(t *testing.T) {
+		var main, ownershipRef, plainRef v1.Descriptor
+		store := readLayout(t, func(w *OCILayoutWriter) {
+			main = pack(t, w, "main", "", nil)
+			// Two referrers on main with different artifact types. Detection is by
+			// subject, so both must be classified as referrers.
+			ownershipRef = pack(t, w, "ownership-referrer", ownershipArtifactType, &main)
+			plainRef = pack(t, w, "plain-referrer", "", &main)
+		})
+
+		mainArtifacts, referrers := store.MainArtifactsAndReferrers(t.Context())
+		assert.Equal(t, []string{main.Digest.String()}, digests(mainArtifacts),
+			"the only main artifact is the subject-less manifest")
+		assert.ElementsMatch(t, []string{ownershipRef.Digest.String(), plainRef.Digest.String()}, digests(referrers),
+			"both subject-declaring manifests are referrers, regardless of artifact type")
+
+		// MainArtifacts and Referrers are the two halves of MainArtifactsAndReferrers.
+		assert.Equal(t, digests(mainArtifacts), digests(store.MainArtifacts(t.Context())))
+		assert.Equal(t, digests(referrers), digests(store.Referrers(t.Context())))
+	})
+
+	t.Run("no referrers: main artifact only", func(t *testing.T) {
+		var main v1.Descriptor
+		store := readLayout(t, func(w *OCILayoutWriter) {
+			main = pack(t, w, "main", "", nil)
+		})
+
+		mainArtifacts, referrers := store.MainArtifactsAndReferrers(t.Context())
+		assert.Equal(t, []string{main.Digest.String()}, digests(mainArtifacts))
+		assert.Empty(t, referrers)
+		assert.Equal(t, []string{main.Digest.String()}, digests(store.MainArtifacts(t.Context())))
+		assert.Empty(t, store.Referrers(t.Context()))
+	})
+
+	t.Run("main selection drops manifests contained by another", func(t *testing.T) {
+		// An image index over two child manifests, plus a referrer on the index.
+		// The children are contained by the index, so only the index is a main
+		// artifact; the referrer is held aside.
+		var index, ref v1.Descriptor
+		store := readLayout(t, func(w *OCILayoutWriter) {
+			child1 := pack(t, w, "child1", "", nil)
+			child2 := pack(t, w, "child2", "", nil)
+			index = packIndex(t, w, child1, child2)
+			ref = pack(t, w, "index-referrer", "", &index)
+		})
+
+		mainArtifacts, referrers := store.MainArtifactsAndReferrers(t.Context())
+		assert.Equal(t, []string{index.Digest.String()}, digests(mainArtifacts),
+			"only the top-level index is a main artifact; its children are contained")
+		assert.Equal(t, []string{ref.Digest.String()}, digests(referrers))
+	})
+}
+
+// readLayout builds an OCI layout via build, then reads it back into a store
+// closed on test cleanup. pack and packIndex push every blob they reference, so
+// build only has to call them.
+func readLayout(t *testing.T, build func(w *OCILayoutWriter)) *CloseableReadOnlyStore {
+	t.Helper()
+	var buf bytes.Buffer
+	w, err := NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	require.NoError(t, err)
+	build(w)
+	require.NoError(t, w.Close())
+	store, err := ReadOCILayout(t.Context(), &testBlob{data: buf.Bytes()})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	return store
+}
+
+// pack builds and pushes a minimal image manifest (empty config and layer) and
+// returns its descriptor. A non-nil subject makes it a referrer. name becomes
+// the title annotation, which documents the manifest and keeps otherwise
+// identical siblings distinct. An empty artifactType falls back to a generic
+// type, which image-spec v1.1 requires alongside the empty config.
+func pack(t *testing.T, w *OCILayoutWriter, name, artifactType string, subject *v1.Descriptor) v1.Descriptor {
+	t.Helper()
+	if artifactType == "" {
+		artifactType = "application/vnd.test.artifact.v1+json"
+	}
+	desc, err := oras.PackManifest(t.Context(), w, oras.PackManifestVersion1_1, artifactType, oras.PackManifestOptions{
+		Subject:             subject,
+		ManifestAnnotations: map[string]string{v1.AnnotationTitle: name},
+	})
+	require.NoError(t, err)
+	return desc
+}
+
+// packIndex builds and pushes an image index over the given children, returning
+// its descriptor.
+func packIndex(t *testing.T, w *OCILayoutWriter, children ...v1.Descriptor) v1.Descriptor {
+	t.Helper()
+	data, err := json.Marshal(v1.Index{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: v1.MediaTypeImageIndex,
+		Manifests: children,
+	})
+	require.NoError(t, err)
+	desc := content.NewDescriptorFromBytes(v1.MediaTypeImageIndex, data)
+	require.NoError(t, w.Push(t.Context(), desc, bytes.NewReader(data)))
+	return desc
+}
+
+// digests maps descriptors to their digest strings for order-independent compares.
+func digests(descs []v1.Descriptor) []string {
+	out := make([]string, len(descs))
+	for i, d := range descs {
+		out[i] = d.Digest.String()
+	}
+	return out
 }

@@ -2326,6 +2326,64 @@ func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 	r.Equal(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
 }
 
+// TestRepository_UploadResource_CopiesOwnershipReferrer is the by-reference twin
+// of TestRepository_AddLocalResource_CopiesOwnershipReferrer: it proves the
+// UploadResource path (-> uploadOCIImage) carries an ADR-0016 ownership referrer
+// that travels inside the resource's layout through to the target. The referrer
+// is injected as a successor of the main artifact, so the single CopyGraph that
+// uploads the image lands the referrer in the same traversal — there is no
+// separate copy step. External relation means no referrer is created, so one
+// landing in the target can only have come from the copy path.
+func TestRepository_UploadResource_CopiesOwnershipReferrer(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+	const (
+		imageRef  = "test-image:latest"
+		tag       = "latest"
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+	)
+
+	layoutBytes, main, referrer := buildLayoutWithOwnershipReferrer(t, tag, component, version)
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	resource := &descriptor.Resource{
+		Relation:    descriptor.ExternalRelation,
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend", Version: version}},
+		Type:        "ociImage",
+		Access:      &v1.OCIImage{ImageReference: imageRef},
+	}
+
+	_, err = repo.UploadResource(ctx, resource, inmemory.New(bytes.NewReader(layoutBytes)))
+	r.NoError(err)
+
+	imgStore, err := store.StoreForReference(ctx, imageRef)
+	r.NoError(err)
+
+	mainExists, err := imgStore.Exists(ctx, main)
+	r.NoError(err)
+	r.True(mainExists, "the main artifact must be uploaded")
+
+	referrerExists, err := imgStore.Exists(ctx, referrer)
+	r.NoError(err)
+	r.True(referrerExists, "ownership referrer must ride along in the same CopyGraph as the main artifact")
+
+	// Existence is not enough: the referrer must arrive with its ADR-0016
+	// ownership annotations intact.
+	rc, err := imgStore.Fetch(ctx, referrer)
+	r.NoError(err)
+	defer func() { r.NoError(rc.Close()) }()
+	var copied ociImageSpecV1.Manifest
+	r.NoError(json.NewDecoder(rc).Decode(&copied))
+	r.Equal(component, copied.Annotations[annotations.OwnershipComponentName], "copied referrer must retain its component name")
+	r.Equal(version, copied.Annotations[annotations.OwnershipComponentVersion], "copied referrer must retain its component version")
+	r.Equal(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
+}
+
 // TestRepository_AddOwnershipByReference proves the by-reference attach path (ADR
 // 0016): a resource kept by reference as an OCI image gets an ownership referrer
 // pushed into the registry that hosts the image, without modifying the image

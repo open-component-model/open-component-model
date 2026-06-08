@@ -118,6 +118,37 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 // For example, if an OCI Layout was downloaded from "ghcr.io/open-component-model/ocm-layout:v1.0.0",
 // and the index contains multiple manifests, this function will return a single top-level artifact
 // referencing the main index behind the given reference.
+//
+// Referrers (see [CloseableReadOnlyStore.Referrers]) are excluded — a referrer
+// is metadata attached to another artifact, never a main artifact.
 func (s *CloseableReadOnlyStore) MainArtifacts(ctx context.Context) []ociImageSpecV1.Descriptor {
-	return TopLevelArtifacts(ctx, s.ReadOnlyStore, s.Index.Manifests)
+	mainArtifacts, _ := s.MainArtifactsAndReferrers(ctx)
+	return mainArtifacts
+}
+
+// Referrers returns the referrer manifests in the OCI layout index — those that
+// declare a subject (e.g. an ADR 0016 ownership referrer that travelled inside
+// the layout). A referrer is metadata attached to another artifact and is never
+// a main artifact (see [CloseableReadOnlyStore.MainArtifacts]).
+func (s *CloseableReadOnlyStore) Referrers(ctx context.Context) []ociImageSpecV1.Descriptor {
+	_, referrers := s.MainArtifactsAndReferrers(ctx)
+	return referrers
+}
+
+// MainArtifactsAndReferrers partitions the layout index manifests by subject and
+// returns both halves in a single pass: the main artifacts — the top-level
+// artifacts among the manifests that declare no subject (reduced via
+// [TopLevelArtifacts]) — and the referrers — the manifests that do declare a
+// subject (detected via [Subject]). A manifest whose body cannot be fetched or
+// decoded is treated as a main candidate rather than silently dropped.
+func (s *CloseableReadOnlyStore) MainArtifactsAndReferrers(ctx context.Context) (mainArtifacts, referrers []ociImageSpecV1.Descriptor) {
+	var candidates []ociImageSpecV1.Descriptor
+	for _, manifest := range s.Index.Manifests {
+		if subject, err := Subject(ctx, s.ReadOnlyStore, manifest); err == nil && subject != nil {
+			referrers = append(referrers, manifest)
+			continue
+		}
+		candidates = append(candidates, manifest)
+	}
+	return TopLevelArtifacts(ctx, s.ReadOnlyStore, candidates), referrers
 }

@@ -342,11 +342,10 @@ func buildLayoutWithSourceReferrer(t *testing.T, artifactType string) []byte {
 }
 
 // TestCopyOCILayoutWithIndex_SuppressesCreationWhenSourceCarriesReferrer pins the
-// mutual exclusion between creating and copying referrers of the same type: when
-// the incoming layout already carries a referrer of the source's ArtifactType
-// (the transfer case), Create must not run, so the copied referrer is the only one
-// and no near-duplicate is created. When the layout carries no such referrer (the
-// fresh-add case), Create must run.
+// mutual exclusion between creating and copying referrers: when the incoming
+// layout already carries a referrer (the transfer case), Create must not run, so
+// the copied referrer is the only one and no near-duplicate is created. When the
+// layout carries no referrer (the fresh-add case), Create must run.
 func TestCopyOCILayoutWithIndex_SuppressesCreationWhenSourceCarriesReferrer(t *testing.T) {
 	const artifactType = "application/test.referrer.v1+json"
 
@@ -354,7 +353,7 @@ func TestCopyOCILayoutWithIndex_SuppressesCreationWhenSourceCarriesReferrer(t *t
 		return CopyOCILayoutWithIndexOptions{
 			MutateParentFunc: func(*ociImageSpecV1.Descriptor) error { return nil },
 			Referrer: ReferrerSource{
-				ArtifactType: artifactType,
+				CopyExisting: true,
 				CreateFunc: func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error) {
 					*called = true
 					return nil, nil
@@ -363,7 +362,7 @@ func TestCopyOCILayoutWithIndex_SuppressesCreationWhenSourceCarriesReferrer(t *t
 		}
 	}
 
-	t.Run("suppressed when source already carries a referrer of that type", func(t *testing.T) {
+	t.Run("suppressed when source already carries a referrer", func(t *testing.T) {
 		var called bool
 		_, err := CopyOCILayoutWithIndex(t.Context(), memory.New(),
 			&testReadOnlyBlob{data: buildLayoutWithSourceReferrer(t, artifactType)}, newOpts(&called))
@@ -371,7 +370,7 @@ func TestCopyOCILayoutWithIndex_SuppressesCreationWhenSourceCarriesReferrer(t *t
 		assert.False(t, called, "creation must be suppressed when the source layout already carries the referrer")
 	})
 
-	t.Run("invoked when source carries no referrer of that type", func(t *testing.T) {
+	t.Run("invoked when source carries no referrer", func(t *testing.T) {
 		var called bool
 		layoutBytes, _, _ := buildSingleLayerOCILayout(t)
 		_, err := CopyOCILayoutWithIndex(t.Context(), memory.New(),
