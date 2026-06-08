@@ -23,6 +23,11 @@ var ErrTransferInProgress = errors.New("component version transfer in progress")
 // has no free slot. The reconciler should requeue with backoff.
 var ErrQueueFull = errors.New("transfer work queue is full")
 
+// ErrPoolShuttingDown is returned by [WorkerPool.Submit] once the pool has begun
+// shutting down. No new transfers are accepted; the reconciler should stop and
+// let the manager restart drive a fresh reconcile on the next leader.
+var ErrPoolShuttingDown = errors.New("transfer worker pool is shutting down")
+
 // RequesterInfo identifies the object that requested a transfer and is notified
 // via the completion event when the transfer finishes.
 type RequesterInfo struct {
@@ -101,12 +106,19 @@ type workItem struct {
 type WorkerPool struct {
 	PoolOptions
 
+	// workQueue is intentionally never closed. Submit sends to it concurrently, and a
+	// `send` on a closed channel panics; closing also buys nothing, because workers
+	// terminate on ctx.Done, not on a queue close. Never `range` over this channel
+	// since with no close signal a range would block forever.
 	workQueue chan *workItem
 
-	// mu guards inProgress and results.
+	// mu guards inProgress, results, and closed.
 	mu         sync.Mutex
 	inProgress map[string]*inflight
 	results    map[string]*Result
+	// closed is set when shutdown begins. It gates Submit so no work is enqueued
+	// after the workers stop which also guards a send-on-closed-channel panic.
+	closed bool
 
 	subscribersMu sync.RWMutex
 	subscribers   []chan []RequesterInfo
@@ -184,14 +196,20 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 	<-ctx.Done()
 	wp.Logger.Info("transfer worker pool shutting down, canceling in-flight transfers")
 
+	// Reject new submissions before tearing anything down. Taking mu serializes
+	// this against an in-flight Submit, which holds mu across its send: once
+	// closed is set, no further send can start. The workQueue is deliberately
+	// never closed, so the `send` can never race a close.
+	wp.mu.Lock()
+	wp.closed = true
+	wp.mu.Unlock()
+
 	// Cancel every per-key context so running transfers stop at the next safe point.
 	wp.baseCancel()
 
 	done := make(chan struct{})
 	go func() {
 		wp.workersDone.Wait()
-
-		close(wp.workQueue)
 
 		wp.subscribersMu.Lock()
 		for _, ch := range wp.subscribers {
@@ -242,6 +260,10 @@ func (wp *WorkerPool) Submit(opts SubmitOptions) error {
 
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
+
+	if wp.closed {
+		return ErrPoolShuttingDown
+	}
 
 	if inf, exists := wp.inProgress[opts.Key]; exists {
 		inf.addRequester(opts.Requester)

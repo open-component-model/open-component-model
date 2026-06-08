@@ -327,6 +327,30 @@ func TestShutdownCancelsInFlightAndClosesSubscribers(t *testing.T) {
 	}
 }
 
+func TestSubmitAfterShutdownIsRejected(t *testing.T) {
+	// A Submit racing shutdown must never panic on a closed queue: the queue is
+	// never closed, and once shutdown begins Submit returns ErrPoolShuttingDown.
+	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		_ = pool.Start(ctx)
+	}()
+
+	cancel()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pool did not stop after context cancellation")
+	}
+
+	require.NotPanics(t, func() {
+		require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", &fakeBuilder{})), workerpool.ErrPoolShuttingDown)
+	})
+}
+
 func TestSubmitAfterResultConsumedReRuns(t *testing.T) {
 	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
 	events := pool.Subscribe()
