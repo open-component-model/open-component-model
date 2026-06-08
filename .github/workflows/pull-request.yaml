@@ -129,6 +129,9 @@ jobs:
           configuration-path: .github/config/labeler.yml
   size-labeler:
     # codelytv/pr-size-labeler Dockerfile downloads x86_64-only docpars binary.
+    # Serialized after the kind labelers because pr-size-labeler@v1 PUTs the full
+    # label set, which would otherwise race-wipe kind/* labels added in parallel.
+    needs: [conventional-commit-labeler, labeler]
     runs-on: ubuntu-latest
     name: Label PR based on size
     permissions:
