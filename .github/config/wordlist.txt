@@ -909,3 +909,7 @@ oss
 runnable
 GmbH
 ANSI's
+CLA
+GardenLinux
+IronCore
+Neisener
