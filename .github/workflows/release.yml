@@ -499,7 +499,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
-          version: v4.1.3
+          version: v4.1.4
 
       - name: Re-package final chart
         working-directory: ${{ env.CONTROLLER_PATH }}
@@ -617,6 +617,16 @@ jobs:
             const script = await import('${{ github.workspace }}/.github/scripts/publish-final-release.js');
             await script.default({ github, context, core });
   # === controller-release.yml::promote_and_release_final + cli-release.yml::promote_final + cli-release.yml::release_final ===
+
+  verify_install_script:
+    name: Verify install script for ${{ needs.prepare.outputs.base_version }}
+    needs: [prepare, promote_and_release_final]
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    uses: ./.github/workflows/website-live-test-install-script.yml
+    with:
+      version: ${{ needs.prepare.outputs.base_version }}
+    permissions:
+      contents: read
 
   # === Website version release ===
   # Replaces the old standalone website-version-release.yml. Runs after the
