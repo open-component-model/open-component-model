@@ -477,6 +477,88 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 			},
 		},
 		{
+			name: "constructor with component labels",
+			constructor: &v1.ComponentConstructor{
+				Components: []v1.Component{
+					{
+						ComponentMeta: v1.ComponentMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-component",
+								Version: "1.0.0",
+								Labels: []v1.Label{
+									{
+										Name:    "component-label",
+										Value:   []byte("component-value"),
+										Signing: true,
+									},
+								},
+							},
+						},
+						Provider: v1.Provider{
+							Name: "test-provider",
+						},
+					},
+				},
+			},
+			want: &ComponentConstructor{
+				Components: []Component{
+					{
+						ComponentMeta: ComponentMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-component",
+								Version: "1.0.0",
+								Labels: []Label{
+									{
+										Name:    "component-label",
+										Value:   []byte("component-value"),
+										Signing: true,
+									},
+								},
+							},
+						},
+						Provider: Provider{
+							Name: "test-provider",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "constructor with empty component labels",
+			constructor: &v1.ComponentConstructor{
+				Components: []v1.Component{
+					{
+						ComponentMeta: v1.ComponentMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-component",
+								Version: "1.0.0",
+								Labels:  []v1.Label{},
+							},
+						},
+						Provider: v1.Provider{
+							Name: "test-provider",
+						},
+					},
+				},
+			},
+			want: &ComponentConstructor{
+				Components: []Component{
+					{
+						ComponentMeta: ComponentMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-component",
+								Version: "1.0.0",
+								Labels:  []Label{},
+							},
+						},
+						Provider: Provider{
+							Name: "test-provider",
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "constructor with provider labels",
 			constructor: &v1.ComponentConstructor{
 				Components: []v1.Component{
@@ -538,6 +620,7 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 			if len(got.Components) > 0 {
 				assert.Equal(t, tt.want.Components[0].Name, got.Components[0].Name)
 				assert.Equal(t, tt.want.Components[0].Version, got.Components[0].Version)
+				assert.Equal(t, tt.want.Components[0].Labels, got.Components[0].Labels)
 				assert.Equal(t, tt.want.Components[0].Provider.Name, got.Components[0].Provider.Name)
 
 				// Check provider labels
