@@ -14,6 +14,7 @@ import (
 	ocmv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
 	resolversv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
+	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -106,10 +107,9 @@ func getEffectiveConfig(cfg *genericv1.Config) (*genericv1.Config, error) {
 		{ocmv1.Scheme, func() (runtime.Typed, error) { return ocmv1.Lookup(cfg) }}, //nolint:staticcheck // displaying deprecated config for user visibility
 		{resolversv1alpha1.Scheme, func() (runtime.Typed, error) { return resolversv1alpha1.Lookup(cfg) }},
 		{ownershipv1alpha1.Scheme, func() (runtime.Typed, error) { return ownershipv1alpha1.Lookup(cfg) }},
-		{extractv1alpha1.Scheme, func() (runtime.Typed, error) { return extractv1alpha1.LookupConfig(cfg) }},
+		{extractv1alpha1.Scheme, nil}, // TODO: bindings/go/configuration/extract/v1alpha1/spec/config.go merge is no-op
 		{pluginsScheme, func() (runtime.Typed, error) { return pluginsv2alpha1.LookupConfig(cfg) }},
-		// TODO: credentials config has json:"-" on all fields, serialization expectation needs to be clarified
-		// {credentialsScheme, func() (runtime.Typed, error) { return credentialsRuntime.LookupCredentialConfig(cfg) }},
+		{credentialsScheme, nil},
 	}
 
 	for _, e := range entries {
@@ -121,10 +121,15 @@ func getEffectiveConfig(cfg *genericv1.Config) (*genericv1.Config, error) {
 	return result, nil
 }
 
-// TODO: remove once pluginsv2alpha1.Scheme is exported (currently unexported var scheme)
 var pluginsScheme = func() *runtime.Scheme {
 	s := runtime.NewScheme()
 	s.MustRegisterWithAlias(&pluginsv2alpha1.Config{}, runtime.NewVersionedType(pluginsv2alpha1.ConfigType, pluginsv2alpha1.Version))
+	return s
+}()
+
+var credentialsScheme = func() *runtime.Scheme {
+	s := runtime.NewScheme()
+	credentialsv1.MustRegister(s)
 	return s
 }()
 
@@ -135,6 +140,14 @@ func appendEffective(result *genericv1.Config, cfg *genericv1.Config, scheme *ru
 		types = append(types, aliases...)
 	}
 	if !hasEntries(cfg, types) {
+		return nil
+	}
+	if lookup == nil {
+		filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{ConfigTypes: types})
+		if err != nil {
+			return fmt.Errorf("%s: %w", types[0], err)
+		}
+		result.Configurations = append(result.Configurations, filtered.Configurations...)
 		return nil
 	}
 	typed, err := lookup()

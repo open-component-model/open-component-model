@@ -2115,7 +2115,7 @@ type: generic.config.ocm.software/v1
 		},
 		{
 			name: "all config types populated",
-			args: []string{"get", "config", "--output=json"},
+			args: []string{"get", "config"},
 			configYAML: `
 type: generic.config.ocm.software/v1
 configurations:
@@ -2154,84 +2154,65 @@ configurations:
       type: CommonTransportFormat/v1
       filePath: /legacy/archive
     prefix: ocm.software/legacy
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry/v1
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: user
+        password: pass
 `,
-			// TODO: to clear up expected behavior
-			//- type: credentials.config.ocm.software
-			//  consumers:
-			//  - identity:
-			//      type: OCIRegistry/v1
-			//      hostname: ghcr.io
-			//    credentials:
-			//    - type: Credentials/v1
-			//      properties:
-			//        username: user
-			//        password: pass
-			expectedOutput: `{
-  "type": "generic.config.ocm.software/v1",
-  "configurations": [
-    {
-      "tempFolder": "/tmp/custom",
-      "type": "filesystem.config.ocm.software/v1alpha1",
-      "workingDirectory": "/workspace"
-    },
-    {
-      "timeout": "45s",
-      "type": "http.config.ocm.software/v1alpha1"
-    },
-    {
-      "resolvers": [
-        {
-          "prefix": "ocm.software/legacy",
-          "repository": {
-            "filePath": "/legacy/archive",
-            "type": "CommonTransportFormat/v1"
-          }
-        }
-      ],
-      "type": "ocm.config.ocm.software/v1"
-    },
-    {
-      "resolvers": [
-        {
-          "componentNamePattern": "ocm.software/*",
-          "repository": {
-            "filePath": "/some/archive",
-            "type": "CommonTransportFormat/v1"
-          },
-          "versionConstraint": ">=1.0.0"
-        }
-      ],
-      "type": "resolvers.config.ocm.software/v1alpha1"
-    },
-    {
-      "policy": "AddIfSupported",
-      "repositories": [
-        {
-          "policy": "Never",
-          "repository": {
-            "filePath": "/some/repo",
-            "type": "CommonTransportFormat/v1"
-          }
-        }
-      ],
-      "type": "ownership.config.ocm.software/v1alpha1"
-    },
-    {
-      "type": "extract.oci.artifact.ocm.software/v1alpha1"
-    }
-  ]
-}`,
-			// TODO: unexpected empty in extract, input is:
-			//- type: extract.oci.artifact.ocm.software/v1alpha1
-			//  rules:
-			//  - filename: output.tar
-			//    layerSelectors:
-			//    - matchProperties:
-			//        layer.mediaType: application/vnd.oci.image.layer.v1.tar+gzip
-			//      matchExpressions:
-			//      - key: layer.index
-			//        operator: In
-			//        values: ["0"]
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /workspace
+- timeout: 45s
+  type: http.config.ocm.software/v1alpha1
+- resolvers:
+  - prefix: ocm.software/legacy
+    repository:
+      filePath: /legacy/archive
+      type: CommonTransportFormat/v1
+  type: ocm.config.ocm.software/v1
+- resolvers:
+  - componentNamePattern: ocm.software/*
+    repository:
+      filePath: /some/archive
+      type: CommonTransportFormat/v1
+    versionConstraint: '>=1.0.0'
+  type: resolvers.config.ocm.software/v1alpha1
+- policy: AddIfSupported
+  repositories:
+  - policy: Never
+    repository:
+      filePath: /some/repo
+      type: CommonTransportFormat/v1
+  type: ownership.config.ocm.software/v1alpha1
+- rules:
+  - filename: output.tar
+    layerSelectors:
+    - matchExpressions:
+      - key: layer.index
+        operator: In
+        values:
+        - "0"
+      matchProperties:
+        layer.mediaType: application/vnd.oci.image.layer.v1.tar+gzip
+  type: extract.oci.artifact.ocm.software/v1alpha1
+- consumers:
+  - credentials:
+    - properties:
+        password: pass
+        username: user
+      type: Credentials/v1
+    identity:
+      hostname: ghcr.io
+      type: OCIRegistry/v1
+  type: credentials.config.ocm.software
+type: generic.config.ocm.software/v1`,
 		},
 
 		{
