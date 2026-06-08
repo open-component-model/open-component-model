@@ -1,0 +1,18 @@
+components:
+  - name: jakob.io/ai-skill-catalogue
+    version: "1.0.0"
+    provider:
+      name: jakob
+    resources:
+      - name: ocm-guide
+        type: ai.skill/v1
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./skills/ocm-guide/SKILL.md
+      - name: golang-patterns
+        type: ai.skill/v1
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./skills/golang-patterns/SKILL.md
