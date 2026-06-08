@@ -167,6 +167,8 @@
       matchPackageNames: [
         'ocm.software/open-component-model/**',
       ],
+      // Combine minor and patch updates into a single PR.
+      separateMinorPatch: false,
       'schedule': [
         '* 22,0-6 * * *' // At every minute past hour 22 and every hour from 0 through 6.
       ],
