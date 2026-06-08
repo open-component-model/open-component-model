@@ -717,7 +717,8 @@ func TestBuildDescriptorSpec_NoLabelsOmitted(t *testing.T) {
 }
 
 // Sibling of TestBuildDescriptorSpec_LabelsIncluded covering the
-// descriptor-level Signatures field (gated separately at graph.go:405). When
+// descriptor-level Signatures field, which buildDescriptorSpec gates with a
+// separate length check from the component-level slice fields. When
 // signatures are populated, the spec map must carry a CEL placeholder
 // referencing the environment signatures.
 func TestBuildDescriptorSpec_SignaturesIncluded(t *testing.T) {
