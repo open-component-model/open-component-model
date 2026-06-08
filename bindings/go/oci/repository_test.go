@@ -2368,7 +2368,7 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 		Access:      &v1.OCIImage{ImageReference: imageRef},
 	}
 
-	r.NoError(repo.AddOwnershipByReference(ctx, component, version, resource))
+	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
 
 	// The expected referrer is content-addressed off the resolved subject; build
 	// it the same way the repository does and assert it now exists in the store.
@@ -2392,7 +2392,7 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 	// subject is untouched after the second run. Enumeration ("exactly one referrer")
 	// needs the live Referrers API, which the CTF store has no index for; that
 	// guarantee is covered by Test_Integration_AssetToOwner.
-	r.NoError(repo.AddOwnershipByReference(ctx, component, version, resource))
+	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
 
 	stillExists, err := imgStore.Exists(ctx, referrers[0].Descriptor)
 	r.NoError(err)
@@ -2498,7 +2498,7 @@ func TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest(t *testing.
 	}
 
 	// With the old manifest-first push order this fails MANIFEST_BLOB_UNKNOWN.
-	r.NoError(repo.AddOwnershipByReference(ctx, component, version, resource))
+	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
 
 	emptyExists, err = imgStore.Exists(ctx, ociImageSpecV1.DescriptorEmptyJSON)
 	r.NoError(err)
@@ -2569,7 +2569,7 @@ func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 	r.True(stillExists, "re-running AddOwnership must converge on the same referrer")
 }
 
-// The OCI-level opt-in gate was intentionally removed: AddOwnershipByReference now
+// The OCI-level opt-in gate was intentionally removed: AddOwnership now
 // builds a referrer unconditionally for the resource it is handed, and the
 // opt-in decision (options.ownershipPolicy: Always) lives in the constructor.
 // That gate is covered by the constructor tests (TestDefaultConstructor_attachOwnershipReferrer_CallSiteGating

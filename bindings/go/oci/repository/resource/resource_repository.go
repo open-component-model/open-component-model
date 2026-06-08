@@ -153,8 +153,8 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 // AddOwnership attaches an asset-to-owner ownership referrer (ADR 0016)
 // to a by-reference OCI image resource, pushing the referrer into the registry
 // that hosts the image. It delegates to the inner repository's
-// [oci.Repository.AddOwnershipByReference]. It implements
-// [repository.OwnershipAwareRepository.AddOwnership].
+// [oci.Repository.AddOwnership], which dispatches on the resource's access type.
+// It implements [repository.OwnershipAwareRepository.AddOwnership].
 func (p *ResourceRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
 	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {
@@ -174,7 +174,7 @@ func (p *ResourceRepository) AddOwnership(ctx context.Context, component, versio
 	}
 	resource.Access = obj
 
-	if err := repo.AddOwnershipByReference(ctx, component, version, resource); err != nil {
+	if err := repo.AddOwnership(ctx, component, version, resource, credentials); err != nil {
 		return fmt.Errorf("error attaching ownership referrer: %w", err)
 	}
 	return nil

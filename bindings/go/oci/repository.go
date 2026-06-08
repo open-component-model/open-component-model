@@ -49,8 +49,9 @@ import (
 )
 
 var (
-	_            ComponentVersionRepository = (*Repository)(nil)
-	versionRegex                            = regexp.MustCompile(compref.VersionRegex)
+	_            ComponentVersionRepository          = (*Repository)(nil)
+	_            repository.OwnershipAwareRepository = (*Repository)(nil)
+	versionRegex                                     = regexp.MustCompile(compref.VersionRegex)
 )
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
@@ -788,30 +789,32 @@ func (repo *Repository) uploadOwnershipReferrers(ctx context.Context, src conten
 	return tar.CopyReferrerRoots(ctx, src, dst, referrers, repo.resourceCopyOptions.CopyGraphOptions)
 }
 
-// AddOwnershipByReference attaches an asset-to-owner ownership referrer (ADR 0016)
-// to a resource that is kept by reference as an OCI image (typically a
-// relation=local resource whose access stays an [accessv1.OCIImage] instead of
-// being copied by value). It resolves the referenced image in its hosting
-// registry and pushes a separate ownership referrer manifest whose subject is
-// that image, linking the artifact back to the owning component version.
+// AddOwnership attaches an asset-to-owner ownership referrer (ADR 0016) to
+// resource and pushes it, linking the resource back to the owning component
+// version. It implements the constructor's [OwnershipAwareRepository] capability.
 //
-// The referenced image is left byte-for-byte unchanged: only a new referrer
-// manifest (and the shared empty config/layer blob) is pushed, so OCI-level
-// signatures over the image stay valid. Pushing a manifest carrying a subject
-// lets the ORAS store create the registry's referrers entry (or its tag-schema
-// fallback) automatically. The referrer is content-addressed and deterministic,
-// so re-running the same construction converges on the same digest and the
-// registry deduplicates it.
-func (repo *Repository) AddOwnershipByReference(ctx context.Context, component, version string, resource *descriptor.Resource) (err error) {
+// The subject the referrer points at and the store it is pushed into are derived
+// from the resource's access type (see [Repository.resolveOwnershipSubject]):
+//
+//   - a by-value [v2.LocalBlob] just uploaded into this repository's own component
+//     store is resolved by digest there;
+//   - a by-reference [accessv1.OCIImage] kept in its hosting registry is resolved
+//     by image reference there. That image is left byte-for-byte unchanged — only
+//     the new referrer manifest (and the shared empty config/layer blob) is pushed,
+//     so OCI-level signatures over the image stay valid.
+//
+// The referrer is content-addressed and deterministic, so re-running converges on
+// the same digest and the registry deduplicates it. It is a no-op when the subject
+// is not an OCI manifest (raw blobs get no referrer).
+//
+// The opt-in decision (options.ownershipPolicy: Always) is made by the caller — the
+// constructor gates on the runtime resource options at its call site
+// (processResource) — so this method unconditionally builds the referrer for the
+// resource it is handed. credentials are unused: every store is resolved through
+// this repository's own resolver, already carrying credentials.
+func (repo *Repository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, _ runtime.Typed) (err error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
-
-	// The opt-in decision (options.ownershipPolicy: Always) is made by the caller
-	// before reaching this method — the constructor gates on the runtime resource
-	// options at its call site (processResource). This method unconditionally builds the
-	// referrer for the resource it is handed; it remains a no-op only when the
-	// subject is not an OCI manifest (handled below).
-
-	done := log.Operation(ctx, "add ownership by reference",
+	done := log.Operation(ctx, "add ownership referrer",
 		slog.String("component", component),
 		slog.String("version", version),
 		log.IdentityLogAttr("resource", resource.ToIdentity()))
@@ -819,70 +822,59 @@ func (repo *Repository) AddOwnershipByReference(ctx context.Context, component, 
 		done(err)
 	}()
 
-	var access accessv1.OCIImage
-	if err := repo.scheme.Convert(resource.Access, &access); err != nil {
-		return fmt.Errorf("error converting resource access to OCI image for ownership referrer: %w", err)
-	}
-
-	store, err := repo.resolver.StoreForReference(ctx, access.ImageReference)
+	store, subject, err := repo.resolveOwnershipSubject(ctx, component, version, resource)
 	if err != nil {
 		return err
 	}
-
-	ref, err := looseref.ParseReference(access.ImageReference)
-	if err != nil {
-		return fmt.Errorf("failed to parse image reference %q: %w", access.ImageReference, err)
-	}
-	subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
-	if err != nil {
-		return fmt.Errorf("failed to resolve subject %q for ownership referrer: %w", access.ImageReference, err)
-	}
-
 	return repo.buildAndPushOwnershipReferrer(ctx, store, subject, resource, component, version)
 }
 
-// AddOwnership attaches an asset-to-owner ownership referrer (ADR 0016) to a
-// by-value resource that was just stored as a local blob in this repository's
-// own component store (a relation=local resource that opted in via
-// options.ownershipPolicy: Always). It resolves the uploaded manifest in the
-// component store and pushes a separate ownership referrer manifest whose subject
-// is that manifest, linking it back to the owning component version. It is a
-// no-op when the uploaded artifact is not an OCI manifest (e.g. a raw blob).
+// resolveOwnershipSubject locates the manifest an ownership referrer (ADR 0016)
+// points at and the store the referrer is pushed into, dispatching on the
+// resource's access type:
 //
-// It implements the constructor's OwnershipAwareRepository capability for the
-// by-value path (the by-reference path uses [Repository.AddOwnershipByReference]).
-// credentials are unused: the component store is this repository's own store,
-// already resolved with credentials at construction time.
-func (repo *Repository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, _ runtime.Typed) (err error) {
-	ctx = slogcontext.NewCtx(ctx, repo.logger)
-	done := log.Operation(ctx, "add ownership",
-		slog.String("component", component),
-		slog.String("version", version),
-		log.IdentityLogAttr("resource", resource.ToIdentity()))
-	defer func() {
-		done(err)
-	}()
+//   - by-value ([v2.LocalBlob]): the uploaded local resource's access is a local
+//     blob whose reference is the digest of its just-pushed manifest in this
+//     repository's own component store; that manifest is the subject. It is resolved
+//     directly by digest rather than via the component-version descriptor, which is
+//     not written until AddComponentVersion — i.e. after the constructor has already
+//     attached ownership for each resource.
+//   - by-reference ([accessv1.OCIImage]): the resource stays in its hosting
+//     registry; the referrer is pushed there with the referenced image as subject.
+func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, version string, resource *descriptor.Resource) (spec.Store, ociImageSpecV1.Descriptor, error) {
+	if v2.IsLocalBlob(resource.Access) {
+		var localBlob v2.LocalBlob
+		if err := repo.scheme.Convert(resource.Access, &localBlob); err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("by-value ownership referrer requires a local blob access: %w", err)
+		}
+		_, store, err := repo.getStore(ctx, component, version)
+		if err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, err
+		}
+		subject, err := store.Resolve(ctx, localBlob.LocalReference)
+		if err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve uploaded artifact %q for ownership referrer: %w", localBlob.LocalReference, err)
+		}
+		return store, subject, nil
+	}
 
-	_, store, err := repo.getStore(ctx, component, version)
+	var access accessv1.OCIImage
+	if err := repo.scheme.Convert(resource.Access, &access); err != nil {
+		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource access to OCI image for ownership referrer: %w", err)
+	}
+	store, err := repo.resolver.StoreForReference(ctx, access.ImageReference)
 	if err != nil {
-		return err
+		return nil, ociImageSpecV1.Descriptor{}, err
 	}
-
-	// The uploaded local resource's access is a local blob whose reference is the
-	// digest of its just-pushed manifest in the component store; that manifest is
-	// the referrer subject. Resolve it directly by digest rather than via the
-	// component-version descriptor, which is not written until AddComponentVersion
-	// — i.e. after the constructor has already attached ownership for each resource.
-	var localBlob v2.LocalBlob
-	if err := repo.scheme.Convert(resource.Access, &localBlob); err != nil {
-		return fmt.Errorf("by-value ownership referrer requires a local blob access: %w", err)
-	}
-	subject, err := store.Resolve(ctx, localBlob.LocalReference)
+	ref, err := looseref.ParseReference(access.ImageReference)
 	if err != nil {
-		return fmt.Errorf("failed to resolve uploaded artifact %q for ownership referrer: %w", localBlob.LocalReference, err)
+		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to parse image reference %q: %w", access.ImageReference, err)
 	}
-
-	return repo.buildAndPushOwnershipReferrer(ctx, store, subject, resource, component, version)
+	subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
+	if err != nil {
+		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve subject %q for ownership referrer: %w", access.ImageReference, err)
+	}
+	return store, subject, nil
 }
 
 // buildAndPushOwnershipReferrer builds the ownership referrer (ADR 0016) linking

@@ -45,8 +45,8 @@ func TestProcessResourceDigest_RawAccessType(t *testing.T) {
 func TestAddOwnership_RawAccessType(t *testing.T) {
 	// As with ProcessResourceDigest, a resource coming from a component descriptor
 	// carries *runtime.Raw access. AddOwnership must convert it to the typed
-	// spec before handing off to the inner repository's AddOwnershipByReference, whose
-	// type-switch only matches the typed access.
+	// spec before handing off to the inner repository's AddOwnership, which then
+	// dispatches on the typed access to the by-reference path.
 	raw := &runtime.Raw{}
 	require.NoError(t, ociaccess.Scheme.Convert(&v1.OCIImage{
 		Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
@@ -64,8 +64,8 @@ func TestAddOwnership_RawAccessType(t *testing.T) {
 	repo := NewResourceRepository(nil)
 	err := repo.AddOwnership(t.Context(), "ocm.software/test", "1.0.0", res, nil)
 
-	// Conversion succeeded only if execution reached the inner AddOwnershipByReference
-	// and failed resolving the unreachable host. Assert that positively so a reworded
+	// Conversion succeeded only if execution reached the inner AddOwnership by-reference
+	// path and failed resolving the unreachable host. Assert that positively so a reworded
 	// conversion error can't make this pass for the wrong reason.
 	require.ErrorContains(t, err, "nonexistent.invalid",
 		"AddOwnership must convert *runtime.Raw access to typed and reach the inner repository")

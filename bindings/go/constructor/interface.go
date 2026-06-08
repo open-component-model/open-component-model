@@ -169,14 +169,21 @@ type ResourceRepository interface {
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (content blob.ReadOnlyBlob, err error)
 }
 
-// OwnershipAwareRepository is an optional capability of a [ResourceRepository]:
-// attaching an asset-to-owner ownership referrer (ADR 0016) that links a
-// relation=local resource kept by reference back to the owning component version
-// in the registry that hosts it. It is intentionally kept off [ResourceRepository]
-// so that repositories which cannot host referrers — notably the out-of-process
-// plugin bridge — stay valid resource repositories without implementing anything.
-// The constructor type-asserts a [ResourceRepository] for it and treats its
-// absence as "ownership referrers are not supported here".
+// OwnershipAwareRepository is an optional capability for attaching an
+// asset-to-owner ownership referrer (ADR 0016) that links a resource back to the
+// owning component version in the registry that hosts it. The constructor
+// type-asserts it in two places:
+//
+//   - on a [ResourceRepository], for a relation=local resource kept by reference
+//     (its access is not copied by value), so the referenced artifact records
+//     which component version owns it; and
+//   - on a [TargetRepository], for a by-value or input-method resource stored as
+//     a local blob in the target component store.
+//
+// It is intentionally kept off both base interfaces so that repositories which
+// cannot host referrers — notably the out-of-process plugin bridge and the
+// deprecated fallback — stay valid without implementing anything; the constructor
+// treats its absence as "ownership referrers are not supported here".
 type OwnershipAwareRepository interface {
 	AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error
 }
