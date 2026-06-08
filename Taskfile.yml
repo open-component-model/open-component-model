@@ -136,6 +136,10 @@ includes:
     optional: true
     taskfile: ./kubernetes/controller/Taskfile.yml
     dir: ./kubernetes/controller
+  kubernetes/controller/integration:
+    optional: true
+    taskfile: ./kubernetes/controller/integration/Taskfile.yml
+    dir: ./kubernetes/controller/integration
 
 vars:
   GO_MODULES:
