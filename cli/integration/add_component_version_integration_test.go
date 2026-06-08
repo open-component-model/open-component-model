@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -142,6 +143,9 @@ configurations:
 components:
 - name: %[1]s
   version: %[2]s
+  labels:
+    - name: hello
+      value: world
   provider:
     name: ocm.software
   componentReferences:
@@ -152,6 +156,9 @@ components:
   - name: test-resource
     version: v1.0.0
     type: plainText
+    labels:
+      - name: hello
+        value: world
     input:
       type: utf8
       text: "Hello, World from OCI registry!"
@@ -172,12 +179,18 @@ components:
 components:
 - name: %s
   version: %s
+  labels:
+    - name: hello
+      value: world
   provider:
     name: ocm.software
   resources:
   - name: test-resource
     version: v1.0.0
     type: plainText
+    labels:
+      - name: hello
+        value: world
     input:
       type: utf8
       text: "Hello, World from OCI registry!"
@@ -207,9 +220,15 @@ components:
 				r.Equal(componentName, desc.Component.Name)
 				r.Equal(componentVersion, desc.Component.Version)
 				r.Equal("ocm.software", desc.Component.Provider.Name)
+				r.Len(desc.Component.Labels, 1)
+				r.Equal("hello", desc.Component.Labels[0].Name)
+				r.Equal(json.RawMessage("\"world\""), desc.Component.Labels[0].Value)
 				r.Len(desc.Component.Resources, 1)
 				r.Equal("test-resource", desc.Component.Resources[0].Name)
 				r.Equal("v1.0.0", desc.Component.Resources[0].Version)
+				r.Len(desc.Component.Resources[0].Labels, 1)
+				r.Equal("hello", desc.Component.Resources[0].Labels[0].Name)
+				r.Equal(json.RawMessage("\"world\""), desc.Component.Resources[0].Labels[0].Value)
 
 				if tc.external {
 					componentNameExternal := fmt.Sprintf("%s-external", componentName)
