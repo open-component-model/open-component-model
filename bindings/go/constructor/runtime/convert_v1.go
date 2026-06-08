@@ -363,7 +363,7 @@ func ConvertToRuntimeConstructor(constructor *v1.ComponentConstructor) *Componen
 	for i, component := range constructor.Components {
 		target.Components[i] = Component{
 			ComponentMeta: ComponentMeta{
-				ObjectMeta:   ObjectMeta{Name: component.Name, Version: component.Version},
+				ObjectMeta:   ObjectMeta{Name: component.Name, Version: component.Version, Labels: ConvertFromV1Labels(component.Labels)},
 				CreationTime: component.CreationTime,
 			},
 			Provider: Provider{
