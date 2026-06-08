@@ -26,4 +26,7 @@ type CapabilitySpec struct {
 	//  currently, it uses the general types.Type, but we might want to tailor this
 	//  to credentials specifically.
 	SupportedCredentialRepositorySpecTypes []types.Type `json:"supportedCredentialRepositorySpecTypes"`
+	// CustomCredentialTypes allows plugins to introduce new credential types that are not predefined in the system.
+	// The graph internally provides them as runtime.Raw and the plugins itself need to convert them back.
+	CustomCredentialTypes []types.Type `json:"customCredentialTypes,omitempty"`
 }
