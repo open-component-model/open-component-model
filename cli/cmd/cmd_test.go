@@ -2035,7 +2035,7 @@ func Test_Get_Config(t *testing.T) {
 	tests := []struct {
 		name           string
 		args           []string
-		configYAML     string
+		configsYAML    []string
 		expectedOutput string
 		expectedError  bool
 	}{
@@ -2051,12 +2051,12 @@ type: generic.config.ocm.software/v1
 		{
 			name: "filesystem config - yaml output",
 			args: []string{"get", "config"},
-			configYAML: `
+			configsYAML: []string{`
 type: generic.config.ocm.software/v1
 configurations:
 - type: filesystem.config.ocm.software/v1alpha1
   tempFolder: /tmp/custom
-  workingDirectory: /work`,
+  workingDirectory: /work`},
 			expectedOutput: `configurations:
 - tempFolder: /tmp/custom
   type: filesystem.config.ocm.software/v1alpha1
@@ -2065,14 +2065,55 @@ type: generic.config.ocm.software/v1
 `,
 		},
 		{
-			name: "filesystem config - json output",
-			args: []string{"get", "config", "--output=json"},
-			configYAML: `
+			name: "filesystem config - merge multiple files",
+			args: []string{"get", "config"},
+			// Config file combination covers: a value that gets overriden, a value that is preserved, and a value that is added from the second file
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/overridden
+  workingDirectory: /work
+- type: http.config.ocm.software/v1alpha1
+  timeout: 60s
+`, `
 type: generic.config.ocm.software/v1
 configurations:
 - type: filesystem.config.ocm.software/v1alpha1
   tempFolder: /tmp/custom
-  workingDirectory: /work`,
+  workingDirectory: /work
+- policy: AddIfSupported
+  repositories:
+  - policy: Never
+    repository:
+      filePath: /some/repo
+      type: CommonTransportFormat/v1
+  type: ownership.config.ocm.software/v1alpha1`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /work
+- timeout: 1m0s
+  type: http.config.ocm.software/v1alpha1
+- policy: AddIfSupported
+  repositories:
+  - policy: Never
+    repository:
+      filePath: /some/repo
+      type: CommonTransportFormat/v1
+  type: ownership.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
+`,
+		},
+		{
+			name: "filesystem config - json output",
+			args: []string{"get", "config", "--output=json"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
 			expectedOutput: `{
   "type": "generic.config.ocm.software/v1",
   "configurations": [
@@ -2087,24 +2128,24 @@ configurations:
 		{
 			name: "filesystem config - ndjson output",
 			args: []string{"get", "config", "--output=ndjson"},
-			configYAML: `
+			configsYAML: []string{`
 type: generic.config.ocm.software/v1
 configurations:
 - type: filesystem.config.ocm.software/v1alpha1
   tempFolder: /tmp/custom
-  workingDirectory: /work`,
+  workingDirectory: /work`},
 			expectedOutput: `{"type":"generic.config.ocm.software/v1","configurations":[{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/tmp/custom","workingDirectory":"/work"}]}`,
 		},
 		{
 			name: "multiple config types",
 			args: []string{"get", "config"},
-			configYAML: `
+			configsYAML: []string{`
 type: generic.config.ocm.software/v1
 configurations:
 - type: filesystem.config.ocm.software/v1alpha1
   tempFolder: /tmp/test
 - type: http.config.ocm.software/v1alpha1
-  timeout: 60s`,
+  timeout: 60s`},
 			expectedOutput: `configurations:
 - tempFolder: /tmp/test
   type: filesystem.config.ocm.software/v1alpha1
@@ -2116,7 +2157,7 @@ type: generic.config.ocm.software/v1
 		{
 			name: "all config types populated",
 			args: []string{"get", "config"},
-			configYAML: `
+			configsYAML: []string{`
 type: generic.config.ocm.software/v1
 configurations:
 - type: filesystem.config.ocm.software/v1alpha1
@@ -2164,7 +2205,7 @@ configurations:
       properties:
         username: user
         password: pass
-`,
+`},
 			expectedOutput: `configurations:
 - tempFolder: /tmp/custom
   type: filesystem.config.ocm.software/v1alpha1
@@ -2227,11 +2268,13 @@ type: generic.config.ocm.software/v1`,
 			r := require.New(t)
 			args := tt.args
 
-			if tt.configYAML != "" {
-				tmp := t.TempDir()
-				configFilePath := filepath.Join(tmp, "ocm-config.yaml")
-				r.NoError(os.WriteFile(configFilePath, []byte(tt.configYAML), 0o600))
-				args = append(args, "--config", configFilePath)
+			tmp := t.TempDir()
+			if len(tt.configsYAML) > 0 {
+				for i, configYAML := range tt.configsYAML {
+					configFilePath := filepath.Join(tmp, fmt.Sprintf("config%d.yaml", i))
+					r.NoError(os.WriteFile(configFilePath, []byte(configYAML), 0o600))
+					args = append(args, "--config", configFilePath)
+				}
 			}
 
 			logs := test.NewJSONLogReader()
