@@ -14,7 +14,6 @@ import (
 	ocmv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
 	resolversv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
-
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -110,7 +109,7 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 	if hasEntries(cfg, filesystemv1alpha1.ConfigType, filesystemv1alpha1.Version) {
 		typed, err = filesystemv1alpha1.LookupConfig(cfg)
 		if err != nil {
-			return nil, fmt.Errorf("Config lookup failed for filesystem: %w", err)
+			return nil, fmt.Errorf("config lookup failed for filesystem: %w", err)
 		}
 		result.Configurations = append(result.Configurations, typed)
 	}
@@ -118,15 +117,15 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 	if hasEntries(cfg, httpv1alpha1.ConfigType, httpv1alpha1.Version) {
 		typed, err = httpv1alpha1.LookupConfig(cfg)
 		if err != nil {
-			return nil, fmt.Errorf("Config lookup failed for http: %w", err)
+			return nil, fmt.Errorf("config lookup failed for http: %w", err)
 		}
 		result.Configurations = append(result.Configurations, typed)
 	}
 
 	if hasEntries(cfg, ocmv1.ConfigType, ocmv1.Version) {
-		typed, err = ocmv1.Lookup(cfg)
+		typed, err = ocmv1.Lookup(cfg) //nolint:staticcheck // displaying deprecated config for user visibility
 		if err != nil {
-			return nil, fmt.Errorf("Config lookup failed for ocm: %w", err)
+			return nil, fmt.Errorf("config lookup failed for ocm: %w", err)
 		}
 		result.Configurations = append(result.Configurations, typed)
 	}
@@ -134,7 +133,7 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 	if hasEntries(cfg, resolversv1alpha1.ConfigType, resolversv1alpha1.Version) {
 		typed, err = resolversv1alpha1.Lookup(cfg)
 		if err != nil {
-			return nil, fmt.Errorf("Config lookup failed for resolvers: %w", err)
+			return nil, fmt.Errorf("config lookup failed for resolvers: %w", err)
 		}
 		result.Configurations = append(result.Configurations, typed)
 	}
@@ -142,7 +141,7 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 	if hasEntries(cfg, ownershipv1alpha1.ConfigType, ownershipv1alpha1.Version) {
 		typed, err = ownershipv1alpha1.Lookup(cfg)
 		if err != nil {
-			return nil, fmt.Errorf("Config lookup failed for ownership: %w", err)
+			return nil, fmt.Errorf("config lookup failed for ownership: %w", err)
 		}
 		result.Configurations = append(result.Configurations, typed)
 	}
@@ -150,7 +149,7 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 	if hasEntries(cfg, pluginsv2alpha1.ConfigType, pluginsv2alpha1.Version) {
 		typed, err = pluginsv2alpha1.LookupConfig(cfg)
 		if err != nil {
-			return nil, fmt.Errorf("Config lookup failed for plugins: %w", err)
+			return nil, fmt.Errorf("config lookup failed for plugins: %w", err)
 		}
 		result.Configurations = append(result.Configurations, typed)
 	}
