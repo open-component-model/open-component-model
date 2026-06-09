@@ -2077,8 +2077,8 @@ configurations:
   "type": "generic.config.ocm.software/v1",
   "configurations": [
     {
-      "tempFolder": "/tmp/custom",
       "type": "filesystem.config.ocm.software/v1alpha1",
+      "tempFolder": "/tmp/custom",
       "workingDirectory": "/work"
     }
   ]
@@ -2093,7 +2093,7 @@ configurations:
 - type: filesystem.config.ocm.software/v1alpha1
   tempFolder: /tmp/custom
   workingDirectory: /work`,
-			expectedOutput: `{"type":"generic.config.ocm.software/v1","configurations":[{"tempFolder":"/tmp/custom","type":"filesystem.config.ocm.software/v1alpha1","workingDirectory":"/work"}]}`,
+			expectedOutput: `{"type":"generic.config.ocm.software/v1","configurations":[{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/tmp/custom","workingDirectory":"/work"}]}`,
 		},
 		{
 			name: "multiple config types",

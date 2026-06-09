@@ -14,6 +14,7 @@ import (
 	ocmv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
 	resolversv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
+
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -93,81 +94,114 @@ func GetConfig(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func getEffectiveConfig(cfg *genericv1.Config) (*genericv1.Config, error) {
-	result := &genericv1.Config{
+type effectiveConfig struct {
+	Type           runtime.Type `json:"type"`
+	Configurations []any        `json:"configurations"`
+}
+
+func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
+	result := &effectiveConfig{
 		Type: runtime.NewVersionedType(genericv1.ConfigType, genericv1.Version),
 	}
 
-	entries := []struct {
-		scheme *runtime.Scheme
-		lookup func() (runtime.Typed, error)
-	}{
-		{filesystemv1alpha1.Scheme, func() (runtime.Typed, error) { return filesystemv1alpha1.LookupConfig(cfg) }},
-		{httpv1alpha1.Scheme, func() (runtime.Typed, error) { return httpv1alpha1.LookupConfig(cfg) }},
-		{ocmv1.Scheme, func() (runtime.Typed, error) { return ocmv1.Lookup(cfg) }}, //nolint:staticcheck // displaying deprecated config for user visibility
-		{resolversv1alpha1.Scheme, func() (runtime.Typed, error) { return resolversv1alpha1.Lookup(cfg) }},
-		{ownershipv1alpha1.Scheme, func() (runtime.Typed, error) { return ownershipv1alpha1.Lookup(cfg) }},
-		{extractv1alpha1.Scheme, nil}, // TODO: bindings/go/configuration/extract/v1alpha1/spec/config.go merge is no-op
-		{pluginsScheme, func() (runtime.Typed, error) { return pluginsv2alpha1.LookupConfig(cfg) }},
-		{credentialsScheme, nil},
+	var typed runtime.Typed
+	var err error
+
+	if hasEntries(cfg, filesystemv1alpha1.ConfigType, filesystemv1alpha1.Version) {
+		typed, err = filesystemv1alpha1.LookupConfig(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("Config lookup failed for filesystem: %w", err)
+		}
+		result.Configurations = append(result.Configurations, typed)
 	}
 
-	for _, e := range entries {
-		if err := appendEffective(result, cfg, e.scheme, e.lookup); err != nil {
-			return nil, err
+	if hasEntries(cfg, httpv1alpha1.ConfigType, httpv1alpha1.Version) {
+		typed, err = httpv1alpha1.LookupConfig(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("Config lookup failed for http: %w", err)
+		}
+		result.Configurations = append(result.Configurations, typed)
+	}
+
+	if hasEntries(cfg, ocmv1.ConfigType, ocmv1.Version) {
+		typed, err = ocmv1.Lookup(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("Config lookup failed for ocm: %w", err)
+		}
+		result.Configurations = append(result.Configurations, typed)
+	}
+
+	if hasEntries(cfg, resolversv1alpha1.ConfigType, resolversv1alpha1.Version) {
+		typed, err = resolversv1alpha1.Lookup(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("Config lookup failed for resolvers: %w", err)
+		}
+		result.Configurations = append(result.Configurations, typed)
+	}
+
+	if hasEntries(cfg, ownershipv1alpha1.ConfigType, ownershipv1alpha1.Version) {
+		typed, err = ownershipv1alpha1.Lookup(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("Config lookup failed for ownership: %w", err)
+		}
+		result.Configurations = append(result.Configurations, typed)
+	}
+
+	if hasEntries(cfg, pluginsv2alpha1.ConfigType, pluginsv2alpha1.Version) {
+		typed, err = pluginsv2alpha1.LookupConfig(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("Config lookup failed for plugins: %w", err)
+		}
+		result.Configurations = append(result.Configurations, typed)
+	}
+
+	if hasEntries(cfg, extractv1alpha1.ConfigType, extractv1alpha1.Version) {
+		// bindings/go/configuration/extract/v1alpha1/spec/config.go merge is no-op, so the result is always empty
+		// Serialize the raw entry instead (caveat: output is not merged)
+		filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
+			ConfigTypes: []runtime.Type{
+				runtime.NewVersionedType(extractv1alpha1.ConfigType, extractv1alpha1.Version),
+				runtime.NewUnversionedType(extractv1alpha1.ConfigType),
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to filter config for %s: %w", extractv1alpha1.ConfigType, err)
+		}
+		for _, entry := range filtered.Configurations {
+			var config extractv1alpha1.Config
+			if err := extractv1alpha1.Scheme.Convert(entry, &config); err != nil {
+				return nil, fmt.Errorf("failed to decode credential config: %w", err)
+			}
+			result.Configurations = append(result.Configurations, &config)
+		}
+	}
+
+	if hasEntries(cfg, credentialsv1.ConfigType, credentialsv1.Version) {
+		// Runtime types of credentials serialize as `json:"-"` (bindings/go/credentials/spec/config/runtime/config.go)
+		// Serialize the raw entry instead (caveat: output is not merged)
+		filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
+			ConfigTypes: []runtime.Type{
+				runtime.NewVersionedType(credentialsv1.ConfigType, credentialsv1.Version),
+				runtime.NewUnversionedType(credentialsv1.ConfigType),
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to filter config for %s: %w", credentialsv1.ConfigType, err)
+		}
+		for _, entry := range filtered.Configurations {
+			result.Configurations = append(result.Configurations, entry)
 		}
 	}
 
 	return result, nil
 }
 
-var pluginsScheme = func() *runtime.Scheme {
-	s := runtime.NewScheme()
-	s.MustRegisterWithAlias(&pluginsv2alpha1.Config{}, runtime.NewVersionedType(pluginsv2alpha1.ConfigType, pluginsv2alpha1.Version))
-	return s
-}()
-
-var credentialsScheme = func() *runtime.Scheme {
-	s := runtime.NewScheme()
-	credentialsv1.MustRegister(s)
-	return s
-}()
-
-func appendEffective(result *genericv1.Config, cfg *genericv1.Config, scheme *runtime.Scheme, lookup func() (runtime.Typed, error)) error {
-	var types []runtime.Type
-	for typ, aliases := range scheme.GetTypes() {
-		types = append(types, typ)
-		types = append(types, aliases...)
-	}
-	if !hasEntries(cfg, types) {
-		return nil
-	}
-	if lookup == nil {
-		filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{ConfigTypes: types})
-		if err != nil {
-			return fmt.Errorf("%s: %w", types[0], err)
-		}
-		result.Configurations = append(result.Configurations, filtered.Configurations...)
-		return nil
-	}
-	typed, err := lookup()
-	if err != nil {
-		return fmt.Errorf("%s: %w", types[0], err)
-	}
-	if typed == nil {
-		return nil
-	}
-	raw := &runtime.Raw{}
-	if err := scheme.Convert(typed, raw); err != nil {
-		return fmt.Errorf("failed to convert %s to raw: %w", types[0], err)
-	}
-	result.Configurations = append(result.Configurations, raw)
-	return nil
-}
-
-func hasEntries(cfg *genericv1.Config, types []runtime.Type) bool {
+func hasEntries(cfg *genericv1.Config, configType string, version string) bool {
 	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
-		ConfigTypes: types,
+		ConfigTypes: []runtime.Type{
+			runtime.NewVersionedType(configType, version),
+			runtime.NewUnversionedType(configType),
+		},
 	})
 	if err != nil {
 		return false
