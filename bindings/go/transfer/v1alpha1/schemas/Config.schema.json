@@ -7,7 +7,8 @@
   "description": "Config is the canonical wire format for transfer knobs. Downstream consumers\n(CLI, controllers) load it from YAML/JSON and pass it into [transfer.FromConfig],\nso any new transfer setting belongs here first.",
   "properties": {
     "copyMode": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.CopyMode"
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.CopyMode",
+      "description": "CopyMode determines which resources are copied during a transfer operation.\n\nWhen building a transformation graph, the CopyMode controls whether only local blob\nresources are included or all resources (including remote OCI artifacts and Helm charts)\nare fetched and re-uploaded to the target repository."
     },
     "recursive": {
       "type": "integer",
@@ -28,7 +29,8 @@
       ]
     },
     "uploadType": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.UploadType"
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.UploadType",
+      "description": "UploadType determines how resources are stored in the target repository during transfer.\n\nThis option is only relevant when resources are being copied (i.e., when [CopyModeAllResources]\nis set or for local blob resources in the default mode). It controls whether resources are\nembedded as local blobs within the component descriptor or uploaded as separate OCI artifacts\nwith their own repository references."
     }
   },
   "required": [

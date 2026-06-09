@@ -34,8 +34,19 @@ type Config struct {
 	// -1 means infinite recursion, 0 means no recursion.
 	Recursive int `json:"recursive,omitempty"`
 
+	// CopyMode determines which resources are copied during a transfer operation.
+	//
+	// When building a transformation graph, the CopyMode controls whether only local blob
+	// resources are included or all resources (including remote OCI artifacts and Helm charts)
+	// are fetched and re-uploaded to the target repository.
 	CopyMode CopyMode `json:"copyMode,omitempty"`
 
+	// UploadType determines how resources are stored in the target repository during transfer.
+	//
+	// This option is only relevant when resources are being copied (i.e., when [CopyModeAllResources]
+	// is set or for local blob resources in the default mode). It controls whether resources are
+	// embedded as local blobs within the component descriptor or uploaded as separate OCI artifacts
+	// with their own repository references.
 	UploadType UploadType `json:"uploadType,omitempty"`
 }
 
