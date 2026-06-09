@@ -115,13 +115,11 @@ type ResourceRepository interface {
 }
 
 // OwnershipAwareRepository is an optional capability of a [ResourceRepository]:
-// attaching an asset-to-owner ownership referrer (ADR 0016) for a resource kept by
-// reference. Only repositories backed by an OCI registry — which exposes a
-// Referrers API — implement it; callers type-assert a [ResourceRepository] for it
-// and treat its absence as "ownership referrers are not supported here".
+// recording ownership (ADR 0016) that traces a resource kept by reference back to
+// the component version that owns it.
 type OwnershipAwareRepository interface {
-	// AddOwnership attaches an ownership referrer linking res back to the
-	// owning component version in the registry that hosts it.
+	// AddOwnership records an ownership link tracing res back to the
+	// component version that owns it in the storage backend that hosts it.
 	AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error
 }
 
