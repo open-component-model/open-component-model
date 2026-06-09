@@ -42,6 +42,19 @@ func TestGetOCMConfigForCommand(t *testing.T) {
 		// default config files exist on the test machine
 		_, _ = GetOCMConfigForCommand(cmd)
 	})
+
+	t.Run("multiple config flags merges configurations", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		RegisterConfigFlag(cmd)
+		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "testdata/.ocmconfig-1"))
+		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "testdata/.ocmconfig-2"))
+
+		cfg, err := GetOCMConfigForCommand(cmd)
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		// .ocmconfig-1 has 5 configurations, .ocmconfig-2 has 1
+		assert.Len(t, cfg.Configurations, 6)
+	})
 }
 
 func stubStat(t *testing.T, existing map[string]bool) {

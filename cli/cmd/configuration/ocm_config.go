@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 )
@@ -25,7 +26,7 @@ const (
 var statFunc = os.Stat
 
 func RegisterConfigFlag(cmd *cobra.Command) {
-	cmd.PersistentFlags().String(OCMConfigCommandArgument, "", `supply configuration by a given configuration file.
+	cmd.PersistentFlags().StringArray(OCMConfigCommandArgument, nil, `supply configuration by a given configuration file.
 By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
 1. The path specified in the OCM_CONFIG environment variable
 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
@@ -42,7 +43,7 @@ By default (without specifying custom locations with this flag), the file will b
 - $EXE_DIR/ocm/config
 - $EXE_DIR/.ocmconfig
 If multiple configuration files are found, they will be merged in the order they are discovered.
-Using the option, this configuration file be used instead of the lookup above.`)
+Using the option, the specified configuration file(s) will be used instead of the lookup above.`)
 }
 
 func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
@@ -56,7 +57,8 @@ func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, err
 func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 	flag := cmd.Flag(OCMConfigCommandArgument)
 	if flag != nil && flag.Changed {
-		return GetConfigFromPath(flag.Value.String())
+		paths := flag.Value.(pflag.SliceValue).GetSlice()
+		return loadAndMergeConfigs(paths, true)
 	}
 	return GetOCMConfig()
 }
@@ -77,10 +79,17 @@ func GetOCMConfig(additional ...string) (*genericv1.Config, error) {
 	if err != nil && len(additional) == 0 {
 		return nil, err
 	}
+	return loadAndMergeConfigs(paths, false)
+}
+
+func loadAndMergeConfigs(paths []string, strict bool) (*genericv1.Config, error) {
 	cfgs := make([]*genericv1.Config, 0, len(paths))
 	for _, path := range paths {
 		cfg, err := GetConfigFromPath(path)
 		if err != nil {
+			if strict {
+				return nil, err
+			}
 			slog.Error("ocm config path was skipped due to an error loading it",
 				slog.String("path", path),
 				slog.String("error", err.Error()),
