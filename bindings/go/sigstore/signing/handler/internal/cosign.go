@@ -104,6 +104,11 @@ func (b *CosignBinary) execCosign(ctx context.Context, binaryPath string, args, 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// args[0] is the subcommand (sign-blob/verify-blob); the remaining args are file paths and
+	// configuration flags such as --certificate-identity. None of these contain secrets — the OIDC
+	// token is passed through env (SIGSTORE_ID_TOKEN), never argv.
+	slog.DebugContext(ctx, "cosign: invoking subcommand", "subcommand", args[0], "args", args[1:])
+
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	cmd.Stdout = &stdout
@@ -124,6 +129,9 @@ func (b *CosignBinary) execCosign(ctx context.Context, binaryPath string, args, 
 	}
 	if out := strings.TrimSpace(stdout.String()); out != "" {
 		slog.DebugContext(ctx, "cosign output", "subcommand", args[0], "stdout", out)
+	}
+	if errOut := strings.TrimSpace(stderr.String()); errOut != "" {
+		slog.DebugContext(ctx, "cosign output", "subcommand", args[0], "stderr", errOut)
 	}
 	return nil
 }
