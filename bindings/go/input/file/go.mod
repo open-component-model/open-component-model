@@ -6,7 +6,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/constructor v0.0.9
+	ocm.software/open-component-model/bindings/go/constructor v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 )
 
@@ -23,8 +23,8 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.12 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260505072254-1c17fcd5c971 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260520144124-c7e5118f86a6 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260608215003-3782e7b92e24 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260608215003-3782e7b92e24 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.9 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
