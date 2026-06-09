@@ -36,14 +36,20 @@ brew install open-component-model/tap/ocm
 Earlier releases of the tap installed the OCM CLI as a version-pinned formula
 (e.g. `ocm@0.43.0`), which caused each release to accumulate as a separate
 keg instead of upgrading in place. If you previously installed the CLI via
-Homebrew, run the following once to switch onto the canonical formula:
+Homebrew, list all version-pinned kegs and uninstall every one before
+installing the canonical formula:
 
 ```sh
-brew uninstall ocm@<your-installed-version>
+# list every version-pinned keg you currently have installed
+brew list | grep '^ocm@'
+
+# uninstall each one (repeat the command for every entry above)
+brew uninstall ocm@<version>   # e.g. brew uninstall ocm@0.43.0
+
+# install the canonical formula
 brew install open-component-model/tap/ocm
 ```
 
-You can list the installed version-pinned kegs with `brew list | grep ocm@`.
 After migrating, `brew upgrade` replaces the binary in place on every release.
 {{</callout>}}
 
