@@ -21,21 +21,21 @@ require (
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/configuration v0.0.14
 	ocm.software/open-component-model/bindings/go/constructor v0.0.10
-	ocm.software/open-component-model/bindings/go/credentials v0.0.12
+	ocm.software/open-component-model/bindings/go/credentials v0.0.13
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260608215003-3782e7b92e24
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260608215003-3782e7b92e24
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260609061717-1aefd3478571
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260608215003-3782e7b92e24
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/oci v0.0.45
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260608215003-3782e7b92e24
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260609061717-1aefd3478571
