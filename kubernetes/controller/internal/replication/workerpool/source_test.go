@@ -13,6 +13,9 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/replication/workerpool"
 )
 
+// TestEventSourceEnqueuesRequestersOnCompletion verifies that a finished transfer
+// notifies its requester by enqueueing a reconcile.Request for the right
+// NamespacedName.
 func TestEventSourceEnqueuesRequestersOnCompletion(t *testing.T) {
 	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
 
