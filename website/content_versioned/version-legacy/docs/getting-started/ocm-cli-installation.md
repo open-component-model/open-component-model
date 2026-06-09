@@ -32,6 +32,21 @@ curl -s https://ocm.software/install.sh | sudo bash
 brew install open-component-model/tap/ocm
 ```
 
+{{<callout context="note" title="One-time migration for users on older releases" icon="outline/refresh-cw">}}
+Earlier releases of the tap installed the OCM CLI as a version-pinned formula
+(e.g. `ocm@0.43.0`), which caused each release to accumulate as a separate
+keg instead of upgrading in place. If you previously installed the CLI via
+Homebrew, run the following once to switch onto the canonical formula:
+
+```sh
+brew uninstall ocm@<your-installed-version>
+brew install open-component-model/tap/ocm
+```
+
+You can list the installed version-pinned kegs with `brew list | grep ocm@`.
+After migrating, `brew upgrade` replaces the binary in place on every release.
+{{</callout>}}
+
 ## Install using Nix (with Flakes)
 
 ```sh
