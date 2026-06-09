@@ -54,6 +54,19 @@ substitute your own repository.
 {{< steps >}}
 {{< step >}}
 
+### Push an image for the by-reference resource
+
+The constructor in the next step includes a **by-reference** resource pointing at an image in your own repository,
+`ghcr.io/<your-org>/backend:1.0.0`. Push one there with `oras` so the reference resolves — copying a public image is
+enough:
+
+```bash
+oras cp ghcr.io/stefanprodan/podinfo:6.7.1 ghcr.io/<your-org>/podinfo:6.7.1
+```
+
+{{< /step >}}
+{{< step >}}
+
 ### Author a component constructor that opts in
 
 A resource opts in with `options.ownershipPolicy: Always`. Each resource carries its own policy, so you can mix them
@@ -71,7 +84,7 @@ components:
         version: 1.0.0
         type: ociArtifact
         options:
-          ownershipPolicy: Always
+          ownershipPolicy: Never
         copyPolicy: byValue
         access:
           type: OCIImage/v1
@@ -83,16 +96,16 @@ components:
           ownershipPolicy: Always
         access:
           type: OCIImage/v1
-          imageReference: ghcr.io/<your-org>/backend:1.0.0
+          imageReference: ghcr.io/<your-org>/podinfo:6.7.1
 EOF
 ```
 
-Both resources opt in, but they store the image — and therefore the ownership record — in different places:
+The two resources differ both in how the image is stored and in whether they opt in:
 
-| Resource | How it's stored | Where the ownership record lands |
+| Resource | How it's stored | Ownership |
 | --- | --- | --- |
-| `backend` | **By value** (`copyPolicy: byValue`) — OCM copies the image into your component repository as a localBlob | Your component repository, right next to the image |
-| `backend-ref` | **By reference** (`access` only) — the image is left where it is | The registry that hosts the image; because it's one you have write access to, the record is persisted there without copying the image |
+| `backend` | **By value** (`copyPolicy: byValue`) — OCM copies the image into your component repository as a localBlob | Opted out (`Never`) — uploaded exactly as it would be otherwise, no record |
+| `backend-ref` | **By reference** (`access` only) — the image stays where it is | Opted in (`Always`) — an ownership record is pushed next to the image; because the registry is one you have write access to, the record is persisted there without copying the image |
 
 {{< callout context="note" title="Opt-in is required" icon="outline/info-circle" >}}
 `ownershipPolicy` defaults to `Never`. Without `options.ownershipPolicy: Always`, no ownership record is created —
@@ -110,8 +123,9 @@ ocm add cv \
   --constructor component-constructor.yaml
 ```
 
-OCM uploads the image into your component repository and pushes the ownership record next to it. Because the record
-is content-addressed, re-running this command converges on the same record — you never end up with duplicates.
+OCM copies the `backend` image into your component repository and pushes an ownership record next to the opted-in
+`backend-ref` image. Because the record is content-addressed, re-running this command converges on the same record —
+you never end up with duplicates.
 
 {{< /step >}}
 {{< /steps >}}
@@ -128,12 +142,13 @@ not yet provide its own command to read ownership back, and support for other st
 
 ### Find the resource image reference
 
-For a by-value resource, the uploaded image lives in your component repository. Read its reference from the component
-descriptor:
+The ownership record sits on the image of the opted-in `backend-ref` resource. Read its reference from the component
+descriptor — OCM pinned it to a digest during `ocm add cv`, so you query exactly the artifact the component version
+refers to:
 
 ```bash
 IMAGE_REF=$(ocm get cv ghcr.io/<your-org>//ocm.software/ownership-demo:1.0.0 -o json \
-  | jq -r '.[0].component.resources[] | select(.name=="backend") | .access.globalAccess.imageReference')
+  | jq -r '.[0].component.resources[] | select(.name=="backend-ref") | .access.imageReference')
 echo "$IMAGE_REF"
 ```
 
@@ -158,7 +173,7 @@ oras discover "$IMAGE_REF" \
 {
   "software.ocm.component.name": "ocm.software/ownership-demo",
   "software.ocm.component.version": "1.0.0",
-  "software.ocm.artifact": "{\"identity\":{\"name\":\"backend\",\"version\":\"1.0.0\"},\"kind\":\"resource\"}"
+  "software.ocm.artifact": "{\"identity\":{\"name\":\"backend-ref\",\"version\":\"1.0.0\"},\"kind\":\"resource\"}"
 }
 ```
 
@@ -181,18 +196,13 @@ Read together, these three annotations are the full answer to "who owns this ima
 | Symptom | Likely cause and fix |
 | --- | --- |
 | `oras discover` returns an empty `referrers` array | The resource did not opt in. Confirm `options.ownershipPolicy: Always` is set on the resource and re-run `ocm add cv`. |
-| Empty results even though a record was created | You may be querying the wrong subject. For a by-value resource, discover the image from the descriptor's `globalAccess.imageReference`; for a by-reference resource, discover the `imageReference` you wrote in the constructor. |
+| Empty results even though a record was created | You may be querying the wrong subject. Discover the digest-pinned `imageReference` recorded in the component descriptor, not another copy of the image — referrers live per repository and digest. |
 | `subject.digest` does not match the descriptor digest | The record points at a different artifact — treat the ownership claim as unverified. |
 | Ownership record not visible on an older registry | The registry may not support the Referrers API. `oras` falls back to a tag-based scheme automatically; ensure you query with a recent `oras` version. |
 
 ## Related Documentation
 
-- [Concept: Ownership]({{< relref "docs/concepts/ownership.md" >}}) — what ownership records are and why
-  OCM links artifacts this way
-- [How-To: Use the OCM CLI Container Image]({{< relref "docs/how-to/container-image-usage.md" >}}) — create and read
-  component versions
-- [Tutorial: Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) — author and
-  store component versions
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — how resources and their
-  ownership records move between repositories
-```
+- [Concept: Ownership]({{< relref "docs/concepts/ownership.md" >}}) — what ownership records are and why OCM links artifacts this way
+- [How-To: Use the OCM CLI Container Image]({{< relref "docs/how-to/container-image-usage.md" >}}) — create and read component versions
+- [Tutorial: Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) — author and store component versions
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — how resources and their ownership records move between repositories
