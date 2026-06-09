@@ -111,6 +111,7 @@ func CredentialGraph(cmd *cobra.Command) error {
 		RepositoryPluginProvider:       pluginManager.CredentialRepositoryRegistry,
 		CredentialPluginProvider:       pluginManager.CredentialPluginRegistry,
 		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
+		CredentialTypeSchemeProvider:   pluginManager.CredentialRepositoryRegistry,
 	}
 
 	var credCfg *credentialsRuntime.Config
