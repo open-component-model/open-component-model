@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
@@ -61,6 +62,7 @@ type Graph struct {
 // provider, or nil if no provider is configured.
 func (g *Graph) credentialTypeScheme() *runtime.Scheme {
 	if g.credentialTypeSchemeProvider == nil {
+		slog.Warn("no credential type scheme provider configured, typed credential ingestion will fallback to DirectCredentials")
 		return nil
 	}
 	credentialTypeScheme := g.credentialTypeSchemeProvider.GetCredentialTypeScheme()
