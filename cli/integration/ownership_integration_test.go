@@ -42,10 +42,12 @@ import (
 //     cover idempotent re-adds and sibling isolation.
 //   - "ocm transfer": transfers the same component version to a fresh registry with
 //     the real `ocm transfer component-version`. The by-value referrer rides inside
-//     its local-blob layout and reaches the target with or without --copy-resources;
-//     the by-reference resources only materialise with --copy-resources and carry no
-//     referrer, since transfer copies only referrers inside the layout, not ones
-//     attached out-of-band via the Referrers API.
+//     its local-blob layout and reaches the target with or without --copy-resources.
+//     The by-reference resources only materialise with --copy-resources; when they
+//     do, the transfer pulls each source image's ownership referrers (attached
+//     out-of-band via the Referrers API) into the copy, so a resource that opted in
+//     (Always) gains its referrer on the target while one that opted out (Never) does
+//     not — both with and without --upload-as ociArtifact.
 //
 // Verification goes through the OCI Referrers API (`registry.Referrers`).
 func Test_Integration_Ownership(t *testing.T) {
@@ -76,8 +78,8 @@ func Test_Integration_Ownership(t *testing.T) {
 	constructorDir := t.TempDir()
 	writeOCILayoutTarball(t, constructorDir, "hello-ocm.tar.gz", []byte("backend-image-local-payload"))
 
-	ownedImageRef := pushByReferenceImage(t, ctx, srcRepo, "backend-image", version,
-		fmt.Sprintf("%s/test-asset/backend-image:%s", srcAddr, version), []byte("backend-image-payload"))
+	ownedImageRef := pushByReferenceImage(t, ctx, srcRepo, "backend-image-always", version,
+		fmt.Sprintf("%s/test-asset/backend-image-always:%s", srcAddr, version), []byte("backend-image-payload"))
 	externalImageRef := pushByReferenceImage(t, ctx, srcRepo, "backend-image-external", version,
 		fmt.Sprintf("%s/test-asset/backend-image-external:%s", srcAddr, version), []byte("backend-image-external-payload"))
 
@@ -99,7 +101,7 @@ components:
           type: file/v1
           path: hello-ocm.tar.gz
           mediaType: application/vnd.ocm.software.oci.layout.v1+tar+gzip
-      - name: backend-image
+      - name: backend-image-always
         version: %[2]s
         type: ociArtifact
         options:
@@ -121,28 +123,19 @@ components:
 
 	t.Run("ocm add cv", func(t *testing.T) {
 		t.Run("input resource (ownershipPolicy=Always) — ownership referrer is created", func(t *testing.T) {
-			r := require.New(t)
 			subjectRef := resourceSubjectReference(t, ctx, srcResolver, srcRepo, component, version, "backend-image-local")
-			referrers := listOwnershipReferrers(t, ctx, srcResolver, subjectRef)
-			r.Len(referrers, 1, "a by-value input resource that opts in must get exactly one ownership referrer")
-			assertOwnership(t, ctx, srcResolver, subjectRef, referrers[0], component, version, "backend-image-local")
+			assertOwnershipReferrer(t, ctx, srcResolver, subjectRef, component, version, "backend-image-local", true)
 		})
 
 		t.Run("imageReference access (ownershipPolicy=Always) — ownership referrer is created", func(t *testing.T) {
-			r := require.New(t)
-			referrers := listOwnershipReferrers(t, ctx, srcResolver, ownedImageRef)
-			r.Len(referrers, 1, "a by-reference resource that opts in must get exactly one ownership referrer on its image")
-			assertOwnership(t, ctx, srcResolver, ownedImageRef, referrers[0], component, version, "backend-image")
+			assertOwnershipReferrer(t, ctx, srcResolver, ownedImageRef, component, version, "backend-image-always", true)
 		})
 
 		t.Run("imageReference access (ownershipPolicy=Never) — ownership referrer is not created", func(t *testing.T) {
-			r := require.New(t)
-			r.Empty(listOwnershipReferrers(t, ctx, srcResolver, externalImageRef),
-				"a resource that does not opt in must not get an ownership referrer")
+			assertOwnershipReferrer(t, ctx, srcResolver, externalImageRef, component, version, "backend-image-external", false)
 		})
 
 		t.Run("by-value create is idempotent (single referrer on re-add)", func(t *testing.T) {
-			r := require.New(t)
 			const (
 				component    = "ocm.software/ownership/idempotent"
 				resourceName = "backend-image"
@@ -157,9 +150,53 @@ components:
 			addOwnershipResource(t, ctx, repo, component, version, resourceName, true)
 
 			subjectRef := resourceSubjectReference(t, ctx, resolver, repo, component, version, resourceName)
-			referrers := listOwnershipReferrers(t, ctx, resolver, subjectRef)
-			r.Len(referrers, 1, "re-adding the same by-value resource must leave exactly one ownership referrer")
-			assertOwnership(t, ctx, resolver, subjectRef, referrers[0], component, version, resourceName)
+			assertOwnershipReferrer(t, ctx, resolver, subjectRef, component, version, resourceName, true)
+		})
+
+		t.Run("re-add flips ownershipPolicy Never -> Always (referrer appears only after Always)", func(t *testing.T) {
+			const (
+				component    = "ocm.software/ownership/policy-toggle"
+				resourceName = "backend-image-local"
+			)
+			resolver, reg := ownershipRegistry(t)
+			repo := newOwnershipRepository(t, resolver)
+
+			// A single by-value (input) resource added twice. The on-disk tarball is
+			// identical across both adds, so the resource's content — and therefore its
+			// subject digest — is stable; only options.ownershipPolicy changes.
+			dir := t.TempDir()
+			writeOCILayoutTarball(t, dir, "hello-ocm.tar.gz", []byte("policy-toggle-payload"))
+			toggleYAML := func(policy string) string {
+				return fmt.Sprintf(`
+components:
+  - name: %[1]s
+    version: %[2]s
+    provider:
+      name: ocm.software
+    resources:
+      - name: %[3]s
+        version: %[2]s
+        type: ociArtifact
+        options:
+          ownershipPolicy: %[4]s
+        input:
+          type: file/v1
+          path: hello-ocm.tar.gz
+          mediaType: application/vnd.ocm.software.oci.layout.v1+tar+gzip
+`, component, version, resourceName, policy)
+			}
+
+			// Add #1 — ownershipPolicy=Never: the resource is uploaded but opts out, so
+			// its subject must carry no ownership referrer.
+			addComponentVersionViaCLI(t, ctx, reg, dir, toggleYAML("Never"))
+			subjectRef := resourceSubjectReference(t, ctx, resolver, repo, component, version, resourceName)
+			assertOwnershipReferrer(t, ctx, resolver, subjectRef, component, version, resourceName, false)
+
+			// Add #2 — flip the same resource to ownershipPolicy=Always and replace the
+			// existing component version. The referrer must now appear on the unchanged
+			// subject.
+			addComponentVersionViaCLI(t, ctx, reg, dir, toggleYAML("Always"), "--component-version-conflict-policy", "replace")
+			assertOwnershipReferrer(t, ctx, resolver, subjectRef, component, version, resourceName, true)
 		})
 
 		t.Run("sibling resources get isolated referrers", func(t *testing.T) {
@@ -211,10 +248,7 @@ components:
 				{"frontend", frontendSubject},
 			} {
 				t.Run(sub.name+" carries exactly its own referrer", func(t *testing.T) {
-					r := require.New(t)
-					referrers := listOwnershipReferrers(t, ctx, resolver, sub.subject)
-					r.Len(referrers, 1, "%s must carry exactly its own referrer", sub.name)
-					assertOwnership(t, ctx, resolver, sub.subject, referrers[0], component, version, sub.name)
+					assertOwnershipReferrer(t, ctx, resolver, sub.subject, component, version, sub.name, true)
 				})
 			}
 		})
@@ -236,10 +270,11 @@ components:
 		//     backend-image, which carries a referrer in the source, lands none on the
 		//     target.
 		t.Run("without --copy-resources", func(t *testing.T) {
-			dstResolver, dstRepo := transferTestAsset(t, ctx, srcReg, component, version, false)
+			dstResolver, dstRepo := transferTestAsset(t, ctx, srcReg, component, version, false, "")
 
 			t.Run("backend-image-local (by-value) — referrer reaches the target", func(t *testing.T) {
-				assertLocalReferrerOnTarget(t, ctx, dstResolver, dstRepo, component, version)
+				subject := resourceSubjectReference(t, ctx, dstResolver, dstRepo, component, version, "backend-image-local")
+				assertOwnershipReferrer(t, ctx, dstResolver, subject, component, version, "backend-image-local", true)
 			})
 
 			// The by-reference resources are left pointing at the source, so nothing about
@@ -247,22 +282,45 @@ components:
 		})
 
 		t.Run("with --copy-resources", func(t *testing.T) {
-			dstResolver, dstRepo := transferTestAsset(t, ctx, srcReg, component, version, true)
+			dstResolver, dstRepo := transferTestAsset(t, ctx, srcReg, component, version, true, "")
 
 			t.Run("backend-image-local (by-value) — referrer reaches the target", func(t *testing.T) {
-				assertLocalReferrerOnTarget(t, ctx, dstResolver, dstRepo, component, version)
+				subject := resourceSubjectReference(t, ctx, dstResolver, dstRepo, component, version, "backend-image-local")
+				assertOwnershipReferrer(t, ctx, dstResolver, subject, component, version, "backend-image-local", true)
 			})
 
-			// Both by-reference resources are copied to the target, but neither gains an
-			// ownership referrer: backend-image's source referrer was attached via the
-			// Referrers API (not inside the layout) so the by-reference upload path drops
-			// it, and backend-image-external never had one.
-			t.Run("backend-image (by-reference) — no referrer on the target", func(t *testing.T) {
-				assertNoReferrerOnTarget(t, ctx, dstResolver, dstRepo, component, version, "backend-image")
+			// Both by-reference resources are copied to the target. The transfer pulls
+			// each source image's ownership referrers (attached out-of-band via the
+			// Referrers API) into the copy, so backend-image-always — which opted in —
+			// gains its referrer on the target; backend-image-external opted out (Never)
+			// and never had one.
+			t.Run("backend-image-always (by-reference) — referrer reaches the target", func(t *testing.T) {
+				subject := resourceSubjectReference(t, ctx, dstResolver, dstRepo, component, version, "backend-image-always")
+				assertOwnershipReferrer(t, ctx, dstResolver, subject, component, version, "backend-image-always", true)
 			})
 
 			t.Run("backend-image-external (by-reference) — no referrer on the target", func(t *testing.T) {
-				assertNoReferrerOnTarget(t, ctx, dstResolver, dstRepo, component, version, "backend-image-external")
+				subject := resourceSubjectReference(t, ctx, dstResolver, dstRepo, component, version, "backend-image-external")
+				assertOwnershipReferrer(t, ctx, dstResolver, subject, component, version, "backend-image-external", false)
+			})
+		})
+
+		t.Run("with --copy-resources --upload-as ociArtifact", func(t *testing.T) {
+			// --upload-as ociArtifact re-uploads the by-value resource as a real,
+			// standalone OCI artifact on the target instead of a component-descriptors
+			// local blob. Its content (hence its manifest digest) is unchanged, so the
+			// ownership referrer riding inside the layout must remain discoverable — now
+			// against the uploaded OCI image reference subject.
+			dstResolver, dstRepo := transferTestAsset(t, ctx, srcReg, component, version, true, "ociArtifact")
+
+			t.Run("backend-image-local (by-value) — referrer reaches the uploaded OCI artifact on the target", func(t *testing.T) {
+				subject := resourceSubjectReference(t, ctx, dstResolver, dstRepo, component, version, "backend-image-local")
+				assertOwnershipReferrer(t, ctx, dstResolver, subject, component, version, "backend-image-local", true)
+			})
+
+			t.Run("backend-image-always (by-reference) — referrer reaches the target", func(t *testing.T) {
+				subject := resourceSubjectReference(t, ctx, dstResolver, dstRepo, component, version, "backend-image-always")
+				assertOwnershipReferrer(t, ctx, dstResolver, subject, component, version, "backend-image-always", true)
 			})
 		})
 	})
@@ -273,7 +331,7 @@ components:
 // transferTestAsset transfers the shared test-asset component version into a fresh
 // target registry via the real `ocm transfer component-version` CLI command and
 // returns the target's resolver and repository for asserting the result.
-func transferTestAsset(t *testing.T, ctx context.Context, srcReg *internal.OCIRegistry, component, version string, copyResources bool) (*urlresolver.CachingResolver, *oci.Repository) {
+func transferTestAsset(t *testing.T, ctx context.Context, srcReg *internal.OCIRegistry, component, version string, copyResources bool, uploadAs string) (*urlresolver.CachingResolver, *oci.Repository) {
 	t.Helper()
 	r := require.New(t)
 
@@ -296,6 +354,9 @@ func transferTestAsset(t *testing.T, ctx context.Context, srcReg *internal.OCIRe
 	if copyResources {
 		args = append(args, "--copy-resources")
 	}
+	if uploadAs != "" {
+		args = append(args, "--upload-as", uploadAs)
+	}
 
 	transferCMD := cmd.New()
 	transferOut := new(bytes.Buffer)
@@ -309,27 +370,6 @@ func transferTestAsset(t *testing.T, ctx context.Context, srcReg *internal.OCIRe
 	return dstResolver, dstRepo
 }
 
-// assertLocalReferrerOnTarget asserts the by-value resource's referrer reached the
-// target — it travels inside the layout, so it does regardless of --copy-resources.
-func assertLocalReferrerOnTarget(t *testing.T, ctx context.Context, dstResolver *urlresolver.CachingResolver, dstRepo *oci.Repository, component, version string) {
-	t.Helper()
-	r := require.New(t)
-	subject := resourceSubjectReference(t, ctx, dstResolver, dstRepo, component, version, "backend-image-local")
-	referrers := listOwnershipReferrers(t, ctx, dstResolver, subject)
-	r.Len(referrers, 1, "the by-value resource's ownership referrer must reach the target")
-	assertOwnership(t, ctx, dstResolver, subject, referrers[0], component, version, "backend-image-local")
-}
-
-// assertNoReferrerOnTarget asserts a by-reference resource copied to the target gained
-// no ownership referrer.
-func assertNoReferrerOnTarget(t *testing.T, ctx context.Context, dstResolver *urlresolver.CachingResolver, dstRepo *oci.Repository, component, version, resourceName string) {
-	t.Helper()
-	r := require.New(t)
-	subject := resourceSubjectReference(t, ctx, dstResolver, dstRepo, component, version, resourceName)
-	r.Empty(listOwnershipReferrers(t, ctx, dstResolver, subject),
-		"by-reference resource %q must not gain an ownership referrer on transfer", resourceName)
-}
-
 // --- ocm add cv: driving the real `ocm add component-version` command ---------
 //
 // The add cv half is driven end to end through the production CLI command, so the
@@ -340,7 +380,7 @@ func assertNoReferrerOnTarget(t *testing.T, ctx context.Context, dstResolver *ur
 // addComponentVersionViaCLI writes constructorYAML into constructorDir — where the
 // command roots relative file/v1 input paths — and runs the real
 // `ocm add component-version` command against reg.
-func addComponentVersionViaCLI(t *testing.T, ctx context.Context, reg *internal.OCIRegistry, constructorDir, constructorYAML string) {
+func addComponentVersionViaCLI(t *testing.T, ctx context.Context, reg *internal.OCIRegistry, constructorDir, constructorYAML string, extraArgs ...string) {
 	t.Helper()
 	r := require.New(t)
 
@@ -356,12 +396,12 @@ func addComponentVersionViaCLI(t *testing.T, ctx context.Context, reg *internal.
 	out := new(bytes.Buffer)
 	addCMD.SetOut(out)
 	addCMD.SetErr(out)
-	addCMD.SetArgs([]string{
+	addCMD.SetArgs(append([]string{
 		"add", "component-version",
 		"--repository", fmt.Sprintf("http://%s", reg.RegistryAddress),
 		"--constructor", constructorPath,
 		"--config", cfgPath,
-	})
+	}, extraArgs...))
 
 	addCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
@@ -459,12 +499,27 @@ func addOwnershipResource(t *testing.T, ctx context.Context, repo *oci.Repositor
 	}))
 }
 
-// assertOwnership checks an ADR-0016 ownership referrer: its annotations and that
-// its subject points at the subject manifest as it exists on this registry.
-// subjectRef is the full OCI reference of the owned artifact (by tag or digest).
-func assertOwnership(t *testing.T, ctx context.Context, resolver *urlresolver.CachingResolver, subjectRef string, ref ociImageSpecV1.Descriptor, component, version, resourceName string) {
+// assertOwnershipReferrer asserts the ADR-0016 ownership-referrer state of resourceName
+// on the subject identified by subjectRef — a full OCI reference (by tag or digest)
+// already resolved by the caller, be it a by-value resource (component-descriptors repo
+// @ local-blob digest), a by-reference image, on the source or on a transfer target.
+//
+// When wantReferrer is false, no ownership referrer must be present. When true, exactly
+// one must be present and it is verified: its annotations carry the owning
+// component/version and resource identity, and its manifest subject digest matches the
+// resolved subject manifest on this registry (the Referrers API indexes by subject, so a
+// referrer with a stale or wrong subject digest would still be returned for this subject).
+func assertOwnershipReferrer(t *testing.T, ctx context.Context, resolver *urlresolver.CachingResolver, subjectRef, component, version, resourceName string, wantReferrer bool) {
 	t.Helper()
 	r := require.New(t)
+
+	referrers := listOwnershipReferrers(t, ctx, resolver, subjectRef)
+	if !wantReferrer {
+		r.Empty(referrers, "resource %q must not carry an ownership referrer", resourceName)
+		return
+	}
+	r.Len(referrers, 1, "resource %q must carry exactly one ownership referrer", resourceName)
+	ref := referrers[0]
 
 	assert.Equal(t, component, ref.Annotations[annotations.OwnershipComponentName])
 	assert.Equal(t, version, ref.Annotations[annotations.OwnershipComponentVersion])

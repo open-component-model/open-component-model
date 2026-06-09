@@ -1069,21 +1069,7 @@ func (repo *Repository) DownloadResourceStream(ctx context.Context, res *descrip
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
 	}
-	stream, err := repo.downloadStream(ctx, res.Access)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO(ocm-project#1025): ownership referrers (ADR 0016) are intentionally NOT
-	// fetched here, which is asymmetric with getLocalBlobFromIndexOrManifest (the
-	// by-value path), which does pull them. DownloadResource is also used during
-	// by-value construction (constructor.processResourceByValue), where pulling an
-	// external image's pre-existing referrers into the downloaded layout would break
-	// the subsequent AddLocalResource pack. By-value resources carry their referrers
-	// via the local-blob path instead. Resolving the asymmetry needs a properly
-	// scoped trigger that distinguishes transfer-of-owned-artifact from
-	// ingest-of-external-image before this path can fetch them.
-	return stream, nil
+	return repo.downloadStream(ctx, res.Access)
 }
 
 func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed) (ocistream.ResourceStream, error) {
@@ -1126,16 +1112,29 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			return nil, fmt.Errorf("failed to resolve reference %q: %w", typed.ImageReference, err)
 		}
 
+		// Pull any ownership referrers (ADR 0016) of the artifact into the stream so
+		// they ride inside the materialized layout and travel to a transfer target,
+		// just as they do for a by-value resource (see
+		// [Repository.getLocalBlobFromIndexOrManifest]). Referrers on a by-reference
+		// image are attached out-of-band via the Referrers API, so without this they
+		// would be left behind when the image is copied. A referrers-query hiccup must
+		// not fail an otherwise-healthy read; continue without them.
+		refs, err := lookupOwnershipReferrers(ctx, src, desc)
+		if err != nil {
+			slogcontext.Log(ctx, slog.LevelWarn, "failed listing ownership referrers; continuing without them", slog.String("reference", typed.ImageReference), slog.Any("err", err))
+		}
+
 		var tags []string
 		if resolved.Tag != "" {
 			tags = []string{typed.ImageReference}
 		}
 		return &ocistream.OCIResourceStream{
-			ReadOnlyStorage: src,
-			Descriptor:      desc,
-			CopyOpts:        repo.resourceCopyOptions.CopyGraphOptions,
-			TempDir:         repo.tempDir,
-			Tags:            tags,
+			ReadOnlyStorage:     src,
+			Descriptor:          desc,
+			CopyOpts:            repo.resourceCopyOptions.CopyGraphOptions,
+			TempDir:             repo.tempDir,
+			Tags:                tags,
+			ReferrerDescriptors: refs,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -1162,7 +1161,21 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		return nil, err
 	}
 
-	if err := oras.CopyGraph(ctx, rs, store, rs.Root(), repo.resourceCopyOptions.CopyGraphOptions); err != nil {
+	// ExtendedCopyGraph copies the root together with its ownership referrers (ADR
+	// 0016), which a plain CopyGraph would miss because a referrer's subject edge
+	// points back at the root. FindPredecessors restricts the upward walk to just
+	// the ownership referrers of the source artifact — discovered live against the
+	// source — so signatures or other referrers do not ride along. Depth 1 keeps it
+	// to the root's direct referrers, never referrers-of-referrers. With none, it
+	// degenerates to copying the root alone.
+	extendedOpts := oras.ExtendedCopyGraphOptions{
+		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
+		Depth:            1,
+		FindPredecessors: func(ctx context.Context, src content.ReadOnlyGraphStorage, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+			return lookupOwnershipReferrers(ctx, src, desc)
+		},
+	}
+	if err := oras.ExtendedCopyGraph(ctx, rs, store, rs.Root(), extendedOpts); err != nil {
 		return nil, fmt.Errorf("failed to stream resource via copy: %w", err)
 	}
 
