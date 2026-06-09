@@ -2,6 +2,7 @@ package download
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,7 +55,7 @@ func NewHTTPConfigGetter(client *http.Client, opts HTTPConfigGetterOpts) (getter
 
 // Get implements getter.Getter.
 func (g *httpConfigGetter) Get(href string, _ ...getter.Option) (*bytes.Buffer, error) {
-	req, err := http.NewRequest(http.MethodGet, href, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, href, nil)
 	if err != nil {
 		return nil, err
 	}
