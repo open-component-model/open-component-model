@@ -103,107 +103,88 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		Type: runtime.NewVersionedType(genericv1.ConfigType, genericv1.Version),
 	}
 
-	var typed runtime.Typed
-	var err error
-
-	if hasEntries(cfg, filesystemv1alpha1.ConfigType, filesystemv1alpha1.Version) {
-		typed, err = filesystemv1alpha1.LookupConfig(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("config lookup failed for filesystem: %w", err)
-		}
-		result.Configurations = append(result.Configurations, typed)
+	fsCfg, err := filesystemv1alpha1.LookupConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("config lookup failed for filesystem: %w", err)
+	}
+	if fsCfg != nil {
+		result.Configurations = append(result.Configurations, fsCfg)
 	}
 
-	if hasEntries(cfg, httpv1alpha1.ConfigType, httpv1alpha1.Version) {
-		typed, err = httpv1alpha1.LookupConfig(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("config lookup failed for http: %w", err)
-		}
-		result.Configurations = append(result.Configurations, typed)
+	httpCfg, err := httpv1alpha1.LookupConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("config lookup failed for http: %w", err)
+	}
+	if httpCfg != nil && httpCfg.Type != (runtime.Type{}) {
+		result.Configurations = append(result.Configurations, httpCfg)
 	}
 
-	if hasEntries(cfg, ocmv1.ConfigType, ocmv1.Version) {
-		typed, err = ocmv1.Lookup(cfg) //nolint:staticcheck // displaying deprecated config for user visibility
-		if err != nil {
-			return nil, fmt.Errorf("config lookup failed for ocm: %w", err)
-		}
-		result.Configurations = append(result.Configurations, typed)
+	ocmCfg, err := ocmv1.Lookup(cfg) //nolint:staticcheck // displaying deprecated config for user visibility
+	if err != nil {
+		return nil, fmt.Errorf("config lookup failed for ocm: %w", err)
+	}
+	if ocmCfg != nil {
+		result.Configurations = append(result.Configurations, ocmCfg)
 	}
 
-	if hasEntries(cfg, resolversv1alpha1.ConfigType, resolversv1alpha1.Version) {
-		typed, err = resolversv1alpha1.Lookup(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("config lookup failed for resolvers: %w", err)
-		}
-		result.Configurations = append(result.Configurations, typed)
+	resolversCfg, err := resolversv1alpha1.Lookup(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("config lookup failed for resolvers: %w", err)
+	}
+	if resolversCfg != nil {
+		result.Configurations = append(result.Configurations, resolversCfg)
 	}
 
-	if hasEntries(cfg, ownershipv1alpha1.ConfigType, ownershipv1alpha1.Version) {
-		typed, err = ownershipv1alpha1.Lookup(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("config lookup failed for ownership: %w", err)
-		}
-		result.Configurations = append(result.Configurations, typed)
+	ownershipCfg, err := ownershipv1alpha1.Lookup(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("config lookup failed for ownership: %w", err)
+	}
+	if ownershipCfg != nil {
+		result.Configurations = append(result.Configurations, ownershipCfg)
 	}
 
-	if hasEntries(cfg, pluginsv2alpha1.ConfigType, pluginsv2alpha1.Version) {
-		typed, err = pluginsv2alpha1.LookupConfig(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("config lookup failed for plugins: %w", err)
-		}
-		result.Configurations = append(result.Configurations, typed)
+	pluginsCfg, err := pluginsv2alpha1.LookupConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("config lookup failed for plugins: %w", err)
+	}
+	if pluginsCfg != nil && pluginsCfg.Type != (runtime.Type{}) {
+		result.Configurations = append(result.Configurations, pluginsCfg)
 	}
 
-	if hasEntries(cfg, extractv1alpha1.ConfigType, extractv1alpha1.Version) {
-		// bindings/go/configuration/extract/v1alpha1/spec/config.go merge is no-op, so the result is always empty
-		// Serialize the raw entry instead (caveat: output is not merged)
-		filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
-			ConfigTypes: []runtime.Type{
-				runtime.NewVersionedType(extractv1alpha1.ConfigType, extractv1alpha1.Version),
-				runtime.NewUnversionedType(extractv1alpha1.ConfigType),
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to filter config for %s: %w", extractv1alpha1.ConfigType, err)
-		}
-		for _, entry := range filtered.Configurations {
-			var config extractv1alpha1.Config
-			if err := extractv1alpha1.Scheme.Convert(entry, &config); err != nil {
-				return nil, fmt.Errorf("failed to decode extract config: %w", err)
-			}
-			result.Configurations = append(result.Configurations, &config)
-		}
-	}
-
-	if hasEntries(cfg, credentialsv1.ConfigType, credentialsv1.Version) {
-		// Runtime types of credentials serialize as `json:"-"` (bindings/go/credentials/spec/config/runtime/config.go)
-		// Serialize the raw entry instead (caveat: output is not merged)
-		filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
-			ConfigTypes: []runtime.Type{
-				runtime.NewVersionedType(credentialsv1.ConfigType, credentialsv1.Version),
-				runtime.NewUnversionedType(credentialsv1.ConfigType),
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to filter config for %s: %w", credentialsv1.ConfigType, err)
-		}
-		for _, entry := range filtered.Configurations {
-			result.Configurations = append(result.Configurations, entry)
-		}
-	}
-
-	return result, nil
-}
-
-func hasEntries(cfg *genericv1.Config, configType string, version string) bool {
-	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
+	// bindings/go/configuration/extract/v1alpha1/spec/config.go merge is no-op, so the result is always empty
+	// Serialize the raw entry instead (caveat: output is not merged)
+	var filtered *genericv1.Config
+	filtered, err = genericv1.Filter(cfg, &genericv1.FilterOptions{
 		ConfigTypes: []runtime.Type{
-			runtime.NewVersionedType(configType, version),
-			runtime.NewUnversionedType(configType),
+			runtime.NewVersionedType(extractv1alpha1.ConfigType, extractv1alpha1.Version),
+			runtime.NewUnversionedType(extractv1alpha1.ConfigType),
 		},
 	})
 	if err != nil {
-		return false
+		return nil, fmt.Errorf("failed to filter config for %s: %w", extractv1alpha1.ConfigType, err)
 	}
-	return len(filtered.Configurations) > 0
+	for _, entry := range filtered.Configurations {
+		var config extractv1alpha1.Config
+		if err := extractv1alpha1.Scheme.Convert(entry, &config); err != nil {
+			return nil, fmt.Errorf("failed to decode extract config: %w", err)
+		}
+		result.Configurations = append(result.Configurations, &config)
+	}
+
+	// Runtime types of credentials serialize as `json:"-"` (bindings/go/credentials/spec/config/runtime/config.go)
+	// Serialize the raw entry instead (caveat: output is not merged)
+	filtered, err = genericv1.Filter(cfg, &genericv1.FilterOptions{
+		ConfigTypes: []runtime.Type{
+			runtime.NewVersionedType(credentialsv1.ConfigType, credentialsv1.Version),
+			runtime.NewUnversionedType(credentialsv1.ConfigType),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter config for %s: %w", credentialsv1.ConfigType, err)
+	}
+	for _, entry := range filtered.Configurations {
+		result.Configurations = append(result.Configurations, entry)
+	}
+
+	return result, nil
 }
