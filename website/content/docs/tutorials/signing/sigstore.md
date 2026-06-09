@@ -29,10 +29,13 @@ and [Concept: Identity-Based Trust]({{< relref "docs/concepts/signing-and-verifi
 flowchart LR
     subgraph sign ["Sign (You)"]
         direction TB
-        A[Component Version] --> B[Browser-based OIDC login]
-        B --> C[Fulcio issues short-lived cert]
-        C --> D[Sign + record in Rekor]
-        D --> E[Signed Component Version]
+        A[Component Version] --> B[Browser-based login]
+        B --> IDP[("OIDC IdP<br/>Google / GitHub / Microsoft")]
+        IDP --> DEX[("Dex<br/>oauth2.sigstore.dev<br/>federation gateway")]
+        DEX --> FULCIO[("Fulcio<br/>issues short-lived cert<br/>(~10 min)")]
+        FULCIO --> SIGN[Sign descriptor digest]
+        SIGN --> REKOR[("Rekor<br/>transparency log entry")]
+        REKOR --> E[Signed Component Version<br/>+ bundle in signature.value]
     end
 
     E --> T["Share Component"]
@@ -41,8 +44,10 @@ flowchart LR
 
     subgraph verify ["Verify (Consumer)"]
         direction TB
-        F[Signed Component Version] --> G[Check identity in cert]
-        G --> H{Matches expected<br/>identity?}
+        F[Signed Component Version] --> TUF[("TUF<br/>discover trust roots")]
+        TUF --> CERT[Validate Fulcio cert]
+        CERT --> PROOF[Verify Rekor inclusion proof]
+        PROOF --> H{Identity matches<br/>verifier spec?}
         H -->|Yes| VALID["✓ Trusted"]
         H -->|No| INVALID["✗ Rejected"]
     end
@@ -51,7 +56,9 @@ flowchart LR
     style INVALID fill:#fee2e2,color:#991b1b
 ```
 
-The producer logs in via OIDC; Fulcio binds that login to a short-lived signing certificate; the signature and certificate are recorded in the Rekor transparency log and embedded in the component descriptor. The consumer doesn't need a public key — they declare which OIDC identity they trust, and OCM checks that the signature was made by that identity.
+On the sign side: you log in at your OIDC provider, Dex relays the federated token to Fulcio, Fulcio issues a short-lived certificate bound to your identity, OCM signs the descriptor digest with the ephemeral key, and Rekor records the entry in its transparency log. The signature, certificate, and inclusion proof are bundled into the component descriptor.
+
+On the verify side: TUF supplies the current trust roots, OCM validates the Fulcio certificate, checks the Rekor inclusion proof, and matches the certificate's identity against the verifier spec. The consumer doesn't need a public key — they declare which OIDC identity they trust, and OCM checks that the signature was made by that identity.
 
 ## Prerequisites
 
@@ -176,7 +183,12 @@ ocm sign cv \
 
 A browser window opens against the public Sigstore login page (Dex). Pick your identity provider (Google, GitHub, or Microsoft), authenticate, and you'll see an OCM "Signing identity verified!" page. Return to the terminal — signing continues automatically.
 
-What just happened, in three sentences: OCM exchanged your OIDC token at Fulcio for a short-lived signing certificate (~10 minutes validity) bound to your email address. It hashed the component descriptor, signed the hash with the ephemeral key, and recorded the entry in the Rekor transparency log. The signature, the Fulcio certificate, and the Rekor inclusion proof are bundled into the component descriptor's `signatures` field as one self-contained blob.
+What just happened, step by step:
+
+1. OCM exchanged your OIDC token at Fulcio for a short-lived signing certificate (~10 minutes validity) bound to your email address.
+2. It hashed the component descriptor and signed the hash with the certificate's ephemeral key.
+3. The signed entry was recorded in the Rekor transparency log.
+4. The signature, the Fulcio certificate, and the Rekor inclusion proof are bundled into the component descriptor's `signatures` field as one self-contained blob.
 
 <details>
 <summary>Expected output</summary>
@@ -189,7 +201,6 @@ digest:
 name: default
 signature:
   algorithm: sigstore
-  issuer: https://accounts.google.com
   mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
   value: eyJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi92bmQuZGV2LnNpZ3N0b3JlLmJ1bmRsZS52MC4z...
 
@@ -221,14 +232,13 @@ digest:
   value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
 signature:
   algorithm: sigstore
-  issuer: https://accounts.google.com
   mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
   value: <base64-encoded Sigstore bundle>
 ```
 
-Note the `issuer` field: that's the OIDC provider you logged in with, copied into the component descriptor at sign time. Combined with the email embedded in the bundle's Fulcio certificate, it's everything a verifier needs to decide whether to trust the signature.
+The `value` field is the full Sigstore bundle — base64-encoded JSON containing three things in one self-contained blob: the **signature bytes**, the **Fulcio certificate** (your email is recorded as the certificate's Subject Alternative Name, and the OIDC issuer URL is recorded as a certificate extension), and the **Rekor inclusion proof**. All three travel with the component descriptor; nothing needs to be fetched at verify time.
 
-The `value` field is the full Sigstore bundle — base64-encoded JSON containing the signature bytes, the Fulcio certificate (with your email as the certificate's Subject Alternative Name), and the Rekor inclusion proof. All three travel with the component descriptor; nothing needs to be fetched at verify time.
+The exact bundle layout is defined by the [Sigstore protobuf bundle spec](https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_bundle.proto) — see the upstream [Sigstore documentation](https://docs.sigstore.dev/) for the full schema. To inspect a specific bundle, decode the `value` field with `base64 -d` and pipe it through `jq`.
 
 {{< /step >}}
 
@@ -238,10 +248,12 @@ The `value` field is the full Sigstore bundle — base64-encoded JSON containing
 
 Verification is "do I trust *this identity*?" — not "do I have *this public key*?" Tell OCM which identity you trust by writing a verifier spec.
 
-Two values matter, both required:
+Two values matter:
 
-- **`certificateIdentity`** — the email or workload identity of whoever signed (e.g. your own email, copied from the previous step's output)
-- **`certificateOIDCIssuer`** — *which* OIDC provider they logged in with (different providers can have the same email)
+- **`certificateIdentity`** — the email or workload identity of whoever signed (e.g. your own email, copied from the previous step's output). Use `certificateIdentityRegexp` instead to match a pattern of identities (see below).
+- **`certificateOIDCIssuer`** — *which* OIDC provider they logged in with (different providers can have the same email). Use `certificateOIDCIssuerRegexp` instead to match a pattern of issuers.
+
+You must set one identity field and one issuer field — exact or regex.
 
 Create `sigstore-verify.yaml`:
 
@@ -261,9 +273,30 @@ Replace `certificateIdentity` with the email you logged in with, and adjust `cer
 | GitHub | `https://github.com/login/oauth` |
 | Microsoft | `https://login.microsoftonline.com` |
 
-{{< callout context="caution" title="The issuer is the upstream IdP, not Sigstore Dex" icon="outline/alert-triangle" >}}
-Public Sigstore uses Dex (`oauth2.sigstore.dev`) as a federation gateway, but the issuer recorded in your signing certificate is the **upstream identity provider** — the one in the table above. Don't put `oauth2.sigstore.dev` here.
+{{< callout context="caution" title="`certificateOIDCIssuer` is the upstream IdP, not Sigstore Dex" icon="outline/alert-triangle" >}}
+Public Sigstore uses Dex (`oauth2.sigstore.dev`) as a federation gateway, but the issuer URL recorded in the Fulcio certificate is the **upstream identity provider** — the one in the table above. Don't put `oauth2.sigstore.dev` here.
 {{< /callout >}}
+
+#### Two unrelated "issuer" concepts
+
+The verifier's `certificateOIDCIssuer` field is **not** the same thing as the OCM signature `issuer` field used by the RSA/PEM signing handlers. They are independent concepts that happen to share a name:
+
+- **OCM signature issuer** — a descriptor-level field on the signature, carrying an [RFC 2253](https://datatracker.ietf.org/doc/html/rfc2253) Distinguished Name (e.g. `CN=Signer,O=Acme,C=US`). It is set on the signing side by the RSA/PEM handlers and inspected by their verifiers. Sigstore signatures don't use it.
+- **Sigstore OIDC issuer** — a URL recorded as an [extension on the Fulcio certificate](https://github.com/sigstore/fulcio/blob/main/docs/oid-info.md) inside the Sigstore bundle, identifying which OIDC provider authenticated the signer. The verifier spec's `certificateOIDCIssuer` is matched against this extension.
+
+When you write a verifier spec for Sigstore, you are configuring the **Sigstore OIDC issuer** check only.
+
+#### Trust a pattern of identities, not a single email
+
+`certificateIdentity` and `certificateOIDCIssuer` require an exact match. For team-wide trust — "anyone at my org who logged in via our IdP" — use the regex variants `certificateIdentityRegexp` and `certificateOIDCIssuerRegexp` instead. Realistic example: trust any signer with an `@example.com` email who logged in via Google:
+
+```yaml
+type: SigstoreVerificationConfiguration/v1alpha1
+certificateOIDCIssuer: https://accounts.google.com
+certificateIdentityRegexp: ^[^@]+@example\.com$
+```
+
+The exact and regex variants are mutually exclusive per field — set `certificateIdentity` *or* `certificateIdentityRegexp`, not both. The same applies to `certificateOIDCIssuer` / `certificateOIDCIssuerRegexp`. Anchor your patterns (`^...$`) and escape literal dots (`\.`) — an unanchored `.*@example\.com` would also match `attacker@example.com.evil.io`.
 
 {{< /step >}}
 
