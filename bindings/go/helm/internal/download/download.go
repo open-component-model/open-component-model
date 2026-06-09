@@ -98,8 +98,11 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		// OCI registry client: full retry+timeout client from config.
 		httpClient := ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig))
 		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(httpClient))
-		// HTTP/S getter needs a bare *http.Transport (helm API constraint).
-		// Use the global timeout config; per-host overrides are not supported here.
+		// HTTP/S getter needs a bare *http.Transport (helm API constraint —
+		// getter.WithTransport does not accept http.RoundTripper). Per-host
+		// overrides from cfg.Hosts are therefore not applied on this path;
+		// only the global TimeoutConfig is used. The OCI registry path above
+		// does get full per-host support via ocmhttp.New.
 		getterOpts = append(getterOpts, getter.WithTransport(
 			ocmhttp.NewTransport(&opt.HTTPConfig.TimeoutConfig),
 		))
