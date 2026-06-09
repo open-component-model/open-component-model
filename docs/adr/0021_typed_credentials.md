@@ -168,9 +168,10 @@ credentialTypeScheme.MustRegisterWithAlias(&HelmHTTPCredentials{}, HelmHTTPCrede
 }
 ```
 
-External plugins (separate binaries) declare their credential types in their JSON capability spec. The
-`PluginManager` registers these into the credential type scheme during plugin discovery — no manual CLI
-aggregation needed.
+External plugins (separate binaries) declare custom credential types they introduce in the `customCredentialTypes`
+field of their JSON capability spec. The `PluginManager` registers these into the credential type scheme during
+plugin discovery — no manual CLI aggregation needed. Built-in types (e.g., `HelmHTTPCredentials/v1`,
+`OCICredentials/v1`) are already registered by the built-in bindings at startup and must not be re-declared here.
 
 #### Graph Consumption
 
@@ -240,8 +241,8 @@ signature** to `credentials runtime.Typed`, with `scheme.Convert(typed, *runtime
 way — only the Go API shape changes.
 
 **At discovery time:** The plugin manager runs each plugin binary with `capabilities` and reads the capability JSON.
-The plugin manager registers declared credential types into the credential type scheme during plugin discovery — no
-manual aggregation is needed.
+The plugin manager registers any types listed in `customCredentialTypes` into the credential type scheme — covering
+only custom types the plugin introduces, not built-ins already registered at startup.
 
 **At the plugin boundary (post Phase 3):** The graph hands the resolved `runtime.Typed` directly to the plugin
 contract; the plugin transport marshals it to canonical JSON via the scheme and the plugin-side handler unmarshals
@@ -336,6 +337,13 @@ binding owns its credential types. The graph stores typed credentials natively. 
 development blocking while transitioning the multi-module monorepo.
 
 ## Changelog
+
+### 2026-06-01 — Rename `SupportedCredentialTypes` to `CustomCredentialTypes`
+
+- **`CapabilitySpec.SupportedCredentialTypes` renamed to `CustomCredentialTypes`** (JSON: `customCredentialTypes`).
+  The old name implied plugins should declare all credential types they can return; the field's actual purpose is
+  registration of custom types the plugin introduces. Built-in types are already registered at startup and must
+  not be listed here.
 
 ### 2026-05-21 — Phase 4: constructor binding migrated (#2598)
 
