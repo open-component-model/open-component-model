@@ -177,7 +177,7 @@ func (e *Environment) GetOCMConfigPaths() ([]string, error) {
 		return paths, nil
 	}
 
-	return nil, fmt.Errorf("ocm config not found in any known locations, see --help for detail on how to supply configuration files")
+	return nil, fmt.Errorf("ocm config not found in any known locations, see --help for details on how to supply configuration files")
 }
 
 func (e *Environment) getFromEnvironment() string {
