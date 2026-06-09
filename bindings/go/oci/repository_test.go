@@ -2449,7 +2449,7 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 	// alone wouldn't prove that, so also assert the referrer is still present and the
 	// subject is untouched after the second run. Enumeration ("exactly one referrer")
 	// needs the live Referrers API, which the CTF store has no index for; that
-	// guarantee is covered by Test_Integration_AssetToOwner.
+	// guarantee is covered by Test_Integration_Ownership.
 	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
 
 	stillExists, err := imgStore.Exists(ctx, referrers[0].Descriptor)

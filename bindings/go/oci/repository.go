@@ -694,8 +694,8 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 
 	src = src.DeepCopy()
 
-	// Sources never carry referrers (ADR 0016 ownership is asset-to-owner for
-	// resources), so never copy them here.
+	// Sources never carry referrers (ADR 0016 ownership applies to resources, not
+	// sources), so never copy them here.
 	_, access, err := repo.uploadOCIImage(ctx, src.Access, b, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload source as OCI image: %w", err)
@@ -763,7 +763,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	return main, &access, nil
 }
 
-// AddOwnership attaches an asset-to-owner ownership referrer (ADR 0016) to
+// AddOwnership attaches an ownership referrer (ADR 0016) to
 // resource and pushes it, linking the resource back to the owning component
 // version. It implements the constructor's [OwnershipAwareRepository] capability.
 //

@@ -32,34 +32,23 @@ import (
 	"ocm.software/open-component-model/cli/integration/internal"
 )
 
-// Test_Integration_AssetToOwner verifies the asset-to-owner scenario end-to-end
-// (ADR 0016) against live containerised registries, covering both halves of the
-// feature as nested subtests:
+// Test_Integration_Ownership verifies ownership (ADR 0016) end-to-end against live
+// containerised registries, in two nested subtests:
 //
-//   - "ocm add cv": the real `ocm add component-version` command runs a
-//     component-constructor YAML carrying three resources that differ only in how
-//     each opts into ownership via options.ownershipPolicy — never via relation. A
-//     by-value "input" resource and a by-reference "imageReference" resource that
-//     opt in (ownershipPolicy=Always) each become discoverable as an ownership
-//     referrer; a by-reference resource that does not opt in (ownershipPolicy=Never)
-//     gets none. Two further subtests cover idempotent re-adds and sibling
-//     isolation directly against the repository.
-//   - "ocm transfer": transfers the same component version into a fresh target
-//     registry with the real `ocm transfer component-version` CLI command and
-//     asserts each resource on the target. The by-value resource's referrer rides
-//     inside its local-blob layout, so it reaches the target with and without
-//     --copy-resources; the by-reference resources only materialise on the target
-//     with --copy-resources and land no referrer there, because the by-reference
-//     upload path copies only referrers that ride inside the layout — never those
+//   - "ocm add cv": runs the real `ocm add component-version` on a constructor YAML
+//     with three resources that differ only in options.ownershipPolicy. The two that
+//     opt in (Always) — one by-value, one by-reference — become discoverable as
+//     ownership referrers; the one that does not (Never) gets none. Further subtests
+//     cover idempotent re-adds and sibling isolation.
+//   - "ocm transfer": transfers the same component version to a fresh registry with
+//     the real `ocm transfer component-version`. The by-value referrer rides inside
+//     its local-blob layout and reaches the target with or without --copy-resources;
+//     the by-reference resources only materialise with --copy-resources and carry no
+//     referrer, since transfer copies only referrers inside the layout, not ones
 //     attached out-of-band via the Referrers API.
 //
-// Driving the real CLI command for the add cv half exercises the wired seam
-// (GetResourceRepository -> constructorPlugin.AddOwnership) and the policy
-// gate in constructor.processResource exactly as a user hits them.
-//
-// Verification always goes through the OCI Distribution Referrers API
-// (`registry.Referrers`) — the same path every OCI v1.1 client uses.
-func Test_Integration_AssetToOwner(t *testing.T) {
+// Verification goes through the OCI Referrers API (`registry.Referrers`).
+func Test_Integration_Ownership(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
@@ -155,7 +144,7 @@ components:
 		t.Run("by-value create is idempotent (single referrer on re-add)", func(t *testing.T) {
 			r := require.New(t)
 			const (
-				component    = "ocm.software/asset-to-owner/idempotent"
+				component    = "ocm.software/ownership/idempotent"
 				resourceName = "backend-image"
 			)
 			resolver, _ := ownershipRegistry(t)
@@ -175,7 +164,7 @@ components:
 
 		t.Run("sibling resources get isolated referrers", func(t *testing.T) {
 			r := require.New(t)
-			const component = "ocm.software/asset-to-owner/siblings"
+			const component = "ocm.software/ownership/siblings"
 			resolver, _ := ownershipRegistry(t)
 			repo := newOwnershipRepository(t, resolver)
 

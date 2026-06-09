@@ -50,7 +50,7 @@ type ResourceRepository struct {
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
 // The OCI resource repository is the only implementation of the optional
-// asset-to-owner ownership-referrer capability (ADR 0016).
+// ownership-referrer capability (ADR 0016).
 var _ repository.OwnershipAwareRepository = (*ResourceRepository)(nil)
 
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
@@ -150,7 +150,7 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return b, nil
 }
 
-// AddOwnership attaches an asset-to-owner ownership referrer (ADR 0016)
+// AddOwnership attaches an ownership referrer (ADR 0016)
 // to a by-reference OCI image resource, pushing the referrer into the registry
 // that hosts the image. It delegates to the inner repository's
 // [oci.Repository.AddOwnership], which dispatches on the resource's access type.

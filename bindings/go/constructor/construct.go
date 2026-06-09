@@ -431,11 +431,10 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 				}
 			}
 
-			// A resource kept by reference still belongs to this component version;
-			// attach asset-to-owner ownership (ADR 0016) in the hosting
-			// registry. Only resources that opt in via OwnershipPolicyAlways get one,
-			// and resolving the hosting resource repository is gated on that opt-in so
-			// non-opted-in (and non-OCI) by-reference resources never touch it.
+			// A resource kept by reference still belongs to this component version, so its
+			// ownership (ADR 0016) is recorded in the registry that hosts it. Only resources
+			// that opt in via OwnershipPolicyAlways get one, and the hosting resource repository
+			// is resolved only for those, so resources that don't opt in never reach it.
 			if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways && c.opts.ResourceRepositoryProvider != nil {
 				repo, err := c.opts.GetResourceRepository(ctx, resource)
 				if err != nil {
@@ -743,7 +742,7 @@ func addColocatedResourceLocalBlob(
 	}
 
 	// A by-value (or input-method) resource that opts in via OwnershipPolicyAlways
-	// gets asset-to-owner ownership (ADR 0016) pointing the uploaded
+	// gets ownership (ADR 0016) pointing the uploaded
 	// artifact back at the owning component version. Recording it requires a target
 	// repository that implements [OwnershipAwareRepository]; one that cannot (e.g. the
 	// out-of-process plugin bridge, or the deprecated fallback) makes construction fail

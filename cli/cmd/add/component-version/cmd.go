@@ -150,11 +150,12 @@ Example:
             type: ociArtifact
             imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
 
-Ownership Referrers (ADR 0016):
+Ownership:
 
-A resource can opt into an asset-to-owner ownership referrer so consumers can trace the
-artifact back to the component version that owns it. Set "options.ownershipPolicy" to
-"Always" on the resource (the default is "Never"):
+Ownership records a link from a resource back to the component version that owns it,
+so a consumer who encounters the resource's artifact in a registry can trace it back to
+that component version. A resource opts in by setting "options.ownershipPolicy" to
+"Always" (the default is "Never"):
 
   resources:
     - name: my-image
@@ -166,7 +167,7 @@ artifact back to the component version that owns it. Set "options.ownershipPolic
         type: ociArtifact
         imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
 
-When enabled, a referrer manifest (artifact type "application/vnd.ocm.software.ownership.v1+json")
+When enabled, an ownership manifest (artifact type "application/vnd.ocm.software.ownership.v1+json")
 is attached to the resource's manifest: pushed into the component repository for by-value
 resources, or next to the image in its hosting registry for by-reference resources (the image
 bytes are left unchanged, so existing signatures stay valid). The policy is a construction-time
@@ -492,7 +493,7 @@ var (
 
 // constructorPlugin adapts a resolved [resource.Repository] plugin to the
 // constructor's [constructor.ResourceRepository] interface, including the optional
-// asset-to-owner ownership-referrer capability (ADR 0016) when the plugin supports it.
+// ownership capability (ADR 0016) when the plugin supports it.
 type constructorPlugin struct {
 	plugin resource.Repository
 }
@@ -505,12 +506,12 @@ func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descripto
 	return c.plugin.DownloadResource(ctx, res, credentials)
 }
 
-// AddOwnership attaches an asset-to-owner ownership referrer (ADR 0016) by
+// AddOwnership records ownership (ADR 0016) by
 // delegating to the resolved plugin when it implements
 // [repository.OwnershipAwareRepository] (the in-process OCI resource repository
 // does). When it does not (e.g. the out-of-process plugin bridge), it returns an
 // error: the resource explicitly opted into ownership (policy "Always"), so a
-// repository that cannot host referrers is a hard failure rather than a silent no-op.
+// repository that cannot record ownership is a hard failure rather than a silent no-op.
 func (c *constructorPlugin) AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error {
 	ownershipAwareRepo, ok := c.plugin.(repository.OwnershipAwareRepository)
 	if !ok {

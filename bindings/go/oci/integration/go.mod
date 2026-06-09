@@ -12,29 +12,19 @@ require (
 	golang.org/x/crypto v0.51.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/configuration v0.0.14
-	ocm.software/open-component-model/bindings/go/constructor v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.12
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260521121644-2be2fc986501
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/input/file v0.0.5
 	ocm.software/open-component-model/bindings/go/oci v0.0.45
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	oras.land/oras-go/v2 v2.6.0
-	sigs.k8s.io/yaml v1.6.0
 )
 
 // Replace include to make sure we are always testing the current code instead of a version.
 // It is irrelevant for us that integration tests cannot be consumed by other modules.
 replace ocm.software/open-component-model/bindings/go/oci => ../
-
-// The constructor engine is driven directly by the asset-to-owner integration
-// test (ocm add cv). Replace it to test the current code, mirroring the oci replace above.
-replace ocm.software/open-component-model/bindings/go/constructor => ../../constructor
-
-// The file/v1 input method reads the local OCI layout tarball the add cv test feeds in.
-replace ocm.software/open-component-model/bindings/go/input/file => ../../input/file
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -55,7 +45,6 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
@@ -92,5 +81,5 @@ require (
 	golang.org/x/text v0.37.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260505072254-1c17fcd5c971 // indirect
+	sigs.k8s.io/yaml v1.6.0 // indirect
 )
