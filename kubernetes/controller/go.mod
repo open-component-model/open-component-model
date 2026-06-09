@@ -33,16 +33,16 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.14
 	ocm.software/open-component-model/bindings/go/credentials v0.0.12
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260505072254-1c17fcd5c971
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260521121644-2be2fc986501
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260608215003-3782e7b92e24
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260608215003-3782e7b92e24
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260522105049-e4d3ffbaf1f3
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/oci v0.0.45
-	ocm.software/open-component-model/bindings/go/plugin v0.0.16
+	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260522110833-67a18b816b78
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260608215003-3782e7b92e24
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260521152541-2f5bcd0f1f44
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260609061717-1aefd3478571
 	sigs.k8s.io/release-utils v0.12.4
 )
 
@@ -149,7 +149,7 @@ require (
 	k8s.io/cli-runtime v0.36.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.9 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.10 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
