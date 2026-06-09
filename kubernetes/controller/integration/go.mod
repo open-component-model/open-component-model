@@ -12,8 +12,8 @@ require (
 	golang.org/x/crypto v0.52.0
 	k8s.io/apimachinery v0.36.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/credentials v0.0.12
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260608085201-803e85a72f5c
+	ocm.software/open-component-model/bindings/go/credentials v0.0.13
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.45
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
@@ -70,7 +70,7 @@ require (
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
@@ -136,9 +136,9 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260505072254-1c17fcd5c971 // indirect
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260522105049-e4d3ffbaf1f3 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260521152541-2f5bcd0f1f44 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260609061717-1aefd3478571 // indirect
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260609061717-1aefd3478571 // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260609061717-1aefd3478571 // indirect
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260603205251-b4dd5b753a8d // indirect
 	sigs.k8s.io/controller-runtime v0.24.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect

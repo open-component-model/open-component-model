@@ -42,7 +42,7 @@ require (
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260609061717-1aefd3478571  
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260603205251-b4dd5b753a8d
 	sigs.k8s.io/release-utils v0.12.4
 )
