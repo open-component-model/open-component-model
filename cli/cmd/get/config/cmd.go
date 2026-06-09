@@ -152,7 +152,7 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 	}
 
 	// bindings/go/configuration/extract/v1alpha1/spec/config.go merge is no-op, so the result is always empty
-	// Serialize the raw entry instead (caveat: output is not merged)
+	// Serialize the typed config directly without merging
 	var filtered *genericv1.Config
 	filtered, err = genericv1.Filter(cfg, &genericv1.FilterOptions{
 		ConfigTypes: []runtime.Type{
