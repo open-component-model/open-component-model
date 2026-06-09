@@ -11,8 +11,7 @@ import (
 )
 
 // Register registers the Sigstore signing handler with the signing registry and
-// registers OIDCIdentityToken/v1alpha1 and TrustedRoot/v1alpha1 credential types
-// with the credential type registry.
+// registers OIDCIdentityToken/v1alpha1 and TrustedRoot/v1alpha1 credential types.
 func Register(
 	signingHandlerRegistry *signinghandler.SigningRegistry,
 	repositoryRegistry *credentialrepository.RepositoryRegistry,
