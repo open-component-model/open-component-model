@@ -16,6 +16,9 @@ const (
 	NoneLegacyType = "None"
 )
 
+// labelsKey is the descriptor field name carrying labels.
+const labelsKey = "labels"
+
 // Algorithm is the registered name for this normalisation algorithm.
 // It is used to identify and retrieve this specific normalisation implementation
 // from the normalisation registry.
@@ -49,27 +52,27 @@ var ExclusionRules = jcs.MapExcludes{
 		"provider": jcs.MapValue{
 			Mapping: ProviderAsMap,
 			Continue: jcs.MapExcludes{
-				"labels": LabelExcludes,
+				labelsKey: LabelExcludes,
 			},
 		},
-		"labels": LabelExcludes,
+		labelsKey: LabelExcludes,
 		"resources": jcs.DynamicArrayExcludes{
 			ValueMapper: MapResourcesWithNoneAccess,
 			Continue: jcs.MapExcludes{
 				"access":  nil,
 				"srcRefs": nil,
-				"labels":  LabelExcludes,
+				labelsKey: LabelExcludes,
 			},
 		},
 		"sources": jcs.ArrayExcludes{
 			Continue: jcs.MapExcludes{
-				"access": nil,
-				"labels": LabelExcludes,
+				"access":  nil,
+				labelsKey: LabelExcludes,
 			},
 		},
 		"references": jcs.ArrayExcludes{
 			Continue: jcs.MapExcludes{
-				"labels": LabelExcludes,
+				labelsKey: LabelExcludes,
 			},
 		},
 	},
