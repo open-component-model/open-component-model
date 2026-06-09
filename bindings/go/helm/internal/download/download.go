@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
@@ -92,7 +93,18 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 
 	getterOpts = append(getterOpts, getter.WithPlainHTTP(plainHTTP))
 
-	regClient, err := registry.NewClient()
+	var regClientOpts []registry.ClientOption
+	if opt.HTTPConfig != nil {
+		// OCI registry client: full retry+timeout client from config.
+		httpClient := ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig))
+		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(httpClient))
+		// HTTP/S getter needs a bare *http.Transport (helm API constraint).
+		// Use the global timeout config; per-host overrides are not supported here.
+		getterOpts = append(getterOpts, getter.WithTransport(
+			ocmhttp.NewTransport(&opt.HTTPConfig.TimeoutConfig),
+		))
+	}
+	regClient, err := registry.NewClient(regClientOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("error creating registry client: %w", err)
 	}
