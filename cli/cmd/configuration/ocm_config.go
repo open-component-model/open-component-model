@@ -21,6 +21,9 @@ const (
 	OCMConfigCommandArgument = "config"
 )
 
+// statFunc is the file stat function used for config discovery. Overridden in tests.
+var statFunc = os.Stat
+
 func RegisterConfigFlag(cmd *cobra.Command) {
 	cmd.PersistentFlags().String(OCMConfigCommandArgument, "", `supply configuration by a given configuration file.
 By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
@@ -133,37 +136,33 @@ func GetConfigFromPath(path string) (_ *genericv1.Config, err error) {
 //   - $EXE_DIR/.ocmconfig
 //
 // Returns:
-//   - string: The path of the discovered configuration file.
+//   - []string: A slice of valid config file paths found; otherwise, an empty slice.
 //   - error: An error if no configuration file is found.
 func GetOCMConfigPaths() ([]string, error) {
 	var paths []string
 	if path := getFromEnvironment(); path != "" {
 		paths = append(paths, path)
 	}
-	if path := getFromXDGOrHomeDir(); path != "" {
-		paths = append(paths, path)
+	if subPaths := getFromXDGOrHomeDir(); len(subPaths) > 0 {
+		paths = append(paths, subPaths...)
 	}
-	if path := getFromWorkingDir(); path != "" {
-		paths = append(paths, path)
+	if subPaths := getFromWorkingDir(); len(subPaths) > 0 {
+		paths = append(paths, subPaths...)
 	}
-	if path := getFromExecutableDir(); path != "" {
-		paths = append(paths, path)
+	if subPaths := getFromExecutableDir(); len(subPaths) > 0 {
+		paths = append(paths, subPaths...)
 	}
 
 	if len(paths) > 0 {
 		return paths, nil
 	}
 
-	return nil, fmt.Errorf("ocm config not found in any known locations: %s", paths)
+	return nil, fmt.Errorf("ocm config not found in any known locations, see --help for details on how to supply configuration files")
 }
 
-// getFromEnvironment checks if the OCM_CONFIG_PATH environment variable is set.
-//
-// Returns:
-//   - string: The file path if valid; otherwise, an empty string.
 func getFromEnvironment() string {
 	if env := os.Getenv(OCMConfigEnvironmentKey); env != "" {
-		if _, err := os.Stat(filepath.Clean(env)); err == nil {
+		if _, err := statFunc(filepath.Clean(env)); err == nil {
 			return env
 		}
 	}
@@ -176,49 +175,49 @@ func getFromEnvironment() string {
 // If both are unavailable, it falls back to the user's home directory.
 //
 // Returns:
-//   - string: The file path if found; otherwise, an empty string.
-func getFromXDGOrHomeDir() string {
-	// Check XDG_CONFIG_HOME if set
+//   - []string: A slice of valid config file paths found; otherwise, an empty slice.
+func getFromXDGOrHomeDir() []string {
+	paths := []string{}
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		if path := checkConfigPaths(xdg); path != "" {
-			return path
+		if subPaths := checkConfigPaths(xdg); len(subPaths) > 0 {
+			paths = append(paths, subPaths...)
 		}
 	}
 
 	// Check default XDG home ($HOME/.config)
 	if home, err := os.UserHomeDir(); err == nil {
-		if path := checkConfigPaths(filepath.Join(home, ".config")); path != "" {
-			return path
+		if subPaths := checkConfigPaths(filepath.Join(home, ".config")); len(subPaths) > 0 {
+			paths = append(paths, subPaths...)
 		}
-		if path := checkConfigPaths(home); path != "" {
-			return path
+		if subPaths := checkConfigPaths(home); len(subPaths) > 0 {
+			paths = append(paths, subPaths...)
 		}
 	}
 
-	return ""
+	return paths
 }
 
 // getFromWorkingDir checks the current working directory for the configuration file.
 //
 // Returns:
-//   - string: The file path if found; otherwise, an empty string.
-func getFromWorkingDir() string {
+//   - []string: A slice of valid config file paths found; otherwise, an empty slice.
+func getFromWorkingDir() []string {
 	if wd, err := os.Getwd(); err == nil {
 		return checkConfigPaths(wd)
 	}
-	return ""
+	return []string{}
 }
 
 // getFromExecutableDir checks the directory of the running executable for the configuration file.
 //
 // Returns:
-//   - string: The file path if found; otherwise, an empty string.
-func getFromExecutableDir() string {
+//   - []string: A slice of valid config file paths found; otherwise, an empty slice.
+func getFromExecutableDir() []string {
 	if ex, err := os.Executable(); err == nil {
 		base := filepath.Dir(ex)
 		return checkConfigPaths(base)
 	}
-	return ""
+	return []string{}
 }
 
 // checkConfigPaths searches for both config file variations in a given base directory.
@@ -227,13 +226,14 @@ func getFromExecutableDir() string {
 //   - base (string): The directory to search in.
 //
 // Returns:
-//   - string: The path of the first valid config file found; otherwise, an empty string.
-func checkConfigPaths(base string) string {
+//   - []string: A slice of valid config file paths found; otherwise, an empty slice.
+func checkConfigPaths(base string) []string {
+	paths := []string{}
 	for _, name := range []string{OCMConfigFileName, NestedOCMConfigFileName} {
 		path := filepath.Clean(filepath.Join(base, name))
-		if _, err := os.Stat(path); err == nil {
-			return path
+		if _, err := statFunc(path); err == nil {
+			paths = append(paths, path)
 		}
 	}
-	return ""
+	return paths
 }

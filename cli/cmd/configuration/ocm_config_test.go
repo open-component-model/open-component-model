@@ -1,6 +1,8 @@
 package configuration
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -40,6 +42,93 @@ func TestGetOCMConfigForCommand(t *testing.T) {
 		// default config files exist on the test machine
 		_, _ = GetOCMConfigForCommand(cmd)
 	})
+}
+
+func stubStat(t *testing.T, existing map[string]bool) {
+	t.Helper()
+	original := statFunc
+	t.Cleanup(func() { statFunc = original })
+	statFunc = func(path string) (os.FileInfo, error) {
+		if existing == nil || existing[path] {
+			return nil, nil
+		}
+		return nil, os.ErrNotExist
+	}
+}
+func TestGetOCMConfigPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing map[string]bool
+		envVars  map[string]string
+		want     func(workingDirectory, executableDirectory string) []string
+		wantErr  bool
+	}{
+		{
+			name:     "env var set and file exists",
+			existing: map[string]bool{"/custom/config": true},
+			envVars:  map[string]string{"OCM_CONFIG": "/custom/config"},
+			want:     func(string, string) []string { return []string{"/custom/config"} },
+		},
+		{
+			name:     "env var set but file does not exist",
+			existing: map[string]bool{},
+			envVars:  map[string]string{"OCM_CONFIG": "/missing/config"},
+			wantErr:  true,
+		},
+		{
+			name:     "all files found across all locations in documented order",
+			existing: nil, // all paths exist
+			envVars: map[string]string{
+				"OCM_CONFIG":      "/ocm-config",
+				"XDG_CONFIG_HOME": "/xdg",
+				"HOME":            "/home/user",
+			},
+			want: func(workingDirectory, executableDirectory string) []string {
+				return []string{
+					"/ocm-config",
+					"/xdg/.ocm/config",
+					"/xdg/.ocmconfig",
+					"/home/user/.config/.ocm/config",
+					"/home/user/.config/.ocmconfig",
+					"/home/user/.ocm/config",
+					"/home/user/.ocmconfig",
+					filepath.Join(workingDirectory, ".ocm/config"),
+					filepath.Join(workingDirectory, ".ocmconfig"),
+					filepath.Join(executableDirectory, ".ocm/config"),
+					filepath.Join(executableDirectory, ".ocmconfig"),
+				}
+			},
+		},
+		{
+			name:     "no files found returns error",
+			existing: map[string]bool{},
+			envVars:  map[string]string{},
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workingDirectory := t.TempDir()
+			ex, err := os.Executable()
+			require.NoError(t, err)
+			executableDirectory := filepath.Dir(ex)
+			t.Chdir(workingDirectory)
+
+			stubStat(t, tt.existing)
+			for k, v := range tt.envVars {
+				t.Setenv(k, v)
+			}
+
+			got, err := GetOCMConfigPaths()
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want(workingDirectory, executableDirectory), got)
+		})
+	}
 }
 
 func TestGetFlattenedGetConfigFromPath(t *testing.T) {
