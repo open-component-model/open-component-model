@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"reflect"
 	"runtime"
 	"sync"
 
@@ -455,7 +454,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 						return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 					}
 				} else {
-					logger.Warn("resource repository does not support ownership, skipping.", "resource", resource.ToIdentity(), "type", reflect.TypeOf(repo))
+					return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), "Always", repo)
 				}
 			}
 		}
@@ -745,15 +744,17 @@ func addColocatedResourceLocalBlob(
 
 	// A by-value (or input-method) resource that opts in via OwnershipPolicyAlways
 	// gets asset-to-owner ownership (ADR 0016) pointing the uploaded
-	// artifact back at the owning component version. Attaching it is an optional
-	// capability: a target repository that cannot record ownership (e.g. the
-	// out-of-process plugin bridge, or the deprecated fallback) does not implement
-	// [OwnershipAwareRepository], and the attach is skipped for it.
+	// artifact back at the owning component version. Recording it requires a target
+	// repository that implements [OwnershipAwareRepository]; one that cannot (e.g. the
+	// out-of-process plugin bridge, or the deprecated fallback) makes construction fail
+	// rather than silently dropping an explicitly requested ownership link.
 	if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
 		if ownershipAwareRepo, ok := repo.(OwnershipAwareRepository); ok {
 			if err := ownershipAwareRepo.AddOwnership(ctx, component, version, uploaded, creds); err != nil {
 				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 			}
+		} else {
+			return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), "Always", repo)
 		}
 	}
 

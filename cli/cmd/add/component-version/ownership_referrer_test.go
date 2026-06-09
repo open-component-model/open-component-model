@@ -96,12 +96,12 @@ func TestGetResourceRepository_ForwardsOwnershipReferrer(t *testing.T) {
 	require.Equal(t, "v1.0.0", plugin.gotVersion)
 }
 
-// TestGetResourceRepository_SkipsOwnershipReferrerWhenUnsupported proves the
+// TestGetResourceRepository_FailsOwnershipReferrerWhenUnsupported proves the
 // inverse: constructorPlugin always exposes AddOwnership, but for a plugin
-// that cannot host referrers (e.g. an external plugin bridge) the call warns and
-// skips — returning nil without delegating — instead of failing. That graceful
-// degradation is the designed behavior for such bridges.
-func TestGetResourceRepository_SkipsOwnershipReferrerWhenUnsupported(t *testing.T) {
+// that cannot host referrers (e.g. an external plugin bridge) the call returns an
+// error instead of silently skipping. A resource that opts in via policy "Always"
+// must not be published without its ownership link.
+func TestGetResourceRepository_FailsOwnershipReferrerWhenUnsupported(t *testing.T) {
 	prov := providerWithPlugin(t, &basePlugin{scheme: newTestAccessScheme()})
 
 	repo, err := prov.GetResourceRepository(t.Context(), &constructorruntime.Resource{AccessOrInput: constructorruntime.AccessOrInput{Access: &testAccess{Type: testAccessType}}})
@@ -110,7 +110,7 @@ func TestGetResourceRepository_SkipsOwnershipReferrerWhenUnsupported(t *testing.
 	attacher, ok := repo.(constructor.OwnershipAwareRepository)
 	require.True(t, ok, "constructorPlugin always exposes the optional capability")
 
-	// The underlying plugin cannot host referrers, so the attach degrades to a
-	// warn-and-skip: no delegation, no error.
-	require.NoError(t, attacher.AddOwnership(t.Context(), "ocm.software/test", "v1.0.0", &descriptor.Resource{}, nil))
+	// The underlying plugin cannot host referrers, so an explicit "Always" opt-in
+	// is a hard failure: no delegation, an error returned.
+	require.Error(t, attacher.AddOwnership(t.Context(), "ocm.software/test", "v1.0.0", &descriptor.Resource{}, nil))
 }

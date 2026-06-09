@@ -130,6 +130,8 @@ type Resource struct {
 
 	AccessOrInput `json:",inline"`
 
+	// TODO: Options and ConstructorAttributes sit alongside each other here, which is
+	// awkward; reconcile them into a single construction-options grouping.
 	ConstructorAttributes `json:",inline"`
 }
 

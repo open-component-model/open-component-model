@@ -508,14 +508,13 @@ func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descripto
 // AddOwnership attaches an asset-to-owner ownership referrer (ADR 0016) by
 // delegating to the resolved plugin when it implements
 // [repository.OwnershipAwareRepository] (the in-process OCI resource repository
-// does). When it does not (e.g. the out-of-process plugin bridge), it warns and skips
-// rather than silently no-opping, so an opted-in resource on a repository that cannot
-// host referrers degrades visibly.
+// does). When it does not (e.g. the out-of-process plugin bridge), it returns an
+// error: the resource explicitly opted into ownership (policy "Always"), so a
+// repository that cannot host referrers is a hard failure rather than a silent no-op.
 func (c *constructorPlugin) AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error {
 	ownershipAwareRepo, ok := c.plugin.(repository.OwnershipAwareRepository)
 	if !ok {
-		slog.WarnContext(ctx, "resource repository does not support ownership referrers, skipping", "resource", res.ToIdentity())
-		return nil
+		return fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", res.ToIdentity(), "Always", c.plugin)
 	}
 	return ownershipAwareRepo.AddOwnership(ctx, component, version, res, credentials)
 }

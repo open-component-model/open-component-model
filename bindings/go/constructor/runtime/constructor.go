@@ -89,6 +89,8 @@ type Resource struct {
 	// In a component constructor, there is only one access or input information.
 	AccessOrInput `json:"-"`
 
+	// TODO: Options and ConstructorAttributes sit alongside each other here, which is
+	// awkward; reconcile them into a single construction-options grouping.
 	ConstructorAttributes `json:"-"`
 }
 
