@@ -161,12 +161,10 @@ func Test_JSON_Schema_For_Repository_Specification(t *testing.T) {
 	}
 }
 
-// TestWithHTTPConfig verifies that a custom HTTP config is used by the OCI
-// provider for registry traffic. We start a test server that records requests
-// and configure the provider with a config that has a very short
-// responseHeaderTimeout so a slow server triggers a timeout error.
+// TestWithHTTPConfig_CustomConfigIsUsed verifies that a custom HTTP config is
+// used by the OCI provider for registry traffic by confirming the test server
+// is actually contacted when a repository operation is performed.
 func TestWithHTTPConfig_CustomConfigIsUsed(t *testing.T) {
-	// Track whether the test server was hit.
 	var serverHit bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serverHit = true
@@ -181,18 +179,15 @@ func TestWithHTTPConfig_CustomConfigIsUsed(t *testing.T) {
 	)
 	require.NotNil(t, prov)
 
-	// The provider is initialized with the custom config. We verify this by
-	// checking that the provider was constructed without error and that a
-	// direct OCI repo spec (pointing at the test server) would use it.
 	repoSpec := &ocirepospecv1.Repository{
 		BaseUrl: srv.URL,
 		SubPath: "test/repo",
 	}
-	// GetComponentVersionRepositoryCredentialConsumerIdentity just exercises
-	// the provider's identity logic — no actual HTTP calls — confirming it is
-	// constructed correctly and won't panic.
-	_, _ = prov.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
-	_ = serverHit // provider construction succeeded; serverHit remains false (no HTTP yet)
+	repo, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
+	require.NoError(t, err)
+	// ListComponentVersions triggers HTTP traffic to the registry.
+	_, _ = repo.ListComponentVersions(t.Context(), "example.org/component")
+	require.True(t, serverHit, "expected HTTP request to reach test server")
 }
 
 // TestWithHTTPConfig_NilFallsBackToDefault verifies that when no HTTPConfig
@@ -216,7 +211,7 @@ func TestWithHTTPConfig_NilFallsBackToDefault(t *testing.T) {
 
 // TestWithHTTPConfig_ShortTimeoutCausesError starts a server that hangs and
 // verifies that a provider configured with a very short overall timeout
-// returns an error when trying to reach an OCI registry.
+// returns an error when performing an OCI registry operation.
 func TestWithHTTPConfig_ShortTimeoutCausesError(t *testing.T) {
 	// Server that sleeps longer than our timeout.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -235,9 +230,9 @@ func TestWithHTTPConfig_ShortTimeoutCausesError(t *testing.T) {
 		BaseUrl: srv.URL,
 		SubPath: "test/repo",
 	}
-	_, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
-	// Getting the repository itself may not fail (it's lazy), but attempting to
-	// use it for an OCI operation should surface the timeout.
-	// Construction should succeed even if the registry is slow.
+	repo, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
 	require.NoError(t, err)
+	// ListComponentVersions triggers HTTP traffic — should time out.
+	_, err = repo.ListComponentVersions(t.Context(), "example.org/component")
+	require.Error(t, err)
 }
