@@ -448,7 +448,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 					}
 				}
 
-				if ownershipAwareRepository, ok := repo.(OwnershipAwareRepository); ok {
+				if ownershipAwareRepository, ok := repo.(repository.OwnershipAwareRepository); ok {
 					if err := ownershipAwareRepository.AddOwnership(ctx, component, version, res, creds); err != nil {
 						return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 					}
@@ -748,7 +748,7 @@ func addColocatedResourceLocalBlob(
 	// out-of-process plugin bridge, or the deprecated fallback) makes construction fail
 	// rather than silently dropping an explicitly requested ownership link.
 	if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
-		if ownershipAwareRepo, ok := repo.(OwnershipAwareRepository); ok {
+		if ownershipAwareRepo, ok := repo.(repository.OwnershipAwareRepository); ok {
 			if err := ownershipAwareRepo.AddOwnership(ctx, component, version, uploaded, creds); err != nil {
 				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 			}

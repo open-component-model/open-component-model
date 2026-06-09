@@ -487,8 +487,8 @@ func (prov *constructorProvider) GetResourceRepository(ctx context.Context, reso
 }
 
 var (
-	_ constructor.ResourceRepository       = (*constructorPlugin)(nil)
-	_ constructor.OwnershipAwareRepository = (*constructorPlugin)(nil)
+	_ constructor.ResourceRepository      = (*constructorPlugin)(nil)
+	_ repository.OwnershipAwareRepository = (*constructorPlugin)(nil)
 )
 
 // constructorPlugin adapts a resolved [resource.Repository] plugin to the

@@ -169,12 +169,6 @@ type ResourceRepository interface {
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (content blob.ReadOnlyBlob, err error)
 }
 
-// OwnershipAwareRepository is an optional capability for attaching ownership (ADR 0016)
-// that links a resource back to the owning component version in the registry that hosts it.
-type OwnershipAwareRepository interface {
-	AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error
-}
-
 type ResourceRepositoryProvider interface {
 	// GetResourceRepository returns the target ocm resource repository for the given resource specification in the constructor.
 	GetResourceRepository(ctx context.Context, comp *constructor.Resource) (ResourceRepository, error)
