@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -43,57 +44,36 @@ func TestGetOCMConfigForCommand(t *testing.T) {
 	})
 }
 
-func testEnvironment(existing map[string]bool, envVars map[string]string, home, wd, exe string) *Environment {
-	return &Environment{
-		Stat: func(path string) (os.FileInfo, error) {
-			if existing == nil || existing[path] {
-				return nil, nil
-			}
-			return nil, os.ErrNotExist
-		},
-		Getenv: func(key string) string {
-			return envVars[key]
-		},
-		UserHomeDir: func() (string, error) {
-			return home, nil
-		},
-		Getwd: func() (string, error) {
-			return wd, nil
-		},
-		Executable: func() (string, error) {
-			return exe, nil
-		},
+func stubStat(t *testing.T, existing map[string]bool) {
+	t.Helper()
+	original := statFunc
+	t.Cleanup(func() { statFunc = original })
+	statFunc = func(path string) (os.FileInfo, error) {
+		if existing == nil || existing[path] {
+			return nil, nil
+		}
+		return nil, os.ErrNotExist
 	}
 }
-
-func TestEnvironmentGetOCMConfigPaths(t *testing.T) {
+func TestGetOCMConfigPaths(t *testing.T) {
 	tests := []struct {
 		name     string
 		existing map[string]bool
 		envVars  map[string]string
-		home     string
-		wd       string
-		exe      string
-		want     []string
+		want     func(workingDirectory, executableDirectory string) []string
 		wantErr  bool
 	}{
 		{
 			name:     "env var set and file exists",
 			existing: map[string]bool{"/custom/config": true},
 			envVars:  map[string]string{"OCM_CONFIG": "/custom/config"},
-			home:     "/home/user",
-			wd:       "/workspace",
-			exe:      "/usr/bin/ocm",
-			want:     []string{"/custom/config"},
+			want:     func(string, string) []string { return []string{"/custom/config"} },
 		},
 		{
 			name:     "env var set but file does not exist",
-			existing: map[string]bool{"/home/user/.ocm/config": true},
+			existing: map[string]bool{},
 			envVars:  map[string]string{"OCM_CONFIG": "/missing/config"},
-			home:     "/home/user",
-			wd:       "/workspace",
-			exe:      "/usr/bin/ocm",
-			want:     []string{"/home/user/.ocm/config"},
+			wantErr:  true,
 		},
 		{
 			name:     "all files found across all locations in documented order",
@@ -101,47 +81,52 @@ func TestEnvironmentGetOCMConfigPaths(t *testing.T) {
 			envVars: map[string]string{
 				"OCM_CONFIG":      "/ocm-config",
 				"XDG_CONFIG_HOME": "/xdg",
-				"HOME":            "/home",
-				"PWD":             "/pwd",
+				"HOME":            "/home/user",
 			},
-			home: "/home/user",
-			wd:   "/workspace",
-			exe:  "/usr/bin/ocm",
-			want: []string{
-				"/ocm-config",
-				"/xdg/.ocm/config",
-				"/xdg/.ocmconfig",
-				"/home/user/.config/.ocm/config",
-				"/home/user/.config/.ocmconfig",
-				"/home/user/.ocm/config",
-				"/home/user/.ocmconfig",
-				"/workspace/.ocm/config",
-				"/workspace/.ocmconfig",
-				"/usr/bin/.ocm/config",
-				"/usr/bin/.ocmconfig",
+			want: func(workingDirectory, executableDirectory string) []string {
+				return []string{
+					"/ocm-config",
+					"/xdg/.ocm/config",
+					"/xdg/.ocmconfig",
+					"/home/user/.config/.ocm/config",
+					"/home/user/.config/.ocmconfig",
+					"/home/user/.ocm/config",
+					"/home/user/.ocmconfig",
+					filepath.Join(workingDirectory, ".ocm/config"),
+					filepath.Join(workingDirectory, ".ocmconfig"),
+					filepath.Join(executableDirectory, ".ocm/config"),
+					filepath.Join(executableDirectory, ".ocmconfig"),
+				}
 			},
 		},
 		{
 			name:     "no files found returns error",
 			existing: map[string]bool{},
 			envVars:  map[string]string{},
-			home:     "/home/user",
-			wd:       "/workspace",
-			exe:      "/usr/bin/ocm",
 			wantErr:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env := testEnvironment(tt.existing, tt.envVars, tt.home, tt.wd, tt.exe)
-			got, err := env.GetOCMConfigPaths()
+			workingDirectory := t.TempDir()
+			ex, err := os.Executable()
+			require.NoError(t, err)
+			executableDirectory := filepath.Dir(ex)
+			t.Chdir(workingDirectory)
+
+			stubStat(t, tt.existing)
+			for k, v := range tt.envVars {
+				t.Setenv(k, v)
+			}
+
+			got, err := GetOCMConfigPaths()
 			if tt.wantErr {
 				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.want(workingDirectory, executableDirectory), got)
 		})
 	}
 }

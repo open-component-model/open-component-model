@@ -21,24 +21,8 @@ const (
 	OCMConfigCommandArgument = "config"
 )
 
-// Environment abstracts OS functions the module relies on, dependency injected during testing.
-type Environment struct {
-	Stat        func(string) (os.FileInfo, error)
-	Getenv      func(string) string
-	UserHomeDir func() (string, error)
-	Getwd       func() (string, error)
-	Executable  func() (string, error)
-}
-
-func DefaultEnvironment() *Environment {
-	return &Environment{
-		Stat:        os.Stat,
-		Getenv:      os.Getenv,
-		UserHomeDir: os.UserHomeDir,
-		Getwd:       os.Getwd,
-		Executable:  os.Executable,
-	}
-}
+// statFunc is the file stat function used for config discovery. Overridden in tests.
+var statFunc = os.Stat
 
 func RegisterConfigFlag(cmd *cobra.Command) {
 	cmd.PersistentFlags().String(OCMConfigCommandArgument, "", `supply configuration by a given configuration file.
@@ -155,21 +139,17 @@ func GetConfigFromPath(path string) (_ *genericv1.Config, err error) {
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
 //   - error: An error if no configuration file is found.
 func GetOCMConfigPaths() ([]string, error) {
-	return DefaultEnvironment().GetOCMConfigPaths()
-}
-
-func (e *Environment) GetOCMConfigPaths() ([]string, error) {
 	var paths []string
-	if path := e.getFromEnvironment(); path != "" {
+	if path := getFromEnvironment(); path != "" {
 		paths = append(paths, path)
 	}
-	if subPaths := e.getFromXDGOrHomeDir(); len(subPaths) > 0 {
+	if subPaths := getFromXDGOrHomeDir(); len(subPaths) > 0 {
 		paths = append(paths, subPaths...)
 	}
-	if subPaths := e.getFromWorkingDir(); len(subPaths) > 0 {
+	if subPaths := getFromWorkingDir(); len(subPaths) > 0 {
 		paths = append(paths, subPaths...)
 	}
-	if subPaths := e.getFromExecutableDir(); len(subPaths) > 0 {
+	if subPaths := getFromExecutableDir(); len(subPaths) > 0 {
 		paths = append(paths, subPaths...)
 	}
 
@@ -180,9 +160,9 @@ func (e *Environment) GetOCMConfigPaths() ([]string, error) {
 	return nil, fmt.Errorf("ocm config not found in any known locations, see --help for details on how to supply configuration files")
 }
 
-func (e *Environment) getFromEnvironment() string {
-	if env := e.Getenv(OCMConfigEnvironmentKey); env != "" {
-		if _, err := e.Stat(filepath.Clean(env)); err == nil {
+func getFromEnvironment() string {
+	if env := os.Getenv(OCMConfigEnvironmentKey); env != "" {
+		if _, err := statFunc(filepath.Clean(env)); err == nil {
 			return env
 		}
 	}
@@ -196,20 +176,20 @@ func (e *Environment) getFromEnvironment() string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func (e *Environment) getFromXDGOrHomeDir() []string {
+func getFromXDGOrHomeDir() []string {
 	paths := []string{}
-	if xdg := e.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		if subPaths := e.checkConfigPaths(xdg); len(subPaths) > 0 {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		if subPaths := checkConfigPaths(xdg); len(subPaths) > 0 {
 			paths = append(paths, subPaths...)
 		}
 	}
 
 	// Check default XDG home ($HOME/.config)
-	if home, err := e.UserHomeDir(); err == nil {
-		if subPaths := e.checkConfigPaths(filepath.Join(home, ".config")); len(subPaths) > 0 {
+	if home, err := os.UserHomeDir(); err == nil {
+		if subPaths := checkConfigPaths(filepath.Join(home, ".config")); len(subPaths) > 0 {
 			paths = append(paths, subPaths...)
 		}
-		if subPaths := e.checkConfigPaths(home); len(subPaths) > 0 {
+		if subPaths := checkConfigPaths(home); len(subPaths) > 0 {
 			paths = append(paths, subPaths...)
 		}
 	}
@@ -221,9 +201,9 @@ func (e *Environment) getFromXDGOrHomeDir() []string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func (e *Environment) getFromWorkingDir() []string {
-	if wd, err := e.Getwd(); err == nil {
-		return e.checkConfigPaths(wd)
+func getFromWorkingDir() []string {
+	if wd, err := os.Getwd(); err == nil {
+		return checkConfigPaths(wd)
 	}
 	return []string{}
 }
@@ -232,10 +212,10 @@ func (e *Environment) getFromWorkingDir() []string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func (e *Environment) getFromExecutableDir() []string {
-	if ex, err := e.Executable(); err == nil {
+func getFromExecutableDir() []string {
+	if ex, err := os.Executable(); err == nil {
 		base := filepath.Dir(ex)
-		return e.checkConfigPaths(base)
+		return checkConfigPaths(base)
 	}
 	return []string{}
 }
@@ -247,11 +227,11 @@ func (e *Environment) getFromExecutableDir() []string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func (e *Environment) checkConfigPaths(base string) []string {
+func checkConfigPaths(base string) []string {
 	paths := []string{}
 	for _, name := range []string{OCMConfigFileName, NestedOCMConfigFileName} {
 		path := filepath.Clean(filepath.Join(base, name))
-		if _, err := e.Stat(path); err == nil {
+		if _, err := statFunc(path); err == nil {
 			paths = append(paths, path)
 		}
 	}
