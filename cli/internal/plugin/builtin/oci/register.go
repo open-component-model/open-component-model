@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -29,14 +28,10 @@ func Register(
 	httpConfig *httpv1alpha1.Config,
 	logger *slog.Logger,
 ) error {
-	httpClient := ocmhttp.New(
-		ocmhttp.WithConfig(httpConfig),
-		ocmhttp.WithUserAgent(creator),
-	)
-
 	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(
 		provider.WithTempDir(filesystemConfig.TempFolder),
-		provider.WithHTTPClient(httpClient),
+		provider.WithUserAgent(creator),
+		provider.WithHTTPConfig(httpConfig),
 	)
 
 	resourceRepoPlugin := ocires.NewResourceRepository(filesystemConfig, ocires.WithUserAgent(creator))

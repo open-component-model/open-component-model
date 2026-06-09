@@ -5,10 +5,9 @@ import (
 	"log/slog"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	ocmhttp "ocm.software/open-component-model/bindings/go/http"
-	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocicredentialplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/credentials/oci"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/gpg"
@@ -20,8 +19,6 @@ import (
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/oidc"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/rsa"
 )
-
-const helmCreator = "Builtin Helm Plugin"
 
 func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, logger *slog.Logger) error {
 	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
@@ -54,18 +51,13 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		return fmt.Errorf("could not register helm input plugin: %w", err)
 	}
 
-	helmHTTPClient := ocmhttp.New(
-		ocmhttp.WithConfig(httpConfig),
-		ocmhttp.WithUserAgent(helmCreator),
-	)
-
 	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(
 		helmdigest.NewDigestProcessor(filesystemConfig.TempFolder),
 	); err != nil {
 		return fmt.Errorf("could not register helm digest processor plugin: %w", err)
 	}
 	if err := manager.ResourcePluginRegistry.RegisterInternalResourcePlugin(
-		helmresource.NewResourceRepository(filesystemConfig, helmresource.WithHTTPClient(helmHTTPClient)),
+		helmresource.NewResourceRepository(filesystemConfig, helmresource.WithHTTPConfig(httpConfig)),
 	); err != nil {
 		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
 	}
