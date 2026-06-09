@@ -2,16 +2,15 @@ package oci
 
 import (
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
-	"ocm.software/open-component-model/bindings/go/oci/spec/credentials"
-	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	ocicredentialsspec "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	ociidentity "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Register(registry *credentialrepository.RepositoryRegistry) error {
-	scheme := runtime.NewScheme()
-	scheme.MustRegisterWithAlias(&ocicredentialsspecv1.DockerConfig{}, credentials.CredentialRepositoryConfigType)
+	registry.Register(ocicredentialsspec.Scheme)
+
 	return registry.RegisterInternalCredentialRepositoryPlugin(
 		&ocicredentials.OCICredentialRepository{},
 		[]runtime.Type{ociidentity.Type},
