@@ -21,7 +21,7 @@ const (
 	OCMConfigCommandArgument = "config"
 )
 
-// Interface of environment functions the module relies on, dependency injected during testing.
+// Environment abstracts OS functions the module relies on, dependency injected during testing.
 type Environment struct {
 	Stat        func(string) (os.FileInfo, error)
 	Getenv      func(string) string
