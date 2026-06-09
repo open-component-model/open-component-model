@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -40,6 +41,109 @@ func TestGetOCMConfigForCommand(t *testing.T) {
 		// default config files exist on the test machine
 		_, _ = GetOCMConfigForCommand(cmd)
 	})
+}
+
+func testEnvironment(existing map[string]bool, envVars map[string]string, home, wd, exe string) *Environment {
+	return &Environment{
+		Stat: func(path string) (os.FileInfo, error) {
+			if existing == nil || existing[path] {
+				return nil, nil
+			}
+			return nil, os.ErrNotExist
+		},
+		Getenv: func(key string) string {
+			return envVars[key]
+		},
+		UserHomeDir: func() (string, error) {
+			return home, nil
+		},
+		Getwd: func() (string, error) {
+			return wd, nil
+		},
+		Executable: func() (string, error) {
+			return exe, nil
+		},
+	}
+}
+
+func TestEnvironmentGetOCMConfigPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing map[string]bool
+		envVars  map[string]string
+		home     string
+		wd       string
+		exe      string
+		want     []string
+		wantErr  bool
+	}{
+		{
+			name:     "env var set and file exists",
+			existing: map[string]bool{"/custom/config": true},
+			envVars:  map[string]string{"OCM_CONFIG": "/custom/config"},
+			home:     "/home/user",
+			wd:       "/workspace",
+			exe:      "/usr/bin/ocm",
+			want:     []string{"/custom/config"},
+		},
+		{
+			name:     "env var set but file does not exist",
+			existing: map[string]bool{"/home/user/.ocm/config": true},
+			envVars:  map[string]string{"OCM_CONFIG": "/missing/config"},
+			home:     "/home/user",
+			wd:       "/workspace",
+			exe:      "/usr/bin/ocm",
+			want:     []string{"/home/user/.ocm/config"},
+		},
+		{
+			name:     "all files found across all locations in documented order",
+			existing: nil, // all paths exist
+			envVars: map[string]string{
+				"OCM_CONFIG":      "/ocm-config",
+				"XDG_CONFIG_HOME": "/xdg",
+				"HOME":            "/home",
+				"PWD":             "/pwd",
+			},
+			home: "/home/user",
+			wd:   "/workspace",
+			exe:  "/usr/bin/ocm",
+			want: []string{
+				"/ocm-config",
+				"/xdg/.ocm/config",
+				"/xdg/.ocmconfig",
+				"/home/user/.config/.ocm/config",
+				"/home/user/.config/.ocmconfig",
+				"/home/user/.ocm/config",
+				"/home/user/.ocmconfig",
+				"/workspace/.ocm/config",
+				"/workspace/.ocmconfig",
+				"/usr/bin/.ocm/config",
+				"/usr/bin/.ocmconfig",
+			},
+		},
+		{
+			name:     "no files found returns error",
+			existing: map[string]bool{},
+			envVars:  map[string]string{},
+			home:     "/home/user",
+			wd:       "/workspace",
+			exe:      "/usr/bin/ocm",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := testEnvironment(tt.existing, tt.envVars, tt.home, tt.wd, tt.exe)
+			got, err := env.GetOCMConfigPaths()
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestGetFlattenedGetConfigFromPath(t *testing.T) {
