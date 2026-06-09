@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 
@@ -35,6 +36,7 @@ var _ interface {
 // the system's default temporary directory will be used.
 type InputMethod struct {
 	TempFolder string
+	HTTPClient *http.Client
 }
 
 // LegacyHelmChartConsumerType is the type of the identity for remote helm repositories.
@@ -97,6 +99,9 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 			}
 			credOpts = append(credOpts, WithCredentials(helmCreds))
 		}
+	}
+	if i.HTTPClient != nil {
+		credOpts = append(credOpts, WithHTTPClient(i.HTTPClient))
 	}
 
 	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder, credOpts...)

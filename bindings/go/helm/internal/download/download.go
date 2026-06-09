@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	nethttp "net/http"
 	"net/url"
 	"os"
 	"path"
@@ -92,7 +93,14 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 
 	getterOpts = append(getterOpts, getter.WithPlainHTTP(plainHTTP))
 
-	regClient, err := registry.NewClient()
+	var regClientOpts []registry.ClientOption
+	if opt.HTTPClient != nil {
+		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(opt.HTTPClient))
+		if t, ok := opt.HTTPClient.Transport.(*nethttp.Transport); ok {
+			getterOpts = append(getterOpts, getter.WithTransport(t))
+		}
+	}
+	regClient, err := registry.NewClient(regClientOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("error creating registry client: %w", err)
 	}

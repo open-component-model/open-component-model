@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 
@@ -26,6 +27,18 @@ import (
 // and resolving credential consumer identities for authentication.
 type ResourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
+	httpClient       *http.Client
+}
+
+// Option configures a ResourceRepository.
+type Option func(*ResourceRepository)
+
+// WithHTTPClient sets the HTTP client used for chart downloads and OCI registry access.
+// When unset, the default Helm client is used.
+func WithHTTPClient(client *http.Client) Option {
+	return func(r *ResourceRepository) {
+		r.httpClient = client
+	}
 }
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
@@ -33,13 +46,17 @@ var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 // NewResourceRepository creates a ResourceRepository. If filesystemConfig is non-nil,
 // its TempFolder is used for intermediate download directories; otherwise os.TempDir
 // is used.
-func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config) *ResourceRepository {
+func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	if filesystemConfig == nil {
 		filesystemConfig = &filesystemv1alpha1.Config{}
 	}
-	return &ResourceRepository{
+	r := &ResourceRepository{
 		filesystemConfig: filesystemConfig,
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 // GetResourceRepositoryScheme returns the Helm access scheme containing the
@@ -116,6 +133,9 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 			}
 			opts = append(opts, helmdownload.WithCredentials(helmCreds))
 		}
+	}
+	if r.httpClient != nil {
+		opts = append(opts, helmdownload.WithHTTPClient(r.httpClient))
 	}
 
 	result, err := helmdownload.NewReadOnlyChartFromRemote(ctx, helmURL, downloadDir, opts...)

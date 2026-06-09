@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
@@ -48,9 +49,18 @@ func WithOCICredentials(credentials *ocicredsv1.OCICredentials) Option {
 	}
 }
 
+// WithHTTPClient sets the HTTP client used for chart downloads and OCI registry access.
+// When unset, the default Helm client is used.
+func WithHTTPClient(client *http.Client) Option {
+	return func(options *Options) {
+		options.HTTPClient = client
+	}
+}
+
 type Options struct {
 	Credentials    *helmcredsv1.HelmHTTPCredentials
 	OCICredentials *ocicredsv1.OCICredentials
+	HTTPClient     *http.Client
 }
 
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
@@ -77,7 +87,7 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 			return nil, nil, fmt.Errorf("error loading local helm chart %q: %w", helmSpec.Path, err)
 		}
 	case helmSpec.HelmRepository != "":
-		chart, err = newReadOnlyChartFromRemote(ctx, helmSpec, tmpDir, options.Credentials, options.OCICredentials)
+		chart, err = newReadOnlyChartFromRemote(ctx, helmSpec, tmpDir, options.Credentials, options.OCICredentials, options.HTTPClient)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error loading remote helm chart from %q: %w", helmSpec.HelmRepository, err)
 		}
@@ -169,6 +179,7 @@ func newReadOnlyChartFromRemote(
 	tmpDirBase string,
 	credentials *helmcredsv1.HelmHTTPCredentials,
 	ociCredentials *ocicredsv1.OCICredentials,
+	httpClient *http.Client,
 ) (result *ReadOnlyChart, err error) {
 	opts := []dlinternal.Option{
 		dlinternal.WithCredentials(credentials),
@@ -179,6 +190,9 @@ func newReadOnlyChartFromRemote(
 		dlinternal.WithCACert(helmSpec.CACert),
 		//nolint:staticcheck // downward compatibility for helm input
 		dlinternal.WithCACertFile(helmSpec.CACertFile),
+	}
+	if httpClient != nil {
+		opts = append(opts, dlinternal.WithHTTPClient(httpClient))
 	}
 	resultChart, err := dlinternal.NewReadOnlyChartFromRemote(ctx, helmSpec.HelmRepository, tmpDirBase, opts...)
 	if err != nil {

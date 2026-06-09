@@ -372,16 +372,12 @@ ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 h1:bTb
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3/go.mod h1:miNDxmNWsrYI9f3QNZIOBrK6jVmWnyFj0Z/ZGFjR5Qk=
 ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260609061717-1aefd3478571 h1:fGxLcZ/0DHkSGeLDJnB1VL5H8pnbeE+A3x8shQXhPFE=
 ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260609061717-1aefd3478571/go.mod h1:2WZpPF77cH3oPlO8XlqpFLg/N8eGQdvH74iYncG6LKs=
-ocm.software/open-component-model/bindings/go/helm v0.0.0-20260609061717-1aefd3478571 h1:Cu0gI3mXH9F8dV7oc32jKFj2uanqc+5gWCkB+f/74VQ=
-ocm.software/open-component-model/bindings/go/helm v0.0.0-20260609061717-1aefd3478571/go.mod h1:c9DzuojrP/C9fVvpNKaDnsDh3goyeaAlhPUd6aM7ntU=
 ocm.software/open-component-model/bindings/go/input/dir v0.0.4 h1:E/Ndd0vJah3C348Ipylja8Rrijgp7thINRdRXIB8ueo=
 ocm.software/open-component-model/bindings/go/input/dir v0.0.4/go.mod h1:EimuDBI8aLk5yVyhp1FJUg+qkYzND8awBNTfZLCl7vA=
 ocm.software/open-component-model/bindings/go/input/file v0.0.5 h1:RbolMn7cCHiXzafzJORYPklkN2QO0vV/sSCOw0XUyPY=
 ocm.software/open-component-model/bindings/go/input/file v0.0.5/go.mod h1:AoHlDrI2DJ9eG7qYNdMjPTs57aqD/E9e/u6TbJc7N1g=
 ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260608215003-3782e7b92e24 h1:88HgyER7UHUF5UTZAc0hqhDTJVubDtzZcXTHmUUqC4c=
 ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260608215003-3782e7b92e24/go.mod h1:qDRUQg//GZEUdzk6SjACfd/MN+WEX+yonoI7OsIpXjA=
-ocm.software/open-component-model/bindings/go/oci v0.0.45 h1:9cENui1vjxOCUI1nelsy8F8ItOyryV35ePJT0OwXLi8=
-ocm.software/open-component-model/bindings/go/oci v0.0.45/go.mod h1:71rWEKjpFaD0QY7aiPIgUjMkejF/05vBg1ZilRhakUI=
 ocm.software/open-component-model/bindings/go/plugin v0.0.17 h1:DBhLGaR4rhvj2kqQZXhrKxf2caepi7QCEPZiVDhpuDk=
 ocm.software/open-component-model/bindings/go/plugin v0.0.17/go.mod h1:2npV1CmXcOF4DaPjdfMij7mKyHTjS1bP3jxJPJsPtTE=
 ocm.software/open-component-model/bindings/go/repository v0.0.9 h1:j6WmumbeN+m19oQ1ViZ8cWSjbpIAv+9kJhIyUSmsHL0=

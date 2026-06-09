@@ -1,6 +1,7 @@
 package download
 
 import (
+	"net/http"
 	"time"
 
 	"helm.sh/helm/v4/pkg/getter"
@@ -52,6 +53,10 @@ type option struct {
 	// AlwaysDownloadProv indicates whether to always download the provenance file for the chart.
 	// In cases where a Keyring is present in the credentials, Helm will attempt to download the provenance file to verify the chart's integrity.
 	AlwaysDownloadProv bool `json:"alwaysDownloadProv,omitempty"`
+
+	// HTTPClient is the HTTP client used for chart downloads and OCI registry access.
+	// When nil, the default Helm client is used.
+	HTTPClient *http.Client
 }
 
 // Option configures the behavior of [NewReadOnlyChartFromRemote].
@@ -107,5 +112,13 @@ func WithOCICredentials(credentials *ocicredsv1.OCICredentials) Option {
 func WithAlwaysDownloadProv(dl bool) Option {
 	return func(t *option) {
 		t.AlwaysDownloadProv = dl
+	}
+}
+
+// WithHTTPClient sets the HTTP client used for chart downloads and OCI registry access.
+// When unset, the default Helm client is used.
+func WithHTTPClient(client *http.Client) Option {
+	return func(t *option) {
+		t.HTTPClient = client
 	}
 }

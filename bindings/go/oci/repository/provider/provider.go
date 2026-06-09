@@ -72,11 +72,15 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		options.Scheme = repoSpec.Scheme
 	}
 
+	if options.HTTPClient == nil {
+		options.HTTPClient = retry.DefaultClient
+	}
+
 	provider := &CachingComponentVersionRepositoryProvider{
 		creator:    options.UserAgent,
 		scheme:     options.Scheme,
 		storeCache: &storeCache{store: make(map[string]*ocictf.Store)},
-		httpClient: retry.DefaultClient,
+		httpClient: options.HTTPClient,
 		tempDir:    options.TempDir,
 	}
 
