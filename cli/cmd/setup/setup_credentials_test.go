@@ -10,50 +10,57 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credconfigruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
+	credv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	gpgcredsv1alpha1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	gpgidentityv1alpha1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/identity/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	rsacredsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
+	rsaidentityv1 "ocm.software/open-component-model/bindings/go/rsa/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	oidctokenv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1"
+	trustedrootv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1"
+	sigstoresignerv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
+	sigstoreverifierv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1alpha1"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
 )
 
 // TestCredentialTypeSchemePopulatedByBuiltinRegister verifies that calling builtin.Register
 // populates the credential type scheme inside PluginManager.CredentialRepositoryRegistry with
 // the typed consumer credential structs declared by each built-in binding
-// (ADR 0021 §Type Registries and Graph Independence).
-//
-// Before this wiring existed, the credential type scheme was always empty and the credential
-// graph would fall back to *DirectCredentials for every credential type, including
-// OCICredentials/v1, HelmHTTPCredentials/v1, and RSACredentials/v1.
 func TestCredentialTypeSchemePopulatedByBuiltinRegister(t *testing.T) {
-	r := require.New(t)
-
 	pm := manager.NewPluginManager(context.Background())
-	r.NoError(builtin.Register(pm, &filesystemv1alpha1.Config{}, slog.Default()))
+	require.NoError(t, builtin.Register(pm, &filesystemv1alpha1.Config{}, slog.Default()))
 
 	scheme := pm.CredentialRepositoryRegistry.GetCredentialTypeScheme()
-	r.NotNil(scheme, "CredentialRepositoryRegistry credential type scheme must not be nil after builtin.Register")
+	require.NotNil(t, scheme)
 
-	r.True(scheme.IsRegistered(runtime.NewVersionedType(ocicredsv1.OCICredentialsType, ocicredsv1.Version)),
-		"OCICredentials/v1 must be registered in the credential type scheme")
+	tests := []struct {
+		name          string
+		versionedType runtime.Type
+	}{
+		{"OCICredentials/v1", runtime.NewVersionedType(ocicredsv1.OCICredentialsType, ocicredsv1.Version)},
+		{"HelmHTTPCredentials/v1", runtime.NewVersionedType(helmcredsv1.HelmHTTPCredentialsType, helmcredsv1.Version)},
+		{"RSACredentials/v1", rsacredsv1.VersionedType},
+		{"GPGCredentials/v1alpha1", runtime.NewVersionedType(gpgcredsv1alpha1.GPGCredentialsType, gpgcredsv1alpha1.Version)},
+		{"OIDCIdentityToken/v1alpha1", oidctokenv1alpha1.VersionedType},
+		{"TrustedRoot/v1alpha1", trustedrootv1alpha1.VersionedType},
+	}
 
-	r.True(scheme.IsRegistered(runtime.NewVersionedType(helmcredsv1.HelmHTTPCredentialsType, helmcredsv1.Version)),
-		"HelmHTTPCredentials/v1 must be registered in the credential type scheme")
-
-	r.True(scheme.IsRegistered(rsacredsv1.VersionedType),
-		"RSACredentials/v1 must be registered in the credential type scheme")
-
-	r.True(scheme.IsRegistered(runtime.NewVersionedType(gpgcredsv1alpha1.GPGCredentialsType, gpgcredsv1alpha1.Version)),
-		"GPGCredentials/v1alpha1 must be registered in the credential type scheme")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.True(t, scheme.IsRegistered(tc.versionedType),
+				"%s must be registered in the credential type scheme", tc.name)
+		})
+	}
 }
 
 // TestCredentialGraphResolvesTypedCredentials verifies that a credential graph built with
 // PluginManager.CredentialRepositoryRegistry as the scheme provider resolves each built-in
-// typed credential format to its concrete Go type instead of falling back to *DirectCredentials.
+// typed credential to its concrete Go type.
 func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
 	ctx := t.Context()
 
@@ -86,6 +93,43 @@ func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
 			},
 		},
 		{
+			name: "HelmHTTPCredentials/v1",
+			identity: runtime.Identity{
+				"type":     helmidentityv1.VersionedType.String(),
+				"hostname": "charts.example.com",
+			},
+			credential: &helmcredsv1.HelmHTTPCredentials{
+				Type:     runtime.NewVersionedType(helmcredsv1.HelmHTTPCredentialsType, helmcredsv1.Version),
+				Username: "helmuser",
+				Password: "helmpass",
+			},
+			assertType: func(t *testing.T, resolved runtime.Typed) {
+				t.Helper()
+				creds, ok := resolved.(*helmcredsv1.HelmHTTPCredentials)
+				require.True(t, ok, "expected *HelmHTTPCredentials, got %T", resolved)
+				require.Equal(t, "helmuser", creds.Username)
+			},
+		},
+		{
+			name: "RSACredentials/v1",
+			identity: runtime.Identity{
+				"type":      rsaidentityv1.V1Alpha1Type.String(),
+				"algorithm": "RSASSA-PSS",
+				"signature": "default",
+			},
+			credential: &rsacredsv1.RSACredentials{
+				Type:          rsacredsv1.VersionedType,
+				PrivateKeyPEM: "placeholder",
+				PublicKeyPEM:  "placeholder",
+			},
+			assertType: func(t *testing.T, resolved runtime.Typed) {
+				t.Helper()
+				creds, ok := resolved.(*rsacredsv1.RSACredentials)
+				require.True(t, ok, "expected *RSACredentials, got %T", resolved)
+				require.Equal(t, "placeholder", creds.PrivateKeyPEM)
+			},
+		},
+		{
 			name: "GPGCredentials/v1alpha1",
 			identity: runtime.Identity{
 				"type":      gpgidentityv1alpha1.V1Alpha1Type.String(),
@@ -93,14 +137,63 @@ func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
 			},
 			credential: &gpgcredsv1alpha1.GPGCredentials{
 				Type:          runtime.NewVersionedType(gpgcredsv1alpha1.GPGCredentialsType, gpgcredsv1alpha1.Version),
-				PrivateKeyPGP: "placeholder-key",
-				PublicKeyPGP:  "placeholder-key",
+				PrivateKeyPGP: "placeholder",
+				PublicKeyPGP:  "placeholder",
 			},
 			assertType: func(t *testing.T, resolved runtime.Typed) {
 				t.Helper()
 				creds, ok := resolved.(*gpgcredsv1alpha1.GPGCredentials)
 				require.True(t, ok, "expected *GPGCredentials, got %T", resolved)
-				require.Equal(t, "placeholder-key", creds.PrivateKeyPGP)
+				require.Equal(t, "placeholder", creds.PrivateKeyPGP)
+			},
+		},
+		{
+			name: "OIDCIdentityToken/v1alpha1",
+			identity: runtime.Identity{
+				"type": sigstoresignerv1alpha1.VersionedType.String(),
+			},
+			credential: &oidctokenv1alpha1.OIDCIdentityToken{
+				Type:  oidctokenv1alpha1.VersionedType,
+				Token: "placeholder-token",
+			},
+			assertType: func(t *testing.T, resolved runtime.Typed) {
+				t.Helper()
+				creds, ok := resolved.(*oidctokenv1alpha1.OIDCIdentityToken)
+				require.True(t, ok, "expected *OIDCIdentityToken, got %T", resolved)
+				require.Equal(t, "placeholder-token", creds.Token)
+			},
+		},
+		{
+			name: "TrustedRoot/v1alpha1",
+			identity: runtime.Identity{
+				"type": sigstoreverifierv1alpha1.VersionedType.String(),
+			},
+			credential: &trustedrootv1alpha1.TrustedRoot{
+				Type:            trustedrootv1alpha1.VersionedType,
+				TrustedRootJSON: "{}",
+			},
+			assertType: func(t *testing.T, resolved runtime.Typed) {
+				t.Helper()
+				creds, ok := resolved.(*trustedrootv1alpha1.TrustedRoot)
+				require.True(t, ok, "expected *TrustedRoot, got %T", resolved)
+				require.Equal(t, "{}", creds.TrustedRootJSON)
+			},
+		},
+		{
+			name: "Credentials/v1 falls back to DirectCredentials",
+			identity: runtime.Identity{
+				"type":     credidentityv1.Type.String(),
+				"hostname": "legacy.example.com",
+			},
+			credential: &credv1.DirectCredentials{
+				Type:       runtime.NewVersionedType("Credentials", "v1"),
+				Properties: map[string]string{"username": "legacyuser", "password": "legacypass"},
+			},
+			assertType: func(t *testing.T, resolved runtime.Typed) {
+				t.Helper()
+				creds, ok := resolved.(*credv1.DirectCredentials)
+				require.True(t, ok, "expected *DirectCredentials, got %T", resolved)
+				require.Equal(t, "legacyuser", creds.Properties["username"])
 			},
 		},
 	}

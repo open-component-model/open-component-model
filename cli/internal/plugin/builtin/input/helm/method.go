@@ -11,14 +11,14 @@ import (
 )
 
 func Register(inputRegistry *input.RepositoryRegistry,
-	credentialTypeRegistry *credentialrepository.RepositoryRegistry,
+	repositoryRegistry *credentialrepository.RepositoryRegistry,
 	filesystemConfig *filesystemv1alpha1.Config,
 ) error {
 	method := &helminput.InputMethod{
 		TempFolder: filesystemConfig.TempFolder,
 	}
 
-	credentialTypeRegistry.Register(helm.Scheme)
+	repositoryRegistry.Register(helm.Scheme)
 
 	if err := inputRegistry.RegisterInternalResourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register helm resource input method: %w", err)

@@ -14,7 +14,7 @@ import (
 
 func Register(
 	signingHandlerRegistry *signinghandler.SigningRegistry,
-	credentialTypeRegistry *credentialrepository.RepositoryRegistry,
+	repositoryRegistry *credentialrepository.RepositoryRegistry,
 	// TODO add filesystem and logging awareness to rsa handler
 	_ *filesystemv1alpha1.Config,
 ) error {
@@ -28,7 +28,7 @@ func Register(
 		return err
 	}
 
-	credentialTypeRegistry.Register(rsacredentials.Scheme)
+	repositoryRegistry.Register(rsacredentials.Scheme)
 
 	return errors.Join(
 		signingHandlerRegistry.RegisterInternalComponentSignatureHandler(hdlr),
