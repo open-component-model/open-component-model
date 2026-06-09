@@ -15,32 +15,32 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.44.0
-	golang.org/x/term v0.42.0
+	golang.org/x/term v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260526121250-aae701a4aa9b
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/configuration v0.0.14
-	ocm.software/open-component-model/bindings/go/constructor v0.0.9
-	ocm.software/open-component-model/bindings/go/credentials v0.0.12
+	ocm.software/open-component-model/bindings/go/constructor v0.0.10
+	ocm.software/open-component-model/bindings/go/credentials v0.0.13
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260526121250-aae701a4aa9b
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260526121250-aae701a4aa9b
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260609061717-1aefd3478571
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260528112443-9cd4df811eb4
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260601150938-fdc040441934
+	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260609061717-1aefd3478571
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260526121250-aae701a4aa9b
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/oci v0.0.45
-	ocm.software/open-component-model/bindings/go/plugin v0.0.16
+	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260526121250-aae701a4aa9b
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260526121250-aae701a4aa9b
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260526121250-aae701a4aa9b
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260526121250-aae701a4aa9b
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260526121250-aae701a4aa9b
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260609061717-1aefd3478571
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260609061717-1aefd3478571
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260609061717-1aefd3478571
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260609061717-1aefd3478571
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -111,10 +111,10 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
-	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
-	golang.org/x/net v0.53.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348 // indirect
