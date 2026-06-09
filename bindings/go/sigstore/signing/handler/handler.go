@@ -70,6 +70,7 @@ func (h *Handler) Sign(
 	if err := cfg.Validate(); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("invalid signing config: %w", err)
 	}
+	algorithm := cfg.GetSignatureAlgorithm()
 
 	if strings.HasPrefix(cfg.Issuer, "http://") {
 		slog.WarnContext(ctx, "Issuer uses HTTP (non-TLS); this is insecure outside of test environments")
@@ -147,9 +148,8 @@ func (h *Handler) Sign(
 	}
 	slog.DebugContext(ctx, "signing certificate identity", "issuer", certInfo.Issuer, "identity", certInfo.Identity)
 
-	// MediaType is fixed: this handler produces/verifies Sigstore bundles v0.3+json (cosign >=3.0).
 	return descruntime.SignatureInfo{
-		Algorithm: v1alpha1.AlgorithmSigstore,
+		Algorithm: string(algorithm),
 		MediaType: v1alpha1.MediaTypeSigstoreBundle,
 		Value:     base64.StdEncoding.EncodeToString(bundleJSON),
 		Issuer:    certInfo.Issuer,
@@ -170,7 +170,16 @@ func (h *Handler) Verify(
 		return fmt.Errorf("convert config: %w", err)
 	}
 
-	if signed.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
+	// Empty Algorithm is rejected (not defaulted) because OCM signatures must
+	// be produced by the OCM CLI; an unset value indicates a foreign or
+	// malformed signature.
+	if signed.Signature.Algorithm == "" {
+		return fmt.Errorf("signature.Algorithm is required for sigstore verification")
+	}
+	if !v1alpha1.IsKnownAlgorithm(v1alpha1.SignatureAlgorithm(signed.Signature.Algorithm)) {
+		return fmt.Errorf("unknown sigstore algorithm %q", signed.Signature.Algorithm)
+	}
+	if !v1alpha1.IsAcceptableMediaType(signed.Signature.MediaType) {
 		return fmt.Errorf("unsupported media type %q for sigstore verification", signed.Signature.MediaType)
 	}
 
@@ -293,7 +302,13 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	signature descruntime.Signature,
 	_ runtime.Typed,
 ) (runtime.Identity, error) {
-	if signature.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
+	if signature.Signature.Algorithm == "" {
+		return nil, fmt.Errorf("signature.Algorithm is required for sigstore verification")
+	}
+	if !v1alpha1.IsKnownAlgorithm(v1alpha1.SignatureAlgorithm(signature.Signature.Algorithm)) {
+		return nil, fmt.Errorf("unknown sigstore algorithm %q", signature.Signature.Algorithm)
+	}
+	if !v1alpha1.IsAcceptableMediaType(signature.Signature.MediaType) {
 		return nil, fmt.Errorf("unsupported media type %q for sigstore verification", signature.Signature.MediaType)
 	}
 	id := credentialIdentity(verifierv1.VersionedType)
