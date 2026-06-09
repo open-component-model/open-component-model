@@ -169,7 +169,7 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		for _, entry := range filtered.Configurations {
 			var config extractv1alpha1.Config
 			if err := extractv1alpha1.Scheme.Convert(entry, &config); err != nil {
-				return nil, fmt.Errorf("failed to decode credential config: %w", err)
+				return nil, fmt.Errorf("failed to decode extract config: %w", err)
 			}
 			result.Configurations = append(result.Configurations, &config)
 		}
