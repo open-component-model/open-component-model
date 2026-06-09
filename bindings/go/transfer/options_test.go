@@ -18,7 +18,7 @@ func TestDefaultOptions(t *testing.T) {
 	var o Options
 	assert.Equal(t, transferv1alpha1.CopyMode(""), o.CopyMode)
 	assert.Equal(t, transferv1alpha1.UploadType(""), o.UploadType)
-	assert.Equal(t, 0, o.Recursive)
+	assert.Equal(t, transferv1alpha1.RecursiveNone, o.Recursive)
 	assert.Equal(t, transferv1alpha1.CopyModeLocalBlobResources, o.GetCopyMode())
 	assert.Equal(t, transferv1alpha1.UploadAsDefault, o.GetUploadType())
 	assert.Equal(t, 0, o.GetRecursive())
@@ -33,12 +33,10 @@ func TestWithCopyMode(t *testing.T) {
 func TestWithRecursive(t *testing.T) {
 	var o Options
 	WithRecursive(-1)(&o)
-	require.NotNil(t, o.Recursive)
-	assert.Equal(t, -1, o.Recursive)
+	assert.Equal(t, transferv1alpha1.RecursiveInfinite, o.Recursive)
 
 	WithRecursive(0)(&o)
-	require.NotNil(t, o.Recursive)
-	assert.Equal(t, 0, o.Recursive, "WithRecursive(false) must overwrite the previous WithRecursive(true) - that's the override path")
+	assert.Equal(t, transferv1alpha1.RecursiveNone, o.Recursive, "WithRecursive(0) must overwrite the previous WithRecursive(-1) - that's the override path")
 }
 
 func TestWithUploadType(t *testing.T) {

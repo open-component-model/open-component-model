@@ -15,6 +15,9 @@ var schemaConfig []byte
 //go:embed schemas/CopyMode.schema.json
 var schemaCopyMode []byte
 
+//go:embed schemas/Recursive.schema.json
+var schemaRecursive []byte
+
 //go:embed schemas/UploadType.schema.json
 var schemaUploadType []byte
 
@@ -26,6 +29,11 @@ func (Config) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for CopyMode.
 func (CopyMode) JSONSchema() []byte {
 	return schemaCopyMode
+}
+
+// JSONSchema returns the JSON Schema for Recursive.
+func (Recursive) JSONSchema() []byte {
+	return schemaRecursive
 }
 
 // JSONSchema returns the JSON Schema for UploadType.

@@ -85,7 +85,7 @@
 // runtime-only mappings:
 //
 //	cfg := &transferv1alpha1.Config{
-//	    Recursive:  int,
+//	    Recursive:  transferv1alpha1.RecursiveInfinite,
 //	    CopyMode:   transferv1alpha1.CopyModeAllResources,
 //	    UploadType: transferv1alpha1.UploadAsOciArtifact,
 //	}
@@ -104,8 +104,8 @@
 //
 // [FromConfig] skips empty fields - so callers can overlay explicit overrides
 // on top of a partial config without the zero values clobbering them. The
-// resulting [Options] therefore still carries empty enum strings and a nil
-// Recursive pointer until [BuildGraphDefinition] runs; that's where the empties
+// resulting [Options] therefore still carries empty enum strings and a zero
+// Recursive depth until [BuildGraphDefinition] runs; that's where the empties
 // are resolved to their canonical defaults via [transferv1alpha1.Config.GetCopyMode],
 // [transferv1alpha1.Config.GetUploadType], and [transferv1alpha1.Config.GetRecursive].
 package transfer

@@ -31,8 +31,10 @@ type Config struct {
 	Type runtime.Type `json:"type"`
 
 	// Recursive configures transferring component references with the parent component.
-	// -1 means infinite recursion, 0 means no recursion.
-	Recursive int `json:"recursive,omitempty"`
+	// It accepts either an integer or a boolean: -1 means infinite recursion, 0 means
+	// no recursion, n > 0 limits recursion to n levels; true is shorthand for -1 and
+	// false for 0. See [Recursive].
+	Recursive Recursive `json:"recursive,omitempty"`
 
 	// CopyMode determines which resources are copied during a transfer operation.
 	//
@@ -57,15 +59,15 @@ func (cfg *Config) GetCopyMode() CopyMode {
 	return cfg.CopyMode
 }
 
-// GetRecursive collapses the *bool tri-state to a plain bool. Use this rather
-// than reading [Config.Recursive] directly so callers don't have to think about
-// the nil case the wire format needs.
+// GetRecursive resolves [Config.Recursive] to a plain int depth. Use this
+// rather than reading the field directly so callers don't have to handle the
+// nil receiver case.
 func (cfg *Config) GetRecursive() int {
 	if cfg == nil {
 		return 0
 	}
 
-	return cfg.Recursive
+	return int(cfg.Recursive)
 }
 
 func (cfg *Config) GetUploadType() UploadType {

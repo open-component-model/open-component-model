@@ -11,10 +11,8 @@
       "description": "CopyMode determines which resources are copied during a transfer operation.\n\nWhen building a transformation graph, the CopyMode controls whether only local blob\nresources are included or all resources (including remote OCI artifacts and Helm charts)\nare fetched and re-uploaded to the target repository."
     },
     "recursive": {
-      "type": "integer",
-      "description": "Recursive configures transferring component references with the parent component.\n-1 means infinite recursion, 0 means no recursion.",
-      "minimum": -9223372036854776000,
-      "maximum": 9223372036854776000
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.Recursive",
+      "description": "Recursive configures transferring component references with the parent component.\nIt accepts either an integer or a boolean: -1 means infinite recursion, 0 means\nno recursion, n \u003e 0 limits recursion to n levels; true is shorthand for -1 and\nfalse for 0. See [Recursive]."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
@@ -60,6 +58,22 @@
         {
           "description": "CopyModeAllResources transfers all resources regardless of their access type.\nRemote OCI artifacts are downloaded and re-uploaded to the target, and Helm charts\nare fetched, converted to OCI format, and stored in the target repository.\nThis mode ensures the target repository is fully self-contained.",
           "const": "allResources"
+        }
+      ]
+    },
+    "ocm.software.open-component-model.bindings.go.transfer.v1alpha1.Recursive": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "Recursive is a Go int that also accepts a boolean in the wire format: true means infinite recursion (-1) and false means no recursion (0). It always marshals back out as an integer.",
+      "title": "Recursive",
+      "description": "Recursive controls whether component references are transferred along with\ntheir parent component, and how deep that recursion goes.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "description": "Recursion depth: -1 means infinite recursion, 0 means no recursion, n \u003e 0 limits recursion to n levels."
+        },
+        {
+          "type": "boolean",
+          "description": "Shorthand: true maps to infinite recursion (-1), false to no recursion (0)."
         }
       ]
     },

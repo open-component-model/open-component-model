@@ -108,22 +108,24 @@ func TestConfig_YAMLRoundTrip(t *testing.T) {
 	r.Equal(cfg, cfg2)
 }
 
-// TestConfig_RecursiveTriState pins the wire-format tri-state semantic that the
-// replication controller's CRD spec relies on: a YAML document that omits
-// "recursive" decodes to a nil pointer (distinguishable from an explicit false),
-// and an explicit "recursive: false" decodes to a non-nil pointer holding false.
-// This is exactly what the *bool indirection on Config.Recursive buys.
-func TestConfig_RecursiveTriState(t *testing.T) {
+// TestConfig_RecursiveIntOrBool pins the wire-format flexibility of
+// [Config.Recursive]: it decodes from either an integer depth or a boolean
+// shorthand (true maps to infinite recursion -1, false to no recursion 0), and
+// an omitted field decodes to the zero depth.
+func TestConfig_RecursiveIntOrBool(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name      string
 		yaml      string
-		wantValue int // only checked when wantNil is false
+		wantValue Recursive
 	}{
-		{"omitted", "type: TransferConfiguration/v1alpha1\n", 0},
-		{"explicit true", "type: TransferConfiguration/v1alpha1\nrecursive: -1\n", -1},
-		{"explicit false", "type: TransferConfiguration/v1alpha1\nrecursive: 0\n", 0},
+		{"omitted", "type: TransferConfiguration/v1alpha1\n", RecursiveNone},
+		{"explicit infinite", "type: TransferConfiguration/v1alpha1\nrecursive: -1\n", RecursiveInfinite},
+		{"explicit none", "type: TransferConfiguration/v1alpha1\nrecursive: 0\n", RecursiveNone},
+		{"explicit depth", "type: TransferConfiguration/v1alpha1\nrecursive: 3\n", 3},
+		{"bool true", "type: TransferConfiguration/v1alpha1\nrecursive: true\n", RecursiveInfinite},
+		{"bool false", "type: TransferConfiguration/v1alpha1\nrecursive: false\n", RecursiveNone},
 	}
 
 	for _, tc := range cases {
@@ -135,4 +137,28 @@ func TestConfig_RecursiveTriState(t *testing.T) {
 			r.Equal(tc.wantValue, cfg.Recursive)
 		})
 	}
+}
+
+// TestRecursive_MarshalIsAlwaysInt confirms a Recursive set from a boolean
+// round-trips back out as its integer form, not as a boolean.
+func TestRecursive_MarshalIsAlwaysInt(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	var rec Recursive
+	r.NoError(rec.UnmarshalJSON([]byte("true")))
+	r.Equal(RecursiveInfinite, rec)
+
+	out, err := rec.MarshalJSON()
+	r.NoError(err)
+	r.Equal("-1", string(out))
+}
+
+func TestRecursive_UnmarshalRejectsGarbage(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	var rec Recursive
+	r.ErrorContains(rec.UnmarshalJSON([]byte(`"nope"`)), "must be a boolean or an integer")
+	r.ErrorContains(rec.UnmarshalJSON([]byte("1.5")), "must be a whole number")
 }

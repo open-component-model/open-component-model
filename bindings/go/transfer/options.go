@@ -30,7 +30,7 @@ func WithCopyMode(mode transferv1alpha1.CopyMode) Option {
 
 func WithRecursive(recursive int) Option {
 	return func(o *Options) {
-		o.Recursive = recursive
+		o.Recursive = transferv1alpha1.Recursive(recursive)
 	}
 }
 
@@ -62,7 +62,7 @@ func FromConfig(cfg *transferv1alpha1.Config) []Option {
 		return nil
 	}
 	var opts []Option
-	opts = append(opts, WithRecursive(cfg.Recursive))
+	opts = append(opts, WithRecursive(cfg.GetRecursive()))
 
 	if cfg.CopyMode != "" {
 		opts = append(opts, WithCopyMode(cfg.CopyMode))
