@@ -1074,3 +1074,118 @@ func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 		})
 	}
 }
+
+// nonOwnershipAwareResourceRepository is a [ResourceRepository] that does NOT
+// implement [repository.OwnershipAwareRepository]. Used to drive the
+// "policy=Always but repo cannot record" hard-error branch in
+// [DefaultConstructor.processResource].
+type nonOwnershipAwareResourceRepository struct{}
+
+func (n *nonOwnershipAwareResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
+	id := runtime.Identity{}
+	id.SetType(runtime.NewVersionedType("mock", "v1"))
+	return id, nil
+}
+
+func (n *nonOwnershipAwareResourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	return nil, nil
+}
+
+// nonOwnershipAwareTargetRepository is a [TargetRepository] that does NOT
+// implement [repository.OwnershipAwareRepository]. Used to drive the
+// "policy=Always but repo cannot record" hard-error branch in
+// [addColocatedResourceLocalBlob].
+type nonOwnershipAwareTargetRepository struct {
+	inner *mockTargetRepository
+}
+
+func newNonOwnershipAwareTargetRepository() *nonOwnershipAwareTargetRepository {
+	return &nonOwnershipAwareTargetRepository{inner: newMockTargetRepository()}
+}
+
+func (n *nonOwnershipAwareTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	return n.inner.AddLocalResource(ctx, component, version, resource, data)
+}
+
+func (n *nonOwnershipAwareTargetRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
+	return n.inner.AddLocalSource(ctx, component, version, source, data)
+}
+
+func (n *nonOwnershipAwareTargetRepository) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
+	return n.inner.AddComponentVersion(ctx, desc)
+}
+
+func (n *nonOwnershipAwareTargetRepository) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
+	return n.inner.GetComponentVersion(ctx, name, version)
+}
+
+// TestProcessResource_OwnershipAlways_NonOwnershipAwareRepo_HardErrors covers
+// the by-reference branch in [DefaultConstructor.processResource]: when a
+// resource opts into ADR-0016 ownership via OwnershipPolicyAlways and a
+// ResourceRepositoryProvider is configured but the resolved repository does
+// not implement [repository.OwnershipAwareRepository], construction must fail
+// rather than silently drop the explicitly requested ownership link.
+func TestProcessResource_OwnershipAlways_NonOwnershipAwareRepo_HardErrors(t *testing.T) {
+	c := setupTestComponent(t, `
+      - name: backend-image
+        version: v1.0.0
+        relation: local
+        type: ociArtifact
+        options:
+          ownershipPolicy: Always
+        access:
+          type: mock/v1
+          mediaType: application/octet-stream
+          reference: test-ref
+`)
+
+	opts := Options{
+		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: newMockTargetRepository()},
+		ResourceRepositoryProvider: &mockResourceRepositoryProvider{
+			repo: &nonOwnershipAwareResourceRepository{},
+		},
+	}
+
+	err := NewDefaultConstructor(c, opts).Construct(context.Background())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "cannot record")
+	assert.ErrorContains(t, err, "Always")
+}
+
+// TestAddColocatedResourceLocalBlob_OwnershipAlways_NonOwnershipAwareRepo_HardErrors
+// covers the by-value branch in [addColocatedResourceLocalBlob]: when an
+// input-method resource opts into ADR-0016 ownership via OwnershipPolicyAlways
+// but the target repository does not implement
+// [repository.OwnershipAwareRepository], the by-value add must fail rather
+// than silently drop the link.
+func TestAddColocatedResourceLocalBlob_OwnershipAlways_NonOwnershipAwareRepo_HardErrors(t *testing.T) {
+	mockMethod := &mockInputMethod{
+		processedBlob: &mockBlob{mediaType: "application/octet-stream", data: []byte("payload")},
+	}
+	mockProvider := &mockInputMethodProvider{
+		methods: map[runtime.Type]ResourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): mockMethod,
+		},
+	}
+
+	c := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: local
+        type: blob
+        options:
+          ownershipPolicy: Always
+        input:
+          type: mock/v1
+`)
+
+	opts := Options{
+		ResourceInputMethodProvider: mockProvider,
+		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: newNonOwnershipAwareTargetRepository()},
+	}
+
+	err := NewDefaultConstructor(c, opts).Construct(context.Background())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "cannot record")
+	assert.ErrorContains(t, err, "Always")
+}
