@@ -145,14 +145,16 @@ func (h *Handler) Sign(
 	if certInfo.Identity == "" {
 		slog.WarnContext(ctx, "signing certificate contains no SAN identity (email or URI)")
 	}
-	slog.DebugContext(ctx, "signing certificate identity", "issuer", certInfo.Issuer, "identity", certInfo.Identity)
+	slog.DebugContext(ctx, "sigstore sign: bundle written", "identity", certInfo.Identity, "issuer", certInfo.Issuer)
 
 	// MediaType is fixed: this handler produces/verifies Sigstore bundles v0.3+json (cosign >=3.0).
+	// SignatureInfo.Issuer is intentionally unset: the OIDC issuer is embedded in the Fulcio
+	// certificate inside the bundle, and OCM's Issuer field carries RFC2253 DN semantics
+	// (used by RSA/PEM) that don't apply to keyless Sigstore signatures.
 	return descruntime.SignatureInfo{
 		Algorithm: v1alpha1.AlgorithmSigstore,
 		MediaType: v1alpha1.MediaTypeSigstoreBundle,
 		Value:     base64.StdEncoding.EncodeToString(bundleJSON),
-		Issuer:    certInfo.Issuer,
 	}, nil
 }
 
@@ -259,6 +261,15 @@ func (h *Handler) Verify(
 	if cfg.PrivateInfrastructure {
 		extraArgs = append(extraArgs, "--private-infrastructure")
 	}
+
+	slog.InfoContext(ctx, "sigstore verify: enforcing identity constraints",
+		"certificate_identity", cfg.CertificateIdentity,
+		"certificate_identity_regexp", cfg.CertificateIdentityRegexp,
+		"certificate_oidc_issuer", cfg.CertificateOIDCIssuer,
+		"certificate_oidc_issuer_regexp", cfg.CertificateOIDCIssuerRegexp,
+		"private_infrastructure", cfg.PrivateInfrastructure,
+		"trusted_root", trustedRootPath,
+	)
 
 	if err := h.runner.Verify(ctx, dataPath, bundlePath, extraArgs, os.Environ()); err != nil {
 		return err

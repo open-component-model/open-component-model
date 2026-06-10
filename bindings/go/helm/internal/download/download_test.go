@@ -502,7 +502,7 @@ func TestResolveHTTPChartURL(t *testing.T) {
 				}
 			}
 
-			result, err := resolveHTTPChartURL(t.Context(), helmRepo, tt.requestedVersion, t.TempDir(), GetterProviders(), &helmrepo.Entry{})
+			result, err := resolveHTTPChartURL(t.Context(), helmRepo, tt.requestedVersion, t.TempDir(), GetterProviders(nil, HTTPConfigGetterOpts{}), &helmrepo.Entry{})
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
