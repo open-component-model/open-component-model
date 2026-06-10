@@ -2461,6 +2461,57 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 	r.Equal(resolved, resolvedAfter, "the subject must be unchanged by re-running the attach")
 }
 
+// TestRepository_AddOwnership_ResolveErrors covers the subject-resolution failure
+// branches of AddOwnership (ADR 0016) on both access paths. These are the branches
+// most likely to regress silently: a by-reference image whose reference resolves to
+// nothing, and a by-value local blob whose digest is not present in the component
+// store. Both must surface as an error rather than a quietly-skipped referrer.
+func TestRepository_AddOwnership_ResolveErrors(t *testing.T) {
+	const (
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+		// a well-formed but absent digest, so resolution fails rather than parsing.
+		missingDigest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	)
+	tests := []struct {
+		name    string
+		access  runtime.Typed
+		wantErr string
+	}{
+		{
+			name:    "by-reference subject does not resolve",
+			access:  &v1.OCIImage{ImageReference: "ghcr.io/acme/missing:latest"},
+			wantErr: "failed to resolve subject",
+		},
+		{
+			name:    "by-value local blob does not resolve",
+			access:  &v2.LocalBlob{LocalReference: missingDigest, MediaType: "application/octet-stream"},
+			wantErr: "failed to resolve uploaded artifact",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := context.Background()
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo := Repository(t, ocictf.WithCTF(store))
+
+			resource := &descriptor.Resource{
+				Relation:    descriptor.LocalRelation,
+				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend-image", Version: version}},
+				Type:        "ociArtifact",
+				Access:      tt.access,
+			}
+
+			err = repo.AddOwnership(ctx, component, version, resource, nil)
+			r.Error(err)
+			r.ErrorContains(err, tt.wantErr)
+		})
+	}
+}
+
 // blobValidatingResolver wraps a resolver so the stores it hands out reject a
 // manifest whose referenced config/layer blobs are not yet present — the
 // MANIFEST_BLOB_UNKNOWN behaviour of a conformant OCI registry, which the CTF
@@ -2632,3 +2683,45 @@ func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 // opt-in decision (options.ownershipPolicy: Always) lives in the constructor.
 // That gate is covered by the constructor tests (TestDefaultConstructor_attachOwnership_CallSiteGating
 // and the relocated-policy-gate case in construct_resource_test.go).
+
+// TestRepository_AddOwnership_RawBlobSubjectSkipped locks the no-op contract (ADR
+// 0016): when the resolved subject is a raw blob rather than an OCI manifest,
+// AddOwnership records no referrer and returns nil instead of failing. A by-value
+// resource whose local reference points at a plain blob exercises that branch.
+func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+	const (
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+	)
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	// Stage a raw, non-manifest blob in the component store and reference it by digest.
+	componentStore, err := store.StoreForReference(ctx, store.ComponentVersionReference(ctx, component, version))
+	r.NoError(err)
+	raw := []byte("not a manifest")
+	rawDesc := content.NewDescriptorFromBytes("application/octet-stream", raw)
+	r.NoError(componentStore.Push(ctx, rawDesc, bytes.NewReader(raw)))
+
+	resource := &descriptor.Resource{
+		Relation:    descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend", Version: version}},
+		Type:        "blob",
+		Access: &v2.LocalBlob{
+			LocalReference: rawDesc.Digest.String(),
+			MediaType:      "application/octet-stream",
+		},
+	}
+
+	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
+
+	// The contract: a raw-blob subject yields no referrer, so nothing was pushed.
+	referrers, err := pack.OwnershipReferrer(resource, component, version)(ctx, rawDesc)
+	r.NoError(err)
+	r.Empty(referrers, "a raw-blob subject must yield no ownership referrer")
+}

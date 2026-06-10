@@ -491,9 +491,6 @@ var (
 	_ constructor.OwnershipAwareRepository = (*constructorPlugin)(nil)
 )
 
-// constructorPlugin adapts a resolved [resource.Repository] plugin to the
-// constructor's [constructor.ResourceRepository] interface, including the optional
-// ownership capability (ADR 0016) when the plugin supports it.
 type constructorPlugin struct {
 	plugin resource.Repository
 }
