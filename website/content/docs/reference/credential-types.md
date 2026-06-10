@@ -23,18 +23,19 @@ consumers:
         # ... type-specific fields
 ```
 
-OCM ships with four built-in credential types:
+OCM ships with the following built-in credential types:
 
-| Credential Type                                    | Used With                                | Purpose                                                   |
-|----------------------------------------------------|------------------------------------------|-----------------------------------------------------------|
-| [`OCICredentials/v1`](#ocicredentialsv1)           | `OCIRegistry` consumers                  | OCI registry username/password and token auth             |
-| [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1) | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs            |
-| [`RSACredentials/v1`](#rsacredentialsv1)           | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                 |
-| [`DirectCredentials/v1`](#directcredentialsv1)     | Any consumer                             | Legacy untyped key-value fallback (also `Credentials/v1`) |
+| Credential Type | Used With | Purpose |
+|---|---|---|
+| [`OCICredentials/v1`](#ocicredentialsv1) | `OCIRegistry` consumers | OCI registry username/password and token auth |
+| [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1) | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs |
+| [`RSACredentials/v1`](#rsacredentialsv1) | `RSA/v1alpha1` consumers | RSA signing and verification key material |
+| [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1) | `GPG/v1alpha1` consumers | GPG signing and verification key material |
+| [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers | OIDC token for Sigstore keyless signing via Fulcio |
+| [`TrustedRoot/v1alpha1`](#trustedrootv1alpha1) | `SigstoreVerifier/v1alpha1` consumers | Sigstore trust material for private infrastructure verification |
+| [`DirectCredentials/v1`](#directcredentialsv1) | Any consumer | Legacy untyped key-value fallback (also `Credentials/v1`) |
 
-Typed credential types (`OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`) use flat top-level fields.
-`DirectCredentials/v1` uses a nested `properties:` map — it is the universal fallback and all existing `.ocmconfig`
-files using `Credentials/v1` continue to work unchanged.
+All typed credential types use flat top-level fields. `DirectCredentials/v1` uses a nested `properties:` map — it is the universal fallback and all existing `.ocmconfig` files using `Credentials/v1` continue to work unchanged.
 
 ---
 
@@ -199,6 +200,85 @@ consumers:
 
 ---
 
+## GPGCredentials/v1alpha1
+
+Typed credentials carrying OpenPGP key material for GPG signing and verification. Each field has two forms: inline ASCII-armored content or a path to a file. The inline form takes precedence when both are set.
+
+For signing, provide `privateKeyPGP` or `privateKeyPGPFile`. For verification, `publicKeyPGP` or `publicKeyPGPFile` is used; if neither is set, the public key is derived from the private key. Both can be combined in the same entry.
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/gpg/v1alpha1/GPGCredentials.schema.json" >}}
+
+### Example
+
+```yaml
+consumers:
+  - identity:
+      type: GPG/v1alpha1
+      algorithm: application/vnd.ocm.signature.gpg
+      signature: default
+    credentials:
+      - type: GPGCredentials/v1alpha1
+        privateKeyPGPFile: /path/to/private.asc
+        publicKeyPGPFile: /path/to/public.asc
+        passphrase: my-passphrase
+```
+
+### Used With
+
+`GPG/v1alpha1` consumer identities (signing and verification with OpenPGP keys).
+
+---
+
+## OIDCIdentityToken/v1alpha1
+
+Typed credentials carrying an OIDC identity token for Sigstore keyless signing. The token is forwarded to Fulcio, which issues a short-lived signing certificate bound to the identity claims. Provide `token` (inline) or `tokenFile` (path); `token` takes precedence when both are set.
+
+Not needed when the `SIGSTORE_ID_TOKEN` environment variable or GitHub Actions ambient OIDC is already available.
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1/OIDCIdentityToken.schema.json" >}}
+
+### Example
+
+```yaml
+consumers:
+  - identity:
+      type: SigstoreSigner/v1alpha1
+      signature: default
+    credentials:
+      - type: OIDCIdentityToken/v1alpha1
+        tokenFile: /path/to/oidc-token
+```
+
+### Used With
+
+`SigstoreSigner/v1alpha1` consumer identities (Sigstore keyless signing path only; not used during verification).
+
+---
+
+## TrustedRoot/v1alpha1
+
+Typed credentials carrying Sigstore trust material for verifying signatures produced against private Sigstore infrastructure. Overrides the default public-good TUF root. Required when `VerifyConfig.PrivateInfrastructure` is set. Provide `trustedRootJSON` (inline) or `trustedRootJSONFile` (path); the inline form takes precedence.
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1/TrustedRoot.schema.json" >}}
+
+### Example
+
+```yaml
+consumers:
+  - identity:
+      type: SigstoreVerifier/v1alpha1
+      signature: default
+    credentials:
+      - type: TrustedRoot/v1alpha1
+        trustedRootJSONFile: /path/to/trusted-root.json
+```
+
+### Used With
+
+`SigstoreVerifier/v1alpha1` consumer identities (Sigstore verification path only; not used during signing).
+
+---
+
 ## DirectCredentials/v1
 
 The universal legacy fallback, also accepted as `Credentials/v1`. All existing `.ocmconfig` files continue to work
@@ -236,13 +316,12 @@ consumers:
     credentials:
       - type: Credentials/v1
         properties:
-          private_key_pem_file: /path/to/private-key.pem
-          public_key_pem_file: /path/to/public-key.pem
+          privateKeyPEMFile: /path/to/private-key.pem
+          publicKeyPEMFile: /path/to/public-key.pem
 ```
 
 {{< callout context="note" >}}
-Note the difference in key naming: `DirectCredentials/v1` uses `snake_case` string keys (e.g., `private_key_pem_file`),
-while typed credential types like `RSACredentials/v1` use `camelCase` Go struct fields (e.g., `privateKeyPEMFile`).
+`DirectCredentials/v1` property keys use the same **camelCase** names as the corresponding typed credential fields (e.g., `privateKeyPEMFile`, not `private_key_pem_file`). The RSA binding additionally accepts the old `snake_case` keys (`private_key_pem_file`, `public_key_pem_file`) as a deprecated backward-compatibility fallback — all other bindings require camelCase.
 {{< /callout >}}
 
 ### When to use

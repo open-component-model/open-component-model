@@ -82,15 +82,39 @@ The new OCM still accepts the singular `identity` field, so this step is optiona
 {{< /step >}}
 
 {{< step >}}
-**Keep everything else as-is**
+**Migrate to typed credentials**
 
-The following parts of your legacy config work unchanged in the new OCM:
+Replace `Credentials/v1` with the typed equivalent for your credential type. Typed credentials use flat top-level fields instead of a nested `properties:` map and are validated at parse time.
 
-- `OCIRegistry` consumer identity type (unchanged)
-- `Credentials/v1` type and `properties` field — `Credentials/v1` is an alias for `DirectCredentials/v1`, the universal credential fallback; it continues to work with no changes
-- `DockerConfig/v1` repository entries
-- `dockerConfigFile` and `dockerConfig` fields
-- Config file locations (`$HOME/.ocmconfig`, `$OCM_CONFIG`)
+For OCI registries, replace:
+
+```yaml
+        credentials:
+          - type: Credentials/v1
+            properties:
+              username: my-user
+              password: my-token
+```
+
+with:
+
+```yaml
+        credentials:
+          - type: OCICredentials/v1
+            username: my-user
+            password: my-token
+```
+
+`OCICredentials/v1` also supports `accessToken` and `refreshToken` for token-based auth. For all built-in typed credential types and their fields, see [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}).
+
+{{< callout context="note" >}}
+`Credentials/v1` continues to work unchanged — it is an alias for `DirectCredentials/v1`. You only need this step if you want field validation and cleaner configuration.
+{{< /callout >}}
+
+{{< /step >}}
+
+{{< step >}}
+**Verify**
 
 Your migrated config now looks like this:
 
@@ -104,20 +128,14 @@ configurations:
             hostname: ghcr.io
             path: open-component-model/*
         credentials:
-          - type: Credentials/v1
-            properties:
-              username: my-user
-              password: my-token
+          - type: OCICredentials/v1
+            username: my-user
+            password: my-token
     repositories:
       - repository:
           type: DockerConfig/v1
           dockerConfigFile: "~/.docker/config.json"
 ```
-
-{{< /step >}}
-
-{{< step >}}
-**Verify**
 
 Run any OCM command that requires authentication:
 
@@ -132,29 +150,6 @@ If you get `401 Unauthorized`, check that you renamed `pathprefix` → `path` (w
 {{< /step >}}
 
 {{< /steps >}}
-
-## Optionally migrate to typed credentials
-
-`Credentials/v1` with a `properties:` will continue to work, but you can migrate to typed credential types for field validation and clearer configuration. For OCI registries, replace:
-
-```yaml
-credentials:
-  - type: Credentials/v1
-    properties:
-      username: my-user
-      password: my-token
-```
-
-with the typed equivalent:
-
-```yaml
-credentials:
-  - type: OCICredentials/v1
-    username: my-user
-    password: my-token
-```
-
-Typed credentials use flat top-level fields instead of a nested `properties:` map. For all built-in typed credential types and their fields, see [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}).
 
 ## Next Steps
 

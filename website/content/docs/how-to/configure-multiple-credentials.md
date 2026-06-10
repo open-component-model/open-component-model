@@ -39,10 +39,9 @@ configurations:
           - type: OCIRegistry
             hostname: ghcr.io  # No path = matches all paths
         credentials:
-          - type: Credentials/v1
-            properties:
-              username: my-user
-              password: ghp_your_token_here
+          - type: OCICredentials/v1
+            username: my-user
+            password: ghp_your_token_here
 ```
 
 **Identity:** `hostname: ghcr.io` (no `path`)  
@@ -66,10 +65,9 @@ configurations:
             hostname: ghcr.io
             path: my-org/production  # Exact path match
         credentials:
-          - type: Credentials/v1
-            properties:
-              username: prod-user
-              password: ghp_production_token
+          - type: OCICredentials/v1
+            username: prod-user
+            password: ghp_production_token
 ```
 
 **Identity:** `hostname: ghcr.io` + `path: my-org/production`  
@@ -94,10 +92,9 @@ configurations:
             hostname: ghcr.io
             path: my-org/*  # Glob — matches one segment after my-org/
         credentials:
-          - type: Credentials/v1
-            properties:
-              username: org-user
-              password: ghp_org_token
+          - type: OCICredentials/v1
+            username: org-user
+            password: ghp_org_token
 ```
 
 **Identity:** `hostname: ghcr.io` + `path: my-org/*`  
@@ -145,29 +142,26 @@ configurations:
             hostname: ghcr.io
             path: my-org/*
         credentials:
-          - type: Credentials/v1
-            properties:
-              username: org-user
-              password: ghp_org_token
+          - type: OCICredentials/v1
+            username: org-user
+            password: ghp_org_token
       # Exact path: matches only ghcr.io/my-org/production (takes precedence over glob)
       - identities:
           - type: OCIRegistry
             hostname: ghcr.io
             path: my-org/production
         credentials:
-          - type: Credentials/v1
-            properties:
-              username: prod-user
-              password: ghp_production_token
+          - type: OCICredentials/v1
+            username: prod-user
+            password: ghp_production_token
       # Hostname only: matches all other paths on ghcr.io
       - identities:
           - type: OCIRegistry
             hostname: ghcr.io
         credentials:
-          - type: Credentials/v1
-            properties:
-              username: my-user
-              password: ghp_your_token_here
+          - type: OCICredentials/v1
+            username: my-user
+            password: ghp_your_token_here
     # Docker config: fallback for any registry not matched above
     repositories:
       - repository:
@@ -199,24 +193,6 @@ Use `ocm --loglevel debug` to enable debug logging. This shows which consumers a
 **Cause:** Docker config doesn't have credentials for that registry.
 
 **Fix:** Run `docker login <registry-hostname>`, then retry the OCM command.
-
-## Typed Credentials
-
-The examples above use `Credentials/v1` with a nested `properties:` map. You can also use the typed `OCICredentials/v1` type, which uses flat top-level fields:
-
-```yaml
-consumers:
-  - identities:
-      - type: OCIRegistry
-        hostname: ghcr.io
-    credentials:
-      - type: OCICredentials/v1
-        username: my-user
-        password: ghp_your_token_here
-        # accessToken and refreshToken are also supported for token-based auth
-```
-
-Both forms are equivalent for basic username/password auth. Typed credentials additionally support `accessToken` and `refreshToken` fields with no extra nesting. For a full field reference, see [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}).
 
 ## Related Documentation
 

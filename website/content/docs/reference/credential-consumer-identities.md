@@ -60,8 +60,12 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 
 | Property | Description |
 | --- | --- |
-| `username` | Registry username |
-| `password` | Registry password or token |
+| `username` | Username for basic authentication |
+| `password` | Password for basic authentication |
+| `accessToken` | Bearer token sent directly to the registry (Docker token flow) |
+| `refreshToken` | OAuth2 refresh token exchanged for an access token before each request |
+
+Token fields take precedence over `username`/`password` when both are present. Use [`OCICredentials/v1`]({{< relref "credential-types.md#ocicredentialsv1" >}}) for the full typed field reference.
 
 ### Matching Behavior
 
