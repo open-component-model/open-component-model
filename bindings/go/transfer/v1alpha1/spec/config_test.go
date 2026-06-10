@@ -28,6 +28,8 @@ func TestConfig_Validate(t *testing.T) {
 		{"valid uploadType localBlob", Config{UploadType: UploadAsLocalBlob}, ""},
 		{"invalid copyMode", Config{CopyMode: "garbage"}, "invalid copyMode"},
 		{"invalid uploadType", Config{UploadType: "garbage"}, "invalid uploadType"},
+		{"valid recursive depth", Config{Recursive: 3}, ""},
+		{"invalid recursive below -1", Config{Recursive: -5}, "invalid recursive"},
 	}
 
 	for _, tc := range tests {
@@ -89,11 +91,10 @@ func TestConfig_YAMLRoundTrip(t *testing.T) {
 	r.Equal(cfg, cfg2)
 }
 
-// TestConfig_RecursiveIntOrBool pins the wire-format flexibility of
-// [Config.Recursive]: it decodes from either an integer depth or a boolean
-// shorthand (true maps to infinite recursion -1, false to no recursion 0), and
-// an omitted field decodes to the zero depth.
-func TestConfig_RecursiveIntOrBool(t *testing.T) {
+// TestConfig_RecursiveDepth pins the wire format of [Config.Recursive]: an
+// integer depth where -1 means infinite recursion, 0 (or an omitted field)
+// means no recursion, and n > 0 limits recursion to n levels.
+func TestConfig_RecursiveDepth(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -105,8 +106,6 @@ func TestConfig_RecursiveIntOrBool(t *testing.T) {
 		{"explicit infinite", "type: transfer.config.ocm.software/v1alpha1\nrecursive: -1\n", RecursiveInfinite},
 		{"explicit none", "type: transfer.config.ocm.software/v1alpha1\nrecursive: 0\n", RecursiveNone},
 		{"explicit depth", "type: transfer.config.ocm.software/v1alpha1\nrecursive: 3\n", 3},
-		{"bool true", "type: transfer.config.ocm.software/v1alpha1\nrecursive: true\n", RecursiveInfinite},
-		{"bool false", "type: transfer.config.ocm.software/v1alpha1\nrecursive: false\n", RecursiveNone},
 	}
 
 	for _, tc := range cases {
@@ -118,30 +117,6 @@ func TestConfig_RecursiveIntOrBool(t *testing.T) {
 			r.Equal(tc.wantValue, cfg.Recursive)
 		})
 	}
-}
-
-// TestRecursive_MarshalIsAlwaysInt confirms a Recursive set from a boolean
-// round-trips back out as its integer form, not as a boolean.
-func TestRecursive_MarshalIsAlwaysInt(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	var rec Recursive
-	r.NoError(rec.UnmarshalJSON([]byte("true")))
-	r.Equal(RecursiveInfinite, rec)
-
-	out, err := rec.MarshalJSON()
-	r.NoError(err)
-	r.Equal("-1", string(out))
-}
-
-func TestRecursive_UnmarshalRejectsGarbage(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	var rec Recursive
-	r.ErrorContains(rec.UnmarshalJSON([]byte(`"nope"`)), "must be a boolean or an integer")
-	r.ErrorContains(rec.UnmarshalJSON([]byte("1.5")), "must be a whole number")
 }
 
 func makeGenericConfig(t *testing.T, entries ...string) *genericv1.Config {

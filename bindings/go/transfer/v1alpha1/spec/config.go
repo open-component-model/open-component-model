@@ -39,10 +39,9 @@ type Config struct {
 	// +ocm:jsonschema-gen:enum:deprecated=transfer.config.ocm.software
 	Type runtime.Type `json:"type"`
 
-	// Recursive configures transferring component references with the parent component.
-	// It accepts either an integer or a boolean: -1 means infinite recursion, 0 means
-	// no recursion, n > 0 limits recursion to n levels; true is shorthand for -1 and
-	// false for 0. See [Recursive].
+	// Recursive configures transferring component references with the parent
+	// component: -1 means infinite recursion, 0 means no recursion, n > 0
+	// limits recursion to n levels. See [Recursive].
 	Recursive Recursive `json:"recursive,omitempty"`
 
 	// CopyMode determines which resources are copied during a transfer operation.
@@ -76,6 +75,10 @@ func (cfg *Config) Validate() error {
 			return fmt.Errorf("invalid type %q (must be %q or %q)",
 				cfg.Type, ConfigType, runtime.NewVersionedType(ConfigType, Version))
 		}
+	}
+
+	if cfg.Recursive < RecursiveInfinite {
+		return fmt.Errorf("invalid recursive %d (must be -1 for infinite recursion, 0 for none, or a positive depth)", cfg.Recursive)
 	}
 
 	switch cfg.CopyMode {

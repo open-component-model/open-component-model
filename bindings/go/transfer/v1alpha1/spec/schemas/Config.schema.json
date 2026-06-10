@@ -12,7 +12,7 @@
     },
     "recursive": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.Recursive",
-      "description": "Recursive configures transferring component references with the parent component.\nIt accepts either an integer or a boolean: -1 means infinite recursion, 0 means\nno recursion, n \u003e 0 limits recursion to n levels; true is shorthand for -1 and\nfalse for 0. See [Recursive]."
+      "description": "Recursive configures transferring component references with the parent\ncomponent: -1 means infinite recursion, 0 means no recursion, n \u003e 0\nlimits recursion to n levels. See [Recursive]."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
@@ -63,19 +63,11 @@
     },
     "ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.Recursive": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$comment": "Recursive is a Go int that also accepts a boolean in the wire format: true means infinite recursion (-1) and false means no recursion (0). It always marshals back out as an integer.",
+      "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/Recursive.schema.json",
       "title": "Recursive",
-      "description": "Recursive controls whether component references are transferred along with\ntheir parent component, and how deep that recursion goes.",
-      "anyOf": [
-        {
-          "type": "integer",
-          "description": "Recursion depth: -1 means infinite recursion, 0 means no recursion, n \u003e 0 limits recursion to n levels."
-        },
-        {
-          "type": "boolean",
-          "description": "Shorthand: true maps to infinite recursion (-1), false to no recursion (0)."
-        }
-      ]
+      "type": "integer",
+      "description": "Recursive controls whether component references are transferred along with\ntheir parent component, and how deep that recursion goes: -1 means infinite\nrecursion, 0 means no recursion, and n \u003e 0 limits recursion to n levels.",
+      "minimum": -1
     },
     "ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploadType": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

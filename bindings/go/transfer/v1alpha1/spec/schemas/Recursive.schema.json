@@ -1,16 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "Recursive is a Go int that also accepts a boolean in the wire format: true means infinite recursion (-1) and false means no recursion (0). It always marshals back out as an integer.",
+  "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/Recursive.schema.json",
   "title": "Recursive",
-  "description": "Recursive controls whether component references are transferred along with\ntheir parent component, and how deep that recursion goes.",
-  "anyOf": [
-    {
-      "type": "integer",
-      "description": "Recursion depth: -1 means infinite recursion, 0 means no recursion, n > 0 limits recursion to n levels."
-    },
-    {
-      "type": "boolean",
-      "description": "Shorthand: true maps to infinite recursion (-1), false to no recursion (0)."
-    }
-  ]
+  "type": "integer",
+  "description": "Recursive controls whether component references are transferred along with\ntheir parent component, and how deep that recursion goes: -1 means infinite\nrecursion, 0 means no recursion, and n > 0 limits recursion to n levels.",
+  "minimum": -1
 }
