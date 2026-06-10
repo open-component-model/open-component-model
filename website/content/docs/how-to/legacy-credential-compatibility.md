@@ -11,7 +11,8 @@ toc: true
 Migrate an existing legacy OCM `.ocmconfig` file so it works with the new OCM.
 
 {{< callout context="caution" >}}
-`HashiCorpVault/v1`, `GardenerConfig/v1`, and `NPMConfig/v1` are not yet available in the new OCM. If you rely on these, stay on legacy OCM for now.
+`HashiCorpVault/v1`, `GardenerConfig/v1`, and `NPMConfig/v1` are not yet available in the new OCM. If you rely on these,
+stay on legacy OCM for now.
 {{< /callout >}}
 
 ## Prerequisites
@@ -50,7 +51,8 @@ The following steps walk you through each change needed to make this config work
 {{< step >}}
 **Change `pathprefix` to `path` with a glob pattern**
 
-The field for matching repository paths was renamed from `pathprefix` to `path`. Because `pathprefix` matched any path starting with the given prefix, you need to append a glob pattern (`/*`) to preserve the same matching behavior:
+The field for matching repository paths was renamed from `pathprefix` to `path`. Because `pathprefix` matched any path
+starting with the given prefix, you need to append a glob pattern (`/*`) to preserve the same matching behavior:
 
 ```yaml
     consumers:
@@ -61,7 +63,9 @@ The field for matching repository paths was renamed from `pathprefix` to `path`.
 ```
 
 {{< callout context="note" >}}
-`path` does **not** do prefix matching — `path: open-component-model` would only match the exact path `open-component-model`, not `open-component-model/my-repo`. Use `open-component-model/*` to match any single segment after the prefix, or `open-component-model/*/*` for two levels.
+`path` does **not** do prefix matching — `path: open-component-model` would only match the exact path
+`open-component-model`, not `open-component-model/my-repo`. Use `open-component-model/*` to match any single segment
+after the prefix, or `open-component-model/*/*` for two levels.
 {{< /callout >}}
 
 {{< /step >}}
@@ -69,11 +73,13 @@ The field for matching repository paths was renamed from `pathprefix` to `path`.
 {{< step >}}
 **Change `identity` to `identities` (optional)**
 
-The new OCM still accepts the singular `identity` field, so this step is optional. However, switching to `identities` (a list) lets you share one credential across multiple registries. See [Multi-Identity Credentials]({{< relref "/docs/tutorials/credential-resolution.md" >}}) for details.
+The new OCM still accepts the singular `identity` field, so this step is optional. However, switching to `identities` (a
+list) lets you share one credential across multiple registries. See [Multi-Identity Credentials]({{< relref "
+/docs/tutorials/credential-resolution.md" >}}) for details.
 
 ```yaml
     consumers:
-      - identities:  # was: identity (now a list)
+      - identities: # was: identity (now a list)
           - type: OCIRegistry
             hostname: ghcr.io
             path: open-component-model/*
@@ -84,7 +90,8 @@ The new OCM still accepts the singular `identity` field, so this step is optiona
 {{< step >}}
 **Migrate to typed credentials**
 
-Replace `Credentials/v1` with the typed equivalent for your credential type. Typed credentials use flat top-level fields instead of a nested `properties:` map and are validated at parse time.
+Replace `Credentials/v1` with the typed equivalent for your credential type. Typed credentials use flat top-level fields
+instead of a nested `properties:` map and are validated at parse time.
 
 For OCI registries, replace:
 
@@ -105,10 +112,13 @@ with:
             password: my-token
 ```
 
-`OCICredentials/v1` also supports `accessToken` and `refreshToken` for token-based auth. For all built-in typed credential types and their fields, see [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}).
+`OCICredentials/v1` also supports `accessToken` and `refreshToken` for token-based auth. For all built-in typed
+credential types and their fields, see [Reference: Credential Types]({{< relref "
+/docs/reference/credential-types.md" >}}).
 
 {{< callout context="note" >}}
-`Credentials/v1` continues to work unchanged — it is an alias for `DirectCredentials/v1`. You only need this step if you want field validation and cleaner configuration.
+`Credentials/v1` continues to work unchanged — it is an alias for `DirectCredentials/v1`. You only need this step if you
+want field validation and cleaner configuration.
 {{< /callout >}}
 
 {{< /step >}}
@@ -143,9 +153,12 @@ Run any OCM command that requires authentication:
 ocm get cv ghcr.io/my-org/my-component
 ```
 
-If you get `unknown credential repository type`, you may be using a repository type not yet supported in the new OCM (`HashiCorpVault/v1`, `NPMConfig/v1`, `GardenerConfig/v1`). Remove the unsupported entry or stay on legacy OCM until support is added.
+If you get `unknown credential repository type`, you may be using a repository type not yet supported in the new OCM (
+`HashiCorpVault/v1`, `NPMConfig/v1`, `GardenerConfig/v1`). Remove the unsupported entry or stay on legacy OCM until
+support is added.
 
-If you get `401 Unauthorized`, check that you renamed `pathprefix` → `path` (with a glob pattern) in all consumer entries.
+If you get `401 Unauthorized`, check that you renamed `pathprefix` → `path` (with a glob pattern) in all consumer
+entries.
 
 {{< /step >}}
 
@@ -153,10 +166,14 @@ If you get `401 Unauthorized`, check that you renamed `pathprefix` → `path` (w
 
 ## Next Steps
 
-- [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) - Set up credentials for multiple registries
-- [Tutorial: Credential Resolution]({{< relref "/docs/tutorials/credential-resolution.md" >}}) - Learn how OCM resolves credentials step-by-step
+- [How-To: Configure Credentials for Multiple Registries]({{< relref "
+  docs/how-to/configure-multiple-credentials.md" >}}) - Set up credentials for multiple registries
+- [Tutorial: Credential Resolution]({{< relref "/docs/tutorials/credential-resolution.md" >}}) - Learn how OCM resolves
+  credentials step-by-step
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system automatically finds the right credentials for each operation
-- [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}) - All built-in typed credential types and their fields
+- [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system
+  automatically finds the right credentials for each operation
+- [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}) - All built-in typed credential
+  types and their fields

@@ -8,9 +8,11 @@ toc: true
 
 ## Overview
 
-Every time OCM accesses a registry, it resolves credentials automatically. This tutorial walks you through how that resolution works — given a config, which credentials does OCM pick for each request, and why?
+Every time OCM accesses a registry, it resolves credentials automatically. This tutorial walks you through how that
+resolution works — given a config, which credentials does OCM pick for each request, and why?
 
-This tutorial focuses on OCI registry credentials. For signing credential identities (`RSA/v1alpha1`), see the [Consumer Identities Reference]({{< relref "/docs/reference/credential-consumer-identities.md" >}}).
+This tutorial focuses on OCI registry credentials. For signing credential identities (`RSA/v1alpha1`), see
+the [Consumer Identities Reference]({{< relref "/docs/reference/credential-consumer-identities.md" >}}).
 
 For the full concept, see [Credential System]({{< relref "/docs/concepts/credential-system.md" >}}).
 
@@ -32,15 +34,23 @@ For the full concept, see [Credential System]({{< relref "/docs/concepts/credent
 
 When resolving credentials, OCM follows three paths in order:
 
-1. **Direct consumers** — the consumer entry holds credentials inline (a typed credential like `OCICredentials/v1` or the legacy `DirectCredentials/v1`). These are returned immediately on match.
-2. **Indirect consumers** — the credential entry refers to a plugin-backed source (e.g., `HashiCorpVault/v1alpha1`). The graph creates a dependency edge at ingestion time; at resolution time, the plugin is called with the credentials resolved for its own identity.
-3. **Repository fallback** — `DockerConfig/v1` and similar repository plugins. Consulted only when neither direct nor indirect lookup yields a result; all repository plugins are queried concurrently and the first success wins.
+1. **Direct consumers** — the consumer entry holds credentials inline (a typed credential like `OCICredentials/v1` or
+   the legacy `DirectCredentials/v1`). These are returned immediately on match.
+2. **Indirect consumers** — the credential entry refers to a plugin-backed source (e.g., `HashiCorpVault/v1alpha1`). The
+   graph creates a dependency edge at ingestion time; at resolution time, the plugin is called with the credentials
+   resolved for its own identity.
+3. **Repository fallback** — `DockerConfig/v1` and similar repository plugins. Consulted only when neither direct nor
+   indirect lookup yields a result; all repository plugins are queried concurrently and the first success wins.
 
-Consumer entries (direct or indirect) always take priority over repository lookups. This means you can rely on Docker config for most registries while overriding specific ones with explicit credentials — without touching your Docker setup.
+Consumer entries (direct or indirect) always take priority over repository lookups. This means you can rely on Docker
+config for most registries while overriding specific ones with explicit credentials — without touching your Docker
+setup.
 
 ### Identity Matching
 
-When OCM needs credentials for an operation (e.g., pushing to `ghcr.io/my-org/my-repo`), it constructs a **lookup identity** — a map of attributes like `type`, `hostname`, `scheme`, `port`, and `path`. It then tries to find a matching consumer entry in the credential graph.
+When OCM needs credentials for an operation (e.g., pushing to `ghcr.io/my-org/my-repo`), it constructs a **lookup
+identity** — a map of attributes like `type`, `hostname`, `scheme`, `port`, and `path`. It then tries to find a matching
+consumer entry in the credential graph.
 
 ```mermaid
 flowchart TB
@@ -59,32 +69,36 @@ flowchart TB
 
 Matching runs three chained matchers **in order** — all three must pass:
 
-1. **Path matcher** — compares `path` using Go's `path.Match` (glob). If the configured entry has no `path`, any request path is accepted. `*` matches exactly one segment (not across `/`).
-2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports: `https` → `443`, `http` → `80`. Schemes must be equal (if neither side specifies one, they match).
+1. **Path matcher** — compares `path` using Go's `path.Match` (glob). If the configured entry has no `path`, any request
+   path is accepted. `*` matches exactly one segment (not across `/`).
+2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports: `https` → `443`, `http` → `80`.
+   Schemes must be equal (if neither side specifies one, they match).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
 If any matcher fails, the entry is skipped. **First match wins** — OCM returns the first matching entry it finds.
 
 Quick reference:
 
-| Configured identity | Request | Result | Why |
-| --- | --- | --- | --- |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/my-repo` | `ghcr.io/my-org/my-repo` | ✅ | Exact path match |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*` | `ghcr.io/my-org/my-repo` | ✅ | `*` matches `my-repo` |
-| `type: OCIRegistry`<br>`hostname: ghcr.io` | `ghcr.io/my-org/my-repo` | ✅ | No path — accepts any |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org` | `ghcr.io/my-org/my-repo` | ❌ | `my-org` ≠ `my-org/my-repo` |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*` | `ghcr.io/other-org/foo` | ❌ | `other-org` ≠ `my-org` |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: https` | `https://ghcr.io:443/repo` | ✅ | Port defaults to `443` |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: http` | `https://ghcr.io/repo` | ❌ | `http` ≠ `https` |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`port: 5000` | `https://ghcr.io:443/repo` | ❌ | `5000` ≠ `443` |
+| Configured identity                                                  | Request                    | Result | Why                         |
+|----------------------------------------------------------------------|----------------------------|--------|-----------------------------|
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/my-repo` | `ghcr.io/my-org/my-repo`   | ✅      | Exact path match            |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*`       | `ghcr.io/my-org/my-repo`   | ✅      | `*` matches `my-repo`       |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`                           | `ghcr.io/my-org/my-repo`   | ✅      | No path — accepts any       |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org`         | `ghcr.io/my-org/my-repo`   | ❌      | `my-org` ≠ `my-org/my-repo` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*`       | `ghcr.io/other-org/foo`    | ❌      | `other-org` ≠ `my-org`      |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: https`        | `https://ghcr.io:443/repo` | ✅      | Port defaults to `443`      |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: http`         | `https://ghcr.io/repo`     | ❌      | `http` ≠ `https`            |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`port: 5000`           | `https://ghcr.io:443/repo` | ❌      | `5000` ≠ `443`              |
 
 {{< callout context="note" >}}
-`*` matches exactly one path segment. It does **not** match across `/` separators. Use `my-org/*/*` to match two-level paths like `my-org/team/repo`.
+`*` matches exactly one path segment. It does **not** match across `/` separators. Use `my-org/*/*` to match two-level
+paths like `my-org/team/repo`.
 {{< /callout >}}
 
 ### Example A: Simple Hostname Match
 
-The simplest case: a single consumer entry with just a `hostname`. Because no `path` is configured, it acts as a **catch-all** for that host.
+The simplest case: a single consumer entry with just a `hostname`. Because no `path` is configured, it acts as a *
+*catch-all** for that host.
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -101,13 +115,14 @@ configurations:
               password: ghp_token
 ```
 
-| Request | Result | Why |
-| --- | --- | --- |
-| `ghcr.io/my-org/my-repo` | ✅ `ghcr-user` | No `path` in config → accepts any path |
-| `ghcr.io/other-org/thing` | ✅ `ghcr-user` | Same — hostname matches, path is unrestricted |
-| `docker.io/library/nginx` | ❌ No credentials | `docker.io` ≠ `ghcr.io` |
+| Request                   | Result           | Why                                           |
+|---------------------------|------------------|-----------------------------------------------|
+| `ghcr.io/my-org/my-repo`  | ✅ `ghcr-user`    | No `path` in config → accepts any path        |
+| `ghcr.io/other-org/thing` | ✅ `ghcr-user`    | Same — hostname matches, path is unrestricted |
+| `docker.io/library/nginx` | ❌ No credentials | `docker.io` ≠ `ghcr.io`                       |
 
-**Takeaway:** A hostname-only entry is the broadest match. It catches every request to that host regardless of path, scheme, or port.
+**Takeaway:** A hostname-only entry is the broadest match. It catches every request to that host regardless of path,
+scheme, or port.
 
 ### Example B: Glob Path Matching with Multiple Consumers
 
@@ -149,18 +164,20 @@ configurations:
               password: ghp_catchall
 ```
 
-| Request | Matches A? | Matches B? | Matches C? | Why |
-| --- | --- | --- | --- | --- |
-| `ghcr.io/my-org/production` | ✅ | ✅ | ✅ | Exact path match on A; `*` also matches `production`; C has no path |
-| `ghcr.io/my-org/staging` | ❌ | ✅ | ✅ | `staging` ≠ `production`, but `*` matches `staging` |
-| `ghcr.io/my-org/team/repo` | ❌ | ❌ | ✅ | `*` matches **one** segment — `team/repo` has two. Only C matches |
-| `ghcr.io/other-org/repo` | ❌ | ❌ | ✅ | `other-org` ≠ `my-org`; only the hostname catch-all matches |
+| Request                     | Matches A? | Matches B? | Matches C? | Why                                                                 |
+|-----------------------------|------------|------------|------------|---------------------------------------------------------------------|
+| `ghcr.io/my-org/production` | ✅          | ✅          | ✅          | Exact path match on A; `*` also matches `production`; C has no path |
+| `ghcr.io/my-org/staging`    | ❌          | ✅          | ✅          | `staging` ≠ `production`, but `*` matches `staging`                 |
+| `ghcr.io/my-org/team/repo`  | ❌          | ❌          | ✅          | `*` matches **one** segment — `team/repo` has two. Only C matches   |
+| `ghcr.io/other-org/repo`    | ❌          | ❌          | ✅          | `other-org` ≠ `my-org`; only the hostname catch-all matches         |
 
 {{< callout context="note" >}}
-`*` matches exactly one path segment. It does **not** match across `/` separators. To match two levels like `my-org/team/repo`, use `my-org/*/*`.
+`*` matches exactly one path segment. It does **not** match across `/` separators. To match two levels like
+`my-org/team/repo`, use `my-org/*/*`.
 {{< /callout >}}
 
-**Takeaway:** OCM first tries an exact string match on the full identity. If that fails, it iterates all configured entries and returns the first wildcard match.
+**Takeaway:** OCM first tries an exact string match on the full identity. If that fails, it iterates all configured
+entries and returns the first wildcard match.
 
 ### Example B2: Two-Level Wildcard Matching (`*/*`)
 
@@ -193,18 +210,20 @@ configurations:
               password: ghp_my_org_token
 ```
 
-| Request | Consumer A (`*/*`) | Consumer B (`my-org/*`) | Result | Why |
-| --- | --- | --- | --- | --- |
-| `ghcr.io/my-org/repo` | ✅ | ✅ | ✅ `my-org-user` | B matches first (more specific) |
-| `ghcr.io/other-org/project` | ✅ | ❌ | ✅ `org-user` | Only A matches (two-level wildcard) |
-| `ghcr.io/my-org/team/subteam/repo` | ❌ | ❌ | ❌ No credentials | Path has 4 segments, `*/*` only matches 2 |
-| `ghcr.io/singlelevel` | ❌ | ❌ | ❌ No credentials | Path has 1 segment, `*/*` requires exactly 2 |
+| Request                            | Consumer A (`*/*`) | Consumer B (`my-org/*`) | Result           | Why                                          |
+|------------------------------------|--------------------|-------------------------|------------------|----------------------------------------------|
+| `ghcr.io/my-org/repo`              | ✅                  | ✅                       | ✅ `my-org-user`  | B matches first (more specific)              |
+| `ghcr.io/other-org/project`        | ✅                  | ❌                       | ✅ `org-user`     | Only A matches (two-level wildcard)          |
+| `ghcr.io/my-org/team/subteam/repo` | ❌                  | ❌                       | ❌ No credentials | Path has 4 segments, `*/*` only matches 2    |
+| `ghcr.io/singlelevel`              | ❌                  | ❌                       | ❌ No credentials | Path has 1 segment, `*/*` requires exactly 2 |
 
 {{< callout context="tip" >}}
-`*/*` matches **exactly** two path segments. For three levels, use `*/*/*`, and so on. Each `*` matches one segment between `/` separators.
+`*/*` matches **exactly** two path segments. For three levels, use `*/*/*`, and so on. Each `*` matches one segment
+between `/` separators.
 {{< /callout >}}
 
-**Takeaway:** Use `*/*` when you want to match any two-segment path structure (like organization/repository) while still being more specific than a hostname-only catch-all.
+**Takeaway:** Use `*/*` when you want to match any two-segment path structure (like organization/repository) while still
+being more specific than a hostname-only catch-all.
 
 ### Example C: URL Normalization — Scheme and Port Defaults
 
@@ -242,23 +261,27 @@ configurations:
               password: local_pass
 ```
 
-| Request | Result | Why |
-| --- | --- | --- |
-| `https://ghcr.io/my-org/repo` | ✅ `secure-user` | Scheme matches; no port defaults to `443` on both sides |
-| `https://ghcr.io:443/repo` | ✅ `secure-user` | Explicit `443` equals the default `443` for `https` |
-| `https://ghcr.io:8443/repo` | ❌ No credentials | Port `8443` ≠ default `443` |
-| `http://ghcr.io/repo` | ❌ No credentials | Scheme `http` ≠ `https` |
-| `ghcr.io/repo` (no scheme) | ❌ No credentials | Empty scheme ≠ `https` — schemes must match |
-| `myregistry.local:5000/repo` | ✅ `local-user` | Port `5000` matches; no scheme on either side |
-| `myregistry.local/repo` (no port) | ❌ No credentials | No scheme means no default port — empty ≠ `5000` |
+| Request                           | Result           | Why                                                     |
+|-----------------------------------|------------------|---------------------------------------------------------|
+| `https://ghcr.io/my-org/repo`     | ✅ `secure-user`  | Scheme matches; no port defaults to `443` on both sides |
+| `https://ghcr.io:443/repo`        | ✅ `secure-user`  | Explicit `443` equals the default `443` for `https`     |
+| `https://ghcr.io:8443/repo`       | ❌ No credentials | Port `8443` ≠ default `443`                             |
+| `http://ghcr.io/repo`             | ❌ No credentials | Scheme `http` ≠ `https`                                 |
+| `ghcr.io/repo` (no scheme)        | ❌ No credentials | Empty scheme ≠ `https` — schemes must match             |
+| `myregistry.local:5000/repo`      | ✅ `local-user`   | Port `5000` matches; no scheme on either side           |
+| `myregistry.local/repo` (no port) | ❌ No credentials | No scheme means no default port — empty ≠ `5000`        |
 
-**Takeaway:** Port defaults only apply when a `scheme` is present. If you omit `scheme` from both the config and the request, ports are compared literally.
+**Takeaway:** Port defaults only apply when a `scheme` is present. If you omit `scheme` from both the config and the
+request, ports are compared literally.
 
 ### Example D: The `oci` Scheme
 
-Some OCI tools use `oci://` URLs instead of `https://`. When OCM builds a lookup identity from an `oci://` URL, it treats `oci` like `https` and explicitly sets **port 443**. However, the identity matcher only has built-in port defaults for `https` → `443` and `http` → `80` — the `oci` scheme has **no default port**.
+Some OCI tools use `oci://` URLs instead of `https://`. When OCM builds a lookup identity from an `oci://` URL, it
+treats `oci` like `https` and explicitly sets **port 443**. However, the identity matcher only has built-in port
+defaults for `https` → `443` and `http` → `80` — the `oci` scheme has **no default port**.
 
-In practice this works because OCM sets port `443` explicitly on both sides for `oci://` URLs, so they match via literal comparison.
+In practice this works because OCM sets port `443` explicitly on both sides for `oci://` URLs, so they match via literal
+comparison.
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -277,18 +300,20 @@ configurations:
               password: oci_token
 ```
 
-| Request | Result | Why |
-| --- | --- | --- |
-| `oci://registry.example.com:443/repo` | ✅ `oci-user` | Same scheme, same explicit port |
+| Request                                     | Result           | Why                                                      |
+|---------------------------------------------|------------------|----------------------------------------------------------|
+| `oci://registry.example.com:443/repo`       | ✅ `oci-user`     | Same scheme, same explicit port                          |
 | `oci://registry.example.com/repo` (no port) | ❌ No credentials | `oci` has no default port in the matcher — empty ≠ `443` |
-| `https://registry.example.com:443/repo` | ❌ No credentials | Scheme `https` ≠ `oci` |
-| `oci://registry.example.com:5000/repo` | ❌ No credentials | Port `5000` ≠ `443` |
+| `https://registry.example.com:443/repo`     | ❌ No credentials | Scheme `https` ≠ `oci`                                   |
+| `oci://registry.example.com:5000/repo`      | ❌ No credentials | Port `5000` ≠ `443`                                      |
 
 {{< callout context="caution" >}}
-`oci` and `https` are **different schemes** — they are never interchangeable. If your config uses `scheme: oci`, only `oci://` requests will match. Always include an explicit `port` when using the `oci` scheme.
+`oci` and `https` are **different schemes** — they are never interchangeable. If your config uses `scheme: oci`, only
+`oci://` requests will match. Always include an explicit `port` when using the `oci` scheme.
 {{< /callout >}}
 
-**Takeaway:** When using the `oci` scheme, always specify `port: "443"` explicitly in your config. Unlike `https`, the matcher does not infer a default port for `oci`.
+**Takeaway:** When using the `oci` scheme, always specify `port: "443"` explicitly in your config. Unlike `https`, the
+matcher does not infer a default port for `oci`.
 
 ### Example E: When Nothing Matches
 
@@ -313,26 +338,34 @@ configurations:
 
 Every request below fails to match:
 
-| Request | Why it fails |
-| --- | --- |
-| `https://quay.io/my-org/repo` | **Wrong hostname** — `quay.io` ≠ `ghcr.io` |
-| `https://ghcr.io/my-org/team/repo` | **Path too deep** — `*` matches one segment, `team/repo` has two |
-| `https://ghcr.io/my-org` | **Path too short** — `my-org` does not match `my-org/*` (glob requires a segment after `/`) |
-| `http://ghcr.io/my-org/repo` | **Scheme mismatch** — `http` ≠ `https` |
+| Request                            | Why it fails                                                                                |
+|------------------------------------|---------------------------------------------------------------------------------------------|
+| `https://quay.io/my-org/repo`      | **Wrong hostname** — `quay.io` ≠ `ghcr.io`                                                  |
+| `https://ghcr.io/my-org/team/repo` | **Path too deep** — `*` matches one segment, `team/repo` has two                            |
+| `https://ghcr.io/my-org`           | **Path too short** — `my-org` does not match `my-org/*` (glob requires a segment after `/`) |
+| `http://ghcr.io/my-org/repo`       | **Scheme mismatch** — `http` ≠ `https`                                                      |
 
 {{< callout context="tip" >}}
-There is **no prefix matching** — `path: my-org` does not match `my-org/production`. And `path: my-org/*` does not match `my-org` either. The glob pattern must match the full path.
+There is **no prefix matching** — `path: my-org` does not match `my-org/production`. And `path: my-org/*` does not match
+`my-org` either. The glob pattern must match the full path.
 {{< /callout >}}
 
-**Takeaway:** If you get `401 Unauthorized` unexpectedly, check each attribute: `type`, `hostname`, `scheme`, `port`, and `path`. Every attribute present on the configured entry must match the request exactly (with glob support for `path` and port defaults for `https`/`http`).
+**Takeaway:** If you get `401 Unauthorized` unexpectedly, check each attribute: `type`, `hostname`, `scheme`, `port`,
+and `path`. Every attribute present on the configured entry must match the request exactly (with glob support for `path`
+and port defaults for `https`/`http`).
 
 ### Example F: Indirect Credentials (Plugin-Backed)
 
-Direct and indirect consumers look identical from the `.ocmconfig` perspective — the difference is in the `type` of the credential entry. When OCM encounters a credential type it does not recognize as built-in (not `OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`, `DirectCredentials/v1`), it treats the entry as **indirect** and looks for a plugin to resolve it.
+Direct and indirect consumers look identical from the `.ocmconfig` perspective — the difference is in the `type` of the
+credential entry. When OCM encounters a credential type it does not recognize as built-in (not `OCICredentials/v1`,
+`HelmHTTPCredentials/v1`, `RSACredentials/v1`, `DirectCredentials/v1`), it treats the entry as **indirect** and looks
+for a plugin to resolve it.
 
-The following is a hypothetical example showing what a plugin-backed credential chain would look like. A real `HashiCorpVault/v1alpha1` plugin does not ship with OCM core — a third-party plugin would need to provide this type.
+The following is a hypothetical example showing what a plugin-backed credential chain would look like. A real
+`HashiCorpVault/v1alpha1` plugin does not ship with OCM core — a third-party plugin would need to provide this type.
 
-**Hypothetical Vault chain:** OCI registry credentials would come from HashiCorp Vault, which itself would need `role_id` and `secret_id` credentials:
+**Hypothetical Vault chain:** OCI registry credentials would come from HashiCorp Vault, which itself would need
+`role_id` and `secret_id` credentials:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -362,17 +395,22 @@ configurations:
 Resolution sequence for a request to `quay.io`:
 
 1. OCM matches consumer A (`quay.io` → `HashiCorpVault/v1alpha1`)
-2. The Vault plugin would be asked which identity it needs credentials for — it would return a `HashiCorpVault/v1alpha1` identity for `myvault.example.com`
+2. The Vault plugin would be asked which identity it needs credentials for — it would return a `HashiCorpVault/v1alpha1`
+   identity for `myvault.example.com`
 3. OCM resolves consumer B — a direct match returning `role_id` / `secret_id`
 4. The Vault plugin would be called with those credentials and would return the final OCI credentials for `quay.io`
 
 This bottom-up traversal supports chains of arbitrary depth. Cycles are detected at ingestion time and rejected.
 
 {{< callout context="note" >}}
-`HashiCorpVault/v1alpha1` is a hypothetical credential type used here for illustration. Such a type would be provided by a third-party plugin, not by OCM core. The plugin system supports exactly this pattern — any installed plugin can introduce new credential types that participate in the credential graph.
+`HashiCorpVault/v1alpha1` is a hypothetical credential type used here for illustration. Such a type would be provided by
+a third-party plugin, not by OCM core. The plugin system supports exactly this pattern — any installed plugin can
+introduce new credential types that participate in the credential graph.
 {{< /callout >}}
 
-**Takeaway:** Indirect credentials look like regular consumer entries. The credential type determines which plugin handles the resolution. The identity matching rules (exact path, glob, hostname-only) apply the same way as for direct credentials.
+**Takeaway:** Indirect credentials look like regular consumer entries. The credential type determines which plugin
+handles the resolution. The identity matching rules (exact path, glob, hostname-only) apply the same way as for direct
+credentials.
 
 ## Troubleshooting
 
@@ -380,7 +418,8 @@ This bottom-up traversal supports chains of arbitrary depth. Cycles are detected
 
 **Cause:** The lookup identity doesn't match. Common issues: `path` mismatch or wrong `hostname`.
 
-**Fix:** Check that `hostname` and `path` match the request. Remember, `path: my-org` does **not** match `my-org/production` — there is no prefix matching. See [Identity Matching](#identity-matching) above.
+**Fix:** Check that `hostname` and `path` match the request. Remember, `path: my-org` does **not** match
+`my-org/production` — there is no prefix matching. See [Identity Matching](#identity-matching) above.
 
 ### Problem: `401 Unauthorized` when Docker fallback should work
 
@@ -396,10 +435,14 @@ Then retry the OCM command.
 
 ## Next Steps
 
-- [How-To: Configure Credentials for multiple Repositories ]({{< relref "configure-multiple-credentials.md" >}}) - Configure OCM to authenticate against multiple OCI registries
-- [How-To: Migrate v1 Credentials to v2]({{< relref "legacy-credential-compatibility.md" >}}) - Migrate an existing OCM v1 `.ocmconfig` file so it works with OCM v2
+- [How-To: Configure Credentials for multiple Repositories ]({{< relref "configure-multiple-credentials.md" >}}) -
+  Configure OCM to authenticate against multiple OCI registries
+- [How-To: Migrate v1 Credentials to v2]({{< relref "legacy-credential-compatibility.md" >}}) - Migrate an existing OCM
+  v1 `.ocmconfig` file so it works with OCM v2
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system automatically finds the right credentials for each operation
-- [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) — Complete reference for all identity types (OCI registries and RSA signing)
+- [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system
+  automatically finds the right credentials for each operation
+- [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) — Complete
+  reference for all identity types (OCI registries and RSA signing)

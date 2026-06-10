@@ -6,7 +6,9 @@ weight: 4
 toc: true
 ---
 
-This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:` field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).
+This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:`
+field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "
+docs/concepts/credential-system.md" >}}).
 
 ## Overview
 
@@ -25,17 +27,18 @@ consumers:
 
 OCM ships with the following built-in credential types:
 
-| Credential Type | Used With | Purpose |
-|---|---|---|
-| [`OCICredentials/v1`](#ocicredentialsv1) | `OCIRegistry` consumers | OCI registry username/password and token auth |
-| [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1) | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs |
-| [`RSACredentials/v1`](#rsacredentialsv1) | `RSA/v1alpha1` consumers | RSA signing and verification key material |
-| [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1) | `GPG/v1alpha1` consumers | GPG signing and verification key material |
-| [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers | OIDC token for Sigstore keyless signing via Fulcio |
-| [`TrustedRoot/v1alpha1`](#trustedrootv1alpha1) | `SigstoreVerifier/v1alpha1` consumers | Sigstore trust material for private infrastructure verification |
-| [`DirectCredentials/v1`](#directcredentialsv1) | Any consumer | Legacy untyped key-value fallback (also `Credentials/v1`) |
+| Credential Type                                            | Used With                                | Purpose                                                         |
+|------------------------------------------------------------|------------------------------------------|-----------------------------------------------------------------|
+| [`OCICredentials/v1`](#ocicredentialsv1)                   | `OCIRegistry` consumers                  | OCI registry username/password and token auth                   |
+| [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1)         | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs                  |
+| [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
+| [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
+| [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers      | OIDC token for Sigstore keyless signing via Fulcio              |
+| [`TrustedRoot/v1alpha1`](#trustedrootv1alpha1)             | `SigstoreVerifier/v1alpha1` consumers    | Sigstore trust material for private infrastructure verification |
+| [`DirectCredentials/v1`](#directcredentialsv1)             | Any consumer                             | Legacy untyped key-value fallback (also `Credentials/v1`)       |
 
-All typed credential types use flat top-level fields. `DirectCredentials/v1` uses a nested `properties:` map — it is the universal fallback and all existing `.ocmconfig` files using `Credentials/v1` continue to work unchanged.
+All typed credential types use flat top-level fields. `DirectCredentials/v1` uses a nested `properties:` map — it is the
+universal fallback and all existing `.ocmconfig` files using `Credentials/v1` continue to work unchanged.
 
 ---
 
@@ -202,9 +205,11 @@ consumers:
 
 ## GPGCredentials/v1alpha1
 
-Typed credentials carrying OpenPGP key material for GPG signing and verification. Each field has two forms: inline ASCII-armored content or a path to a file. The inline form takes precedence when both are set.
+Typed credentials carrying OpenPGP key material for GPG signing and verification. Each field has two forms: inline
+ASCII-armored content or a path to a file. The inline form takes precedence when both are set.
 
-For signing, provide `privateKeyPGP` or `privateKeyPGPFile`. For verification, `publicKeyPGP` or `publicKeyPGPFile` is used; if neither is set, the public key is derived from the private key. Both can be combined in the same entry.
+For signing, provide `privateKeyPGP` or `privateKeyPGPFile`. For verification, `publicKeyPGP` or `publicKeyPGPFile` is
+used; if neither is set, the public key is derived from the private key. Both can be combined in the same entry.
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/gpg/v1alpha1/GPGCredentials.schema.json" >}}
 
@@ -231,11 +236,14 @@ consumers:
 
 ## OIDCIdentityToken/v1alpha1
 
-Typed credentials carrying an OIDC identity token for Sigstore keyless signing. The token is forwarded to Fulcio, which issues a short-lived signing certificate bound to the identity claims. Provide `token` (inline) or `tokenFile` (path); `token` takes precedence when both are set.
+Typed credentials carrying an OIDC identity token for Sigstore keyless signing. The token is forwarded to Fulcio, which
+issues a short-lived signing certificate bound to the identity claims. Provide `token` (inline) or `tokenFile` (path);
+`token` takes precedence when both are set.
 
 Not needed when the `SIGSTORE_ID_TOKEN` environment variable or GitHub Actions ambient OIDC is already available.
 
-{{< schema-renderer url="/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1/OIDCIdentityToken.schema.json" >}}
+{{< schema-renderer url="
+/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1/OIDCIdentityToken.schema.json" >}}
 
 ### Example
 
@@ -257,7 +265,9 @@ consumers:
 
 ## TrustedRoot/v1alpha1
 
-Typed credentials carrying Sigstore trust material for verifying signatures produced against private Sigstore infrastructure. Overrides the default public-good TUF root. Required when `VerifyConfig.PrivateInfrastructure` is set. Provide `trustedRootJSON` (inline) or `trustedRootJSONFile` (path); the inline form takes precedence.
+Typed credentials carrying Sigstore trust material for verifying signatures produced against private Sigstore
+infrastructure. Overrides the default public-good TUF root. Required when `VerifyConfig.PrivateInfrastructure` is set.
+Provide `trustedRootJSON` (inline) or `trustedRootJSONFile` (path); the inline form takes precedence.
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1/TrustedRoot.schema.json" >}}
 
@@ -321,7 +331,10 @@ consumers:
 ```
 
 {{< callout context="note" >}}
-`DirectCredentials/v1` property keys use the same **camelCase** names as the corresponding typed credential fields (e.g., `privateKeyPEMFile`, not `private_key_pem_file`). The RSA binding additionally accepts the old `snake_case` keys (`private_key_pem_file`, `public_key_pem_file`) as a deprecated backward-compatibility fallback — all other bindings require camelCase.
+`DirectCredentials/v1` property keys use the same **camelCase** names as the corresponding typed credential fields (
+e.g., `privateKeyPEMFile`, not `private_key_pem_file`). The RSA binding additionally accepts the old `snake_case` keys (
+`private_key_pem_file`, `public_key_pem_file`) as a deprecated backward-compatibility fallback — all other bindings
+require camelCase.
 {{< /callout >}}
 
 ### When to use
@@ -345,7 +358,8 @@ available in `.ocmconfig` alongside the built-ins.
 External plugin credential types use a reverse-domain prefix by convention (e.g.,
 `com.hashicorp.vault.VaultCredentials/v1`). This prevents name collisions between independently developed plugins.
 
-For details on how plugins declare and register credential types, see [Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}).
+For details on how plugins declare and register credential types, see [Plugin System]({{< relref "
+docs/concepts/plugin-system.md" >}}).
 
 ---
 
