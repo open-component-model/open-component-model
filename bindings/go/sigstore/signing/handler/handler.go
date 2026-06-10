@@ -148,11 +148,13 @@ func (h *Handler) Sign(
 	slog.DebugContext(ctx, "sigstore sign: bundle written", "identity", certInfo.Identity, "issuer", certInfo.Issuer)
 
 	// MediaType is fixed: this handler produces/verifies Sigstore bundles v0.3+json (cosign >=3.0).
+	// SignatureInfo.Issuer is intentionally unset: the OIDC issuer is embedded in the Fulcio
+	// certificate inside the bundle, and OCM's Issuer field carries RFC2253 DN semantics
+	// (used by RSA/PEM) that don't apply to keyless Sigstore signatures.
 	return descruntime.SignatureInfo{
 		Algorithm: v1alpha1.AlgorithmSigstore,
 		MediaType: v1alpha1.MediaTypeSigstoreBundle,
 		Value:     base64.StdEncoding.EncodeToString(bundleJSON),
-		Issuer:    certInfo.Issuer,
 	}, nil
 }
 
