@@ -147,13 +147,11 @@ func verifyConfig(opts ...func(*v1alpha1.VerifyConfig)) *v1alpha1.VerifyConfig {
 func Test_Integration_Keyless_IdentityVerification(t *testing.T) {
 	h := newHandler(t)
 	signed := testSignature(t, h, "identity-test", "identity-verify")
-	r := require.New(t)
-	r.NotEmpty(signed.Signature.Issuer)
 
 	t.Run("matching issuer succeeds", func(t *testing.T) {
 		r := require.New(t)
 		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-			c.CertificateOIDCIssuer = signed.Signature.Issuer
+			c.CertificateOIDCIssuer = stack.OIDCIssuer
 		})
 		r.NoError(h.Verify(t.Context(), signed, cfg, nil))
 	})
@@ -232,7 +230,6 @@ func Test_Integration_TamperedBundle(t *testing.T) {
 				Algorithm: signed.Signature.Algorithm,
 				MediaType: signed.Signature.MediaType,
 				Value:     value,
-				Issuer:    signed.Signature.Issuer,
 			},
 		}
 	}
@@ -310,7 +307,6 @@ func Test_Integration_SignAndVerify(t *testing.T) {
 	r.NotEmpty(bundle.MessageSignature.Signature)
 	r.Equal(v1alpha1.AlgorithmSigstore, sigInfo.Algorithm)
 	r.Equal(v1alpha1.MediaTypeSigstoreBundle, sigInfo.MediaType)
-	r.NotEmpty(sigInfo.Issuer)
 
 	signed := descruntime.Signature{
 		Name:      "sign-and-verify-test",
@@ -406,7 +402,6 @@ func Test_Integration_AmbientSIGSTORE_ID_TOKEN(t *testing.T) {
 	require.NoError(t, err, "signing with ambient SIGSTORE_ID_TOKEN should succeed without credential")
 	require.Equal(t, v1alpha1.AlgorithmSigstore, sigInfo.Algorithm)
 	require.NotEmpty(t, sigInfo.Value)
-	require.NotEmpty(t, sigInfo.Issuer)
 
 	signed := descruntime.Signature{
 		Name:      "ambient-sigstore-id-token-test",
