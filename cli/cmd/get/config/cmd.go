@@ -177,7 +177,11 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		return nil, fmt.Errorf("config lookup failed for credentials: %w", err)
 	}
 	if credentialsCfg != nil {
-		result.Configurations = append(result.Configurations, convertCredentialsToV1(credentialsCfg))
+		v1Cfg, err := convertCredentialsToV1(credentialsCfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert credentials config: %w", err)
+		}
+		result.Configurations = append(result.Configurations, v1Cfg)
 	}
 
 	return result, nil
@@ -185,16 +189,24 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 
 // Runtime types of credentials serialize as `json:"-"` (bindings/go/credentials/spec/config/runtime/config.go)
 // so we convert to the v1 spec type for serialization.
-func convertCredentialsToV1(cfg *credentialsruntime.Config) *credentialsv1.Config {
-	repos := make([]credentialsv1.RepositoryConfigEntry, len(cfg.Repositories))
-	for i, r := range cfg.Repositories {
-		repos[i] = credentialsv1.RepositoryConfigEntry{Repository: r.Repository.(*runtime.Raw)}
+func convertCredentialsToV1(cfg *credentialsruntime.Config) (*credentialsv1.Config, error) {
+	repos := make([]credentialsv1.RepositoryConfigEntry, 0, len(cfg.Repositories))
+	for _, r := range cfg.Repositories {
+		raw, ok := r.Repository.(*runtime.Raw)
+		if !ok {
+			return nil, fmt.Errorf("unexpected repository type %T, expected *runtime.Raw", r.Repository)
+		}
+		repos = append(repos, credentialsv1.RepositoryConfigEntry{Repository: raw})
 	}
 	consumers := make([]credentialsv1.Consumer, len(cfg.Consumers))
 	for i, c := range cfg.Consumers {
-		creds := make([]*runtime.Raw, len(c.Credentials))
-		for j, cred := range c.Credentials {
-			creds[j] = cred.(*runtime.Raw)
+		creds := make([]*runtime.Raw, 0, len(c.Credentials))
+		for _, cred := range c.Credentials {
+			raw, ok := cred.(*runtime.Raw)
+			if !ok {
+				return nil, fmt.Errorf("unexpected credential type %T, expected *runtime.Raw", cred)
+			}
+			creds = append(creds, raw)
 		}
 		consumers[i] = credentialsv1.Consumer{
 			Identities:  c.Identities,
@@ -205,5 +217,5 @@ func convertCredentialsToV1(cfg *credentialsruntime.Config) *credentialsv1.Confi
 		Type:         cfg.Type,
 		Repositories: repos,
 		Consumers:    consumers,
-	}
+	}, nil
 }
