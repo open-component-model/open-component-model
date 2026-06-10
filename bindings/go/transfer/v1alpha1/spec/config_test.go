@@ -44,26 +44,6 @@ func TestConfig_Validate(t *testing.T) {
 	}
 }
 
-func TestConfig_GetDefaults(t *testing.T) {
-	t.Parallel()
-
-	r := require.New(t)
-	var nilCfg *Config
-	r.Equal(CopyModeLocalBlobResources, nilCfg.GetCopyMode())
-	r.Equal(UploadAsDefault, nilCfg.GetUploadType())
-	r.Equal(0, nilCfg.GetRecursive())
-
-	empty := &Config{}
-	r.Equal(CopyModeLocalBlobResources, empty.GetCopyMode())
-	r.Equal(UploadAsDefault, empty.GetUploadType())
-	r.Equal(0, nilCfg.GetRecursive())
-
-	populated := &Config{Recursive: -1, CopyMode: CopyModeAllResources, UploadType: UploadAsOciArtifact}
-	r.Equal(CopyModeAllResources, populated.GetCopyMode())
-	r.Equal(UploadAsOciArtifact, populated.GetUploadType())
-	r.Equal(-1, populated.GetRecursive())
-}
-
 func TestConfig_SchemeRoundTrip(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
@@ -82,7 +62,7 @@ func TestConfig_SchemeRoundTrip(t *testing.T) {
 	r.NoError(err)
 	out := &Config{}
 	r.NoError(Scheme.Decode(bytes.NewReader(data), out))
-	r.Equal(versioned.GetRecursive(), out.GetRecursive())
+	r.Equal(versioned.Recursive, out.Recursive)
 	r.Equal(versioned.CopyMode, out.CopyMode)
 }
 
@@ -97,7 +77,7 @@ func TestConfig_YAMLRoundTrip(t *testing.T) {
 
 	cfg := &Config{}
 	r.NoError(Scheme.Decode(bytes.NewReader(src), cfg))
-	r.Equal(-1, cfg.GetRecursive())
+	r.Equal(RecursiveInfinite, cfg.Recursive)
 	r.Equal(CopyModeAllResources, cfg.CopyMode)
 	r.Equal(UploadAsOciArtifact, cfg.UploadType)
 
@@ -206,9 +186,9 @@ func TestLookupConfig(t *testing.T) {
 		cfg, err := LookupConfig(generic)
 		r.NoError(err)
 		r.NotNil(cfg)
-		r.Equal(-1, cfg.GetRecursive())
+		r.Equal(RecursiveInfinite, cfg.Recursive)
 		r.Equal(CopyModeAllResources, cfg.CopyMode)
-		r.Equal(UploadAsDefault, cfg.GetUploadType())
+		r.Empty(cfg.UploadType)
 	})
 
 	t.Run("unversioned type alias", func(t *testing.T) {
@@ -233,7 +213,7 @@ func TestLookupConfig(t *testing.T) {
 		cfg, err := LookupConfig(generic)
 		r.NoError(err)
 		r.NotNil(cfg)
-		r.Equal(3, cfg.GetRecursive())
+		r.Equal(Recursive(3), cfg.Recursive)
 		r.Equal(CopyModeAllResources, cfg.CopyMode)
 		r.Equal(UploadAsLocalBlob, cfg.UploadType)
 	})

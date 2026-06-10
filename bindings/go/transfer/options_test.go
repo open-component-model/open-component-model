@@ -19,9 +19,6 @@ func TestDefaultOptions(t *testing.T) {
 	assert.Equal(t, transferv1alpha1.CopyMode(""), o.CopyMode)
 	assert.Equal(t, transferv1alpha1.UploadType(""), o.UploadType)
 	assert.Equal(t, transferv1alpha1.RecursiveNone, o.Recursive)
-	assert.Equal(t, transferv1alpha1.CopyModeLocalBlobResources, o.GetCopyMode())
-	assert.Equal(t, transferv1alpha1.UploadAsDefault, o.GetUploadType())
-	assert.Equal(t, 0, o.GetRecursive())
 }
 
 func TestWithCopyMode(t *testing.T) {
@@ -152,7 +149,7 @@ func TestFromConfig_AllFields(t *testing.T) {
 	for _, opt := range FromConfig(cfg) {
 		opt(&o)
 	}
-	require.Equal(t, -1, o.GetRecursive())
+	require.Equal(t, transferv1alpha1.RecursiveInfinite, o.Recursive)
 	require.Equal(t, transferv1alpha1.CopyModeAllResources, o.CopyMode)
 	require.Equal(t, transferv1alpha1.UploadAsOciArtifact, o.UploadType)
 }
@@ -165,7 +162,7 @@ func TestFromConfig_PartialDoesNotClobber(t *testing.T) {
 	for _, opt := range FromConfig(cfg) {
 		opt(&o)
 	}
-	require.Equal(t, 0, o.GetRecursive())
+	require.Equal(t, transferv1alpha1.RecursiveNone, o.Recursive)
 	require.Equal(t, transferv1alpha1.CopyModeAllResources, o.CopyMode)
 	require.Equal(t, transferv1alpha1.UploadAsLocalBlob, o.UploadType)
 }

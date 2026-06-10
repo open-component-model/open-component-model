@@ -61,36 +61,11 @@ type Config struct {
 	UploadType UploadType `json:"uploadType,omitempty"`
 }
 
-func (cfg *Config) GetCopyMode() CopyMode {
-	if cfg == nil || cfg.CopyMode == "" {
-		return CopyModeLocalBlobResources
-	}
-	return cfg.CopyMode
-}
-
-// GetRecursive resolves [Config.Recursive] to a plain int depth. Use this
-// rather than reading the field directly so callers don't have to handle the
-// nil receiver case.
-func (cfg *Config) GetRecursive() int {
-	if cfg == nil {
-		return 0
-	}
-
-	return int(cfg.Recursive)
-}
-
-func (cfg *Config) GetUploadType() UploadType {
-	if cfg == nil || cfg.UploadType == "" {
-		return UploadAsDefault
-	}
-	return cfg.UploadType
-}
-
 // Validate rejects a non-matching [Config.Type] and unknown enum values.
 // An empty Type is allowed so callers constructing a Config programmatically
 // (without going through [Scheme.Decode]) do not need to set it explicitly.
-// Empty enum fields are allowed; consumers must call [Config.GetCopyMode] /
-// [Config.GetUploadType] to resolve them.
+// Empty enum fields are allowed; consumers resolve them to their defaults
+// ([CopyModeLocalBlobResources], [UploadAsDefault]) at the point of use.
 func (cfg *Config) Validate() error {
 	if cfg == nil {
 		return nil

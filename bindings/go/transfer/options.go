@@ -62,7 +62,7 @@ func FromConfig(cfg *transferv1alpha1.Config) []Option {
 		return nil
 	}
 	var opts []Option
-	opts = append(opts, WithRecursive(cfg.GetRecursive()))
+	opts = append(opts, WithRecursive(int(cfg.Recursive)))
 
 	if cfg.CopyMode != "" {
 		opts = append(opts, WithCopyMode(cfg.CopyMode))

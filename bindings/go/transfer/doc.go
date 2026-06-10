@@ -104,10 +104,10 @@
 //	    )...,
 //	)
 //
-// [FromConfig] skips empty fields - so callers can overlay explicit overrides
-// on top of a partial config without the zero values clobbering them. The
-// resulting [Options] therefore still carries empty enum strings and a zero
-// Recursive depth until [BuildGraphDefinition] runs; that's where the empties
-// are resolved to their canonical defaults via [transferv1alpha1.Config.GetCopyMode],
-// [transferv1alpha1.Config.GetUploadType], and [transferv1alpha1.Config.GetRecursive].
+// [FromConfig] skips empty enum fields - so callers can overlay explicit
+// overrides on top of a partial config without the zero values clobbering
+// them. The resulting [Options] therefore still carries empty enum strings
+// until [BuildGraphDefinition] runs; that's where the empties are resolved to
+// their canonical defaults ([transferv1alpha1.CopyModeLocalBlobResources],
+// [transferv1alpha1.UploadAsDefault]).
 package transfer

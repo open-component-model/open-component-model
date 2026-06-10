@@ -8,6 +8,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
@@ -37,9 +38,15 @@ func BuildGraphDefinition(
 		return nil, err
 	}
 
-	copyMode := o.GetCopyMode()
-	uploadType := o.GetUploadType()
-	recursive := o.GetRecursive()
+	copyMode := o.CopyMode
+	if copyMode == "" {
+		copyMode = transferv1alpha1.CopyModeLocalBlobResources
+	}
+	uploadType := o.UploadType
+	if uploadType == "" {
+		uploadType = transferv1alpha1.UploadAsDefault
+	}
+	recursive := int(o.Recursive)
 
 	slog.DebugContext(ctx, "building transfer graph definition",
 		"roots", len(roots),
