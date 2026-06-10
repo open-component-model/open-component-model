@@ -66,6 +66,19 @@ const (
 	OwnershipPolicyAlways
 )
 
+// String renders the policy by name so it matches the v1 spelling ("Never"/"Always")
+// in logs and error messages rather than leaking the underlying enum value.
+func (p OwnershipPolicy) String() string {
+	switch p {
+	case OwnershipPolicyAlways:
+		return "Always"
+	case OwnershipPolicyNever:
+		return "Never"
+	default:
+		return fmt.Sprintf("OwnershipPolicy(%d)", int(p))
+	}
+}
+
 // A Resource is a delivery artifact, intended for deployment into a runtime environment, or describing additional content,
 // relevant for a deployment mechanism.
 // For example, installation procedures or meta-model descriptions controlling orchestration and/or deployment mechanisms.

@@ -444,7 +444,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 				var creds ocmruntime.Typed
 				if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
 					if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
-						return nil, fmt.Errorf("error resolving credentials for resource by-value processing %w", err)
+						return nil, fmt.Errorf("error resolving credentials for resource by-value processing: %w", err)
 					}
 				}
 
@@ -453,7 +453,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 						return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 					}
 				} else {
-					return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), "Always", repo)
+					return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
 				}
 			}
 		}
@@ -487,7 +487,7 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 	var creds ocmruntime.Typed
 	if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
 		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
-			return nil, fmt.Errorf("error resolving credentials for resource by-value processing %w", err)
+			return nil, fmt.Errorf("error resolving credentials for resource by-value processing: %w", err)
 		}
 	}
 
@@ -753,7 +753,7 @@ func addColocatedResourceLocalBlob(
 				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 			}
 		} else {
-			return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), "Always", repo)
+			return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
 		}
 	}
 

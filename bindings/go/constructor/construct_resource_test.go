@@ -511,23 +511,28 @@ func TestConstructWithResourceByValue(t *testing.T) {
 // not from descriptor.Resource, which no longer carries the policy. It also
 // asserts the uploaded resource and the resolved credentials are forwarded. This
 // is the by-value half of the opt-in wiring; the by-reference half is covered by
-// TestDefaultConstructor_attachOwnership_CallSiteGating.
+// TestDefaultConstructor_attachOwnership_CallSiteGating. The error case asserts an
+// AddOwnership failure propagates and fails the add rather than being swallowed.
 func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 	const (
 		component = "ocm.software/test-component"
 		version   = "1.0.0"
 	)
 	tests := []struct {
-		name      string
-		policy    constructorruntime.OwnershipPolicy
-		wantCalls int
+		name         string
+		policy       constructorruntime.OwnershipPolicy
+		ownershipErr error
+		wantCalls    int
+		wantErr      bool
 	}{
 		{name: "opted in (Always)", policy: constructorruntime.OwnershipPolicyAlways, wantCalls: 1},
 		{name: "not opted in (Never)", policy: constructorruntime.OwnershipPolicyNever, wantCalls: 0},
+		{name: "opted in but attach fails", policy: constructorruntime.OwnershipPolicyAlways, ownershipErr: fmt.Errorf("attach boom"), wantCalls: 1, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := newMockTargetRepository()
+			repo.ownershipErr = tt.ownershipErr
 			res := &constructorruntime.Resource{
 				ElementMeta: constructorruntime.ElementMeta{ObjectMeta: constructorruntime.ObjectMeta{Name: "backend-image", Version: version}},
 				Type:        "ociArtifact",
@@ -538,12 +543,18 @@ func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 			creds := &mockAccess{Type: "mock/v1"}
 
 			out, err := addColocatedResourceLocalBlob(context.Background(), repo, component, version, res, data, creds)
-			require.NoError(t, err)
-			require.NotNil(t, out)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, "error attaching ownership")
+				assert.ErrorContains(t, err, "attach boom")
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, out)
+			}
 
 			assert.Equal(t, tt.wantCalls, repo.ownershipCalls,
 				"by-value add must attach ownership iff the runtime options opt in")
-			if tt.wantCalls > 0 {
+			if tt.wantCalls > 0 && !tt.wantErr {
 				assert.Same(t, out, repo.ownershipResource, "the uploaded resource must be forwarded to AddOwnership")
 				assert.Equal(t, creds, repo.ownershipCreds, "credentials must be forwarded to AddOwnership")
 			}
