@@ -391,8 +391,6 @@ k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 h1:wU4tMEhLGgIbLvXQb1cfN+EcM0wf7
 k8s.io/utils v0.0.0-20260507154919-ff6756f316d2/go.mod h1:xDxuJ0whA3d0I4mf/C4ppKHxXynQ+fxnkmQH0vTHnuk=
 ocm.software/open-component-model/bindings/go/blob v0.0.13 h1:hLM+KUV9QbLVC5rQvCFwPiQLkjuNLjrtVdZc4A8mGZA=
 ocm.software/open-component-model/bindings/go/blob v0.0.13/go.mod h1:nJqz2QmNoODFNFGDtd4d577RQ+vvlLI1u9G2O1sRmNc=
-ocm.software/open-component-model/bindings/go/cel v0.0.0-20260505072254-1c17fcd5c971 h1:Pmr7DFX19yYt1HgVXzw8EL790JHYi3fpJ41J0yPh4M0=
-ocm.software/open-component-model/bindings/go/cel v0.0.0-20260505072254-1c17fcd5c971/go.mod h1:GHZfvK+e1mgGf3V15w3ZgTVDxuFSqxxOoSRqIMUtNSA=
 ocm.software/open-component-model/bindings/go/configuration v0.0.14 h1:+Rbgg9sy68Grf1xVmJwDQazhUd8kCxCYJrE+u8DlHUY=
 ocm.software/open-component-model/bindings/go/configuration v0.0.14/go.mod h1:UF5HzB5QbNap6oHx0/ul7FRPSMSl0dyobMV3vhYQGZc=
 ocm.software/open-component-model/bindings/go/constructor v0.0.10 h1:Gi53AHmUlmJEtkPFAijsDXEH2tIahDbgdi22eGfVaL4=
@@ -423,8 +421,6 @@ ocm.software/open-component-model/bindings/go/runtime v0.0.8 h1:NIN8smq0Fs64N10U
 ocm.software/open-component-model/bindings/go/runtime v0.0.8/go.mod h1:sRm+ybi9yjJGAgMSUHr0xdaSobsmeU8DWGP4Xonaso8=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260609061717-1aefd3478571 h1:BBTkVpQJAacBGYGXBF9HmaF1jl/pwjQEnx4+0Wvt7C4=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260609061717-1aefd3478571/go.mod h1:2Jm2p1KjWOdVFf6v/9CV8Cg7gx1K+OOmF6YA1d1r4WU=
-ocm.software/open-component-model/bindings/go/transform v0.0.0-20260603205251-b4dd5b753a8d h1:oX4zp4ac5Mr1IUVL5a6IloPuGbp5wVRclAKFWtYNaaI=
-ocm.software/open-component-model/bindings/go/transform v0.0.0-20260603205251-b4dd5b753a8d/go.mod h1:FJ+4SYIdwAlTtoS1CiU1x8X8weOTyNxnSE+e9IhEFg4=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
 oras.land/oras-go/v2 v2.6.0/go.mod h1:magiQDfG6H1O9APp+rOsvCPcW1GD2MM7vgnKY0Y+u1o=
 sigs.k8s.io/controller-runtime v0.24.1 h1:miPEwrmirImAvgME1L9qebGHrOnGJoVmVdtOU9fRfo4=

@@ -36,6 +36,8 @@
 //     to retrigger reconciliation.
 //
 // Phase 1 (building the in-memory TransformationGraphDefinition) happens in the
-// reconciler. The pool runs Phase 2 only: it builds the executable graph from
-// the TGD and processes it.
+// reconciler. The pool runs Phase 2 only: the reconciler hands Submit a transfer
+// function that builds the executable graph from the TGD and processes it. The
+// pool never interprets the work it runs; it only provides keying, dedup,
+// concurrency limiting, cancellation, and result delivery around it.
 package workerpool

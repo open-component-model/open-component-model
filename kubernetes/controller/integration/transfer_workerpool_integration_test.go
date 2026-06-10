@@ -29,7 +29,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
-
 	"ocm.software/open-component-model/kubernetes/controller/internal/replication/workerpool"
 )
 
@@ -119,7 +118,6 @@ func Test_Integration_WorkerPool_OCIToOCI(t *testing.T) {
 		resource.NewResourceRepository(nil),
 		credResolver,
 	)
-	graphBuilder := workerpool.NewGraphBuilder(b)
 
 	// Phase 2: async transfer
 	logger := testr.New(t)
@@ -156,8 +154,14 @@ func Test_Integration_WorkerPool_OCIToOCI(t *testing.T) {
 		Key:       key,
 		Stamp:     stamp,
 		Requester: requester,
-		TGD:       tgd,
-		Builder:   graphBuilder,
+		TransferFn: func(ctx context.Context) error {
+			graph, err := b.BuildAndCheck(tgd)
+			if err != nil {
+				return fmt.Errorf("building transformation graph: %w", err)
+			}
+
+			return graph.Process(ctx)
+		},
 	}), workerpool.ErrTransferInProgress)
 
 	select {

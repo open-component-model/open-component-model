@@ -13,50 +13,33 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
-	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/replication/workerpool"
 )
 
-// fakeBuilder is a test GraphBuilder. buildErr fails the build step; process, if
-// set, runs as the graph execution and otherwise succeeds immediately.
-type fakeBuilder struct {
-	buildErr error
-	process  func(ctx context.Context) error
-	builds   atomic.Int32
-}
+// countingTransfer returns a transfer function that counts its runs and then
+// delegates to next, succeeding immediately when next is nil.
+func countingTransfer(runs *atomic.Int32, next func(ctx context.Context) error) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		runs.Add(1)
+		if next != nil {
+			return next(ctx)
+		}
 
-func (f *fakeBuilder) BuildAndCheck(_ *transformv1alpha1.TransformationGraphDefinition) (workerpool.Graph, error) {
-	f.builds.Add(1)
-	if f.buildErr != nil {
-		return nil, f.buildErr
+		return nil
 	}
-
-	return fakeGraph{process: f.process}, nil
 }
 
-type fakeGraph struct {
-	process func(ctx context.Context) error
-}
-
-func (g fakeGraph) Process(ctx context.Context) error {
-	if g.process != nil {
-		return g.process(ctx)
-	}
-
-	return nil
-}
-
-// blockingBuilder returns a builder whose graph blocks until release is closed
-// or the transfer context is canceled, so shutdown is never wedged.
-func blockingBuilder(release <-chan struct{}) *fakeBuilder {
-	return &fakeBuilder{process: func(ctx context.Context) error {
+// blockingTransfer returns a transfer function that blocks until release is
+// closed or the transfer context is canceled, so shutdown is never wedged.
+func blockingTransfer(release <-chan struct{}) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
 		select {
 		case <-release:
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-	}}
+	}
 }
 
 func newTestPool(t *testing.T, opts workerpool.PoolOptions) *workerpool.WorkerPool {
@@ -90,17 +73,16 @@ func requester(name string) workerpool.RequesterInfo {
 	return workerpool.RequesterInfo{NamespacedName: types.NamespacedName{Namespace: "default", Name: name}}
 }
 
-func submitOpts(key, requesterName string, builder workerpool.GraphBuilder) workerpool.SubmitOptions {
-	return submitOptsStamped(key, "stamp-"+key, requesterName, builder)
+func submitOpts(key, requesterName string, transfer func(ctx context.Context) error) workerpool.SubmitOptions {
+	return submitOptsStamped(key, "stamp-"+key, requesterName, transfer)
 }
 
-func submitOptsStamped(key, stamp, requesterName string, builder workerpool.GraphBuilder) workerpool.SubmitOptions {
+func submitOptsStamped(key, stamp, requesterName string, transfer func(ctx context.Context) error) workerpool.SubmitOptions {
 	return workerpool.SubmitOptions{
-		Key:       key,
-		Stamp:     stamp,
-		Requester: requester(requesterName),
-		TGD:       &transformv1alpha1.TransformationGraphDefinition{},
-		Builder:   builder,
+		Key:        key,
+		Stamp:      stamp,
+		Requester:  requester(requesterName),
+		TransferFn: transfer,
 	}
 }
 
@@ -122,8 +104,8 @@ func TestSubmitRunsTransferAndEmitsEvent(t *testing.T) {
 	events := pool.Events()
 	startPool(t, pool)
 
-	builder := &fakeBuilder{}
-	err := pool.Submit(submitOpts("uid-1", "repl-1", builder))
+	var runs atomic.Int32
+	err := pool.Submit(submitOpts("uid-1", "repl-1", countingTransfer(&runs, nil)))
 	require.ErrorIs(t, err, workerpool.ErrTransferInProgress)
 
 	got := waitEvent(t, events)
@@ -132,7 +114,7 @@ func TestSubmitRunsTransferAndEmitsEvent(t *testing.T) {
 	res, ok := pool.Result("uid-1", "stamp-uid-1")
 	require.True(t, ok)
 	require.NoError(t, res.Error)
-	assert.Equal(t, int32(1), builder.builds.Load())
+	assert.Equal(t, int32(1), runs.Load())
 
 	// Result is delivered exactly once.
 	_, ok = pool.Result("uid-1", "stamp-uid-1")
@@ -145,7 +127,7 @@ func TestResultCarriesStamp(t *testing.T) {
 	events := pool.Events()
 	startPool(t, pool)
 
-	require.ErrorIs(t, pool.Submit(submitOptsStamped("uid-1", "digest-A", "repl-1", &fakeBuilder{})), workerpool.ErrTransferInProgress)
+	require.ErrorIs(t, pool.Submit(submitOptsStamped("uid-1", "digest-A", "repl-1", countingTransfer(&atomic.Int32{}, nil))), workerpool.ErrTransferInProgress)
 
 	waitEvent(t, events)
 	res, ok := pool.Result("uid-1", "digest-A")
@@ -164,15 +146,16 @@ func TestStaleResultDroppedOnStampMismatch(t *testing.T) {
 	startPool(t, pool)
 
 	release := make(chan struct{})
-	builder := blockingBuilder(release)
+	var runs atomic.Int32
+	transfer := countingTransfer(&runs, blockingTransfer(release))
 
-	require.ErrorIs(t, pool.Submit(submitOptsStamped("uid-1", "digest-A", "repl-1", builder)), workerpool.ErrTransferInProgress)
-	require.ErrorIs(t, pool.Submit(submitOptsStamped("uid-1", "digest-B", "repl-1", builder)), workerpool.ErrTransferInProgress)
+	require.ErrorIs(t, pool.Submit(submitOptsStamped("uid-1", "digest-A", "repl-1", transfer)), workerpool.ErrTransferInProgress)
+	require.ErrorIs(t, pool.Submit(submitOptsStamped("uid-1", "digest-B", "repl-1", transfer)), workerpool.ErrTransferInProgress)
 
 	close(release)
 
 	waitEvent(t, events)
-	assert.Equal(t, int32(1), builder.builds.Load(), "the deduplicated key must run exactly one transfer")
+	assert.Equal(t, int32(1), runs.Load(), "the deduplicated key must run exactly one transfer")
 
 	_, ok := pool.Result("uid-1", "digest-B")
 	require.False(t, ok, "a result for digest-A must not satisfy a consumer that now wants digest-B")
@@ -188,24 +171,9 @@ func TestSubmitFailureSurfacesError(t *testing.T) {
 	startPool(t, pool)
 
 	wantErr := errors.New("registry unreachable")
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", &fakeBuilder{process: func(context.Context) error {
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", func(context.Context) error {
 		return wantErr
-	}})), workerpool.ErrTransferInProgress)
-
-	waitEvent(t, events)
-
-	res, ok := pool.Result("uid-1", "stamp-uid-1")
-	require.True(t, ok)
-	require.ErrorIs(t, res.Error, wantErr)
-}
-
-func TestSubmitBuildFailureSurfacesError(t *testing.T) {
-	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
-	events := pool.Events()
-	startPool(t, pool)
-
-	wantErr := errors.New("invalid graph")
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", &fakeBuilder{buildErr: wantErr})), workerpool.ErrTransferInProgress)
+	})), workerpool.ErrTransferInProgress)
 
 	waitEvent(t, events)
 
@@ -215,19 +183,20 @@ func TestSubmitBuildFailureSurfacesError(t *testing.T) {
 }
 
 func TestBurstSubmitDeduplicatesAndCollectsRequesters(t *testing.T) {
-	// The first submit blocks in the graph, so the following submits land while
-	// the key is in flight and collapse onto it, adding their requesters.
+	// The first submit blocks in the transfer, so the following submits land
+	// while the key is in flight and collapse onto it, adding their requesters.
 	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
 	events := pool.Events()
 	startPool(t, pool)
 
 	release := make(chan struct{})
-	builder := blockingBuilder(release)
+	var runs atomic.Int32
+	transfer := countingTransfer(&runs, blockingTransfer(release))
 
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-a", builder)), workerpool.ErrTransferInProgress)
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-b", builder)), workerpool.ErrTransferInProgress)
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-a", transfer)), workerpool.ErrTransferInProgress)
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-b", transfer)), workerpool.ErrTransferInProgress)
 	// Same requester again must not duplicate.
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-a", builder)), workerpool.ErrTransferInProgress)
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-a", transfer)), workerpool.ErrTransferInProgress)
 
 	close(release)
 
@@ -236,7 +205,7 @@ func TestBurstSubmitDeduplicatesAndCollectsRequesters(t *testing.T) {
 		requester("repl-a").NamespacedName,
 		requester("repl-b").NamespacedName,
 	}, got)
-	assert.Equal(t, int32(1), builder.builds.Load(), "transfer must run exactly once for a deduplicated key")
+	assert.Equal(t, int32(1), runs.Load(), "transfer must run exactly once for a deduplicated key")
 }
 
 func TestConcurrencyCapQueuesExcessTransfers(t *testing.T) {
@@ -248,7 +217,7 @@ func TestConcurrencyCapQueuesExcessTransfers(t *testing.T) {
 
 	release := make(chan struct{})
 	started := make(chan struct{})
-	first := &fakeBuilder{process: func(ctx context.Context) error {
+	first := func(ctx context.Context) error {
 		close(started)
 		select {
 		case <-release:
@@ -256,15 +225,15 @@ func TestConcurrencyCapQueuesExcessTransfers(t *testing.T) {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-	}}
-	second := &fakeBuilder{}
+	}
+	var secondRuns atomic.Int32
 
 	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", first)), workerpool.ErrTransferInProgress)
 	<-started
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-2", "repl-2", second)), workerpool.ErrTransferInProgress)
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-2", "repl-2", countingTransfer(&secondRuns, nil))), workerpool.ErrTransferInProgress)
 
 	time.Sleep(100 * time.Millisecond)
-	assert.Equal(t, int32(0), second.builds.Load(), "second transfer must wait for a free slot")
+	assert.Equal(t, int32(0), secondRuns.Load(), "second transfer must wait for a free slot")
 	assert.True(t, pool.IsInProgress("uid-2"))
 
 	close(release)
@@ -274,20 +243,17 @@ func TestConcurrencyCapQueuesExcessTransfers(t *testing.T) {
 		requester("repl-1").NamespacedName,
 		requester("repl-2").NamespacedName,
 	}, got)
-	assert.Equal(t, int32(1), second.builds.Load())
+	assert.Equal(t, int32(1), secondRuns.Load())
 }
 
 func TestSubmitValidation(t *testing.T) {
 	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
 
-	err := pool.Submit(workerpool.SubmitOptions{TGD: &transformv1alpha1.TransformationGraphDefinition{}, Builder: &fakeBuilder{}})
+	err := pool.Submit(workerpool.SubmitOptions{TransferFn: func(context.Context) error { return nil }})
 	require.ErrorContains(t, err, "non-empty key")
 
-	err = pool.Submit(workerpool.SubmitOptions{Key: "uid-1", Builder: &fakeBuilder{}})
-	require.ErrorContains(t, err, "transformation graph definition")
-
-	err = pool.Submit(workerpool.SubmitOptions{Key: "uid-1", TGD: &transformv1alpha1.TransformationGraphDefinition{}})
-	require.ErrorContains(t, err, "graph builder")
+	err = pool.Submit(workerpool.SubmitOptions{Key: "uid-1"})
+	require.ErrorContains(t, err, "transfer function")
 }
 
 func TestCancelRunningTransfer(t *testing.T) {
@@ -296,14 +262,14 @@ func TestCancelRunningTransfer(t *testing.T) {
 	startPool(t, pool)
 
 	started := make(chan struct{})
-	builder := &fakeBuilder{process: func(ctx context.Context) error {
+	transfer := func(ctx context.Context) error {
 		close(started)
 		<-ctx.Done()
 
 		return ctx.Err()
-	}}
+	}
 
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", builder)), workerpool.ErrTransferInProgress)
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", transfer)), workerpool.ErrTransferInProgress)
 
 	<-started
 	require.True(t, pool.IsInProgress("uid-1"))
@@ -318,14 +284,14 @@ func TestCancelRunningTransfer(t *testing.T) {
 
 func TestCancelQueuedTransfer(t *testing.T) {
 	// One slot held by a blocked transfer: the second key waits on the
-	// semaphore. Cancel must abort it there, without ever building a graph.
+	// semaphore. Cancel must abort it there, without ever running.
 	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
 	events := pool.Events()
 	startPool(t, pool)
 
 	release := make(chan struct{})
 	started := make(chan struct{})
-	first := &fakeBuilder{process: func(ctx context.Context) error {
+	first := func(ctx context.Context) error {
 		close(started)
 		select {
 		case <-release:
@@ -333,12 +299,12 @@ func TestCancelQueuedTransfer(t *testing.T) {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-	}}
-	second := &fakeBuilder{}
+	}
+	var secondRuns atomic.Int32
 
 	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", first)), workerpool.ErrTransferInProgress)
 	<-started
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-2", "repl-2", second)), workerpool.ErrTransferInProgress)
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-2", "repl-2", countingTransfer(&secondRuns, nil))), workerpool.ErrTransferInProgress)
 
 	pool.Cancel("uid-2")
 
@@ -347,7 +313,7 @@ func TestCancelQueuedTransfer(t *testing.T) {
 	res, ok := pool.Result("uid-2", "stamp-uid-2")
 	require.True(t, ok)
 	require.ErrorIs(t, res.Error, context.Canceled)
-	assert.Equal(t, int32(0), second.builds.Load(), "canceled queued transfer must not build a graph")
+	assert.Equal(t, int32(0), secondRuns.Load(), "canceled queued transfer must not run")
 
 	close(release)
 	waitEvent(t, events)
@@ -370,13 +336,13 @@ func TestShutdownCancelsInFlightTransfers(t *testing.T) {
 	}()
 
 	started := make(chan struct{})
-	builder := &fakeBuilder{process: func(ctx context.Context) error {
+	transfer := func(ctx context.Context) error {
 		close(started)
 		<-ctx.Done()
 
 		return ctx.Err()
-	}}
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", builder)), workerpool.ErrTransferInProgress)
+	}
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", transfer)), workerpool.ErrTransferInProgress)
 	<-started
 
 	cancel()
@@ -412,7 +378,7 @@ func TestSubmitAfterShutdownIsRejected(t *testing.T) {
 		t.Fatal("pool did not stop after context cancellation")
 	}
 
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", &fakeBuilder{})), workerpool.ErrPoolShuttingDown)
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", countingTransfer(&atomic.Int32{}, nil))), workerpool.ErrPoolShuttingDown)
 }
 
 func TestSubmitAfterResultConsumedReRuns(t *testing.T) {
@@ -420,18 +386,19 @@ func TestSubmitAfterResultConsumedReRuns(t *testing.T) {
 	events := pool.Events()
 	startPool(t, pool)
 
-	builder := &fakeBuilder{}
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", builder)), workerpool.ErrTransferInProgress)
+	var runs atomic.Int32
+	transfer := countingTransfer(&runs, nil)
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", transfer)), workerpool.ErrTransferInProgress)
 	waitEvent(t, events)
 	res, ok := pool.Result("uid-1", "stamp-uid-1")
 	require.True(t, ok)
 	require.NoError(t, res.Error)
 
 	// A fresh source digest re-submits the same key after the result was consumed.
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", builder)), workerpool.ErrTransferInProgress)
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", transfer)), workerpool.ErrTransferInProgress)
 	waitEvent(t, events)
 	res, ok = pool.Result("uid-1", "stamp-uid-1")
 	require.True(t, ok)
 	require.NoError(t, res.Error)
-	assert.Equal(t, int32(2), builder.builds.Load())
+	assert.Equal(t, int32(2), runs.Load())
 }

@@ -13,8 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-
-	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
 // ErrTransferInProgress is returned by [WorkerPool.Submit] when a transfer for
@@ -47,10 +45,14 @@ type SubmitOptions struct {
 	Stamp string
 	// Requester is notified via the completion event when the transfer finishes.
 	Requester RequesterInfo
-	// TGD is the in-memory transformation graph definition built outside of this pool.
-	TGD *transformv1alpha1.TransformationGraphDefinition
-	// Builder builds and runs the executable graph from the TGD.
-	Builder GraphBuilder
+	// TransferFn wraps a unit of work. The caller composes it. Typically, building
+	// the executable graph from the in-memory TGD and processing it. Any retries,
+	// must live inside the function. It MUST honor ctx for cancellation and shutdown.
+	// When composing it with `transfer.NewDefaultBuilder`, do not configure a progress
+	// event channel via WithEvents! Nothing will drain it and `Process` would block
+	// once it fills. For an example graph instantiation please take a look at the integration
+	// test here: kubernetes/controller/integration/transfer_workerpool_integration_test.go
+	TransferFn func(ctx context.Context) error
 }
 
 // Result is the outcome of a transfer. A nil Error means success.
@@ -89,10 +91,9 @@ type inflight struct {
 
 // workItem is the internal unit processed by a transfer goroutine.
 type workItem struct {
-	key     string
-	stamp   string
-	tgd     *transformv1alpha1.TransformationGraphDefinition
-	builder GraphBuilder
+	key      string
+	stamp    string
+	transfer func(ctx context.Context) error
 	// ctx is the per-key context, derived from the pool base context.
 	ctx context.Context
 }
@@ -234,11 +235,8 @@ func (wp *WorkerPool) Submit(opts SubmitOptions) error {
 	if opts.Key == "" {
 		return fmt.Errorf("submit requires a non-empty key")
 	}
-	if opts.TGD == nil {
-		return fmt.Errorf("submit requires a transformation graph definition for key %s", opts.Key)
-	}
-	if opts.Builder == nil {
-		return fmt.Errorf("submit requires a graph builder for key %s", opts.Key)
+	if opts.TransferFn == nil {
+		return fmt.Errorf("submit requires a transfer function for key %s", opts.Key)
 	}
 
 	wp.mu.Lock()
@@ -265,11 +263,10 @@ func (wp *WorkerPool) Submit(opts SubmitOptions) error {
 
 	wp.transfersDone.Add(1)
 	go wp.run(&workItem{
-		key:     opts.Key,
-		stamp:   opts.Stamp,
-		tgd:     opts.TGD,
-		builder: opts.Builder,
-		ctx:     itemCtx,
+		key:      opts.Key,
+		stamp:    opts.Stamp,
+		transfer: opts.TransferFn,
+		ctx:      itemCtx,
 	})
 
 	return ErrTransferInProgress
@@ -368,23 +365,16 @@ func (wp *WorkerPool) run(item *workItem) {
 	wp.emit(requesters)
 }
 
-// runTransfer builds the executable graph from the TGD and processes it. The
-// per-key context aborts the transfer on cancellation or pool shutdown.
+// runTransfer runs the submitted transfer function under the per-key context,
+// which aborts it on cancellation or pool shutdown. The explicit Err check
+// covers the race where the context is canceled while a semaphore slot happens
+// to be free. `Acquire` may still succeed, but the work must not run.
 func runTransfer(item *workItem) error {
 	if err := item.ctx.Err(); err != nil {
 		return err
 	}
 
-	graph, err := item.builder.BuildAndCheck(item.tgd)
-	if err != nil {
-		return fmt.Errorf("building transformation graph: %w", err)
-	}
-
-	if err := graph.Process(item.ctx); err != nil {
-		return fmt.Errorf("processing transformation graph: %w", err)
-	}
-
-	return nil
+	return item.transfer(item.ctx)
 }
 
 // setResult stores the terminal result, releases the per-key context, and

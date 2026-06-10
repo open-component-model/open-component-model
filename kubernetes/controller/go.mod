@@ -43,7 +43,6 @@ require (
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260609061717-1aefd3478571
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260609061717-1aefd3478571
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260603205251-b4dd5b753a8d
 	sigs.k8s.io/release-utils v0.12.4
 )
 
@@ -150,7 +149,6 @@ require (
 	k8s.io/cli-runtime v0.36.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260505072254-1c17fcd5c971 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.10 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
