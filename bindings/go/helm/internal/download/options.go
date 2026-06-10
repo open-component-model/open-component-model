@@ -6,6 +6,7 @@ import (
 	"helm.sh/helm/v4/pkg/getter"
 
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
@@ -52,6 +53,12 @@ type option struct {
 	// AlwaysDownloadProv indicates whether to always download the provenance file for the chart.
 	// In cases where a Keyring is present in the credentials, Helm will attempt to download the provenance file to verify the chart's integrity.
 	AlwaysDownloadProv bool `json:"alwaysDownloadProv,omitempty"`
+
+	// HTTPConfig is the HTTP client configuration (timeouts, per-host overrides) used for
+	// chart downloads and OCI registry access. When nil, the default Helm client is used.
+	// Accepts the serialisable config type so that external plugins can round-trip it over
+	// the wire and reconstruct an equivalent client.
+	HTTPConfig *httpv1alpha1.Config
 }
 
 // Option configures the behavior of [NewReadOnlyChartFromRemote].
@@ -107,5 +114,14 @@ func WithOCICredentials(credentials *ocicredsv1.OCICredentials) Option {
 func WithAlwaysDownloadProv(dl bool) Option {
 	return func(t *option) {
 		t.AlwaysDownloadProv = dl
+	}
+}
+
+// WithHTTPConfig sets the HTTP client configuration used for chart downloads and OCI registry
+// access. The download layer builds its internal client from cfg, applying timeouts and
+// per-host overrides. When nil, the default Helm client is used.
+func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+	return func(t *option) {
+		t.HTTPConfig = cfg
 	}
 }
