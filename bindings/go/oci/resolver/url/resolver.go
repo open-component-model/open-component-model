@@ -135,10 +135,9 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		repo.Client = resolver.baseClient
 	}
 
-	store := &remoteStore{repo}
-	resolver.addToCache(key, store)
+	resolver.addToCache(key, repo)
 
-	return store, nil
+	return repo, nil
 }
 
 func (resolver *CachingResolver) addToCache(reference string, store spec.Store) {
