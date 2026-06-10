@@ -123,7 +123,7 @@ ocm --loglevel debug get componentversion ghcr.io/my-org/my-component:1.0.0
 ```
 
 {{< details "Expected output (excerpt)" >}}
-```
+```text
 DEBUG  http config resolved  timeout=15s tlsHandshakeTimeout=5s hosts=map[ghcr.io:443:{...}]
 ```
 {{< /details >}}
@@ -213,4 +213,4 @@ the standard HTTPS port (443).
 
 - [How-To: Transfer Components across an Air Gap]({{< relref "air-gap-transfer.md" >}}) — move component versions into isolated networks
 - [How-To: Configure Credentials for Multiple Registries]({{< relref "configure-multiple-credentials.md" >}}) — pair HTTP config with credential setup in the same config file
-- [Go binding example: HTTP Client Configuration](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/examples/08_http_config_test.go) — runnable Go test that shows the programmatic API
+- `bindings/go/examples/08_http_config_test.go` in the repository — runnable Go test that shows the programmatic API
