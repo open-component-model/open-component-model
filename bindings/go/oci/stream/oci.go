@@ -22,7 +22,10 @@ type OCIResourceStream struct {
 	CopyOpts   oras.CopyGraphOptions
 	TempDir    string
 	Tags       []string
-	Referrers  []ocispec.Descriptor
+	// ReferrerDescriptors are referrer manifests (e.g. ADR 0016 ownership
+	// referrers) reachable from ReadOnlyStorage that must travel with Descriptor.
+	// Exposed via [OCIResourceStream.Referrers].
+	ReferrerDescriptors []ocispec.Descriptor
 }
 
 var _ ResourceStream = (*OCIResourceStream)(nil)
@@ -31,11 +34,22 @@ func (s *OCIResourceStream) Root() ocispec.Descriptor {
 	return s.Descriptor
 }
 
+// Predecessors forwards to the underlying storage so the stream satisfies
+// content.ReadOnlyGraphStorage, as oras.ExtendedCopyGraph requires of its source.
+// It returns node's real parents (none if the storage can't report them).
+func (s *OCIResourceStream) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+	finder, ok := s.ReadOnlyStorage.(content.PredecessorFinder)
+	if !ok {
+		return nil, nil
+	}
+	return finder.Predecessors(ctx, node)
+}
+
 func (s *OCIResourceStream) Materialize(ctx context.Context) (blob.ReadOnlyBlob, error) {
 	return tar.CopyToOCILayoutInMemory(ctx, s.ReadOnlyStorage, s.Descriptor, tar.CopyToOCILayoutOptions{
 		CopyGraphOptions: s.CopyOpts,
 		Tags:             s.Tags,
 		TempDir:          s.TempDir,
-		Referrers:        s.Referrers,
+		Referrers:        s.ReferrerDescriptors,
 	})
 }
