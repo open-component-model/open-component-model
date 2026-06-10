@@ -135,7 +135,7 @@ If you get `401 Unauthorized`, check that you renamed `pathprefix` → `path` (w
 
 ## Optionally migrate to typed credentials
 
-`Credentials/v1` with a `properties:` map works indefinitely, but you can migrate to typed credential types for field validation and clearer configuration. For OCI registries, replace:
+`Credentials/v1` with a `properties:` will continue to work, but you can migrate to typed credential types for field validation and clearer configuration. For OCI registries, replace:
 
 ```yaml
 credentials:
