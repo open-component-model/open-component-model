@@ -6,9 +6,7 @@ weight: 4
 toc: true
 ---
 
-This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:`
-field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "
-docs/concepts/credential-system.md" >}}).
+This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:` field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).
 
 ## Overview
 
@@ -268,8 +266,7 @@ available in `.ocmconfig` alongside the built-ins.
 External plugin credential types use a reverse-domain prefix by convention (e.g.,
 `com.hashicorp.vault.VaultCredentials/v1`). This prevents name collisions between independently developed plugins.
 
-For details on how plugins declare and register credential types, see [Plugin System]({{< relref "
-docs/concepts/plugin-system.md" >}}).
+For details on how plugins declare and register credential types, see [Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}).
 
 ---
 
