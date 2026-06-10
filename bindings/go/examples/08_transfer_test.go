@@ -1,4 +1,4 @@
-// Step 7: Transferring Component Versions
+// Step 8: Transferring Component Versions
 //
 // What you'll learn:
 //   - Building a transfer graph that describes how to move a component version

@@ -1,4 +1,4 @@
-// Step 8: HTTP Client Configuration
+// Step 7: HTTP Client Configuration
 //
 // What you'll learn:
 //   - Wiring resolved HTTP config into the OCI component version provider
