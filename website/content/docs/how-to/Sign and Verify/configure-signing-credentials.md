@@ -53,8 +53,30 @@ or by including the key material directly in the config file.
 Check out the [Credential Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}})
 for more details on the supported attributes and configuration options.
 
-The most convenient way to configure signing credentials is to add a consumer block to your `.ocmconfig` with the key file paths:
+The most convenient way to configure signing credentials is to add a consumer block to your `.ocmconfig` with the key file paths.
 
+You can use either the typed `RSACredentials/v1` (recommended for new configurations) or the legacy `Credentials/v1`:
+
+{{< tabs "signing-cred-type" >}}
+{{< tab "RSACredentials/v1 (typed)" >}}
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+          - type: RSACredentials/v1
+            privateKeyPEMFile: /tmp/keys/private-key.pem
+            publicKeyPEMFile: /tmp/keys/public-key.pem
+```
+
+`RSACredentials/v1` uses flat `camelCase` fields validated at parse time. See [Reference: Credential Types]({{< relref "docs/reference/credential-types.md" >}}) for all supported fields.
+{{< /tab >}}
+{{< tab "Credentials/v1 (legacy)" >}}
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
@@ -71,15 +93,19 @@ configurations:
               public_key_pem_file: /tmp/keys/public-key.pem
 ```
 
+`Credentials/v1` (an alias for `DirectCredentials/v1`) uses a nested `properties:` map with `snake_case` keys and works in all OCM versions.
+{{< /tab >}}
+{{< /tabs >}}
+
 **Key paths:**
 
-- `private_key_pem_file` - Required for **signing** operations
-- `public_key_pem_file` - Required for **verification** operations
+- `privateKeyPEMFile` / `private_key_pem_file` - Required for **signing** operations
+- `publicKeyPEMFile` / `public_key_pem_file` - Required for **verification** operations
 
 <br>
-It is also possible to configure the keys inline using `private_key_pem` and `public_key_pem` properties instead of file paths.
+It is also possible to configure the keys inline. With `RSACredentials/v1` use `privateKeyPEM` / `publicKeyPEM`; with `Credentials/v1` use `private_key_pem` / `public_key_pem` inside `properties:`.
 
-{{< details "Example .ocmconfig with inline keys" >}}
+{{< details "Example .ocmconfig with inline keys (RSACredentials/v1)" >}}
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
@@ -90,16 +116,15 @@ configurations:
           algorithm: RSASSA-PSS
           signature: default
         credentials:
-          - type: Credentials/v1
-            properties:
-              private_key_pem: |
-                -----BEGIN RSA PRIVATE KEY-----
-                MIIEpAIBAAKCAQEA...
-                -----END RSA PRIVATE KEY-----
-              public_key_pem: |
-                -----BEGIN PUBLIC KEY-----
-                MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...
-                -----END PUBLIC KEY-----
+          - type: RSACredentials/v1
+            privateKeyPEM: |
+              -----BEGIN RSA PRIVATE KEY-----
+              MIIEpAIBAAKCAQEA...
+              -----END RSA PRIVATE KEY-----
+            publicKeyPEM: |
+              -----BEGIN PUBLIC KEY-----
+              MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...
+              -----END PUBLIC KEY-----
 ```
 {{< /details >}}
 {{< /step >}}
@@ -151,19 +176,17 @@ configurations:
           algorithm: RSASSA-PSS
           signature: dev
         credentials:
-          - type: Credentials/v1
-            properties:
-              private_key_pem_file: /tmp/keys/dev/private-key.pem
-              public_key_pem_file: /tmp/keys/dev/public-key.pem
+          - type: RSACredentials/v1
+            privateKeyPEMFile: /tmp/keys/dev/private-key.pem
+            publicKeyPEMFile: /tmp/keys/dev/public-key.pem
       - identity:
           type: RSA/v1alpha1
           algorithm: RSASSA-PSS
           signature: prod
         credentials:
-          - type: Credentials/v1
-            properties:
-              private_key_pem_file: /tmp/keys/prod/private-key.pem
-              public_key_pem_file: /tmp/keys/prod/public-key.pem
+          - type: RSACredentials/v1
+            privateKeyPEMFile: /tmp/keys/prod/private-key.pem
+            publicKeyPEMFile: /tmp/keys/prod/public-key.pem
 ```
 
 Specify the signature name when signing:
@@ -191,7 +214,7 @@ The consumer identity for RSA signing/verification supports these attributes:
 
 **Fix:** Ensure:
 
-- The file path `private_key_pem_file` is correct and the file exists
+- The key file path is correct and the file exists (`privateKeyPEMFile` for `RSACredentials/v1`, or `private_key_pem_file` inside `properties:` for `Credentials/v1`)
 - The `algorithm` attribute is present in the identity (e.g. `algorithm: RSASSA-PSS`). See [Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
 - The `signature` name matches what you're using (or is `default` if not specified)
 - The file is valid YAML with correct indentation

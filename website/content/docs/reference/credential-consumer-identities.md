@@ -8,6 +8,8 @@ toc: true
 
 This page is the technical reference for credential consumer identities — the key-value maps OCM uses to look up credentials for a given operation. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).
 
+For the credential types that go in the `credentials:` field of each consumer entry, see [Reference: Credential Types]({{< relref "credential-types.md" >}}).
+
 ## Overview
 
 Every time OCM needs credentials (accessing a registry, signing a component version), it constructs a **lookup identity** — a map of string attributes describing what it needs credentials for. The credential system then searches configured consumers for a matching entry.
@@ -80,10 +82,9 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
     type: OCIRegistry
     hostname: ghcr.io
   credentials:
-    - type: Credentials/v1
-      properties:
-        username: my-user
-        password: ghp_token
+    - type: OCICredentials/v1
+      username: my-user
+      password: ghp_token
 ```
 
 **Hostname + path glob** — matches any single-segment path under `my-org/`:
@@ -94,10 +95,9 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
     hostname: ghcr.io
     path: my-org/*
   credentials:
-    - type: Credentials/v1
-      properties:
-        username: org-user
-        password: ghp_org_token
+    - type: OCICredentials/v1
+      username: org-user
+      password: ghp_org_token
 ```
 
 **Hostname + scheme + port** — matches only HTTPS on a custom port:
@@ -109,10 +109,9 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
     scheme: https
     port: "8443"
   credentials:
-    - type: Credentials/v1
-      properties:
-        username: internal-user
-        password: internal_pass
+    - type: OCICredentials/v1
+      username: internal-user
+      password: internal_pass
 ```
 
 ---
@@ -148,10 +147,9 @@ Used when OCM accesses a remote Helm chart repository — pulling or resolving H
     hostname: charts.example.com
     path: stable
   credentials:
-    - type: Credentials/v1
-      properties:
-        username: helm-user
-        password: helm-token
+    - type: HelmHTTPCredentials/v1
+      username: helm-user
+      password: helm-token
 ```
 
 **OCI-based Helm repository:**
@@ -162,10 +160,9 @@ Used when OCM accesses a remote Helm chart repository — pulling or resolving H
     hostname: registry.example.com
     scheme: oci
   credentials:
-    - type: Credentials/v1
-      properties:
-        username: registry-user
-        password: registry-token
+    - type: OCICredentials/v1
+      username: registry-user
+      password: registry-token
 ```
 
 ---
@@ -213,10 +210,9 @@ Unlike OCI identities, RSA signing identities use **strict equality matching** �
     algorithm: RSASSA-PSS
     signature: default
   credentials:
-    - type: Credentials/v1
-      properties:
-        private_key_pem_file: /path/to/private-key.pem
-        public_key_pem_file: /path/to/public-key.pem
+    - type: RSACredentials/v1
+      privateKeyPEMFile: /path/to/private-key.pem
+      publicKeyPEMFile: /path/to/public-key.pem
 ```
 
 **Multiple signature identities** (e.g. dev and prod):
@@ -227,19 +223,17 @@ Unlike OCI identities, RSA signing identities use **strict equality matching** �
     algorithm: RSASSA-PSS
     signature: dev
   credentials:
-    - type: Credentials/v1
-      properties:
-        private_key_pem_file: /path/to/dev/private-key.pem
-        public_key_pem_file: /path/to/dev/public-key.pem
+    - type: RSACredentials/v1
+      privateKeyPEMFile: /path/to/dev/private-key.pem
+      publicKeyPEMFile: /path/to/dev/public-key.pem
 - identity:
     type: RSA/v1alpha1
     algorithm: RSASSA-PSS
     signature: prod
   credentials:
-    - type: Credentials/v1
-      properties:
-        private_key_pem_file: /path/to/prod/private-key.pem
-        public_key_pem_file: /path/to/prod/public-key.pem
+    - type: RSACredentials/v1
+      privateKeyPEMFile: /path/to/prod/private-key.pem
+      publicKeyPEMFile: /path/to/prod/public-key.pem
 ```
 
 Sign with a specific identity:
@@ -257,9 +251,8 @@ ocm sign cv --signature prod <component-version>
     algorithm: RSASSA-PKCS1-V1_5
     signature: legacy
   credentials:
-    - type: Credentials/v1
-      properties:
-        private_key_pem_file: /path/to/private-key.pem
+    - type: RSACredentials/v1
+      privateKeyPEMFile: /path/to/private-key.pem
 ```
 
 ---
@@ -278,20 +271,18 @@ configurations:
           type: OCIRegistry
           hostname: ghcr.io
         credentials:
-          - type: Credentials/v1
-            properties:
-              username: my-user
-              password: ghp_token
+          - type: OCICredentials/v1
+            username: my-user
+            password: ghp_token
       # RSA signing — default signature
       - identity:
           type: RSA/v1alpha1
           algorithm: RSASSA-PSS
           signature: default
         credentials:
-          - type: Credentials/v1
-            properties:
-              private_key_pem_file: /path/to/private-key.pem
-              public_key_pem_file: /path/to/public-key.pem
+          - type: RSACredentials/v1
+            privateKeyPEMFile: /path/to/private-key.pem
+            publicKeyPEMFile: /path/to/public-key.pem
     # Docker config fallback for registries not matched above
     repositories:
       - repository:
@@ -302,6 +293,7 @@ configurations:
 ## Related Documentation
 
 - [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — How the credential system works
+- [Reference: Credential Types]({{< relref "credential-types.md" >}}) — All built-in typed credential types and their fields
 - [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}) — Step-by-step matching examples for OCI registries
 - [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) — Task-oriented registry credential setup
 - [How-To: Configure Credentials for Signing]({{< relref "configure-signing-credentials.md" >}}) — Task-oriented signing credential setup

@@ -30,12 +30,13 @@ For the full concept, see [Credential System]({{< relref "/docs/concepts/credent
 
 ## How Resolution Works
 
-When resolving credentials, OCM checks the two config sections in this order:
+When resolving credentials, OCM follows three paths in order:
 
-1. **`consumers`** — explicit consumer-to-credential mappings
-2. **`repositories`** — fallback providers like Docker config files
+1. **Direct consumers** — the consumer entry holds credentials inline (a typed credential like `OCICredentials/v1` or the legacy `DirectCredentials/v1`). These are returned immediately on match.
+2. **Indirect consumers** — the credential entry refers to a plugin-backed source (e.g., `HashiCorpVault/v1alpha1`). The graph creates a dependency edge at ingestion time; at resolution time, the plugin is called with the credentials resolved for its own identity.
+3. **Repository fallback** — `DockerConfig/v1` and similar repository plugins. Consulted only when neither direct nor indirect lookup yields a result; all repository plugins are queried concurrently and the first success wins.
 
-Consumer entries always take priority over repository lookups. This means you can rely on Docker config for most registries while overriding specific ones with explicit credentials — without touching your Docker setup.
+Consumer entries (direct or indirect) always take priority over repository lookups. This means you can rely on Docker config for most registries while overriding specific ones with explicit credentials — without touching your Docker setup.
 
 ### Identity Matching
 
@@ -46,13 +47,14 @@ flowchart TB
     req(["Request to ghcr.io/my-org/repo"])
     req --> lookup["Construct lookup identity<br>type + hostname + path"]
     lookup --> exact{"Exact string<br>match?"}
-    exact -->|"yes"| creds["Use consumer credentials"]
+    exact -->|"yes"| direct{"Direct or<br>indirect?"}
     exact -->|"no"| wild{"Wildcard match?<br>path glob, hostname-only"}
-    wild -->|"yes"| creds
+    wild -->|"yes"| direct
     wild -->|"no"| repos{"Repository<br>match?"}
+    direct -->|"direct"| creds["Return credentials"]
+    direct -->|"indirect"| plugin["Call plugin<br>(e.g. Vault)"] --> creds
     repos -->|"yes"| fallback["Use repository credentials"]
     repos -->|"no"| fail["No credentials"]
-
 ```
 
 Matching runs three chained matchers **in order** — all three must pass:
@@ -323,6 +325,52 @@ There is **no prefix matching** — `path: my-org` does not match `my-org/produc
 {{< /callout >}}
 
 **Takeaway:** If you get `401 Unauthorized` unexpectedly, check each attribute: `type`, `hostname`, `scheme`, `port`, and `path`. Every attribute present on the configured entry must match the request exactly (with glob support for `path` and port defaults for `https`/`http`).
+
+### Example F: Indirect Credentials (Plugin-Backed)
+
+Direct and indirect consumers look identical from the `.ocmconfig` perspective — the difference is in the `type` of the credential entry. When OCM encounters a credential type it does not recognize as a built-in (not `OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`, `DirectCredentials/v1`), it treats the entry as **indirect** and looks for a plugin to resolve it.
+
+**Vault chain example:** OCI registry credentials come from HashiCorp Vault, which itself needs `role_id` and `secret_id` credentials:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      # Consumer A: OCI registry gets credentials from Vault
+      - identities:
+          - type: OCIRegistry
+            hostname: quay.io
+        credentials:
+          - type: HashiCorpVault/v1alpha1
+            serverURL: "https://myvault.example.com/"
+            mountPath: "my-engine/my-engine-root"
+            path: "my/path/to/my/secret"
+      # Consumer B: Vault itself needs role_id + secret_id
+      - identities:
+          - type: HashiCorpVault/v1alpha1
+            hostname: myvault.example.com
+        credentials:
+          - type: DirectCredentials/v1
+            properties:
+              role_id: "repository.vault.com-role"
+              secret_id: "repository.vault.com-secret"
+```
+
+Resolution sequence for a request to `quay.io`:
+
+1. OCM matches consumer A (`quay.io` → `HashiCorpVault/v1alpha1`)
+2. The Vault plugin is asked which identity it needs credentials for — it returns a `HashiCorpVault/v1alpha1` identity for `myvault.example.com`
+3. OCM resolves consumer B — a direct match returning `role_id` / `secret_id`
+4. The Vault plugin is called with those credentials and returns the final OCI credentials for `quay.io`
+
+This bottom-up traversal supports chains of arbitrary depth. Cycles are detected at ingestion time and rejected.
+
+{{< callout context="note" >}}
+The `HashiCorpVault/v1alpha1` credential type is provided by the HashiCorp Vault plugin, not by OCM core. The plugin must be installed for this configuration to work.
+{{< /callout >}}
+
+**Takeaway:** Indirect credentials look like regular consumer entries. The credential type (`HashiCorpVault/v1alpha1`) determines that a plugin handles the resolution. The identity matching rules (exact path, glob, hostname-only) apply the same way as for direct credentials.
 
 ## Troubleshooting
 

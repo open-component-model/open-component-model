@@ -200,8 +200,27 @@ Use `ocm --loglevel debug` to enable debug logging. This shows which consumers a
 
 **Fix:** Run `docker login <registry-hostname>`, then retry the OCM command.
 
+## Typed Credentials
+
+The examples above use `Credentials/v1` with a nested `properties:` map. You can also use the typed `OCICredentials/v1` type, which uses flat top-level fields:
+
+```yaml
+consumers:
+  - identities:
+      - type: OCIRegistry
+        hostname: ghcr.io
+    credentials:
+      - type: OCICredentials/v1
+        username: my-user
+        password: ghp_your_token_here
+        # accessToken and refreshToken are also supported for token-based auth
+```
+
+Both forms are equivalent for basic username/password auth. Typed credentials additionally support `accessToken` and `refreshToken` fields with no extra nesting. For a full field reference, see [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}).
+
 ## Related Documentation
 
 - [How-To: Migrate Legacy Credentials]({{< relref "legacy-credential-compatibility.md" >}}) - Migrate an existing legacy OCM `.ocmconfig` file so it works with the new OCM
 - [Tutorial: Credential Resolution]({{< relref "/docs/tutorials/credential-resolution.md" >}}) — learn how OCM resolves credentials by experimenting step-by-step
 - [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system automatically finds the right credentials for each operation
+- [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}) — all built-in typed credential types and their fields

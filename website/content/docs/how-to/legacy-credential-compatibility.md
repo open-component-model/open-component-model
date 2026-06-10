@@ -87,7 +87,7 @@ The new OCM still accepts the singular `identity` field, so this step is optiona
 The following parts of your legacy config work unchanged in the new OCM:
 
 - `OCIRegistry` consumer identity type (unchanged)
-- `Credentials/v1` type and `properties` field
+- `Credentials/v1` type and `properties` field — `Credentials/v1` is an alias for `DirectCredentials/v1`, the universal credential fallback; it continues to work with no changes
 - `DockerConfig/v1` repository entries
 - `dockerConfigFile` and `dockerConfig` fields
 - Config file locations (`$HOME/.ocmconfig`, `$OCM_CONFIG`)
@@ -133,6 +133,29 @@ If you get `401 Unauthorized`, check that you renamed `pathprefix` → `path` (w
 
 {{< /steps >}}
 
+## Optionally migrate to typed credentials
+
+`Credentials/v1` with a `properties:` map works indefinitely, but you can migrate to typed credential types for field validation and clearer configuration. For OCI registries, replace:
+
+```yaml
+credentials:
+  - type: Credentials/v1
+    properties:
+      username: my-user
+      password: my-token
+```
+
+with the typed equivalent:
+
+```yaml
+credentials:
+  - type: OCICredentials/v1
+    username: my-user
+    password: my-token
+```
+
+Typed credentials use flat top-level fields instead of a nested `properties:` map. For all built-in typed credential types and their fields, see [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}).
+
 ## Next Steps
 
 - [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) - Set up credentials for multiple registries
@@ -141,3 +164,4 @@ If you get `401 Unauthorized`, check that you renamed `pathprefix` → `path` (w
 ## Related Documentation
 
 - [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system automatically finds the right credentials for each operation
+- [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}) - All built-in typed credential types and their fields
