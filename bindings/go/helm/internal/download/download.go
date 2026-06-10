@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -20,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
@@ -53,7 +55,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		return nil, fmt.Errorf("error creating temporary directory: %w", err)
 	}
 
-	var getterOpts []getter.Option
+	var helmGetterOpts []getter.Option
 
 	tlsOpts := []tlOptionsFn{
 		withCACertFile(opt.CACertFile),
@@ -64,7 +66,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 	if err != nil {
 		return nil, fmt.Errorf("error setting up TLS options: %w", err)
 	}
-	getterOpts = append(getterOpts, tlsOption)
+	helmGetterOpts = append(helmGetterOpts, tlsOption)
 
 	var (
 		keyring string
@@ -72,7 +74,6 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 	)
 
 	if opt.AlwaysDownloadProv {
-		// At least download the .prov file
 		verify = downloader.VerifyLater
 	}
 
@@ -90,35 +91,9 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		plainHTTP = true
 	}
 
-	getterOpts = append(getterOpts, getter.WithPlainHTTP(plainHTTP))
+	helmGetterOpts = append(helmGetterOpts, getter.WithPlainHTTP(plainHTTP))
 
-	regClient, err := registry.NewClient()
-	if err != nil {
-		return nil, fmt.Errorf("error creating registry client: %w", err)
-	}
-
-	cacheDir, err := os.MkdirTemp(targetDir, "helm-cache*")
-	if err != nil {
-		return nil, fmt.Errorf("error creating temporary directory for helm operations: %w", err)
-	}
-	defer func(path string) {
-		_ = os.RemoveAll(path)
-	}(cacheDir)
-
-	dl := &downloader.ChartDownloader{
-		Out:     os.Stderr,
-		Verify:  verify,
-		Getters: GetterProviders(),
-		// set by ocm v1 originally.
-		RepositoryCache:  filepath.Join(cacheDir, ".helmcache"),
-		RepositoryConfig: filepath.Join(cacheDir, ".helmrepo"),
-		ContentCache:     filepath.Join(cacheDir, ".helmcontent"),
-		RegistryClient:   regClient,
-		Options:          getterOpts,
-		Keyring:          keyring,
-	}
-
-	// Do not break legacy behaviour, but also support pure OCI based credentials
+	// Resolve credentials early so they can be passed to GetterProviders.
 	username := opt.Credentials.Username
 	if username == "" {
 		username = opt.OCICredentials.Username
@@ -131,7 +106,50 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		password = opt.OCICredentials.AccessToken
 	}
 
-	resolvedRepo, err := resolveHTTPChartURL(ctx, helmRepo, opt.Version, targetDir, GetterProviders(), &helmrepo.Entry{
+	var regClientOpts []registry.ClientOption
+	var httpClient *http.Client
+	if opt.HTTPConfig != nil {
+		// Build a single client from the full config (includes per-host routing).
+		// It is shared between the OCI registry client and the HTTP/S getter so
+		// both paths use the same timeout and per-host override behaviour.
+		httpClient = ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig))
+		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(httpClient))
+	}
+	regClient, err := registry.NewClient(regClientOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("error creating registry client: %w", err)
+	}
+
+	cfgOpts := HTTPConfigGetterOpts{
+		username: username,
+		password: password,
+		baseURL:  helmRepo,
+	}
+
+	cacheDir, err := os.MkdirTemp(targetDir, "helm-cache*")
+	if err != nil {
+		return nil, fmt.Errorf("error creating temporary directory for helm operations: %w", err)
+	}
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(cacheDir)
+
+	providers := GetterProviders(httpClient, cfgOpts)
+
+	dl := &downloader.ChartDownloader{
+		Out:     os.Stderr,
+		Verify:  verify,
+		Getters: providers,
+		// set by ocm v1 originally.
+		RepositoryCache:  filepath.Join(cacheDir, ".helmcache"),
+		RepositoryConfig: filepath.Join(cacheDir, ".helmrepo"),
+		ContentCache:     filepath.Join(cacheDir, ".helmcontent"),
+		RegistryClient:   regClient,
+		Options:          helmGetterOpts,
+		Keyring:          keyring,
+	}
+
+	resolvedRepo, err := resolveHTTPChartURL(ctx, helmRepo, opt.Version, targetDir, GetterProviders(httpClient, cfgOpts), &helmrepo.Entry{
 		Name:     "index",
 		Username: username,
 		Password: password,
@@ -143,12 +161,18 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		return nil, fmt.Errorf("error resolving chart URL %q via index.yaml: %w", helmRepo, err)
 	}
 
-	// Stole this from helm's httpgetter.Get guard so credentials are not
-	// leaked to a third-party host advertised in index.yaml. Works with OCI repos as well. Even though
-	// helm's own getter does this, we don't want to go through a redirect potentially with the set
-	// credentials for a malicious index file.
-	// https://github.com/helm/helm/blob/59b57c5c31a009d069f9318c9d3ba8b784f1fe97/pkg/getter/httpgetter.go#L80
-	if username != "" && password != "" && sameHost(helmRepo, resolvedRepo) {
+	// Update baseURL to the resolved repo URL for accurate same-host credential scoping,
+	// then rebuild providers so httpConfigGetter instances capture the new baseURL.
+	cfgOpts.baseURL = resolvedRepo
+	if httpClient != nil {
+		providers = GetterProviders(httpClient, cfgOpts)
+		dl.Getters = providers
+	}
+
+	// For the standard getter.HTTPGetter path (no custom client), credentials
+	// must be forwarded via dl.Options. The httpConfigGetter path has them
+	// baked in via cfgOpts above.
+	if httpClient == nil && username != "" && password != "" && sameHost(helmRepo, resolvedRepo) {
 		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
 	}
 
@@ -188,8 +212,13 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 
 // GetterProviders returns the available getter providers.
 // This replaces the need for cli.New() and avoids the explosion of the dependency tree.
-func GetterProviders() getter.Providers {
-	return getter.Providers{
+// When client is non-nil, the HTTP/S provider uses a custom getter backed by
+// that client so per-host routing and full timeout config apply on the HTTP/S
+// path as well as the OCI path. The opts struct carries the credential and
+// header values that httpConfigGetter needs, bypassing the opaque
+// getter.Option type.
+func GetterProviders(client *http.Client, opts HTTPConfigGetterOpts) getter.Providers {
+	providers := getter.Providers{
 		{
 			Schemes: []string{"http", "https"},
 			New: func(options ...getter.Option) (getter.Getter, error) {
@@ -202,6 +231,12 @@ func GetterProviders() getter.Providers {
 			New:     getter.NewOCIGetter,
 		},
 	}
+	if client != nil {
+		providers[0].New = func(_ ...getter.Option) (getter.Getter, error) {
+			return NewHTTPConfigGetter(client, opts)
+		}
+	}
+	return providers
 }
 
 // getVersion determines the version of the chart to download based on the provided version override and the helm repository URL.
