@@ -155,7 +155,7 @@ func NewWorkerPool(opts PoolOptions) *WorkerPool {
 		opts.Logger = new(logr.Discard())
 	}
 
-	baseCtx, baseCancel := context.WithCancel(context.Background())
+	baseCtx, baseCancel := context.WithCancel(context.Background()) //nolint:gosec // it's called later on in Start.
 
 	return &WorkerPool{
 		PoolOptions: opts,
@@ -255,7 +255,7 @@ func (wp *WorkerPool) Submit(opts SubmitOptions) error {
 		return ErrTransferInProgress
 	}
 
-	itemCtx, cancel := context.WithCancel(wp.baseCtx)
+	itemCtx, cancel := context.WithCancel(wp.baseCtx) //nolint:gosec // the cancel is called optionally from inflight
 	wp.inProgress[opts.Key] = &inflight{
 		requesters: []RequesterInfo{opts.Requester},
 		cancel:     cancel,
