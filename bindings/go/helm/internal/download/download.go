@@ -218,27 +218,25 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 // header values that httpConfigGetter needs, bypassing the opaque
 // getter.Option type.
 func GetterProviders(client *http.Client, opts HTTPConfigGetterOpts) getter.Providers {
-	var httpNew getter.Constructor
-	if client != nil {
-		httpNew = func(_ ...getter.Option) (getter.Getter, error) {
-			return NewHTTPConfigGetter(client, opts)
-		}
-	} else {
-		httpNew = func(options ...getter.Option) (getter.Getter, error) {
-			options = append(options, defaultOptions...)
-			return getter.NewHTTPGetter(options...)
-		}
-	}
-	return getter.Providers{
+	providers := getter.Providers{
 		{
 			Schemes: []string{"http", "https"},
-			New:     httpNew,
+			New: func(options ...getter.Option) (getter.Getter, error) {
+				options = append(options, defaultOptions...)
+				return getter.NewHTTPGetter(options...)
+			},
 		},
 		{
 			Schemes: []string{registry.OCIScheme},
 			New:     getter.NewOCIGetter,
 		},
 	}
+	if client != nil {
+		providers[0].New = func(_ ...getter.Option) (getter.Getter, error) {
+			return NewHTTPConfigGetter(client, opts)
+		}
+	}
+	return providers
 }
 
 // getVersion determines the version of the chart to download based on the provided version override and the helm repository URL.
