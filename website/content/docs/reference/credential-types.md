@@ -6,11 +6,14 @@ weight: 4
 toc: true
 ---
 
-This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:` field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).
+This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:`
+field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "
+docs/concepts/credential-system.md" >}}).
 
 ## Overview
 
-Every consumer entry in `.ocmconfig` has a `credentials:` list. Each entry in that list has a `type` that determines which fields are expected:
+Every consumer entry in `.ocmconfig` has a `credentials:` list. Each entry in that list has a `type` that determines
+which fields are expected:
 
 ```yaml
 consumers:
@@ -24,20 +27,23 @@ consumers:
 
 OCM ships with four built-in credential types:
 
-| Credential Type | Used With | Purpose |
-|---|---|---|
-| [`OCICredentials/v1`](#ocicredentialsv1) | `OCIRegistry` consumers | OCI registry username/password and token auth |
-| [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1) | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs |
-| [`RSACredentials/v1`](#rsacredentialsv1) | `RSA/v1alpha1` consumers | RSA signing and verification key material |
-| [`DirectCredentials/v1`](#directcredentialsv1) | Any consumer | Legacy untyped key-value fallback (also `Credentials/v1`) |
+| Credential Type                                    | Used With                                | Purpose                                                   |
+|----------------------------------------------------|------------------------------------------|-----------------------------------------------------------|
+| [`OCICredentials/v1`](#ocicredentialsv1)           | `OCIRegistry` consumers                  | OCI registry username/password and token auth             |
+| [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1) | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs            |
+| [`RSACredentials/v1`](#rsacredentialsv1)           | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                 |
+| [`DirectCredentials/v1`](#directcredentialsv1)     | Any consumer                             | Legacy untyped key-value fallback (also `Credentials/v1`) |
 
-Typed credential types (`OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`) use flat top-level fields. `DirectCredentials/v1` uses a nested `properties:` map — it is the universal fallback and all existing `.ocmconfig` files using `Credentials/v1` continue to work unchanged.
+Typed credential types (`OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`) use flat top-level fields.
+`DirectCredentials/v1` uses a nested `properties:` map — it is the universal fallback and all existing `.ocmconfig`
+files using `Credentials/v1` continue to work unchanged.
 
 ---
 
 ## Discovering Credential Types
 
-The `ocm describe types` command exposes the full set of credential types registered in your OCM installation, including any types introduced by installed plugins.
+The `ocm describe types` command exposes the full set of credential types registered in your OCM installation, including
+any types introduced by installed plugins.
 
 **List all available credential types:**
 
@@ -94,13 +100,15 @@ consumers:
 
 ### Used With
 
-[`OCIRegistry`]({{< relref "credential-consumer-identities.md#ociregistry" >}}) consumer identities. For OCI-backed Helm repositories, also use `OCICredentials/v1` (not `HelmHTTPCredentials/v1`).
+[`OCIRegistry`]({{< relref "credential-consumer-identities.md#ociregistry" >}}) consumer identities. For OCI-backed Helm
+repositories, also use `OCICredentials/v1` (not `HelmHTTPCredentials/v1`).
 
 ---
 
 ## HelmHTTPCredentials/v1
 
-Typed credentials for HTTP/S-based Helm chart repositories. Supports username/password and mutual TLS. All fields are optional.
+Typed credentials for HTTP/S-based Helm chart repositories. Supports username/password and mutual TLS. All fields are
+optional.
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/helm/v1/HelmHTTPCredentials.schema.json" >}}
 
@@ -136,15 +144,18 @@ consumers:
 
 ### Used With
 
-[`HelmChartRepository`]({{< relref "credential-consumer-identities.md#helmchartrepository" >}}) consumer identities that use HTTP/S transport. For OCI-based Helm repositories, use `OCICredentials/v1` instead.
+[`HelmChartRepository`]({{< relref "credential-consumer-identities.md#helmchartrepository" >}}) consumer identities that
+use HTTP/S transport. For OCI-based Helm repositories, use `OCICredentials/v1` instead.
 
 ---
 
 ## RSACredentials/v1
 
-Typed credentials carrying RSA key material for signing and verification. Each field has two forms: inline PEM content or a path to a PEM file. The inline form takes precedence when both are set.
+Typed credentials carrying RSA key material for signing and verification. Each field has two forms: inline PEM content
+or a path to a PEM file. The inline form takes precedence when both are set.
 
-For signing, provide `privateKeyPEM` or `privateKeyPEMFile`. For verification, provide `publicKeyPEM` or `publicKeyPEMFile`. Both can be combined in the same entry to support signing and verification from one config block.
+For signing, provide `privateKeyPEM` or `privateKeyPEMFile`. For verification, provide `publicKeyPEM` or
+`publicKeyPEMFile`. Both can be combined in the same entry to support signing and verification from one config block.
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/rsa/v1/RSACredentials.schema.json" >}}
 
@@ -192,9 +203,11 @@ consumers:
 
 ## DirectCredentials/v1
 
-The universal legacy fallback, also accepted as `Credentials/v1`. All existing `.ocmconfig` files continue to work unchanged — `Credentials/v1` is an alias for `DirectCredentials/v1`.
+The universal legacy fallback, also accepted as `Credentials/v1`. All existing `.ocmconfig` files continue to work
+unchanged — `Credentials/v1` is an alias for `DirectCredentials/v1`.
 
-Unlike the typed credential types above, `DirectCredentials/v1` stores credentials as an untyped `properties:` map. The property key names are consumer-defined string constants (e.g., `username`, `password`, `private_key_pem_file`).
+Unlike the typed credential types above, `DirectCredentials/v1` stores credentials as an untyped `properties:` map. The
+property key names are consumer-defined string constants (e.g., `username`, `password`, `private_key_pem_file`).
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/direct/v1/DirectCredentials.schema.json" >}}
 
@@ -230,31 +243,41 @@ consumers:
 ```
 
 {{< callout context="note" >}}
-Note the difference in key naming: `DirectCredentials/v1` uses `snake_case` string keys (e.g., `private_key_pem_file`), while typed credential types like `RSACredentials/v1` use `camelCase` Go struct fields (e.g., `privateKeyPEMFile`).
+Note the difference in key naming: `DirectCredentials/v1` uses `snake_case` string keys (e.g., `private_key_pem_file`),
+while typed credential types like `RSACredentials/v1` use `camelCase` Go struct fields (e.g., `privateKeyPEMFile`).
 {{< /callout >}}
 
 ### When to use
 
 Use `Credentials/v1` / `DirectCredentials/v1` when:
+
 - Migrating from an existing configuration and you want no changes
 - Working with consumer identity types that do not yet have a corresponding typed credential type
 
-Use the typed alternatives (`OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`) for new configurations — they provide field validation at configuration parse time and clearer field names.
+Use the typed alternatives (`OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`) for new configurations —
+they provide field validation at configuration parse time and clearer field names.
 
 ---
 
 ## Plugin-Declared Types
 
-Plugins can introduce additional credential types beyond the built-ins listed here. A plugin declares its custom types in the `customCredentialTypes` field of its capability spec. Those types are registered at plugin discovery time and available in `.ocmconfig` alongside the built-ins.
+Plugins can introduce additional credential types beyond the built-ins listed here. A plugin declares its custom types
+in the `customCredentialTypes` field of its capability spec. Those types are registered at plugin discovery time and
+available in `.ocmconfig` alongside the built-ins.
 
-External plugin credential types use a reverse-domain prefix by convention (e.g., `com.hashicorp.vault.VaultCredentials/v1`). This prevents name collisions between independently developed plugins.
+External plugin credential types use a reverse-domain prefix by convention (e.g.,
+`com.hashicorp.vault.VaultCredentials/v1`). This prevents name collisions between independently developed plugins.
 
-For details on how plugins declare and register credential types, see [Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}).
+For details on how plugins declare and register credential types, see [Plugin System]({{< relref "
+docs/concepts/plugin-system.md" >}}).
 
 ---
 
 ## Related Documentation
 
-- [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}) — identity types and their attributes
-- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — how credential resolution works end-to-end
-- [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}) — step-by-step matching examples
+- [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}) — identity types and
+  their attributes
+- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — how credential resolution works
+  end-to-end
+- [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}) — step-by-step
+  matching examples

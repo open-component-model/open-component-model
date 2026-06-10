@@ -330,7 +330,9 @@ There is **no prefix matching** — `path: my-org` does not match `my-org/produc
 
 Direct and indirect consumers look identical from the `.ocmconfig` perspective — the difference is in the `type` of the credential entry. When OCM encounters a credential type it does not recognize as built-in (not `OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`, `DirectCredentials/v1`), it treats the entry as **indirect** and looks for a plugin to resolve it.
 
-**Vault chain example:** OCI registry credentials come from HashiCorp Vault, which itself needs `role_id` and `secret_id` credentials:
+The following is a hypothetical example showing what a plugin-backed credential chain would look like. A real `HashiCorpVault/v1alpha1` plugin does not ship with OCM core — a third-party plugin would need to provide this type.
+
+**Hypothetical Vault chain:** OCI registry credentials would come from HashiCorp Vault, which itself would need `role_id` and `secret_id` credentials:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -360,17 +362,17 @@ configurations:
 Resolution sequence for a request to `quay.io`:
 
 1. OCM matches consumer A (`quay.io` → `HashiCorpVault/v1alpha1`)
-2. The Vault plugin is asked which identity it needs credentials for — it returns a `HashiCorpVault/v1alpha1` identity for `myvault.example.com`
+2. The Vault plugin would be asked which identity it needs credentials for — it would return a `HashiCorpVault/v1alpha1` identity for `myvault.example.com`
 3. OCM resolves consumer B — a direct match returning `role_id` / `secret_id`
-4. The Vault plugin is called with those credentials and returns the final OCI credentials for `quay.io`
+4. The Vault plugin would be called with those credentials and would return the final OCI credentials for `quay.io`
 
 This bottom-up traversal supports chains of arbitrary depth. Cycles are detected at ingestion time and rejected.
 
 {{< callout context="note" >}}
-The `HashiCorpVault/v1alpha1` credential type is provided by the HashiCorp Vault plugin, not by OCM core. The plugin must be installed for this configuration to work.
+`HashiCorpVault/v1alpha1` is a hypothetical credential type used here for illustration. Such a type would be provided by a third-party plugin, not by OCM core. The plugin system supports exactly this pattern — any installed plugin can introduce new credential types that participate in the credential graph.
 {{< /callout >}}
 
-**Takeaway:** Indirect credentials look like regular consumer entries. The credential type (`HashiCorpVault/v1alpha1`) determines that a plugin handles the resolution. The identity matching rules (exact path, glob, hostname-only) apply the same way as for direct credentials.
+**Takeaway:** Indirect credentials look like regular consumer entries. The credential type determines which plugin handles the resolution. The identity matching rules (exact path, glob, hostname-only) apply the same way as for direct credentials.
 
 ## Troubleshooting
 
