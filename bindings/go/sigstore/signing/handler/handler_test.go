@@ -312,21 +312,21 @@ func TestHandler_Sign(t *testing.T) {
 			},
 		},
 		{
-			name:       "V1 issuer extracted from bundle",
+			name:       "V1 issuer in bundle does not leak to SignatureInfo",
 			creds:      &oidcv1.OIDCIdentityToken{Token: "test-token"},
 			bundleJSON: func(t *testing.T) []byte { return fakeBundleJSONWithCert(t, "https://accounts.google.com") },
 			assertResult: func(t *testing.T, result descruntime.SignatureInfo) {
-				require.Equal(t, "https://accounts.google.com", result.Issuer)
+				require.Empty(t, result.Issuer)
 			},
 		},
 		{
-			name:  "V2 issuer extracted from bundle",
+			name:  "V2 issuer in bundle does not leak to SignatureInfo",
 			creds: &oidcv1.OIDCIdentityToken{Token: "test-token"},
 			bundleJSON: func(t *testing.T) []byte {
 				return fakeBundleJSONWithCertV2(t, "https://token.actions.githubusercontent.com")
 			},
 			assertResult: func(t *testing.T, result descruntime.SignatureInfo) {
-				require.Equal(t, "https://token.actions.githubusercontent.com", result.Issuer)
+				require.Empty(t, result.Issuer)
 			},
 		},
 		{
