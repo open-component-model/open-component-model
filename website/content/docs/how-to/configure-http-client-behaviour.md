@@ -1,6 +1,6 @@
 ---
 title: "Configure HTTP Client Behaviour for Constrained Environments"
-description: "Set global and per-host HTTP timeouts for OCM operations in corporate networks, air-gapped environments, and high-latency registries."
+description: "Set global and per-host HTTP timeouts for OCM operations in corporate networks, air-gapped, and high-latency registries."
 icon: "🌐"
 weight: 15
 toc: true
