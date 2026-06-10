@@ -85,6 +85,11 @@ func PluginManager(cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("could not get http configuration: %w", err)
 	}
+	slog.DebugContext(cmd.Context(), "http config resolved",
+		slog.Any("timeout", httpConfig.Timeout),
+		slog.Any("tlsHandshakeTimeout", httpConfig.TLSHandshakeTimeout),
+		slog.Any("hosts", httpConfig.Hosts),
+	)
 	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, slog.Default()); err != nil {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
