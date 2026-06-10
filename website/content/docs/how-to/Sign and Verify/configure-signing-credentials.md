@@ -53,9 +53,8 @@ See the [Consumer Identities Reference]({{< relref "docs/reference/credential-co
 
 There are two ways to configure signing credentials, either using file paths that point to your key files,
 or by including the key material directly in the config file.
-Check out the [Credential Consumer Identities Reference]({{< relref "
-docs/reference/credential-consumer-identities.md" >}})
-for more details on the supported attributes and configuration options.
+For more details on the supported attributes and configuration options, see
+[Credential Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
 
 The most convenient way to configure signing credentials is to add a consumer block to your `.ocmconfig` with the key
 file paths.
@@ -80,8 +79,8 @@ configurations:
             publicKeyPEMFile: /tmp/keys/public-key.pem
 ```
 
-`RSACredentials/v1` uses flat `camelCase` fields validated at parse time. See [Reference: Credential Types]({{< relref "
-docs/reference/credential-types.md" >}}) for all supported fields.
+`RSACredentials/v1` uses flat `camelCase` fields validated at parse time. For all supported fields, see
+[Reference: Credential Types]({{< relref "docs/reference/credential-types.md" >}}).
 {{< /tab >}}
 {{< tab "Credentials/v1 (legacy)" >}}
 

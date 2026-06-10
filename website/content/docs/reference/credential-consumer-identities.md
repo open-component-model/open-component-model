@@ -6,9 +6,7 @@ weight: 3
 toc: true
 ---
 
-This page is the technical reference for credential consumer identities — the key-value maps OCM uses to look up
-credentials for a given operation. For a high-level introduction, see [Credential System]({{< relref "
-docs/concepts/credential-system.md" >}}).
+This page is the technical reference for credential consumer identities — the key-value maps OCM uses to look up credentials for a given operation. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).
 
 For the credential types that go in the `credentials:` field of each consumer entry,
 see [Reference: Credential Types]({{< relref "credential-types.md" >}}).
@@ -70,8 +68,7 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 | `accessToken`  | Bearer token sent directly to the registry (Docker token flow)         |
 | `refreshToken` | OAuth2 refresh token exchanged for an access token before each request |
 
-Token fields take precedence over `username`/`password` when both are present. Use [`OCICredentials/v1`]({{< relref "
-credential-types.md#ocicredentialsv1" >}}) for the full typed field reference.
+Token fields take precedence over `username`/`password` when both are present. Use [`OCICredentials/v1`]({{< relref "credential-types.md#ocicredentialsv1" >}}) for the full typed field reference.
 
 ### Matching Behavior
 
@@ -83,8 +80,7 @@ Matching runs three chained checks — all must pass:
    `https` → `443`, `http` → `80`).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
-For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "
-docs/tutorials/credential-resolution.md" >}}).
+For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}).
 
 ### Examples
 
@@ -322,7 +318,6 @@ added by installed plugins — and `ocm describe types credentials <type>` to in
   fields
 - [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}) — Step-by-step
   matching examples for OCI registries
-- [How-To: Configure Credentials for Multiple Registries]({{< relref "
-  docs/how-to/configure-multiple-credentials.md" >}}) — Task-oriented registry credential setup
+- [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) — Task-oriented registry credential setup
 - [How-To: Configure Credentials for Signing]({{< relref "configure-signing-credentials.md" >}}) — Task-oriented signing
   credential setup

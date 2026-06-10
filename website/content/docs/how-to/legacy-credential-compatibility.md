@@ -73,9 +73,7 @@ after the prefix, or `open-component-model/*/*` for two levels.
 {{< step >}}
 **Change `identity` to `identities` (optional)**
 
-The new OCM still accepts the singular `identity` field, so this step is optional. However, switching to `identities` (a
-list) lets you share one credential across multiple registries. See [Multi-Identity Credentials]({{< relref "
-/docs/tutorials/credential-resolution.md" >}}) for details.
+The new OCM still accepts the singular `identity` field, so this step is optional. However, switching to `identities` (a list) lets you share one credential across multiple registries. See [Multi-Identity Credentials]({{< relref "/docs/tutorials/credential-resolution.md" >}}) for details.
 
 ```yaml
     consumers:
@@ -112,9 +110,7 @@ with:
             password: my-token
 ```
 
-`OCICredentials/v1` also supports `accessToken` and `refreshToken` for token-based auth. For all built-in typed
-credential types and their fields, see [Reference: Credential Types]({{< relref "
-/docs/reference/credential-types.md" >}}).
+`OCICredentials/v1` also supports `accessToken` and `refreshToken` for token-based auth. For all built-in typed credential types and their fields, see [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}).
 
 {{< callout context="note" >}}
 `Credentials/v1` continues to work unchanged — it is an alias for `DirectCredentials/v1`. You only need this step if you
@@ -166,8 +162,7 @@ entries.
 
 ## Next Steps
 
-- [How-To: Configure Credentials for Multiple Registries]({{< relref "
-  docs/how-to/configure-multiple-credentials.md" >}}) - Set up credentials for multiple registries
+- [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) - Set up credentials for multiple registries
 - [Tutorial: Credential Resolution]({{< relref "/docs/tutorials/credential-resolution.md" >}}) - Learn how OCM resolves
   credentials step-by-step
 

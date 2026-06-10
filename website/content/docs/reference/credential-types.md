@@ -6,9 +6,7 @@ weight: 4
 toc: true
 ---
 
-This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:`
-field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "
-docs/concepts/credential-system.md" >}}).
+This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:` field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).
 
 ## Overview
 
@@ -242,8 +240,7 @@ issues a short-lived signing certificate bound to the identity claims. Provide `
 
 Not needed when the `SIGSTORE_ID_TOKEN` environment variable or GitHub Actions ambient OIDC is already available.
 
-{{< schema-renderer url="
-/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1/OIDCIdentityToken.schema.json" >}}
+{{< schema-renderer url="/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1/OIDCIdentityToken.schema.json" >}}
 
 ### Example
 
@@ -358,8 +355,8 @@ available in `.ocmconfig` alongside the built-ins.
 External plugin credential types use a reverse-domain prefix by convention (e.g.,
 `com.hashicorp.vault.VaultCredentials/v1`). This prevents name collisions between independently developed plugins.
 
-For details on how plugins declare and register credential types, see [Plugin System]({{< relref "
-docs/concepts/plugin-system.md" >}}).
+For details on how plugins declare and register credential types, see
+[Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}).
 
 ---
 
