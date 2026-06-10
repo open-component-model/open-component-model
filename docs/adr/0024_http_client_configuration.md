@@ -12,7 +12,7 @@ construction layer that turns that config into a `*http.Client` without leaking 
 
 ## Decision Drivers
 
-1. **Single source of truth** — connection-level knobs via the same `generic.config.ocm.software/v1` envelope as every other typed config.
+1. **Single source of truth** — connection-level settings via the same `generic.config.ocm.software/v1` envelope as every other typed config.
 2. **Per-host overrides as first-class** — most deployments reach registries with different timeout budgets.
 3. **Proxy via env vars** — `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` are already the platform convention; no YAML surface needed.
 4. **Retry stays per-protocol** — `http.config.ocm.software` deliberately omits retry; each protocol config (e.g. `oci.config.ocm.software/v1alpha1`) owns its own retry block.

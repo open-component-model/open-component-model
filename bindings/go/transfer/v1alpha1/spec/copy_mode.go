@@ -1,4 +1,4 @@
-package v1alpha1
+package spec
 
 // CopyMode determines which resources are copied during a transfer operation.
 //

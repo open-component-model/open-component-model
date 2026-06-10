@@ -1,4 +1,4 @@
-package v1alpha1
+package spec
 
 const (
 	Version = "v1alpha1"

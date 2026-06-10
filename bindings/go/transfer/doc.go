@@ -78,11 +78,13 @@
 //
 // # Driving the Transfer from a Wire-Format Config
 //
-// The transfer knobs (recursive, copy mode, upload type) are also expressed by
-// [transferv1alpha1.Config] - a canonical wire format that downstream consumers
-// (CLI, controllers, other tooling) can load from YAML/JSON and feed in directly.
-// Use [FromConfig] to convert a loaded config into [Option]s alongside the
-// runtime-only mappings:
+// The transfer settings (recursive, copy mode, upload type) are also expressed by
+// [transferv1alpha1.Config] - a canonical wire format carried as an entry of
+// type "transfer.config.ocm.software" inside the central generic configuration
+// (generic.config.ocm.software/v1). Downstream consumers (CLI, controllers,
+// other tooling) extract it from a loaded central config with
+// [transferv1alpha1.LookupConfig], or construct it directly. Use [FromConfig]
+// to convert a config into [Option]s alongside the runtime-only mappings:
 //
 //	cfg := &transferv1alpha1.Config{
 //	    Recursive:  transferv1alpha1.RecursiveInfinite,

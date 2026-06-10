@@ -1,12 +1,13 @@
-package v1alpha1
+package spec
 
 import (
 	"fmt"
 
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const ConfigType = "TransferConfiguration"
+const ConfigType = "transfer.config.ocm.software"
 
 var Scheme = runtime.NewScheme()
 
@@ -17,17 +18,25 @@ func init() {
 	)
 }
 
-// Config is the canonical wire format for transfer knobs. Downstream consumers
-// (CLI, controllers) load it from YAML/JSON and pass it into [transfer.FromConfig],
-// so any new transfer setting belongs here first.
+// Config is the canonical wire format for transfer settings. It is carried as an
+// entry inside the central generic configuration
+// (generic.config.ocm.software/v1) and extracted with [LookupConfig].
+// Downstream consumers (CLI, controllers) pass the result into
+// [transfer.FromConfig], so any new transfer setting belongs here first.
+//
+//	type: generic.config.ocm.software/v1
+//	configurations:
+//	  - type: transfer.config.ocm.software/v1alpha1
+//	    recursive: -1
+//	    copyMode: localBlob
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Config struct {
-	// +ocm:jsonschema-gen:enum=TransferConfiguration/v1alpha1
-	// +ocm:jsonschema-gen:enum:deprecated=TransferConfiguration
+	// +ocm:jsonschema-gen:enum=transfer.config.ocm.software/v1alpha1
+	// +ocm:jsonschema-gen:enum:deprecated=transfer.config.ocm.software
 	Type runtime.Type `json:"type"`
 
 	// Recursive configures transferring component references with the parent component.
@@ -107,4 +116,62 @@ func (cfg *Config) Validate() error {
 			cfg.UploadType, UploadAsDefault, UploadAsLocalBlob, UploadAsOciArtifact)
 	}
 	return nil
+}
+
+// LookupConfig extracts the transfer configuration from a central generic
+// config. All entries of type [ConfigType] are decoded, validated, and merged
+// via [Merge]. Returns nil if cfg is nil or contains no transfer entries.
+func LookupConfig(cfg *genericv1.Config) (*Config, error) {
+	if cfg == nil {
+		return nil, nil
+	}
+	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
+		ConfigTypes: []runtime.Type{
+			runtime.NewVersionedType(ConfigType, Version),
+			runtime.NewUnversionedType(ConfigType),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter config: %w", err)
+	}
+	cfgs := make([]*Config, 0, len(filtered.Configurations))
+	for _, entry := range filtered.Configurations {
+		var config Config
+		if err := Scheme.Convert(entry, &config); err != nil {
+			return nil, fmt.Errorf("failed to decode transfer config: %w", err)
+		}
+		if err := config.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid transfer config: %w", err)
+		}
+		cfgs = append(cfgs, &config)
+	}
+	return Merge(cfgs...), nil
+}
+
+// Merge merges the provided configs into a single config. Later entries win:
+// a non-empty CopyMode or UploadType and a non-zero Recursive override
+// whatever earlier entries set. An explicit "recursive: 0" cannot be
+// distinguished from an omitted field; both leave the default of no recursion.
+func Merge(configs ...*Config) *Config {
+	if len(configs) == 0 {
+		return nil
+	}
+
+	merged := new(Config)
+	merged.Type = runtime.NewVersionedType(ConfigType, Version)
+	for _, cfg := range configs {
+		if cfg == nil {
+			continue
+		}
+		if cfg.Recursive != RecursiveNone {
+			merged.Recursive = cfg.Recursive
+		}
+		if cfg.CopyMode != "" {
+			merged.CopyMode = cfg.CopyMode
+		}
+		if cfg.UploadType != "" {
+			merged.UploadType = cfg.UploadType
+		}
+	}
+	return merged
 }

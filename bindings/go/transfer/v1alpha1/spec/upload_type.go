@@ -1,4 +1,4 @@
-package v1alpha1
+package spec
 
 // UploadType determines how resources are stored in the target repository during transfer.
 //

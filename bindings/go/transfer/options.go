@@ -1,12 +1,12 @@
 package transfer
 
 import (
-	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
 // Options configures the behavior of a transfer operation.
 //
-// It embeds the wire-format [transferv1alpha1.Config] (so the declarative knobs
+// It embeds the wire-format [transferv1alpha1.Config] (so the declarative settings
 // are accessed as promoted fields) and adds [Mappings], which carries the live
 // runtime objects (resolvers, repository specs) that the wire format cannot
 // serialize.

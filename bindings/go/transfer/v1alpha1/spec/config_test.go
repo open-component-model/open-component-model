@@ -1,4 +1,4 @@
-package v1alpha1
+package spec
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -92,7 +93,7 @@ func TestConfig_YAMLRoundTrip(t *testing.T) {
 	// Match the production path: CLI's loadTransferConfig parses --transfer-config
 	// files via Scheme.Decode (which yaml.Unmarshals under the hood and respects
 	// the type discriminator), not via raw yaml.Unmarshal.
-	src := []byte("type: TransferConfiguration/v1alpha1\nrecursive: -1\ncopyMode: allResources\nuploadType: ociArtifact\n")
+	src := []byte("type: transfer.config.ocm.software/v1alpha1\nrecursive: -1\ncopyMode: allResources\nuploadType: ociArtifact\n")
 
 	cfg := &Config{}
 	r.NoError(Scheme.Decode(bytes.NewReader(src), cfg))
@@ -120,12 +121,12 @@ func TestConfig_RecursiveIntOrBool(t *testing.T) {
 		yaml      string
 		wantValue Recursive
 	}{
-		{"omitted", "type: TransferConfiguration/v1alpha1\n", RecursiveNone},
-		{"explicit infinite", "type: TransferConfiguration/v1alpha1\nrecursive: -1\n", RecursiveInfinite},
-		{"explicit none", "type: TransferConfiguration/v1alpha1\nrecursive: 0\n", RecursiveNone},
-		{"explicit depth", "type: TransferConfiguration/v1alpha1\nrecursive: 3\n", 3},
-		{"bool true", "type: TransferConfiguration/v1alpha1\nrecursive: true\n", RecursiveInfinite},
-		{"bool false", "type: TransferConfiguration/v1alpha1\nrecursive: false\n", RecursiveNone},
+		{"omitted", "type: transfer.config.ocm.software/v1alpha1\n", RecursiveNone},
+		{"explicit infinite", "type: transfer.config.ocm.software/v1alpha1\nrecursive: -1\n", RecursiveInfinite},
+		{"explicit none", "type: transfer.config.ocm.software/v1alpha1\nrecursive: 0\n", RecursiveNone},
+		{"explicit depth", "type: transfer.config.ocm.software/v1alpha1\nrecursive: 3\n", 3},
+		{"bool true", "type: transfer.config.ocm.software/v1alpha1\nrecursive: true\n", RecursiveInfinite},
+		{"bool false", "type: transfer.config.ocm.software/v1alpha1\nrecursive: false\n", RecursiveNone},
 	}
 
 	for _, tc := range cases {
@@ -161,4 +162,89 @@ func TestRecursive_UnmarshalRejectsGarbage(t *testing.T) {
 	var rec Recursive
 	r.ErrorContains(rec.UnmarshalJSON([]byte(`"nope"`)), "must be a boolean or an integer")
 	r.ErrorContains(rec.UnmarshalJSON([]byte("1.5")), "must be a whole number")
+}
+
+func makeGenericConfig(t *testing.T, entries ...string) *genericv1.Config {
+	t.Helper()
+	cfg := &genericv1.Config{
+		Type: runtime.NewVersionedType(genericv1.ConfigType, genericv1.ConfigTypeV1),
+	}
+	for _, entry := range entries {
+		raw := &runtime.Raw{}
+		require.NoError(t, json.Unmarshal([]byte(entry), raw))
+		cfg.Configurations = append(cfg.Configurations, raw)
+	}
+	return cfg
+}
+
+func TestLookupConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil central config", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		cfg, err := LookupConfig(nil)
+		r.NoError(err)
+		r.Nil(cfg)
+	})
+
+	t.Run("no transfer entries", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		generic := makeGenericConfig(t, `{"type": "other.config.ocm.software/v1"}`)
+		cfg, err := LookupConfig(generic)
+		r.NoError(err)
+		r.Nil(cfg)
+	})
+
+	t.Run("single entry", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		generic := makeGenericConfig(t,
+			`{"type": "transfer.config.ocm.software/v1alpha1", "recursive": -1, "copyMode": "allResources"}`,
+		)
+		cfg, err := LookupConfig(generic)
+		r.NoError(err)
+		r.NotNil(cfg)
+		r.Equal(-1, cfg.GetRecursive())
+		r.Equal(CopyModeAllResources, cfg.CopyMode)
+		r.Equal(UploadAsDefault, cfg.GetUploadType())
+	})
+
+	t.Run("unversioned type alias", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		generic := makeGenericConfig(t,
+			`{"type": "transfer.config.ocm.software", "copyMode": "allResources"}`,
+		)
+		cfg, err := LookupConfig(generic)
+		r.NoError(err)
+		r.NotNil(cfg)
+		r.Equal(CopyModeAllResources, cfg.CopyMode)
+	})
+
+	t.Run("later entry wins, unset fields fall through", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		generic := makeGenericConfig(t,
+			`{"type": "transfer.config.ocm.software/v1alpha1", "recursive": 3, "copyMode": "localBlob", "uploadType": "localBlob"}`,
+			`{"type": "transfer.config.ocm.software/v1alpha1", "copyMode": "allResources"}`,
+		)
+		cfg, err := LookupConfig(generic)
+		r.NoError(err)
+		r.NotNil(cfg)
+		r.Equal(3, cfg.GetRecursive())
+		r.Equal(CopyModeAllResources, cfg.CopyMode)
+		r.Equal(UploadAsLocalBlob, cfg.UploadType)
+	})
+
+	t.Run("invalid entry is rejected", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		generic := makeGenericConfig(t,
+			`{"type": "transfer.config.ocm.software/v1alpha1", "copyMode": "garbage"}`,
+		)
+		_, err := LookupConfig(generic)
+		r.ErrorContains(err, "invalid copyMode")
+	})
 }
