@@ -328,7 +328,7 @@ There is **no prefix matching** — `path: my-org` does not match `my-org/produc
 
 ### Example F: Indirect Credentials (Plugin-Backed)
 
-Direct and indirect consumers look identical from the `.ocmconfig` perspective — the difference is in the `type` of the credential entry. When OCM encounters a credential type it does not recognize as a built-in (not `OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`, `DirectCredentials/v1`), it treats the entry as **indirect** and looks for a plugin to resolve it.
+Direct and indirect consumers look identical from the `.ocmconfig` perspective — the difference is in the `type` of the credential entry. When OCM encounters a credential type it does not recognize as built-in (not `OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`, `DirectCredentials/v1`), it treats the entry as **indirect** and looks for a plugin to resolve it.
 
 **Vault chain example:** OCI registry credentials come from HashiCorp Vault, which itself needs `role_id` and `secret_id` credentials:
 

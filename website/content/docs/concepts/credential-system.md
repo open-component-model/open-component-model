@@ -98,7 +98,7 @@ credentials:
     password: my-password
 ```
 
-**`DirectCredentials/v1`** (also accepted as `Credentials/v1`) stores credentials as an untyped `properties:` map. All existing `.ocmconfig` files using `Credentials/v1` continue to work unchanged — `Credentials/v1` is an alias for `DirectCredentials/v1`:
+**`DirectCredentials/v1`** stores credentials as an untyped `properties:` map. All existing `.ocmconfig` files using `Credentials/v1` continue to work unchanged — `Credentials/v1` is an alias for `DirectCredentials/v1`:
 
 ```yaml
 credentials:
