@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"fmt"
+
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -50,39 +52,59 @@ func convertFromV1Repositories(repositories []v1.RepositoryConfigEntry) []Reposi
 	return entries
 }
 
-func ConvertToV1(config *Config) *v1.Config {
+func ConvertToV1(config *Config) (*v1.Config, error) {
+	repositories, err := convertToV1Repositories(config.Repositories)
+	if err != nil {
+		return nil, err
+	}
+	consumers, err := convertToV1Consumers(config.Consumers)
+	if err != nil {
+		return nil, err
+	}
 	return &v1.Config{
 		Type:         config.Type,
-		Repositories: convertToV1Repositories(config.Repositories),
-		Consumers:    convertToV1Consumers(config.Consumers),
-	}
+		Repositories: repositories,
+		Consumers:    consumers,
+	}, nil
 }
 
-func convertToV1Consumers(consumers []Consumer) []v1.Consumer {
+func convertToV1Consumers(consumers []Consumer) ([]v1.Consumer, error) {
 	entries := make([]v1.Consumer, len(consumers))
 	for i, consumer := range consumers {
+		credentials, err := convertToV1Credentials(consumer.Credentials)
+		if err != nil {
+			return nil, err
+		}
 		entries[i] = v1.Consumer{
 			Identities:  deepCopyIdentities(consumer.Identities),
-			Credentials: convertToV1Credentials(consumer.Credentials),
+			Credentials: credentials,
 		}
 	}
-	return entries
+	return entries, nil
 }
 
-func convertToV1Credentials(credentials []runtime.Typed) []*runtime.Raw {
+func convertToV1Credentials(credentials []runtime.Typed) ([]*runtime.Raw, error) {
 	entries := make([]*runtime.Raw, len(credentials))
 	for i, cred := range credentials {
-		entries[i] = cred.(*runtime.Raw).DeepCopy()
+		raw, ok := cred.(*runtime.Raw)
+		if !ok {
+			return nil, fmt.Errorf("credential at index %d has unexpected type %T, expected *runtime.Raw", i, cred)
+		}
+		entries[i] = raw.DeepCopy()
 	}
-	return entries
+	return entries, nil
 }
 
-func convertToV1Repositories(repositories []RepositoryConfigEntry) []v1.RepositoryConfigEntry {
+func convertToV1Repositories(repositories []RepositoryConfigEntry) ([]v1.RepositoryConfigEntry, error) {
 	entries := make([]v1.RepositoryConfigEntry, len(repositories))
 	for i, repo := range repositories {
+		raw, ok := repo.Repository.(*runtime.Raw)
+		if !ok {
+			return nil, fmt.Errorf("repository at index %d has unexpected type %T, expected *runtime.Raw", i, repo.Repository)
+		}
 		entries[i] = v1.RepositoryConfigEntry{
-			Repository: repo.Repository.(*runtime.Raw).DeepCopy(),
+			Repository: raw.DeepCopy(),
 		}
 	}
-	return entries
+	return entries, nil
 }
