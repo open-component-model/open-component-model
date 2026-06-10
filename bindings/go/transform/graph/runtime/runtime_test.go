@@ -42,6 +42,33 @@ func newTestRuntime(t *testing.T, transformer Transformer, events chan ProgressE
 	}
 }
 
+func newTestCredentialAwareTransformation(t *testing.T) graph.Transformation {
+	t.Helper()
+
+	schemaJSON, err := jsonschema.UnmarshalJSON(bytes.NewReader(testutils.MockCredentialAwareTransformer{}.JSONSchema()))
+	require.NoError(t, err)
+
+	compiler := jsonschema.NewCompiler()
+	require.NoError(t, compiler.AddResource(testutils.MockCredentialAwareV1alpha1.String(), schemaJSON))
+
+	schema, err := compiler.Compile(testutils.MockCredentialAwareV1alpha1.String())
+	require.NoError(t, err)
+
+	return graph.Transformation{
+		GenericTransformation: v1alpha1.GenericTransformation{
+			TransformationMeta: meta.TransformationMeta{
+				Type: testutils.MockCredentialAwareV1alpha1,
+				ID:   "test-cred",
+			},
+			Spec: &runtime.Unstructured{Data: map[string]any{
+				"name":    "test-name",
+				"version": "1.0.0",
+			}},
+		},
+		Schema: schema,
+	}
+}
+
 func newTestTransformation(t *testing.T) graph.Transformation {
 	t.Helper()
 
