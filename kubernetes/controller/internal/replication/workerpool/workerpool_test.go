@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/replication/workerpool"
@@ -43,6 +44,19 @@ func (g fakeGraph) Process(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// blockingBuilder returns a builder whose graph blocks until release is closed
+// or the transfer context is canceled, so shutdown is never wedged.
+func blockingBuilder(release <-chan struct{}) *fakeBuilder {
+	return &fakeBuilder{process: func(ctx context.Context) error {
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}}
 }
 
 func newTestPool(t *testing.T, opts workerpool.PoolOptions) *workerpool.WorkerPool {
@@ -90,21 +104,22 @@ func submitOptsStamped(key, stamp, requesterName string, builder workerpool.Grap
 	}
 }
 
-func waitEvent(t *testing.T, ch <-chan []workerpool.RequesterInfo) []workerpool.RequesterInfo {
+// waitEvent receives one completion event and returns the requester it carries.
+func waitEvent(t *testing.T, ch <-chan event.GenericEvent) types.NamespacedName {
 	t.Helper()
 	select {
-	case r := <-ch:
-		return r
+	case evt := <-ch:
+		return types.NamespacedName{Namespace: evt.Object.GetNamespace(), Name: evt.Object.GetName()}
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for transfer event")
 
-		return nil
+		return types.NamespacedName{}
 	}
 }
 
-func TestSubmitRunsTransferAndBroadcasts(t *testing.T) {
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 2, QueueSize: 8})
-	events := pool.Subscribe()
+func TestSubmitRunsTransferAndEmitsEvent(t *testing.T) {
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 2})
+	events := pool.Events()
 	startPool(t, pool)
 
 	builder := &fakeBuilder{}
@@ -112,7 +127,7 @@ func TestSubmitRunsTransferAndBroadcasts(t *testing.T) {
 	require.ErrorIs(t, err, workerpool.ErrTransferInProgress)
 
 	got := waitEvent(t, events)
-	require.Equal(t, []workerpool.RequesterInfo{requester("repl-1")}, got)
+	require.Equal(t, requester("repl-1").NamespacedName, got)
 
 	res, ok := pool.Result("uid-1", "stamp-uid-1")
 	require.True(t, ok)
@@ -126,8 +141,8 @@ func TestSubmitRunsTransferAndBroadcasts(t *testing.T) {
 }
 
 func TestResultCarriesStamp(t *testing.T) {
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
-	events := pool.Subscribe()
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
+	events := pool.Events()
 	startPool(t, pool)
 
 	require.ErrorIs(t, pool.Submit(submitOptsStamped("uid-1", "digest-A", "repl-1", &fakeBuilder{})), workerpool.ErrTransferInProgress)
@@ -140,17 +155,21 @@ func TestResultCarriesStamp(t *testing.T) {
 }
 
 func TestStaleResultDroppedOnStampMismatch(t *testing.T) {
-	// A second submit for the same key while the first is queued does not change
-	// the in-flight stamp. The transfer runs for digest-A, but the consumer has
-	// moved on to digest-B: Result must reject and drop the stale outcome.
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
-	events := pool.Subscribe()
+	// A second submit for the same key while the first is in flight does not
+	// change the in-flight stamp. The transfer runs for digest-A, but the
+	// consumer has moved on to digest-B: Result must reject and drop the stale
+	// outcome.
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
+	events := pool.Events()
+	startPool(t, pool)
 
-	builder := &fakeBuilder{}
+	release := make(chan struct{})
+	builder := blockingBuilder(release)
+
 	require.ErrorIs(t, pool.Submit(submitOptsStamped("uid-1", "digest-A", "repl-1", builder)), workerpool.ErrTransferInProgress)
 	require.ErrorIs(t, pool.Submit(submitOptsStamped("uid-1", "digest-B", "repl-1", builder)), workerpool.ErrTransferInProgress)
 
-	startPool(t, pool)
+	close(release)
 
 	waitEvent(t, events)
 	assert.Equal(t, int32(1), builder.builds.Load(), "the deduplicated key must run exactly one transfer")
@@ -164,8 +183,8 @@ func TestStaleResultDroppedOnStampMismatch(t *testing.T) {
 }
 
 func TestSubmitFailureSurfacesError(t *testing.T) {
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
-	events := pool.Subscribe()
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
+	events := pool.Events()
 	startPool(t, pool)
 
 	wantErr := errors.New("registry unreachable")
@@ -181,8 +200,8 @@ func TestSubmitFailureSurfacesError(t *testing.T) {
 }
 
 func TestSubmitBuildFailureSurfacesError(t *testing.T) {
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
-	events := pool.Subscribe()
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
+	events := pool.Events()
 	startPool(t, pool)
 
 	wantErr := errors.New("invalid graph")
@@ -196,41 +215,70 @@ func TestSubmitBuildFailureSurfacesError(t *testing.T) {
 }
 
 func TestBurstSubmitDeduplicatesAndCollectsRequesters(t *testing.T) {
-	// No workers started yet: both submits land before processing, so the
-	// second collapses onto the in-flight key and adds its requester.
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
-	events := pool.Subscribe()
+	// The first submit blocks in the graph, so the following submits land while
+	// the key is in flight and collapse onto it, adding their requesters.
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
+	events := pool.Events()
+	startPool(t, pool)
 
-	block := make(chan struct{})
-	builder := &fakeBuilder{process: func(context.Context) error {
-		<-block
-
-		return nil
-	}}
+	release := make(chan struct{})
+	builder := blockingBuilder(release)
 
 	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-a", builder)), workerpool.ErrTransferInProgress)
 	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-b", builder)), workerpool.ErrTransferInProgress)
 	// Same requester again must not duplicate.
 	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-a", builder)), workerpool.ErrTransferInProgress)
 
-	startPool(t, pool)
-	close(block)
+	close(release)
 
-	got := waitEvent(t, events)
-	require.ElementsMatch(t, []workerpool.RequesterInfo{requester("repl-a"), requester("repl-b")}, got)
+	got := []types.NamespacedName{waitEvent(t, events), waitEvent(t, events)}
+	require.ElementsMatch(t, []types.NamespacedName{
+		requester("repl-a").NamespacedName,
+		requester("repl-b").NamespacedName,
+	}, got)
 	assert.Equal(t, int32(1), builder.builds.Load(), "transfer must run exactly once for a deduplicated key")
 }
 
-func TestSubmitQueueFull(t *testing.T) {
-	// One slot, no workers: the slot fills and the next distinct key overflows.
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 1})
+func TestConcurrencyCapQueuesExcessTransfers(t *testing.T) {
+	// One slot: the second key must wait for the semaphore until the first
+	// transfer finishes, then run.
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
+	events := pool.Events()
+	startPool(t, pool)
 
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", &fakeBuilder{})), workerpool.ErrTransferInProgress)
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-2", "repl-2", &fakeBuilder{})), workerpool.ErrQueueFull)
+	release := make(chan struct{})
+	started := make(chan struct{})
+	first := &fakeBuilder{process: func(ctx context.Context) error {
+		close(started)
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}}
+	second := &fakeBuilder{}
+
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", first)), workerpool.ErrTransferInProgress)
+	<-started
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-2", "repl-2", second)), workerpool.ErrTransferInProgress)
+
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, int32(0), second.builds.Load(), "second transfer must wait for a free slot")
+	assert.True(t, pool.IsInProgress("uid-2"))
+
+	close(release)
+
+	got := []types.NamespacedName{waitEvent(t, events), waitEvent(t, events)}
+	require.ElementsMatch(t, []types.NamespacedName{
+		requester("repl-1").NamespacedName,
+		requester("repl-2").NamespacedName,
+	}, got)
+	assert.Equal(t, int32(1), second.builds.Load())
 }
 
 func TestSubmitValidation(t *testing.T) {
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 1})
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
 
 	err := pool.Submit(workerpool.SubmitOptions{TGD: &transformv1alpha1.TransformationGraphDefinition{}, Builder: &fakeBuilder{}})
 	require.ErrorContains(t, err, "non-empty key")
@@ -243,8 +291,8 @@ func TestSubmitValidation(t *testing.T) {
 }
 
 func TestCancelRunningTransfer(t *testing.T) {
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
-	events := pool.Subscribe()
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
+	events := pool.Events()
 	startPool(t, pool)
 
 	started := make(chan struct{})
@@ -269,31 +317,50 @@ func TestCancelRunningTransfer(t *testing.T) {
 }
 
 func TestCancelQueuedTransfer(t *testing.T) {
-	// Cancel before any worker runs: the worker must short-circuit the item.
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
-	events := pool.Subscribe()
-
-	builder := &fakeBuilder{}
-	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", builder)), workerpool.ErrTransferInProgress)
-	pool.Cancel("uid-1")
-
+	// One slot held by a blocked transfer: the second key waits on the
+	// semaphore. Cancel must abort it there, without ever building a graph.
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
+	events := pool.Events()
 	startPool(t, pool)
 
-	waitEvent(t, events)
-	res, ok := pool.Result("uid-1", "stamp-uid-1")
+	release := make(chan struct{})
+	started := make(chan struct{})
+	first := &fakeBuilder{process: func(ctx context.Context) error {
+		close(started)
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}}
+	second := &fakeBuilder{}
+
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", first)), workerpool.ErrTransferInProgress)
+	<-started
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-2", "repl-2", second)), workerpool.ErrTransferInProgress)
+
+	pool.Cancel("uid-2")
+
+	got := waitEvent(t, events)
+	require.Equal(t, requester("repl-2").NamespacedName, got)
+	res, ok := pool.Result("uid-2", "stamp-uid-2")
 	require.True(t, ok)
 	require.ErrorIs(t, res.Error, context.Canceled)
-	assert.Equal(t, int32(0), builder.builds.Load(), "canceled queued transfer must not build a graph")
+	assert.Equal(t, int32(0), second.builds.Load(), "canceled queued transfer must not build a graph")
+
+	close(release)
+	waitEvent(t, events)
 }
 
 func TestCancelUnknownKeyIsNoop(t *testing.T) {
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 1})
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
 	require.NotPanics(t, func() { pool.Cancel("does-not-exist") })
 }
 
-func TestShutdownCancelsInFlightAndClosesSubscribers(t *testing.T) {
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
-	events := pool.Subscribe()
+func TestShutdownCancelsInFlightTransfers(t *testing.T) {
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
+	events := pool.Events()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
@@ -320,17 +387,16 @@ func TestShutdownCancelsInFlightAndClosesSubscribers(t *testing.T) {
 		t.Fatal("pool did not stop after context cancellation")
 	}
 
-	// The subscriber channel is closed on shutdown.
-	_, open := <-events
-	for open {
-		_, open = <-events
-	}
+	// The in-flight transfer terminated with a canceled result and its
+	// completion event was still emitted.
+	waitEvent(t, events)
+	res, ok := pool.Result("uid-1", "stamp-uid-1")
+	require.True(t, ok)
+	require.ErrorIs(t, res.Error, context.Canceled)
 }
 
 func TestSubmitAfterShutdownIsRejected(t *testing.T) {
-	// A Submit racing shutdown must never panic on a closed queue: the queue is
-	// never closed, and once shutdown begins Submit returns ErrPoolShuttingDown.
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
@@ -346,42 +412,12 @@ func TestSubmitAfterShutdownIsRejected(t *testing.T) {
 		t.Fatal("pool did not stop after context cancellation")
 	}
 
-	require.NotPanics(t, func() {
-		require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", &fakeBuilder{})), workerpool.ErrPoolShuttingDown)
-	})
-}
-
-func TestSubscribeAfterShutdownReturnsClosedChannel(t *testing.T) {
-	// A subscription that lands after shutdown must come back already closed, so
-	// the consumer terminates instead of waiting on a channel nothing will close.
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	stopped := make(chan struct{})
-	go func() {
-		defer close(stopped)
-		_ = pool.Start(ctx)
-	}()
-
-	cancel()
-	select {
-	case <-stopped:
-	case <-time.After(5 * time.Second):
-		t.Fatal("pool did not stop after context cancellation")
-	}
-
-	events := pool.Subscribe()
-	select {
-	case _, open := <-events:
-		assert.False(t, open, "post-shutdown subscription must be closed")
-	case <-time.After(time.Second):
-		t.Fatal("post-shutdown subscription was not closed")
-	}
+	require.ErrorIs(t, pool.Submit(submitOpts("uid-1", "repl-1", &fakeBuilder{})), workerpool.ErrPoolShuttingDown)
 }
 
 func TestSubmitAfterResultConsumedReRuns(t *testing.T) {
-	pool := newTestPool(t, workerpool.PoolOptions{WorkerCount: 1, QueueSize: 4})
-	events := pool.Subscribe()
+	pool := newTestPool(t, workerpool.PoolOptions{MaxConcurrentTransfers: 1})
+	events := pool.Events()
 	startPool(t, pool)
 
 	builder := &fakeBuilder{}

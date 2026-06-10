@@ -8,7 +8,6 @@ import (
 
 func init() {
 	kmetrics.Registry.MustRegister(
-		TransferQueueSizeGauge,
 		TransferInProgressGauge,
 		TransferDurationHistogram,
 		TransferEventChannelDropsTotal,
@@ -24,8 +23,6 @@ const (
 )
 
 const (
-	// TransferQueueSizeLabel tracks the current size of the transfer queue.
-	TransferQueueSizeLabel = "transfer_queue_size"
 	// TransferInProgressLabel tracks the number of transfers currently in progress.
 	TransferInProgressLabel = "transfer_in_progress"
 	// TransferDurationLabel tracks the duration of transfers.
@@ -45,14 +42,6 @@ const (
 	resultSuccess  = "success"
 	resultError    = "error"
 	resultCanceled = "canceled"
-)
-
-// TransferQueueSizeGauge tracks the current size of the transfer queue.
-var TransferQueueSizeGauge = metrics.MustRegisterGauge(
-	MetricsNamespace,
-	OcmComponent,
-	TransferQueueSizeLabel,
-	"Current size of the component version transfer queue.",
 )
 
 // TransferInProgressGauge tracks the number of transfers currently in progress.

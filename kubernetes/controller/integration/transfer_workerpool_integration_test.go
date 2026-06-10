@@ -42,9 +42,9 @@ const (
 // Test_Integration_WorkerPool_OCIToOCI test the transfer workerpool by creating
 // two registries using testcontainers. Creates a component version in the first
 // container normally with a resource, then uses the workerpool implementation to
-// do a transfer by calling `Submit`. Then, we subscribe to the events channel
-// using `Subscribe` and wait for the result. Once we got that the pool finished
-// the transfer, we call `Result` and verify that it actually worked.
+// do a transfer by calling `Submit`. Then, we watch the completion event
+// channel from `Events` and wait for the result. Once we got that the pool
+// finished the transfer, we call `Result` and verify that it actually worked.
 func Test_Integration_WorkerPool_OCIToOCI(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
@@ -124,11 +124,10 @@ func Test_Integration_WorkerPool_OCIToOCI(t *testing.T) {
 	// Phase 2: async transfer
 	logger := testr.New(t)
 	pool := workerpool.NewWorkerPool(workerpool.PoolOptions{
-		WorkerCount: 2,
-		QueueSize:   8,
-		Logger:      new(logger),
+		MaxConcurrentTransfers: 2,
+		Logger:                 new(logger),
 	})
-	events := pool.Subscribe()
+	events := pool.Events()
 
 	poolCtx, cancelPool := context.WithCancel(ctx)
 	poolDone := make(chan struct{})
@@ -163,7 +162,8 @@ func Test_Integration_WorkerPool_OCIToOCI(t *testing.T) {
 
 	select {
 	case got := <-events:
-		r.Equal([]workerpool.RequesterInfo{requester}, got)
+		r.Equal(requester.NamespacedName.Name, got.Object.GetName())
+		r.Equal(requester.NamespacedName.Namespace, got.Object.GetNamespace())
 	case <-time.After(90 * time.Second):
 		t.Fatal("timed out waiting for transfer completion event")
 	}

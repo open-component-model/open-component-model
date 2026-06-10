@@ -9,7 +9,10 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/semaphore"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
@@ -18,10 +21,6 @@ import (
 // the given key has been accepted and is queued or running. The reconciler
 // treats it as a signal to exit and wait for the completion event.
 var ErrTransferInProgress = errors.New("component version transfer in progress")
-
-// ErrQueueFull is returned by [WorkerPool.Submit] when the bounded work queue
-// has no free slot. The reconciler should requeue with backoff.
-var ErrQueueFull = errors.New("transfer work queue is full")
 
 // ErrPoolShuttingDown is returned by [WorkerPool.Submit] once the pool has begun
 // shutting down. No new transfers are accepted; the reconciler should stop and
@@ -66,18 +65,15 @@ type Result struct {
 
 // PoolOptions configures the worker pool.
 type PoolOptions struct {
-	// WorkerCount is the number of concurrent workers.
-	WorkerCount int
-	// QueueSize is the size of the work queue buffer.
-	QueueSize int
-	// SubscriberBufferSize is the buffer size for each subscriber's event
-	// channel. A larger buffer reduces the probability of dropped events under
-	// load.
-	SubscriberBufferSize int
-	// ShutdownTimeout bounds how long Start waits for workers to drain on
-	// shutdown. Defaults to 5s.
+	// MaxConcurrentTransfers caps how many transfers run at the same time.
+	MaxConcurrentTransfers int
+	// EventBufferSize is the buffer size of the completion event channel. A
+	// larger buffer reduces the probability of dropped events under load.
+	EventBufferSize int
+	// ShutdownTimeout bounds how long Start waits for in-flight transfers to
+	// drain on shutdown. Defaults to 5s.
 	ShutdownTimeout time.Duration
-	// Logger for the worker pool.
+	// Logger for the worker pool. Defaults to a no-op logger.
 	Logger *logr.Logger
 }
 
@@ -86,11 +82,12 @@ type inflight struct {
 	// requesters are all objects waiting on this key, notified on completion.
 	requesters []RequesterInfo
 	// cancel cancels the per-key context, used for the deletion drain and on
-	// pool shutdown.
+	// pool shutdown. A transfer still waiting for a semaphore slot aborts
+	// immediately: Acquire returns the context error.
 	cancel context.CancelFunc
 }
 
-// workItem is the internal unit processed by a worker.
+// workItem is the internal unit processed by a transfer goroutine.
 type workItem struct {
 	key     string
 	stamp   string
@@ -101,137 +98,108 @@ type workItem struct {
 }
 
 // WorkerPool runs component version transfers asynchronously. Submission is
-// non-blocking and backed by a bounded queue. Completions are broadcast to
-// subscribers, which retrigger reconciliation.
+// non-blocking: each accepted transfer runs in its own goroutine gated by a
+// concurrency semaphore. There is no work queue; in-flight work is bounded by
+// the per-key dedup, one item per Replication CR. Completions are emitted as
+// generic events on a single channel, consumed by the controller via
+// source.Channel.
 type WorkerPool struct {
 	PoolOptions
 
-	// workQueue is intentionally never closed. Submit sends to it concurrently, and a
-	// `send` on a closed channel panics; closing also buys nothing, because workers
-	// terminate on ctx.Done, not on a queue close. Never `range` over this channel
-	// since with no close signal a range would block forever.
-	workQueue chan *workItem
+	// sem caps the number of concurrently running transfers per pool.
+	sem *semaphore.Weighted
+
+	// events carries one event per requester on transfer completion. It is
+	// never closed; sends are non-blocking and drop when the buffer is full,
+	// the periodic reconcile interval recovers a dropped completion.
+	events chan event.GenericEvent
 
 	// mu guards inProgress, results, and closed.
 	mu         sync.Mutex
 	inProgress map[string]*inflight
 	results    map[string]*Result
-	// closed is set when shutdown begins. It gates Submit so no work is enqueued
-	// after the workers stop which also guards a send-on-closed-channel panic.
+	// closed is set when shutdown begins. It gates Submit so no transfer is
+	// started after the drain has begun.
 	closed bool
-
-	subscribersMu sync.RWMutex
-	subscribers   []chan []RequesterInfo
-	// subscribersClosed is set under subscribersMu once shutdown has closed every
-	// subscriber. A Subscribe that lands after this returns an already-closed
-	// channel rather than one that would never be closed.
-	subscribersClosed bool
 
 	// baseCtx is the parent of every per-key context. It is canceled on
 	// shutdown so all in-flight transfers stop.
 	baseCtx    context.Context
 	baseCancel context.CancelFunc
 
-	workersDone sync.WaitGroup
+	transfersDone sync.WaitGroup
 }
 
 const (
-	defaultWorkerCount          = 5
-	defaultQueueSize            = 1000
-	defaultSubscriberBufferSize = 100
-	defaultShutdownTimeout      = 5 * time.Second
+	defaultMaxConcurrentTransfersPerPool = 5
+	defaultEventBufferSize               = 100
+	defaultShutdownTimeout               = 5 * time.Second
 )
 
-// NewWorkerPool creates a new transfer worker pool.
+// NewWorkerPool creates a new transfer worker pool. The pool accepts and runs
+// transfers from construction; Start only implements graceful shutdown.
 func NewWorkerPool(opts PoolOptions) *WorkerPool {
-	if opts.WorkerCount <= 0 {
-		opts.WorkerCount = defaultWorkerCount
+	if opts.MaxConcurrentTransfers <= 0 {
+		opts.MaxConcurrentTransfers = defaultMaxConcurrentTransfersPerPool
 	}
 
-	if opts.QueueSize <= 0 {
-		opts.QueueSize = defaultQueueSize
-	}
-
-	if opts.SubscriberBufferSize <= 0 {
-		opts.SubscriberBufferSize = defaultSubscriberBufferSize
+	if opts.EventBufferSize <= 0 {
+		opts.EventBufferSize = defaultEventBufferSize
 	}
 
 	if opts.ShutdownTimeout <= 0 {
 		opts.ShutdownTimeout = defaultShutdownTimeout
 	}
 
-	baseCtx, baseCancel := context.WithCancel(context.Background()) //nolint:gosec // baseCancel is called later.
+	if opts.Logger == nil {
+		opts.Logger = new(logr.Discard())
+	}
+
+	baseCtx, baseCancel := context.WithCancel(context.Background())
 
 	return &WorkerPool{
 		PoolOptions: opts,
-		workQueue:   make(chan *workItem, opts.QueueSize),
+		sem:         semaphore.NewWeighted(int64(opts.MaxConcurrentTransfers)),
+		events:      make(chan event.GenericEvent, opts.EventBufferSize),
 		inProgress:  make(map[string]*inflight),
 		results:     make(map[string]*Result),
-		subscribers: make([]chan []RequesterInfo, 0),
 		baseCtx:     baseCtx,
 		baseCancel:  baseCancel,
 	}
 }
 
-// Subscribe creates a new event subscription channel. Each subscriber gets its
-// own buffered channel so events are not stolen between controllers. The channel
-// is closed when the pool shuts down. Subscribing after shutdown returns an
-// already-closed channel so the consumer stops immediately.
-func (wp *WorkerPool) Subscribe() <-chan []RequesterInfo {
-	wp.subscribersMu.Lock()
-	defer wp.subscribersMu.Unlock()
-
-	ch := make(chan []RequesterInfo, wp.SubscriberBufferSize)
-
-	if wp.subscribersClosed {
-		// Since we range drain this channel and the corresponding listener also uses range
-		// it's more convenient to close it rather than sending back nil.
-		close(ch)
-
-		return ch
-	}
-
-	wp.subscribers = append(wp.subscribers, ch)
-
-	return ch
+// Events returns the completion event channel. Wire it into the controller
+// with source.Channel(pool.Events(), &handler.EnqueueRequestForObject{}).
+func (wp *WorkerPool) Events() <-chan event.GenericEvent {
+	return wp.events
 }
 
-// Start begins the worker pool. It blocks until ctx is canceled to implement
-// graceful shutdown, then cancels all in-flight transfers and drains the
-// workers within ShutdownTimeout.
+// Start implements manager.Runnable. It blocks until ctx is canceled, then
+// rejects new submissions, cancels all in-flight transfers, and waits for them
+// to drain within ShutdownTimeout.
 func (wp *WorkerPool) Start(ctx context.Context) error {
-	wp.Logger.Info("starting transfer worker pool", "workers", wp.WorkerCount, "queueSize", wp.QueueSize, "subscriberBufferSize", wp.SubscriberBufferSize)
-
-	for i := range wp.WorkerCount {
-		wp.workersDone.Add(1)
-		go wp.worker(ctx, i)
-	}
+	wp.Logger.Info("transfer worker pool started", "maxConcurrentTransfers", wp.MaxConcurrentTransfers, "eventBufferSize", wp.EventBufferSize)
 
 	<-ctx.Done()
 	wp.Logger.Info("transfer worker pool shutting down, canceling in-flight transfers")
 
 	// Reject new submissions before tearing anything down. Taking mu serializes
-	// this against an in-flight Submit, which holds mu across its send: once
-	// closed is set, no further send can start. The workQueue is deliberately
-	// never closed, so the `send` can never race a close.
+	// this against an in-flight Submit: once closed is set, no further transfer
+	// goroutine can start.
 	wp.mu.Lock()
 	wp.closed = true
 	wp.mu.Unlock()
 
-	// Cancel every per-key context so running transfers stop at the next safe point.
+	// Cancel every per-key context so running transfers stop at the next safe
+	// point and queued ones abort. This is the `baseContext`. Ever new context
+	// gets this context as a parent, so using Go's Context cancel propagation
+	// to close all of them out.
 	wp.baseCancel()
 
 	done := make(chan struct{})
 	go func() {
-		wp.workersDone.Wait()
-
-		wp.subscribersMu.Lock()
-		wp.subscribersClosed = true
-		for _, ch := range wp.subscribers {
-			close(ch)
-		}
-		wp.subscribersMu.Unlock()
-
+		// wait for all in-progress transfers to cancel out.
+		wp.transfersDone.Wait()
 		close(done)
 	}()
 
@@ -248,12 +216,12 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 	}
 }
 
-// Submit enqueues a transfer for asynchronous execution.
+// Submit accepts a transfer for asynchronous execution.
 //
 // If a transfer for the same key is already queued or running, the requester is
 // added to its notification set and [ErrTransferInProgress] is returned without
-// re-submitting. On a successful first enqueue it also returns
-// [ErrTransferInProgress]. [ErrQueueFull] is returned when the queue is full.
+// re-submitting. On a successful first submission it also returns
+// [ErrTransferInProgress].
 //
 // The caller must consume any pending terminal result via [WorkerPool.Result]
 // before submitting a new transfer for the same key.
@@ -288,30 +256,23 @@ func (wp *WorkerPool) Submit(opts SubmitOptions) error {
 	}
 
 	itemCtx, cancel := context.WithCancel(wp.baseCtx)
-	item := &workItem{
+	wp.inProgress[opts.Key] = &inflight{
+		requesters: []RequesterInfo{opts.Requester},
+		cancel:     cancel,
+	}
+	TransferInProgressGauge.Set(float64(len(wp.inProgress)))
+	wp.Logger.V(1).Info("accepted transfer", "key", opts.Key, "requester", opts.Requester.NamespacedName)
+
+	wp.transfersDone.Add(1)
+	go wp.run(&workItem{
 		key:     opts.Key,
 		stamp:   opts.Stamp,
 		tgd:     opts.TGD,
 		builder: opts.Builder,
 		ctx:     itemCtx,
-	}
+	})
 
-	select {
-	case wp.workQueue <- item:
-		wp.inProgress[opts.Key] = &inflight{
-			requesters: []RequesterInfo{opts.Requester},
-			cancel:     cancel,
-		}
-		TransferInProgressGauge.Set(float64(len(wp.inProgress)))
-		TransferQueueSizeGauge.Set(float64(len(wp.workQueue)))
-		wp.Logger.V(1).Info("enqueued transfer", "key", opts.Key, "requester", opts.Requester.NamespacedName)
-
-		return ErrTransferInProgress
-	default:
-		cancel()
-
-		return ErrQueueFull
-	}
+	return ErrTransferInProgress
 }
 
 // Result consumes the terminal result for a key, returning it only when its
@@ -382,43 +343,29 @@ func (inf *inflight) addRequester(r RequesterInfo) {
 	inf.requesters = append(inf.requesters, r)
 }
 
-func (wp *WorkerPool) worker(ctx context.Context, id int) {
-	defer wp.workersDone.Done()
-	logger := wp.Logger.WithValues("worker", id)
-	defer logger.V(1).Info("transfer worker stopped")
+// run executes a single transfer: it waits for a semaphore slot, runs the
+// graph, records the terminal result, and emits the completion events.
+func (wp *WorkerPool) run(item *workItem) {
+	defer wp.transfersDone.Done()
 
-	for {
-		select {
-		case <-ctx.Done():
-			logger.V(1).Info("transfer worker stopped due to context cancellation")
-
-			return
-		case item := <-wp.workQueue:
-			TransferQueueSizeGauge.Set(float64(len(wp.workQueue)))
-			wp.handleWorkItem(&logger, item)
-		}
+	err := wp.sem.Acquire(item.ctx, 1)
+	if err == nil {
+		start := time.Now()
+		err = runTransfer(item)
+		wp.sem.Release(1)
+		TransferDurationHistogram.WithLabelValues(resultLabel(err)).Observe(time.Since(start).Seconds())
 	}
-}
 
-func (wp *WorkerPool) handleWorkItem(logger *logr.Logger, item *workItem) {
-	logger.V(1).Info("processing transfer", "key", item.key)
-
-	start := time.Now()
-	err := runTransfer(item)
-	duration := time.Since(start).Seconds()
-
-	result := resultLabel(err)
-	TransferDurationHistogram.WithLabelValues(result).Observe(duration)
-	TransferTotal.WithLabelValues(result).Inc()
+	TransferTotal.WithLabelValues(resultLabel(err)).Inc()
 
 	if err != nil {
-		logger.Error(err, "transfer failed", "key", item.key, "duration", duration)
+		wp.Logger.Error(err, "transfer failed", "key", item.key)
 	} else {
-		logger.V(1).Info("transfer complete", "key", item.key, "duration", duration)
+		wp.Logger.V(1).Info("transfer complete", "key", item.key)
 	}
 
 	requesters := wp.setResult(item.key, &Result{Stamp: item.stamp, Error: err})
-	wp.broadcast(logger, requesters)
+	wp.emit(requesters)
 }
 
 // runTransfer builds the executable graph from the TGD and processes it. The
@@ -459,23 +406,22 @@ func (wp *WorkerPool) setResult(key string, res *Result) []RequesterInfo {
 	return requesters
 }
 
-// broadcast sends the requesters to every subscriber without blocking. Events
-// are dropped if a subscriber buffer is full; the periodic reconcile interval
-// recovers any dropped completion.
-func (wp *WorkerPool) broadcast(logger *logr.Logger, requesters []RequesterInfo) {
-	if len(requesters) == 0 {
-		return
-	}
+// emit sends one completion event per requester without blocking. Events are
+// dropped if the buffer is full. A periodic reconcile interval can be used as
+// a fallback mechanism.
+func (wp *WorkerPool) emit(requesters []RequesterInfo) {
+	for _, r := range requesters {
+		evt := event.GenericEvent{Object: &metav1.PartialObjectMetadata{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: r.NamespacedName.Namespace,
+				Name:      r.NamespacedName.Name,
+			},
+		}}
 
-	wp.subscribersMu.RLock()
-	subscribers := slices.Clone(wp.subscribers)
-	wp.subscribersMu.RUnlock()
-
-	for _, ch := range subscribers {
 		select {
-		case ch <- requesters:
+		case wp.events <- evt:
 		default:
-			logger.Info("dropped transfer event, subscriber buffer full", "requesterCount", len(requesters))
+			wp.Logger.Info("dropped transfer completion event, buffer full", "requester", r.NamespacedName)
 			TransferEventChannelDropsTotal.WithLabelValues().Inc()
 		}
 	}
