@@ -38,7 +38,7 @@ func NewRegistryFromPluginManager(pm *manager.PluginManager) (*Registry, error) 
 	)
 	credentials := NewSubsystem(
 		"credentials",
-		"Available credential types registered in OCM. Each type represents a structured set of credentials that can be referenced under 'credentials:' in ocm config.",
+		"Available credential types registered in OCM. Each type represents a structured set of credentials that can be referenced under 'credentials:' in the OCM configuration.",
 	)
 
 	// Register plugin manager schemes
