@@ -10,10 +10,12 @@ var (
 	MockGetObjectV1alpha1          = runtime.NewVersionedType(MockGetObjectTransformerType, Version)
 	MockAddObjectV1alpha1          = runtime.NewVersionedType(MockAddObjectTransformerType, Version)
 	MockCustomSchemaObjectV1alpha1 = runtime.NewVersionedType(MockCustomSchemaObjectTransformerType, Version)
+	MockCredentialAwareV1alpha1    = runtime.NewVersionedType(MockCredentialAwareTransformerType, Version)
 )
 
 func init() {
 	Scheme.MustRegisterWithAlias(&MockGetObjectTransformer{}, MockGetObjectV1alpha1)
 	Scheme.MustRegisterWithAlias(&MockAddObjectTransformer{}, MockAddObjectV1alpha1)
 	Scheme.MustRegisterWithAlias(&MockCustomSchemaObjectTransformer{}, MockCustomSchemaObjectV1alpha1)
+	Scheme.MustRegisterWithAlias(&MockCredentialAwareTransformer{}, MockCredentialAwareV1alpha1)
 }

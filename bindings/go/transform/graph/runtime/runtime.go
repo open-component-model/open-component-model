@@ -24,13 +24,20 @@ type Transformer interface {
 }
 
 // TransformerWithCredentials is an opt-in extension for Transformer implementations
-// that require typed credential resolution per step. The runtime resolves credentials
-// via GetConsumerIdentity and passes them to TransformWithCredentials.
-// Transformers that hold a credentials.Resolver directly (legacy path) do not need
-// to implement this interface.
+// that require typed credential resolution per step. The runtime calls
+// GetCredentialConsumerIdentities to obtain a named set of identities (slots), resolves
+// each slot via the configured credentials.Resolver, and passes the resulting map to
+// TransformWithCredentials. Slots whose identity resolves to ErrNotFound are omitted
+// from the map; the transformer receives an empty map when no credentials are found or
+// no resolver is configured. Transformers that hold a credentials.Resolver directly do
+// not need to implement this interface.
 type TransformerWithCredentials interface {
-	GetConsumerIdentity(ctx context.Context, step runtime.Typed) (runtime.Identity, error)
-	TransformWithCredentials(ctx context.Context, step runtime.Typed, credentials runtime.Typed) (runtime.Typed, error)
+	// GetCredentialConsumerIdentities returns a named set of consumer identities
+	// (slots) required by this transformer for the given step. An empty map is
+	// valid and results in TransformWithCredentials being called with an empty
+	// credentials map.
+	GetCredentialConsumerIdentities(ctx context.Context, step runtime.Typed) (map[string]runtime.Identity, error)
+	TransformWithCredentials(ctx context.Context, step runtime.Typed, credentials map[string]runtime.Typed) (runtime.Typed, error)
 }
 
 // State represents the state of a transformation node.
@@ -145,15 +152,21 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 
 	var transformed runtime.Typed
 	if twc, ok := transformer.(TransformerWithCredentials); ok {
-		var creds runtime.Typed
+		creds := make(map[string]runtime.Typed)
 		if b.CredentialResolver != nil {
-			identity, err := twc.GetConsumerIdentity(ctx, transformation.AsRaw())
+			identities, err := twc.GetCredentialConsumerIdentities(ctx, transformation.AsRaw())
 			if err != nil {
-				return fmt.Errorf("failed to get consumer identity for transformation %q: %w", transformation.ID, err)
+				return fmt.Errorf("failed to get credential consumer identities for transformation %q: %w", transformation.ID, err)
 			}
-			creds, err = b.CredentialResolver.Resolve(ctx, identity)
-			if err != nil && !errors.Is(err, credentials.ErrNotFound) {
-				return fmt.Errorf("failed to resolve credentials for transformation %q: %w", transformation.ID, err)
+			for slot, identity := range identities {
+				resolved, err := b.CredentialResolver.Resolve(ctx, identity)
+				if errors.Is(err, credentials.ErrNotFound) {
+					continue
+				}
+				if err != nil {
+					return fmt.Errorf("failed to resolve credentials for slot %q in transformation %q: %w", slot, transformation.ID, err)
+				}
+				creds[slot] = resolved
 			}
 		}
 		transformed, err = twc.TransformWithCredentials(ctx, transformation.AsRaw(), creds)

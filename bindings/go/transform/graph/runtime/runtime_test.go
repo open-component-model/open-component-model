@@ -3,12 +3,14 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph"
 	"ocm.software/open-component-model/bindings/go/transform/graph/internal/testutils"
@@ -93,5 +95,107 @@ func TestProcessValueEvents(t *testing.T) {
 
 		require.Nil(t, rt.Events, "Events channel should be nil")
 		require.NoError(t, rt.ProcessValue(t.Context(), transformation), "ProcessValue should succeed without events")
+	})
+}
+
+func TestProcessValue_TransformerWithCredentials(t *testing.T) {
+	scheme := runtime.NewScheme()
+	scheme.MustRegisterScheme(testutils.Scheme)
+
+	sourceIdentity := runtime.Identity{"host": "source.example.com"}
+	targetIdentity := runtime.Identity{"host": "target.example.com"}
+	sourceCred := &testutils.MockTypedCredential{ID: "source"}
+	targetCred := &testutils.MockTypedCredential{ID: "target"}
+
+	newRT := func(t *testing.T, mock *testutils.MockCredentialAware, resolver credentials.Resolver) *Runtime {
+		t.Helper()
+		return &Runtime{
+			EvaluatedExpressionCache: map[string]any{},
+			EvaluatedTransformations: map[string]any{},
+			Transformers:             map[runtime.Type]Transformer{testutils.MockCredentialAwareV1alpha1: mock},
+			CredentialResolver:       resolver,
+		}
+	}
+
+	transformation := newTestCredentialAwareTransformation(t)
+
+	t.Run("credentials resolved per slot and passed to TransformWithCredentials", func(t *testing.T) {
+		mock := &testutils.MockCredentialAware{
+			Scheme: scheme,
+			Identities: map[string]runtime.Identity{
+				"source": sourceIdentity,
+				"target": targetIdentity,
+			},
+		}
+		resolver := &testutils.MockCredentialResolver{Entries: map[string]runtime.Typed{
+			sourceIdentity.String(): sourceCred,
+			targetIdentity.String(): targetCred,
+		}}
+
+		require.NoError(t, newRT(t, mock, resolver).ProcessValue(t.Context(), transformation))
+		require.Equal(t, sourceCred, mock.ReceivedCreds["source"])
+		require.Equal(t, targetCred, mock.ReceivedCreds["target"])
+	})
+
+	t.Run("nil resolver passes empty credentials map", func(t *testing.T) {
+		mock := &testutils.MockCredentialAware{
+			Scheme:     scheme,
+			Identities: map[string]runtime.Identity{"source": sourceIdentity},
+		}
+
+		require.NoError(t, newRT(t, mock, nil).ProcessValue(t.Context(), transformation))
+		require.Empty(t, mock.ReceivedCreds)
+	})
+
+	t.Run("ErrNotFound for a slot omits it from the map", func(t *testing.T) {
+		mock := &testutils.MockCredentialAware{
+			Scheme: scheme,
+			Identities: map[string]runtime.Identity{
+				"source": sourceIdentity,
+				"target": targetIdentity,
+			},
+		}
+		resolver := &testutils.MockCredentialResolver{Entries: map[string]runtime.Typed{
+			sourceIdentity.String(): sourceCred,
+			// targetIdentity not in entries → ErrNotFound
+		}}
+
+		require.NoError(t, newRT(t, mock, resolver).ProcessValue(t.Context(), transformation))
+		require.Equal(t, sourceCred, mock.ReceivedCreds["source"])
+		require.NotContains(t, mock.ReceivedCreds, "target")
+	})
+
+	t.Run("empty identity map passes empty credentials map", func(t *testing.T) {
+		mock := &testutils.MockCredentialAware{
+			Scheme:     scheme,
+			Identities: map[string]runtime.Identity{},
+		}
+		resolver := &testutils.MockCredentialResolver{Entries: map[string]runtime.Typed{
+			sourceIdentity.String(): sourceCred,
+		}}
+
+		require.NoError(t, newRT(t, mock, resolver).ProcessValue(t.Context(), transformation))
+		require.Empty(t, mock.ReceivedCreds)
+	})
+
+	t.Run("resolver hard error propagates", func(t *testing.T) {
+		mock := &testutils.MockCredentialAware{
+			Scheme:     scheme,
+			Identities: map[string]runtime.Identity{"source": sourceIdentity},
+		}
+		resolver := &testutils.MockCredentialResolver{Err: errors.New("backend unavailable")}
+
+		err := newRT(t, mock, resolver).ProcessValue(t.Context(), transformation)
+		require.ErrorContains(t, err, "backend unavailable")
+	})
+
+	t.Run("GetCredentialConsumerIdentities error propagates", func(t *testing.T) {
+		mock := &testutils.MockCredentialAware{
+			Scheme:      scheme,
+			IdentityErr: errors.New("identity lookup failed"),
+		}
+
+		err := newRT(t, mock, &testutils.MockCredentialResolver{}).ProcessValue(t.Context(), transformation)
+		require.ErrorContains(t, err, "identity lookup failed")
 	})
 }

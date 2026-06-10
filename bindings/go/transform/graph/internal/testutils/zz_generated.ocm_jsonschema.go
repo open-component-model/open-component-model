@@ -18,6 +18,15 @@ var schemaMockAddObjectTransformerOutput []byte
 //go:embed schemas/MockAddObjectTransformerSpec.schema.json
 var schemaMockAddObjectTransformerSpec []byte
 
+//go:embed schemas/MockCredentialAwareTransformer.schema.json
+var schemaMockCredentialAwareTransformer []byte
+
+//go:embed schemas/MockCredentialAwareTransformerOutput.schema.json
+var schemaMockCredentialAwareTransformerOutput []byte
+
+//go:embed schemas/MockCredentialAwareTransformerSpec.schema.json
+var schemaMockCredentialAwareTransformerSpec []byte
+
 //go:embed schemas/custom_schema.json
 var schemaMockCustomSchemaObject []byte
 
@@ -52,6 +61,21 @@ func (MockAddObjectTransformerOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for MockAddObjectTransformerSpec.
 func (MockAddObjectTransformerSpec) JSONSchema() []byte {
 	return schemaMockAddObjectTransformerSpec
+}
+
+// JSONSchema returns the JSON Schema for MockCredentialAwareTransformer.
+func (MockCredentialAwareTransformer) JSONSchema() []byte {
+	return schemaMockCredentialAwareTransformer
+}
+
+// JSONSchema returns the JSON Schema for MockCredentialAwareTransformerOutput.
+func (MockCredentialAwareTransformerOutput) JSONSchema() []byte {
+	return schemaMockCredentialAwareTransformerOutput
+}
+
+// JSONSchema returns the JSON Schema for MockCredentialAwareTransformerSpec.
+func (MockCredentialAwareTransformerSpec) JSONSchema() []byte {
+	return schemaMockCredentialAwareTransformerSpec
 }
 
 // JSONSchema returns the JSON Schema for MockCustomSchemaObject.
