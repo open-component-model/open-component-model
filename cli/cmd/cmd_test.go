@@ -2249,8 +2249,8 @@ configurations:
         password: pass
         username: user
       type: Credentials/v1
-    identity:
-      hostname: ghcr.io
+    identities:
+    - hostname: ghcr.io
       type: OCIRegistry/v1
   type: credentials.config.ocm.software
 type: generic.config.ocm.software/v1`,

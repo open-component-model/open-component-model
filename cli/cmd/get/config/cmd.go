@@ -14,6 +14,8 @@ import (
 	ocmv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
 	resolversv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
+	credentialsruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
+
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -171,20 +173,38 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		result.Configurations = append(result.Configurations, &config)
 	}
 
-	// Runtime types of credentials serialize as `json:"-"` (bindings/go/credentials/spec/config/runtime/config.go)
-	// Serialize the raw entry instead (caveat: output is not merged)
-	filtered, err = genericv1.Filter(cfg, &genericv1.FilterOptions{
-		ConfigTypes: []runtime.Type{
-			runtime.NewVersionedType(credentialsv1.ConfigType, credentialsv1.Version),
-			runtime.NewUnversionedType(credentialsv1.ConfigType),
-		},
-	})
+	credentialsCfg, err := credentialsruntime.LookupCredentialConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to filter config for %s: %w", credentialsv1.ConfigType, err)
+		return nil, fmt.Errorf("config lookup failed for credentials: %w", err)
 	}
-	for _, entry := range filtered.Configurations {
-		result.Configurations = append(result.Configurations, entry)
+	if credentialsCfg != nil {
+		result.Configurations = append(result.Configurations, convertCredentialsToV1(credentialsCfg))
 	}
 
 	return result, nil
+}
+
+// Runtime types of credentials serialize as `json:"-"` (bindings/go/credentials/spec/config/runtime/config.go)
+// so we convert to the v1 spec type for serialization.
+func convertCredentialsToV1(cfg *credentialsruntime.Config) *credentialsv1.Config {
+	repos := make([]credentialsv1.RepositoryConfigEntry, len(cfg.Repositories))
+	for i, r := range cfg.Repositories {
+		repos[i] = credentialsv1.RepositoryConfigEntry{Repository: r.Repository.(*runtime.Raw)}
+	}
+	consumers := make([]credentialsv1.Consumer, len(cfg.Consumers))
+	for i, c := range cfg.Consumers {
+		creds := make([]*runtime.Raw, len(c.Credentials))
+		for j, cred := range c.Credentials {
+			creds[j] = cred.(*runtime.Raw)
+		}
+		consumers[i] = credentialsv1.Consumer{
+			Identities:  c.Identities,
+			Credentials: creds,
+		}
+	}
+	return &credentialsv1.Config{
+		Type:         cfg.Type,
+		Repositories: repos,
+		Consumers:    consumers,
+	}
 }
