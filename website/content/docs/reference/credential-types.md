@@ -35,20 +35,37 @@ Typed credential types (`OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACrede
 
 ---
 
+## Discovering Credential Types
+
+The `ocm describe types` command exposes the full set of credential types registered in your OCM installation, including any types introduced by installed plugins.
+
+**List all available credential types:**
+
+```bash
+ocm describe types credentials
+```
+
+**Inspect the fields of a specific credential type:**
+
+```bash
+ocm describe types credentials OCICredentials/v1
+```
+
+**Export the raw JSON Schema for a type** (useful for tooling and validation):
+
+```bash
+ocm describe types credentials OCICredentials/v1 -o jsonschema
+```
+
+---
+
 ## OCICredentials/v1
 
 Typed credentials for OCI registry authentication. Supports username/password basic auth and token-based flows.
 
-### Fields
+Token fields (`accessToken`, `refreshToken`) take precedence over `username`/`password` when both are present.
 
-| Field | Description |
-|---|---|
-| `username` | Username for basic authentication |
-| `password` | Password for basic authentication |
-| `accessToken` | Bearer token sent directly to the registry (Docker token flow) |
-| `refreshToken` | OAuth2 refresh token exchanged for an `accessToken` before each request |
-
-All fields are optional; set only the fields applicable to your authentication method. Token fields (`accessToken`, `refreshToken`) take precedence over `username`/`password` when both are present.
+{{< schema-renderer url="/schemas/bindings/go/credentials/oci/v1/OCICredentials.schema.json" >}}
 
 ### Example
 
@@ -83,19 +100,9 @@ consumers:
 
 ## HelmHTTPCredentials/v1
 
-Typed credentials for HTTP/S-based Helm chart repositories. Supports username/password and mutual TLS.
+Typed credentials for HTTP/S-based Helm chart repositories. Supports username/password and mutual TLS. All fields are optional.
 
-### Fields
-
-| Field | Description |
-|---|---|
-| `username` | Username for basic authentication |
-| `password` | Password for basic authentication |
-| `certFile` | Path to a TLS client certificate file (PEM) |
-| `keyFile` | Path to a TLS client private key file (PEM) |
-| `keyring` | Path to a GPG keyring file for chart verification |
-
-All fields are optional.
+{{< schema-renderer url="/schemas/bindings/go/credentials/helm/v1/HelmHTTPCredentials.schema.json" >}}
 
 ### Example
 
@@ -137,16 +144,9 @@ consumers:
 
 Typed credentials carrying RSA key material for signing and verification. Each field has two forms: inline PEM content or a path to a PEM file. The inline form takes precedence when both are set.
 
-### Fields
-
-| Field | Description |
-|---|---|
-| `privateKeyPEM` | Inline PEM-encoded RSA private key (PKCS#1 or PKCS#8). Required for signing. |
-| `privateKeyPEMFile` | Path to a PEM file containing an RSA private key. Used when `privateKeyPEM` is not set. |
-| `publicKeyPEM` | Inline PEM-encoded RSA public key or X.509 certificate chain. Required for verification. |
-| `publicKeyPEMFile` | Path to a PEM file containing an RSA public key. Used when `publicKeyPEM` is not set. |
-
 For signing, provide `privateKeyPEM` or `privateKeyPEMFile`. For verification, provide `publicKeyPEM` or `publicKeyPEMFile`. Both can be combined in the same entry to support signing and verification from one config block.
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/rsa/v1/RSACredentials.schema.json" >}}
 
 ### Example
 
@@ -196,11 +196,7 @@ The universal legacy fallback, also accepted as `Credentials/v1`. All existing `
 
 Unlike the typed credential types above, `DirectCredentials/v1` stores credentials as an untyped `properties:` map. The property key names are consumer-defined string constants (e.g., `username`, `password`, `private_key_pem_file`).
 
-### Fields
-
-| Field | Description |
-|---|---|
-| `properties` | Map of string key-value pairs. Key names depend on the consumer. |
+{{< schema-renderer url="/schemas/bindings/go/credentials/direct/v1/DirectCredentials.schema.json" >}}
 
 ### Example
 

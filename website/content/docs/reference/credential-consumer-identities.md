@@ -290,6 +290,12 @@ configurations:
           dockerConfigFile: "~/.docker/config.json"
 ```
 
+## Discovering Credential Types at Runtime
+
+Use `ocm describe types credentials` to list all credential types registered in your OCM installation — including any added by installed plugins — and `ocm describe types credentials <type>` to inspect the fields of a specific type.
+
+---
+
 ## Related Documentation
 
 - [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — How the credential system works
