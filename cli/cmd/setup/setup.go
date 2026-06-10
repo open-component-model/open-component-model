@@ -86,8 +86,8 @@ func PluginManager(cmd *cobra.Command) error {
 		return fmt.Errorf("could not get http configuration: %w", err)
 	}
 	slog.DebugContext(cmd.Context(), "http config resolved",
-		slog.Any("timeout", httpConfig.Timeout),
-		slog.Any("tlsHandshakeTimeout", httpConfig.TLSHandshakeTimeout),
+		slog.String("timeout", timeoutString(httpConfig.Timeout)),
+		slog.String("tlsHandshakeTimeout", timeoutString(httpConfig.TLSHandshakeTimeout)),
 		slog.Any("hosts", httpConfig.Hosts),
 	)
 	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, slog.Default()); err != nil {
@@ -144,4 +144,11 @@ func CredentialGraph(cmd *cobra.Command) error {
 	cmd.SetContext(ocmctx.WithCredentialGraph(cmd.Context(), graph))
 
 	return nil
+}
+
+func timeoutString(t *httpv1alpha1.Timeout) string {
+	if t == nil {
+		return "<nil>"
+	}
+	return time.Duration(*t).String()
 }
