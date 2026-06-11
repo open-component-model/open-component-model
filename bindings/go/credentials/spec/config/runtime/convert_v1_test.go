@@ -93,8 +93,11 @@ func TestConvertToV1_NonRawTyped(t *testing.T) {
 		Type: runtime.NewVersionedType("credentials.config.ocm.software", "v1"),
 		Consumers: []Consumer{
 			{
-				Identities:  []runtime.Identity{{"type": "test"}},
-				Credentials: []runtime.Typed{&mockTyped{name: "not-raw"}},
+				Identities: []runtime.Identity{{"type": "test"}},
+				Credentials: []runtime.Typed{&v1.DirectCredentials{
+					Type:       runtime.NewVersionedType("Credentials", "v1"),
+					Properties: map[string]string{"username": "admin", "password": "secret"},
+				}},
 			},
 		},
 	}
@@ -103,5 +106,9 @@ func TestConvertToV1_NonRawTyped(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Consumers, 1)
 	require.Len(t, result.Consumers[0].Credentials, 1)
-	assert.NotNil(t, result.Consumers[0].Credentials[0].Data)
+
+	data := string(result.Consumers[0].Credentials[0].Data)
+	assert.Contains(t, data, `"username":"admin"`)
+	assert.Contains(t, data, `"password":"secret"`)
+	assert.Equal(t, runtime.NewVersionedType("Credentials", "v1"), result.Consumers[0].Credentials[0].Type)
 }
