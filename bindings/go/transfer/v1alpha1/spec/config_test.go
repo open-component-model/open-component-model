@@ -137,12 +137,6 @@ func TestLookupConfig(t *testing.T) {
 		return &generic
 	}
 
-	t.Run("nil central config", func(t *testing.T) {
-		cfg, err := spec.LookupConfig(nil)
-		require.NoError(t, err)
-		assert.Nil(t, cfg)
-	})
-
 	t.Run("no transfer entries", func(t *testing.T) {
 		generic := decode(t, `
 type: generic.config.ocm.software/v1

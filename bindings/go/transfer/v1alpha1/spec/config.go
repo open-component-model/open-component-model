@@ -103,9 +103,6 @@ func (cfg *Config) Validate() error {
 // config. All entries of type [ConfigType] are decoded, validated, and merged
 // via [Merge]. Returns nil if cfg is nil or contains no transfer entries.
 func LookupConfig(cfg *genericv1.Config) (*Config, error) {
-	if cfg == nil {
-		return nil, nil
-	}
 	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
 		ConfigTypes: []runtime.Type{
 			runtime.NewVersionedType(ConfigType, Version),
