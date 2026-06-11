@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
@@ -29,6 +30,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
@@ -38,11 +40,6 @@ const (
 	componentRefIndex  = "spec.componentRef.name"
 	targetRepoRefIndex = "spec.targetRepositoryRef.name"
 )
-
-// errTransferNotImplemented signals that the asynchronous transfer execution
-// (Phase 2) is not wired yet. The reconcile loop, gating, and status handling
-// are in place; the transfer worker pool and TGD execution land in a follow-up.
-var errTransferNotImplemented = errors.New("transfer execution not yet implemented")
 
 type Reconciler struct {
 	*ocm.BaseReconciler
@@ -154,9 +151,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	if !replication.GetDeletionTimestamp().IsZero() {
-		// TODO(replication): per ADR 0020 deletion semantics, cancel any in-flight transfer
-		// via a per-item context keyed by CR UID and wait for a bounded drain before removing
-		// the finalizer. No transfer worker pool exists yet, so we just release the finalizer.
+		// TODO(skarlso): per ADR 0020 deletion semantics should cancel in-flight transfer, right now
+		// since the transfer is sequential, cancel is when the reconcile context is cancelled.
 		if updated := controllerutil.RemoveFinalizer(replication, v1alpha1.ReplicationFinalizer); updated {
 			if err := r.Update(ctx, replication); err != nil {
 				status.MarkNotReady(r.EventRecorder, replication, v1alpha1.DeletionFailedReason, err.Error())
@@ -180,7 +176,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 }
 
 // reconcile runs Phase 1 (plan): it gates on the source Component being ready with a digest,
-// decides whether a transfer is needed, and hands off to the (not-yet-implemented) Phase 2.
+// decides whether a transfer is needed, and executes the transfer graph (Phase 2).
 func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replication) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -324,13 +320,13 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		}
 	}
 
-	// Phase 1: discover the transfer graph. Descriptor fetches go through the
-	// resolution service, so an uncached component version aborts the walk with
-	// ErrResolutionInProgress and the event from the resolution service will retrigger
-	// this object.
+	// Descriptor fetches for discovery go through the resolution service. Uncached component version
+	// aborts the walk with `ErrResolutionInProgress` and the event from the resolution service will retrigger
+	// this object once done fetching.
 	//
 	// The process takes turns to complete: resolved descriptors are cache hits, each
-	// pass enqueues the next component version of the graph.
+	// pass enqueues the next component version of the graph until all component versions are in the cache and
+	// accounted for.
 	tgd, err := transfer.BuildGraphDefinition(ctx,
 		transfer.WithTransfer(
 			transfer.Component(component.Status.Component.Component, component.Status.Component.Version),
@@ -354,13 +350,50 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to build transfer graph definition: %w", err)
 	}
 
-	// TODO: run the TGD.
-	logger.Info("transfer graph definition built; transfer execution not yet implemented",
+	var credGraph credentials.Resolver
+	if cfg != nil {
+		credGraph, err = setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
+			PluginManager: r.PluginManager,
+			Logger:        &logger,
+		})
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+			return ctrl.Result{}, fmt.Errorf("failed to create credential graph: %w", err)
+		}
+	}
+
+	transferGraph, err := transfer.NewDefaultBuilder(
+		r.PluginManager.ComponentVersionRepositoryRegistry,
+		r.PluginManager.ResourcePluginRegistry,
+		credGraph,
+	).BuildAndCheck(tgd)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to build transformation graph: %w", err)
+	}
+
+	logger.Info("executing transfer",
 		"component", component.Status.Component.Component,
 		"version", component.Status.Component.Version,
 		"sourceDigest", sourceDigest,
 		"transformations", len(tgd.Transformations))
-	status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, errTransferNotImplemented.Error())
+	if err := transferGraph.Process(ctx); err != nil {
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())
 
-	return ctrl.Result{}, errTransferNotImplemented
+		return ctrl.Result{}, fmt.Errorf("failed to process transformation graph: %w", err)
+	}
+
+	replication.Status.LastTransferredVersion = component.Status.Component.Version
+	replication.Status.LastTransferredDigest = sourceDigest
+	status.SetCondition(replication, metav1.Condition{
+		Type:    v1alpha1.TransferInProgressCondition,
+		Status:  metav1.ConditionFalse,
+		Reason:  v1alpha1.IdleReason,
+		Message: fmt.Sprintf("transferred component version %s", component.Status.Component.Version),
+	})
+	status.MarkReady(r.EventRecorder, replication, "Successfully transferred component version %s", component.Status.Component.Version)
+
+	return ctrl.Result{}, nil
 }

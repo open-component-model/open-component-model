@@ -90,9 +90,10 @@ var _ = Describe("Replication Controller", func() {
 			}
 		}
 
-		setupSourceAndTarget := func(ctx SpecContext, descs []*descruntime.Descriptor) (*v1alpha1.Component, *v1alpha1.Repository) {
+		setupSourceAndTarget := func(ctx SpecContext, descs []*descruntime.Descriptor) (*v1alpha1.Component, *v1alpha1.Repository, string) {
+			targetPath := GinkgoT().TempDir()
 			_, sourceSpecData := test.SetupCTFComponentVersionRepository(ctx, GinkgoT().TempDir(), descs)
-			_, targetSpecData := test.SetupCTFComponentVersionRepository(ctx, GinkgoT().TempDir(), nil)
+			_, targetSpecData := test.SetupCTFComponentVersionRepository(ctx, targetPath, nil)
 
 			component := test.MockComponent(ctx, "source-component", namespace.GetName(), &test.MockComponentOptions{
 				Client:     k8sClient,
@@ -112,7 +113,7 @@ var _ = Describe("Replication Controller", func() {
 
 			targetRepository := test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), "target-repository", targetSpecData)
 
-			return component, targetRepository
+			return component, targetRepository, targetPath
 		}
 
 		newReplication := func(component *v1alpha1.Component, targetRepository *v1alpha1.Repository) *v1alpha1.Replication {
@@ -131,8 +132,8 @@ var _ = Describe("Replication Controller", func() {
 			}
 		}
 
-		It("discovers the recursive transfer graph through the resolution service", func(ctx SpecContext) {
-			component, targetRepository := setupSourceAndTarget(ctx, []*descruntime.Descriptor{
+		It("transfers the recursive component graph to the target repository", func(ctx SpecContext) {
+			component, targetRepository, targetPath := setupSourceAndTarget(ctx, []*descruntime.Descriptor{
 				newDescriptor(componentName, "1.0.0", descruntime.Reference{
 					ElementMeta: descruntime.ElementMeta{
 						ObjectMeta: descruntime.ObjectMeta{
@@ -151,27 +152,35 @@ var _ = Describe("Replication Controller", func() {
 				test.DeleteObject(ctx, k8sClient, replication)
 			})
 
-			// We should recieve a `errTransferNotImplemented` error eventually if everything worked fine.
-			// Since there was no transfer and the TGD is in memory, there is nothing else to assert right now.
 			Eventually(func(g Gomega) {
 				g.Expect(komega.Get(replication)()).To(Succeed())
 				ready := apimeta.FindStatusCondition(replication.Status.Conditions, v1alpha1.ReadyCondition)
 				g.Expect(ready).NotTo(BeNil())
-				g.Expect(ready.Status).To(Equal(metav1.ConditionFalse))
-				g.Expect(ready.Reason).To(Equal(v1alpha1.ReplicationFailedReason))
-				g.Expect(ready.Message).To(Equal(errTransferNotImplemented.Error()))
+				g.Expect(ready.Status).To(Equal(metav1.ConditionTrue))
 
 				inProgress := apimeta.FindStatusCondition(replication.Status.Conditions, v1alpha1.TransferInProgressCondition)
 				g.Expect(inProgress).NotTo(BeNil())
-				g.Expect(inProgress.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(inProgress.Status).To(Equal(metav1.ConditionFalse))
 			}, timeout, interval).Should(Succeed())
 
 			Expect(replication.Status.Component).NotTo(BeNil())
 			Expect(replication.Status.Component.Version).To(Equal("1.0.0"))
+			Expect(replication.Status.LastTransferredVersion).To(Equal("1.0.0"))
+			Expect(replication.Status.LastTransferredDigest).To(Equal("deadbeef"))
+
+			// Open the target ctf to check all components are where they are supposed to be.
+			targetRepo, _ := test.SetupCTFComponentVersionRepository(ctx, targetPath, nil)
+			parentDesc, err := targetRepo.GetComponentVersion(ctx, componentName, "1.0.0")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(parentDesc.Component.Name).To(Equal(componentName))
+
+			childDesc, err := targetRepo.GetComponentVersion(ctx, childName, "0.1.0")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(childDesc.Component.Name).To(Equal(childName))
 		})
 
 		It("fails discovery when a referenced component version does not exist", func(ctx SpecContext) {
-			component, targetRepository := setupSourceAndTarget(ctx, []*descruntime.Descriptor{
+			component, targetRepository, _ := setupSourceAndTarget(ctx, []*descruntime.Descriptor{
 				newDescriptor(componentName, "1.0.0", descruntime.Reference{
 					ElementMeta: descruntime.ElementMeta{
 						ObjectMeta: descruntime.ObjectMeta{
