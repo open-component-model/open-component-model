@@ -666,10 +666,10 @@ func TestUntag(t *testing.T) {
 	_, err = store.Resolve(ctx, "latest")
 	assert.Error(t, err, "removed tag must not resolve")
 
-	// The blob is still referenced by v1.0.0 — GC must not delete it.
+	// Untag only removes the tag pointer — the blob itself must remain.
 	blobs, err := archive.ListBlobs(ctx)
 	require.NoError(t, err)
-	assert.Contains(t, blobs, digestStr, "shared blob must survive when a sibling tag still exists")
+	assert.Contains(t, blobs, digestStr, "underlying blob must survive untagging")
 }
 
 func TestUntag_NotFound(t *testing.T) {
@@ -682,12 +682,14 @@ func TestUntag_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, errdef.ErrNotFound)
 }
 
-func TestUntag_GC_OrphanManifest(t *testing.T) {
+func TestUntag_LastTag_KeepsBlob(t *testing.T) {
+	// Per the content.Untagger contract, untagging is purely nominal: even when
+	// the removed tag was the only index entry for the manifest, the blob stays.
 	archive := setupTestCTF(t)
 	provider := NewFromCTF(archive)
 	ctx := t.Context()
 
-	content := []byte("orphan manifest")
+	content := []byte("manifest content")
 	manifestDigest := digest.FromBytes(content)
 	require.NoError(t, archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(content))))
 
@@ -704,102 +706,11 @@ func TestUntag_GC_OrphanManifest(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.(*repository).Untag(ctx, "latest"))
 
-	blobs, err := archive.ListBlobs(ctx)
-	require.NoError(t, err)
-	assert.NotContains(t, blobs, manifestDigest.String(), "orphaned manifest blob must be deleted")
-}
-
-func TestUntag_GC_OwnedChildren(t *testing.T) {
-	archive := setupTestCTF(t)
-	provider := NewFromCTF(archive)
-	ctx := t.Context()
-
-	configContent := []byte("config content")
-	configDigest := digest.FromBytes(configContent)
-	require.NoError(t, archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(configContent))))
-
-	layerContent := []byte("layer content")
-	layerDigest := digest.FromBytes(layerContent)
-	require.NoError(t, archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(layerContent))))
-
-	manifestJSON := fmt.Sprintf(
-		`{"schemaVersion":2,"config":{"digest":"%s","size":%d},"layers":[{"digest":"%s","size":%d}]}`,
-		configDigest.String(), len(configContent), layerDigest.String(), len(layerContent),
-	)
-	manifestContent := []byte(manifestJSON)
-	manifestDigest := digest.FromBytes(manifestContent)
-	require.NoError(t, archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(manifestContent))))
-
-	idx := v1.NewIndex()
-	idx.AddArtifact(v1.ArtifactMetadata{
-		Repository: "test-repo",
-		Tag:        "latest",
-		Digest:     manifestDigest.String(),
-		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
-	})
-	require.NoError(t, archive.SetIndex(ctx, idx))
-
-	store, err := provider.StoreForReference(ctx, "test-repo:latest")
-	require.NoError(t, err)
-	require.NoError(t, store.(*repository).Untag(ctx, "latest"))
+	_, err = store.Resolve(ctx, "latest")
+	assert.Error(t, err, "removed tag must not resolve")
 
 	blobs, err := archive.ListBlobs(ctx)
 	require.NoError(t, err)
-	assert.NotContains(t, blobs, manifestDigest.String(), "orphaned manifest must be deleted")
-	assert.NotContains(t, blobs, configDigest.String(), "orphaned config blob must be deleted")
-	assert.NotContains(t, blobs, layerDigest.String(), "orphaned layer blob must be deleted")
-}
-
-func TestUntag_GC_SharedChildren(t *testing.T) {
-	// Two manifests share the same layer blob. Remove the last tag of one manifest.
-	// Only the orphaned manifest and its exclusive config should be deleted; the shared layer must remain.
-	archive := setupTestCTF(t)
-	provider := NewFromCTF(archive)
-	ctx := t.Context()
-
-	sharedLayerContent := []byte("shared layer")
-	sharedLayerDigest := digest.FromBytes(sharedLayerContent)
-	require.NoError(t, archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(sharedLayerContent))))
-
-	configAContent := []byte("config A")
-	configADigest := digest.FromBytes(configAContent)
-	require.NoError(t, archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(configAContent))))
-
-	manifestAJSON := fmt.Sprintf(
-		`{"schemaVersion":2,"config":{"digest":"%s","size":%d},"layers":[{"digest":"%s","size":%d}]}`,
-		configADigest.String(), len(configAContent), sharedLayerDigest.String(), len(sharedLayerContent),
-	)
-	manifestAContent := []byte(manifestAJSON)
-	manifestADigest := digest.FromBytes(manifestAContent)
-	require.NoError(t, archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(manifestAContent))))
-
-	configBContent := []byte("config B")
-	configBDigest := digest.FromBytes(configBContent)
-	require.NoError(t, archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(configBContent))))
-
-	manifestBJSON := fmt.Sprintf(
-		`{"schemaVersion":2,"config":{"digest":"%s","size":%d},"layers":[{"digest":"%s","size":%d}]}`,
-		configBDigest.String(), len(configBContent), sharedLayerDigest.String(), len(sharedLayerContent),
-	)
-	manifestBContent := []byte(manifestBJSON)
-	manifestBDigest := digest.FromBytes(manifestBContent)
-	require.NoError(t, archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(manifestBContent))))
-
-	idx := v1.NewIndex()
-	idx.AddArtifact(v1.ArtifactMetadata{Repository: "test-repo", Tag: "v1.0.0", Digest: manifestADigest.String()})
-	idx.AddArtifact(v1.ArtifactMetadata{Repository: "test-repo", Tag: "v2.0.0", Digest: manifestBDigest.String()})
-	require.NoError(t, archive.SetIndex(ctx, idx))
-
-	storeA, err := provider.StoreForReference(ctx, "test-repo:v1.0.0")
-	require.NoError(t, err)
-	require.NoError(t, storeA.(*repository).Untag(ctx, "v1.0.0"))
-
-	blobs, err := archive.ListBlobs(ctx)
-	require.NoError(t, err)
-	assert.NotContains(t, blobs, manifestADigest.String(), "removed manifest must be deleted")
-	assert.NotContains(t, blobs, configADigest.String(), "exclusive config of removed manifest must be deleted")
-	assert.Contains(t, blobs, manifestBDigest.String(), "sibling manifest must survive")
-	assert.Contains(t, blobs, configBDigest.String(), "sibling config must survive")
-	assert.Contains(t, blobs, sharedLayerDigest.String(), "shared layer must survive")
+	assert.Contains(t, blobs, manifestDigest.String(), "blob must not be deleted by untagging")
 }
 
