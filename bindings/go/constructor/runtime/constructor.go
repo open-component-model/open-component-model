@@ -56,28 +56,15 @@ const (
 	ExternalRelation ResourceRelation = "external"
 )
 
-// OwnershipPolicy controls whether ownership (ADR  0016) is recorded for a resource during construction (ocm add).
-type OwnershipPolicy int
+// OwnershipPolicy controls whether ownership (ADR 0016) is recorded for a resource during construction (ocm add).
+type OwnershipPolicy string
 
 const (
 	// OwnershipPolicyNever is the default: no ownership is recorded.
-	OwnershipPolicyNever OwnershipPolicy = iota
+	OwnershipPolicyNever OwnershipPolicy = "Never"
 	// OwnershipPolicyAlways records ownership for the resource.
-	OwnershipPolicyAlways
+	OwnershipPolicyAlways OwnershipPolicy = "Always"
 )
-
-// String renders the policy by name so it matches the v1 spelling ("Never"/"Always")
-// in logs and error messages rather than leaking the underlying enum value.
-func (p OwnershipPolicy) String() string {
-	switch p {
-	case OwnershipPolicyAlways:
-		return "Always"
-	case OwnershipPolicyNever:
-		return "Never"
-	default:
-		return fmt.Sprintf("OwnershipPolicy(%d)", int(p))
-	}
-}
 
 // A Resource is a delivery artifact, intended for deployment into a runtime environment, or describing additional content,
 // relevant for a deployment mechanism.
@@ -112,7 +99,7 @@ type Resource struct {
 type ResourceOptions struct {
 	// OwnershipPolicy controls whether ownership
 	// (ADR 0016) is recorded for this resource during construction.
-	// Defaults to OwnershipPolicyNever when unset.
+	// The zero value (empty) records no ownership, same as OwnershipPolicyNever.
 	OwnershipPolicy OwnershipPolicy `json:"-"`
 }
 
