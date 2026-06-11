@@ -84,7 +84,7 @@ require (
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260610112036-de724a6601de // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260610112036-de724a6601de // indirect
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260608153443-a43840d089fe // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260610112036-de724a6601de // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
