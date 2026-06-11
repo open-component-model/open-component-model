@@ -83,14 +83,14 @@ Quick reference:
 
 | Configured identity                                                  | Request                    | Result | Why                         |
 |----------------------------------------------------------------------|----------------------------|--------|-----------------------------|
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/my-repo` | `ghcr.io/my-org/my-repo`   | ✅      | Exact path match            |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*`       | `ghcr.io/my-org/my-repo`   | ✅      | `*` matches `my-repo`       |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`                           | `ghcr.io/my-org/my-repo`   | ✅      | No path — accepts any       |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org`         | `ghcr.io/my-org/my-repo`   | ❌      | `my-org` ≠ `my-org/my-repo` |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*`       | `ghcr.io/other-org/foo`    | ❌      | `other-org` ≠ `my-org`      |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: https`        | `https://ghcr.io:443/repo` | ✅      | Port defaults to `443`      |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: http`         | `https://ghcr.io/repo`     | ❌      | `http` ≠ `https`            |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`port: 5000`           | `https://ghcr.io:443/repo` | ❌      | `5000` ≠ `443`              |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/my-repo` | `ghcr.io/my-org/my-repo`   | Yes    | Exact path match            |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*`       | `ghcr.io/my-org/my-repo`   | Yes    | `*` matches `my-repo`       |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`                           | `ghcr.io/my-org/my-repo`   | Yes    | No path — accepts any       |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org`         | `ghcr.io/my-org/my-repo`   | No     | `my-org` ≠ `my-org/my-repo` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*`       | `ghcr.io/other-org/foo`    | No     | `other-org` ≠ `my-org`      |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: https`        | `https://ghcr.io:443/repo` | Yes    | Port defaults to `443`      |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: http`         | `https://ghcr.io/repo`     | No     | `http` ≠ `https`            |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`port: 5000`           | `https://ghcr.io:443/repo` | No     | `5000` ≠ `443`              |
 
 {{< callout context="note" >}}
 `*` matches exactly one path segment. It does **not** match across `/` separators. Use `my-org/*/*` to match two-level
@@ -99,8 +99,8 @@ paths like `my-org/team/repo`.
 
 ### Example A: Simple Hostname Match
 
-The simplest case: a single consumer entry with just a `hostname`. Because no `path` is configured, it acts as a *
-*catch-all** for that host.
+The simplest case: a single consumer entry with just a `hostname`. Because no `path` is configured, it acts as a
+**catch-all** for that host.
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -117,11 +117,11 @@ configurations:
               password: ghp_token
 ```
 
-| Request                   | Result           | Why                                           |
-|---------------------------|------------------|-----------------------------------------------|
-| `ghcr.io/my-org/my-repo`  | ✅ `ghcr-user`    | No `path` in config → accepts any path        |
-| `ghcr.io/other-org/thing` | ✅ `ghcr-user`    | Same — hostname matches, path is unrestricted |
-| `docker.io/library/nginx` | ❌ No credentials | `docker.io` ≠ `ghcr.io`                       |
+| Request                   | Result         | Why                                           |
+|---------------------------|----------------|-----------------------------------------------|
+| `ghcr.io/my-org/my-repo`  | `ghcr-user`    | No `path` in config → accepts any path        |
+| `ghcr.io/other-org/thing` | `ghcr-user`    | Same — hostname matches, path is unrestricted |
+| `docker.io/library/nginx` | No credentials | `docker.io` ≠ `ghcr.io`                       |
 
 **Takeaway:** A hostname-only entry is the broadest match. It catches every request to that host regardless of path,
 scheme, or port.
@@ -168,10 +168,10 @@ configurations:
 
 | Request                     | Matches A? | Matches B? | Matches C? | Why                                                                 |
 |-----------------------------|------------|------------|------------|---------------------------------------------------------------------|
-| `ghcr.io/my-org/production` | ✅          | ✅          | ✅          | Exact path match on A; `*` also matches `production`; C has no path |
-| `ghcr.io/my-org/staging`    | ❌          | ✅          | ✅          | `staging` ≠ `production`, but `*` matches `staging`                 |
-| `ghcr.io/my-org/team/repo`  | ❌          | ❌          | ✅          | `*` matches **one** segment — `team/repo` has two. Only C matches   |
-| `ghcr.io/other-org/repo`    | ❌          | ❌          | ✅          | `other-org` ≠ `my-org`; only the hostname catch-all matches         |
+| `ghcr.io/my-org/production` | Yes        | Yes        | Yes        | Exact path match on A; `*` also matches `production`; C has no path |
+| `ghcr.io/my-org/staging`    | No         | Yes        | Yes        | `staging` ≠ `production`, but `*` matches `staging`                 |
+| `ghcr.io/my-org/team/repo`  | No         | No         | Yes        | `*` matches **one** segment — `team/repo` has two. Only C matches   |
+| `ghcr.io/other-org/repo`    | No         | No         | Yes        | `other-org` ≠ `my-org`; only the hostname catch-all matches         |
 
 {{< callout context="note" >}}
 `*` matches exactly one path segment. It does **not** match across `/` separators. To match two levels like
@@ -212,12 +212,12 @@ configurations:
               password: ghp_my_org_token
 ```
 
-| Request                            | Consumer A (`*/*`) | Consumer B (`my-org/*`) | Result                         | Why                                          |
-|------------------------------------|--------------------|-------------------------|--------------------------------|----------------------------------------------|
-| `ghcr.io/my-org/repo`              | ✅                  | ✅                       | ⚠️ `org-user` or `my-org-user` | Both match — the winner is not guaranteed    |
-| `ghcr.io/other-org/project`        | ✅                  | ❌                       | ✅ `org-user`                   | Only A matches (two-level wildcard)          |
-| `ghcr.io/my-org/team/subteam/repo` | ❌                  | ❌                       | ❌ No credentials               | Path has 4 segments, `*/*` only matches 2    |
-| `ghcr.io/singlelevel`              | ❌                  | ❌                       | ❌ No credentials               | Path has 1 segment, `*/*` requires exactly 2 |
+| Request                            | Consumer A (`*/*`) | Consumer B (`my-org/*`) | Result                      | Why                                          |
+|------------------------------------|--------------------|-------------------------|-----------------------------|----------------------------------------------|
+| `ghcr.io/my-org/repo`              | Yes                | Yes                     | `org-user` or `my-org-user` | Both match — the winner is not guaranteed    |
+| `ghcr.io/other-org/project`        | Yes                | No                      | `org-user`                  | Only A matches (two-level wildcard)          |
+| `ghcr.io/my-org/team/subteam/repo` | No                 | No                      | No credentials              | Path has 4 segments, `*/*` only matches 2    |
+| `ghcr.io/singlelevel`              | No                 | No                      | No credentials              | Path has 1 segment, `*/*` requires exactly 2 |
 
 {{< callout context="tip" >}}
 `*/*` matches **exactly** two path segments. For three levels, use `*/*/*`, and so on. Each `*` matches one segment
@@ -270,15 +270,15 @@ configurations:
               password: local_pass
 ```
 
-| Request                           | Result           | Why                                                                                                                  |
-|-----------------------------------|------------------|----------------------------------------------------------------------------------------------------------------------|
-| `https://ghcr.io/my-org/repo`     | ✅ `secure-user`  | Scheme matches; no port defaults to `443` on both sides                                                              |
-| `https://ghcr.io:443/repo`        | ✅ `secure-user`  | Explicit `443` equals the default `443` for `https`                                                                  |
-| `https://ghcr.io:8443/repo`       | ❌ No credentials | Port `8443` ≠ default `443`                                                                                          |
-| `http://ghcr.io/repo`             | ❌ No credentials | Scheme `http` ≠ `https`                                                                                              |
-| `ghcr.io/repo` (no scheme)        | ✅ `secure-user`  | Empty scheme matches any scheme; the configured `https` becomes the effective scheme, so both ports default to `443` |
-| `myregistry.local:5000/repo`      | ✅ `local-user`   | Port `5000` matches; no scheme on either side                                                                        |
-| `myregistry.local/repo` (no port) | ❌ No credentials | No scheme on either side means no default port — empty ≠ `5000`                                                      |
+| Request                           | Result         | Why                                                                                                                  |
+|-----------------------------------|----------------|----------------------------------------------------------------------------------------------------------------------|
+| `https://ghcr.io/my-org/repo`     | `secure-user`  | Scheme matches; no port defaults to `443` on both sides                                                              |
+| `https://ghcr.io:443/repo`        | `secure-user`  | Explicit `443` equals the default `443` for `https`                                                                  |
+| `https://ghcr.io:8443/repo`       | No credentials | Port `8443` ≠ default `443`                                                                                          |
+| `http://ghcr.io/repo`             | No credentials | Scheme `http` ≠ `https`                                                                                              |
+| `ghcr.io/repo` (no scheme)        | `secure-user`  | Empty scheme matches any scheme; the configured `https` becomes the effective scheme, so both ports default to `443` |
+| `myregistry.local:5000/repo`      | `local-user`   | Port `5000` matches; no scheme on either side                                                                        |
+| `myregistry.local/repo` (no port) | No credentials | No scheme on either side means no default port — empty ≠ `5000`                                                      |
 
 The scheme check only fails when **both** sides specify a scheme and the values differ. If one side omits the scheme,
 it matches anything, and the side that does specify one determines the default port for the comparison.
@@ -309,13 +309,13 @@ configurations:
               password: oci_token
 ```
 
-| Request                                     | Result           | Why                                                           |
-|---------------------------------------------|------------------|---------------------------------------------------------------|
-| `oci://registry.example.com:443/repo`       | ✅ `oci-user`     | Same scheme (after normalization), same explicit port         |
-| `oci://registry.example.com/repo` (no port) | ✅ `oci-user`     | `oci` is normalized to `https`, so the port defaults to `443` |
-| `https://registry.example.com:443/repo`     | ✅ `oci-user`     | `oci` ≡ `https` after normalization                           |
-| `oci://registry.example.com:5000/repo`      | ❌ No credentials | Port `5000` ≠ `443`                                           |
-| `http://registry.example.com/repo`          | ❌ No credentials | `http` ≠ `https` (the normalized form of `oci`)               |
+| Request                                     | Result         | Why                                                           |
+|---------------------------------------------|----------------|---------------------------------------------------------------|
+| `oci://registry.example.com:443/repo`       | `oci-user`     | Same scheme (after normalization), same explicit port         |
+| `oci://registry.example.com/repo` (no port) | `oci-user`     | `oci` is normalized to `https`, so the port defaults to `443` |
+| `https://registry.example.com:443/repo`     | `oci-user`     | `oci` ≡ `https` after normalization                           |
+| `oci://registry.example.com:5000/repo`      | No credentials | Port `5000` ≠ `443`                                           |
+| `http://registry.example.com/repo`          | No credentials | `http` ≠ `https` (the normalized form of `oci`)               |
 
 {{< callout context="note" >}}
 `oci` is an **alias for `https`** in the identity matcher. A config entry with `scheme: oci` matches `https://`
