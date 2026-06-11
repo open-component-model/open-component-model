@@ -142,7 +142,7 @@ func TestExample_TransferCTFtoCTF(t *testing.T) {
 // transfer using a repository provider that applies custom HTTP timeouts.
 //
 // In production you would set these timeouts to match your network constraints.
-// Here we use the defaults (nil config resolves to 30s) just to show the wiring.
+// Here we set explicit values to demonstrate the wiring pattern.
 func TestExample_Transfer_WithHTTPConfig(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()

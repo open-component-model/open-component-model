@@ -110,7 +110,7 @@ ocm --loglevel debug get componentversion ghcr.io/open-component-model//ocm.soft
 
 {{< details "Expected output (excerpt)" >}}
 ```text
-DEBUG  http config resolved  timeout=15s tlsHandshakeTimeout=10s hosts=map[ghcr.io:443:{...}]
+time=2026-06-10T17:25:11.071+02:00 level=DEBUG msg="http config resolved" timeout=15s tlsHandshakeTimeout=10s hosts=map[]
 ```
 {{< /details >}}
 
@@ -172,11 +172,20 @@ fields including those in the `hosts` map.
 
 ### Symptom: per-host override not taking effect
 
-**Cause:** The host key does not include the port, but the registry listens on
-a non-default port (e.g. `artifactory.corp` instead of `artifactory.corp:5000`).
+**Cause:** The `hosts` key does not match the URL's host part exactly. Matching
+is a plain string lookup against `request.URL.Host` — first against
+`hostname:port`, then falling back to the bare `hostname`. Common pitfalls:
 
-**Fix:** Always include the port in the `hosts` key when the registry is not on
-the standard HTTPS port (443).
+- Typo in the hostname or port
+- Including the scheme in the key (e.g. `https://ghcr.io` instead of `ghcr.io`)
+- Including a path (e.g. `ghcr.io/my-org` instead of `ghcr.io`)
+- Missing port when the registry listens on a non-default port
+  (e.g. `artifactory.corp` instead of `artifactory.corp:5000`)
+- Casing mismatch (Go normalises URL hostnames to lowercase)
+
+**Fix:** Set the key to exactly what appears as the host part of the registry
+URL — hostname only when the port is implicit (`443` for HTTPS), or
+`hostname:port` when it is not. No scheme, no path, lowercase.
 
 ## Related Documentation
 
