@@ -199,15 +199,19 @@ If you are unsure which algorithm to use, specify `algorithm: RSASSA-PSS`.
 
 ### Credential Properties
 
-| Property               | Used For     | Description                          |
-|------------------------|--------------|--------------------------------------|
-| `private_key_pem`      | Signing      | Inline PEM-encoded private key       |
-| `private_key_pem_file` | Signing      | Path to PEM-encoded private key file |
-| `public_key_pem`       | Verification | Inline PEM-encoded public key        |
-| `public_key_pem_file`  | Verification | Path to PEM-encoded public key file  |
+| Property            | Used For     | Description                          |
+|---------------------|--------------|--------------------------------------|
+| `privateKeyPEM`     | Signing      | Inline PEM-encoded private key       |
+| `privateKeyPEMFile` | Signing      | Path to PEM-encoded private key file |
+| `publicKeyPEM`      | Verification | Inline PEM-encoded public key        |
+| `publicKeyPEMFile`  | Verification | Path to PEM-encoded public key file  |
 
-You can specify both `private_key_pem_file` and `public_key_pem_file` in the same entry to use it for both signing and
+You can specify both `privateKeyPEMFile` and `publicKeyPEMFile` in the same entry to use it for both signing and
 verification.
+
+When using the legacy `Credentials/v1` `properties:` map instead of `RSACredentials/v1`, the old snake_case keys
+(`private_key_pem`, `private_key_pem_file`, `public_key_pem`, `public_key_pem_file`) are still accepted as a deprecated
+backward-compatibility fallback.
 
 ### Matching Behavior
 

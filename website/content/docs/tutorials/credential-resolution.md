@@ -72,10 +72,12 @@ Matching runs three chained matchers **in order** — all three must pass:
 1. **Path matcher** — compares `path` using Go's `path.Match` (glob). If the configured entry has no `path`, any request
    path is accepted. `*` matches exactly one segment (not across `/`).
 2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports: `https` → `443`, `http` → `80`.
-   Schemes must be equal (if neither side specifies one, they match).
+   Schemes must be equal after normalization (`oci` is normalized to `https`); if either side omits the scheme, it
+   matches any scheme.
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
-If any matcher fails, the entry is skipped. **First match wins** — OCM returns the first matching entry it finds.
+If any matcher fails, the entry is skipped. **First match wins** — OCM returns the first matching entry it finds. The
+entries are scanned in no guaranteed order, so if several entries match the same request, the winner is arbitrary.
 
 Quick reference:
 
@@ -177,7 +179,7 @@ configurations:
 {{< /callout >}}
 
 **Takeaway:** OCM first tries an exact string match on the full identity. If that fails, it iterates all configured
-entries and returns the first wildcard match.
+entries (in no guaranteed order) and returns the first wildcard match.
 
 ### Example B2: Two-Level Wildcard Matching (`*/*`)
 
@@ -198,7 +200,7 @@ configurations:
             properties:
               username: org-user
               password: ghp_org_token
-      # Consumer B: single-level wildcard (more specific)
+      # Consumer B: single-level wildcard scoped to one org
       - identities:
           - type: OCIRegistry
             hostname: ghcr.io
@@ -210,20 +212,27 @@ configurations:
               password: ghp_my_org_token
 ```
 
-| Request                            | Consumer A (`*/*`) | Consumer B (`my-org/*`) | Result            | Why                                          |
-|------------------------------------|--------------------|-------------------------|-------------------|----------------------------------------------|
-| `ghcr.io/my-org/repo`              | ✅                 | ✅                      | ✅ `my-org-user`  | B matches first (more specific)              |
-| `ghcr.io/other-org/project`        | ✅                 | ❌                      | ✅ `org-user`     | Only A matches (two-level wildcard)          |
-| `ghcr.io/my-org/team/subteam/repo` | ❌                 | ❌                      | ❌ No credentials | Path has 4 segments, `*/*` only matches 2    |
-| `ghcr.io/singlelevel`              | ❌                 | ❌                      | ❌ No credentials | Path has 1 segment, `*/*` requires exactly 2 |
+| Request                            | Consumer A (`*/*`) | Consumer B (`my-org/*`) | Result                        | Why                                          |
+|------------------------------------|--------------------|-------------------------|-------------------------------|----------------------------------------------|
+| `ghcr.io/my-org/repo`              | ✅                 | ✅                      | ⚠️ `org-user` or `my-org-user` | Both match — the winner is not guaranteed    |
+| `ghcr.io/other-org/project`        | ✅                 | ❌                      | ✅ `org-user`                 | Only A matches (two-level wildcard)          |
+| `ghcr.io/my-org/team/subteam/repo` | ❌                 | ❌                      | ❌ No credentials             | Path has 4 segments, `*/*` only matches 2    |
+| `ghcr.io/singlelevel`              | ❌                 | ❌                      | ❌ No credentials             | Path has 1 segment, `*/*` requires exactly 2 |
 
 {{< callout context="tip" >}}
 `*/*` matches **exactly** two path segments. For three levels, use `*/*/*`, and so on. Each `*` matches one segment
 between `/` separators.
 {{< /callout >}}
 
-**Takeaway:** Use `*/*` when you want to match any two-segment path structure (like organization/repository) while still
-being more specific than a hostname-only catch-all.
+{{< callout context="caution" >}}
+**Wildcard precedence is not guaranteed.** An exact identity match always wins, but when several wildcard entries match
+the same request, the resolver returns the first match it finds while scanning an unordered collection — there is no
+"most specific pattern wins" ranking. If overlapping patterns carry different credentials, either one may be returned.
+Keep wildcard patterns non-overlapping.
+{{< /callout >}}
+
+**Takeaway:** Use `*/*` when you want to match any two-segment path structure (like organization/repository), and avoid
+overlapping wildcard patterns with different credentials.
 
 ### Example C: URL Normalization — Scheme and Port Defaults
 
@@ -267,21 +276,21 @@ configurations:
 | `https://ghcr.io:443/repo`        | ✅ `secure-user`  | Explicit `443` equals the default `443` for `https`     |
 | `https://ghcr.io:8443/repo`       | ❌ No credentials | Port `8443` ≠ default `443`                             |
 | `http://ghcr.io/repo`             | ❌ No credentials | Scheme `http` ≠ `https`                                 |
-| `ghcr.io/repo` (no scheme)        | ❌ No credentials | Empty scheme ≠ `https` — schemes must match             |
+| `ghcr.io/repo` (no scheme)        | ✅ `secure-user`  | Empty scheme matches any scheme; the configured `https` becomes the effective scheme, so both ports default to `443` |
 | `myregistry.local:5000/repo`      | ✅ `local-user`   | Port `5000` matches; no scheme on either side           |
-| `myregistry.local/repo` (no port) | ❌ No credentials | No scheme means no default port — empty ≠ `5000`        |
+| `myregistry.local/repo` (no port) | ❌ No credentials | No scheme on either side means no default port — empty ≠ `5000` |
 
-**Takeaway:** Port defaults only apply when a `scheme` is present. If you omit `scheme` from both the config and the
-request, ports are compared literally.
+The scheme check only fails when **both** sides specify a scheme and the values differ. If one side omits the scheme,
+it matches anything, and the side that does specify one determines the default port for the comparison.
+
+**Takeaway:** Port defaults apply when either the config or the request specifies a `scheme`. If both omit it, ports
+are compared literally.
 
 ### Example D: The `oci` Scheme
 
-Some OCI tools use `oci://` URLs instead of `https://`. When OCM builds a lookup identity from an `oci://` URL, it
-treats `oci` like `https` and explicitly sets **port 443**. However, the identity matcher only has built-in port
-defaults for `https` → `443` and `http` → `80` — the `oci` scheme has **no default port**.
-
-In practice this works because OCM sets port `443` explicitly on both sides for `oci://` URLs, so they match via literal
-comparison.
+Some OCI tools use `oci://` URLs instead of `https://`. The identity matcher normalizes `oci` to `https` before
+comparing schemes, so the two are **equivalent**: a config with `scheme: oci` matches both `oci://` and `https://`
+requests. Because normalization happens before port defaulting, the `https` default port `443` also applies to `oci`.
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -300,20 +309,22 @@ configurations:
               password: oci_token
 ```
 
-| Request                                     | Result            | Why                                                      |
-|---------------------------------------------|-------------------|----------------------------------------------------------|
-| `oci://registry.example.com:443/repo`       | ✅ `oci-user`     | Same scheme, same explicit port                          |
-| `oci://registry.example.com/repo` (no port) | ❌ No credentials | `oci` has no default port in the matcher — empty ≠ `443` |
-| `https://registry.example.com:443/repo`     | ❌ No credentials | Scheme `https` ≠ `oci`                                   |
-| `oci://registry.example.com:5000/repo`      | ❌ No credentials | Port `5000` ≠ `443`                                      |
+| Request                                     | Result            | Why                                                       |
+|---------------------------------------------|-------------------|-----------------------------------------------------------|
+| `oci://registry.example.com:443/repo`       | ✅ `oci-user`     | Same scheme (after normalization), same explicit port     |
+| `oci://registry.example.com/repo` (no port) | ✅ `oci-user`     | `oci` is normalized to `https`, so the port defaults to `443` |
+| `https://registry.example.com:443/repo`     | ✅ `oci-user`     | `oci` ≡ `https` after normalization                       |
+| `oci://registry.example.com:5000/repo`      | ❌ No credentials | Port `5000` ≠ `443`                                       |
+| `http://registry.example.com/repo`          | ❌ No credentials | `http` ≠ `https` (the normalized form of `oci`)           |
 
-{{< callout context="caution" >}}
-`oci` and `https` are **different schemes** — they are never interchangeable. If your config uses `scheme: oci`, only
-`oci://` requests will match. Always include an explicit `port` when using the `oci` scheme.
+{{< callout context="note" >}}
+`oci` is an **alias for `https`** in the identity matcher. A config entry with `scheme: oci` matches `https://`
+requests and vice versa, and the default port `443` applies. The explicit `port: "443"` in the config above is
+therefore optional.
 {{< /callout >}}
 
-**Takeaway:** When using the `oci` scheme, always specify `port: "443"` explicitly in your config. Unlike `https`, the
-matcher does not infer a default port for `oci`.
+**Takeaway:** Treat `scheme: oci` and `scheme: https` as interchangeable — only `http` is a genuinely different
+scheme.
 
 ### Example E: When Nothing Matches
 
