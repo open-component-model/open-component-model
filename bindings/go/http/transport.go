@@ -1,6 +1,8 @@
 package http
 
 import (
+	"crypto/tls"
+	"log/slog"
 	"net"
 	nethttp "net/http"
 	"time"
@@ -59,6 +61,33 @@ func NewTransport(cfg *httpv1alpha1.TimeoutConfig) *nethttp.Transport {
 	return transport
 }
 
+// NewTransportWithTLS returns an *http.Transport built by NewTransport, with TLS
+// settings applied from tlsCfg. When tlsCfg is nil or InsecureSkipVerify is
+// not set, behaviour is identical to NewTransport.
+//
+// When InsecureSkipVerify is true, a fresh *tls.Config is allocated (or the
+// existing one cloned) and InsecureSkipVerify is set on it. A warning is
+// emitted at construction time. This does not mutate http.DefaultTransport or
+// its TLSClientConfig.
+func NewTransportWithTLS(cfg *httpv1alpha1.TimeoutConfig, tlsCfg *httpv1alpha1.TLSConfig) *nethttp.Transport {
+	transport := NewTransport(cfg)
+	if tlsCfg == nil || tlsCfg.InsecureSkipVerify == nil || !*tlsCfg.InsecureSkipVerify {
+		return transport
+	}
+
+	var tlsConf *tls.Config
+	if transport.TLSClientConfig != nil {
+		tlsConf = transport.TLSClientConfig.Clone()
+	} else {
+		tlsConf = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	tlsConf.InsecureSkipVerify = true
+	transport.TLSClientConfig = tlsConf
+
+	slog.Warn("HTTP transport built with InsecureSkipVerify=true; TLS certificate verification is disabled — connections are vulnerable to MITM attacks")
+	return transport
+}
+
 // newDialer builds the net.Dialer used to replace DialContext when the
 // caller sets either TCP-level timeout. The dialer starts from the same
 // defaults http.DefaultTransport uses (defaultDialTimeout / defaultKeepAlive)
@@ -78,27 +107,21 @@ func newDialer(cfg *httpv1alpha1.TimeoutConfig) *net.Dialer {
 	return dialer
 }
 
-// NewClient returns an *http.Client whose Transport is produced by NewTransport
-// and whose Timeout reflects cfg.Timeout. A nil cfg.Timeout leaves the client
-// with no overall deadline (Go's http.Client default). A nil cfg returns an
-// *http.Client with a default Transport and no Timeout.
-//
-// When cfg carries per-host entries, the transport is fronted by a routing
-// layer that dispatches each request to a transport built from the host's
-// merged TimeoutConfig and applies the host's overall Timeout via a context
-// deadline. http.Client.Timeout is left zero in that case so a per-host
-// timeout can exceed the global.
-//
-// cfg.Timeout (when set without per-host entries) is the overall http.Client
-// deadline and is independent of the transport-level timeouts; setting
-// Timeout alone does NOT also configure TCPDialTimeout, TLSHandshakeTimeout,
-// etc.
+// NewClient returns an *http.Client whose Transport is produced by
+// NewTransportWithTLS and whose Timeout reflects cfg.Timeout. A nil
+// cfg.Timeout leaves the client with no overall deadline (Go's http.Client
+// default). A nil cfg returns an *http.Client with a default Transport and no
+// Timeout.
 //
 // NewClient produces a plain client with no retry behaviour. For the
 // retry-enabled client used for OCI registry traffic, use New.
 func NewClient(cfg *httpv1alpha1.Config) *nethttp.Client {
-	build := func(tc *httpv1alpha1.TimeoutConfig, _ *httpv1alpha1.RetryConfig) nethttp.RoundTripper {
-		return NewTransport(tc)
+	build := func(tc *httpv1alpha1.TimeoutConfig, _ *httpv1alpha1.RetryConfig, tlsc *httpv1alpha1.TLSConfig) nethttp.RoundTripper {
+		rt := nethttp.RoundTripper(NewTransportWithTLS(tc, tlsc))
+		if tlsc != nil && tlsc.InsecureSkipVerify != nil && *tlsc.InsecureSkipVerify {
+			rt = &insecureWarnTransport{base: rt}
+		}
+		return rt
 	}
 	return &nethttp.Client{
 		Transport: buildRoutingTransport(cfg, build),
