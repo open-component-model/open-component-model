@@ -15,51 +15,51 @@ import (
 // BuildGraphDefinition constructs a [transformv1alpha1.TransformationGraphDefinition] that
 // describes how to transfer component versions between repositories.
 //
-// Transfer mappings must be specified via [WithTransfer].
-// Each mapping pairs source components with a target repository and a resolver,
-// enabling N:M routing where different sources feed different targets.
+// cfg carries the declarative transfer settings. A nil cfg and empty enum
+// fields resolve to the defaults: no recursion,
+// [transferv1alpha1.CopyModeLocalBlobResources], and
+// [transferv1alpha1.UploadAsDefault].
+//
+// Each [Mapping] pairs source components with a target repository and a
+// resolver, enabling N:M routing where different sources feed different
+// targets.
 func BuildGraphDefinition(
 	ctx context.Context,
-	opts ...Option,
+	cfg *transferv1alpha1.Config,
+	mappings ...Mapping,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
-	o := Options{}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(&o)
-		}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid transfer config: %w", err)
 	}
 
-	if err := o.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid transfer options: %w", err)
+	resolved := transferv1alpha1.Config{}
+	if cfg != nil {
+		resolved = *cfg
+	}
+	if resolved.CopyMode == "" {
+		resolved.CopyMode = transferv1alpha1.CopyModeLocalBlobResources
+	}
+	if resolved.UploadType == "" {
+		resolved.UploadType = transferv1alpha1.UploadAsDefault
 	}
 
-	roots, err := collectTransferRoots(ctx, &o)
+	roots, err := collectTransferRoots(ctx, mappings)
 	if err != nil {
 		return nil, err
 	}
 
-	copyMode := o.CopyMode
-	if copyMode == "" {
-		copyMode = transferv1alpha1.CopyModeLocalBlobResources
-	}
-	uploadType := o.UploadType
-	if uploadType == "" {
-		uploadType = transferv1alpha1.UploadAsDefault
-	}
-	recursive := int(o.Recursive)
-
 	slog.DebugContext(ctx, "building transfer graph definition",
 		"roots", len(roots),
-		"recursive", recursive,
-		"copyMode", copyMode,
-		"uploadType", uploadType)
+		"recursive", resolved.Recursive,
+		"copyMode", resolved.CopyMode,
+		"uploadType", resolved.UploadType)
 
-	return internal.BuildGraphDefinition(ctx, roots, recursive, copyMode, uploadType)
+	return internal.BuildGraphDefinition(ctx, roots, resolved)
 }
 
-func collectTransferRoots(ctx context.Context, o *Options) (map[string]internal.TransferRoot, error) {
-	if len(o.Mappings) == 0 {
-		return nil, fmt.Errorf("no transfer mappings specified: use WithTransfer")
+func collectTransferRoots(ctx context.Context, mappings []Mapping) (map[string]internal.TransferRoot, error) {
+	if len(mappings) == 0 {
+		return nil, fmt.Errorf("no transfer mappings specified")
 	}
 
 	type rootData struct {
@@ -69,12 +69,12 @@ func collectTransferRoots(ctx context.Context, o *Options) (map[string]internal.
 
 	byKey := make(map[string]*rootData)
 
-	for i, m := range o.Mappings {
+	for i, m := range mappings {
 		if m.Target == nil {
-			return nil, fmt.Errorf("mapping %d has no target: use ToRepositorySpec() in WithTransfer", i)
+			return nil, fmt.Errorf("mapping %d has no target", i)
 		}
 		if m.Resolver == nil {
-			return nil, fmt.Errorf("mapping %d has no resolver: use FromResolver() or FromRepository() in WithTransfer", i)
+			return nil, fmt.Errorf("mapping %d has no resolver", i)
 		}
 
 		ids, err := resolveMapping(ctx, &m)
@@ -113,7 +113,7 @@ func collectTransferRoots(ctx context.Context, o *Options) (map[string]internal.
 
 func resolveMapping(ctx context.Context, m *Mapping) ([]ComponentID, error) {
 	if m.ComponentLister != nil && len(m.Components) > 0 {
-		return nil, fmt.Errorf("cannot combine Component/FromComponents with FromLister in the same mapping")
+		return nil, fmt.Errorf("cannot combine Components with ComponentLister in the same mapping")
 	}
 
 	if m.ComponentLister != nil {
@@ -131,7 +131,7 @@ func resolveMapping(ctx context.Context, m *Mapping) ([]ComponentID, error) {
 	}
 
 	if len(m.Components) == 0 {
-		return nil, fmt.Errorf("no components specified: use Component()")
+		return nil, fmt.Errorf("no components specified in mapping")
 	}
 	return m.Components, nil
 }

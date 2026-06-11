@@ -1,205 +1,213 @@
-package spec
+package spec_test
 
 import (
-	"bytes"
-	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"sigs.k8s.io/yaml"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-func TestConfig_Validate(t *testing.T) {
-	t.Parallel()
+func TestConfig_ParseYAML(t *testing.T) {
+	tests := []struct {
+		name           string
+		yaml           string
+		wantRecursive  spec.Recursive
+		wantCopyMode   spec.CopyMode
+		wantUploadType spec.UploadType
+	}{
+		{
+			name: "all fields",
+			yaml: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    recursive: -1
+    copyMode: allResources
+    uploadType: ociArtifact
+`,
+			wantRecursive:  spec.RecursiveInfinite,
+			wantCopyMode:   spec.CopyModeAllResources,
+			wantUploadType: spec.UploadAsOciArtifact,
+		},
+		{
+			name: "fields omitted stay empty",
+			yaml: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+`,
+			wantRecursive:  spec.RecursiveNone,
+			wantCopyMode:   "",
+			wantUploadType: "",
+		},
+		{
+			name: "unversioned type alias",
+			yaml: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software
+    copyMode: localBlob
+`,
+			wantCopyMode: spec.CopyModeLocalBlobResources,
+		},
+	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var generic genericv1.Config
+			err := genericv1.Scheme.Decode(strings.NewReader(tt.yaml), &generic)
+			require.NoError(t, err)
+			require.Len(t, generic.Configurations, 1)
+
+			var cfg spec.Config
+			err = spec.Scheme.Convert(generic.Configurations[0], &cfg)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantRecursive, cfg.Recursive)
+			assert.Equal(t, tt.wantCopyMode, cfg.CopyMode)
+			assert.Equal(t, tt.wantUploadType, cfg.UploadType)
+		})
+	}
+}
+
+func TestConfig_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		cfg     Config
+		cfg     spec.Config
 		wantErr string
 	}{
-		{"valid empty", Config{}, ""},
-		{"valid all fields", Config{Recursive: -1, CopyMode: CopyModeAllResources, UploadType: UploadAsOciArtifact}, ""},
-		{"valid recursive false", Config{Recursive: 0}, ""},
-		{"valid copyMode localBlob", Config{CopyMode: CopyModeLocalBlobResources}, ""},
-		{"valid uploadType default", Config{UploadType: UploadAsDefault}, ""},
-		{"valid uploadType localBlob", Config{UploadType: UploadAsLocalBlob}, ""},
-		{"invalid copyMode", Config{CopyMode: "garbage"}, "invalid copyMode"},
-		{"invalid uploadType", Config{UploadType: "garbage"}, "invalid uploadType"},
-		{"valid recursive depth", Config{Recursive: 3}, ""},
-		{"invalid recursive below -1", Config{Recursive: -5}, "invalid recursive"},
+		{"valid empty", spec.Config{}, ""},
+		{"valid all fields", spec.Config{Recursive: spec.RecursiveInfinite, CopyMode: spec.CopyModeAllResources, UploadType: spec.UploadAsOciArtifact}, ""},
+		{"valid recursive none", spec.Config{Recursive: spec.RecursiveNone}, ""},
+		{"valid copyMode localBlob", spec.Config{CopyMode: spec.CopyModeLocalBlobResources}, ""},
+		{"valid uploadType default", spec.Config{UploadType: spec.UploadAsDefault}, ""},
+		{"valid uploadType localBlob", spec.Config{UploadType: spec.UploadAsLocalBlob}, ""},
+		{"invalid copyMode", spec.Config{CopyMode: "garbage"}, "invalid copyMode"},
+		{"invalid uploadType", spec.Config{UploadType: "garbage"}, "invalid uploadType"},
+		{"recursive depth not implemented", spec.Config{Recursive: 3}, "not implemented"},
+		{"invalid recursive below -1", spec.Config{Recursive: -5}, "invalid recursive"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			r := require.New(t)
 			err := tc.cfg.Validate()
 			if tc.wantErr == "" {
-				r.NoError(err)
+				require.NoError(t, err)
 			} else {
-				r.ErrorContains(err, tc.wantErr)
+				require.ErrorContains(t, err, tc.wantErr)
 			}
 		})
 	}
 }
 
-func TestConfig_SchemeRoundTrip(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
+func TestMerge(t *testing.T) {
+	t.Run("empty returns nil", func(t *testing.T) {
+		assert.Nil(t, spec.Merge())
+	})
 
-	in := &Config{Recursive: -1, CopyMode: CopyModeAllResources, UploadType: UploadAsOciArtifact}
-	// DefaultType stamps the canonical wire-format type onto a struct that has
-	// none. Asserting the result pins the registration contract from init():
-	// the first alias passed to MustRegisterWithAlias (the versioned form) is
-	// what new writes serialise with. A reorder there would flip this assertion.
-	_, err := Scheme.DefaultType(in)
-	r.NoError(err)
-	r.Equal(runtime.NewVersionedType(ConfigType, Version), in.Type)
+	t.Run("later non-empty fields win", func(t *testing.T) {
+		a := &spec.Config{Recursive: spec.RecursiveInfinite, CopyMode: spec.CopyModeLocalBlobResources, UploadType: spec.UploadAsLocalBlob}
+		b := &spec.Config{CopyMode: spec.CopyModeAllResources}
 
-	versioned := &Config{Type: runtime.NewVersionedType(ConfigType, Version), Recursive: -1, CopyMode: CopyModeAllResources}
-	data, err := json.Marshal(versioned)
-	r.NoError(err)
-	out := &Config{}
-	r.NoError(Scheme.Decode(bytes.NewReader(data), out))
-	r.Equal(versioned.Recursive, out.Recursive)
-	r.Equal(versioned.CopyMode, out.CopyMode)
-}
+		merged := spec.Merge(a, b)
 
-func TestConfig_YAMLRoundTrip(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
+		assert.Equal(t, spec.RecursiveInfinite, merged.Recursive)
+		assert.Equal(t, spec.CopyModeAllResources, merged.CopyMode)
+		assert.Equal(t, spec.UploadAsLocalBlob, merged.UploadType)
+	})
 
-	// Match the production path: CLI's loadTransferConfig parses --transfer-config
-	// files via Scheme.Decode (which yaml.Unmarshals under the hood and respects
-	// the type discriminator), not via raw yaml.Unmarshal.
-	src := []byte("type: transfer.config.ocm.software/v1alpha1\nrecursive: -1\ncopyMode: allResources\nuploadType: ociArtifact\n")
+	t.Run("nil element is skipped", func(t *testing.T) {
+		a := &spec.Config{CopyMode: spec.CopyModeAllResources}
 
-	cfg := &Config{}
-	r.NoError(Scheme.Decode(bytes.NewReader(src), cfg))
-	r.Equal(RecursiveInfinite, cfg.Recursive)
-	r.Equal(CopyModeAllResources, cfg.CopyMode)
-	r.Equal(UploadAsOciArtifact, cfg.UploadType)
+		merged := spec.Merge(nil, a, nil)
 
-	out, err := yaml.Marshal(cfg)
-	r.NoError(err)
-
-	cfg2 := &Config{}
-	r.NoError(Scheme.Decode(bytes.NewReader(out), cfg2))
-	r.Equal(cfg, cfg2)
-}
-
-// TestConfig_RecursiveDepth pins the wire format of [Config.Recursive]: an
-// integer depth where -1 means infinite recursion, 0 (or an omitted field)
-// means no recursion, and n > 0 limits recursion to n levels.
-func TestConfig_RecursiveDepth(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name      string
-		yaml      string
-		wantValue Recursive
-	}{
-		{"omitted", "type: transfer.config.ocm.software/v1alpha1\n", RecursiveNone},
-		{"explicit infinite", "type: transfer.config.ocm.software/v1alpha1\nrecursive: -1\n", RecursiveInfinite},
-		{"explicit none", "type: transfer.config.ocm.software/v1alpha1\nrecursive: 0\n", RecursiveNone},
-		{"explicit depth", "type: transfer.config.ocm.software/v1alpha1\nrecursive: 3\n", 3},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			r := require.New(t)
-			cfg := &Config{}
-			r.NoError(Scheme.Decode(bytes.NewReader([]byte(tc.yaml)), cfg))
-			r.Equal(tc.wantValue, cfg.Recursive)
-		})
-	}
-}
-
-func makeGenericConfig(t *testing.T, entries ...string) *genericv1.Config {
-	t.Helper()
-	cfg := &genericv1.Config{
-		Type: runtime.NewVersionedType(genericv1.ConfigType, genericv1.ConfigTypeV1),
-	}
-	for _, entry := range entries {
-		raw := &runtime.Raw{}
-		require.NoError(t, json.Unmarshal([]byte(entry), raw))
-		cfg.Configurations = append(cfg.Configurations, raw)
-	}
-	return cfg
+		assert.Equal(t, spec.CopyModeAllResources, merged.CopyMode)
+	})
 }
 
 func TestLookupConfig(t *testing.T) {
-	t.Parallel()
+	decode := func(t *testing.T, yaml string) *genericv1.Config {
+		t.Helper()
+		var generic genericv1.Config
+		require.NoError(t, genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+		return &generic
+	}
 
 	t.Run("nil central config", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		cfg, err := LookupConfig(nil)
-		r.NoError(err)
-		r.Nil(cfg)
+		cfg, err := spec.LookupConfig(nil)
+		require.NoError(t, err)
+		assert.Nil(t, cfg)
 	})
 
 	t.Run("no transfer entries", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		generic := makeGenericConfig(t, `{"type": "other.config.ocm.software/v1"}`)
-		cfg, err := LookupConfig(generic)
-		r.NoError(err)
-		r.Nil(cfg)
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: other.config.ocm.software/v1
+`)
+		cfg, err := spec.LookupConfig(generic)
+		require.NoError(t, err)
+		assert.Nil(t, cfg)
 	})
 
 	t.Run("single entry", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		generic := makeGenericConfig(t,
-			`{"type": "transfer.config.ocm.software/v1alpha1", "recursive": -1, "copyMode": "allResources"}`,
-		)
-		cfg, err := LookupConfig(generic)
-		r.NoError(err)
-		r.NotNil(cfg)
-		r.Equal(RecursiveInfinite, cfg.Recursive)
-		r.Equal(CopyModeAllResources, cfg.CopyMode)
-		r.Empty(cfg.UploadType)
-	})
-
-	t.Run("unversioned type alias", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		generic := makeGenericConfig(t,
-			`{"type": "transfer.config.ocm.software", "copyMode": "allResources"}`,
-		)
-		cfg, err := LookupConfig(generic)
-		r.NoError(err)
-		r.NotNil(cfg)
-		r.Equal(CopyModeAllResources, cfg.CopyMode)
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    recursive: -1
+    copyMode: allResources
+`)
+		cfg, err := spec.LookupConfig(generic)
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, spec.RecursiveInfinite, cfg.Recursive)
+		assert.Equal(t, spec.CopyModeAllResources, cfg.CopyMode)
+		assert.Empty(t, cfg.UploadType)
 	})
 
 	t.Run("later entry wins, unset fields fall through", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		generic := makeGenericConfig(t,
-			`{"type": "transfer.config.ocm.software/v1alpha1", "recursive": 3, "copyMode": "localBlob", "uploadType": "localBlob"}`,
-			`{"type": "transfer.config.ocm.software/v1alpha1", "copyMode": "allResources"}`,
-		)
-		cfg, err := LookupConfig(generic)
-		r.NoError(err)
-		r.NotNil(cfg)
-		r.Equal(Recursive(3), cfg.Recursive)
-		r.Equal(CopyModeAllResources, cfg.CopyMode)
-		r.Equal(UploadAsLocalBlob, cfg.UploadType)
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    recursive: -1
+    copyMode: localBlob
+    uploadType: localBlob
+  - type: transfer.config.ocm.software/v1alpha1
+    copyMode: allResources
+`)
+		cfg, err := spec.LookupConfig(generic)
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, spec.RecursiveInfinite, cfg.Recursive)
+		assert.Equal(t, spec.CopyModeAllResources, cfg.CopyMode)
+		assert.Equal(t, spec.UploadAsLocalBlob, cfg.UploadType)
 	})
 
 	t.Run("invalid entry is rejected", func(t *testing.T) {
-		t.Parallel()
-		r := require.New(t)
-		generic := makeGenericConfig(t,
-			`{"type": "transfer.config.ocm.software/v1alpha1", "copyMode": "garbage"}`,
-		)
-		_, err := LookupConfig(generic)
-		r.ErrorContains(err, "invalid copyMode")
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    copyMode: garbage
+`)
+		_, err := spec.LookupConfig(generic)
+		require.ErrorContains(t, err, "invalid copyMode")
+	})
+
+	t.Run("recursive depth is rejected", func(t *testing.T) {
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    recursive: 3
+`)
+		_, err := spec.LookupConfig(generic)
+		require.ErrorContains(t, err, "not implemented")
 	})
 }

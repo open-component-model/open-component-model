@@ -21,8 +21,8 @@ func init() {
 // Config is the canonical wire format for transfer settings. It is carried as an
 // entry inside the central generic configuration
 // (generic.config.ocm.software/v1) and extracted with [LookupConfig].
-// Downstream consumers (CLI, controllers) pass the result into
-// [transfer.FromConfig], so any new transfer setting belongs here first.
+// Downstream consumers (CLI, controllers) pass it directly to
+// [transfer.BuildGraphDefinition], so any new transfer setting belongs here first.
 //
 //	type: generic.config.ocm.software/v1
 //	configurations:
@@ -40,8 +40,8 @@ type Config struct {
 	Type runtime.Type `json:"type"`
 
 	// Recursive configures transferring component references with the parent
-	// component: -1 means infinite recursion, 0 means no recursion, n > 0
-	// limits recursion to n levels. See [Recursive].
+	// component: -1 means infinite recursion, 0 means no recursion. Positive
+	// depths are reserved but not implemented yet. See [Recursive].
 	Recursive Recursive `json:"recursive,omitempty"`
 
 	// CopyMode determines which resources are copied during a transfer operation.
@@ -78,7 +78,10 @@ func (cfg *Config) Validate() error {
 	}
 
 	if cfg.Recursive < RecursiveInfinite {
-		return fmt.Errorf("invalid recursive %d (must be -1 for infinite recursion, 0 for none, or a positive depth)", cfg.Recursive)
+		return fmt.Errorf("invalid recursive %d (must be -1 for infinite recursion or 0 for none)", cfg.Recursive)
+	}
+	if cfg.Recursive > RecursiveNone {
+		return fmt.Errorf("recursive depth %d is not implemented yet (use -1 for infinite recursion or 0 for none)", cfg.Recursive)
 	}
 
 	switch cfg.CopyMode {

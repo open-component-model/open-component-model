@@ -5,22 +5,22 @@
 // versions (and optionally their resources) from source repositories to target
 // repositories. The graph is then executed using the transform/graph/runtime package.
 //
-// Supported repository types include OCI registries and Common Transport Format (CTF)
-// archives. Resources with OCI artifact, local blob, and Helm chart access types are
-// handled during transfer.
+// Transfer settings (recursion, copy mode, upload type) are carried by the wire
+// format [transferv1alpha1.Config], typically extracted from the central generic
+// configuration with [transferv1alpha1.LookupConfig]. Mappings route source
+// components to target repositories and carry the runtime objects (resolvers,
+// repository specs) the wire format cannot serialize:
 //
-// # Basic Usage
-//
-// Use [BuildGraphDefinition] to construct a transformation graph, and [NewDefaultBuilder]
-// to create a pre-configured graph builder that can execute it:
-//
-//	tgd, err := transfer.BuildGraphDefinition(ctx,
-//	    transfer.WithTransfer(
-//	        transfer.Component("ocm.software/mycomponent", "1.0.0"),
-//	        transfer.ToRepositorySpec(targetSpec),
-//	        transfer.FromResolver(repoResolver),
-//	    ),
-//	    transfer.WithCopyMode(transferv1alpha1.CopyModeAllResources),
+//	cfg := &transferv1alpha1.Config{
+//	    Recursive: transferv1alpha1.RecursiveInfinite,
+//	    CopyMode:  transferv1alpha1.CopyModeAllResources,
+//	}
+//	tgd, err := transfer.BuildGraphDefinition(ctx, cfg,
+//	    transfer.Mapping{
+//	        Components: []transfer.ComponentID{{Component: "ocm.software/app", Version: "1.0.0"}},
+//	        Target:     targetSpec,
+//	        Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+//	    },
 //	)
 //	if err != nil {
 //	    return err
@@ -35,79 +35,7 @@
 //	    return err
 //	}
 //
-// # Simple Case — FromRepository
-//
-// For simple transfers from a single repository, use [FromRepository] instead of
-// a full resolver:
-//
-//	tgd, err := transfer.BuildGraphDefinition(ctx,
-//	    transfer.WithTransfer(
-//	        transfer.Component("ocm.software/app", "1.0.0"),
-//	        transfer.ToRepositorySpec(targetSpec),
-//	        transfer.FromRepository(sourceRepo, sourceSpec),
-//	    ),
-//	)
-//
-// # Routing Components to Different Sources and Targets
-//
-// Different components can come from different sources and go to different targets:
-//
-//	tgd, err := transfer.BuildGraphDefinition(ctx,
-//	    transfer.WithTransfer(
-//	        transfer.Component("ocm.software/frontend", "1.0.0"),
-//	        transfer.ToRepositorySpec(registryA),
-//	        transfer.FromResolver(sourceResolverA),
-//	    ),
-//	    transfer.WithTransfer(
-//	        transfer.Component("ocm.software/backend", "2.0.0"),
-//	        transfer.ToRepositorySpec(registryB),
-//	        transfer.FromResolver(sourceResolverB),
-//	    ),
-//	)
-//
-// # Multiple Components to Same Target
-//
-//	tgd, err := transfer.BuildGraphDefinition(ctx,
-//	    transfer.WithTransfer(
-//	        transfer.Component("ocm.software/a", "1.0.0"),
-//	        transfer.Component("ocm.software/b", "2.0.0"),
-//	        transfer.ToRepositorySpec(targetRepo),
-//	        transfer.FromResolver(repoResolver),
-//	    ),
-//	)
-//
-// # Driving the Transfer from a Wire-Format Config
-//
-// The transfer settings (recursive, copy mode, upload type) are also expressed by
-// [transferv1alpha1.Config] - a canonical wire format carried as an entry of
-// type "transfer.config.ocm.software" inside the central generic configuration
-// (generic.config.ocm.software/v1). Downstream consumers (CLI, controllers,
-// other tooling) extract it from a loaded central config with
-// [transferv1alpha1.LookupConfig], or construct it directly. Use [FromConfig]
-// to convert a config into [Option]s alongside the runtime-only mappings:
-//
-//	cfg := &transferv1alpha1.Config{
-//	    Recursive:  transferv1alpha1.RecursiveInfinite,
-//	    CopyMode:   transferv1alpha1.CopyModeAllResources,
-//	    UploadType: transferv1alpha1.UploadAsOciArtifact,
-//	}
-//	if err := cfg.Validate(); err != nil {
-//	    return err
-//	}
-//	tgd, err := transfer.BuildGraphDefinition(ctx,
-//	    append(transfer.FromConfig(cfg),
-//	        transfer.WithTransfer(
-//	            transfer.Component("ocm.software/app", "1.0.0"),
-//	            transfer.ToRepositorySpec(targetSpec),
-//	            transfer.FromResolver(repoResolver),
-//	        ),
-//	    )...,
-//	)
-//
-// [FromConfig] skips empty enum fields - so callers can overlay explicit
-// overrides on top of a partial config without the zero values clobbering
-// them. The resulting [Options] therefore still carries empty enum strings
-// until [BuildGraphDefinition] runs; that's where the empties are resolved to
-// their canonical defaults ([transferv1alpha1.CopyModeLocalBlobResources],
-// [transferv1alpha1.UploadAsDefault]).
+// A nil config uses the defaults (no recursion, local blob resources only).
+// Multiple mappings enable N:M routing where different components come from
+// different sources and go to different targets.
 package transfer

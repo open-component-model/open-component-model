@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/Config.schema.json",
   "title": "Config",
   "type": "object",
-  "description": "Config is the canonical wire format for transfer settings. It is carried as an\nentry inside the central generic configuration\n(generic.config.ocm.software/v1) and extracted with [LookupConfig].\nDownstream consumers (CLI, controllers) pass the result into\n[transfer.FromConfig], so any new transfer setting belongs here first.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: transfer.config.ocm.software/v1alpha1\nrecursive: -1\ncopyMode: localBlob",
+  "description": "Config is the canonical wire format for transfer settings. It is carried as an\nentry inside the central generic configuration\n(generic.config.ocm.software/v1) and extracted with [LookupConfig].\nDownstream consumers (CLI, controllers) pass it directly to\n[transfer.BuildGraphDefinition], so any new transfer setting belongs here first.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: transfer.config.ocm.software/v1alpha1\nrecursive: -1\ncopyMode: localBlob",
   "properties": {
     "copyMode": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.CopyMode",
@@ -12,7 +12,7 @@
     },
     "recursive": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.Recursive",
-      "description": "Recursive configures transferring component references with the parent\ncomponent: -1 means infinite recursion, 0 means no recursion, n \u003e 0\nlimits recursion to n levels. See [Recursive]."
+      "description": "Recursive configures transferring component references with the parent\ncomponent: -1 means infinite recursion, 0 means no recursion. Positive\ndepths are reserved but not implemented yet. See [Recursive]."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
@@ -66,8 +66,9 @@
       "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/Recursive.schema.json",
       "title": "Recursive",
       "type": "integer",
-      "description": "Recursive controls whether component references are transferred along with\ntheir parent component, and how deep that recursion goes: -1 means infinite\nrecursion, 0 means no recursion, and n \u003e 0 limits recursion to n levels.",
-      "minimum": -1
+      "description": "Recursive controls whether component references are transferred along with\ntheir parent component: -1 means infinite recursion, 0 means no recursion.\nValues above 0 are reserved for depth-limited recursion, which is not\nimplemented yet.",
+      "minimum": -1,
+      "maximum": 0
     },
     "ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploadType": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

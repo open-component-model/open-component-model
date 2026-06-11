@@ -53,8 +53,8 @@ type TransferRoot struct {
 //
 // The process has two phases:
 //
-//  1. Discovery: A concurrent DAG discoverer resolves each root component and, if recursive is true,
-//     follows component references to build a complete dependency graph. During discovery, each
+//  1. Discovery: A concurrent DAG discoverer resolves each root component and, if recursion is
+//     enabled, follows component references to build a complete dependency graph. During discovery, each
 //     component's target repositories and resolver are tracked in shared maps (targetMap, resolverMap)
 //     that the discoverer propagates from parent to child.
 //
@@ -68,9 +68,7 @@ type TransferRoot struct {
 func BuildGraphDefinition(
 	ctx context.Context,
 	roots map[string]TransferRoot,
-	recursive int,
-	copyMode transferv1alpha1.CopyMode,
-	uploadType transferv1alpha1.UploadType,
+	cfg transferv1alpha1.Config,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	// Seed the targetMap and resolverMap from explicit roots.
 	// These maps are shared with the discoverer and multiResolver:
@@ -88,7 +86,7 @@ func BuildGraphDefinition(
 	}
 
 	disc := &discoverer{
-		recursive:         recursive,
+		recursive:         cfg.Recursive,
 		discoveredDigests: make(map[string]descruntime.Digest),
 		targetMap:         targetMap,
 		resolverMap:       resolverMap,
@@ -114,7 +112,7 @@ func BuildGraphDefinition(
 	}
 
 	slog.DebugContext(ctx, "starting component discovery",
-		"roots", dagRoots, "recursive", recursive)
+		"roots", dagRoots, "recursive", cfg.Recursive)
 
 	dr := dagsync.NewGraphDiscoverer(&dagsync.GraphDiscovererOptions[string, *discoveryValue]{
 		Roots:      dagRoots,
@@ -137,7 +135,7 @@ func BuildGraphDefinition(
 	// Phase 2: walk the discovered DAG and generate transformation nodes per (component, target) pair.
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, copyMode, uploadType)
+		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, cfg.CopyMode, cfg.UploadType)
 	})
 	if err != nil {
 		return nil, err
