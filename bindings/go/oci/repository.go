@@ -1112,29 +1112,33 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			return nil, fmt.Errorf("failed to resolve reference %q: %w", typed.ImageReference, err)
 		}
 
-		// Pull any ownership referrers (ADR 0016) of the artifact into the stream so
-		// they ride inside the materialized layout and travel to a transfer target,
-		// just as they do for a by-value resource (see
-		// [Repository.getLocalBlobFromIndexOrManifest]). Referrers on a by-reference
-		// image are attached out-of-band via the Referrers API, so without this they
-		// would be left behind when the image is copied. A referrers-query hiccup must
-		// not fail an otherwise-healthy read; continue without them.
-		refs, err := lookupOwnershipReferrers(ctx, src, desc)
-		if err != nil {
-			slogcontext.Log(ctx, slog.LevelWarn, "failed listing ownership referrers; continuing without them", slog.String("reference", typed.ImageReference), slog.Any("err", err))
-		}
-
 		var tags []string
 		if resolved.Tag != "" {
 			tags = []string{typed.ImageReference}
 		}
 		return &ocistream.OCIResourceStream{
-			ReadOnlyStorage:     src,
-			Descriptor:          desc,
-			CopyOpts:            repo.resourceCopyOptions.CopyGraphOptions,
-			TempDir:             repo.tempDir,
-			Tags:                tags,
-			ReferrerDescriptors: refs,
+			ReadOnlyStorage: src,
+			Descriptor:      desc,
+			CopyOpts:        repo.resourceCopyOptions.CopyGraphOptions,
+			TempDir:         repo.tempDir,
+			Tags:            tags,
+			// Pull any ownership referrers (ADR 0016) of the artifact into the stream so
+			// they ride inside the materialized layout and travel to a transfer target,
+			// just as they do for a by-value resource (see
+			// [Repository.getLocalBlobFromIndexOrManifest]). Referrers on a by-reference
+			// image are attached out-of-band via the Referrers API, so without this they
+			// would be left behind when the image is copied. Discovery is deferred to
+			// Materialize so the streaming upload path — which finds its own referrers via
+			// ExtendedCopyGraph — never pays for it. A referrers-query hiccup must not fail
+			// an otherwise-healthy read; continue without them.
+			DiscoverReferrers: func(ctx context.Context) ([]ociImageSpecV1.Descriptor, error) {
+				refs, err := lookupOwnershipReferrers(ctx, src, desc)
+				if err != nil {
+					slogcontext.Log(ctx, slog.LevelWarn, "failed listing ownership referrers; continuing without them", slog.String("reference", typed.ImageReference), slog.Any("err", err))
+					return nil, nil
+				}
+				return refs, nil
+			},
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -1163,17 +1167,14 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 
 	// ExtendedCopyGraph copies the root together with its ownership referrers (ADR
 	// 0016), which a plain CopyGraph would miss because a referrer's subject edge
-	// points back at the root. FindPredecessors restricts the upward walk to just
-	// the ownership referrers of the source artifact — discovered live against the
-	// source — so signatures or other referrers do not ride along. Depth 1 keeps it
-	// to the root's direct referrers, never referrers-of-referrers. With none, it
-	// degenerates to copying the root alone.
+	// points back at the root. The stream reports just those ownership referrers as
+	// the root's predecessors (see [ocistream.OCIResourceStream.Predecessors] /
+	// DiscoverReferrers), so signatures or other referrers do not ride along. Depth
+	// 1 keeps it to the root's direct referrers, never referrers-of-referrers. With
+	// none, it degenerates to copying the root alone.
 	extendedOpts := oras.ExtendedCopyGraphOptions{
 		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
 		Depth:            1,
-		FindPredecessors: func(ctx context.Context, src content.ReadOnlyGraphStorage, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-			return lookupOwnershipReferrers(ctx, src, desc)
-		},
 	}
 	if err := oras.ExtendedCopyGraph(ctx, rs, store, rs.Root(), extendedOpts); err != nil {
 		return nil, fmt.Errorf("failed to stream resource via copy: %w", err)

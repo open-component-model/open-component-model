@@ -22,10 +22,13 @@ type OCIResourceStream struct {
 	CopyOpts   oras.CopyGraphOptions
 	TempDir    string
 	Tags       []string
-	// ReferrerDescriptors are referrer manifests (e.g. ADR 0016 ownership
-	// referrers) reachable from ReadOnlyStorage that must travel with Descriptor.
-	// Exposed via [OCIResourceStream.Referrers].
-	ReferrerDescriptors []ocispec.Descriptor
+	// DiscoverReferrers lazily lists the referrer manifests (e.g. ADR 0016
+	// ownership referrers) of Descriptor that must travel with it. It is the single
+	// discovery hook for both transfer paths: Materialize pulls the result into the
+	// layout, and Predecessors exposes it to oras.ExtendedCopyGraph during a
+	// streaming upload. Discovery is lazy — no network I/O until the stream is
+	// consumed — and nil means no referrers travel.
+	DiscoverReferrers func(ctx context.Context) ([]ocispec.Descriptor, error)
 }
 
 var _ ResourceStream = (*OCIResourceStream)(nil)
@@ -34,22 +37,30 @@ func (s *OCIResourceStream) Root() ocispec.Descriptor {
 	return s.Descriptor
 }
 
-// Predecessors forwards to the underlying storage so the stream satisfies
-// content.ReadOnlyGraphStorage, as oras.ExtendedCopyGraph requires of its source.
-// It returns node's real parents (none if the storage can't report them).
+// Predecessors makes the stream a content.ReadOnlyGraphStorage so it can be the
+// source of an oras.ExtendedCopyGraph. It reports the referrers that must travel
+// with the root (via DiscoverReferrers) as the root's predecessors, so the copy
+// walks them up from Root and carries them along. Every other node — and a stream
+// with no DiscoverReferrers — reports none.
 func (s *OCIResourceStream) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]ocispec.Descriptor, error) {
-	finder, ok := s.ReadOnlyStorage.(content.PredecessorFinder)
-	if !ok {
+	if s.DiscoverReferrers == nil || node.Digest != s.Descriptor.Digest {
 		return nil, nil
 	}
-	return finder.Predecessors(ctx, node)
+	return s.DiscoverReferrers(ctx)
 }
 
 func (s *OCIResourceStream) Materialize(ctx context.Context) (blob.ReadOnlyBlob, error) {
+	var referrers []ocispec.Descriptor
+	if s.DiscoverReferrers != nil {
+		var err error
+		if referrers, err = s.DiscoverReferrers(ctx); err != nil {
+			return nil, err
+		}
+	}
 	return tar.CopyToOCILayoutInMemory(ctx, s.ReadOnlyStorage, s.Descriptor, tar.CopyToOCILayoutOptions{
 		CopyGraphOptions: s.CopyOpts,
 		Tags:             s.Tags,
 		TempDir:          s.TempDir,
-		Referrers:        s.ReferrerDescriptors,
+		Referrers:        referrers,
 	})
 }
