@@ -88,7 +88,7 @@ type: credentials.config.ocm.software/v1
 	assert.Empty(t, result.Consumers)
 }
 
-func TestConvertToV1_ErrorOnNonRaw(t *testing.T) {
+func TestConvertToV1_NonRawTyped(t *testing.T) {
 	internal := &Config{
 		Type: runtime.NewVersionedType("credentials.config.ocm.software", "v1"),
 		Consumers: []Consumer{
@@ -99,8 +99,9 @@ func TestConvertToV1_ErrorOnNonRaw(t *testing.T) {
 		},
 	}
 
-	_, err := ConvertToV1(internal)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected type")
-	assert.Contains(t, err.Error(), "mockTyped")
+	result, err := ConvertToV1(internal)
+	require.NoError(t, err)
+	require.Len(t, result.Consumers, 1)
+	require.Len(t, result.Consumers[0].Credentials, 1)
+	assert.NotNil(t, result.Consumers[0].Credentials[0].Data)
 }

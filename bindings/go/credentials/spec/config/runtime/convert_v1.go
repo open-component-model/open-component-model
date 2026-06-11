@@ -7,6 +7,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+var convertScheme = runtime.NewScheme(runtime.WithAllowUnknown())
+
 func ConvertFromV1(config *v1.Config) *Config {
 	return &Config{
 		Type:         config.Type,
@@ -86,11 +88,11 @@ func convertToV1Consumers(consumers []Consumer) ([]v1.Consumer, error) {
 func convertToV1Credentials(credentials []runtime.Typed) ([]*runtime.Raw, error) {
 	entries := make([]*runtime.Raw, len(credentials))
 	for i, cred := range credentials {
-		raw, ok := cred.(*runtime.Raw)
-		if !ok {
-			return nil, fmt.Errorf("credential at index %d has unexpected type %T, expected *runtime.Raw", i, cred)
+		var raw runtime.Raw
+		if err := convertScheme.Convert(cred, &raw); err != nil {
+			return nil, fmt.Errorf("credential at index %d: %w", i, err)
 		}
-		entries[i] = raw.DeepCopy()
+		entries[i] = &raw
 	}
 	return entries, nil
 }
@@ -98,12 +100,12 @@ func convertToV1Credentials(credentials []runtime.Typed) ([]*runtime.Raw, error)
 func convertToV1Repositories(repositories []RepositoryConfigEntry) ([]v1.RepositoryConfigEntry, error) {
 	entries := make([]v1.RepositoryConfigEntry, len(repositories))
 	for i, repo := range repositories {
-		raw, ok := repo.Repository.(*runtime.Raw)
-		if !ok {
-			return nil, fmt.Errorf("repository at index %d has unexpected type %T, expected *runtime.Raw", i, repo.Repository)
+		var raw runtime.Raw
+		if err := convertScheme.Convert(repo.Repository, &raw); err != nil {
+			return nil, fmt.Errorf("repository at index %d: %w", i, err)
 		}
 		entries[i] = v1.RepositoryConfigEntry{
-			Repository: raw.DeepCopy(),
+			Repository: &raw,
 		}
 	}
 	return entries, nil
