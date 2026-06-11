@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -22,11 +23,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/transfer"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 const (
@@ -76,8 +81,11 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		return fmt.Errorf("failed setting targetRepositoryRef index: %w", err)
 	}
 
+	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Replication{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		WatchesRawSource(eventSource).
 		Watches(
 			&v1alpha1.Component{},
 			handler.EnqueueRequestsFromMapFunc(r.replicationsForIndex(componentRefIndex)),
@@ -202,11 +210,19 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, nil
 	}
 
+	if component.Status.Component.RepositorySpec == nil {
+		const msg = "repository spec in component status must not be nil"
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, msg)
+
+		return ctrl.Result{}, fmt.Errorf("%s for component: %s", msg, component.Name)
+	}
+
 	// The target repository must exist and be ready before a transfer can run.
-	if _, err := util.GetReadyObject[v1alpha1.Repository, *v1alpha1.Repository](ctx, r.Client, client.ObjectKey{
+	targetRepository, err := util.GetReadyObject[v1alpha1.Repository, *v1alpha1.Repository](ctx, r.Client, client.ObjectKey{
 		Namespace: replication.GetNamespace(),
 		Name:      replication.Spec.TargetRepositoryRef.Name,
-	}); err != nil {
+	})
+	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
 
 		var notReadyErr util.NotReadyError
@@ -257,21 +273,93 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		Message: fmt.Sprintf("transferring component version %s", component.Status.Component.Version),
 	})
 
-	// Next: submit the transfer to a dedicated transfer worker pool.
+	sourceSpec := &runtime.Raw{}
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(
+		bytes.NewReader(component.Status.Component.RepositorySpec.Raw), sourceSpec); err != nil {
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to decode source repository spec: %w", err)
+	}
+
+	targetSpec := &runtime.Raw{}
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(
+		bytes.NewReader(targetRepository.Spec.RepositorySpec.Raw), targetSpec); err != nil {
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to decode target repository spec: %w", err)
+	}
+
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, replication.GetNamespace(), configs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
+	}
+
+	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+		RepositorySpec:  sourceSpec,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		RequesterFunc: func() workerpool.RequesterInfo {
+			return workerpool.RequesterInfo{
+				NamespacedName: k8stypes.NamespacedName{
+					Namespace: replication.GetNamespace(),
+					Name:      replication.GetName(),
+				},
+			}
+		},
+	})
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
+	}
+
+	recursive := false
+	copyMode := transfer.CopyModeLocalBlobResources
+	if inlined := replication.Spec.TransferConfig.Inlined; inlined != nil {
+		recursive = inlined.Recursive
+		if inlined.CopyMode == v1alpha1.CopyModeAllResources {
+			copyMode = transfer.CopyModeAllResources
+		}
+	}
+
+	// Phase 1: discover the transfer graph. Descriptor fetches go through the
+	// resolution service, so an uncached component version aborts the walk with
+	// ErrResolutionInProgress and the event from the resolution service will retrigger
+	// this object.
 	//
-	// TODO(replication): build the in-memory TGD with transfer.BuildGraphDefinition
-	// (source resolver from r.Resolver, decoded target repository spec, options derived
-	// from spec.TransferConfig)
-	// Next: submit it to a dedicated transfer worker pool that returns ErrTransferInProgress
-	// for in-flight keys and creates a completion event.
-	// Then: The event retriggers this reconcile. On success, set
-	// LastTransferredVersion/LastTransferredDigest, clear TransferInProgress, and MarkReady;
-	// on failure, clear TransferInProgress and MarkNotReady.
-	// Pretty much the same as the component resolution service.
-	logger.Info("transfer execution not yet implemented; gating complete",
+	// The process takes turns to complete: resolved descriptors are cache hits, each
+	// pass enqueues the next component version of the graph.
+	tgd, err := transfer.BuildGraphDefinition(ctx,
+		transfer.WithTransfer(
+			transfer.Component(component.Status.Component.Component, component.Status.Component.Version),
+			transfer.FromRepository(cacheBackedRepo, sourceSpec),
+			transfer.ToRepositorySpec(targetSpec),
+		),
+		transfer.WithRecursive(recursive),
+		transfer.WithCopyMode(copyMode),
+	)
+	switch {
+	case errors.Is(err, workerpool.ErrResolutionInProgress):
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ResolutionInProgress, err.Error())
+		logger.Info("transfer graph discovery in progress, waiting for resolution event",
+			"component", component.Status.Component.Component,
+			"version", component.Status.Component.Version)
+
+		return ctrl.Result{}, nil
+	case err != nil:
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to build transfer graph definition: %w", err)
+	}
+
+	// TODO: run the TGD.
+	logger.Info("transfer graph definition built; transfer execution not yet implemented",
 		"component", component.Status.Component.Component,
 		"version", component.Status.Component.Version,
-		"sourceDigest", sourceDigest)
+		"sourceDigest", sourceDigest,
+		"transformations", len(tgd.Transformations))
 	status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, errTransferNotImplemented.Error())
 
 	return ctrl.Result{}, errTransferNotImplemented
