@@ -906,18 +906,6 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	return stream.Materialize(ctx)
 }
 
-// lookupOwnershipReferrers lists the ownership referrers (ADR 0016) of subject
-// in store. It returns nil (no error) when store cannot answer referrer
-// queries, leaving the caller to proceed without them.
-func lookupOwnershipReferrers(ctx context.Context, store content.ReadOnlyStorage, subject ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-	graphStore, ok := store.(content.ReadOnlyGraphStorage)
-	if !ok {
-		slogcontext.Log(ctx, slog.LevelDebug, "source store does not support referrer discovery; skipping ownership referrers", slog.String("store", fmt.Sprintf("%T", store)))
-		return nil, nil
-	}
-	return registry.Referrers(ctx, graphStore, subject, annotations.OwnershipArtifactType)
-}
-
 // asGraphStorage adapts a content.ReadOnlyStorage into a
 // content.ReadOnlyGraphStorage. If store already supports graph traversal it is
 // returned unchanged; otherwise it is wrapped in an adapter whose Predecessors
@@ -946,7 +934,7 @@ func (noPredecessorsGraph) Predecessors(context.Context, ociImageSpecV1.Descript
 // to direct referrers of the start node.
 func bestEffortOwnershipReferrers(reference string) func(ctx context.Context, src content.ReadOnlyGraphStorage, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 	return func(ctx context.Context, src content.ReadOnlyGraphStorage, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-		refs, err := lookupOwnershipReferrers(ctx, src, desc)
+		refs, err := registry.Referrers(ctx, src, desc, annotations.OwnershipArtifactType)
 		if err != nil {
 			slogcontext.Log(ctx, slog.LevelWarn, "failed listing ownership referrers; continuing without them", slog.String("reference", reference), slog.Any("err", err))
 			return nil, nil
@@ -1156,24 +1144,15 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 		// CTF-backed stores (and any other ReadOnlyStorage that is not a graph
 		// store) do not support predecessor queries, so wrap them in a no-op
 		// graph adapter — referrers simply do not travel from such sources, which
-		// matches the prior best-effort behaviour.
-		graphSrc := asGraphStorage(src)
-		// Pull any ownership referrers (ADR 0016) of the artifact into the layout
-		// so they ride inside the materialized stream and travel to a transfer
-		// target, just as they do for a by-value resource (see
-		// [Repository.getLocalBlobFromIndexOrManifest]). Referrers on a by-reference
-		// image are attached out-of-band via the Referrers API, so without this
-		// they would be left behind when the image is copied. Discovery happens
-		// lazily inside oras.ExtendedCopyGraph during Materialize; the streaming
-		// upload path sets its own FindPredecessors and does not pay for it twice.
+		// matches the prior best-effort behaviour. Materialize discovers ADR 0016
+		// ownership referrers itself; UploadResourceStream sets its own
+		// FindPredecessors at the call site.
 		return &ocistream.OCIResourceStream{
-			ReadOnlyGraphStorage: graphSrc,
+			ReadOnlyGraphStorage: asGraphStorage(src),
 			Descriptor:           desc,
 			CopyOpts:             repo.resourceCopyOptions.CopyGraphOptions,
 			TempDir:              repo.tempDir,
 			Tags:                 tags,
-			FindPredecessors:     bestEffortOwnershipReferrers(typed.ImageReference),
-			Depth:                1,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
