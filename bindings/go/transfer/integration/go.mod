@@ -126,7 +126,7 @@ require (
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260610112036-de724a6601de // indirect
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260610112036-de724a6601de // indirect
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260608153443-a43840d089fe // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260610112036-de724a6601de // indirect
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260610112036-de724a6601de // indirect
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260610112036-de724a6601de // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect

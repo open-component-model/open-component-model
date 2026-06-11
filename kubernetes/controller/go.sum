@@ -409,8 +409,8 @@ ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 h1:bTb
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3/go.mod h1:miNDxmNWsrYI9f3QNZIOBrK6jVmWnyFj0Z/ZGFjR5Qk=
 ocm.software/open-component-model/bindings/go/helm v0.0.0-20260610112036-de724a6601de h1:edo24yWuXoYBbJ31kVN9kRZEY+U0iqFC3OnKW7eP4/k=
 ocm.software/open-component-model/bindings/go/helm v0.0.0-20260610112036-de724a6601de/go.mod h1:7zww5L6r9HYG5bgw92N3Yysj9flV9mpPBJO6aZpeBfc=
-ocm.software/open-component-model/bindings/go/http v0.0.0-20260608153443-a43840d089fe h1:nPyREfONvZ630ROo+voMyvyQrVGvUMYu9lk5uiDiyLo=
-ocm.software/open-component-model/bindings/go/http v0.0.0-20260608153443-a43840d089fe/go.mod h1:VgvvYLEimiC6+EmmMaUl3MScdBegyHpFkVllNL9b/vg=
+ocm.software/open-component-model/bindings/go/http v0.0.0-20260610112036-de724a6601de h1:LbGXYivzJGO9lhQev/nTuTgJoNA+F8k18axa9PPGVno=
+ocm.software/open-component-model/bindings/go/http v0.0.0-20260610112036-de724a6601de/go.mod h1:VgvvYLEimiC6+EmmMaUl3MScdBegyHpFkVllNL9b/vg=
 ocm.software/open-component-model/bindings/go/oci v0.0.46 h1:XENY123FcemG6kc8sers6HHscJsrWk/ghcv3TGYbV0U=
 ocm.software/open-component-model/bindings/go/oci v0.0.46/go.mod h1:3AaWQ5R+PD8jMqlcIZ7zWXPTvXqZIRfY5GXD7DcyWiw=
 ocm.software/open-component-model/bindings/go/plugin v0.0.17 h1:DBhLGaR4rhvj2kqQZXhrKxf2caepi7QCEPZiVDhpuDk=
