@@ -11,9 +11,9 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.14
 	ocm.software/open-component-model/bindings/go/constructor v0.0.10
 	ocm.software/open-component-model/bindings/go/credentials v0.0.13
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260610112036-de724a6601de
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260611120504-e55ead3bd200
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260610112036-de724a6601de
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260611120504-e55ead3bd200
 	ocm.software/open-component-model/bindings/go/oci v0.0.46
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
@@ -107,7 +107,7 @@ require (
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260610112036-de724a6601de // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260611120504-e55ead3bd200 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
