@@ -46,6 +46,27 @@ func (t *userAgentTransport) RoundTrip(req *nethttp.Request) (*nethttp.Response,
 	return t.base.RoundTrip(req)
 }
 
+// retryPolicyFromConfig translates a *RetryConfig into a retry.Policy.
+// Returns nil when rc is nil, which causes retry.Transport to use DefaultGenericPolicy.
+func retryPolicyFromConfig(rc *httpv1alpha1.RetryConfig) retry.Policy {
+	if rc == nil {
+		return nil
+	}
+	maxRetries := retry.DefaultGenericPolicy.MaxRetry
+	minWait := retry.DefaultGenericPolicy.MinWait
+	maxWait := retry.DefaultGenericPolicy.MaxWait
+	if rc.MaxRetries != nil {
+		maxRetries = *rc.MaxRetries
+	}
+	if rc.MinWait != nil {
+		minWait = time.Duration(*rc.MinWait)
+	}
+	if rc.MaxWait != nil {
+		maxWait = time.Duration(*rc.MaxWait)
+	}
+	return retry.NewGenericPolicy(maxRetries, minWait, maxWait)
+}
+
 // New builds an *http.Client with retry transport, applying the
 // transport-level timeouts from the supplied HTTP configuration. It is the
 // factory counterpart to httpv1alpha1.ResolveHTTPConfig: resolve the config
@@ -79,8 +100,12 @@ func New(opts ...Option) *nethttp.Client {
 		opt(options)
 	}
 
-	build := func(tc *httpv1alpha1.TimeoutConfig) nethttp.RoundTripper {
-		return retry.NewTransport(NewTransport(tc))
+	build := func(tc *httpv1alpha1.TimeoutConfig, rc *httpv1alpha1.RetryConfig) nethttp.RoundTripper {
+		rt := retry.NewTransport(NewTransport(tc))
+		if p := retryPolicyFromConfig(rc); p != nil {
+			rt.Policy = func() retry.Policy { return p }
+		}
+		return rt
 	}
 
 	httpClient := &nethttp.Client{Transport: buildRoutingTransport(options.config, build)}
@@ -97,9 +122,9 @@ func New(opts ...Option) *nethttp.Client {
 }
 
 // buildRoutingTransport builds the transport chain that fronts every request
-// from a client built out of cfg. inner is invoked for each TimeoutConfig
-// (global, then once per host entry) to produce the innermost RoundTripper —
-// callers use that to layer retry, instrumentation, etc.
+// from a client built out of cfg. inner is invoked for each TimeoutConfig and
+// RetryConfig (global, then once per host entry) to produce the innermost
+// RoundTripper — callers use that to layer retry, instrumentation, etc.
 //
 // When cfg has no per-host entries the result is whatever inner returned for
 // the global config. With per-host entries the result is a hostRouter that
@@ -112,12 +137,12 @@ func New(opts ...Option) *nethttp.Client {
 // returned by inner (via NewTransport). Only the overall Timeout is stored
 // separately in hostTimeouts because it must be enforced as a per-request
 // context deadline by hostRouter, covering both headers and body reads.
-func buildRoutingTransport(cfg *httpv1alpha1.Config, inner func(*httpv1alpha1.TimeoutConfig) nethttp.RoundTripper) nethttp.RoundTripper {
+func buildRoutingTransport(cfg *httpv1alpha1.Config, inner func(*httpv1alpha1.TimeoutConfig, *httpv1alpha1.RetryConfig) nethttp.RoundTripper) nethttp.RoundTripper {
 	if cfg == nil {
-		return inner(nil)
+		return inner(nil, nil)
 	}
 
-	globalChain := inner(&cfg.TimeoutConfig)
+	globalChain := inner(&cfg.TimeoutConfig, cfg.Retry)
 	if len(cfg.Hosts) == 0 {
 		return globalChain
 	}
@@ -134,7 +159,8 @@ func buildRoutingTransport(cfg *httpv1alpha1.Config, inner func(*httpv1alpha1.Ti
 			continue
 		}
 		merged := httpv1alpha1.MergeTimeoutConfig(&cfg.TimeoutConfig, &hc.TimeoutConfig)
-		hosts[host] = inner(&merged)
+		mergedRetry := httpv1alpha1.MergeRetryConfig(cfg.Retry, hc.Retry)
+		hosts[host] = inner(&merged, mergedRetry)
 		if merged.Timeout != nil {
 			hostTimeouts[host] = time.Duration(*merged.Timeout)
 		}

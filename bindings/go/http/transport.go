@@ -97,7 +97,7 @@ func newDialer(cfg *httpv1alpha1.TimeoutConfig) *net.Dialer {
 // NewClient produces a plain client with no retry behaviour. For the
 // retry-enabled client used for OCI registry traffic, use New.
 func NewClient(cfg *httpv1alpha1.Config) *nethttp.Client {
-	build := func(tc *httpv1alpha1.TimeoutConfig) nethttp.RoundTripper {
+	build := func(tc *httpv1alpha1.TimeoutConfig, _ *httpv1alpha1.RetryConfig) nethttp.RoundTripper {
 		return NewTransport(tc)
 	}
 	return &nethttp.Client{
