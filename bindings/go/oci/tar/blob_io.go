@@ -21,9 +21,15 @@ import (
 
 type CopyToOCILayoutOptions struct {
 	oras.CopyGraphOptions
-	Tags      []string
-	TempDir   string
-	Referrers []ociImageSpecV1.Descriptor
+	Tags    []string
+	TempDir string
+	// FindPredecessors and Depth drive an oras.ExtendedCopyGraph from base: any
+	// predecessors (e.g. ADR 0016 ownership referrers) the callback returns ride
+	// along with base into the layout. Nil leaves predecessor traversal to
+	// oras.ExtendedCopyGraph's default (src.Predecessors); pair it with Depth to
+	// bound the upward walk — Depth 1 keeps it to direct predecessors of base.
+	FindPredecessors func(ctx context.Context, src content.ReadOnlyGraphStorage, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error)
+	Depth            int
 }
 
 // CopyToOCILayoutInMemory streams the contents of an OCI graph from the given
@@ -69,14 +75,23 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyStora
 		err = errors.Join(err, target.Close())
 	}()
 
-	// Copy the image graph into the layout.
-	if err = errors.Join(err, oras.CopyGraph(ctx, src, target, base, opts.CopyGraphOptions)); err != nil {
-		return
-	}
-
-	// Copy any referrer graphs as their own roots (see [CopyReferrerRoots]); the
-	// base traversal above never reaches them via the subject edge.
-	if err = errors.Join(err, CopyReferrerRoots(ctx, src, target, opts.Referrers, opts.CopyGraphOptions)); err != nil {
+	// Copy the image graph into the layout. With FindPredecessors set and a
+	// graph-capable source, walk upward from base via oras.ExtendedCopyGraph so
+	// any predecessors the callback returns (e.g. ADR 0016 ownership referrers)
+	// ride along — their subject edge points "backwards" at base, so a plain
+	// CopyGraph would never reach them. Sources that are not graph storage (e.g.
+	// CTF) cannot answer the predecessor walk; fall back to a plain CopyGraph so
+	// the artifact itself still travels.
+	if graph, ok := src.(content.ReadOnlyGraphStorage); ok && opts.FindPredecessors != nil {
+		extendedOpts := oras.ExtendedCopyGraphOptions{
+			CopyGraphOptions: opts.CopyGraphOptions,
+			Depth:            opts.Depth,
+			FindPredecessors: opts.FindPredecessors,
+		}
+		if err = errors.Join(err, oras.ExtendedCopyGraph(ctx, graph, target, base, extendedOpts)); err != nil {
+			return
+		}
+	} else if err = errors.Join(err, oras.CopyGraph(ctx, src, target, base, opts.CopyGraphOptions)); err != nil {
 		return
 	}
 
