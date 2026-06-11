@@ -69,7 +69,7 @@ func Test_Integration_CTF_Untag(t *testing.T) {
 	})
 }
 
-func Test_Integration_CTF_Untag_GC(t *testing.T) {
+func Test_Integration_CTF_Untag_LastTag(t *testing.T) {
 	t.Parallel()
 
 	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR|os.O_CREATE)
@@ -93,7 +93,7 @@ func Test_Integration_CTF_Untag_GC(t *testing.T) {
 	untagger, ok := store.(content.Untagger)
 	require.True(t, ok, "CTF store must implement content.Untagger")
 
-	t.Run("deletes orphaned blob when last tag is removed", func(t *testing.T) {
+	t.Run("keeps the blob when the last tag is removed", func(t *testing.T) {
 		require.NoError(t, untagger.Untag(ctx, "only-tag"))
 
 		_, err := store.Resolve(ctx, "only-tag")
@@ -101,7 +101,7 @@ func Test_Integration_CTF_Untag_GC(t *testing.T) {
 
 		exists, err := store.Exists(ctx, desc)
 		require.NoError(t, err)
-		require.False(t, exists, "orphaned blob must be garbage-collected when last tag is removed")
+		require.True(t, exists, "untagging is tag-only; the blob must not be garbage-collected")
 	})
 }
 
