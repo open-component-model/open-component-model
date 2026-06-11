@@ -22,11 +22,12 @@ type ResourceStream interface {
 	// Root returns the top-level descriptor (manifest or index).
 	Root() ocispec.Descriptor
 
-	// Predecessors returns the nodes directly pointing to node (its parents, e.g.
-	// referrer manifests), making the stream a content.ReadOnlyGraphStorage that can
-	// be the source of an oras.ExtendedCopyGraph. ExtendedCopyGraph walks these up
-	// from Root to copy referrers alongside it; pair it with a FindPredecessors
-	// filter to restrict which referrers travel.
+	// Predecessors reports the referrers that must travel with Root (e.g. ADR 0016
+	// ownership referrers) as Root's predecessors, making the stream a
+	// content.ReadOnlyGraphStorage that can be the source of an
+	// oras.ExtendedCopyGraph. ExtendedCopyGraph walks these up from Root to copy
+	// them alongside it; nodes other than Root report none, so only the intended
+	// referrers travel.
 	Predecessors(ctx context.Context, node ocispec.Descriptor) ([]ocispec.Descriptor, error)
 
 	// Materialize produces a ReadOnlyBlob (OCI layout tar) for legacy consumers.
