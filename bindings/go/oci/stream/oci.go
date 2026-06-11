@@ -39,13 +39,10 @@ func (s *OCIResourceStream) Root() ocispec.Descriptor {
 	return s.Descriptor
 }
 
-// Predecessors makes the stream a content.ReadOnlyGraphStorage so it can be the
-// source of an oras.ExtendedCopyGraph. It reports the ownership referrers (ADR
-// 0016) of the root — discovered from the wrapped store via the Referrers API —
-// as the root's predecessors, so the copy walks them up from Root and carries
-// them along. Every other node reports none; a store that cannot answer referrer
-// queries yields none; and a referrers-query hiccup must not fail an
-// otherwise-healthy transfer, so it is logged and treated as none.
+// Predecessors reports the root's ownership referrers (ADR 0016), discovered
+// from the wrapped store, so an oras.ExtendedCopyGraph carries them along.
+// Other nodes report none; referrer-discovery failures are logged and treated
+// as none, so they never fail an otherwise-healthy transfer.
 func (s *OCIResourceStream) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 	if !content.Equal(node, s.Root()) {
 		return nil, nil
@@ -64,9 +61,8 @@ func (s *OCIResourceStream) Predecessors(ctx context.Context, node ocispec.Descr
 }
 
 func (s *OCIResourceStream) Materialize(ctx context.Context) (blob.ReadOnlyBlob, error) {
-	// Pull the root's ownership referrers into the layout so they ride along to a
-	// transfer target, mirroring the streaming-upload path that exposes them via
-	// Predecessors to oras.ExtendedCopyGraph.
+	// Include the root's ownership referrers in the layout so they travel to a
+	// transfer target.
 	referrers, err := s.Predecessors(ctx, s.Descriptor)
 	if err != nil {
 		return nil, err

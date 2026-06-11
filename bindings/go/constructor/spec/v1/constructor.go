@@ -123,8 +123,7 @@ type Resource struct {
 	// Relation describes the relation of the resource to the component.
 	// Can be a local or external resource.
 	Relation ResourceRelation `json:"relation,omitempty"`
-	// Options bundles optional, construction-time directives for the resource
-	// It is omitted entirely when no options are set.
+	// Options bundles optional, construction-time directives for the resource.
 	Options *ResourceOptions `json:"options,omitempty"`
 
 	AccessOrInput `json:",inline"`
@@ -135,13 +134,10 @@ type Resource struct {
 }
 
 // ResourceOptions bundles optional, construction-time directives for a resource.
-// These options influence how the resource is handled during construction
-// (ocm add/create) but are not themselves persisted to the component descriptor.
 // +k8s:deepcopy-gen=true
 type ResourceOptions struct {
-	// OwnershipPolicy controls whether ownership
-	// (ADR 0016) is recorded for this resource during construction. Defaults to
-	// "Never" when unset.
+	// OwnershipPolicy controls whether ownership is recorded for this resource.
+	// Defaults to "Never" when unset.
 	OwnershipPolicy OwnershipPolicy `json:"ownershipPolicy,omitempty"`
 }
 

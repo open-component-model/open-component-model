@@ -49,8 +49,7 @@ type ResourceRepository struct {
 // make sure that ResourceRepository implements the oci ResourceRepository interface
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
-// The OCI resource repository is the only implementation of the optional
-// ownership-referrer capability (ADR 0016).
+// ResourceRepository also implements the optional ownership capability (ADR 0016).
 var _ repository.OwnershipAwareRepository = (*ResourceRepository)(nil)
 
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
@@ -150,19 +149,17 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return b, nil
 }
 
-// AddOwnership attaches an ownership referrer (ADR 0016)
-// to a by-reference OCI image resource, pushing the referrer into the registry
-// that hosts the image. It delegates to the inner repository's
-// [oci.Repository.AddOwnership], which dispatches on the resource's access type.
-// It implements [repository.OwnershipAwareRepository.AddOwnership].
+// AddOwnership attaches an ownership referrer (ADR 0016) to a by-reference OCI
+// image resource in its hosting registry, delegating to the inner repository's
+// [oci.Repository.AddOwnership].
 func (p *ResourceRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
 	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {
 		return err
 	}
 
-	// Convert the access from *runtime.Raw to the typed access spec so the inner
-	// repository's type-switch can match it.
+	// Convert *runtime.Raw access to the typed spec the inner repository
+	// dispatches on.
 	resource = resource.DeepCopy()
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)

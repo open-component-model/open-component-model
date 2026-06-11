@@ -63,9 +63,7 @@ func (m *mockInputMethodProvider) GetResourceInputMethod(ctx context.Context, re
 	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", resource.Input.GetType())
 }
 
-// mockResourceRepository implements ResourceRepository for testing. It serves
-// downloads (downloadData/fail) and records how AddOwnership was invoked
-// so the constructor's by-reference ownership attach chain can be asserted.
+// mockResourceRepository implements ResourceRepository for testing
 type mockResourceRepository struct {
 	downloadData blob.ReadOnlyBlob
 	fail         bool
@@ -112,8 +110,7 @@ func (m *mockResourceRepositoryProvider) GetResourceRepository(ctx context.Conte
 	return m.repo, nil
 }
 
-// mockResourceRepositoryProviderWithError returns its repo and a fixed error, so the
-// "could not resolve the resource repository" branch can be exercised.
+// mockResourceRepositoryProviderWithError returns its repo and a fixed error.
 type mockResourceRepositoryProviderWithError struct {
 	repo ResourceRepository
 	err  error
@@ -499,20 +496,13 @@ func TestConstructWithResourceByValue(t *testing.T) {
 	assert.Len(t, mockTargetRepo.addedLocalResources, 1)
 	assert.Len(t, mockTargetRepo.addedVersions, 1)
 
-	// The resource did not opt into ownership, so the by-value add must
-	// not attach one: AddOwnership is never called. The opt-in lives on the runtime
-	// resource options, not on descriptor.Resource.
+	// No ownership opt-in, so AddOwnership must not be called.
 	assert.Zero(t, mockTargetRepo.ownershipCalls, "a resource that did not opt in must not attach ownership")
 }
 
-// TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn proves the
-// ADR-0016 opt-in drives a by-value AddOwnership call on the target repository
-// (when it supports the capability), sourced from the runtime resource options —
-// not from descriptor.Resource, which no longer carries the policy. It also
-// asserts the uploaded resource and the resolved credentials are forwarded. This
-// is the by-value half of the opt-in wiring; the by-reference half is covered by
-// TestDefaultConstructor_attachOwnership_CallSiteGating. The error case asserts an
-// AddOwnership failure propagates and fails the add rather than being swallowed.
+// TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn covers the by-value
+// ownership opt-in (ADR 0016): AddOwnership is called with the uploaded resource
+// and credentials iff the resource opts in, and an attach failure fails the add.
 func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 	const (
 		component = "ocm.software/test-component"
@@ -986,21 +976,17 @@ func TestConstructCredentialsPassedAsDirectCredentials(t *testing.T) {
 	assert.Equal(t, "testpass", dc.Properties["password"])
 }
 
-// TestDefaultConstructor_attachOwnership_CallSiteGating proves the gates
-// that now live at the by-reference call site (processResource): the hosting
-// resource repository is resolved — and AddOwnership reached — only
-// when the resource opts in via OwnershipPolicyAlways and a provider is
-// configured. A non-opted-in resource must never touch the resource repository,
-// which is what keeps non-OCI by-reference accesses out of OCI-specific
-// resolution.
+// TestDefaultConstructor_attachOwnership_CallSiteGating covers the by-reference
+// ownership gating in processResource: the resource repository is resolved and
+// AddOwnership reached only when the resource opts in and a provider is configured.
 func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 	const (
 		component = "ocm.software/test-component"
 		version   = "v1.0.0"
 	)
 
-	// byReferenceResource builds a by-reference (access, not input) resource with
-	// the given ownership policy. An empty policy leaves the options block off.
+	// byReferenceResource builds a by-reference resource YAML; an empty policy
+	// omits the options block.
 	byReferenceResource := func(policy string) string {
 		options := ""
 		if policy != "" {
@@ -1022,7 +1008,7 @@ func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 		name string
 		// policy is the resource's ownershipPolicy ("" => no opt-in).
 		policy string
-		// provider builds opts.ResourceRepositoryProvider; nil means "not configured".
+		// provider builds opts.ResourceRepositoryProvider; nil means not configured.
 		provider   func(attacher *mockResourceRepository) ResourceRepositoryProvider
 		wantErr    string
 		wantAttach int

@@ -431,10 +431,6 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 				}
 			}
 
-			// A resource kept by reference still belongs to this component version, so its
-			// ownership (ADR 0016) is recorded in the registry that hosts it. Only resources
-			// that opt in via OwnershipPolicyAlways get one, and the hosting resource repository
-			// is resolved only for those, so resources that don't opt in never reach it.
 			if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways && c.opts.ResourceRepositoryProvider != nil {
 				repo, err := c.opts.GetResourceRepository(ctx, resource)
 				if err != nil {
@@ -741,19 +737,13 @@ func addColocatedResourceLocalBlob(
 		return nil, fmt.Errorf("error adding local resource %q based on input type %q as local resource to component %q : %w", resource.ToIdentity(), resource.Input.GetType(), component, err)
 	}
 
-	// A by-value (or input-method) resource that opts in via OwnershipPolicyAlways
-	// gets ownership (ADR 0016) pointing the uploaded
-	// artifact back at the owning component version. Recording it requires a target
-	// repository that implements [OwnershipAwareRepository]; one that cannot (e.g. the
-	// out-of-process plugin bridge, or the deprecated fallback) makes construction fail
-	// rather than silently dropping an explicitly requested ownership link.
 	if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
-		if ownershipAwareRepo, ok := repo.(OwnershipAwareRepository); ok {
-			if err := ownershipAwareRepo.AddOwnership(ctx, component, version, uploaded, creds); err != nil {
-				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
-			}
-		} else {
+		ownershipAwareRepo, ok := repo.(OwnershipAwareRepository)
+		if !ok {
 			return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
+		}
+		if err := ownershipAwareRepo.AddOwnership(ctx, component, version, uploaded, creds); err != nil {
+			return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 		}
 	}
 

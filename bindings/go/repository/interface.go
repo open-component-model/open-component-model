@@ -114,12 +114,12 @@ type ResourceRepository interface {
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error)
 }
 
-// OwnershipAwareRepository is an optional capability of a [ResourceRepository]:
-// recording ownership (ADR 0016) that traces a resource kept by reference back to
-// the component version that owns it.
+// OwnershipAwareRepository is an optional [ResourceRepository] capability:
+// recording ownership (ADR 0016) that traces a resource back to the component
+// version that owns it.
 type OwnershipAwareRepository interface {
-	// AddOwnership records an ownership link tracing res back to the
-	// component version that owns it in the storage backend that hosts it.
+	// AddOwnership records an ownership link from res to its owning component
+	// version in the storage backend hosting res.
 	AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error
 }
 

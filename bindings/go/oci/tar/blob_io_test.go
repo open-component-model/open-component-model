@@ -293,10 +293,8 @@ func TestCopyOCILayoutWithIndex_NilReferrersFunc(t *testing.T) {
 	assert.Empty(t, predecessors)
 }
 
-// buildLayoutWithSourceReferrer produces an OCI layout (one layer + manifest,
-// tagged) that also carries a referrer manifest of artifactType in its index —
-// i.e. what an incoming layout looks like on transfer once the source referrer
-// has been pulled into it.
+// buildLayoutWithSourceReferrer produces a tagged single-layer OCI layout whose
+// index also carries a referrer manifest of artifactType.
 func buildLayoutWithSourceReferrer(t *testing.T, artifactType string) []byte {
 	t.Helper()
 	r := require.New(t)
@@ -341,11 +339,9 @@ func buildLayoutWithSourceReferrer(t *testing.T, artifactType string) []byte {
 	return buf.Bytes()
 }
 
-// TestCopyOCILayoutWithIndex_SuppressesCreationWhenSourceCarriesReferrer pins the
-// mutual exclusion between creating and copying referrers: when the incoming
-// layout already carries a referrer (the transfer case), Create must not run, so
-// the copied referrer is the only one and no near-duplicate is created. When the
-// layout carries no referrer (the fresh-add case), Create must run.
+// TestCopyOCILayoutWithIndex_SuppressesCreationWhenSourceCarriesReferrer checks
+// copy/create mutual exclusion: CreateFunc must not run when the incoming
+// layout already carries a referrer, and must run when it does not.
 func TestCopyOCILayoutWithIndex_SuppressesCreationWhenSourceCarriesReferrer(t *testing.T) {
 	const artifactType = "application/test.referrer.v1+json"
 

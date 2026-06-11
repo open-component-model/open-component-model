@@ -49,11 +49,10 @@ type Options struct {
 	// Set policy.GlobalAccessPolicyAuto to auto-detect based on whether the storage backend is globally reachable.
 	GlobalAccessPolicy policy.GlobalAccessPolicy
 
-	// Referrer describes the referrer to attach to a packed OCI-layout artifact.
-	// An existing referrer of its ArtifactType in the incoming layout is copied
-	// through; only when none is present is a fresh one created (e.g. an ADR 0016
-	// ownership referrer — copied on transfer, created on add). Only applies to the
-	// OCI-layout path; ignored for single-layer blobs. The zero value attaches nothing.
+	// Referrer describes the referrer to attach to a packed OCI-layout artifact
+	// (e.g. an ADR 0016 ownership referrer): existing referrers in the incoming
+	// layout are copied through, otherwise a fresh one may be created. Ignored for
+	// single-layer blobs; the zero value attaches nothing.
 	Referrer tar.ReferrerSource
 }
 

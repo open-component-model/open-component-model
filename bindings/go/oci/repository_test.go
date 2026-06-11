@@ -2041,12 +2041,8 @@ func TestRepositoryHealthCheck(t *testing.T) {
 	})
 }
 
-// TestRepository_AddLocalSource_OCILayoutBody pins the regression that
-// AddLocalSource must not create an ownership referrer for any OCI-packed
-// source body. uploadAndUpdateLocalArtifact is shared with AddLocalResource,
-// but it only builds a referrer for a *descriptor.Resource with local
-// relation; a source is never a resource, so OwnershipReferrer is never
-// invoked for sources.
+// TestRepository_AddLocalSource_OCILayoutBody verifies that AddLocalSource
+// never creates an ownership referrer for an OCI-packed source body.
 func TestRepository_AddLocalSource_OCILayoutBody(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
@@ -2202,14 +2198,13 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 	}
 }
 
-// ownershipArtifactAnnotation is a representative software.ocm.artifact value in
-// the shape pack.OwnershipReferrer marshals for a resource subject.
+// ownershipArtifactAnnotation is a software.ocm.artifact value in the shape
+// pack.OwnershipReferrer marshals for a resource subject.
 const ownershipArtifactAnnotation = `[{"identity":{"name":"backend","version":"1.0.0"},"kind":"resource"}]`
 
 // buildLayoutWithOwnershipReferrer serializes an OCI layout tar containing a
-// one-layer image (tagged) and an ADR 0016 ownership referrer whose subject is
-// that image — i.e. what GetLocalResource produces on the source side after
-// pulling the referrer into the layout.
+// tagged one-layer image and an ownership referrer (ADR 0016) whose subject is
+// that image.
 func buildLayoutWithOwnershipReferrer(t *testing.T, tag, component, version string) (layoutBytes []byte, main, referrer ociImageSpecV1.Descriptor) {
 	t.Helper()
 	r := require.New(t)
@@ -2241,9 +2236,7 @@ func buildLayoutWithOwnershipReferrer(t *testing.T, tag, component, version stri
 		Config:       empty,
 		Layers:       []ociImageSpecV1.Descriptor{empty},
 		Subject:      &main,
-		// Mirror the three annotations production pack.OwnershipReferrer sets,
-		// including the required software.ocm.artifact, so the layout carries a
-		// spec-faithful ADR 0016 referrer rather than an incomplete one.
+		// Mirror the three annotations pack.OwnershipReferrer sets in production.
 		Annotations: map[string]string{
 			annotations.OwnershipComponentName:    component,
 			annotations.OwnershipComponentVersion: version,
@@ -2264,14 +2257,10 @@ func buildLayoutWithOwnershipReferrer(t *testing.T, tag, component, version stri
 	return buf.Bytes(), main, referrer
 }
 
-// TestRepository_AddLocalResource_CopiesOwnershipReferrer proves the add-side
-// copy path (ADR 0016): a by-value resource whose incoming layout already
-// carries an ownership referrer transfers that referrer to the target even when
-// referrer *creation* does not apply. The resource has external relation, so no
-// referrer is created — any referrer in the target therefore proves the copy
-// path ran. This is the upload half that pairs with GetLocalResource's referrer
-// fetch, giving the local-resource path the same transfer behavior as the
-// OCI-image path.
+// TestRepository_AddLocalResource_CopiesOwnershipReferrer verifies that an
+// ownership referrer (ADR 0016) carried in a by-value resource's layout is
+// copied to the target. The resource has external relation, so no referrer is
+// created and any referrer in the target comes from the copy path.
 func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -2288,8 +2277,6 @@ func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
 	repo := Repository(t, ocictf.WithCTF(store))
 
-	// External relation => no referrer is created, so a referrer landing in the
-	// target can only have come from the copy path, never from creation.
 	resource := &descriptor.Resource{
 		Relation:    descriptor.ExternalRelation,
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend", Version: version}},
@@ -2314,8 +2301,7 @@ func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 	r.NoError(err)
 	r.True(referrerExists, "ownership referrer must be copied to the target even when no referrer is created")
 
-	// Existence isn't enough: the copied referrer must carry its ADR 0016 ownership
-	// annotations verbatim, so fetch the manifest and check all three.
+	// The copied referrer must retain its ownership annotations verbatim.
 	rc, err := componentStore.Fetch(ctx, referrer)
 	r.NoError(err)
 	defer func() { r.NoError(rc.Close()) }()
@@ -2326,14 +2312,10 @@ func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 	r.Equal(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
 }
 
-// TestRepository_UploadResource_CopiesOwnershipReferrer is the by-reference twin
-// of TestRepository_AddLocalResource_CopiesOwnershipReferrer: it proves the
-// UploadResource path (-> uploadOCIImage) carries an ADR-0016 ownership referrer
-// that travels inside the resource's layout through to the target. The referrer
-// is injected as a successor of the main artifact, so the single CopyGraph that
-// uploads the image lands the referrer in the same traversal — there is no
-// separate copy step. External relation means no referrer is created, so one
-// landing in the target can only have come from the copy path.
+// TestRepository_UploadResource_CopiesOwnershipReferrer verifies that
+// UploadResource copies an ownership referrer carried in the resource's layout
+// through to the target. External relation means no referrer is created, so
+// any referrer in the target comes from the copy path.
 func TestRepository_UploadResource_CopiesOwnershipReferrer(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -2372,8 +2354,7 @@ func TestRepository_UploadResource_CopiesOwnershipReferrer(t *testing.T) {
 	r.NoError(err)
 	r.True(referrerExists, "ownership referrer must ride along in the same CopyGraph as the main artifact")
 
-	// Existence is not enough: the referrer must arrive with its ADR-0016
-	// ownership annotations intact.
+	// The copied referrer must retain its ownership annotations verbatim.
 	rc, err := imgStore.Fetch(ctx, referrer)
 	r.NoError(err)
 	defer func() { r.NoError(rc.Close()) }()
@@ -2384,11 +2365,9 @@ func TestRepository_UploadResource_CopiesOwnershipReferrer(t *testing.T) {
 	r.Equal(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
 }
 
-// TestRepository_AddOwnershipByReference proves the by-reference attach path (ADR
-// 0016): a resource kept by reference as an OCI image gets an ownership referrer
-// pushed into the registry that hosts the image, without modifying the image
-// itself. This is the half that backs OwnershipAwareRepository.AddOwnership for
-// by-reference resources.
+// TestRepository_AddOwnershipByReference verifies that AddOwnership pushes an
+// ownership referrer (ADR 0016) for a by-reference OCI image into the registry
+// hosting the image, without modifying the image itself.
 func TestRepository_AddOwnershipByReference(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -2404,8 +2383,8 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
 	repo := Repository(t, ocictf.WithCTF(store))
 
-	// Stage a one-layer image in the hosting store and tag it, mimicking an
-	// image that already lives in the registry and is referenced by the resource.
+	// Stage a tagged image in the hosting store, mimicking a pre-existing
+	// registry image referenced by the resource.
 	imgStore, err := store.StoreForReference(ctx, imageRef)
 	r.NoError(err)
 
@@ -2428,8 +2407,7 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 
 	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
 
-	// The expected referrer is content-addressed off the resolved subject; build
-	// it the same way the repository does and assert it now exists in the store.
+	// Build the expected content-addressed referrer the same way the repository does.
 	resolved, err := imgStore.Resolve(ctx, tag)
 	r.NoError(err)
 	referrers, err := pack.OwnershipReferrer(resource, component, version)(ctx, resolved)
@@ -2440,16 +2418,12 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 	r.NoError(err)
 	r.True(exists, "ownership referrer manifest must be pushed into the hosting store")
 
-	// The referenced image manifest must be untouched (still resolvable, same digest).
 	stillThere, err := imgStore.Exists(ctx, main)
 	r.NoError(err)
 	r.True(stillThere, "the referenced image must remain present and unchanged")
 
-	// Re-running attaches the same content-addressed referrer (idempotent). NoError
-	// alone wouldn't prove that, so also assert the referrer is still present and the
-	// subject is untouched after the second run. Enumeration ("exactly one referrer")
-	// needs the live Referrers API, which the CTF store has no index for; that
-	// guarantee is covered by Test_Integration_Ownership.
+	// Re-running must be idempotent: same referrer present, subject untouched.
+	// Exact-count checks need the live Referrers API, which the CTF store lacks.
 	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
 
 	stillExists, err := imgStore.Exists(ctx, referrers[0].Descriptor)
@@ -2461,16 +2435,14 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 	r.Equal(resolved, resolvedAfter, "the subject must be unchanged by re-running the attach")
 }
 
-// TestRepository_AddOwnership_ResolveErrors covers the subject-resolution failure
-// branches of AddOwnership (ADR 0016) on both access paths. These are the branches
-// most likely to regress silently: a by-reference image whose reference resolves to
-// nothing, and a by-value local blob whose digest is not present in the component
-// store. Both must surface as an error rather than a quietly-skipped referrer.
+// TestRepository_AddOwnership_ResolveErrors verifies that AddOwnership returns
+// an error when the subject cannot be resolved, on both the by-reference and
+// by-value access paths.
 func TestRepository_AddOwnership_ResolveErrors(t *testing.T) {
 	const (
 		component = "ocm.software/test-component"
 		version   = "1.0.0"
-		// a well-formed but absent digest, so resolution fails rather than parsing.
+		// well-formed but absent, so resolution fails rather than parsing.
 		missingDigest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 	)
 	tests := []struct {
@@ -2512,10 +2484,9 @@ func TestRepository_AddOwnership_ResolveErrors(t *testing.T) {
 	}
 }
 
-// blobValidatingResolver wraps a resolver so the stores it hands out reject a
-// manifest whose referenced config/layer blobs are not yet present — the
-// MANIFEST_BLOB_UNKNOWN behaviour of a conformant OCI registry, which the CTF
-// store does not emulate.
+// blobValidatingResolver wraps a resolver so its stores reject manifests whose
+// referenced blobs are missing, emulating a registry's MANIFEST_BLOB_UNKNOWN
+// behaviour that the CTF store lacks.
 type blobValidatingResolver struct{ oci.Resolver }
 
 func (r blobValidatingResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
@@ -2553,12 +2524,10 @@ func (s *blobValidatingStore) Push(ctx context.Context, expected ociImageSpecV1.
 	return s.Store.Push(ctx, expected, bytes.NewReader(raw))
 }
 
-// TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest guards the push
-// order (ADR 0016): the referrer manifest references the empty config/layer
-// blob, so that blob must reach the registry before the manifest or a conformant
-// registry rejects it with MANIFEST_BLOB_UNKNOWN. The subject image is staged
-// with a real (non-empty) config so the empty blob is genuinely absent up front —
-// otherwise the subject's own empty config would pre-seed it and mask the bug.
+// TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest verifies the
+// empty config/layer blob reaches the registry before the referrer manifest
+// that references it. The subject is staged with a non-empty config so the
+// empty blob is genuinely absent up front.
 func TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -2574,8 +2543,7 @@ func TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest(t *testing.
 	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
 	repo := Repository(t, oci.WithResolver(blobValidatingResolver{Resolver: store}))
 
-	// Stage the subject image directly on the CTF store (bypassing validation), with
-	// an explicit non-empty config so the empty-JSON blob is not already present.
+	// Stage the subject image directly on the CTF store, bypassing validation.
 	imgStore, err := store.StoreForReference(ctx, imageRef)
 	r.NoError(err)
 	layer := []byte("layer")
@@ -2614,13 +2582,10 @@ func TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest(t *testing.
 	r.True(emptyExists, "the empty config/layer blob must be pushed during the attach")
 }
 
-// TestRepository_AddOwnership_CreatesByValueReferrer proves the by-value create
-// path (ADR 0016): after a resource is uploaded by value into the
-// component's own store, AddOwnership resolves the uploaded manifest and pushes a
-// fresh ownership referrer for it. The incoming layout carries no referrer, so a
-// referrer landing in the store can only have come from creation. This backs the
-// constructor's OwnershipAwareRepository capability for the by-value path; the
-// by-reference half is TestRepository_AddOwnershipByReference.
+// TestRepository_AddOwnership_CreatesByValueReferrer verifies that AddOwnership
+// creates and pushes an ownership referrer for a resource uploaded by value.
+// The incoming layout carries no referrer, so any referrer in the store comes
+// from creation.
 func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -2650,8 +2615,8 @@ func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 	uploaded, err := repo.AddLocalResource(ctx, component, version, resource, inmemory.New(bytes.NewReader(layoutBytes)))
 	r.NoError(err)
 
-	// After upload, the resource's local reference points at the unpacked manifest
-	// in the component store; that manifest is the ownership referrer subject.
+	// The uploaded resource's local reference points at the unpacked manifest,
+	// which is the referrer subject.
 	componentStore, err := store.StoreForReference(ctx, store.ComponentVersionReference(ctx, component, version))
 	r.NoError(err)
 	subject, err := componentStore.Resolve(ctx, uploaded.Access.(*v2.LocalBlob).LocalReference)
@@ -2678,16 +2643,9 @@ func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 	r.True(stillExists, "re-running AddOwnership must converge on the same referrer")
 }
 
-// The OCI-level opt-in gate was intentionally removed: AddOwnership now
-// builds a referrer unconditionally for the resource it is handed, and the
-// opt-in decision (options.ownershipPolicy: Always) lives in the constructor.
-// That gate is covered by the constructor tests (TestDefaultConstructor_attachOwnership_CallSiteGating
-// and the relocated-policy-gate case in construct_resource_test.go).
-
-// TestRepository_AddOwnership_RawBlobSubjectSkipped locks the no-op contract (ADR
-// 0016): when the resolved subject is a raw blob rather than an OCI manifest,
-// AddOwnership records no referrer and returns nil instead of failing. A by-value
-// resource whose local reference points at a plain blob exercises that branch.
+// TestRepository_AddOwnership_RawBlobSubjectSkipped verifies that AddOwnership
+// is a no-op (nil error, no referrer) when the resolved subject is a raw blob
+// rather than an OCI manifest.
 func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -2701,7 +2659,7 @@ func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
 	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
 	repo := Repository(t, ocictf.WithCTF(store))
 
-	// Stage a raw, non-manifest blob in the component store and reference it by digest.
+	// Stage a raw, non-manifest blob as the subject.
 	componentStore, err := store.StoreForReference(ctx, store.ComponentVersionReference(ctx, component, version))
 	r.NoError(err)
 	raw := []byte("not a manifest")
@@ -2720,7 +2678,7 @@ func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
 
 	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
 
-	// The contract: a raw-blob subject yields no referrer, so nothing was pushed.
+	// A raw-blob subject yields no referrer, so nothing was pushed.
 	referrers, err := pack.OwnershipReferrer(resource, component, version)(ctx, rawDesc)
 	r.NoError(err)
 	r.Empty(referrers, "a raw-blob subject must yield no ownership referrer")

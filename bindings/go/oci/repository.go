@@ -213,11 +213,9 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	return desc, err
 }
 
-// AddLocalResource adds a local resource to the repository. An ownership referrer
-// (ADR 0016) that already travels inside the resource's layout is copied across
-// with it (transfer). Creating a fresh ownership referrer for an opted-in
-// resource is a separate step, driven by the caller via [Repository.AddOwnership]
-// once the artifact has been uploaded.
+// AddLocalResource adds a local resource to the repository. Ownership referrers
+// (ADR 0016) already inside the resource's layout are copied across; creating a
+// fresh one is the caller's job via [Repository.AddOwnership].
 func (repo *Repository) AddLocalResource(
 	ctx context.Context,
 	component, version string,
@@ -254,8 +252,6 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 
 	source = source.DeepCopy()
 
-	// Sources never get an ownership referrer; the referrer logic short-circuits
-	// for non-resource artifacts anyway.
 	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content); err != nil {
 		return nil, err
 	}
@@ -475,12 +471,9 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 	return nil
 }
 
-// configureReferrerCopy requests that the pack layer copy through every referrer
-// that already travels inside an artifact's incoming layout (transfer) — any
-// manifest declaring a subject, e.g. an ADR-0016 ownership referrer — so links
-// the source attached survive the upload. Creating a fresh ownership referrer for
-// an opted-in resource is a separate, caller-driven step ([Repository.AddOwnership]);
-// this only handles copy-through. Sources are not resources, so they get nothing.
+// configureReferrerCopy asks the pack layer to copy through referrers already in
+// a resource's incoming layout (e.g. ADR 0016 ownership referrers) so they
+// survive the upload. Non-resources (sources) get nothing.
 func configureReferrerCopy(packOptions *pack.Options, artifact descriptor.Artifact) {
 	if _, isResource := artifact.(*descriptor.Resource); !isResource {
 		return
@@ -613,15 +606,12 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		// into an in-memory OCI layout. This is used when the descriptor refers
 		// to another OCI-compliant manifest instead of a single layer.
 		//
-		// Pull any ownership referrers (ADR 0016) of the artifact into the layout
-		// as well, so they travel with a by-value resource just as they do for
-		// the OCI-image path (see [Repository.DownloadResourceStream]). Only the
-		// main artifact is tagged, so a later re-add still resolves it as the
-		// top-level parent even with the referrer present in the index.
+		// Pull any ownership referrers (ADR 0016) into the layout so they travel
+		// with the by-value resource. Only the main artifact is tagged, so a later
+		// re-add still resolves it as the top-level parent.
 		refs, err := lookupOwnershipReferrers(ctx, store, artifact)
 		if err != nil {
-			// A referrers-query hiccup must not fail an otherwise-healthy read;
-			// continue without them.
+			// Referrer-discovery failures must not fail an otherwise-healthy read.
 			slogcontext.Log(ctx, slog.LevelWarn, "failed listing ownership referrers; continuing without them", slog.String("reference", ref), slog.Any("err", err))
 		}
 		return tar.CopyToOCILayoutInMemory(ctx, store, artifact, tar.CopyToOCILayoutOptions{
@@ -665,9 +655,8 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 
 	res = res.DeepCopy()
 
-	// Always carry across any referrer that already travels in the resource's
-	// layout (e.g. an ADR 0016 ownership referrer): transfer copies the existing
-	// referrers, while a fresh upload simply has none to copy.
+	// Copy across referrers already in the resource's layout (e.g. ADR 0016
+	// ownership referrers); a fresh upload simply has none to copy.
 	desc, access, err := repo.uploadOCIImage(ctx, res.Access, b, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
@@ -694,8 +683,7 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 
 	src = src.DeepCopy()
 
-	// Sources never carry referrers (ADR 0016 ownership applies to resources, not
-	// sources), so never copy them here.
+	// Ownership (ADR 0016) applies to resources only, so never copy referrers here.
 	_, access, err := repo.uploadOCIImage(ctx, src.Access, b, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload source as OCI image: %w", err)
@@ -724,11 +712,8 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		err = errors.Join(err, ociStore.Close())
 	}()
 
-	// A referrer is tagged by digest when written into a layout, so it appears in
-	// the index. Split the index into the main artifacts and the referrers
-	// (manifests declaring a subject): the referrers are injected as extra
-	// successors of the main in the copy below (only when copyReferrers), and
-	// holding them aside keeps main selection from tripping over them.
+	// Referrers appear in the layout index (tagged by digest); split them out so
+	// main-artifact selection ignores them. They are copied below when requested.
 	mainArtifacts, referrers := ociStore.MainArtifactsAndReferrers(ctx)
 	if len(mainArtifacts) != 1 {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("expected exactly one main artifact in OCI layout, but got %d", len(mainArtifacts))
@@ -743,10 +728,8 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("can only copy %q if it is tagged: %w", access.ImageReference, err)
 	}
 
-	// Copy the main artifact. When the resource's layout carries referrers, copy
-	// them in the same traversal: their subject edge points back at main, which
-	// CopyGraph's default successor resolution does not follow, so inject them as
-	// extra successors of main (see [tar.InjectReferrersAsSuccessors]).
+	// CopyGraph does not follow subject edges, so inject the referrers as extra
+	// successors of main to copy them in the same traversal.
 	copyOpts := repo.resourceCopyOptions.CopyGraphOptions
 	if copyReferrers && len(referrers) > 0 {
 		copyOpts.FindSuccessors = tar.InjectReferrersAsSuccessors(main, referrers)
@@ -763,29 +746,12 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	return main, &access, nil
 }
 
-// AddOwnership attaches an ownership referrer (ADR 0016) to
-// resource and pushes it, linking the resource back to the owning component
-// version. It implements the constructor's [OwnershipAwareRepository] capability.
-//
-// The subject the referrer points at and the store it is pushed into are derived
-// from the resource's access type (see [Repository.resolveOwnershipSubject]):
-//
-//   - a by-value [v2.LocalBlob] just uploaded into this repository's own component
-//     store is resolved by digest there;
-//   - a by-reference [accessv1.OCIImage] kept in its hosting registry is resolved
-//     by image reference there. That image is left byte-for-byte unchanged — only
-//     the new referrer manifest (and the shared empty config/layer blob) is pushed,
-//     so OCI-level signatures over the image stay valid.
-//
-// The referrer is content-addressed and deterministic, so re-running converges on
-// the same digest and the registry deduplicates it. It is a no-op when the subject
-// is not an OCI manifest (raw blobs get no referrer).
-//
-// The opt-in decision (options.ownershipPolicy: Always) is made by the caller — the
-// constructor gates on the runtime resource options at its call site
-// (processResource) — so this method unconditionally builds the referrer for the
-// resource it is handed. credentials are unused: every store is resolved through
-// this repository's own resolver, already carrying credentials.
+// AddOwnership attaches an ownership referrer (ADR 0016) to resource, linking it
+// back to the owning component version. Subject and target store derive from the
+// resource's access type (see [Repository.resolveOwnershipSubject]). The referrer
+// is deterministic, so re-runs converge on the same digest; non-manifest subjects
+// are a no-op. Opting in is the caller's decision; credentials are unused, as
+// stores come from this repository's own resolver.
 func (repo *Repository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, _ runtime.Typed) (err error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "add ownership referrer",
@@ -803,18 +769,14 @@ func (repo *Repository) AddOwnership(ctx context.Context, component, version str
 	return repo.buildAndPushOwnershipReferrer(ctx, store, subject, resource, component, version)
 }
 
-// resolveOwnershipSubject locates the manifest an ownership referrer (ADR 0016)
-// points at and the store the referrer is pushed into, dispatching on the
-// resource's access type:
+// resolveOwnershipSubject locates the manifest an ownership referrer points at
+// and the store it is pushed into, dispatching on the resource's access type:
 //
-//   - by-value ([v2.LocalBlob]): the uploaded local resource's access is a local
-//     blob whose reference is the digest of its just-pushed manifest in this
-//     repository's own component store; that manifest is the subject. It is resolved
-//     directly by digest rather than via the component-version descriptor, which is
-//     not written until AddComponentVersion — i.e. after the constructor has already
-//     attached ownership for each resource.
-//   - by-reference ([accessv1.OCIImage]): the resource stays in its hosting
-//     registry; the referrer is pushed there with the referenced image as subject.
+//   - by-value ([v2.LocalBlob]): resolved by digest in this repository's own
+//     component store (the component-version descriptor is not written yet).
+//   - by-reference ([accessv1.OCIImage]): the referenced image is the subject;
+//     the referrer is pushed into its hosting registry, the image itself stays
+//     untouched.
 func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, version string, resource *descriptor.Resource) (spec.Store, ociImageSpecV1.Descriptor, error) {
 	if v2.IsLocalBlob(resource.Access) {
 		var localBlob v2.LocalBlob
@@ -851,24 +813,19 @@ func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, 
 	return store, subject, nil
 }
 
-// buildAndPushOwnershipReferrer builds the ownership referrer (ADR 0016) linking
-// subject back to the owning component version and pushes it into store. It is a
-// no-op when subject is not an OCI manifest (raw blobs get no referrer).
+// buildAndPushOwnershipReferrer builds the ownership referrer for subject and
+// pushes it into store; no-op when subject is not an OCI manifest.
 func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, resource *descriptor.Resource, component, version string) error {
 	referrers, err := pack.OwnershipReferrer(resource, component, version)(ctx, subject)
 	if err != nil {
 		return fmt.Errorf("failed to build ownership referrer: %w", err)
 	}
-	// OwnershipReferrer skips non-manifest subjects (raw blobs get no referrer).
 	if len(referrers) == 0 {
 		slogcontext.Log(ctx, slog.LevelDebug, "subject is not an OCI manifest; skipping ownership referrer", log.DescriptorLogAttr(subject))
 		return nil
 	}
-	// OCI registries reject a manifest that references blobs not yet present
-	// (MANIFEST_BLOB_UNKNOWN), so push the referrer's referenced content — its
-	// empty config/layer blob — before the referrer manifest itself. Collect the
-	// manifests, push the blobs, then push the manifests; this stays correct
-	// regardless of the order pack returns them in.
+	// Registries reject manifests referencing absent blobs (MANIFEST_BLOB_UNKNOWN),
+	// so push blobs first, manifests last, regardless of the order pack returned.
 	var manifests []tar.Referrer
 	for _, r := range referrers {
 		if introspection.IsOCICompliantManifest(r.Descriptor) {
@@ -898,9 +855,6 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
 	}
-	// DownloadResourceStream attaches any ownership referrers (ADR 0016) to the
-	// stream for locally-owned resources; Materialize then pulls them into the
-	// layout so a downstream upload can transfer them with the artifact.
 	stream, err := repo.DownloadResourceStream(ctx, res)
 	if err != nil {
 		return nil, err
@@ -908,9 +862,8 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	return stream.Materialize(ctx)
 }
 
-// lookupOwnershipReferrers lists the ownership referrers (ADR 0016) of subject
-// in store. It returns nil (no error) when store cannot answer referrer
-// queries, leaving the caller to proceed without them.
+// lookupOwnershipReferrers lists subject's ownership referrers (ADR 0016) in
+// store; nil (no error) when the store cannot answer referrer queries.
 func lookupOwnershipReferrers(ctx context.Context, store content.ReadOnlyStorage, subject ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 	graphStore, ok := store.(content.ReadOnlyGraphStorage)
 	if !ok {
@@ -1116,13 +1069,9 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 		if resolved.Tag != "" {
 			tags = []string{typed.ImageReference}
 		}
-		// The stream self-discovers any ownership referrers (ADR 0016) of the
-		// artifact from src: Materialize pulls them into the layout so they travel
-		// to a transfer target (just as for a by-value resource, see
-		// [Repository.getLocalBlobFromIndexOrManifest]), and the streaming upload
-		// path exposes them via Predecessors to ExtendedCopyGraph. Referrers on a
-		// by-reference image are attached out-of-band via the Referrers API, so
-		// without this they would be left behind when the image is copied.
+		// The stream discovers the artifact's ownership referrers (ADR 0016) from
+		// src so they travel with the copy; they are attached out-of-band via the
+		// Referrers API and would otherwise be left behind.
 		return &ocistream.OCIResourceStream{
 			ReadOnlyStorage: src,
 			Descriptor:      desc,
@@ -1155,13 +1104,10 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		return nil, err
 	}
 
-	// ExtendedCopyGraph copies the root together with its ownership referrers (ADR
-	// 0016), which a plain CopyGraph would miss because a referrer's subject edge
-	// points back at the root. The stream reports just those ownership referrers as
-	// the root's predecessors (see [ocistream.OCIResourceStream.Predecessors] /
-	// DiscoverReferrers), so signatures or other referrers do not ride along. Depth
-	// 1 keeps it to the root's direct referrers, never referrers-of-referrers. With
-	// none, it degenerates to copying the root alone.
+	// ExtendedCopyGraph copies the root plus its ownership referrers (ADR 0016),
+	// which plain CopyGraph would miss (subject edges point back at the root).
+	// The stream's Predecessors reports only ownership referrers, and Depth 1
+	// limits the walk to the root's direct referrers.
 	extendedOpts := oras.ExtendedCopyGraphOptions{
 		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
 		Depth:            1,

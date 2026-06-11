@@ -9,18 +9,11 @@ import (
 	"oras.land/oras-go/v2/content"
 )
 
-// TopLevelArtifacts returns the top-level artifacts from a list of candidates.
-// An artifact is top-level when it is not contained by another candidate (not
-// one of its successors).
-//
-// The Subject edge is deliberately NOT treated as containment: a referrer points
-// "back" at its subject, so counting that edge would mark the subject as
-// referenced and wrongly hide it, surfacing the referrer instead. Referrers
-// themselves are still returned (nothing contains them); callers that want only
-// the main content artifacts must exclude referrers separately — see
-// [CloseableReadOnlyStore.MainArtifacts].
-//
-// If there is only one candidate, it is returned as-is.
+// TopLevelArtifacts returns the candidates that are not contained by (a
+// successor of) any other candidate. The subject edge does not count as
+// containment — it points backwards, and following it would hide the subject
+// and surface the referrer instead. Referrers are therefore still returned;
+// see [CloseableReadOnlyStore.MainArtifacts] to exclude them.
 func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates []ociImageSpecV1.Descriptor) []ociImageSpecV1.Descriptor {
 	// If there's only one artifact, it's automatically a top-level artifact
 	if len(candidates) <= 1 {

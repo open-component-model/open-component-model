@@ -179,23 +179,17 @@ func TestReadOCILayout_Close(t *testing.T) {
 	assert.NoError(t, store.Close())
 }
 
-// ownershipArtifactType is the ADR-0016 artifact type carried by an ownership
-// referrer. Referrer detection keys off the subject, not the artifact type, so
-// the test pairs it with a referrer carrying a different type.
+// ownershipArtifactType is the ADR-0016 ownership referrer artifact type.
 const ownershipArtifactType = "application/vnd.ocm.software.ownership.v1+json"
 
 // TestCloseableReadOnlyStore_MainArtifactsAndReferrers covers the subject-based
-// partition of the layout index: a referrer is any manifest that declares a
-// subject (regardless of artifact type), everything else is a main candidate,
-// and the mains are reduced to the top-level set. MainArtifacts and Referrers
-// are asserted to be the two halves of MainArtifactsAndReferrers.
+// partition of the layout index into main artifacts and referrers.
 func TestCloseableReadOnlyStore_MainArtifactsAndReferrers(t *testing.T) {
 	t.Run("partitions referrers (by subject) from the main artifact", func(t *testing.T) {
 		var main, ownershipRef, plainRef v1.Descriptor
 		store := readLayout(t, func(w *OCILayoutWriter) {
 			main = pack(t, w, "main", "", nil)
-			// Two referrers on main with different artifact types. Detection is by
-			// subject, so both must be classified as referrers.
+			// Two referrers with different artifact types; detection is by subject.
 			ownershipRef = pack(t, w, "ownership-referrer", ownershipArtifactType, &main)
 			plainRef = pack(t, w, "plain-referrer", "", &main)
 		})
@@ -206,7 +200,6 @@ func TestCloseableReadOnlyStore_MainArtifactsAndReferrers(t *testing.T) {
 		assert.ElementsMatch(t, []string{ownershipRef.Digest.String(), plainRef.Digest.String()}, digests(referrers),
 			"both subject-declaring manifests are referrers, regardless of artifact type")
 
-		// MainArtifacts and Referrers are the two halves of MainArtifactsAndReferrers.
 		assert.Equal(t, digests(mainArtifacts), digests(store.MainArtifacts(t.Context())))
 		assert.Equal(t, digests(referrers), digests(store.Referrers(t.Context())))
 	})
@@ -225,9 +218,6 @@ func TestCloseableReadOnlyStore_MainArtifactsAndReferrers(t *testing.T) {
 	})
 
 	t.Run("main selection drops manifests contained by another", func(t *testing.T) {
-		// An image index over two child manifests, plus a referrer on the index.
-		// The children are contained by the index, so only the index is a main
-		// artifact; the referrer is held aside.
 		var index, ref v1.Descriptor
 		store := readLayout(t, func(w *OCILayoutWriter) {
 			child1 := pack(t, w, "child1", "", nil)
@@ -244,8 +234,7 @@ func TestCloseableReadOnlyStore_MainArtifactsAndReferrers(t *testing.T) {
 }
 
 // readLayout builds an OCI layout via build, then reads it back into a store
-// closed on test cleanup. pack and packIndex push every blob they reference, so
-// build only has to call them.
+// closed on test cleanup.
 func readLayout(t *testing.T, build func(w *OCILayoutWriter)) *CloseableReadOnlyStore {
 	t.Helper()
 	var buf bytes.Buffer
@@ -259,11 +248,10 @@ func readLayout(t *testing.T, build func(w *OCILayoutWriter)) *CloseableReadOnly
 	return store
 }
 
-// pack builds and pushes a minimal image manifest (empty config and layer) and
-// returns its descriptor. A non-nil subject makes it a referrer. name becomes
-// the title annotation, which documents the manifest and keeps otherwise
-// identical siblings distinct. An empty artifactType falls back to a generic
-// type, which image-spec v1.1 requires alongside the empty config.
+// pack builds and pushes a minimal image manifest and returns its descriptor.
+// A non-nil subject makes it a referrer; name (the title annotation) keeps
+// otherwise identical siblings distinct. An empty artifactType gets a generic
+// default — image-spec v1.1 requires one alongside the empty config.
 func pack(t *testing.T, w *OCILayoutWriter, name, artifactType string, subject *v1.Descriptor) v1.Descriptor {
 	t.Helper()
 	if artifactType == "" {

@@ -119,28 +119,23 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 // and the index contains multiple manifests, this function will return a single top-level artifact
 // referencing the main index behind the given reference.
 //
-// Referrers (see [CloseableReadOnlyStore.Referrers]) are excluded — a referrer
-// is metadata attached to another artifact, never a main artifact.
+// Referrers (manifests declaring a subject) are excluded.
 func (s *CloseableReadOnlyStore) MainArtifacts(ctx context.Context) []ociImageSpecV1.Descriptor {
 	mainArtifacts, _ := s.MainArtifactsAndReferrers(ctx)
 	return mainArtifacts
 }
 
-// Referrers returns the referrer manifests in the OCI layout index — those that
-// declare a subject (e.g. an ADR 0016 ownership referrer that travelled inside
-// the layout). A referrer is metadata attached to another artifact and is never
-// a main artifact (see [CloseableReadOnlyStore.MainArtifacts]).
+// Referrers returns the manifests in the OCI layout index that declare a
+// subject, e.g. an ADR 0016 ownership referrer.
 func (s *CloseableReadOnlyStore) Referrers(ctx context.Context) []ociImageSpecV1.Descriptor {
 	_, referrers := s.MainArtifactsAndReferrers(ctx)
 	return referrers
 }
 
-// MainArtifactsAndReferrers partitions the layout index manifests by subject and
-// returns both halves in a single pass: the main artifacts — the top-level
-// artifacts among the manifests that declare no subject (reduced via
-// [TopLevelArtifacts]) — and the referrers — the manifests that do declare a
-// subject (detected via [Subject]). A manifest whose body cannot be fetched or
-// decoded is treated as a main candidate rather than silently dropped.
+// MainArtifactsAndReferrers partitions the layout index manifests in a single
+// pass: those declaring a subject are referrers; the rest are reduced via
+// [TopLevelArtifacts] to the main artifacts. A manifest that fails to fetch or
+// decode counts as a main candidate rather than being dropped.
 func (s *CloseableReadOnlyStore) MainArtifactsAndReferrers(ctx context.Context) (mainArtifacts, referrers []ociImageSpecV1.Descriptor) {
 	var candidates []ociImageSpecV1.Descriptor
 	for _, manifest := range s.Index.Manifests {

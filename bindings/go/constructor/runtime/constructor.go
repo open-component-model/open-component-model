@@ -94,12 +94,10 @@ type Resource struct {
 }
 
 // ResourceOptions bundles optional, construction-time directives for a resource.
-// These options influence how the resource is handled during construction.
 // +k8s:deepcopy-gen=true
 type ResourceOptions struct {
-	// OwnershipPolicy controls whether ownership
-	// (ADR 0016) is recorded for this resource during construction.
-	// The zero value (empty) records no ownership, same as OwnershipPolicyNever.
+	// OwnershipPolicy controls whether ownership is recorded for this resource.
+	// The zero value behaves like OwnershipPolicyNever.
 	OwnershipPolicy OwnershipPolicy `json:"-"`
 }
 

@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"context"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -10,7 +9,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
@@ -63,10 +61,6 @@ const distributionRegistryImage = "registry:3.0.0"
 
 func StartDockerContainerRegistry(t *testing.T, container, htpasswd string) string {
 	t.Helper()
-	// Make sure the registry starts clean: drop any container that still carries
-	// this name from a previously crashed or interrupted run, so testcontainers'
-	// WithName can never collide with — or reuse the stale state of — a leftover.
-	removeContainerByName(t, t.Context(), container)
 	// Start containerized registry
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
 	registryContainer, err := registry.Run(t.Context(), distributionRegistryImage,
@@ -89,29 +83,6 @@ func StartDockerContainerRegistry(t *testing.T, container, htpasswd string) stri
 	r.NoError(err)
 
 	return registryAddress
-}
-
-// removeContainerByName force-removes any container that already carries name —
-// e.g. one left behind by a previously crashed or interrupted test run — so a
-// freshly started container can never reuse or collide with stale state. It goes
-// through testcontainers' Docker client so it targets the same daemon
-// testcontainers does. A missing container is the normal, expected case and is
-// only logged, never fatal.
-func removeContainerByName(t *testing.T, ctx context.Context, name string) {
-	t.Helper()
-	cli, err := testcontainers.NewDockerClientWithOpts(ctx)
-	if err != nil {
-		t.Logf("clean-start: could not open docker client to remove leftover container %q: %v", name, err)
-		return
-	}
-	defer func() { _ = cli.Close() }()
-
-	if _, err := cli.ContainerRemove(ctx, name, client.ContainerRemoveOptions{Force: true, RemoveVolumes: true}); err != nil {
-		// Almost always "No such container" — the happy path of a clean machine.
-		t.Logf("clean-start: no leftover container %q to remove: %v", name, err)
-		return
-	}
-	t.Logf("clean-start: removed leftover container %q before launching a fresh one", name)
 }
 
 func WithHtpasswd(credentials string) testcontainers.CustomizeRequestOption {

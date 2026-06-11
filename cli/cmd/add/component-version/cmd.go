@@ -503,12 +503,10 @@ func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descripto
 	return c.plugin.DownloadResource(ctx, res, credentials)
 }
 
-// AddOwnership records ownership (ADR 0016) by
-// delegating to the resolved plugin when it implements
-// [repository.OwnershipAwareRepository] (the in-process OCI resource repository
-// does). When it does not (e.g. the out-of-process plugin bridge), it returns an
-// error: the resource explicitly opted into ownership (policy "Always"), so a
-// repository that cannot record ownership is a hard failure rather than a silent no-op.
+// AddOwnership records ownership (ADR 0016) by delegating to the resolved
+// plugin when it implements [repository.OwnershipAwareRepository]. Otherwise it
+// errors: the resource explicitly opted in (policy "Always"), so a repository
+// that cannot record ownership must not silently no-op.
 func (c *constructorPlugin) AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error {
 	ownershipAwareRepo, ok := c.plugin.(repository.OwnershipAwareRepository)
 	if !ok {
