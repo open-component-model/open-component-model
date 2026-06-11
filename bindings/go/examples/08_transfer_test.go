@@ -1,10 +1,11 @@
-// Step 7: Transferring Component Versions
+// Step 8: Transferring Component Versions
 //
 // What you'll learn:
 //   - Building a transfer graph that describes how to move a component version
 //   - Executing the graph to transfer a component from one CTF repository to another
 //   - Using transfer.WithTransfer, transfer.Component, transfer.FromRepository, and transfer.ToRepositorySpec
 //   - Verifying the transferred component version and its resource payload in the target repository
+//   - Applying custom HTTP timeouts to the repository provider used during transfer
 
 package examples
 
@@ -12,6 +13,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -19,9 +21,11 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -132,6 +136,99 @@ func TestExample_TransferCTFtoCTF(t *testing.T) {
 	data, err := io.ReadAll(rc)
 	r.NoError(err)
 	r.Equal(resourceContent, data)
+}
+
+// TestExample_Transfer_WithHTTPConfig demonstrates performing a CTF-to-CTF
+// transfer using a repository provider that applies custom HTTP timeouts.
+//
+// In production you would set these timeouts to match your network constraints.
+// Here we set explicit values to demonstrate the wiring pattern.
+func TestExample_Transfer_WithHTTPConfig(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	component := "acme.org/transfer-http-example"
+	version := "1.0.0"
+	resourceContent := []byte("payload to transfer with http config")
+
+	// --- Set up source CTF repository ---
+
+	sourceSpec := newCTFSpecAt(t, t.TempDir())
+	sourceRepo := ctfSpecToRepo(t, sourceSpec)
+
+	res := &descriptor.Resource{
+		Relation: descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "my-resource", Version: version},
+		},
+		Type: "plainText",
+		Access: &v2.LocalBlob{
+			LocalReference: digest.FromBytes(resourceContent).String(),
+			MediaType:      "text/plain",
+		},
+	}
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "acme.org"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version},
+			},
+			Resources: []descriptor.Resource{*res},
+		},
+	}
+	b := inmemory.New(bytes.NewReader(resourceContent))
+	newRes, err := sourceRepo.AddLocalResource(ctx, component, version, res, b)
+	r.NoError(err)
+	desc.Component.Resources[0] = *newRes
+	r.NoError(sourceRepo.AddComponentVersion(ctx, desc))
+
+	// --- Resolve HTTP config from an OCM config with custom timeouts ---
+
+	const yamlConfig = `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    timeout: 60s
+    tlsHandshakeTimeout: 10s
+`
+	var cfg genericv1.Config
+	r.NoError(genericv1.Scheme.Decode(strings.NewReader(yamlConfig), &cfg))
+	httpCfg, err := httpv1alpha1.ResolveHTTPConfig(&cfg)
+	r.NoError(err)
+
+	// --- Build and execute the transfer using a provider with HTTP config ---
+
+	targetSpec := newCTFSpecAt(t, t.TempDir())
+	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
+
+	tgd, err := transfer.BuildGraphDefinition(ctx,
+		transfer.WithTransfer(
+			transfer.Component(component, version),
+			transfer.ToRepositorySpec(targetSpec),
+			transfer.FromRepository(sourceRepo, sourceSpec),
+		),
+	)
+	r.NoError(err)
+
+	repoProvider := provider.NewComponentVersionRepositoryProvider(
+		provider.WithHTTPConfig(httpCfg),
+		provider.WithTempDir(t.TempDir()),
+	)
+	resourceRepo := resource.NewResourceRepository(nil)
+
+	builder := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
+	graph, err := builder.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	// --- Verify ---
+
+	targetRepo := ctfSpecToRepo(t, targetSpec)
+	got, err := targetRepo.GetComponentVersion(ctx, component, version)
+	r.NoError(err)
+	r.Equal(component, got.Component.Name)
+	r.Equal(version, got.Component.Version)
 }
 
 // --- helpers ---
