@@ -7,8 +7,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var convertScheme = runtime.NewScheme(runtime.WithAllowUnknown())
-
 func ConvertFromV1(config *v1.Config) *Config {
 	return &Config{
 		Type:         config.Type,
@@ -54,12 +52,12 @@ func convertFromV1Repositories(repositories []v1.RepositoryConfigEntry) []Reposi
 	return entries
 }
 
-func ConvertToV1(config *Config) (*v1.Config, error) {
-	repositories, err := convertToV1Repositories(config.Repositories)
+func ConvertToV1(scheme *runtime.Scheme, config *Config) (*v1.Config, error) {
+	repositories, err := convertToV1Repositories(scheme, config.Repositories)
 	if err != nil {
 		return nil, err
 	}
-	consumers, err := convertToV1Consumers(config.Consumers)
+	consumers, err := convertToV1Consumers(scheme, config.Consumers)
 	if err != nil {
 		return nil, err
 	}
@@ -70,10 +68,10 @@ func ConvertToV1(config *Config) (*v1.Config, error) {
 	}, nil
 }
 
-func convertToV1Consumers(consumers []Consumer) ([]v1.Consumer, error) {
+func convertToV1Consumers(scheme *runtime.Scheme, consumers []Consumer) ([]v1.Consumer, error) {
 	entries := make([]v1.Consumer, len(consumers))
 	for i, consumer := range consumers {
-		credentials, err := convertToV1Credentials(consumer.Credentials)
+		credentials, err := convertToV1Credentials(scheme, consumer.Credentials)
 		if err != nil {
 			return nil, err
 		}
@@ -85,11 +83,11 @@ func convertToV1Consumers(consumers []Consumer) ([]v1.Consumer, error) {
 	return entries, nil
 }
 
-func convertToV1Credentials(credentials []runtime.Typed) ([]*runtime.Raw, error) {
+func convertToV1Credentials(scheme *runtime.Scheme, credentials []runtime.Typed) ([]*runtime.Raw, error) {
 	entries := make([]*runtime.Raw, len(credentials))
 	for i, cred := range credentials {
 		var raw runtime.Raw
-		if err := convertScheme.Convert(cred, &raw); err != nil {
+		if err := scheme.Convert(cred, &raw); err != nil {
 			return nil, fmt.Errorf("credential at index %d: %w", i, err)
 		}
 		entries[i] = &raw
@@ -97,11 +95,11 @@ func convertToV1Credentials(credentials []runtime.Typed) ([]*runtime.Raw, error)
 	return entries, nil
 }
 
-func convertToV1Repositories(repositories []RepositoryConfigEntry) ([]v1.RepositoryConfigEntry, error) {
+func convertToV1Repositories(scheme *runtime.Scheme, repositories []RepositoryConfigEntry) ([]v1.RepositoryConfigEntry, error) {
 	entries := make([]v1.RepositoryConfigEntry, len(repositories))
 	for i, repo := range repositories {
 		var raw runtime.Raw
-		if err := convertScheme.Convert(repo.Repository, &raw); err != nil {
+		if err := scheme.Convert(repo.Repository, &raw); err != nil {
 			return nil, fmt.Errorf("repository at index %d: %w", i, err)
 		}
 		entries[i] = v1.RepositoryConfigEntry{
