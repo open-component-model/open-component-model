@@ -7,6 +7,7 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -20,7 +21,7 @@ func TestRegister(t *testing.T) {
 		TempFolder: t.TempDir(),
 	}
 
-	require.NoError(t, Register(registry, credentialsRegistry, cfg))
+	require.NoError(t, Register(registry, credentialsRegistry, cfg, &httpv1alpha1.Config{}))
 
 	helmSpec := &helmv1.Helm{
 		Type: runtime.NewVersionedType(helmv1.Type, helmv1.Version),
