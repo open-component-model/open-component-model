@@ -1116,29 +1116,19 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 		if resolved.Tag != "" {
 			tags = []string{typed.ImageReference}
 		}
+		// The stream self-discovers any ownership referrers (ADR 0016) of the
+		// artifact from src: Materialize pulls them into the layout so they travel
+		// to a transfer target (just as for a by-value resource, see
+		// [Repository.getLocalBlobFromIndexOrManifest]), and the streaming upload
+		// path exposes them via Predecessors to ExtendedCopyGraph. Referrers on a
+		// by-reference image are attached out-of-band via the Referrers API, so
+		// without this they would be left behind when the image is copied.
 		return &ocistream.OCIResourceStream{
 			ReadOnlyStorage: src,
 			Descriptor:      desc,
 			CopyOpts:        repo.resourceCopyOptions.CopyGraphOptions,
 			TempDir:         repo.tempDir,
 			Tags:            tags,
-			// Pull any ownership referrers (ADR 0016) of the artifact into the stream so
-			// they ride inside the materialized layout and travel to a transfer target,
-			// just as they do for a by-value resource (see
-			// [Repository.getLocalBlobFromIndexOrManifest]). Referrers on a by-reference
-			// image are attached out-of-band via the Referrers API, so without this they
-			// would be left behind when the image is copied. Discovery is deferred to
-			// Materialize so the streaming upload path — which finds its own referrers via
-			// ExtendedCopyGraph — never pays for it. A referrers-query hiccup must not fail
-			// an otherwise-healthy read; continue without them.
-			DiscoverReferrers: func(ctx context.Context) ([]ociImageSpecV1.Descriptor, error) {
-				refs, err := lookupOwnershipReferrers(ctx, src, desc)
-				if err != nil {
-					slogcontext.Log(ctx, slog.LevelWarn, "failed listing ownership referrers; continuing without them", slog.String("reference", typed.ImageReference), slog.Any("err", err))
-					return nil, nil
-				}
-				return refs, nil
-			},
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)

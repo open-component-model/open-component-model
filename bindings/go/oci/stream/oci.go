@@ -2,12 +2,17 @@ package stream
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	slogcontext "github.com/veqryn/slog-context"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
@@ -18,44 +23,53 @@ import (
 // full ImageReference string so the caller can resolve the layout by that same key.
 type OCIResourceStream struct {
 	content.ReadOnlyStorage
+	content.PredecessorFinder
 	Descriptor ocispec.Descriptor
 	CopyOpts   oras.CopyGraphOptions
 	TempDir    string
 	Tags       []string
-	// DiscoverReferrers lazily lists the referrer manifests (e.g. ADR 0016
-	// ownership referrers) of Descriptor that must travel with it. It is the single
-	// discovery hook for both transfer paths: Materialize pulls the result into the
-	// layout, and Predecessors exposes it to oras.ExtendedCopyGraph during a
-	// streaming upload. Discovery is lazy — no network I/O until the stream is
-	// consumed — and nil means no referrers travel.
-	DiscoverReferrers func(ctx context.Context) ([]ocispec.Descriptor, error)
 }
 
-var _ ResourceStream = (*OCIResourceStream)(nil)
+var (
+	_ ResourceStream               = (*OCIResourceStream)(nil)
+	_ content.ReadOnlyGraphStorage = (*OCIResourceStream)(nil)
+)
 
 func (s *OCIResourceStream) Root() ocispec.Descriptor {
 	return s.Descriptor
 }
 
 // Predecessors makes the stream a content.ReadOnlyGraphStorage so it can be the
-// source of an oras.ExtendedCopyGraph. It reports the referrers that must travel
-// with the root (via DiscoverReferrers) as the root's predecessors, so the copy
-// walks them up from Root and carries them along. Every other node — and a stream
-// with no DiscoverReferrers — reports none.
+// source of an oras.ExtendedCopyGraph. It reports the ownership referrers (ADR
+// 0016) of the root — discovered from the wrapped store via the Referrers API —
+// as the root's predecessors, so the copy walks them up from Root and carries
+// them along. Every other node reports none; a store that cannot answer referrer
+// queries yields none; and a referrers-query hiccup must not fail an
+// otherwise-healthy transfer, so it is logged and treated as none.
 func (s *OCIResourceStream) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]ocispec.Descriptor, error) {
-	if s.DiscoverReferrers == nil || node.Digest != s.Descriptor.Digest {
+	if !content.Equal(node, s.Root()) {
 		return nil, nil
 	}
-	return s.DiscoverReferrers(ctx)
+	graphStore, ok := s.ReadOnlyStorage.(content.ReadOnlyGraphStorage)
+	if !ok {
+		slogcontext.Log(ctx, slog.LevelDebug, "source store does not support referrer discovery; skipping ownership referrers", slog.String("store", fmt.Sprintf("%T", s.ReadOnlyStorage)))
+		return nil, nil
+	}
+	refs, err := registry.Referrers(ctx, graphStore, node, annotations.OwnershipArtifactType)
+	if err != nil {
+		slogcontext.Log(ctx, slog.LevelWarn, "failed listing ownership referrers; continuing without them", slog.Any("err", err))
+		return nil, nil
+	}
+	return refs, nil
 }
 
 func (s *OCIResourceStream) Materialize(ctx context.Context) (blob.ReadOnlyBlob, error) {
-	var referrers []ocispec.Descriptor
-	if s.DiscoverReferrers != nil {
-		var err error
-		if referrers, err = s.DiscoverReferrers(ctx); err != nil {
-			return nil, err
-		}
+	// Pull the root's ownership referrers into the layout so they ride along to a
+	// transfer target, mirroring the streaming-upload path that exposes them via
+	// Predecessors to oras.ExtendedCopyGraph.
+	referrers, err := s.Predecessors(ctx, s.Descriptor)
+	if err != nil {
+		return nil, err
 	}
 	return tar.CopyToOCILayoutInMemory(ctx, s.ReadOnlyStorage, s.Descriptor, tar.CopyToOCILayoutOptions{
 		CopyGraphOptions: s.CopyOpts,
