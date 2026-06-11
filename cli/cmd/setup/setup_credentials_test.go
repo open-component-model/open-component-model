@@ -15,6 +15,7 @@ import (
 	gpgidentityv1alpha1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/identity/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -33,7 +34,7 @@ import (
 // the typed consumer credential structs declared by each built-in binding
 func TestCredentialTypeSchemePopulatedByBuiltinRegister(t *testing.T) {
 	pm := manager.NewPluginManager(context.Background())
-	require.NoError(t, builtin.Register(pm, &filesystemv1alpha1.Config{}, slog.Default()))
+	require.NoError(t, builtin.Register(pm, &filesystemv1alpha1.Config{}, &httpv1alpha1.Config{}, slog.Default()))
 
 	scheme := pm.CredentialRepositoryRegistry.GetCredentialTypeScheme()
 	require.NotNil(t, scheme)
@@ -65,7 +66,7 @@ func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
 	ctx := t.Context()
 
 	pm := manager.NewPluginManager(ctx)
-	require.NoError(t, builtin.Register(pm, &filesystemv1alpha1.Config{}, slog.Default()))
+	require.NoError(t, builtin.Register(pm, &filesystemv1alpha1.Config{}, &httpv1alpha1.Config{}, slog.Default()))
 
 	tests := []struct {
 		name       string
