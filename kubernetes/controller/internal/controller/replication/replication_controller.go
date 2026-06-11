@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,6 +27,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
+	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
@@ -187,9 +189,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())
 
-		var notReadyErr util.NotReadyError
-		var deletionErr util.DeletionError
-		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
+		if isNotReadyOrDeleted(err) {
 			logger.Info("source component is not available, waiting for component event", "error", err)
 
 			return ctrl.Result{}, nil
@@ -221,9 +221,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
 
-		var notReadyErr util.NotReadyError
-		var deletionErr util.DeletionError
-		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
+		if isNotReadyOrDeleted(err) {
 			logger.Info("target repository is not available, waiting for repository event", "error", err)
 
 			return ctrl.Result{}, nil
@@ -350,7 +348,20 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to build transfer graph definition: %w", err)
 	}
 
-	var credGraph credentials.Resolver
+	if err := r.transfer(ctx, logger, replication, cfg, tgd, component, sourceDigest); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	status.MarkReady(r.EventRecorder, replication, "Successfully transferred component version %s", component.Status.Component.Version)
+
+	return ctrl.Result{}, nil
+}
+
+func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replication *v1alpha1.Replication, cfg *configuration.Configuration, tgd *transformv1alpha1.TransformationGraphDefinition, component *v1alpha1.Component, sourceDigest string) error {
+	var (
+		credGraph credentials.Resolver
+		err       error
+	)
 	if cfg != nil {
 		credGraph, err = setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
 			PluginManager: r.PluginManager,
@@ -359,7 +370,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
 
-			return ctrl.Result{}, fmt.Errorf("failed to create credential graph: %w", err)
+			return fmt.Errorf("failed to create credential graph: %w", err)
 		}
 	}
 
@@ -371,7 +382,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to build transformation graph: %w", err)
+		return fmt.Errorf("failed to build transformation graph: %w", err)
 	}
 
 	logger.Info("executing transfer",
@@ -382,7 +393,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	if err := transferGraph.Process(ctx); err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to process transformation graph: %w", err)
+		return fmt.Errorf("failed to process transformation graph: %w", err)
 	}
 
 	replication.Status.LastTransferredVersion = component.Status.Component.Version
@@ -393,7 +404,12 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		Reason:  v1alpha1.IdleReason,
 		Message: fmt.Sprintf("transferred component version %s", component.Status.Component.Version),
 	})
-	status.MarkReady(r.EventRecorder, replication, "Successfully transferred component version %s", component.Status.Component.Version)
+	return nil
+}
 
-	return ctrl.Result{}, nil
+func isNotReadyOrDeleted(err error) bool {
+	var notReadyErr util.NotReadyError
+	var deletionErr util.DeletionError
+
+	return errors.As(err, &notReadyErr) || errors.As(err, &deletionErr)
 }
