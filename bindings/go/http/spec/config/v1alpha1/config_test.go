@@ -700,7 +700,7 @@ func TestRetryConfig_Validate(t *testing.T) {
 		}
 		err := cfg.Validate()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "retry:")
+		assert.Contains(t, err.Error(), "invalid retry config:")
 	})
 
 	t.Run("Config.Validate wraps per-host retry error", func(t *testing.T) {
@@ -715,7 +715,7 @@ func TestRetryConfig_Validate(t *testing.T) {
 		err := cfg.Validate()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `host "ghcr.io:443"`)
-		assert.Contains(t, err.Error(), "retry:")
+		assert.Contains(t, err.Error(), "invalid retry config:")
 	})
 }
 

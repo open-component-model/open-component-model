@@ -283,11 +283,11 @@ type HostConfig struct {
 // Validate checks the per-host timeout and retry config for valid values.
 func (h *HostConfig) Validate() error {
 	if err := h.TimeoutConfig.Validate(); err != nil {
-		return err
+		return fmt.Errorf("timeout: %w", err)
 	}
 	if h.Retry != nil {
 		if err := h.Retry.Validate(); err != nil {
-			return fmt.Errorf("retry: %w", err)
+			return fmt.Errorf("invalid retry config: %w", err)
 		}
 	}
 	return nil
@@ -329,7 +329,7 @@ func (c *Config) Validate() error {
 	}
 	if c.Retry != nil {
 		if err := c.Retry.Validate(); err != nil {
-			return fmt.Errorf("retry: %w", err)
+			return fmt.Errorf("invalid retry config: %w", err)
 		}
 	}
 	for host, hc := range c.Hosts {
