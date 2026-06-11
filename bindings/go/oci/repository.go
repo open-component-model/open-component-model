@@ -794,6 +794,7 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 		if descriptorManifest.MediaType != ociImageSpecV1.MediaTypeImageManifest {
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index manifest is not an OCI image manifest")
 		}
+		slogcontext.Log(ctx, slog.LevelDebug, "fetching first manifest from index", log.DescriptorLogAttr(descriptorManifest))
 		indexManifestRaw, err := store.Fetch(ctx, descriptorManifest)
 		defer func() {
 			err = errors.Join(err, indexManifestRaw.Close())

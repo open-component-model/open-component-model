@@ -304,14 +304,21 @@ func setGlobalAccess(baseReference string, desc ociImageSpecV1.Descriptor, local
 	}
 }
 
-// backedByGlobalStore checks if the given storage is backed by a globally reachable store
+// backedByGlobalStore checks if the given storage is backed by a globally reachable store.
+//
+// Decorators that wrap a global store (e.g. the manifest blob cache
+// in resolver/url) may implement an Unwrap method returning the
+// underlying store; this function unwraps recursively so the test
+// looks through the decorator chain.
 //
 // TODO(jakobmoellerdev): Eventually we should find a smarter solution to determine if a store is global.
 func backedByGlobalStore(storage content.Storage) bool {
-	switch storage.(type) {
+	switch s := storage.(type) {
 	// for ORAS repositories, we know they are global if they are remote repositories.
 	case *remote.Repository:
 		return true
+	case interface{ Unwrap() content.Storage }:
+		return backedByGlobalStore(s.Unwrap())
 	default:
 		return false
 	}
