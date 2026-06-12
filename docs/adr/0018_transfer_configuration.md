@@ -91,7 +91,7 @@ team-specific registry.
 The CLI accepts exactly one source component reference. To transfer
 multiple root components, the user has to run multiple transfers. The
 transfer library already supports multiple root components via multiple
-`WithTransfer` option calls.
+`Mapping` values passed to `BuildGraphDefinition`.
 
 ### Summary
 

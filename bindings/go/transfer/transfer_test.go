@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
 // --- mock types ---
@@ -115,7 +116,8 @@ func testResolverFor(component, version string, repoSpec runtime.Typed, desc *de
 func testMultiComponentResolver(entries map[string]struct {
 	spec runtime.Typed
 	desc *descriptor.Descriptor
-}) *mockCVRepoResolver {
+},
+) *mockCVRepoResolver {
 	specs := make(map[string]runtime.Typed)
 	allDescs := make(map[string]*descriptor.Descriptor)
 	for key, entry := range entries {
@@ -138,12 +140,12 @@ func TestBuildGraphDefinition_SingleMapping(t *testing.T) {
 	desc := testDescriptor("ocm.software/test", "1.0.0", nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
-	tgd, err := BuildGraphDefinition(t.Context(),
-		WithTransfer(
-			Component("ocm.software/test", "1.0.0"),
-			ToRepositorySpec(targetRepo),
-			FromResolver(resolver),
-		),
+	tgd, err := BuildGraphDefinition(t.Context(), nil,
+		Mapping{
+			Components: []ComponentID{{Component: "ocm.software/test", Version: "1.0.0"}},
+			Target:     targetRepo,
+			Resolver:   resolver,
+		},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)
@@ -176,13 +178,15 @@ func TestBuildGraphDefinition_MultipleComponentsSameTarget(t *testing.T) {
 		"ocm.software/b:2.0.0": {spec: sourceRepo, desc: descB},
 	})
 
-	tgd, err := BuildGraphDefinition(t.Context(),
-		WithTransfer(
-			Component("ocm.software/a", "1.0.0"),
-			Component("ocm.software/b", "2.0.0"),
-			ToRepositorySpec(targetRepo),
-			FromResolver(resolver),
-		),
+	tgd, err := BuildGraphDefinition(t.Context(), nil,
+		Mapping{
+			Components: []ComponentID{
+				{Component: "ocm.software/a", Version: "1.0.0"},
+				{Component: "ocm.software/b", Version: "2.0.0"},
+			},
+			Target:   targetRepo,
+			Resolver: resolver,
+		},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)
@@ -208,17 +212,17 @@ func TestBuildGraphDefinition_DifferentComponentsDifferentTargets(t *testing.T) 
 	resolverA := testResolverFor("ocm.software/a", "1.0.0", sourceA, descA)
 	resolverB := testResolverFor("ocm.software/b", "2.0.0", sourceB, descB)
 
-	tgd, err := BuildGraphDefinition(t.Context(),
-		WithTransfer(
-			Component("ocm.software/a", "1.0.0"),
-			ToRepositorySpec(targetA),
-			FromResolver(resolverA),
-		),
-		WithTransfer(
-			Component("ocm.software/b", "2.0.0"),
-			ToRepositorySpec(targetB),
-			FromResolver(resolverB),
-		),
+	tgd, err := BuildGraphDefinition(t.Context(), nil,
+		Mapping{
+			Components: []ComponentID{{Component: "ocm.software/a", Version: "1.0.0"}},
+			Target:     targetA,
+			Resolver:   resolverA,
+		},
+		Mapping{
+			Components: []ComponentID{{Component: "ocm.software/b", Version: "2.0.0"}},
+			Target:     targetB,
+			Resolver:   resolverB,
+		},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)
@@ -241,17 +245,17 @@ func TestBuildGraphDefinition_SameComponentMultipleTargets(t *testing.T) {
 	desc := testDescriptor("ocm.software/test", "1.0.0", nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
-	tgd, err := BuildGraphDefinition(t.Context(),
-		WithTransfer(
-			Component("ocm.software/test", "1.0.0"),
-			ToRepositorySpec(target1),
-			FromResolver(resolver),
-		),
-		WithTransfer(
-			Component("ocm.software/test", "1.0.0"),
-			ToRepositorySpec(target2),
-			FromResolver(resolver),
-		),
+	tgd, err := BuildGraphDefinition(t.Context(), nil,
+		Mapping{
+			Components: []ComponentID{{Component: "ocm.software/test", Version: "1.0.0"}},
+			Target:     target1,
+			Resolver:   resolver,
+		},
+		Mapping{
+			Components: []ComponentID{{Component: "ocm.software/test", Version: "1.0.0"}},
+			Target:     target2,
+			Resolver:   resolver,
+		},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)
@@ -272,7 +276,7 @@ func TestBuildGraphDefinition_SameComponentMultipleTargets(t *testing.T) {
 	}
 }
 
-func TestBuildGraphDefinition_FromRepository(t *testing.T) {
+func TestBuildGraphDefinition_RepositoryResolver(t *testing.T) {
 	sourceSpec := testOCITarget("ghcr.io/source")
 	targetRepo := testOCITarget("ghcr.io/target")
 
@@ -283,12 +287,12 @@ func TestBuildGraphDefinition_FromRepository(t *testing.T) {
 		},
 	}
 
-	tgd, err := BuildGraphDefinition(t.Context(),
-		WithTransfer(
-			Component("ocm.software/test", "1.0.0"),
-			ToRepositorySpec(targetRepo),
-			FromRepository(mockRepo, sourceSpec),
-		),
+	tgd, err := BuildGraphDefinition(t.Context(), nil,
+		Mapping{
+			Components: []ComponentID{{Component: "ocm.software/test", Version: "1.0.0"}},
+			Target:     targetRepo,
+			Resolver:   NewRepositoryResolver(mockRepo, sourceSpec),
+		},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)
@@ -299,10 +303,10 @@ func TestBuildGraphDefinition_FromRepository(t *testing.T) {
 			uploadCount++
 		}
 	}
-	assert.Equal(t, 1, uploadCount, "expected 1 upload transformation when using FromRepository")
+	assert.Equal(t, 1, uploadCount, "expected 1 upload transformation when using NewRepositoryResolver")
 }
 
-func TestBuildGraphDefinition_WithTransferFromLister(t *testing.T) {
+func TestBuildGraphDefinition_ComponentLister(t *testing.T) {
 	sourceRepo := testOCITarget("ghcr.io/source")
 	targetRepo := testOCITarget("ghcr.io/target")
 
@@ -324,8 +328,8 @@ func TestBuildGraphDefinition_WithTransferFromLister(t *testing.T) {
 		})
 	})
 
-	tgd, err := BuildGraphDefinition(t.Context(),
-		WithTransfer(FromLister(lister), ToRepositorySpec(targetRepo), FromResolver(resolver)),
+	tgd, err := BuildGraphDefinition(t.Context(), nil,
+		Mapping{ComponentLister: lister, Target: targetRepo, Resolver: resolver},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)
@@ -362,12 +366,12 @@ func TestBuildGraphDefinition_Recursive(t *testing.T) {
 	})
 
 	tgd, err := BuildGraphDefinition(t.Context(),
-		WithTransfer(
-			Component("ocm.software/parent", "1.0.0"),
-			ToRepositorySpec(targetRepo),
-			FromResolver(resolver),
-		),
-		WithRecursive(true),
+		&transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite},
+		Mapping{
+			Components: []ComponentID{{Component: "ocm.software/parent", Version: "1.0.0"}},
+			Target:     targetRepo,
+			Resolver:   resolver,
+		},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)
@@ -385,7 +389,7 @@ func TestBuildGraphDefinition_Recursive(t *testing.T) {
 // --- Validation error tests ---
 
 func TestBuildGraphDefinition_NoMappings(t *testing.T) {
-	_, err := BuildGraphDefinition(t.Context())
+	_, err := BuildGraphDefinition(t.Context(), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no transfer mappings")
 }
@@ -395,11 +399,11 @@ func TestBuildGraphDefinition_MissingTarget(t *testing.T) {
 		specs: map[string]runtime.Typed{},
 		repos: map[string]repository.ComponentVersionRepository{},
 	}
-	_, err := BuildGraphDefinition(t.Context(),
-		WithTransfer(
-			Component("ocm.software/test", "1.0.0"),
-			FromResolver(resolver),
-		),
+	_, err := BuildGraphDefinition(t.Context(), nil,
+		Mapping{
+			Components: []ComponentID{{Component: "ocm.software/test", Version: "1.0.0"}},
+			Resolver:   resolver,
+		},
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no target")
@@ -407,11 +411,11 @@ func TestBuildGraphDefinition_MissingTarget(t *testing.T) {
 
 func TestBuildGraphDefinition_MissingResolver(t *testing.T) {
 	targetRepo := testOCITarget("ghcr.io/target")
-	_, err := BuildGraphDefinition(t.Context(),
-		WithTransfer(
-			Component("ocm.software/test", "1.0.0"),
-			ToRepositorySpec(targetRepo),
-		),
+	_, err := BuildGraphDefinition(t.Context(), nil,
+		Mapping{
+			Components: []ComponentID{{Component: "ocm.software/test", Version: "1.0.0"}},
+			Target:     targetRepo,
+		},
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no resolver")
@@ -423,11 +427,11 @@ func TestBuildGraphDefinition_MissingComponents(t *testing.T) {
 		specs: map[string]runtime.Typed{},
 		repos: map[string]repository.ComponentVersionRepository{},
 	}
-	_, err := BuildGraphDefinition(t.Context(),
-		WithTransfer(
-			ToRepositorySpec(targetRepo),
-			FromResolver(resolver),
-		),
+	_, err := BuildGraphDefinition(t.Context(), nil,
+		Mapping{
+			Target:   targetRepo,
+			Resolver: resolver,
+		},
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no components")
@@ -445,17 +449,18 @@ func TestBuildGraphDefinition_ListerAndComponentsConflict(t *testing.T) {
 	})
 
 	// Build a mapping that has both a lister and explicit components.
-	var o Options
-	o.Mappings = append(o.Mappings, Mapping{
-		Components: []ComponentID{
-			{Component: "ocm.software/b", Version: "2.0.0"},
+	mappings := []Mapping{
+		{
+			Components: []ComponentID{
+				{Component: "ocm.software/b", Version: "2.0.0"},
+			},
+			ComponentLister: lister,
+			Target:          targetRepo,
+			Resolver:        resolver,
 		},
-		ComponentLister: lister,
-		Target:          targetRepo,
-		Resolver:        resolver,
-	})
+	}
 
-	_, err := collectTransferRoots(t.Context(), &o)
+	_, err := collectTransferRoots(t.Context(), mappings)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot combine")
 }
@@ -472,8 +477,8 @@ func TestBuildGraphDefinition_EmptyListerResult(t *testing.T) {
 		return fn([]ComponentID{})
 	})
 
-	_, err := BuildGraphDefinition(t.Context(),
-		WithTransfer(FromLister(lister), ToRepositorySpec(targetRepo), FromResolver(resolver)),
+	_, err := BuildGraphDefinition(t.Context(), nil,
+		Mapping{ComponentLister: lister, Target: targetRepo, Resolver: resolver},
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no components")
@@ -488,19 +493,17 @@ func TestCollectTransferRoots_SingleMapping(t *testing.T) {
 		repos: map[string]repository.ComponentVersionRepository{},
 	}
 
-	o := &Options{
-		Mappings: []Mapping{
-			{
-				Components: []ComponentID{
-					{Component: "ocm.software/test", Version: "1.0.0"},
-				},
-				Target:   targetRepo,
-				Resolver: resolver,
+	mappings := []Mapping{
+		{
+			Components: []ComponentID{
+				{Component: "ocm.software/test", Version: "1.0.0"},
 			},
+			Target:   targetRepo,
+			Resolver: resolver,
 		},
 	}
 
-	roots, err := collectTransferRoots(t.Context(), o)
+	roots, err := collectTransferRoots(t.Context(), mappings)
 	require.NoError(t, err)
 	require.Len(t, roots, 1)
 	root := roots["ocm.software/test:1.0.0"]
@@ -517,26 +520,24 @@ func TestCollectTransferRoots_MergesTargetsForSameComponent(t *testing.T) {
 		repos: map[string]repository.ComponentVersionRepository{},
 	}
 
-	o := &Options{
-		Mappings: []Mapping{
-			{
-				Components: []ComponentID{
-					{Component: "ocm.software/test", Version: "1.0.0"},
-				},
-				Target:   target1,
-				Resolver: resolver,
+	mappings := []Mapping{
+		{
+			Components: []ComponentID{
+				{Component: "ocm.software/test", Version: "1.0.0"},
 			},
-			{
-				Components: []ComponentID{
-					{Component: "ocm.software/test", Version: "1.0.0"},
-				},
-				Target:   target2,
-				Resolver: resolver,
+			Target:   target1,
+			Resolver: resolver,
+		},
+		{
+			Components: []ComponentID{
+				{Component: "ocm.software/test", Version: "1.0.0"},
 			},
+			Target:   target2,
+			Resolver: resolver,
 		},
 	}
 
-	roots, err := collectTransferRoots(t.Context(), o)
+	roots, err := collectTransferRoots(t.Context(), mappings)
 	require.NoError(t, err)
 	require.Len(t, roots, 1, "same component should be de-duplicated into one root")
 	root := roots["ocm.software/test:1.0.0"]
@@ -552,26 +553,24 @@ func TestCollectTransferRoots_DuplicateTargetNotMergedTwice(t *testing.T) {
 		repos: map[string]repository.ComponentVersionRepository{},
 	}
 
-	o := &Options{
-		Mappings: []Mapping{
-			{
-				Components: []ComponentID{
-					{Component: "ocm.software/test", Version: "1.0.0"},
-				},
-				Target:   targetRepo,
-				Resolver: resolver,
+	mappings := []Mapping{
+		{
+			Components: []ComponentID{
+				{Component: "ocm.software/test", Version: "1.0.0"},
 			},
-			{
-				Components: []ComponentID{
-					{Component: "ocm.software/test", Version: "1.0.0"},
-				},
-				Target:   targetRepo, // same pointer
-				Resolver: resolver,
+			Target:   targetRepo,
+			Resolver: resolver,
+		},
+		{
+			Components: []ComponentID{
+				{Component: "ocm.software/test", Version: "1.0.0"},
 			},
+			Target:   targetRepo, // same pointer
+			Resolver: resolver,
 		},
 	}
 
-	roots, err := collectTransferRoots(t.Context(), o)
+	roots, err := collectTransferRoots(t.Context(), mappings)
 	require.NoError(t, err)
 	require.Len(t, roots, 1)
 	assert.Len(t, roots["ocm.software/test:1.0.0"].Targets, 1, "duplicate target (same pointer) should not be added twice")

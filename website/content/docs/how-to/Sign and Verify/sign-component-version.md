@@ -287,7 +287,6 @@ digest:
 name: default
 signature:
   algorithm: sigstore
-  issuer: https://github.com/login/oauth
   mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
   value: ...
 
