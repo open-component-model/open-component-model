@@ -22,7 +22,7 @@ ends up with exactly **one** ownership record, however many times it is created.
 
 ## Ownership Across Transfer
 
-When you transfer a component version to another registry, OCM brings the ownership records for **by-value**
+When you transfer a component version to another registry, OCM brings the ownership records of **by-value**
 resources along automatically. The record travels together with the resource it points at, so it arrives whether or not you also copy the resources (`--copy-resources`).
 
 For the full picture of how artifacts move between repositories, see [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}).
