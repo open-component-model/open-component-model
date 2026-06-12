@@ -30,7 +30,6 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
-	"ocm.software/open-component-model/bindings/go/oci/tar"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd"
 	"ocm.software/open-component-model/cli/integration/internal"
@@ -328,26 +327,31 @@ components:
 			})
 		})
 
-		// CTF has no Referrers API and stores by-value resources as OCI image
-		// layout tarballs in the component-descriptors repo. The ownership
-		// referrer rides inside that layout, so it survives a CTF target transfer
-		// regardless of --copy-resources. By-reference resources are not asserted
-		// here: without --copy-resources they stay pointed at the source registry,
-		// and with --copy-resources they get re-hosted as local blobs in the CTF
-		// — the same by-value layout path the local resource exercises.
+		// CTF has no native Referrers API, but the OCI binding exposes its archive
+		// as an oci.Resolver-compatible store, so the same Referrers-API assertion
+		// path used for live registries applies here. By-value resources land as
+		// local-blob OCI image layout tarballs in the component-descriptors repo;
+		// the ownership referrer rides inside that layout and must be discoverable
+		// via the resolver-backed Referrers walk regardless of --copy-resources.
+		// By-reference resources are not asserted here: without --copy-resources
+		// they stay pointed at the source registry, and with --copy-resources they
+		// get re-hosted as local blobs in the CTF — the same by-value layout path
+		// the local resource exercises.
 		t.Run("to CTF target — by-value referrer reaches the target layout", func(t *testing.T) {
-			dstCTFPath, dstRepo := transferTestAssetToCTF(t, ctx, srcReg, component, version)
+			dstCTFPath, dstRepo, dstResolver := transferTestAssetToCTF(t, ctx, srcReg, component, version)
 			t.Logf("destination CTF: %s", dstCTFPath)
-			assertCTFLocalBlobReferrer(t, ctx, dstRepo, component, version, "backend-image-local", true)
+			subject := resourceSubjectReference(t, ctx, dstResolver, dstRepo, component, version, "backend-image-local")
+			assertOwnershipReferrer(t, ctx, dstResolver, subject, component, version, "backend-image-local", true)
 		})
 	})
 }
 
 // transferTestAssetToCTF transfers the shared test-asset component version from
 // srcReg into a fresh CTF archive via the real `ocm transfer component-version`
-// CLI command and returns the CTF archive path and an [oci.Repository] backed by
-// it for asserting the result.
-func transferTestAssetToCTF(t *testing.T, ctx context.Context, srcReg *internal.OCIRegistry, component, version string) (string, *oci.Repository) {
+// CLI command and returns the CTF archive path, an [oci.Repository] backed by it,
+// and an [oci.Resolver] over the same archive for asserting the result via the
+// shared OCI Referrers-API path.
+func transferTestAssetToCTF(t *testing.T, ctx context.Context, srcReg *internal.OCIRegistry, component, version string) (string, *oci.Repository, *ocictf.Store) {
 	t.Helper()
 	r := require.New(t)
 
@@ -375,70 +379,13 @@ func transferTestAssetToCTF(t *testing.T, ctx context.Context, srcReg *internal.
 
 	fs, err := filesystem.NewFS(dstCTF, os.O_RDWR)
 	r.NoError(err)
+	dstResolver := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
 	dstRepo, err := oci.NewRepository(
-		ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))),
+		ocictf.WithCTF(dstResolver),
 		oci.WithTempDir(t.TempDir()),
 	)
 	r.NoError(err)
-	return dstCTF, dstRepo
-}
-
-// assertCTFLocalBlobReferrer asserts the ADR-0016 ownership referrer state of a
-// by-value resource in a CTF target. The referrer rides inside the resource's
-// OCI image layout tarball, so it is verified by downloading the resource (which
-// materialises the local-blob layout) and inspecting the layout's index for a
-// manifest declaring a subject — the ownership referrer.
-//
-// CTF has no Referrers API ([ctf.repository.Predecessors] returns nil), so the
-// out-of-band Referrers-API verification used for OCI registries does not apply
-// here; the layout-level check is what proves the referrer reached the target.
-func assertCTFLocalBlobReferrer(t *testing.T, ctx context.Context, repo *oci.Repository, component, version, resourceName string, wantReferrer bool) {
-	t.Helper()
-	r := require.New(t)
-
-	desc, err := repo.GetComponentVersion(ctx, component, version)
-	r.NoError(err)
-	var found *descriptor.Resource
-	for i := range desc.Component.Resources {
-		if desc.Component.Resources[i].Name == resourceName {
-			found = &desc.Component.Resources[i]
-			break
-		}
-	}
-	r.NotNilf(found, "resource %q not present in component version %s:%s", resourceName, component, version)
-
-	data, _, err := repo.GetLocalResource(ctx, component, version, found.ToIdentity())
-	r.NoError(err)
-	store, err := tar.ReadOCILayout(ctx, data)
-	r.NoError(err)
-	defer func() { r.NoError(store.Close()) }()
-
-	referrers := store.Referrers(ctx)
-	if !wantReferrer {
-		r.Empty(referrers, "resource %q must not carry an ownership referrer in its CTF layout", resourceName)
-		return
-	}
-	r.Len(referrers, 1, "resource %q must carry exactly one ownership referrer in its CTF layout", resourceName)
-	ref := referrers[0]
-
-	rc, err := store.Fetch(ctx, ref)
-	r.NoError(err)
-	defer func() { r.NoError(rc.Close()) }()
-	var manifest ociImageSpecV1.Manifest
-	r.NoError(json.NewDecoder(rc).Decode(&manifest))
-	r.NotNil(manifest.Subject, "ownership referrer manifest must carry a subject")
-	r.Equal(annotations.OwnershipArtifactType, manifest.ArtifactType)
-	assert.Equal(t, component, manifest.Annotations[annotations.OwnershipComponentName])
-	assert.Equal(t, version, manifest.Annotations[annotations.OwnershipComponentVersion])
-
-	var payload struct {
-		Identity map[string]string `json:"identity"`
-		Kind     string            `json:"kind"`
-	}
-	r.NoError(json.Unmarshal([]byte(manifest.Annotations[annotations.ArtifactAnnotationKey]), &payload))
-	assert.Equal(t, "resource", payload.Kind)
-	assert.Equal(t, resourceName, payload.Identity["name"])
-	assert.Equal(t, version, payload.Identity["version"])
+	return dstCTF, dstRepo, dstResolver
 }
 
 // --- ocm transfer: driving the real `ocm transfer component-version` command ----
@@ -544,7 +491,7 @@ func pushByReferenceImage(t *testing.T, ctx context.Context, repo *oci.Repositor
 // reference of resourceName's content — the subject an ownership referrer points at.
 // For a by-value resource that is the component-descriptors repo @ local-blob digest;
 // for a by-reference resource it is the access' imageReference.
-func resourceSubjectReference(t *testing.T, ctx context.Context, resolver *urlresolver.CachingResolver, repo *oci.Repository, component, version, resourceName string) string {
+func resourceSubjectReference(t *testing.T, ctx context.Context, resolver oci.Resolver, repo *oci.Repository, component, version, resourceName string) string {
 	t.Helper()
 	r := require.New(t)
 	desc, err := repo.GetComponentVersion(ctx, component, version)
@@ -624,7 +571,7 @@ func addOwnershipResource(t *testing.T, ctx context.Context, repo *oci.Repositor
 // component/version and resource identity, and its manifest subject digest matches the
 // resolved subject manifest on this registry (the Referrers API indexes by subject, so a
 // referrer with a stale or wrong subject digest would still be returned for this subject).
-func assertOwnershipReferrer(t *testing.T, ctx context.Context, resolver *urlresolver.CachingResolver, subjectRef, component, version, resourceName string, wantReferrer bool) {
+func assertOwnershipReferrer(t *testing.T, ctx context.Context, resolver oci.Resolver, subjectRef, component, version, resourceName string, wantReferrer bool) {
 	t.Helper()
 	r := require.New(t)
 
@@ -672,7 +619,7 @@ func assertOwnershipReferrer(t *testing.T, ctx context.Context, resolver *urlres
 // carrying [annotations.OwnershipArtifactType]. It serves both a by-value subject
 // (component-descriptors repo @ local-blob digest) and a by-reference OCI image
 // (its access' ImageReference).
-func listOwnershipReferrers(t *testing.T, ctx context.Context, resolver *urlresolver.CachingResolver, reference string) []ociImageSpecV1.Descriptor {
+func listOwnershipReferrers(t *testing.T, ctx context.Context, resolver oci.Resolver, reference string) []ociImageSpecV1.Descriptor {
 	t.Helper()
 	r := require.New(t)
 	store, err := resolver.StoreForReference(ctx, reference)
