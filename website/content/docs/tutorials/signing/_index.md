@@ -1,6 +1,6 @@
 ---
 title: "Signing and Verification"
-description: "Tutorials covering cryptographic signing and verification of OCM component versions, from basic key-pair signing to PKI-based certificate chains."
+description: "Tutorials covering cryptographic signing and verification of OCM component versions, from basic key-pair signing to keyless approaches using Sigstore."
 icon: "✍️"
 weight: 55
 toc: false
