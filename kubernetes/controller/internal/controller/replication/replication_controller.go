@@ -185,7 +185,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 // reconcile runs Phase 1 (plan): it gates on the source Component being ready with a digest,
 // decides whether a transfer is needed, and executes the transfer graph (Phase 2).
-func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replication) (ctrl.Result, error) {
+func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replication) (_ ctrl.Result, retErr error) {
 	logger := log.FromContext(ctx)
 
 	component, err := util.GetReadyObject[v1alpha1.Component, *v1alpha1.Component](ctx, r.Client, client.ObjectKey{
@@ -271,6 +271,18 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		Reason:  v1alpha1.TransferInProgressReason,
 		Message: fmt.Sprintf("transferring component version %s", component.Status.Component.Version),
 	})
+
+	// if there was an error, clear the in progress condition.
+	defer func() {
+		if retErr != nil {
+			status.SetCondition(replication, metav1.Condition{
+				Type:    v1alpha1.TransferInProgressCondition,
+				Status:  metav1.ConditionFalse,
+				Reason:  v1alpha1.ReplicationFailedReason,
+				Message: fmt.Sprintf("transfer attempt aborted because of error: %s", retErr.Error()),
+			})
+		}
+	}()
 
 	sourceSpec, err := convertToTyped(r.RepositoryScheme, component.Status.Component.RepositorySpec.Raw)
 	if err != nil {
@@ -418,7 +430,6 @@ func errIsUnavailable(err error) bool {
 
 	return errors.As(err, &notReadyErr) || errors.As(err, &deletionErr)
 }
-
 
 // convertToTyped converts a runtime.Raw repository spec to a concrete spec.
 func convertToTyped(scheme *runtime.Scheme, data []byte) (runtime.Typed, error) {

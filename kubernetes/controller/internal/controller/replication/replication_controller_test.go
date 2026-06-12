@@ -236,6 +236,13 @@ var _ = Describe("Replication Controller", func() {
 				g.Expect(ready.Status).To(Equal(metav1.ConditionFalse))
 				g.Expect(ready.Reason).To(Equal(v1alpha1.ReplicationFailedReason))
 				g.Expect(ready.Message).To(ContainSubstring(childName))
+
+				// A failed attempt must not leave a stale in-progress condition behind.
+				inProgress := apimeta.FindStatusCondition(replication.Status.Conditions, v1alpha1.TransferInProgressCondition)
+				g.Expect(inProgress).NotTo(BeNil())
+				g.Expect(inProgress.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(inProgress.Reason).To(Equal(v1alpha1.ReplicationFailedReason))
+				g.Expect(inProgress.Message).To(ContainSubstring(childName))
 			}, timeout, interval).Should(Succeed())
 		})
 	})
