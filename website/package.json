@@ -16,7 +16,7 @@
     "dev": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --noHTTPCache",
     "hugo": "./node_modules/.bin/hugo",
     "info": "npm list",
-    "lint:markdown": "markdownlint-cli2 \"*.md\" \"content/**/*.md\"",
+    "lint:markdown": "markdownlint-cli2 --config ../.github/config/website.markdownlint-cli2.yaml \"**/*.md\" \"!node_modules/**\" \"!content_versioned/version-legacy/**\"",
     "lint:scripts": "eslint --cache assets/js",
     "lint:styles": "stylelint --cache \"assets/scss/**/*.{css,sass,scss}\"",
     "lint": "npm run lint:scripts && npm run lint:styles && npm run lint:markdown",

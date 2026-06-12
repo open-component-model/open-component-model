@@ -124,6 +124,54 @@ mounts:
       matrix:
         versions: ["main"]
 
+  - source: ../bindings/go/http/spec/config/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/http
+    sites:
+      matrix:
+        versions: ["main"]
+
+  - source: ../bindings/go/oci/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/oci/v1
+    sites:
+      matrix:
+        versions: ["main"]
+
+  - source: ../bindings/go/helm/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/helm/v1
+    sites:
+      matrix:
+        versions: ["main"]
+
+  - source: ../bindings/go/rsa/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/rsa/v1
+    sites:
+      matrix:
+        versions: ["main"]
+
+  - source: ../bindings/go/gpg/spec/credentials/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/credentials/gpg/v1alpha1
+    sites:
+      matrix:
+        versions: ["main"]
+
+  - source: ../bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1
+    sites:
+      matrix:
+        versions: ["main"]
+
+  - source: ../bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1
+    sites:
+      matrix:
+        versions: ["main"]
+
+  - source: ../bindings/go/credentials/spec/config/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/direct/v1
+    sites:
+      matrix:
+        versions: ["main"]
+
   - source: ../kubernetes/controller/bin/gen/crd
     target: static/main/schemas/kubernetes/controller
     sites:
