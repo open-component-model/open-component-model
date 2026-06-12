@@ -152,13 +152,15 @@ function hasAnyImportForVersion(parsed, version) {
 // A mismatch (hasAny=true, hasAll=false) indicates a corrupted partial state.
 function hasAllImportsForVersion(parsed, version) {
     const { imports: expected } = buildModuleBlocks(version, `${version}.0`);
-    const expectedPaths = expected.map(i => i.path);
-    const existingPaths = new Set(
+    const existingByPath = new Map(
         (parsed?.imports || [])
             .filter(i => i?.mounts?.some(m => m?.sites?.matrix?.versions?.includes(version)))
-            .map(i => i.path)
+            .map(i => [i.path, i])
     );
-    return expectedPaths.every(p => existingPaths.has(p));
+    return expected.every(exp => {
+        const existing = existingByPath.get(exp.path);
+        return existing && existing.mounts.length === exp.mounts.length;
+    });
 }
 
 /**
@@ -357,11 +359,13 @@ function retireOldestVersion(versions) {
 /**
  * Update import tags for an existing version (patch mode).
  * Updates versioned tags (website, cli, controller) to the new fullVersion.
- * Bindings imports (version: 'latest') are left unchanged.
+ * Updates binding import tags to the versions resolved from deps when supplied;
+ * binding tags are left unchanged when deps is not provided.
  *
  * @param {Object} parsed - parsed module.yaml
  * @param {string} version - minor version (X.Y)
  * @param {string} fullVersion - full version (X.Y.Z)
+ * @param {Object} [deps] - resolved binding versions keyed by module path
  * @returns {boolean} true if any tags were updated
  */
 function updateImportTags(parsed, version, fullVersion, deps) {

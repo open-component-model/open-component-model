@@ -87,6 +87,17 @@ test('hasAllImportsForVersion: returns false for wrong version', () => {
     assert.equal(hasAllImportsForVersion(parsed, '0.4'), false);
 });
 
+test('hasAllImportsForVersion: returns false when sigstore has only one of its two mounts', () => {
+    const { imports } = buildModuleBlocks('0.3', '0.3.0');
+    // Truncate sigstore to a single mount (simulates a partially-written module.yaml)
+    const truncated = imports.map(i =>
+        i.path.endsWith('/bindings/go/sigstore')
+            ? { ...i, mounts: [i.mounts[0]] }
+            : i
+    );
+    assert.equal(hasAllImportsForVersion({ imports: truncated }, '0.3'), false);
+});
+
 // --- buildModuleBlocks ---
 
 test('buildModuleBlocks: returns 12 imports (website + CLI + 9 bindings + controller)', () => {
