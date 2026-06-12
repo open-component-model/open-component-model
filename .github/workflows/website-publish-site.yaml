@@ -14,6 +14,7 @@ on:
       - 'cli/docs/reference/**'
       - 'bindings/go/constructor/spec/v1/resources/**'
       - 'bindings/go/descriptor/v2/resources/**'
+      - 'bindings/go/http/spec/config/v1alpha1/schemas/**'
       - 'kubernetes/controller/api/v1alpha1/**'
 
 permissions:

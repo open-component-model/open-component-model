@@ -194,12 +194,14 @@ function resolveGoModVersions(goModPath, modulePaths) {
 const CLI_DERIVED_MODULES = [
     'ocm.software/open-component-model/bindings/go/constructor',
     'ocm.software/open-component-model/bindings/go/descriptor/v2',
+    'ocm.software/open-component-model/bindings/go/http',
 ];
 
 // Build import blocks for a given version (pure when deps are passed, testable)
 function buildModuleBlocks(version, fullVersion, deps) {
     const constructorVersion = deps?.['ocm.software/open-component-model/bindings/go/constructor'] || 'latest';
     const descriptorVersion = deps?.['ocm.software/open-component-model/bindings/go/descriptor/v2'] || 'latest';
+    const httpVersion = deps?.['ocm.software/open-component-model/bindings/go/http'] || 'latest';
 
     const imports = [
         {
@@ -236,6 +238,15 @@ function buildModuleBlocks(version, fullVersion, deps) {
             mounts: [{
                 source: 'resources',
                 target: `static/${version}/schemas/bindings/go/descriptor/v2`,
+                sites: { matrix: { versions: [version] } }
+            }]
+        },
+        {
+            path: 'ocm.software/open-component-model/bindings/go/http',
+            version: `bindings/go/http/${httpVersion}`,
+            mounts: [{
+                source: 'spec/config/v1alpha1/schemas',
+                target: `static/${version}/schemas/bindings/go/http`,
                 sites: { matrix: { versions: [version] } }
             }]
         },
@@ -300,6 +311,8 @@ function updateImportTags(parsed, version, fullVersion, deps) {
             newTag = `bindings/go/constructor/${deps['ocm.software/open-component-model/bindings/go/constructor']}`;
         } else if (deps && imp.path.endsWith('/bindings/go/descriptor/v2')) {
             newTag = `bindings/go/descriptor/v2/${deps['ocm.software/open-component-model/bindings/go/descriptor/v2']}`;
+        } else if (deps && imp.path.endsWith('/bindings/go/http')) {
+            newTag = `bindings/go/http/${deps['ocm.software/open-component-model/bindings/go/http']}`;
         }
 
         if (newTag && imp.version !== newTag) {

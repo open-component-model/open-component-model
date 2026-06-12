@@ -89,9 +89,9 @@ test('hasAllImportsForVersion: returns false for wrong version', () => {
 
 // --- buildModuleBlocks ---
 
-test('buildModuleBlocks: returns 5 imports (website + CLI + 2 bindings + controller)', () => {
+test('buildModuleBlocks: returns 6 imports (website + CLI + 3 bindings + controller)', () => {
     const { imports } = buildModuleBlocks('0.3', '0.3.0');
-    assert.equal(imports.length, 5);
+    assert.equal(imports.length, 6);
 });
 
 test('buildModuleBlocks: does not return a mount field', () => {
@@ -131,20 +131,25 @@ test('buildModuleBlocks: bindings use fallback tag when no deps provided', () =>
     const { imports } = buildModuleBlocks('0.3', '0.3.0');
     const constructor = imports.find(i => i.path.endsWith('/bindings/go/constructor'));
     const descriptor = imports.find(i => i.path.endsWith('/bindings/go/descriptor/v2'));
+    const http = imports.find(i => i.path.endsWith('/bindings/go/http'));
     assert.equal(constructor.version, 'bindings/go/constructor/latest');
     assert.equal(descriptor.version, 'bindings/go/descriptor/v2/latest');
+    assert.equal(http.version, 'bindings/go/http/latest');
 });
 
 test('buildModuleBlocks: bindings use resolved versions when deps provided', () => {
     const deps = {
         'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.7',
         'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.3-alpha3',
+        'ocm.software/open-component-model/bindings/go/http': 'v0.0.5',
     };
     const { imports } = buildModuleBlocks('0.3', '0.3.0', deps);
     const constructor = imports.find(i => i.path.endsWith('/bindings/go/constructor'));
     const descriptor = imports.find(i => i.path.endsWith('/bindings/go/descriptor/v2'));
+    const http = imports.find(i => i.path.endsWith('/bindings/go/http'));
     assert.equal(constructor.version, 'bindings/go/constructor/v0.0.7');
     assert.equal(descriptor.version, 'bindings/go/descriptor/v2/v2.0.3-alpha3');
+    assert.equal(http.version, 'bindings/go/http/v0.0.5');
 });
 
 test('buildModuleBlocks: version matrix uses X.Y not X.Y.Z', () => {
@@ -162,6 +167,7 @@ test('buildModuleBlocks: schema imports have correct targets with version prefix
         'content/docs/reference/ocm-cli',
         'static/2.0/schemas/bindings/go/constructor',
         'static/2.0/schemas/bindings/go/descriptor/v2',
+        'static/2.0/schemas/bindings/go/http',
         'static/2.0/schemas/kubernetes/controller',
     ]);
 });
@@ -173,6 +179,7 @@ test('buildModuleBlocks: schema imports have correct sources', () => {
     assert.deepEqual(sources, [
         'config/crd/bases',
         'resources',
+        'spec/config/v1alpha1/schemas',
         'spec/v1/resources',
     ]);
 });
@@ -408,6 +415,7 @@ test('updateImportTags: updates versioned tags for matching version', () => {
     const deps = {
         'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.8',
         'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.4',
+        'ocm.software/open-component-model/bindings/go/http': 'v0.0.5',
     };
     const parsed = {
         imports: [
@@ -432,6 +440,11 @@ test('updateImportTags: updates versioned tags for matching version', () => {
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
             },
             {
+                path: 'ocm.software/open-component-model/bindings/go/http',
+                version: 'bindings/go/http/v0.0.4',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+            {
                 path: 'ocm.software/open-component-model/kubernetes/controller',
                 version: 'kubernetes/controller/v0.3.0',
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
@@ -445,7 +458,8 @@ test('updateImportTags: updates versioned tags for matching version', () => {
     assert.equal(parsed.imports[1].version, 'cli/v0.3.1');
     assert.equal(parsed.imports[2].version, 'bindings/go/constructor/v0.0.8');
     assert.equal(parsed.imports[3].version, 'bindings/go/descriptor/v2/v2.0.4');
-    assert.equal(parsed.imports[4].version, 'kubernetes/controller/v0.3.1');
+    assert.equal(parsed.imports[4].version, 'bindings/go/http/v0.0.5');
+    assert.equal(parsed.imports[5].version, 'kubernetes/controller/v0.3.1');
 });
 
 test('updateImportTags: does not update bindings when no deps provided', () => {
@@ -510,10 +524,12 @@ test('updateImportTags: patching freshly-built blocks equals building directly w
     const deps = {
         'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.8',
         'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.4',
+        'ocm.software/open-component-model/bindings/go/http': 'v0.0.5',
     };
     const depsInitial = {
         'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.7',
         'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.3',
+        'ocm.software/open-component-model/bindings/go/http': 'v0.0.4',
     };
 
     // Path A: build at 0.3.0 with old deps, then patch to 0.3.1 with new deps
