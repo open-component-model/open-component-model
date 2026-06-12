@@ -8,435 +8,385 @@ toc: true
 
 ## Overview
 
-Every time OCM accesses a registry, it resolves credentials automatically. This tutorial walks you through how that
-resolution works — given a config, which credentials does OCM pick for each request, and why?
+Every time OCM accesses a registry, it constructs a lookup identity from the request and finds the first matching consumer entry in your credential config. This tutorial walks you through that with real commands against a local registry — you'll see which configs match and which don't, and why.
 
-This tutorial focuses on OCI registry credentials. For signing credential identities (`RSA/v1alpha1`), see
-the [Consumer Identities Reference]({{< relref "/docs/reference/credential-consumer-identities.md" >}}).
+For how the matching algorithm works end-to-end, see [Credential System]({{< relref "/docs/concepts/credential-system.md" >}}).
 
-For the full concept, see [Credential System]({{< relref "/docs/concepts/credential-system.md" >}}).
-
-**Estimated time:** ~10 minutes
+**Estimated time:** ~15 minutes
 
 ## What You'll Learn
 
-- How OCM constructs a lookup identity from a request
-- How consumers are matched — exact path, glob, hostname-only
-- How the fallback from consumers to repositories works
-- Why specificity matters when multiple consumers could match
+- Write a consumer entry that matches a local registry
+- See the effect of hostname, port, and scheme mismatches firsthand
+- Understand why `scheme: http` without an explicit port fails on non-standard ports
+- Understand why `scheme: oci` and `scheme: https` are equivalent
+- Know when `path` on a consumer entry does and does not apply
 
 ## Prerequisites
 
-- You have the [OCM CLI]({{< relref "/docs/getting-started/ocm-cli-installation.md" >}}) installed
-- You are comfortable reading YAML
+- [OCM CLI]({{< relref "/docs/getting-started/ocm-cli-installation.md" >}}) installed
+- Docker installed and running
 
-## How Resolution Works
+## Setup
 
-When resolving credentials, OCM follows three paths in order:
+Start a local registry with basic auth and push a test component. All examples use this registry.
 
-1. **Direct consumers** — the consumer entry holds credentials inline (a typed credential like `OCICredentials/v1` or
-   the legacy `DirectCredentials/v1`). These are returned immediately on match.
-2. **Indirect consumers** — the credential entry refers to a plugin-backed source (e.g., `HashiCorpVault/v1alpha1`). The
-   graph creates a dependency edge at ingestion time; at resolution time, the plugin is called with the credentials
-   resolved for its own identity.
-3. **Repository fallback** — `DockerConfig/v1` and similar repository plugins. Consulted only when neither direct nor
-   indirect lookup yields a result; all repository plugins are queried concurrently and the first success wins.
+{{< steps >}}
+{{< step >}}
 
-Consumer entries (direct or indirect) always take priority over repository lookups. This means you can rely on Docker
-config for most registries while overriding specific ones with explicit credentials — without touching your Docker
-setup.
+### Start the local registry
 
-### Identity Matching
+```bash
+export REGISTRY_PORT=15020
+export REGISTRY_USER=testuser
+export REGISTRY_PASS=testpassword
+export WORKDIR=$(mktemp -d)
+export REGISTRY_REF="http://localhost:${REGISTRY_PORT}//ocm.software/cred-tutorial:1.0.0"
 
-When OCM needs credentials for an operation (e.g., pushing to `ghcr.io/my-org/my-repo`), it constructs a **lookup
-identity** — a map of attributes like `type`, `hostname`, `scheme`, `port`, and `path`. It then tries to find a matching
-consumer entry in the credential graph.
+mkdir -p "$WORKDIR/auth"
+docker run --rm --entrypoint htpasswd httpd:2 \
+  -Bbn "$REGISTRY_USER" "$REGISTRY_PASS" > "$WORKDIR/auth/htpasswd"
 
-```mermaid
-flowchart TB
-    req(["Request to ghcr.io/my-org/repo"])
-    req --> lookup["Construct lookup identity<br>type + hostname + path"]
-    lookup --> exact{"Exact string<br>match?"}
-    exact -->|"yes"| direct{"Direct or<br>indirect?"}
-    exact -->|"no"| wild{"Wildcard match?<br>path glob, hostname-only"}
-    wild -->|"yes"| direct
-    wild -->|"no"| repos{"Repository<br>match?"}
-    direct -->|"direct"| creds["Return credentials"]
-    direct -->|"indirect"| plugin["Call plugin<br>(e.g. Vault)"] --> creds
-    repos -->|"yes"| fallback["Use repository credentials"]
-    repos -->|"no"| fail["No credentials"]
+docker run -d \
+  -p "${REGISTRY_PORT}:5000" \
+  -v "$WORKDIR/auth:/auth" \
+  -e REGISTRY_AUTH=htpasswd \
+  -e REGISTRY_AUTH_HTPASSWD_REALM=Test \
+  -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd \
+  registry:2
 ```
 
-Matching runs three chained matchers **in order** — all three must pass:
+{{< /step >}}
+{{< step >}}
 
-1. **Path matcher** — compares `path` using Go's `path.Match` (glob). If the configured entry has no `path`, any request
-   path is accepted. `*` matches exactly one segment (not across `/`).
-2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports: `https` → `443`, `http` → `80`.
-   Schemes must be equal after normalization (`oci` is normalized to `https`); if either side omits the scheme, it
-   matches any scheme.
-3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
+### Push a test component
 
-If any matcher fails, the entry is skipped. **First match wins** — OCM returns the first matching entry it finds. The
-entries are scanned in no guaranteed order, so if several entries match the same request, the winner is arbitrary.
+```bash
+cat > "$WORKDIR/constructor.yaml" <<'EOF'
+components:
+- name: ocm.software/cred-tutorial
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  resources:
+  - name: payload
+    version: 1.0.0
+    type: blob
+    input:
+      type: utf8/v1
+      text: "credential resolution tutorial test"
+EOF
 
-Quick reference:
+ocm add cv --repository "ctf::$WORKDIR/test.ctf" \
+  --constructor "$WORKDIR/constructor.yaml"
 
-| Configured identity                                                  | Request                    | Result | Why                         |
-|----------------------------------------------------------------------|----------------------------|--------|-----------------------------|
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/my-repo` | `ghcr.io/my-org/my-repo`   | Yes    | Exact path match            |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*`       | `ghcr.io/my-org/my-repo`   | Yes    | `*` matches `my-repo`       |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`                           | `ghcr.io/my-org/my-repo`   | Yes    | No path — accepts any       |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org`         | `ghcr.io/my-org/my-repo`   | No     | `my-org` ≠ `my-org/my-repo` |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*`       | `ghcr.io/other-org/foo`    | No     | `other-org` ≠ `my-org`      |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: https`        | `https://ghcr.io:443/repo` | Yes    | Port defaults to `443`      |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: http`         | `https://ghcr.io/repo`     | No     | `http` ≠ `https`            |
-| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`port: 5000`           | `https://ghcr.io:443/repo` | No     | `5000` ≠ `443`              |
+cat > "$WORKDIR/push.yaml" <<EOF
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identities:
+          - type: OCIRegistry
+            hostname: localhost
+            port: "$REGISTRY_PORT"
+            scheme: http
+        credentials:
+          - type: Credentials/v1
+            properties:
+              username: $REGISTRY_USER
+              password: $REGISTRY_PASS
+EOF
 
-{{< callout context="note" >}}
-`*` matches exactly one path segment. It does **not** match across `/` separators. Use `my-org/*/*` to match two-level
-paths like `my-org/team/repo`.
+ocm --config "$WORKDIR/push.yaml" transfer component-version \
+  "ctf::$WORKDIR/test.ctf//ocm.software/cred-tutorial:1.0.0" \
+  "http://localhost:${REGISTRY_PORT}" --copy-resources
+```
+
+{{< /step >}}
+{{< /steps >}}
+
+Throughout this tutorial, verify each config with:
+
+```bash
+ocm --config <config-file> get component-version "$REGISTRY_REF"
+```
+
+A correct credential match prints the component version. A mismatch returns `401 Unauthorized`.
+
+## Example A: Hostname-Only Match
+
+A consumer entry with only a `hostname` (no `path`) is a catch-all for that host — it matches every request to that hostname regardless of anything else.
+
+```bash
+cat > "$WORKDIR/example-a.yaml" <<EOF
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identities:
+          - type: OCIRegistry
+            hostname: localhost
+            port: "$REGISTRY_PORT"
+            scheme: http
+        credentials:
+          - type: Credentials/v1
+            properties:
+              username: $REGISTRY_USER
+              password: $REGISTRY_PASS
+EOF
+
+ocm --config "$WORKDIR/example-a.yaml" get component-version "$REGISTRY_REF"
+# → success: component version printed
+```
+
+Change `hostname: localhost` to `hostname: docker.io` and retry — the request still targets `localhost`, so `docker.io` does not match:
+
+```bash
+# docker.io ≠ localhost → no credentials found → 401
+ocm --config "$WORKDIR/example-a-wrong-host.yaml" get component-version "$REGISTRY_REF"
+```
+
+**Takeaway:** Hostname must match exactly. A single-attribute mismatch means no consumer is found.
+
+## Example B: Path Matching — Conceptual Only
+
+Consumer entries support a `path` attribute with glob matching. `*` matches exactly one path segment and never crosses a `/`:
+
+| Configured path | Request path        | Matches? | Why                          |
+|-----------------|---------------------|----------|------------------------------|
+| `my-org/repo`   | `my-org/repo`       | Yes      | Exact                        |
+| `my-org/*`      | `my-org/staging`    | Yes      | `*` matches one segment      |
+| `my-org/*`      | `my-org/team/repo`  | No       | `*` won't span `/`           |
+| `my-org`        | `my-org/production` | No       | No prefix matching           |
+| `*/*`           | `my-org/repo`       | Yes      | Two-level wildcard           |
+
+{{< callout context="caution" title="Path matching does not apply to component-version operations" icon="outline/alert-triangle" >}}
+For `ocm get component-version` and `ocm transfer component-version`, OCM builds the lookup identity from the registry base URL (`scheme + hostname + port`) **only**. The component namespace is never included. A consumer entry with a non-empty `path` will therefore **never match** a component-version operation. Use hostname-only entries for component registry access.
 {{< /callout >}}
 
-### Example A: Simple Hostname Match
+When multiple wildcard entries could match the same request, the first one found wins — there is no most-specific-pattern-wins ranking. Keep overlapping wildcard patterns off the same host.
 
-The simplest case: a single consumer entry with just a `hostname`. Because no `path` is configured, it acts as a
-**catch-all** for that host.
+## Example C: Scheme and Port Normalization
 
-```yaml
+When a `scheme` is present, OCM applies default ports before comparing:
+
+- `scheme: https` → default port `443`
+- `scheme: http` → default port `80`
+
+This matters when the registry runs on a non-standard port.
+
+**Explicit port, no scheme — matches:**
+
+```bash
+cat > "$WORKDIR/example-c-port.yaml" <<EOF
 type: generic.config.ocm.software/v1
 configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identities:
           - type: OCIRegistry
-            hostname: ghcr.io
+            hostname: localhost
+            port: "$REGISTRY_PORT"
         credentials:
           - type: Credentials/v1
             properties:
-              username: ghcr-user
-              password: ghp_token
+              username: $REGISTRY_USER
+              password: $REGISTRY_PASS
+EOF
+
+ocm --config "$WORKDIR/example-c-port.yaml" get component-version "$REGISTRY_REF"
+# → success: port 15020 matches explicitly
 ```
 
-| Request                   | Result         | Why                                           |
-|---------------------------|----------------|-----------------------------------------------|
-| `ghcr.io/my-org/my-repo`  | `ghcr-user`    | No `path` in config → accepts any path        |
-| `ghcr.io/other-org/thing` | `ghcr-user`    | Same — hostname matches, path is unrestricted |
-| `docker.io/library/nginx` | No credentials | `docker.io` ≠ `ghcr.io`                       |
+**Scheme `http` without port — does not match:**
 
-**Takeaway:** A hostname-only entry is the broadest match. It catches every request to that host regardless of path,
-scheme, or port.
-
-### Example B: Glob Path Matching with Multiple Consumers
-
-Three consumers for the same host, with decreasing specificity:
-
-```yaml
+```bash
+cat > "$WORKDIR/example-c-http.yaml" <<EOF
 type: generic.config.ocm.software/v1
 configurations:
   - type: credentials.config.ocm.software
     consumers:
-      # Consumer A: exact path
       - identities:
           - type: OCIRegistry
-            hostname: ghcr.io
-            path: my-org/production
+            hostname: localhost
+            scheme: http
         credentials:
           - type: Credentials/v1
             properties:
-              username: prod-user
-              password: ghp_prod
-      # Consumer B: glob path
-      - identities:
-          - type: OCIRegistry
-            hostname: ghcr.io
-            path: my-org/*
-        credentials:
-          - type: Credentials/v1
-            properties:
-              username: org-user
-              password: ghp_org
-      # Consumer C: hostname only (catch-all)
-      - identities:
-          - type: OCIRegistry
-            hostname: ghcr.io
-        credentials:
-          - type: Credentials/v1
-            properties:
-              username: catchall-user
-              password: ghp_catchall
+              username: $REGISTRY_USER
+              password: $REGISTRY_PASS
+EOF
+
+ocm --config "$WORKDIR/example-c-http.yaml" get component-version "$REGISTRY_REF"
+# → 401 Unauthorized — http defaults port to 80; 80 ≠ 15020
 ```
 
-| Request                     | Matches A? | Matches B? | Matches C? | Why                                                                 |
-|-----------------------------|------------|------------|------------|---------------------------------------------------------------------|
-| `ghcr.io/my-org/production` | Yes        | Yes        | Yes        | Exact path match on A; `*` also matches `production`; C has no path |
-| `ghcr.io/my-org/staging`    | No         | Yes        | Yes        | `staging` ≠ `production`, but `*` matches `staging`                 |
-| `ghcr.io/my-org/team/repo`  | No         | No         | Yes        | `*` matches **one** segment — `team/repo` has two. Only C matches   |
-| `ghcr.io/other-org/repo`    | No         | No         | Yes        | `other-org` ≠ `my-org`; only the hostname catch-all matches         |
+**Scheme `http` with explicit port — matches:**
 
-{{< callout context="note" >}}
-`*` matches exactly one path segment. It does **not** match across `/` separators. To match two levels like
-`my-org/team/repo`, use `my-org/*/*`.
-{{< /callout >}}
-
-**Takeaway:** OCM first tries an exact string match on the full identity. If that fails, it iterates all configured
-entries (in no guaranteed order) and returns the first wildcard match.
-
-### Example B2: Two-Level Wildcard Matching (`*/*`)
-
-What if you want to match exactly two path segments? Use `*/*` to match any organization/repository combination.
-
-```yaml
+```bash
+cat > "$WORKDIR/example-c-scheme-port.yaml" <<EOF
 type: generic.config.ocm.software/v1
 configurations:
   - type: credentials.config.ocm.software
     consumers:
-      # Consumer A: two-level wildcard for any org/repo
       - identities:
           - type: OCIRegistry
-            hostname: ghcr.io
-            path: "*/*"
+            hostname: localhost
+            scheme: http
+            port: "$REGISTRY_PORT"
         credentials:
           - type: Credentials/v1
             properties:
-              username: org-user
-              password: ghp_org_token
-      # Consumer B: single-level wildcard scoped to one org
-      - identities:
-          - type: OCIRegistry
-            hostname: ghcr.io
-            path: "my-org/*"
-        credentials:
-          - type: Credentials/v1
-            properties:
-              username: my-org-user
-              password: ghp_my_org_token
+              username: $REGISTRY_USER
+              password: $REGISTRY_PASS
+EOF
+
+ocm --config "$WORKDIR/example-c-scheme-port.yaml" get component-version "$REGISTRY_REF"
+# → success
 ```
 
-| Request                            | Consumer A (`*/*`) | Consumer B (`my-org/*`) | Result                      | Why                                          |
-|------------------------------------|--------------------|-------------------------|-----------------------------|----------------------------------------------|
-| `ghcr.io/my-org/repo`              | Yes                | Yes                     | `org-user` or `my-org-user` | Both match — the winner is not guaranteed    |
-| `ghcr.io/other-org/project`        | Yes                | No                      | `org-user`                  | Only A matches (two-level wildcard)          |
-| `ghcr.io/my-org/team/subteam/repo` | No                 | No                      | No credentials              | Path has 4 segments, `*/*` only matches 2    |
-| `ghcr.io/singlelevel`              | No                 | No                      | No credentials              | Path has 1 segment, `*/*` requires exactly 2 |
+**Takeaway:** For non-standard ports, always pair `scheme` with an explicit `port`. Without `port`, the scheme's default (80 or 443) is used, not the port in the request URL.
 
-{{< callout context="tip" >}}
-`*/*` matches **exactly** two path segments. For three levels, use `*/*/*`, and so on. Each `*` matches one segment
-between `/` separators.
-{{< /callout >}}
+## Example D: The `oci` Scheme
 
-{{< callout context="caution" >}}
-**Wildcard precedence is not guaranteed.** An exact identity match always wins, but when several wildcard entries match
-the same request, the resolver returns the first match it finds while scanning an unordered collection — there is no
-"most specific pattern wins" ranking. If overlapping patterns carry different credentials, either one may be returned.
-Keep wildcard patterns non-overlapping.
-{{< /callout >}}
+`oci` normalizes to `https` before comparison — the two are interchangeable, and the default port `443` applies to both.
 
-**Takeaway:** Use `*/*` when you want to match any two-segment path structure (like organization/repository), and avoid
-overlapping wildcard patterns with different credentials.
-
-### Example C: URL Normalization — Scheme and Port Defaults
-
-When `scheme` is specified, OCM applies default port mapping:
-
-- `https` without port → defaults to `443`
-- `http` without port → defaults to `80`
-
-This means `https://ghcr.io` and `https://ghcr.io:443` are **equivalent**.
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: credentials.config.ocm.software
-    consumers:
-      # HTTPS-only entry
-      - identities:
-          - type: OCIRegistry
-            hostname: ghcr.io
-            scheme: https
-        credentials:
-          - type: Credentials/v1
-            properties:
-              username: secure-user
-              password: ghp_secure
-      # Custom port registry (no scheme)
-      - identities:
-          - type: OCIRegistry
-            hostname: myregistry.local
-            port: "5000"
-        credentials:
-          - type: Credentials/v1
-            properties:
-              username: local-user
-              password: local_pass
-```
-
-| Request                           | Result         | Why                                                                                                                  |
-|-----------------------------------|----------------|----------------------------------------------------------------------------------------------------------------------|
-| `https://ghcr.io/my-org/repo`     | `secure-user`  | Scheme matches; no port defaults to `443` on both sides                                                              |
-| `https://ghcr.io:443/repo`        | `secure-user`  | Explicit `443` equals the default `443` for `https`                                                                  |
-| `https://ghcr.io:8443/repo`       | No credentials | Port `8443` ≠ default `443`                                                                                          |
-| `http://ghcr.io/repo`             | No credentials | Scheme `http` ≠ `https`                                                                                              |
-| `ghcr.io/repo` (no scheme)        | `secure-user`  | Empty scheme matches any scheme; the configured `https` becomes the effective scheme, so both ports default to `443` |
-| `myregistry.local:5000/repo`      | `local-user`   | Port `5000` matches; no scheme on either side                                                                        |
-| `myregistry.local/repo` (no port) | No credentials | No scheme on either side means no default port — empty ≠ `5000`                                                      |
-
-The scheme check only fails when **both** sides specify a scheme and the values differ. If one side omits the scheme,
-it matches anything, and the side that does specify one determines the default port for the comparison.
-
-**Takeaway:** Port defaults apply when either the config or the request specifies a `scheme`. If both omit it, ports
-are compared literally.
-
-### Example D: The `oci` Scheme
-
-Some OCI tools use `oci://` URLs instead of `https://`. The identity matcher normalizes `oci` to `https` before
-comparing schemes, so the two are **equivalent**: a config with `scheme: oci` matches both `oci://` and `https://`
-requests. Because normalization happens before port defaulting, the `https` default port `443` also applies to `oci`.
-
-```yaml
+```bash
+cat > "$WORKDIR/example-d-oci.yaml" <<EOF
 type: generic.config.ocm.software/v1
 configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identities:
           - type: OCIRegistry
-            hostname: registry.example.com
+            hostname: localhost
+            port: "$REGISTRY_PORT"
             scheme: oci
-            port: "443"
         credentials:
           - type: Credentials/v1
             properties:
-              username: oci-user
-              password: oci_token
+              username: $REGISTRY_USER
+              password: $REGISTRY_PASS
+EOF
+
+ocm --config "$WORKDIR/example-d-oci.yaml" get component-version "$REGISTRY_REF"
+# → 401 Unauthorized — oci normalizes to https; https ≠ http (registry runs plain HTTP)
 ```
 
-| Request                                     | Result         | Why                                                           |
-|---------------------------------------------|----------------|---------------------------------------------------------------|
-| `oci://registry.example.com:443/repo`       | `oci-user`     | Same scheme (after normalization), same explicit port         |
-| `oci://registry.example.com/repo` (no port) | `oci-user`     | `oci` is normalized to `https`, so the port defaults to `443` |
-| `https://registry.example.com:443/repo`     | `oci-user`     | `oci` ≡ `https` after normalization                           |
-| `oci://registry.example.com:5000/repo`      | No credentials | Port `5000` ≠ `443`                                           |
-| `http://registry.example.com/repo`          | No credentials | `http` ≠ `https` (the normalized form of `oci`)               |
+**Takeaway:** `scheme: oci` and `scheme: https` are identical after normalization. Use `scheme: oci` only for HTTPS registries. Only `http` is genuinely different.
 
-{{< callout context="note" >}}
-`oci` is an **alias for `https`** in the identity matcher. A config entry with `scheme: oci` matches `https://`
-requests and vice versa, and the default port `443` applies. The explicit `port: "443"` in the config above is
-therefore optional.
-{{< /callout >}}
+## Example E: When Nothing Matches
 
-**Takeaway:** Treat `scheme: oci` and `scheme: https` as interchangeable — only `http` is a genuinely different
-scheme.
+The three most common mismatches, each producing `401 Unauthorized`:
 
-### Example E: When Nothing Matches
+**Wrong hostname:**
 
-This example shows common reasons why credential resolution fails. Given a single specific consumer:
-
-```yaml
+```bash
+cat > "$WORKDIR/example-e-host.yaml" <<EOF
 type: generic.config.ocm.software/v1
 configurations:
   - type: credentials.config.ocm.software
     consumers:
-      - identities:
-          - type: OCIRegistry
-            hostname: ghcr.io
-            scheme: https
-            path: my-org/*
-        credentials:
-          - type: Credentials/v1
-            properties:
-              username: org-user
-              password: ghp_org
-```
-
-Every request below fails to match:
-
-| Request                            | Why it fails                                                                                |
-|------------------------------------|---------------------------------------------------------------------------------------------|
-| `https://quay.io/my-org/repo`      | **Wrong hostname** — `quay.io` ≠ `ghcr.io`                                                  |
-| `https://ghcr.io/my-org/team/repo` | **Path too deep** — `*` matches one segment, `team/repo` has two                            |
-| `https://ghcr.io/my-org`           | **Path too short** — `my-org` does not match `my-org/*` (glob requires a segment after `/`) |
-| `http://ghcr.io/my-org/repo`       | **Scheme mismatch** — `http` ≠ `https`                                                      |
-
-{{< callout context="tip" >}}
-There is **no prefix matching** — `path: my-org` does not match `my-org/production`. And `path: my-org/*` does not match
-`my-org` either. The glob pattern must match the full path.
-{{< /callout >}}
-
-**Takeaway:** If you get `401 Unauthorized` unexpectedly, check each attribute: `type`, `hostname`, `scheme`, `port`,
-and `path`. Every attribute present on the configured entry must match the request exactly (with glob support for `path`
-and port defaults for `https`/`http`).
-
-### Example F: Indirect Credentials (Plugin-Backed)
-
-Direct and indirect consumers look identical from the `.ocmconfig` perspective — the difference is in the `type` of the
-credential entry. When OCM encounters a credential type it does not recognize as built-in (not `OCICredentials/v1`,
-`HelmHTTPCredentials/v1`, `RSACredentials/v1`, `DirectCredentials/v1`), it treats the entry as **indirect** and looks
-for a plugin to resolve it.
-
-The following is a hypothetical example showing what a plugin-backed credential chain would look like. A real
-`HashiCorpVault/v1alpha1` plugin does not ship with OCM core — a third-party plugin would need to provide this type.
-
-**Hypothetical Vault chain:** OCI registry credentials would come from HashiCorp Vault, which itself would need
-`role_id` and `secret_id` credentials:
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: credentials.config.ocm.software
-    consumers:
-      # Consumer A: OCI registry gets credentials from Vault
       - identities:
           - type: OCIRegistry
             hostname: quay.io
+            port: "$REGISTRY_PORT"
+            scheme: http
         credentials:
-          - type: HashiCorpVault/v1alpha1
-            serverURL: "https://myvault.example.com/"
-            mountPath: "my-engine/my-engine-root"
-            path: "my/path/to/my/secret"
-      # Consumer B: Vault itself needs role_id + secret_id
-      - identities:
-          - type: HashiCorpVault/v1alpha1
-            hostname: myvault.example.com
-        credentials:
-          - type: DirectCredentials/v1
+          - type: Credentials/v1
             properties:
-              role_id: "repository.vault.com-role"
-              secret_id: "repository.vault.com-secret"
+              username: $REGISTRY_USER
+              password: $REGISTRY_PASS
+EOF
+ocm --config "$WORKDIR/example-e-host.yaml" get component-version "$REGISTRY_REF"
+# → 401 Unauthorized — quay.io ≠ localhost
 ```
 
-Resolution sequence for a request to `quay.io`:
+**Scheme mismatch (configured `https`, registry is `http`):**
 
-1. OCM matches consumer A (`quay.io` → `HashiCorpVault/v1alpha1`)
-2. The Vault plugin would be asked which identity it needs credentials for — it would return a `HashiCorpVault/v1alpha1`
-   identity for `myvault.example.com`
-3. OCM resolves consumer B — a direct match returning `role_id` / `secret_id`
-4. The Vault plugin would be called with those credentials and would return the final OCI credentials for `quay.io`
+```bash
+cat > "$WORKDIR/example-e-scheme.yaml" <<EOF
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identities:
+          - type: OCIRegistry
+            hostname: localhost
+            port: "$REGISTRY_PORT"
+            scheme: https
+        credentials:
+          - type: Credentials/v1
+            properties:
+              username: $REGISTRY_USER
+              password: $REGISTRY_PASS
+EOF
+ocm --config "$WORKDIR/example-e-scheme.yaml" get component-version "$REGISTRY_REF"
+# → 401 Unauthorized — https ≠ http
+```
 
-This bottom-up traversal supports chains of arbitrary depth. Cycles are detected at ingestion time and rejected.
+**Wrong port:**
 
-{{< callout context="note" >}}
-`HashiCorpVault/v1alpha1` is a hypothetical credential type used here for illustration. Such a type would be provided by
-a third-party plugin, not by OCM core. The plugin system supports exactly this pattern — any installed plugin can
-introduce new credential types that participate in the credential graph.
-{{< /callout >}}
+```bash
+cat > "$WORKDIR/example-e-port.yaml" <<EOF
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identities:
+          - type: OCIRegistry
+            hostname: localhost
+            port: "9999"
+            scheme: http
+        credentials:
+          - type: Credentials/v1
+            properties:
+              username: $REGISTRY_USER
+              password: $REGISTRY_PASS
+EOF
+ocm --config "$WORKDIR/example-e-port.yaml" get component-version "$REGISTRY_REF"
+# → 401 Unauthorized — 9999 ≠ 15020
+```
 
-**Takeaway:** Indirect credentials look like regular consumer entries. The credential type determines which plugin
-handles the resolution. The identity matching rules (exact path, glob, hostname-only) apply the same way as for direct
-credentials.
+## Example F: Indirect Credentials (Plugin-Backed)
+
+The difference between direct and indirect consumers is the credential `type`. When OCM encounters a type it doesn't recognize as built-in, it calls a plugin to resolve it — the config structure is otherwise identical.
+
+The following is hypothetical — `HashiCorpVault/v1alpha1` would be provided by a third-party plugin:
+
+```yaml
+consumers:
+  - identities:
+      - type: OCIRegistry
+        hostname: quay.io
+    credentials:
+      - type: HashiCorpVault/v1alpha1
+        serverURL: "https://myvault.example.com/"
+        path: "my/path/to/my/secret"
+  - identities:
+      - type: HashiCorpVault/v1alpha1
+        hostname: myvault.example.com
+    credentials:
+      - type: DirectCredentials/v1
+        properties:
+          role_id: "repository.vault.com-role"
+          secret_id: "repository.vault.com-secret"
+```
+
+Resolution for `quay.io`: OCM matches the Vault consumer → the Vault plugin returns a `HashiCorpVault/v1alpha1` identity for `myvault.example.com` → OCM resolves `role_id`/`secret_id` from the direct entry → Vault returns the final OCI credentials. Chains of arbitrary depth are supported; cycles are rejected at config load time.
 
 ## Troubleshooting
 
-### Problem: `401 Unauthorized` despite having a consumer entry
+### `401 Unauthorized` despite a consumer entry that looks correct
 
-**Cause:** The lookup identity doesn't match. Common issues: `path` mismatch or wrong `hostname`.
+Check each attribute in order:
 
-**Fix:** Check that `hostname` and `path` match the request. Remember, `path: my-org` does **not** match
-`my-org/production` — there is no prefix matching. See [Identity Matching](#identity-matching) above.
+1. **`hostname`** — must match exactly
+2. **`scheme`** — if set, must match after normalization (`oci` = `https`; only `http` differs)
+3. **`port`** — if `scheme` is set without `port`, the scheme's default applies (`https`→443, `http`→80)
+4. **`path`** — if set, never matches a component-version operation (lookup uses base URL only)
 
-### Problem: `401 Unauthorized` when Docker fallback should work
-
-**Cause:** Docker config doesn't have credentials for that registry.
-
-**Fix:**
+### `401 Unauthorized` when Docker fallback should work
 
 ```bash
 docker login <registry-hostname>
@@ -446,23 +396,18 @@ Then retry the OCM command.
 
 ## What You've Learned
 
-- How OCM constructs a lookup identity from a registry request
-- How path matchers, URL matchers, and equality matchers chain together
-- How glob patterns work (`*` matches one segment, not across `/`)
-- How `https` and `oci` schemes are normalized, and how default ports are applied
-- Why wildcard precedence is not guaranteed when multiple entries match
-- How indirect (plugin-backed) credentials chain through the credential graph
+- A hostname-only consumer entry matches every request to that host
+- Setting `scheme` without `port` uses the scheme's default — always pair them for non-standard ports
+- `oci` and `https` are equivalent after normalization; only `http` is genuinely different
+- `path` on a consumer never matches `ocm get/transfer component-version` — only base URL is used in the lookup identity
+- When multiple wildcard entries could match, the first found wins — keep patterns non-overlapping
 
 ## Next Steps
 
-- [How-To: Configure Credentials for multiple Repositories ]({{< relref "configure-multiple-credentials.md" >}}) -
-  Configure OCM to authenticate against multiple OCI registries
-- [How-To: Migrate v1 Credentials to v2]({{< relref "legacy-credential-compatibility.md" >}}) - Migrate an existing OCM
-  v1 `.ocmconfig` file so it works with OCM v2
+- [How-To: Configure Credentials for Multiple Repositories]({{< relref "configure-multiple-credentials.md" >}}) — Configure OCM for multiple OCI registries
+- [How-To: Migrate v1 Credentials to v2]({{< relref "legacy-credential-compatibility.md" >}}) — Migrate an existing OCM v1 `.ocmconfig` file
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system
-  automatically finds the right credentials for each operation
-- [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) — Complete
-  reference for all identity types (OCI registries and RSA signing)
+- [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) — How the credential system works end-to-end
+- [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) — Complete reference for all identity types
