@@ -67,10 +67,6 @@ ocm describe types credentials OCICredentials/v1 -o jsonschema
 
 ## OCICredentials/v1
 
-Typed credentials for OCI registry authentication. Supports username/password basic auth and token-based flows.
-
-Token fields (`accessToken`, `refreshToken`) take precedence over `username`/`password` when both are present.
-
 {{< schema-renderer url="/schemas/bindings/go/credentials/oci/v1/OCICredentials.schema.json" >}}
 
 ### Example
@@ -106,9 +102,6 @@ repositories, also use `OCICredentials/v1` (not `HelmHTTPCredentials/v1`).
 ---
 
 ## HelmHTTPCredentials/v1
-
-Typed credentials for HTTP/S-based Helm chart repositories. Supports username/password and mutual TLS. All fields are
-optional.
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/helm/v1/HelmHTTPCredentials.schema.json" >}}
 
@@ -150,12 +143,6 @@ use HTTP/S transport. For OCI-based Helm repositories, use `OCICredentials/v1` i
 ---
 
 ## RSACredentials/v1
-
-Typed credentials carrying RSA key material for signing and verification. Each field has two forms: inline PEM content
-or a path to a PEM file. The inline form takes precedence when both are set.
-
-For signing, provide `privateKeyPEM` or `privateKeyPEMFile`. For verification, provide `publicKeyPEM` or
-`publicKeyPEMFile`. Both can be combined in the same entry to support signing and verification from one config block.
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/rsa/v1/RSACredentials.schema.json" >}}
 
@@ -203,12 +190,6 @@ consumers:
 
 ## GPGCredentials/v1alpha1
 
-Typed credentials carrying OpenPGP key material for GPG signing and verification. Each field has two forms: inline
-ASCII-armored content or a path to a file. The inline form takes precedence when both are set.
-
-For signing, provide `privateKeyPGP` or `privateKeyPGPFile`. For verification, `publicKeyPGP` or `publicKeyPGPFile` is
-used; if neither is set, the public key is derived from the private key. Both can be combined in the same entry.
-
 {{< schema-renderer url="/schemas/bindings/go/credentials/gpg/v1alpha1/GPGCredentials.schema.json" >}}
 
 ### Example
@@ -234,12 +215,6 @@ consumers:
 
 ## OIDCIdentityToken/v1alpha1
 
-Typed credentials carrying an OIDC identity token for Sigstore keyless signing. The token is forwarded to Fulcio, which
-issues a short-lived signing certificate bound to the identity claims. Provide `token` (inline) or `tokenFile` (path);
-`token` takes precedence when both are set.
-
-Not needed when the `SIGSTORE_ID_TOKEN` environment variable or GitHub Actions ambient OIDC is already available.
-
 {{< schema-renderer url="/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1/OIDCIdentityToken.schema.json" >}}
 
 ### Example
@@ -262,10 +237,6 @@ consumers:
 
 ## TrustedRoot/v1alpha1
 
-Typed credentials carrying Sigstore trust material for verifying signatures produced against private Sigstore
-infrastructure. Overrides the default public-good TUF root. Required when `VerifyConfig.PrivateInfrastructure` is set.
-Provide `trustedRootJSON` (inline) or `trustedRootJSONFile` (path); the inline form takes precedence.
-
 {{< schema-renderer url="/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1/TrustedRoot.schema.json" >}}
 
 ### Example
@@ -287,12 +258,6 @@ consumers:
 ---
 
 ## DirectCredentials/v1
-
-The universal legacy fallback, also accepted as `Credentials/v1`. All existing `.ocmconfig` files continue to work
-unchanged — `Credentials/v1` is an alias for `DirectCredentials/v1`.
-
-Unlike the typed credential types above, `DirectCredentials/v1` stores credentials as an untyped `properties:` map. The
-property key names are consumer-defined string constants (e.g., `username`, `password`, `private_key_pem_file`).
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/direct/v1/DirectCredentials.schema.json" >}}
 

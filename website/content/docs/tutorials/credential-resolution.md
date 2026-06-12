@@ -18,7 +18,7 @@ For the full concept, see [Credential System]({{< relref "/docs/concepts/credent
 
 **Estimated time:** ~10 minutes
 
-## What you'll learn
+## What You'll Learn
 
 - How OCM constructs a lookup identity from a request
 - How consumers are matched — exact path, glob, hostname-only
@@ -443,6 +443,15 @@ docker login <registry-hostname>
 ```
 
 Then retry the OCM command.
+
+## What You've Learned
+
+- How OCM constructs a lookup identity from a registry request
+- How path matchers, URL matchers, and equality matchers chain together
+- How glob patterns work (`*` matches one segment, not across `/`)
+- How `https` and `oci` schemes are normalized, and how default ports are applied
+- Why wildcard precedence is not guaranteed when multiple entries match
+- How indirect (plugin-backed) credentials chain through the credential graph
 
 ## Next Steps
 
