@@ -700,7 +700,7 @@ func TestRetryConfig_Validate(t *testing.T) {
 		}
 		err := cfg.Validate()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "retry:")
+		assert.Contains(t, err.Error(), "invalid retry config:")
 	})
 
 	t.Run("Config.Validate wraps per-host retry error", func(t *testing.T) {
@@ -715,7 +715,7 @@ func TestRetryConfig_Validate(t *testing.T) {
 		err := cfg.Validate()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `host "ghcr.io:443"`)
-		assert.Contains(t, err.Error(), "retry:")
+		assert.Contains(t, err.Error(), "invalid retry config:")
 	})
 }
 
@@ -775,5 +775,101 @@ func TestRetryConfig_Merge(t *testing.T) {
 		merged := httpspec.Merge(a, b)
 		require.NotNil(t, merged.Retry)
 		assert.Equal(t, 5, *merged.Retry.MaxRetries)
+	})
+}
+
+func TestMergeTLSConfig(t *testing.T) {
+	tr := true
+	fa := false
+
+	t.Run("nil dst and nil src returns zero TLSConfig", func(t *testing.T) {
+		result := httpspec.MergeTLSConfig(nil, nil)
+		assert.Nil(t, result.InsecureSkipVerify)
+	})
+
+	t.Run("dst only preserved when src is nil", func(t *testing.T) {
+		dst := &httpspec.TLSConfig{InsecureSkipVerify: &tr}
+		result := httpspec.MergeTLSConfig(dst, nil)
+		require.NotNil(t, result.InsecureSkipVerify)
+		assert.True(t, *result.InsecureSkipVerify)
+	})
+
+	t.Run("src overrides dst", func(t *testing.T) {
+		dst := &httpspec.TLSConfig{InsecureSkipVerify: &fa}
+		src := &httpspec.TLSConfig{InsecureSkipVerify: &tr}
+		result := httpspec.MergeTLSConfig(dst, src)
+		require.NotNil(t, result.InsecureSkipVerify)
+		assert.True(t, *result.InsecureSkipVerify)
+	})
+
+	t.Run("false overrides true — per-host can re-enable verification", func(t *testing.T) {
+		dst := &httpspec.TLSConfig{InsecureSkipVerify: &tr}
+		src := &httpspec.TLSConfig{InsecureSkipVerify: &fa}
+		result := httpspec.MergeTLSConfig(dst, src)
+		require.NotNil(t, result.InsecureSkipVerify)
+		assert.False(t, *result.InsecureSkipVerify)
+	})
+}
+
+func TestConfig_ParseYAML_TLS(t *testing.T) {
+	t.Run("insecureSkipVerify true at global scope", func(t *testing.T) {
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    insecureSkipVerify: true
+`
+		var generic genericv1.Config
+		err := genericv1.Scheme.Decode(strings.NewReader(yaml), &generic)
+		require.NoError(t, err)
+		require.Len(t, generic.Configurations, 1)
+
+		var cfg httpspec.Config
+		err = httpspec.Scheme.Convert(generic.Configurations[0], &cfg)
+		require.NoError(t, err)
+		require.NotNil(t, cfg.InsecureSkipVerify)
+		assert.True(t, *cfg.InsecureSkipVerify)
+	})
+
+	t.Run("insecureSkipVerify per-host", func(t *testing.T) {
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    hosts:
+      registry.example.com:
+        insecureSkipVerify: true
+`
+		var generic genericv1.Config
+		err := genericv1.Scheme.Decode(strings.NewReader(yaml), &generic)
+		require.NoError(t, err)
+		var cfg httpspec.Config
+		err = httpspec.Scheme.Convert(generic.Configurations[0], &cfg)
+		require.NoError(t, err)
+		assert.Nil(t, cfg.InsecureSkipVerify)
+		require.Contains(t, cfg.Hosts, "registry.example.com")
+		require.NotNil(t, cfg.Hosts["registry.example.com"].InsecureSkipVerify)
+		assert.True(t, *cfg.Hosts["registry.example.com"].InsecureSkipVerify)
+	})
+}
+
+func TestMerge_TLS(t *testing.T) {
+	tr := true
+	fa := false
+
+	t.Run("global InsecureSkipVerify propagated through Merge", func(t *testing.T) {
+		a := &httpspec.Config{TLSConfig: httpspec.TLSConfig{InsecureSkipVerify: &tr}}
+		b := &httpspec.Config{}
+		merged := httpspec.Merge(a, b)
+		require.NotNil(t, merged.InsecureSkipVerify)
+		assert.True(t, *merged.InsecureSkipVerify)
+	})
+
+	t.Run("later layer overrides earlier", func(t *testing.T) {
+		a := &httpspec.Config{TLSConfig: httpspec.TLSConfig{InsecureSkipVerify: &tr}}
+		b := &httpspec.Config{TLSConfig: httpspec.TLSConfig{InsecureSkipVerify: &fa}}
+		merged := httpspec.Merge(a, b)
+		require.NotNil(t, merged.InsecureSkipVerify)
+		assert.False(t, *merged.InsecureSkipVerify)
 	})
 }
