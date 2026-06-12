@@ -1073,11 +1073,11 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 		// src so they travel with the copy; they are attached out-of-band via the
 		// Referrers API and would otherwise be left behind.
 		return &ocistream.OCIResourceStream{
-			ReadOnlyStorage: src,
-			Descriptor:      desc,
-			CopyOpts:        repo.resourceCopyOptions.CopyGraphOptions,
-			TempDir:         repo.tempDir,
-			Tags:            tags,
+			ReadOnlyGraphStorage: src,
+			Descriptor:           desc,
+			CopyOpts:             repo.resourceCopyOptions.CopyGraphOptions,
+			TempDir:              repo.tempDir,
+			Tags:                 tags,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)

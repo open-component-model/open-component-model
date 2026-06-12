@@ -347,6 +347,13 @@ func (s *repository) tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 	return nil
 }
 
+// Predecessors satisfies content.ReadOnlyGraphStorage. CTF archives keep no
+// referrer or graph index, so it warns and reports none.
+func (s *repository) Predecessors(ctx context.Context, _ ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	slog.WarnContext(ctx, "CTF archives do not support referrer discovery; no predecessors are reported", "repository", s.repo)
+	return nil, nil
+}
+
 func (s *repository) Tags(ctx context.Context, _ string, fn func(tags []string) error) error {
 	s.mu.RLock()
 

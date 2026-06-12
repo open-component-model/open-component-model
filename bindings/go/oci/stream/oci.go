@@ -2,7 +2,6 @@ package stream
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -16,7 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
-// OCIResourceStream wraps a content.ReadOnlyStorage (typically a remote.Repository)
+// OCIResourceStream wraps a content.ReadOnlyGraphStorage (typically a remote.Repository)
 // and a resolved root descriptor. No network I/O occurs at construction time.
 // Tags are OCI reference tags applied to the layout during Materialize
 // (passed to tar.CopyToOCILayoutOptions). For remote refs they should be the
@@ -46,12 +45,7 @@ func (s *OCIResourceStream) Predecessors(ctx context.Context, node ocispec.Descr
 	if !content.Equal(node, s.Root()) {
 		return nil, nil
 	}
-	graphStore, ok := s.ReadOnlyGraphStorage.(content.ReadOnlyGraphStorage)
-	if !ok {
-		slogcontext.Log(ctx, slog.LevelDebug, "source store does not support referrer discovery; skipping ownership referrers", slog.String("store", fmt.Sprintf("%T", s.ReadOnlyGraphStorage)))
-		return nil, nil
-	}
-	refs, err := registry.Referrers(ctx, graphStore, node, annotations.OwnershipArtifactType)
+	refs, err := registry.Referrers(ctx, s.ReadOnlyGraphStorage, node, annotations.OwnershipArtifactType)
 	if err != nil {
 		slogcontext.Log(ctx, slog.LevelWarn, "failed listing ownership referrers; continuing without them", slog.Any("err", err))
 		return nil, nil
