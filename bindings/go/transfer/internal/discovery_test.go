@@ -121,7 +121,7 @@ func TestIdentityToTransformationID(t *testing.T) {
 // --- discoverer tests ---
 
 func TestDiscoverer_NonRecursive(t *testing.T) {
-	d := &discoverer{recursive: false, discoveredDigests: make(map[string]descriptor.Digest)}
+	d := &discoverer{recursive: 0, discoveredDigests: make(map[string]descriptor.Digest)}
 	parent := &discoveryValue{
 		Descriptor: &descriptor.Descriptor{
 			Component: descriptor.Component{
@@ -140,7 +140,7 @@ func TestDiscoverer_NonRecursive(t *testing.T) {
 }
 
 func TestDiscoverer_Recursive(t *testing.T) {
-	d := &discoverer{recursive: true, discoveredDigests: make(map[string]descriptor.Digest)}
+	d := &discoverer{recursive: -1, discoveredDigests: make(map[string]descriptor.Digest)}
 	parent := &discoveryValue{
 		Descriptor: &descriptor.Descriptor{
 			Component: descriptor.Component{
@@ -241,7 +241,7 @@ func TestDiscoverer_RecursiveTargetPropagation(t *testing.T) {
 		BaseUrl: "ghcr.io/target",
 	}
 	d := &discoverer{
-		recursive:         true,
+		recursive:         -1,
 		discoveredDigests: make(map[string]descriptor.Digest),
 		targetMap:         map[string][]runtime.Typed{"parent.comp/name:1.0.0": {someTarget}},
 		resolverMap:       map[string]resolvers.ComponentVersionRepositoryResolver{},
@@ -273,7 +273,7 @@ func TestDiscoverer_RecursiveResolverPropagation(t *testing.T) {
 		repos: map[string]repository.ComponentVersionRepository{},
 	}
 	d := &discoverer{
-		recursive:         true,
+		recursive:         -1,
 		discoveredDigests: make(map[string]descriptor.Digest),
 		targetMap:         map[string][]runtime.Typed{},
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
@@ -318,7 +318,7 @@ func TestDiscoverer_ConflictingResolversForSameChild(t *testing.T) {
 
 	// Simulate: A already discovered D first and assigned resolverA.
 	d := &discoverer{
-		recursive:         true,
+		recursive:         -1,
 		discoveredDigests: make(map[string]descriptor.Digest),
 		targetMap:         map[string][]runtime.Typed{},
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
@@ -357,7 +357,7 @@ func TestDiscoverer_SameResolverForSameChildFromTwoParents(t *testing.T) {
 	childKey := "shared.comp/d:1.0.0"
 
 	d := &discoverer{
-		recursive:         true,
+		recursive:         -1,
 		discoveredDigests: make(map[string]descriptor.Digest),
 		targetMap:         map[string][]runtime.Typed{},
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{

@@ -68,10 +68,9 @@ spec:
     inlined:
       type: generic.config.ocm.software/v1
       configurations:
-        - type: GlobalTransferOptions/v1alpha1 # Current not existing configuration type.
-          spec:
-            recursive: false
-            copyMode: localBlob
+        - type: transfer.config.ocm.software/v1alpha1
+          recursive: -1 # -1 means infinitely recursive.
+          copyMode: localBlob
 
   # References resolved in the Replication CR's namespace.
   ocmConfig:
@@ -94,10 +93,9 @@ data:
   transferConfig: |
     type: generic.config.ocm.software/v1
     configurations:
-      - type: GlobalTransferOptions/v1alpha1 # Current not existing configuration type.
-        spec:
-          recursive: false
-          copyMode: localBlob
+      - type: transfer.config.ocm.software/v1alpha1
+        recursive: -1
+        copyMode: localBlob
 ```
 
 `copyMode`:
