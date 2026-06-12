@@ -67,6 +67,7 @@ On the verify side: TUF supplies the current trust roots, OCM validates the Fulc
 - An account at one of {Google, GitHub, Microsoft} — public Sigstore federates with these
 - Network access to `*.sigstore.dev` — corporate firewalls sometimes block these
 - A component version to sign (we'll create one if you don't have one)
+- Optional: `yq`and `jq` for inspecting the signature bundle (not required for signing or verification)
 
 {{< callout context="note" title="Cosign CLI is fetched automatically" icon="outline/info-circle" >}}
 The OCM CLI invokes the `cosign` binary under the hood. If it's not on your PATH (or the version is too old), OCM downloads and caches it under `~/.cache/ocm/cosign/...` on first use. Subsequent runs skip the download.

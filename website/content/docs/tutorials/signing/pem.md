@@ -1,7 +1,7 @@
 ---
 title: "Certificate Chains (PEM)"
 description: "Sign and verify component versions using PEM-encoded signatures with an X.509 certificate chain and a dedicated trust anchor."
-icon: pem
+icon: certificate
 weight: 20
 toc: true
 ---
