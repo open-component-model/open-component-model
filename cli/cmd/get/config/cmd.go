@@ -118,11 +118,9 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		result.Configurations = append(result.Configurations, fsCfg)
 	}
 
-	httpCfg, err := httpv1alpha1.LookupConfig(cfg)
-	if err != nil {
+	if httpCfg, err := httpv1alpha1.LookupConfig(cfg); err != nil {
 		return nil, fmt.Errorf("config lookup failed for http: %w", err)
-	}
-	if httpCfg != nil && httpCfg.Type != (runtime.Type{}) {
+	} else if httpCfg != nil && httpCfg.Type != (runtime.Type{}) {
 		result.Configurations = append(result.Configurations, httpCfg)
 	}
 
