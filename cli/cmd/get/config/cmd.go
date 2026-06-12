@@ -99,6 +99,12 @@ type effectiveConfig struct {
 	Configurations []any        `json:"configurations"`
 }
 
+var credentialsScheme = func() *runtime.Scheme {
+	s := runtime.NewScheme()
+	credentialsv1.MustRegister(s)
+	return s
+}()
+
 func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 	result := &effectiveConfig{
 		Type: runtime.NewVersionedType(genericv1.ConfigType, genericv1.Version),
@@ -177,7 +183,7 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		return nil, fmt.Errorf("config lookup failed for credentials: %w", err)
 	}
 	if credentialsCfg != nil {
-		v1Cfg, err := convertCredentialsToV1(credentialsCfg)
+		v1Cfg, err := credentialsruntime.ConvertToV1(credentialsScheme, credentialsCfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert credentials config: %w", err)
 		}
@@ -185,37 +191,4 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 	}
 
 	return result, nil
-}
-
-// Runtime types of credentials serialize as `json:"-"` (bindings/go/credentials/spec/config/runtime/config.go)
-// so we convert to the v1 spec type for serialization.
-func convertCredentialsToV1(cfg *credentialsruntime.Config) (*credentialsv1.Config, error) {
-	repos := make([]credentialsv1.RepositoryConfigEntry, 0, len(cfg.Repositories))
-	for _, r := range cfg.Repositories {
-		raw, ok := r.Repository.(*runtime.Raw)
-		if !ok {
-			return nil, fmt.Errorf("unexpected repository type %T, expected *runtime.Raw", r.Repository)
-		}
-		repos = append(repos, credentialsv1.RepositoryConfigEntry{Repository: raw})
-	}
-	consumers := make([]credentialsv1.Consumer, len(cfg.Consumers))
-	for i, c := range cfg.Consumers {
-		creds := make([]*runtime.Raw, 0, len(c.Credentials))
-		for _, cred := range c.Credentials {
-			raw, ok := cred.(*runtime.Raw)
-			if !ok {
-				return nil, fmt.Errorf("unexpected credential type %T, expected *runtime.Raw", cred)
-			}
-			creds = append(creds, raw)
-		}
-		consumers[i] = credentialsv1.Consumer{
-			Identities:  c.Identities,
-			Credentials: creds,
-		}
-	}
-	return &credentialsv1.Config{
-		Type:         cfg.Type,
-		Repositories: repos,
-		Consumers:    consumers,
-	}, nil
 }

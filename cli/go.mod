@@ -21,7 +21,7 @@ require (
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260611120504-e55ead3bd200
 	ocm.software/open-component-model/bindings/go/configuration v0.0.14
 	ocm.software/open-component-model/bindings/go/constructor v0.0.10
-	ocm.software/open-component-model/bindings/go/credentials v0.0.13
+	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260611120504-e55ead3bd200
