@@ -317,3 +317,5 @@ rm -rf /tmp/ocm-signing-tutorial
 ## Related Documentation
 
 - [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) - Understand the theory behind OCM signing
+- [Tutorial: Certificate Chains (PEM)]({{< relref "docs/tutorials/signing/pem.md" >}}) - Same RSA key pair, but with an X.509 chain instead of a bare public key
+- [Tutorial: Sigstore (Keyless)]({{< relref "docs/tutorials/signing/sigstore.md" >}}) - Identity-based signing — no keys to manage
