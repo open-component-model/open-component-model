@@ -374,8 +374,8 @@ ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260612063051-2d68fb4f
 ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260612063051-2d68fb4f15bc/go.mod h1:eC3atSnaZDG/AN0W+zLKc5Q2IxRzT8Ze20JvLjlsyX0=
 ocm.software/open-component-model/bindings/go/helm v0.0.0-20260612063051-2d68fb4f15bc h1:2wDRRrpa3asJ0/NQ13YvT0sUdnLev+IayjAX4j6JsKs=
 ocm.software/open-component-model/bindings/go/helm v0.0.0-20260612063051-2d68fb4f15bc/go.mod h1:ytdzphWnisCwSJiCoHHcE8zy+OQj7IdZfW2whUS4pko=
-ocm.software/open-component-model/bindings/go/http v0.0.0-20260612063051-2d68fb4f15bc h1:cAmkpYUl529y1aiYKANU+Cd6/6hCRFILhSb2AWFlokE=
-ocm.software/open-component-model/bindings/go/http v0.0.0-20260612063051-2d68fb4f15bc/go.mod h1:VgvvYLEimiC6+EmmMaUl3MScdBegyHpFkVllNL9b/vg=
+ocm.software/open-component-model/bindings/go/http v0.0.0-20260612091318-a153e075bdfd h1:EF2N9ipBdz2EXORi4dbQBzKbFu8kVmuRlOJ4iM3hEhA=
+ocm.software/open-component-model/bindings/go/http v0.0.0-20260612091318-a153e075bdfd/go.mod h1:VgvvYLEimiC6+EmmMaUl3MScdBegyHpFkVllNL9b/vg=
 ocm.software/open-component-model/bindings/go/input/dir v0.0.4 h1:E/Ndd0vJah3C348Ipylja8Rrijgp7thINRdRXIB8ueo=
 ocm.software/open-component-model/bindings/go/input/dir v0.0.4/go.mod h1:EimuDBI8aLk5yVyhp1FJUg+qkYzND8awBNTfZLCl7vA=
 ocm.software/open-component-model/bindings/go/input/file v0.0.5 h1:RbolMn7cCHiXzafzJORYPklkN2QO0vV/sSCOw0XUyPY=

@@ -165,7 +165,7 @@ require (
 	ocm.software/open-component-model/bindings/go/constructor v0.0.10 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260612063051-2d68fb4f15bc // indirect
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260612063051-2d68fb4f15bc // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260612091318-a153e075bdfd // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260612061043-c5a9d0c81b2a // indirect
