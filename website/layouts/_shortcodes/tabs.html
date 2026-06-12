@@ -39,7 +39,7 @@
 <div class="tab-content" id="nav-tabContent">
 {{- $seen := dict -}}
 {{- range $index, $tab := .Scratch.Get $group -}}
-{{- $content := .Content | $.Page.RenderString -}}
+{{- $content := $tab.Content | $.Page.RenderString -}}
 {{- range findRE `<h[1-6][^>]*\sid="[^"]+"` $content -}}
   {{- $headingID := replaceRE `.*\sid="([^"]+)".*` "$1" . -}}
   {{- if index $seen $headingID -}}

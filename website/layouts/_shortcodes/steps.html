@@ -1,0 +1,14 @@
+<!--
+  Local override of the @thulite/doks-core steps shortcode.
+
+  Must be invoked with percent notation so the inner
+  markdown (emitted by the step children) flows through the page's markdown
+  pipeline: headings inside steps appear in the table of contents and get
+  page-wide unique IDs. The theme version rendered each step in an isolated
+  RenderString call, hiding its headings from the TOC.
+-->
+<ol role="list" class="thulite-steps">
+
+{{ .Inner }}
+
+</ol>
