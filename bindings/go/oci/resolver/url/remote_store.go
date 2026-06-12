@@ -14,8 +14,11 @@ import (
 )
 
 // remoteStore wraps *remote.Repository and adds content.Untagger support.
-// oras-go does not implement Untag for remote repositories; we issue the
-// DELETE /v2/<name>/manifests/<tag> call defined by the OCI distribution spec directly.
+//
+// oras-go implements content.Untagger only for its local OCI layout store
+// (content/oci.Store). The remote registry client (registry/remote.Repository)
+// intentionally omits it: the OCI Distribution Spec treats
+// DELETE /v2/<name>/manifests/<tag> as optional, and not all registries honor it.
 type remoteStore struct {
 	*remote.Repository
 }
