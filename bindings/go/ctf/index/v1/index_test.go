@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 func TestNewIndex_Empty(t *testing.T) {
@@ -266,7 +264,6 @@ func TestAddArtifact_RetagFromUntaggedToLatest(t *testing.T) {
 		t.Error("expected old artifact (sha256:old) to have its tag cleared")
 	}
 }
-
 func TestAddArtifact_MultipleUntaggedArtifacts(t *testing.T) {
 	idx := NewIndex()
 	// Add multiple untagged artifacts with different digests - all should be stored
@@ -300,12 +297,17 @@ func TestRemoveArtifactByTag(t *testing.T) {
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "stable", Digest: "sha256:abc"})
 
-	err := idx.RemoveArtifactByTag("repo1", "latest")
-	require.NoError(t, err)
+	if err := idx.RemoveArtifactByTag("repo1", "latest"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	arts := idx.GetArtifacts()
-	require.Lenf(t, arts, 1, "expected 1 artifact after removal, got %d", len(arts))
-	require.Equalf(t, "stable", arts[0].Tag, "expected remaining tag to be 'stable', got %q", arts[0].Tag)
+	if len(arts) != 1 {
+		t.Fatalf("expected 1 artifact after removal, got %d", len(arts))
+	}
+	if arts[0].Tag != "stable" {
+		t.Errorf("expected remaining tag to be 'stable', got %q", arts[0].Tag)
+	}
 }
 
 func TestRemoveArtifactByTag_NotFound(t *testing.T) {
@@ -313,7 +315,9 @@ func TestRemoveArtifactByTag_NotFound(t *testing.T) {
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
 
 	err := idx.RemoveArtifactByTag("repo1", "nonexistent")
-	require.ErrorIs(t, err, ErrArtifactNotFound)
+	if !errors.Is(err, ErrArtifactNotFound) {
+		t.Errorf("expected ErrArtifactNotFound, got %v", err)
+	}
 }
 
 func TestRemoveArtifactByTag_OnlyMatchingTag(t *testing.T) {
@@ -322,23 +326,17 @@ func TestRemoveArtifactByTag_OnlyMatchingTag(t *testing.T) {
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo2", Tag: "latest", Digest: "sha256:abc"})
 
-	err := idx.RemoveArtifactByTag("repo1", "latest")
-	require.NoErrorf(t, err, "failed to remove tag from repo1: %v", err)
+	if err := idx.RemoveArtifactByTag("repo1", "latest"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	arts := idx.GetArtifacts()
-	require.Lenf(t, arts, 2, "expected 2 artifacts, got %d", len(arts))
-
+	if len(arts) != 2 {
+		t.Fatalf("expected 2 artifacts after removal, got %d", len(arts))
+	}
 	for _, art := range arts {
 		if art.Repository == "repo1" && art.Tag == "latest" {
 			t.Error("repo1/latest should have been removed")
 		}
 	}
-}
-
-func TestRemoveArtifactByTag_EmptyTag(t *testing.T) {
-	idx := NewIndex()
-	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Digest: "sha256:abc"})
-
-	err := idx.RemoveArtifactByTag("repo1", "")
-	require.ErrorIs(t, err, ErrInvalidTag)
 }

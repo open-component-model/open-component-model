@@ -17,7 +17,6 @@ const (
 var (
 	ErrSchemaVersionMismatch = fmt.Errorf("schema version mismatch, only %v is supported", SchemaVersion)
 	ErrArtifactNotFound      = errors.New("artifact not found in index")
-	ErrInvalidTag            = errors.New("tag must not be empty")
 )
 
 // Index is a collection of artifacts that can be serialized to disk.
@@ -37,7 +36,7 @@ type Index interface {
 	// It is not guaranteed to be consistent with later calls as it is a snapshot of the current state.
 	GetArtifacts() []ArtifactMetadata
 	// RemoveArtifactByTag removes the entry with the given tag from the given repository.
-	// Returns ErrArtifactNotFound if no matching entry exists, ErrInvalidTag if tag is empty.
+	// Returns ErrArtifactNotFound if no matching entry exists.
 	// The underlying blob is NOT garbage-collected.
 	RemoveArtifactByTag(repository, tag string) error
 }
@@ -143,11 +142,8 @@ func (i *index) GetArtifacts() []ArtifactMetadata {
 }
 
 // RemoveArtifactByTag removes the artifact with the given repository and tag from the index.
-// Returns ErrArtifactNotFound if no matching entry exists, ErrInvalidTag if tag is empty.
+// Returns ErrArtifactNotFound if no matching entry exists.
 func (i *index) RemoveArtifactByTag(repository, tag string) error {
-	if tag == "" {
-		return ErrInvalidTag
-	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	for idx, art := range i.Artifacts {
