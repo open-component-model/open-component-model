@@ -1,24 +1,44 @@
 ---
-title: ocm get
-description: Get anything from OCM.
+title: ocm get config
+description: Display the effective merged OCM configuration.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm get
+## ocm get config
 
-Get anything from OCM
+Display the effective merged OCM configuration
+
+### Synopsis
+
+Evaluate the command line arguments and all explicitly or implicitly used
+configuration files and display the merged effective configuration as a single object.
 
 ```
-ocm get {component-version|component-versions|cv|cvs|config|cfg} [flags]
+ocm get config [flags]
+```
+
+### Examples
+
+```
+  # Display effective config in YAML (default)
+  ocm get config
+
+  # Display effective config in JSON
+  ocm get config --output json
+
+  # Display effective config from a specific config file
+  ocm get config --config ./my-ocm-config.yaml
 ```
 
 ### Options
 
 ```
-  -h, --help   help for get
+  -h, --help          help for config
+  -o, --output enum   output format
+                      (must be one of [json ndjson yaml]) (default yaml)
 ```
 
 ### Options inherited from parent commands
@@ -64,8 +84,5 @@ ocm get {component-version|component-versions|cv|cvs|config|cfg} [flags]
 
 ### SEE ALSO
 
-* [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
-* [ocm get component-version]({{< relref "ocm_get_component-version.md" >}})	 - Get component version(s) from an OCM repository
-* [ocm get config]({{< relref "ocm_get_config.md" >}})	 - Display the effective merged OCM configuration
-* [ocm get types]({{< relref "ocm_get_types.md" >}})	 - Describe OCM types and their configuration schema
+* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
 

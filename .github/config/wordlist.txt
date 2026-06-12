@@ -1,4 +1,5 @@
 Runtime's
+acls
 accessmethod
 accessmethoddescriptor
 accessmethods
@@ -46,6 +47,7 @@ autoscaler
 aws
 backend
 backends
+backoff
 backport
 backports
 basename
@@ -85,6 +87,8 @@ changelog
 changelogs
 checksums
 chocolateyinstall
+cdn
+cidrs
 cicd
 cli
 cli's
@@ -154,6 +158,7 @@ creds
 crossplatform
 crs
 crypto
+cryptoapi
 cryptographic
 cryptographically
 csl
@@ -337,6 +342,7 @@ hidechildren
 hoc
 homebrew
 hostname
+hostnames
 hostpath
 href
 hsm
@@ -373,6 +379,7 @@ jakobmoellerdev
 jakobmoellersap
 jarm
 jfrog
+jitter
 jq
 js
 json
@@ -381,6 +388,7 @@ jsonschema
 jsonschemagen
 jwt
 kelch
+keychain
 kep
 keycloak
 keyless
@@ -663,6 +671,7 @@ resourcereference
 resourcespec
 resourcestatus
 resubmission
+retryconfig
 retrigger
 rgd
 rgd's
@@ -730,6 +739,7 @@ src
 srcrefs
 sre
 sres
+ssl
 stackit
 standup
 stateful

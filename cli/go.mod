@@ -29,7 +29,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260612063051-2d68fb4f15bc
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260612063051-2d68fb4f15bc
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260612063051-2d68fb4f15bc
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260612091318-a153e075bdfd
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260612061043-c5a9d0c81b2a
