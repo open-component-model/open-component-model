@@ -22,8 +22,7 @@ import (
 // (passed to tar.CopyToOCILayoutOptions). For remote refs they should be the
 // full ImageReference string so the caller can resolve the layout by that same key.
 type OCIResourceStream struct {
-	content.ReadOnlyStorage
-	content.PredecessorFinder
+	content.ReadOnlyGraphStorage
 	Descriptor ocispec.Descriptor
 	CopyOpts   oras.CopyGraphOptions
 	TempDir    string
@@ -47,9 +46,9 @@ func (s *OCIResourceStream) Predecessors(ctx context.Context, node ocispec.Descr
 	if !content.Equal(node, s.Root()) {
 		return nil, nil
 	}
-	graphStore, ok := s.ReadOnlyStorage.(content.ReadOnlyGraphStorage)
+	graphStore, ok := s.ReadOnlyGraphStorage.(content.ReadOnlyGraphStorage)
 	if !ok {
-		slogcontext.Log(ctx, slog.LevelDebug, "source store does not support referrer discovery; skipping ownership referrers", slog.String("store", fmt.Sprintf("%T", s.ReadOnlyStorage)))
+		slogcontext.Log(ctx, slog.LevelDebug, "source store does not support referrer discovery; skipping ownership referrers", slog.String("store", fmt.Sprintf("%T", s.ReadOnlyGraphStorage)))
 		return nil, nil
 	}
 	refs, err := registry.Referrers(ctx, graphStore, node, annotations.OwnershipArtifactType)
@@ -67,7 +66,7 @@ func (s *OCIResourceStream) Materialize(ctx context.Context) (blob.ReadOnlyBlob,
 	if err != nil {
 		return nil, err
 	}
-	return tar.CopyToOCILayoutInMemory(ctx, s.ReadOnlyStorage, s.Descriptor, tar.CopyToOCILayoutOptions{
+	return tar.CopyToOCILayoutInMemory(ctx, s.ReadOnlyGraphStorage, s.Descriptor, tar.CopyToOCILayoutOptions{
 		CopyGraphOptions: s.CopyOpts,
 		Tags:             s.Tags,
 		TempDir:          s.TempDir,
