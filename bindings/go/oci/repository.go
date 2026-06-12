@@ -621,12 +621,22 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		// referrers-query hiccup must not fail an otherwise-healthy read; the
 		// callback logs and continues without them. Depth 1 keeps the walk to
 		// direct referrers of artifact, never referrers-of-referrers.
-		return tar.CopyToOCILayoutInMemory(ctx, store, artifact, tar.CopyToOCILayoutOptions{
-			CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-			Tags:             []string{version},
-			TempDir:          repo.tempDir,
-			FindPredecessors: bestEffortOwnershipReferrers(ref),
-			Depth:            1,
+		graph, ok := store.(content.ReadOnlyGraphStorage)
+		if !ok {
+			return nil, fmt.Errorf("store %T does not support predecessor walks", store)
+		}
+		// Pull every referrer of the artifact into the layout so they travel with
+		// a by-value resource just as they do for the OCI-image path (see
+		// [Repository.DownloadResourceStream]). Only the main artifact is tagged,
+		// so a later re-add still resolves it as the top-level parent even with
+		// the referrer present in the index. ExtendedCopyGraph's defaults walk
+		// every predecessor at unbounded depth.
+		return tar.CopyToOCILayoutInMemory(ctx, graph, artifact, tar.CopyToOCILayoutOptions{
+			ExtendedCopyGraphOptions: oras.ExtendedCopyGraphOptions{
+				CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
+			},
+			Tags:    []string{version},
+			TempDir: repo.tempDir,
 		})
 	}
 
@@ -906,43 +916,6 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	return stream.Materialize(ctx)
 }
 
-// asGraphStorage adapts a content.ReadOnlyStorage into a
-// content.ReadOnlyGraphStorage. If store already supports graph traversal it is
-// returned unchanged; otherwise it is wrapped in an adapter whose Predecessors
-// always returns nil. ExtendedCopyGraph callers in this package always set a
-// FindPredecessors callback, so the adapter's Predecessors is purely for type
-// compliance — it is never consulted.
-func asGraphStorage(store content.ReadOnlyStorage) content.ReadOnlyGraphStorage {
-	if g, ok := store.(content.ReadOnlyGraphStorage); ok {
-		return g
-	}
-	return noPredecessorsGraph{ReadOnlyStorage: store}
-}
-
-type noPredecessorsGraph struct {
-	content.ReadOnlyStorage
-}
-
-func (noPredecessorsGraph) Predecessors(context.Context, ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-	return nil, nil
-}
-
-// bestEffortOwnershipReferrers returns a FindPredecessors callback for
-// oras.ExtendedCopyGraph that lists ADR 0016 ownership referrers of desc,
-// logging and swallowing any discovery error so an otherwise-healthy copy is
-// not failed by a referrers-query hiccup. Pair with Depth 1 to keep the walk
-// to direct referrers of the start node.
-func bestEffortOwnershipReferrers(reference string) func(ctx context.Context, src content.ReadOnlyGraphStorage, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-	return func(ctx context.Context, src content.ReadOnlyGraphStorage, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-		refs, err := registry.Referrers(ctx, src, desc, annotations.OwnershipArtifactType)
-		if err != nil {
-			slogcontext.Log(ctx, slog.LevelWarn, "failed listing ownership referrers; continuing without them", slog.String("reference", reference), slog.Any("err", err))
-			return nil, nil
-		}
-		return refs, nil
-	}
-}
-
 // DownloadSource downloads a [*descriptor.Source] from the repository.
 func (repo *Repository) DownloadSource(ctx context.Context, src *descriptor.Source) (data blob.ReadOnlyBlob, err error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
@@ -1139,20 +1112,21 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 		if resolved.Tag != "" {
 			tags = []string{typed.ImageReference}
 		}
-		// The stream embeds ReadOnlyGraphStorage so a downstream
-		// oras.ExtendedCopyGraph (in UploadResourceStream) can walk predecessors.
-		// CTF-backed stores (and any other ReadOnlyStorage that is not a graph
-		// store) do not support predecessor queries, so wrap them in a no-op
-		// graph adapter — referrers simply do not travel from such sources, which
-		// matches the prior best-effort behaviour. Materialize discovers ADR 0016
-		// ownership referrers itself; UploadResourceStream sets its own
-		// FindPredecessors at the call site.
+		graph, ok := src.(content.ReadOnlyGraphStorage)
+		if !ok {
+			return nil, fmt.Errorf("store %T does not support predecessor walks", src)
+		}
+		// ExtendedCopyOpts is left zero: oras.ExtendedCopyGraph then walks every
+		// predecessor at unbounded depth, so all referrers ride along with the
+		// artifact in both Materialize and UploadResourceStream.
 		return &ocistream.OCIResourceStream{
-			ReadOnlyGraphStorage: asGraphStorage(src),
+			ReadOnlyGraphStorage: graph,
 			Descriptor:           desc,
-			CopyOpts:             repo.resourceCopyOptions.CopyGraphOptions,
-			TempDir:              repo.tempDir,
-			Tags:                 tags,
+			ExtendedCopyOpts: oras.ExtendedCopyGraphOptions{
+				CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
+			},
+			TempDir: repo.tempDir,
+			Tags:    tags,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -1179,17 +1153,11 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		return nil, err
 	}
 
-	// ExtendedCopyGraph copies the root together with its ownership referrers (ADR
-	// 0016), which a plain CopyGraph would miss because a referrer's subject edge
-	// points back at the root. FindPredecessors filters the upward walk to just
-	// the ownership referrers of the source artifact, so signatures or other
-	// referrers do not ride along. Depth 1 keeps it to the root's direct
-	// referrers, never referrers-of-referrers. With none, it degenerates to
-	// copying the root alone.
+	// ExtendedCopyGraph copies the root together with its referrers, which a
+	// plain CopyGraph would miss because a referrer's subject edge points back
+	// at the root. The defaults walk every predecessor at unbounded depth.
 	extendedOpts := oras.ExtendedCopyGraphOptions{
 		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-		Depth:            1,
-		FindPredecessors: bestEffortOwnershipReferrers(access.ImageReference),
 	}
 	if err := oras.ExtendedCopyGraph(ctx, rs, store, rs.Root(), extendedOpts); err != nil {
 		return nil, fmt.Errorf("failed to stream resource via copy: %w", err)

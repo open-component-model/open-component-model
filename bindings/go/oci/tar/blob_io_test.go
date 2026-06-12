@@ -409,6 +409,10 @@ func (s *invalidStore) Push(ctx context.Context, desc ociImageSpecV1.Descriptor,
 	return assert.AnError
 }
 
+func (s *invalidStore) Predecessors(ctx context.Context, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	return nil, assert.AnError
+}
+
 // testReadOnlyBlob implements blob.ReadOnlyBlob for testing
 type testReadOnlyBlob struct {
 	data []byte

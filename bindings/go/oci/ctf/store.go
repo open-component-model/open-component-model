@@ -283,6 +283,14 @@ func (s *repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 	return s.tag(ctx, desc, reference)
 }
 
+// Predecessors returns nil — CTF has no referrers index, so no manifest in the
+// archive declares a subject edge pointing at desc. This satisfies
+// content.ReadOnlyGraphStorage so a CTF-backed store can be passed to
+// oras.ExtendedCopyGraph; the predecessor walk simply yields nothing.
+func (s *repository) Predecessors(context.Context, ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	return nil, nil
+}
+
 // tag is the internal version of Tag that assumes the caller holds the lock.
 func (s *repository) tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
 	idx, err := s.archive.GetIndex(ctx)

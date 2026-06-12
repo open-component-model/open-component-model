@@ -17,16 +17,20 @@ import (
 	"oras.land/oras-go/v2/content"
 	orasregistry "oras.land/oras-go/v2/registry"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	"ocm.software/open-component-model/bindings/go/oci/tar"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd"
 	"ocm.software/open-component-model/cli/integration/internal"
@@ -323,7 +327,118 @@ components:
 				assertOwnershipReferrer(t, ctx, dstResolver, subject, component, version, "backend-image-always", true)
 			})
 		})
+
+		// CTF has no Referrers API and stores by-value resources as OCI image
+		// layout tarballs in the component-descriptors repo. The ownership
+		// referrer rides inside that layout, so it survives a CTF target transfer
+		// regardless of --copy-resources. By-reference resources are not asserted
+		// here: without --copy-resources they stay pointed at the source registry,
+		// and with --copy-resources they get re-hosted as local blobs in the CTF
+		// — the same by-value layout path the local resource exercises.
+		t.Run("to CTF target — by-value referrer reaches the target layout", func(t *testing.T) {
+			dstCTFPath, dstRepo := transferTestAssetToCTF(t, ctx, srcReg, component, version)
+			t.Logf("destination CTF: %s", dstCTFPath)
+			assertCTFLocalBlobReferrer(t, ctx, dstRepo, component, version, "backend-image-local", true)
+		})
 	})
+}
+
+// transferTestAssetToCTF transfers the shared test-asset component version from
+// srcReg into a fresh CTF archive via the real `ocm transfer component-version`
+// CLI command and returns the CTF archive path and an [oci.Repository] backed by
+// it for asserting the result.
+func transferTestAssetToCTF(t *testing.T, ctx context.Context, srcReg *internal.OCIRegistry, component, version string) (string, *oci.Repository) {
+	t.Helper()
+	r := require.New(t)
+
+	dstCTF := filepath.Join(t.TempDir(), "dst-ctf")
+
+	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{
+		{Host: srcReg.Host, Port: srcReg.Port, User: srcReg.User, Password: srcReg.Password},
+	})
+	r.NoError(err)
+
+	transferCMD := cmd.New()
+	out := new(bytes.Buffer)
+	transferCMD.SetOut(out)
+	transferCMD.SetErr(out)
+	transferCMD.SetArgs([]string{
+		"transfer", "component-version",
+		fmt.Sprintf("http://%s//%s:%s", srcReg.RegistryAddress, component, version),
+		fmt.Sprintf("ctf::%s", dstCTF),
+		"--config", cfgPath,
+	})
+
+	transferCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	t.Cleanup(cancel)
+	r.NoError(transferCMD.ExecuteContext(transferCtx), "transfer to CTF should succeed: %s", out.String())
+
+	fs, err := filesystem.NewFS(dstCTF, os.O_RDWR)
+	r.NoError(err)
+	dstRepo, err := oci.NewRepository(
+		ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))),
+		oci.WithTempDir(t.TempDir()),
+	)
+	r.NoError(err)
+	return dstCTF, dstRepo
+}
+
+// assertCTFLocalBlobReferrer asserts the ADR-0016 ownership referrer state of a
+// by-value resource in a CTF target. The referrer rides inside the resource's
+// OCI image layout tarball, so it is verified by downloading the resource (which
+// materialises the local-blob layout) and inspecting the layout's index for a
+// manifest declaring a subject — the ownership referrer.
+//
+// CTF has no Referrers API ([ctf.repository.Predecessors] returns nil), so the
+// out-of-band Referrers-API verification used for OCI registries does not apply
+// here; the layout-level check is what proves the referrer reached the target.
+func assertCTFLocalBlobReferrer(t *testing.T, ctx context.Context, repo *oci.Repository, component, version, resourceName string, wantReferrer bool) {
+	t.Helper()
+	r := require.New(t)
+
+	desc, err := repo.GetComponentVersion(ctx, component, version)
+	r.NoError(err)
+	var found *descriptor.Resource
+	for i := range desc.Component.Resources {
+		if desc.Component.Resources[i].Name == resourceName {
+			found = &desc.Component.Resources[i]
+			break
+		}
+	}
+	r.NotNilf(found, "resource %q not present in component version %s:%s", resourceName, component, version)
+
+	data, _, err := repo.GetLocalResource(ctx, component, version, found.ToIdentity())
+	r.NoError(err)
+	store, err := tar.ReadOCILayout(ctx, data)
+	r.NoError(err)
+	defer func() { r.NoError(store.Close()) }()
+
+	referrers := store.Referrers(ctx)
+	if !wantReferrer {
+		r.Empty(referrers, "resource %q must not carry an ownership referrer in its CTF layout", resourceName)
+		return
+	}
+	r.Len(referrers, 1, "resource %q must carry exactly one ownership referrer in its CTF layout", resourceName)
+	ref := referrers[0]
+
+	rc, err := store.Fetch(ctx, ref)
+	r.NoError(err)
+	defer func() { r.NoError(rc.Close()) }()
+	var manifest ociImageSpecV1.Manifest
+	r.NoError(json.NewDecoder(rc).Decode(&manifest))
+	r.NotNil(manifest.Subject, "ownership referrer manifest must carry a subject")
+	r.Equal(annotations.OwnershipArtifactType, manifest.ArtifactType)
+	assert.Equal(t, component, manifest.Annotations[annotations.OwnershipComponentName])
+	assert.Equal(t, version, manifest.Annotations[annotations.OwnershipComponentVersion])
+
+	var payload struct {
+		Identity map[string]string `json:"identity"`
+		Kind     string            `json:"kind"`
+	}
+	r.NoError(json.Unmarshal([]byte(manifest.Annotations[annotations.ArtifactAnnotationKey]), &payload))
+	assert.Equal(t, "resource", payload.Kind)
+	assert.Equal(t, resourceName, payload.Identity["name"])
+	assert.Equal(t, version, payload.Identity["version"])
 }
 
 // --- ocm transfer: driving the real `ocm transfer component-version` command ----

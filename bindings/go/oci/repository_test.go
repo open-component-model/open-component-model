@@ -2182,7 +2182,7 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 			stream := &ocistream.OCIResourceStream{
 				ReadOnlyGraphStorage: memStore,
 				Descriptor:           manifestDesc,
-				CopyOpts:             oras.DefaultCopyGraphOptions,
+				ExtendedCopyOpts:     oras.DefaultExtendedCopyGraphOptions,
 			}
 
 			res, err := repo.UploadResourceStream(ctx, resource, stream)
