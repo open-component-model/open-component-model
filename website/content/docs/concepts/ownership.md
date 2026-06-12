@@ -18,7 +18,7 @@ that owns it.
 An ownership record carries no timestamp or other varying data, so its content is fully determined by the resource
 and the owner. The same resource owned by the same component version always produces the **same** ownership record. Re-running
 `ocm add component-version` lands on that same record; the registry sees a duplicate and keeps just one. A resource
-ends up with exactly **one** ownership record, however many times you create it.
+ends up with exactly **one** ownership record, however many times it is created.
 
 ## Ownership Across Transfer
 
