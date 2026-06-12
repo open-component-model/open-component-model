@@ -110,11 +110,9 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		Type: runtime.NewVersionedType(genericv1.ConfigType, genericv1.Version),
 	}
 
-	fsCfg, err := filesystemv1alpha1.LookupConfig(cfg)
-	if err != nil {
+	if fsCfg, err := filesystemv1alpha1.LookupConfig(cfg); err != nil {
 		return nil, fmt.Errorf("config lookup failed for filesystem: %w", err)
-	}
-	if fsCfg != nil {
+	} else if fsCfg != nil {
 		result.Configurations = append(result.Configurations, fsCfg)
 	}
 
@@ -124,42 +122,33 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		result.Configurations = append(result.Configurations, httpCfg)
 	}
 
-	ocmCfg, err := ocmv1.Lookup(cfg) //nolint:staticcheck // displaying deprecated config for user visibility
-	if err != nil {
+	if ocmCfg, err := ocmv1.Lookup(cfg); err != nil { //nolint:staticcheck // displaying deprecated config for user visibility
 		return nil, fmt.Errorf("config lookup failed for ocm: %w", err)
-	}
-	if ocmCfg != nil {
+	} else if ocmCfg != nil {
 		result.Configurations = append(result.Configurations, ocmCfg)
 	}
 
-	resolversCfg, err := resolversv1alpha1.Lookup(cfg)
-	if err != nil {
+	if resolversCfg, err := resolversv1alpha1.Lookup(cfg); err != nil {
 		return nil, fmt.Errorf("config lookup failed for resolvers: %w", err)
-	}
-	if resolversCfg != nil {
+	} else if resolversCfg != nil {
 		result.Configurations = append(result.Configurations, resolversCfg)
 	}
 
-	ownershipCfg, err := ownershipv1alpha1.Lookup(cfg)
-	if err != nil {
+	if ownershipCfg, err := ownershipv1alpha1.Lookup(cfg); err != nil {
 		return nil, fmt.Errorf("config lookup failed for ownership: %w", err)
-	}
-	if ownershipCfg != nil {
+	} else if ownershipCfg != nil {
 		result.Configurations = append(result.Configurations, ownershipCfg)
 	}
 
-	pluginsCfg, err := pluginsv2alpha1.LookupConfig(cfg)
-	if err != nil {
+	if pluginsCfg, err := pluginsv2alpha1.LookupConfig(cfg); err != nil {
 		return nil, fmt.Errorf("config lookup failed for plugins: %w", err)
-	}
-	if pluginsCfg != nil && pluginsCfg.Type != (runtime.Type{}) {
+	} else if pluginsCfg != nil && pluginsCfg.Type != (runtime.Type{}) {
 		result.Configurations = append(result.Configurations, pluginsCfg)
 	}
 
 	// bindings/go/configuration/extract/v1alpha1/spec/config.go merge is no-op, so the result is always empty
 	// Serialize the typed config directly without merging
-	var filtered *genericv1.Config
-	filtered, err = genericv1.Filter(cfg, &genericv1.FilterOptions{
+	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
 		ConfigTypes: []runtime.Type{
 			runtime.NewVersionedType(extractv1alpha1.ConfigType, extractv1alpha1.Version),
 			runtime.NewUnversionedType(extractv1alpha1.ConfigType),
@@ -176,11 +165,9 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		result.Configurations = append(result.Configurations, &config)
 	}
 
-	credentialsCfg, err := credentialsruntime.LookupCredentialConfig(cfg)
-	if err != nil {
+	if credentialsCfg, err := credentialsruntime.LookupCredentialConfig(cfg); err != nil {
 		return nil, fmt.Errorf("config lookup failed for credentials: %w", err)
-	}
-	if credentialsCfg != nil {
+	} else if credentialsCfg != nil {
 		v1Cfg, err := credentialsruntime.ConvertToV1(credentialsScheme, credentialsCfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert credentials config: %w", err)
