@@ -184,7 +184,7 @@ func (r *ResourceRegistry) GetResourceCredentialConsumerIdentity(ctx context.Con
 	return plugin.GetResourceCredentialConsumerIdentity(ctx, resource)
 }
 
-func (r *ResourceRegistry) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+func (r *ResourceRegistry) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
 	plugin, err := r.GetResourcePlugin(ctx, res.GetAccess())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plugin for resource: %w", err)
@@ -193,7 +193,7 @@ func (r *ResourceRegistry) UploadResource(ctx context.Context, res *descriptor.R
 	return plugin.UploadResource(ctx, res, content, credentials)
 }
 
-func (r *ResourceRegistry) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (r *ResourceRegistry) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	plugin, err := r.GetResourcePlugin(ctx, res.GetAccess())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plugin for resource: %w", err)

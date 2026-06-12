@@ -296,6 +296,11 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
 			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
 		}
+		// Streaming path (TransferOCIArtifact) produces no temp file — skip cleanup.
+		// uploadAsArtifact already requires isOCITarget, so streaming always applies here.
+		if uploadAsArtifact {
+			return nil, nil
+		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *helmv1.Helm:
 		convertResourceID := fmt.Sprintf("%sConvert%s", id, resourceID)
@@ -387,16 +392,17 @@ func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTra
 		"resources": resourcesArray,
 	}
 
-	setOptionalField(componentMap, "repositoryContexts", id, v2desc.Component.RepositoryContexts != nil)
-	setOptionalField(componentMap, "sources", id, v2desc.Component.Sources != nil)
-	setOptionalField(componentMap, "componentReferences", id, v2desc.Component.References != nil)
+	setOptionalField(componentMap, "labels", id, len(v2desc.Component.Labels) != 0)
+	setOptionalField(componentMap, "repositoryContexts", id, len(v2desc.Component.RepositoryContexts) != 0)
+	setOptionalField(componentMap, "sources", id, len(v2desc.Component.Sources) != 0)
+	setOptionalField(componentMap, "componentReferences", id, len(v2desc.Component.References) != 0)
 
 	descSpecMap := map[string]any{
 		"meta":      fmt.Sprintf("${environment.%s.meta}", id),
 		"component": componentMap,
 	}
 
-	if v2desc.Signatures != nil {
+	if len(v2desc.Signatures) != 0 {
 		descSpecMap["signatures"] = fmt.Sprintf("${environment.%s.signatures}", id)
 	}
 

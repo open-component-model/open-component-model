@@ -93,12 +93,22 @@ func (p *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return p.getIdentity(obj)
 }
 
-func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
+func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {
 		return nil, err
 	}
 	resource = resource.DeepCopy()
+	// Convert resource.Access from *runtime.Raw to the typed access spec so the inner repository's type-switch can match it.
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	resource.Access = obj
 	resource, err = repo.ProcessResourceDigest(ctx, resource)
 	if err != nil {
 		return nil, fmt.Errorf("error processing resource digest: %w", err)
@@ -124,7 +134,7 @@ func (p *ResourceRepository) getIdentity(obj runtime.Typed) (runtime.Identity, e
 	}
 }
 
-func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {
 		return nil, err
@@ -136,7 +146,7 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return b, nil
 }
 
-func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
 	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {
 		return nil, err
@@ -185,7 +195,7 @@ func createRepository(
 			Header: map[string][]string{
 				"User-Agent": {userAgent},
 			},
-			Credential: auth.StaticCredential(url.Host, ocicredentials.CredentialFromTyped(credentials)),
+			Credential: auth.StaticCredential(url.Host, ocicredentials.MapCredentials(credentials)),
 		}))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create URL resolver: %w", err)
@@ -208,7 +218,7 @@ var _ ocistream.ResourceRepository = (*ResourceRepository)(nil)
 
 // resolveOCIImageRepo resolves the inner *oci.Repository for the given resource access and credentials.
 // Returns an error if the access type is not *v1.OCIImage.
-func (p *ResourceRepository) resolveOCIImageRepo(resource *descriptor.Resource, credentials map[string]string) (*oci.Repository, error) {
+func (p *ResourceRepository) resolveOCIImageRepo(resource *descriptor.Resource, credentials runtime.Typed) (*oci.Repository, error) {
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
@@ -225,10 +235,18 @@ func (p *ResourceRepository) resolveOCIImageRepo(resource *descriptor.Resource, 
 	if err != nil {
 		return nil, fmt.Errorf("error creating oci image access: %w", err)
 	}
-	return p.getRepository(&ociv1.Repository{BaseUrl: baseURL}, ocicredsv1.FromDirectCredentials(credentials))
+
+	var ociCredentials *ocicredsv1.OCICredentials
+	if credentials != nil {
+		ociCredentials, err = ocicredsv1.ConvertToOCICredentials(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error converting credentials: %w", err)
+		}
+	}
+	return p.getRepository(&ociv1.Repository{BaseUrl: baseURL}, ociCredentials)
 }
 
-func (p *ResourceRepository) DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (ocistream.ResourceStream, error) {
+func (p *ResourceRepository) DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (ocistream.ResourceStream, error) {
 	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {
 		return nil, err
@@ -240,7 +258,7 @@ func (p *ResourceRepository) DownloadResourceStream(ctx context.Context, resourc
 	return stream, nil
 }
 
-func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource *descriptor.Resource, stream ocistream.ResourceStream, credentials map[string]string) (*descriptor.Resource, error) {
+func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource *descriptor.Resource, stream ocistream.ResourceStream, credentials runtime.Typed) (*descriptor.Resource, error) {
 	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {
 		return nil, err

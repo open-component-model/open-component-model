@@ -446,3 +446,34 @@ func TestGenerate_StructInlineAndExplicitFieldSameName_ExplicitWinsWhenLater(t *
 	// Explicit field should override inline-provided one if it appears later.
 	require.Equal(t, "integer", s.Properties["A"].Schema.Type)
 }
+
+func TestGenerate_JSONRawMessageFieldIsUnconstrained(t *testing.T) {
+	u := universe.New()
+
+	// Simulate the real scenario: encoding/json.RawMessage is NOT in the universe
+	// (encoding/json is not loaded as a schema target), but types.Info.Uses maps
+	// the selector ident to the real types.TypeName from the Go type checker.
+	jsonPkg := types.NewPackage("encoding/json", "json")
+	rawMsgObj := types.NewTypeName(0, jsonPkg, "RawMessage", nil)
+
+	selIdent := &ast.Ident{Name: "RawMessage"}
+	uses := map[*ast.Ident]types.Object{selIdent: rawMsgObj}
+
+	valueField := &ast.Field{
+		Names: []*ast.Ident{{Name: "Value"}},
+		Type:  &ast.SelectorExpr{X: &ast.Ident{Name: "json"}, Sel: selIdent},
+	}
+	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{valueField}}}
+	root := mkTypeInfo("example.com/pkg", "Label", nil, st)
+	root.Pkg.TypesInfo = &types.Info{Uses: uses}
+	u.Types[root.Key] = root
+
+	g := jsonschemagen.New(u)
+	s := g.GenerateJSONSchemaDraft202012(root)
+
+	prop, ok := s.Properties["Value"]
+	require.True(t, ok)
+	// Must be unconstrained: no type, no additionalProperties.
+	require.Empty(t, prop.Schema.Type)
+	require.Nil(t, prop.Schema.AdditionalProperties)
+}

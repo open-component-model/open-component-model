@@ -25,7 +25,7 @@ func (m *TestSigningPlugin) GetSignerIdentity(ctx context.Context, req *v1.GetSi
 	return &v1.IdentityResponse{Identity: map[string]string{"id": "signer"}}, nil
 }
 
-func (m *TestSigningPlugin) Sign(ctx context.Context, request *v1.SignRequest[*dummyv1.Repository], credentials map[string]string) (*v1.SignResponse, error) {
+func (m *TestSigningPlugin) Sign(ctx context.Context, request *v1.SignRequest[*dummyv1.Repository], credentials runtime.Typed) (*v1.SignResponse, error) {
 	return &v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: "sig", MediaType: "text/plain"}}, nil
 }
 
@@ -33,7 +33,7 @@ func (m *TestSigningPlugin) GetVerifierIdentity(ctx context.Context, req *v1.Get
 	return &v1.IdentityResponse{Identity: map[string]string{"id": "verifier"}}, nil
 }
 
-func (m *TestSigningPlugin) Verify(ctx context.Context, request *v1.VerifyRequest[*dummyv1.Repository], credentials map[string]string) (*v1.VerifyResponse, error) {
+func (m *TestSigningPlugin) Verify(ctx context.Context, request *v1.VerifyRequest[*dummyv1.Repository], credentials runtime.Typed) (*v1.VerifyResponse, error) {
 	return &v1.VerifyResponse{}, nil
 }
 

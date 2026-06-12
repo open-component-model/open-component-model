@@ -20,7 +20,10 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-const RuntimePackage = "ocm.software/open-component-model/bindings/go/runtime"
+const (
+	RuntimePackage      = "ocm.software/open-component-model/bindings/go/runtime"
+	EncodingJSONPackage = "encoding/json"
+)
 
 // Universe is an indexed view over Go types discovered during scanning.
 // It is immutable after Build.
@@ -94,6 +97,29 @@ func IsRuntimeRaw(ti *TypeInfo) bool {
 
 func IsRuntimeTyped(ti *TypeInfo) bool {
 	return ti.Key.PkgPath == RuntimePackage && ti.Key.TypeName == "Typed"
+}
+
+func IsJSONRawMessageKey(key TypeKey) bool {
+	return key.PkgPath == EncodingJSONPackage && key.TypeName == "RawMessage"
+}
+
+// ResolveExprToTypeKey resolves an AST expression to its (pkgPath, typeName) without
+// requiring the type to be registered in the Universe. Uses types.Info only.
+func ResolveExprToTypeKey(info *types.Info, expr ast.Expr) (TypeKey, bool) {
+	var sel *ast.Ident
+	switch e := expr.(type) {
+	case *ast.Ident:
+		sel = e
+	case *ast.SelectorExpr:
+		sel = e.Sel
+	default:
+		return TypeKey{}, false
+	}
+	obj, ok := info.Uses[sel].(*types.TypeName)
+	if !ok || obj.Pkg() == nil {
+		return TypeKey{}, false
+	}
+	return TypeKey{PkgPath: obj.Pkg().Path(), TypeName: obj.Name()}, true
 }
 
 const (
@@ -236,7 +262,8 @@ func discoverLoadTargets(ctx context.Context, marker string, roots ...string) ([
 		return nil, err
 	}
 
-	slog.InfoContext(ctx, "found packages with schema markers",
+	slog.InfoContext(
+		ctx, "found packages with schema markers",
 		"modules", len(pkgsByModule),
 		"total_modules", len(modRoots),
 	)

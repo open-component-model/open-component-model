@@ -88,6 +88,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/configuration/Taskfile.yml
     dir: ./bindings/go/configuration
+  bindings/go/http:
+    optional: true
+    taskfile: ./bindings/go/http/Taskfile.yml
+    dir: ./bindings/go/http
+  bindings/go/http/integration:
+    optional: true
+    taskfile: ./bindings/go/http/integration/Taskfile.yml
+    dir: ./bindings/go/http/integration
   bindings/go/repository:
     optional: true
     taskfile: ./bindings/go/repository/Taskfile.yml
@@ -96,6 +104,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/rsa/Taskfile.yml
     dir: ./bindings/go/rsa
+  bindings/go/gpg:
+    optional: true
+    taskfile: ./bindings/go/gpg/Taskfile.yml
+    dir: ./bindings/go/gpg
   bindings/go/signing:
     optional: true
     taskfile: ./bindings/go/signing/Taskfile.yml
@@ -190,3 +202,4 @@ tasks:
         vars:
           CLI_DOCUMENTATION_MODE: "hugo"
           CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/cli/docs/reference'
+      - task: 'tidy'

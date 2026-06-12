@@ -2,6 +2,7 @@ package transformer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -10,7 +11,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -82,11 +82,13 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		return nil, fmt.Errorf("file URI is required to access the resource data to be uploaded")
 	}
 
-	var creds map[string]string
+	var creds runtime.Typed
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
-			if creds, err = resolveCredentialsMap(ctx, t.CredentialProvider, v1.FromIdentity(consumerId)); err != nil {
-				return nil, fmt.Errorf("failed resolving credentials: %w", err)
+			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
+				if !errors.Is(err, credentials.ErrNotFound) {
+					return nil, fmt.Errorf("failed resolving credentials: %w", err)
+				}
 			}
 		}
 	}

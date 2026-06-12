@@ -219,10 +219,10 @@ func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsOciArtifact)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.GetOCIArtifactV1alpha1, tgd.Transformations[0].Type)
-	addOCIType := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
-	assert.Equal(t, addOCIType, tgd.Transformations[1].Type)
+	assert.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferOCIArtifactV1alpha1, tgd.Transformations[0].Type)
+	assert.Contains(t, tgd.Transformations[0].ID, "Transfer")
+	assert.Nil(t, findCleanupTransformation(tgd), "streaming OCI path should produce no FileCleanup node")
 }
 
 func TestBuildGraphDefinition_HelmResource(t *testing.T) {
@@ -538,6 +538,22 @@ func TestBuildGraphDefinition_CleanupReferencesAddSpec_OCIArtifact(t *testing.T)
 	assert.NotContains(t, exprs[0], ".output.")
 }
 
+func TestBuildGraphDefinition_NoCleanupForStreamingOCIArtifact(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeAllResources, UploadAsOciArtifact)
+	require.NoError(t, err)
+
+	// TransferOCIArtifact streams blobs directly — no temp file is ever created.
+	cleanup := findCleanupTransformation(tgd)
+	assert.Nil(t, cleanup, "streaming OCI path should not produce a FileCleanup node")
+}
+
 func TestBuildGraphDefinition_CleanupReferencesConvertAndAddSpec_Helm(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
@@ -634,4 +650,193 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 		assert.Contains(t, expr, ".spec.file")
 	}
 	assert.NotEqual(t, exprs[0], exprs[1], "multi-target refs should have different Add IDs")
+}
+
+// Regression test for https://github.com/open-component-model/open-component-model/issues/2585:
+// labels on the component descriptor must be forwarded into the upload transformation spec.
+func TestBuildDescriptorSpec_LabelsIncluded(t *testing.T) {
+	labels := []descriptorv2.Label{
+		{Name: "imagevector.gardener.cloud/name", Value: []byte(`"alpine"`)},
+		{Name: "priority", Value: []byte(`42`)},
+	}
+	v2desc := &descriptorv2.Descriptor{
+		Component: descriptorv2.Component{
+			ComponentMeta: descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "ocm.software/test",
+					Version: "1.0.0",
+					Labels:  labels,
+				},
+			},
+		},
+	}
+
+	// One resource so buildDescriptorSpec builds the composite map (resourceTransformIDs non-empty).
+	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+
+	specMap, ok := spec.(map[string]any)
+	require.True(t, ok, "spec should be a map when resources are transformed")
+
+	componentMap, ok := specMap["component"].(map[string]any)
+	require.True(t, ok, "component field must be a map")
+
+	labelsExpr, ok := componentMap["labels"]
+	require.True(t, ok, "labels must be present in component map")
+	require.NotNil(t, labelsExpr, "labels value must not be nil")
+	assert.Contains(t, labelsExpr.(string), "labels", "labels expression must reference environment labels")
+}
+
+// Regression test: when labels is nil (no labels), the field is absent from the component map
+// (not set to a non-nil CEL expression that would fail evaluation).
+func TestBuildDescriptorSpec_NoLabelsOmitted(t *testing.T) {
+	v2desc := &descriptorv2.Descriptor{
+		Component: descriptorv2.Component{
+			ComponentMeta: descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "ocm.software/test",
+					Version: "1.0.0",
+				},
+			},
+		},
+	}
+
+	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+
+	specMap, ok := spec.(map[string]any)
+	require.True(t, ok)
+
+	componentMap, ok := specMap["component"].(map[string]any)
+	require.True(t, ok)
+
+	labelsVal, present := componentMap["labels"]
+	if present {
+		assert.Nil(t, labelsVal, "when labels is nil, the map entry must be nil (not a CEL ref)")
+	}
+}
+
+// Sibling of TestBuildDescriptorSpec_LabelsIncluded covering the
+// descriptor-level Signatures field, which buildDescriptorSpec gates with a
+// separate length check from the component-level slice fields. When
+// signatures are populated, the spec map must carry a CEL placeholder
+// referencing the environment signatures.
+func TestBuildDescriptorSpec_SignaturesIncluded(t *testing.T) {
+	v2desc := &descriptorv2.Descriptor{
+		Component: descriptorv2.Component{
+			ComponentMeta: descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "ocm.software/test",
+					Version: "1.0.0",
+				},
+			},
+		},
+		Signatures: []descriptorv2.Signature{
+			{
+				Name:      "test-sig",
+				Digest:    descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "jsonNormalisation/v1", Value: "deadbeef"},
+				Signature: descriptorv2.SignatureInfo{Algorithm: "RSASSA-PKCS1-V1_5", Value: "00", MediaType: "application/vnd.ocm.signature.rsa"},
+			},
+		},
+	}
+
+	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+
+	specMap, ok := spec.(map[string]any)
+	require.True(t, ok, "spec should be a map when resources are transformed")
+
+	signaturesExpr, ok := specMap["signatures"]
+	require.True(t, ok, "signatures must be present in spec map when populated")
+	require.NotNil(t, signaturesExpr, "signatures value must not be nil")
+	assert.Contains(t, signaturesExpr.(string), "signatures",
+		"signatures expression must reference environment signatures")
+}
+
+// TestBuildDescriptorSpec_EmptyOptionalFields: empty (not nil) optional
+// slice fields on a component descriptor must not produce CEL placeholders.
+// Regression for
+// https://github.com/open-component-model/open-component-model/issues/2742.
+func TestBuildDescriptorSpec_EmptyOptionalFields(t *testing.T) {
+	v2desc := &descriptorv2.Descriptor{
+		Component: descriptorv2.Component{
+			ComponentMeta: descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "ocm.software/test",
+					Version: "1.0.0",
+					Labels:  []descriptorv2.Label{},
+				},
+			},
+			RepositoryContexts: []*runtime.Raw{},
+			Sources:            []descriptorv2.Source{},
+			References:         []descriptorv2.Reference{},
+		},
+		Signatures: []descriptorv2.Signature{},
+	}
+
+	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+
+	specMap, ok := spec.(map[string]any)
+	require.True(t, ok)
+	componentMap, ok := specMap["component"].(map[string]any)
+	require.True(t, ok)
+
+	for _, field := range []string{"labels", "repositoryContexts", "sources", "componentReferences"} {
+		if val, present := componentMap[field]; present {
+			assert.Nilf(t, val, "component[%q] must be nil for empty slice, got %v", field, val)
+		}
+	}
+	if val, present := specMap["signatures"]; present {
+		assert.Nilf(t, val, "signatures must be absent for empty slice, got %v", val)
+	}
+}
+
+func dockerManifestLocalBlobResource(name, version string) descriptor.Resource {
+	return descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: name, Version: version},
+		},
+		Type:     "ociImage",
+		Relation: descriptor.LocalRelation,
+		Access: &descriptorv2.LocalBlob{
+			Type:           runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			LocalReference: "sha256:abc123",
+			MediaType:      mediaTypeDockerManifest,
+			ReferenceName:  "ghcr.io/org/image:v1",
+		},
+	}
+}
+
+func TestBuildGraphDefinition_DockerManifestLocalBlob_UploadedAsOCIArtifact(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{dockerManifestLocalBlobResource("my-image", "1.0.0")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsOciArtifact)
+	require.NoError(t, err)
+
+	addOCIType := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
+	require.Len(t, tgd.Transformations, 4)
+	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, addOCIType, tgd.Transformations[1].Type, "Docker manifest LocalBlob should be uploaded as OCI artifact")
+}
+
+func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithoutUploadFlag(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{dockerManifestLocalBlobResource("my-image", "1.0.0")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, false, CopyModeLocalBlobResources, UploadAsDefault)
+	require.NoError(t, err)
+
+	require.Len(t, tgd.Transformations, 4)
+	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
 }

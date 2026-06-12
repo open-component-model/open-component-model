@@ -7,9 +7,14 @@ on:
     paths:
       - '.github/workflows/website-live-test-install-script.yml'
       - 'website/static/install-cli.sh'
-  release:
-    types: [published]
   workflow_dispatch:
+  # Called from release.yml after promotion to verify the just-published version.
+  workflow_call:
+    inputs:
+      version:
+        description: "CLI version to verify (e.g. 0.8.0)."
+        type: string
+        required: true
 
 concurrency:
   group: live-test-install-${{ github.ref }}
@@ -21,13 +26,12 @@ permissions:
 jobs:
   resolve:
     runs-on: ubuntu-latest
-    name: Resolve latest stable CLI release
+    name: Resolve latest stable release
     outputs:
       version: ${{ steps.find.outputs.version }}
-      tag: ${{ steps.find.outputs.tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
 
@@ -37,7 +41,7 @@ jobs:
         with:
           script: |
             const { extractHighestPreviousReleaseVersion } = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
-            const tagPrefix = 'cli/v';
+            const tagPrefix = 'v';
 
             const releases = (await github.rest.repos.listReleases({
               owner: context.repo.owner,
@@ -52,12 +56,11 @@ jobs:
             }
 
             core.setOutput('version', version);
-            core.setOutput('tag', `${tagPrefix}${version}`);
             core.info(`Resolved latest stable CLI release: ${tagPrefix}${version}`);
 
   install:
     needs: resolve
-    name: Install + verify (${{ matrix.runner }})
+    name: Install + verify (${{ matrix.runner }}, ${{ matrix.ocm_version || 'autodetect' }})
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -65,12 +68,31 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-latest, ubuntu-24.04-arm]
+        # Pin both legacy (cli/v-prefixed) and modern (bare) URL shapes so each
+        # release-tag scheme is verified end-to-end. The empty string opts into
+        # the script's own autodetect path (extract_stable_version) - without
+        # this cell, prior regressions in the regex/prefix logic shipped because
+        # every cell pre-pinned OCM_VERSION and the autodetect logic never ran.
+        # The resolver provides the oracle for that cell's version assertion.
+        ocm_version: ["0.7.0", "0.8.0", ""]
+        # When invoked via workflow_call, also exercise the explicit-version
+        # download path against the caller's version (covers backports without
+        # special-casing, since `inputs.version` may differ from latest stable).
+        # On other triggers `inputs.version` is empty, so these include entries
+        # collapse into the existing autodetect cells - no-op merge.
+        include:
+          - runner: ubuntu-latest
+            ocm_version: ${{ inputs.version }}
+          - runner: ubuntu-24.04-arm
+            ocm_version: ${{ inputs.version }}
     env:
-      OCM_VERSION: ${{ needs.resolve.outputs.version }}
+      OCM_VERSION: ${{ matrix.ocm_version }}
+      # Falls back to the resolver-computed version when OCM_VERSION is empty.
+      EXPECTED_VERSION: ${{ matrix.ocm_version || needs.resolve.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
 
@@ -96,11 +118,11 @@ jobs:
         run: |
           version_json=$(ocm version 2>/dev/null)
           actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
-          if [[ "${actual}" != "${OCM_VERSION}" ]]; then
-            echo "::error::Version mismatch: expected ${OCM_VERSION}, got ${actual}"
+          if [[ "${actual}" != "${EXPECTED_VERSION}" ]]; then
+            echo "::error::Version mismatch: expected ${EXPECTED_VERSION}, got ${actual}"
             exit 1
           fi
-          echo "Installed version ${actual} matches expected ${OCM_VERSION}"
+          echo "Installed version ${actual} matches expected ${EXPECTED_VERSION}"
           ocm --help > /dev/null
 
   install-without-auth:
@@ -111,7 +133,7 @@ jobs:
       EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
 

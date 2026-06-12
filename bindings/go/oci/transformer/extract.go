@@ -17,6 +17,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/blob/transformer"
 	"ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -28,6 +29,8 @@ const (
 	helmChartContentMediaType = "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
 	helmProvenanceMediaType   = "application/vnd.cncf.helm.chart.provenance.v1.prov"
 )
+
+var _ transformer.Transformer = &Transformer{}
 
 // helmChartMetadata represents chart metadata from Helm config.
 type helmChartMetadata struct {
@@ -52,7 +55,7 @@ func (t *Transformer) GetTransformerScheme() *runtime.Scheme {
 }
 
 // TransformBlob transforms an OCI Layout blob by extracting its main artifacts.
-func (t *Transformer) TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, config runtime.Typed, _ map[string]string) (_ blob.ReadOnlyBlob, err error) {
+func (t *Transformer) TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, config runtime.Typed, _ runtime.Typed) (_ blob.ReadOnlyBlob, err error) {
 	store, err := ocitar.ReadOCILayout(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read OCI layout: %w", err)

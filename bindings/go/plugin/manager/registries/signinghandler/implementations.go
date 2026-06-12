@@ -85,7 +85,7 @@ func (p *SigningHandlerPlugin) GetVerifierIdentity(ctx context.Context, request 
 	return &identity, nil
 }
 
-func (p *SigningHandlerPlugin) Sign(ctx context.Context, request *signingv1.SignRequest[runtime.Typed], credentials map[string]string) (*signingv1.SignResponse, error) {
+func (p *SigningHandlerPlugin) Sign(ctx context.Context, request *signingv1.SignRequest[runtime.Typed], credentials runtime.Typed) (*signingv1.SignResponse, error) {
 	if err := p.validateEndpoint(request.Config); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
@@ -103,7 +103,7 @@ func (p *SigningHandlerPlugin) Sign(ctx context.Context, request *signingv1.Sign
 	return &response, nil
 }
 
-func (p *SigningHandlerPlugin) Verify(ctx context.Context, request *signingv1.VerifyRequest[runtime.Typed], credentials map[string]string) (*signingv1.VerifyResponse, error) {
+func (p *SigningHandlerPlugin) Verify(ctx context.Context, request *signingv1.VerifyRequest[runtime.Typed], credentials runtime.Typed) (*signingv1.VerifyResponse, error) {
 	if err := p.validateEndpoint(request.Config); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
@@ -141,7 +141,10 @@ func (p *SigningHandlerPlugin) validateEndpoint(obj runtime.Typed) error {
 	return nil
 }
 
-func toCredentials(credentials map[string]string) (plugins.KV, error) {
+func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
+	if credentials == nil {
+		return plugins.KV{Key: "Authorization", Value: "{}"}, nil
+	}
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
 		return plugins.KV{}, err

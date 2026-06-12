@@ -33,7 +33,7 @@ func (m *mockRepoProvider) GetComponentVersionRepositoryCredentialConsumerIdenti
 	return nil, fmt.Errorf("not implemented for test")
 }
 
-func (m *mockRepoProvider) GetComponentVersionRepository(ctx context.Context, spec runtime.Typed, creds map[string]string) (repository.ComponentVersionRepository, error) {
+func (m *mockRepoProvider) GetComponentVersionRepository(ctx context.Context, spec runtime.Typed, creds runtime.Typed) (repository.ComponentVersionRepository, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.callCount++
@@ -429,7 +429,7 @@ func (m *fallbackMockRepoProvider) GetComponentVersionRepositoryCredentialConsum
 	return nil, fmt.Errorf("not implemented for test")
 }
 
-func (m *fallbackMockRepoProvider) GetComponentVersionRepository(_ context.Context, spec runtime.Typed, _ map[string]string) (repository.ComponentVersionRepository, error) {
+func (m *fallbackMockRepoProvider) GetComponentVersionRepository(_ context.Context, spec runtime.Typed, _ runtime.Typed) (repository.ComponentVersionRepository, error) {
 	raw, ok := spec.(*runtime.Raw)
 	if !ok {
 		return nil, fmt.Errorf("unexpected spec type: %T", spec)

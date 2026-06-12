@@ -46,7 +46,7 @@
         },
         "value": true,
         "version": {
-          "oneOf": [
+          "anyOf": [
             {
               "type": "string",
               "description": "Version of the label",
@@ -169,7 +169,7 @@
         },
         "labels": {
           "description": "Labels associated with the source",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -327,7 +327,7 @@
         },
         "resourceDigests": {
           "description": "Digest information for resources in the component",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -352,7 +352,7 @@
         },
         "labels": {
           "description": "Labels for further identification of the source",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -395,7 +395,7 @@
         },
         "labels": {
           "description": "Labels associated with the reference",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -409,7 +409,7 @@
         },
         "digest": {
           "description": "Optional digest of the referenced component",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "null"
             },
@@ -450,7 +450,7 @@
         },
         "srcRefs": {
           "description": "References to sources that produced this resource",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -472,7 +472,7 @@
         },
         "labels": {
           "description": "Labels associated with the resource",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -490,7 +490,7 @@
         },
         "digest": {
           "description": "Optional digest of the resource",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "null"
             },
@@ -524,19 +524,19 @@
         },
         "creationTime": {
           "description": "Creation time of the component version",
-          "oneOf": [
+          "format": "date-time",
+          "anyOf": [
             {
               "type": "string"
             },
             {
               "type": "null"
             }
-          ],
-          "format": "date-time"
+          ]
         },
         "repositoryContexts": {
           "description": "Previous repositories of the component",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -554,7 +554,7 @@
         },
         "labels": {
           "description": "Labels associated with the component",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -568,7 +568,7 @@
         },
         "sources": {
           "description": "Sources that produced the component",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -582,7 +582,7 @@
         },
         "componentReferences": {
           "description": "References to other component versions",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -596,7 +596,7 @@
         },
         "resources": {
           "description": "Resources created by the component or third parties",
-          "oneOf": [
+          "anyOf": [
             {
               "type": "array",
               "items": {
@@ -687,7 +687,7 @@
     },
     "signatures": {
       "description": "Optional signing information for verifying component validity",
-      "oneOf": [
+      "anyOf": [
         {
           "type": "array",
           "items": {
@@ -701,7 +701,7 @@
     },
     "nestedDigests": {
       "description": "Digest information for nested components",
-      "oneOf": [
+      "anyOf": [
         {
           "type": "array",
           "items": {

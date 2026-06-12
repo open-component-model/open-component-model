@@ -27,7 +27,7 @@ func (m *mockRepositoryProvider) GetComponentVersionRepositoryScheme() *runtime.
 
 var _ repository.ComponentVersionRepositoryProvider = (*mockRepositoryProvider)(nil)
 
-func (m *mockRepositoryProvider) GetComponentVersionRepository(ctx context.Context, spec runtime.Typed, attrs map[string]string) (repository.ComponentVersionRepository, error) {
+func (m *mockRepositoryProvider) GetComponentVersionRepository(ctx context.Context, spec runtime.Typed, creds runtime.Typed) (repository.ComponentVersionRepository, error) {
 	return nil, nil
 }
 

@@ -119,7 +119,7 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           sparse-checkout: |
             .github/config/labeler.yml
@@ -129,6 +129,9 @@ jobs:
           configuration-path: .github/config/labeler.yml
   size-labeler:
     # codelytv/pr-size-labeler Dockerfile downloads x86_64-only docpars binary.
+    # Serialized after the kind labelers because pr-size-labeler@v1 PUTs the full
+    # label set, which would otherwise race-wipe kind/* labels added in parallel.
+    needs: [conventional-commit-labeler, labeler]
     runs-on: ubuntu-latest
     name: Label PR based on size
     permissions:

@@ -1,9 +1,11 @@
 package internal
 
 import (
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	ocitransformer "ocm.software/open-component-model/bindings/go/oci/transformer"
@@ -61,6 +63,25 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 	}
 
+	// Streaming OCI-to-OCI transfer transformer
+	ociTransferOCIArtifact := &ocitransformer.TransferOCIArtifact{
+		Scheme: transformerScheme,
+		// TODO(jakobmoellerdev): This is an ultra-super-duper hack.
+		// Because the PluginRegistry does not implement our streaming interface, the transformer would break.
+		// But I can also not ask the PluginRegistry for a Plugin that would implement the interface, because
+		// ResourceRepository does not follow our Provider Pattern and the registry is implementing it directly.
+		//
+		// This means that I now have to initialize a raw repository here, until either the builder and/or the
+		// ResourceRepository plugin is refactored (see https://github.com/open-component-model/ocm-project/issues/774).
+		//
+		// Note that I dont care about configuring a user agent here, but this is not nice and we should take it over
+		// from the CLI or upstream.
+		//
+		// Filesystem config can be empty here because a streaming transfer does not need working dir or temp dir.
+		Repository:         resource.NewResourceRepository(&filesystemv1alpha1.Config{}),
+		CredentialProvider: credentialProvider,
+	}
+
 	// Helm transformers
 	getHelmChart := &helmtransformer.GetHelmChart{
 		Scheme:             transformerScheme,
@@ -88,6 +109,7 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
 		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact).
+		WithTransformer(&ociv1alpha1.TransferOCIArtifact{}, ociTransferOCIArtifact).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
