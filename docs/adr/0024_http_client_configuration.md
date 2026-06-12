@@ -38,9 +38,10 @@ The split keeps the config import graph lean: a tool that only reads `.ocmconfig
 
 Three entry points:
 
-* `New(opts ...Option) *http.Client` — wraps `NewTransport` in oras-go's retry transport. Options: `WithConfig`, `WithUserAgent`.
+* `New(opts ...Option) *http.Client` — wraps `NewTransportWithTLS` in oras-go's retry transport. Options: `WithConfig`, `WithUserAgent`.
 * `NewClient(cfg *Config) *http.Client` — plain client, no retry.
-* `NewTransport(cfg *TimeoutConfig) *http.Transport` — bare transport for callers composing their own chain.
+* `NewTransport(cfg *TimeoutConfig) *http.Transport` — bare transport, no TLS config.
+* `NewTransportWithTLS(cfg *TimeoutConfig, tls *TLSConfig) *http.Transport` — bare transport with TLS settings applied; allocates a fresh `*tls.Config` when `InsecureSkipVerify=true`.
 
 `NewTransport` clones `http.DefaultTransport` and overrides only non-nil fields. A fresh `net.Dialer` is installed only when TCP fields are set (`Transport.Clone` cannot expose the default dialer for partial override).
 
@@ -71,14 +72,23 @@ Routing is handled by an internal `hostRouter` `RoundTripper` that is only insta
 Transport chain when per-host routing is active:
 
 ```text
-http.Client → [userAgentTransport] → hostRouter → retry.Transport (per host) → http.Transport (per host)
+http.Client → [userAgentTransport] → hostRouter → [insecureWarnTransport] → retry.Transport (per host) → http.Transport (per host)
 ```
 
 When no per-host routing is needed the chain collapses and `http.Client.Timeout` is used normally.
 
+### TLS
+
+`TLSConfig` is a dedicated struct (distinct from `TimeoutConfig`) embedded inline in `Config` and `HostConfig`. It carries:
+
+| Field                  | Default | Meaning                                                                                     |
+|------------------------|---------|---------------------------------------------------------------------------------------------|
+| `insecureSkipVerify`   | `nil`   | `*bool`. When `true`, disables TLS certificate verification. Emits `slog.Warn` at build time and `slog.WarnContext` on first connection per host. Per-host `false` re-enables verification even when global is `true`. |
+
+**Security note**: `InsecureSkipVerify=true` makes connections vulnerable to MITM attacks. Use only for development/testing with self-signed certificates. No hardcoded `InsecureSkipVerify: true` exists in the codebase.
+
 ### Deferred concerns
 
-* **TLS** — `tls.insecure` (`*bool`) is planned for a follow-up revision. Custom CAs and client certs are deferred until shapes are settled.
 * **DNS overrides** — `dnsOverrides` (`map[string]string`) is reserved in the schema but not stabilised. Open questions around `Dialer.Resolver` scoping and TLS SNI interaction block it.
 * **Logging / monitoring** — deferred. The `logging` key is reserved in the schema.
 

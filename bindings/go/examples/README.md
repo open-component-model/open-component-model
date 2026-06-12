@@ -16,7 +16,8 @@ Every example is a **runnable Go test** — read the code, run it, modify it.
 | 4    | [`04_repository_test.go`](04_repository_test.go)   | **Repositories**             | CTF-backed storage, component version CRUD, resource upload and retrieval      |
 | 5    | [`05_signing_test.go`](05_signing_test.go)         | **Signing & Verification**   | Digests, RSA signing (plain and PEM), tamper detection, wrong-key detection    |
 | 6    | [`06_oci_test.go`](06_oci_test.go)                 | **OCI Registry Round-Trips** | Full push/pull workflow against a real OCI registry (requires Docker)          |
-| 7    | [`07_transfer_test.go`](07_transfer_test.go)       | **Transferring Components**  | Building transfer graphs, CTF-to-CTF transfer, verifying transferred content   |
+| 7    | [`07_http_config_test.go`](07_http_config_test.go) | **HTTP Configuration**       | Global timeouts, per-host overrides, wiring into OCI provider                  |
+| 8    | [`08_transfer_test.go`](08_transfer_test.go)       | **Transferring Components**  | Building transfer graphs, CTF-to-CTF transfer, verifying transferred content   |
 
 ## How to Read
 
@@ -72,7 +73,12 @@ task bindings/go/examples:test
                     └──────┬──────┘
                            │
                     ┌──────▼──────┐
-                    │ 7. Transfer │  Move components
+                    │ 7. HTTP     │  Timeouts,
+                    │   Config    │  per-host overrides
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │ 8. Transfer │  Move components
                     │             │  between repos
                     └─────────────┘
 ```

@@ -1,7 +1,7 @@
 ---
 title: "Certificate Chains (PEM)"
 description: "Sign and verify component versions using PEM-encoded signatures with an X.509 certificate chain and a dedicated trust anchor."
-icon: "🔐"
+icon: certificate
 weight: 20
 toc: true
 ---
@@ -575,4 +575,5 @@ Use `--force` to overwrite or choose a different name with `--signature`.
 ## Related Documentation
 
 - [Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) -- Basic key-pair signing without certificate chains
+- [Sigstore (Keyless)]({{< relref "docs/tutorials/signing/sigstore.md" >}}) -- Identity-based signing — no keys to manage
 - [Configure Credentials for Signing]({{< relref "configure-signing-credentials.md" >}}) -- Full credential configuration reference
