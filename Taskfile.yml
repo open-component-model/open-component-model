@@ -202,3 +202,4 @@ tasks:
         vars:
           CLI_DOCUMENTATION_MODE: "hugo"
           CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/cli/docs/reference'
+      - task: 'tidy'

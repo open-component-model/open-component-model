@@ -192,3 +192,115 @@ func mustHost(t *testing.T, raw string) string {
 	require.NoError(t, err)
 	return u.Host
 }
+
+func TestRetryConfig_Wiring(t *testing.T) {
+	t.Run("unset maxRetries falls back to default policy (5 retries)", func(t *testing.T) {
+		var hits int
+		srv := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
+			hits++
+			w.WriteHeader(nethttp.StatusServiceUnavailable)
+		}))
+		t.Cleanup(srv.Close)
+
+		cfg := &httpv1alpha1.Config{
+			TimeoutConfig: httpv1alpha1.TimeoutConfig{
+				Timeout: httpv1alpha1.NewTimeout(10 * time.Second),
+			},
+			Retry: &httpv1alpha1.RetryConfig{
+				MinWait: httpv1alpha1.NewTimeout(1 * time.Millisecond),
+				MaxWait: httpv1alpha1.NewTimeout(5 * time.Millisecond),
+			},
+		}
+		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
+		resp, err := c.Get(srv.URL)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		assert.Equal(t, 6, hits, "default 5 retries = 1 initial + 5 attempts")
+	})
+
+	t.Run("maxRetries:-1 disables retry (exactly 1 hit)", func(t *testing.T) {
+		var hits int
+		srv := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
+			hits++
+			w.WriteHeader(nethttp.StatusServiceUnavailable)
+		}))
+		t.Cleanup(srv.Close)
+
+		negOne := -1
+		cfg := &httpv1alpha1.Config{
+			TimeoutConfig: httpv1alpha1.TimeoutConfig{
+				Timeout: httpv1alpha1.NewTimeout(10 * time.Second),
+			},
+			Retry: &httpv1alpha1.RetryConfig{
+				MaxRetries: &negOne,
+			},
+		}
+		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
+		resp, err := c.Get(srv.URL)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		assert.Equal(t, 1, hits, "maxRetries:-1 must not retry")
+	})
+
+	t.Run("maxRetries:2 produces 3 total hits", func(t *testing.T) {
+		var hits int
+		srv := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
+			hits++
+			w.WriteHeader(nethttp.StatusServiceUnavailable)
+		}))
+		t.Cleanup(srv.Close)
+
+		two := 2
+		cfg := &httpv1alpha1.Config{
+			TimeoutConfig: httpv1alpha1.TimeoutConfig{
+				Timeout: httpv1alpha1.NewTimeout(10 * time.Second),
+			},
+			Retry: &httpv1alpha1.RetryConfig{
+				MaxRetries: &two,
+				MinWait:    httpv1alpha1.NewTimeout(1 * time.Millisecond),
+				MaxWait:    httpv1alpha1.NewTimeout(5 * time.Millisecond),
+			},
+		}
+		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
+		resp, err := c.Get(srv.URL)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		assert.Equal(t, 3, hits, "maxRetries:2 = 1 initial + 2 retries")
+	})
+
+	t.Run("per-host retry overrides global", func(t *testing.T) {
+		var hits int
+		srv := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
+			hits++
+			w.WriteHeader(nethttp.StatusServiceUnavailable)
+		}))
+		t.Cleanup(srv.Close)
+
+		host := mustHost(t, srv.URL)
+		negOne := -1
+		globalTwo := 2
+		cfg := &httpv1alpha1.Config{
+			TimeoutConfig: httpv1alpha1.TimeoutConfig{
+				Timeout: httpv1alpha1.NewTimeout(10 * time.Second),
+			},
+			Retry: &httpv1alpha1.RetryConfig{
+				MaxRetries: &globalTwo,
+				MinWait:    httpv1alpha1.NewTimeout(1 * time.Millisecond),
+				MaxWait:    httpv1alpha1.NewTimeout(5 * time.Millisecond),
+			},
+			Hosts: map[string]*httpv1alpha1.HostConfig{
+				host: {
+					Retry: &httpv1alpha1.RetryConfig{
+						MaxRetries: &negOne,
+					},
+				},
+			},
+		}
+		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
+		resp, err := c.Get(srv.URL)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		// Per-host maxRetries:-1 overrides global maxRetries:2 — exactly 1 hit.
+		assert.Equal(t, 1, hits, "per-host maxRetries:-1 must override global maxRetries:2")
+	})
+}
