@@ -45,8 +45,8 @@ gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntN
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-ocm.software/open-component-model/bindings/go/cel v0.0.0-20260610112036-de724a6601de h1:BcnqhmmKlPKS7QsRbiIyxp4j3OkP6HhIjwZ/ONVQkrU=
-ocm.software/open-component-model/bindings/go/cel v0.0.0-20260610112036-de724a6601de/go.mod h1:5rTAX6o1S5XXsVs97JjxT2V/8L/DcVOiA0fYJUi7uw4=
+ocm.software/open-component-model/bindings/go/cel v0.0.0-20260611120504-e55ead3bd200 h1:VMcAzfkxzEwbFXSe7PXcmdlmvdUiEbilEXVzoxUCbW4=
+ocm.software/open-component-model/bindings/go/cel v0.0.0-20260611120504-e55ead3bd200/go.mod h1:5rTAX6o1S5XXsVs97JjxT2V/8L/DcVOiA0fYJUi7uw4=
 ocm.software/open-component-model/bindings/go/configuration v0.0.14 h1:+Rbgg9sy68Grf1xVmJwDQazhUd8kCxCYJrE+u8DlHUY=
 ocm.software/open-component-model/bindings/go/configuration v0.0.14/go.mod h1:UF5HzB5QbNap6oHx0/ul7FRPSMSl0dyobMV3vhYQGZc=
 ocm.software/open-component-model/bindings/go/credentials v0.0.13 h1:6jyyeZAJA1PHZYtrqjS9h7AnbVBSd1NozUYKxYGncjA=
