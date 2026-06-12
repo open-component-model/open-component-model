@@ -323,8 +323,9 @@ func main() {
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		Resolver:      resolver,
-		PluginManager: pm,
+		Resolver:         resolver,
+		PluginManager:    pm,
+		RepositoryScheme: ocirepository.Scheme,
 	}).SetupWithManager(ctx, mgr, replicationConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Replication")
 		os.Exit(1)

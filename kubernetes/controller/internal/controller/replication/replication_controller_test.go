@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"bytes"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -14,8 +15,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
@@ -92,8 +95,28 @@ var _ = Describe("Replication Controller", func() {
 
 		setupSourceAndTarget := func(ctx SpecContext, descs []*descruntime.Descriptor) (*v1alpha1.Component, *v1alpha1.Repository, string) {
 			targetPath := GinkgoT().TempDir()
-			_, sourceSpecData := test.SetupCTFComponentVersionRepository(ctx, GinkgoT().TempDir(), descs)
+			sourceRepo, sourceSpecData := test.SetupCTFComponentVersionRepository(ctx, GinkgoT().TempDir(), nil)
 			_, targetSpecData := test.SetupCTFComponentVersionRepository(ctx, targetPath, nil)
+
+			// Also check if the blobs were actually transferred correctly.
+			for _, desc := range descs {
+				res := descruntime.Resource{
+					ElementMeta: descruntime.ElementMeta{
+						ObjectMeta: descruntime.ObjectMeta{Name: "payload", Version: "1.0.0"},
+					},
+					Type:     "plainText",
+					Relation: descruntime.LocalRelation,
+					Access: &v2.LocalBlob{
+						Type:      ocmruntime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+						MediaType: "text/plain",
+					},
+				}
+				updated, err := sourceRepo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, &res,
+					inmemory.New(bytes.NewReader([]byte("payload of "+desc.Component.Name))))
+				Expect(err).NotTo(HaveOccurred())
+				desc.Component.Resources = append(desc.Component.Resources, *updated)
+				Expect(sourceRepo.AddComponentVersion(ctx, desc)).To(Succeed())
+			}
 
 			component := test.MockComponent(ctx, "source-component", namespace.GetName(), &test.MockComponentOptions{
 				Client:     k8sClient,
@@ -173,10 +196,18 @@ var _ = Describe("Replication Controller", func() {
 			parentDesc, err := targetRepo.GetComponentVersion(ctx, componentName, "1.0.0")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(parentDesc.Component.Name).To(Equal(componentName))
+			Expect(parentDesc.Component.Resources).To(HaveLen(1))
 
 			childDesc, err := targetRepo.GetComponentVersion(ctx, childName, "0.1.0")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(childDesc.Component.Name).To(Equal(childName))
+
+			blob, _, err := targetRepo.GetLocalResource(ctx, componentName, "1.0.0", ocmruntime.Identity{
+				"name":    "payload",
+				"version": "1.0.0",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(blob).NotTo(BeNil())
 		})
 
 		It("fails discovery when a referenced component version does not exist", func(ctx SpecContext) {

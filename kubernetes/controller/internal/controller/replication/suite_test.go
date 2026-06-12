@@ -139,8 +139,9 @@ var _ = BeforeSuite(func() {
 			Scheme:        testEnv.Scheme,
 			EventRecorder: recorder,
 		},
-		Resolver:      resolver,
-		PluginManager: pm,
+		Resolver:         resolver,
+		PluginManager:    pm,
+		RepositoryScheme: ocmScheme,
 	}).SetupWithManager(ctx, k8sManager, 1)).To(Succeed())
 
 	mgrDone := make(chan struct{})

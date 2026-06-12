@@ -1,8 +1,8 @@
 package replication
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -51,6 +51,12 @@ type Reconciler struct {
 
 	// PluginManager manages plugins required for transfer operations.
 	PluginManager *manager.PluginManager
+
+	// RepositoryScheme decodes repository specs into their concrete types for
+	// the transfer library. Must be the same scheme the repository provider is
+	// built with, so Replication accepts exactly the spec types Component
+	// resolution accepts.
+	RepositoryScheme *runtime.Scheme
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -189,7 +195,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())
 
-		if isNotReadyOrDeleted(err) {
+		if errIsUnavailable(err) {
 			logger.Info("source component is not available, waiting for component event", "error", err)
 
 			return ctrl.Result{}, nil
@@ -221,7 +227,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
 
-		if isNotReadyOrDeleted(err) {
+		if errIsUnavailable(err) {
 			logger.Info("target repository is not available, waiting for repository event", "error", err)
 
 			return ctrl.Result{}, nil
@@ -248,7 +254,6 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	replication.Status.Component = component.Status.Component.DeepCopy()
 
 	if sourceDigest == replication.Status.LastTransferredDigest {
-		status.RemoveCondition(replication, v1alpha1.TransferInProgressCondition)
 		status.SetCondition(replication, metav1.Condition{
 			Type:    v1alpha1.TransferInProgressCondition,
 			Status:  metav1.ConditionFalse,
@@ -267,17 +272,15 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		Message: fmt.Sprintf("transferring component version %s", component.Status.Component.Version),
 	})
 
-	sourceSpec := &runtime.Raw{}
-	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(
-		bytes.NewReader(component.Status.Component.RepositorySpec.Raw), sourceSpec); err != nil {
+	sourceSpec, err := convertToTyped(r.RepositoryScheme, component.Status.Component.RepositorySpec.Raw)
+	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to decode source repository spec: %w", err)
 	}
 
-	targetSpec := &runtime.Raw{}
-	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(
-		bytes.NewReader(targetRepository.Spec.RepositorySpec.Raw), targetSpec); err != nil {
+	targetSpec, err := convertToTyped(r.RepositoryScheme, targetRepository.Spec.RepositorySpec.Raw)
+	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to decode target repository spec: %w", err)
@@ -407,9 +410,31 @@ func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replicati
 	return nil
 }
 
-func isNotReadyOrDeleted(err error) bool {
+// errIsUnavailable checks if during a Get of an object we detected either not ready error
+// or a deletion request.
+func errIsUnavailable(err error) bool {
 	var notReadyErr util.NotReadyError
 	var deletionErr util.DeletionError
 
 	return errors.As(err, &notReadyErr) || errors.As(err, &deletionErr)
+}
+
+
+// convertToTyped converts a runtime.Raw repository spec to a concrete spec.
+func convertToTyped(scheme *runtime.Scheme, data []byte) (runtime.Typed, error) {
+	raw := &runtime.Raw{}
+	if err := json.Unmarshal(data, raw); err != nil {
+		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
+	}
+
+	obj, err := scheme.NewObject(raw.Type)
+	if err != nil {
+		return nil, fmt.Errorf("unsupported repository spec type %q for transfer: %w", raw.Type, err)
+	}
+
+	if err := scheme.Convert(raw, obj); err != nil {
+		return nil, fmt.Errorf("failed to convert repository spec to concrete type: %w", err)
+	}
+
+	return obj, nil
 }
