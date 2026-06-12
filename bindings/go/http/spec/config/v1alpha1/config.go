@@ -168,8 +168,11 @@ type TLSConfig struct {
 	// active MITM attacks; use only for development and local registry testing.
 	// A warning is logged at transport build time and on every new host connection.
 	//
-	// Nil inherits from parent (global); false explicitly re-enables verification
-	// even when the global config sets true.
+	// Nil means "unset" (TLS verification stays enabled at the top level). When
+	// TLSConfig is embedded in HostConfig, nil additionally means "inherit from
+	// the global Config"; an explicit false on a host re-enables verification
+	// even when the global config sets true. See HostConfig for per-host merge
+	// semantics.
 	InsecureSkipVerify *bool `json:"insecureSkipVerify,omitempty"`
 }
 
