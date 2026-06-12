@@ -1,7 +1,7 @@
 ---
 title: "Sigstore (Keyless)"
 description: "Sign and verify a component version with your OIDC identity — no key pair to generate, no public key to distribute."
-icon: "🪪"
+icon: sigstore
 weight: 30
 toc: true
 hasMermaid: true
