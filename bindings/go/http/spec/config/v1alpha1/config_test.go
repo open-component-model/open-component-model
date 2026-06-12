@@ -550,3 +550,230 @@ func TestConfig_Validate(t *testing.T) {
 		assert.NoError(t, cfg.Validate())
 	})
 }
+
+func TestRetryConfig_ParseYAML(t *testing.T) {
+	t.Run("all retry fields parsed", func(t *testing.T) {
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    retry:
+      maxRetries: 3
+      minWait: 100ms
+      maxWait: 5s
+`
+		var generic genericv1.Config
+		err := genericv1.Scheme.Decode(strings.NewReader(yaml), &generic)
+		require.NoError(t, err)
+
+		var cfg httpspec.Config
+		err = httpspec.Scheme.Convert(generic.Configurations[0], &cfg)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.Retry)
+		require.NotNil(t, cfg.Retry.MaxRetries)
+		assert.Equal(t, 3, *cfg.Retry.MaxRetries)
+		require.NotNil(t, cfg.Retry.MinWait)
+		assert.Equal(t, httpspec.Timeout(100*time.Millisecond), *cfg.Retry.MinWait)
+		require.NotNil(t, cfg.Retry.MaxWait)
+		assert.Equal(t, httpspec.Timeout(5*time.Second), *cfg.Retry.MaxWait)
+	})
+
+	t.Run("retry omitted leaves Retry nil", func(t *testing.T) {
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    timeout: 30s
+`
+		var generic genericv1.Config
+		err := genericv1.Scheme.Decode(strings.NewReader(yaml), &generic)
+		require.NoError(t, err)
+
+		var cfg httpspec.Config
+		err = httpspec.Scheme.Convert(generic.Configurations[0], &cfg)
+		require.NoError(t, err)
+		assert.Nil(t, cfg.Retry)
+	})
+
+	t.Run("maxRetries zero parses correctly", func(t *testing.T) {
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    retry:
+      maxRetries: 0
+`
+		var generic genericv1.Config
+		err := genericv1.Scheme.Decode(strings.NewReader(yaml), &generic)
+		require.NoError(t, err)
+
+		var cfg httpspec.Config
+		err = httpspec.Scheme.Convert(generic.Configurations[0], &cfg)
+		require.NoError(t, err)
+		require.NotNil(t, cfg.Retry)
+		require.NotNil(t, cfg.Retry.MaxRetries)
+		assert.Equal(t, 0, *cfg.Retry.MaxRetries)
+	})
+
+	t.Run("per-host retry parses correctly", func(t *testing.T) {
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    retry:
+      maxRetries: 5
+    hosts:
+      "ghcr.io:443":
+        retry:
+          maxRetries: 2
+          minWait: 50ms
+`
+		var generic genericv1.Config
+		err := genericv1.Scheme.Decode(strings.NewReader(yaml), &generic)
+		require.NoError(t, err)
+
+		var cfg httpspec.Config
+		err = httpspec.Scheme.Convert(generic.Configurations[0], &cfg)
+		require.NoError(t, err)
+
+		require.NotNil(t, cfg.Retry)
+		assert.Equal(t, 5, *cfg.Retry.MaxRetries)
+		require.Contains(t, cfg.Hosts, "ghcr.io:443")
+		host := cfg.Hosts["ghcr.io:443"]
+		require.NotNil(t, host.Retry)
+		assert.Equal(t, 2, *host.Retry.MaxRetries)
+		assert.Equal(t, httpspec.Timeout(50*time.Millisecond), *host.Retry.MinWait)
+	})
+}
+
+func TestRetryConfig_Validate(t *testing.T) {
+	t.Run("nil, zero, and -1 are valid", func(t *testing.T) {
+		zero := 0
+		negOne := -1
+		assert.NoError(t, (&httpspec.RetryConfig{}).Validate())
+		assert.NoError(t, (&httpspec.RetryConfig{MaxRetries: &zero}).Validate())
+		assert.NoError(t, (&httpspec.RetryConfig{MaxRetries: &negOne}).Validate())
+	})
+
+	t.Run("rejects MaxRetries below -1", func(t *testing.T) {
+		neg := -2
+		err := (&httpspec.RetryConfig{MaxRetries: &neg}).Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "maxRetries")
+		assert.Contains(t, err.Error(), "-1 (disable)")
+	})
+
+	t.Run("rejects negative MinWait", func(t *testing.T) {
+		err := (&httpspec.RetryConfig{MinWait: httpspec.NewTimeout(-1 * time.Millisecond)}).Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "minWait")
+	})
+
+	t.Run("rejects negative MaxWait", func(t *testing.T) {
+		err := (&httpspec.RetryConfig{MaxWait: httpspec.NewTimeout(-1 * time.Second)}).Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "maxWait")
+	})
+
+	t.Run("rejects MinWait greater than MaxWait", func(t *testing.T) {
+		err := (&httpspec.RetryConfig{
+			MinWait: httpspec.NewTimeout(5 * time.Second),
+			MaxWait: httpspec.NewTimeout(1 * time.Second),
+		}).Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "minWait")
+		assert.Contains(t, err.Error(), "maxWait")
+	})
+
+	t.Run("equal MinWait and MaxWait is valid", func(t *testing.T) {
+		assert.NoError(t, (&httpspec.RetryConfig{
+			MinWait: httpspec.NewTimeout(1 * time.Second),
+			MaxWait: httpspec.NewTimeout(1 * time.Second),
+		}).Validate())
+	})
+
+	t.Run("Config.Validate wraps retry error", func(t *testing.T) {
+		neg := -2
+		cfg := &httpspec.Config{
+			Retry: &httpspec.RetryConfig{MaxRetries: &neg},
+		}
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "retry:")
+	})
+
+	t.Run("Config.Validate wraps per-host retry error", func(t *testing.T) {
+		neg := -2
+		cfg := &httpspec.Config{
+			Hosts: map[string]*httpspec.HostConfig{
+				"ghcr.io:443": {
+					Retry: &httpspec.RetryConfig{MaxRetries: &neg},
+				},
+			},
+		}
+		err := cfg.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `host "ghcr.io:443"`)
+		assert.Contains(t, err.Error(), "retry:")
+	})
+}
+
+func TestRetryConfig_Merge(t *testing.T) {
+	t.Run("both nil returns nil", func(t *testing.T) {
+		assert.Nil(t, httpspec.MergeRetryConfig(nil, nil))
+	})
+
+	t.Run("dst nil src non-nil returns src", func(t *testing.T) {
+		two := 2
+		src := &httpspec.RetryConfig{MaxRetries: &two}
+		result := httpspec.MergeRetryConfig(nil, src)
+		require.NotNil(t, result)
+		assert.Equal(t, 2, *result.MaxRetries)
+	})
+
+	t.Run("src nil dst non-nil returns dst copy", func(t *testing.T) {
+		two := 2
+		dst := &httpspec.RetryConfig{MaxRetries: &two}
+		result := httpspec.MergeRetryConfig(dst, nil)
+		require.NotNil(t, result)
+		assert.Equal(t, 2, *result.MaxRetries)
+	})
+
+	t.Run("last non-nil wins per field", func(t *testing.T) {
+		five := 5
+		two := 2
+		dst := &httpspec.RetryConfig{
+			MaxRetries: &five,
+			MinWait:    httpspec.NewTimeout(200 * time.Millisecond),
+		}
+		src := &httpspec.RetryConfig{
+			MaxRetries: &two,
+			MaxWait:    httpspec.NewTimeout(5 * time.Second),
+		}
+		result := httpspec.MergeRetryConfig(dst, src)
+		require.NotNil(t, result)
+		assert.Equal(t, 2, *result.MaxRetries, "src overrides dst")
+		assert.Equal(t, httpspec.Timeout(200*time.Millisecond), *result.MinWait, "dst preserved when src nil")
+		assert.Equal(t, httpspec.Timeout(5*time.Second), *result.MaxWait, "src set")
+	})
+
+	t.Run("Merge wires RetryConfig", func(t *testing.T) {
+		five := 5
+		two := 2
+		a := &httpspec.Config{Retry: &httpspec.RetryConfig{MaxRetries: &five}}
+		b := &httpspec.Config{Retry: &httpspec.RetryConfig{MaxRetries: &two}}
+		merged := httpspec.Merge(a, b)
+		require.NotNil(t, merged.Retry)
+		assert.Equal(t, 2, *merged.Retry.MaxRetries, "b overrides a")
+	})
+
+	t.Run("Merge preserves Retry when second has nil Retry", func(t *testing.T) {
+		five := 5
+		a := &httpspec.Config{Retry: &httpspec.RetryConfig{MaxRetries: &five}}
+		b := &httpspec.Config{}
+		merged := httpspec.Merge(a, b)
+		require.NotNil(t, merged.Retry)
+		assert.Equal(t, 5, *merged.Retry.MaxRetries)
+	})
+}
