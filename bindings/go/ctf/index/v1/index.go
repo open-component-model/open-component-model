@@ -35,9 +35,10 @@ type Index interface {
 	// GetArtifacts returns a slice of ArtifactMetadata that are stored in the index at the time of the call.
 	// It is not guaranteed to be consistent with later calls as it is a snapshot of the current state.
 	GetArtifacts() []ArtifactMetadata
-	// RemoveArtifactByTag removes the entry with the given tag from the given repository.
+	// RemoveArtifactByTag removes the index entry with the given tag from the given repository.
 	// Returns ErrArtifactNotFound if no matching entry exists.
-	// The underlying blob is NOT garbage-collected.
+	// No blobs are deleted: the manifest and all blobs it references (layers, config)
+	// remain in the CTF until an explicit GC pass compacts the archive.
 	RemoveArtifactByTag(repository, tag string) error
 }
 
@@ -141,8 +142,11 @@ func (i *index) GetArtifacts() []ArtifactMetadata {
 	return slices.Clone(i.Artifacts)
 }
 
-// RemoveArtifactByTag removes the artifact with the given repository and tag from the index.
+// RemoveArtifactByTag removes the index entry with the given repository and tag.
 // Returns ErrArtifactNotFound if no matching entry exists.
+// No blobs are deleted: the manifest blob and all blobs it references (layers,
+// config) remain in the CTF blobs/ directory and are unreferenced until an
+// explicit GC pass compacts the archive.
 func (i *index) RemoveArtifactByTag(repository, tag string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
