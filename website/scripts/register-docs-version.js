@@ -193,15 +193,27 @@ function resolveGoModVersions(goModPath, modulePaths) {
 // Modules whose versions are derived from the CLI's go.mod
 const CLI_DERIVED_MODULES = [
     'ocm.software/open-component-model/bindings/go/constructor',
+    'ocm.software/open-component-model/bindings/go/credentials',
     'ocm.software/open-component-model/bindings/go/descriptor/v2',
+    'ocm.software/open-component-model/bindings/go/gpg',
+    'ocm.software/open-component-model/bindings/go/helm',
     'ocm.software/open-component-model/bindings/go/http',
+    'ocm.software/open-component-model/bindings/go/oci',
+    'ocm.software/open-component-model/bindings/go/rsa',
+    'ocm.software/open-component-model/bindings/go/sigstore',
 ];
 
 // Build import blocks for a given version (pure when deps are passed, testable)
 function buildModuleBlocks(version, fullVersion, deps) {
     const constructorVersion = deps?.['ocm.software/open-component-model/bindings/go/constructor'] || 'latest';
+    const credentialsVersion = deps?.['ocm.software/open-component-model/bindings/go/credentials'] || 'latest';
     const descriptorVersion = deps?.['ocm.software/open-component-model/bindings/go/descriptor/v2'] || 'latest';
+    const gpgVersion = deps?.['ocm.software/open-component-model/bindings/go/gpg'] || 'latest';
+    const helmVersion = deps?.['ocm.software/open-component-model/bindings/go/helm'] || 'latest';
     const httpVersion = deps?.['ocm.software/open-component-model/bindings/go/http'] || 'latest';
+    const ociVersion = deps?.['ocm.software/open-component-model/bindings/go/oci'] || 'latest';
+    const rsaVersion = deps?.['ocm.software/open-component-model/bindings/go/rsa'] || 'latest';
+    const sigstoreVersion = deps?.['ocm.software/open-component-model/bindings/go/sigstore'] || 'latest';
 
     const imports = [
         {
@@ -247,6 +259,67 @@ function buildModuleBlocks(version, fullVersion, deps) {
             mounts: [{
                 source: 'spec/config/v1alpha1/schemas',
                 target: `static/${version}/schemas/bindings/go/http`,
+                sites: { matrix: { versions: [version] } }
+            }]
+        },
+        {
+            path: 'ocm.software/open-component-model/bindings/go/oci',
+            version: `bindings/go/oci/${ociVersion}`,
+            mounts: [{
+                source: 'spec/credentials/v1/schemas',
+                target: `static/${version}/schemas/bindings/go/credentials/oci/v1`,
+                sites: { matrix: { versions: [version] } }
+            }]
+        },
+        {
+            path: 'ocm.software/open-component-model/bindings/go/helm',
+            version: `bindings/go/helm/${helmVersion}`,
+            mounts: [{
+                source: 'spec/credentials/v1/schemas',
+                target: `static/${version}/schemas/bindings/go/credentials/helm/v1`,
+                sites: { matrix: { versions: [version] } }
+            }]
+        },
+        {
+            path: 'ocm.software/open-component-model/bindings/go/rsa',
+            version: `bindings/go/rsa/${rsaVersion}`,
+            mounts: [{
+                source: 'spec/credentials/v1/schemas',
+                target: `static/${version}/schemas/bindings/go/credentials/rsa/v1`,
+                sites: { matrix: { versions: [version] } }
+            }]
+        },
+        {
+            path: 'ocm.software/open-component-model/bindings/go/gpg',
+            version: `bindings/go/gpg/${gpgVersion}`,
+            mounts: [{
+                source: 'spec/credentials/v1alpha1/schemas',
+                target: `static/${version}/schemas/bindings/go/credentials/gpg/v1alpha1`,
+                sites: { matrix: { versions: [version] } }
+            }]
+        },
+        {
+            path: 'ocm.software/open-component-model/bindings/go/sigstore',
+            version: `bindings/go/sigstore/${sigstoreVersion}`,
+            mounts: [
+                {
+                    source: 'spec/credentials/oidcidentitytoken/v1alpha1/schemas',
+                    target: `static/${version}/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1`,
+                    sites: { matrix: { versions: [version] } }
+                },
+                {
+                    source: 'spec/credentials/trustedroot/v1alpha1/schemas',
+                    target: `static/${version}/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1`,
+                    sites: { matrix: { versions: [version] } }
+                }
+            ]
+        },
+        {
+            path: 'ocm.software/open-component-model/bindings/go/credentials',
+            version: `bindings/go/credentials/${credentialsVersion}`,
+            mounts: [{
+                source: 'spec/config/v1/schemas',
+                target: `static/${version}/schemas/bindings/go/credentials/direct/v1`,
                 sites: { matrix: { versions: [version] } }
             }]
         },
@@ -313,6 +386,18 @@ function updateImportTags(parsed, version, fullVersion, deps) {
             newTag = `bindings/go/descriptor/v2/${deps['ocm.software/open-component-model/bindings/go/descriptor/v2']}`;
         } else if (deps && imp.path.endsWith('/bindings/go/http')) {
             newTag = `bindings/go/http/${deps['ocm.software/open-component-model/bindings/go/http']}`;
+        } else if (deps && imp.path.endsWith('/bindings/go/oci')) {
+            newTag = `bindings/go/oci/${deps['ocm.software/open-component-model/bindings/go/oci']}`;
+        } else if (deps && imp.path.endsWith('/bindings/go/helm')) {
+            newTag = `bindings/go/helm/${deps['ocm.software/open-component-model/bindings/go/helm']}`;
+        } else if (deps && imp.path.endsWith('/bindings/go/rsa')) {
+            newTag = `bindings/go/rsa/${deps['ocm.software/open-component-model/bindings/go/rsa']}`;
+        } else if (deps && imp.path.endsWith('/bindings/go/gpg')) {
+            newTag = `bindings/go/gpg/${deps['ocm.software/open-component-model/bindings/go/gpg']}`;
+        } else if (deps && imp.path.endsWith('/bindings/go/sigstore')) {
+            newTag = `bindings/go/sigstore/${deps['ocm.software/open-component-model/bindings/go/sigstore']}`;
+        } else if (deps && imp.path.endsWith('/bindings/go/credentials')) {
+            newTag = `bindings/go/credentials/${deps['ocm.software/open-component-model/bindings/go/credentials']}`;
         }
 
         if (newTag && imp.version !== newTag) {
