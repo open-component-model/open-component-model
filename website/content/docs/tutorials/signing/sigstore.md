@@ -238,7 +238,7 @@ signature:
 
 The `value` field is the full Sigstore bundle — base64-encoded JSON containing three things in one self-contained blob: the **signature bytes**, the **Fulcio certificate** (your email is recorded as the certificate's Subject Alternative Name, and the OIDC issuer URL is recorded as a certificate extension), and the **Rekor inclusion proof**. All three travel with the component descriptor; nothing needs to be fetched at verify time.
 
-The exact bundle layout is defined by the [Sigstore protobuf bundle spec](https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_bundle.proto) — see the upstream [Sigstore documentation](https://docs.sigstore.dev/) for the full schema. To inspect a specific bundle, decode the `value` field with `base64 -d` and pipe it through `jq`.
+The exact bundle layout is defined by the [Sigstore protobuf bundle spec](https://github.com/sigstore/protobuf-specs/blob/main/protos/sigstore_bundle.proto) — see the upstream [Sigstore documentation](https://docs.sigstore.dev/) for the full schema. To inspect a specific bundle, decode the `value` field with `base64 -d` and pipe it through `jq`, e.g. by appending `| yq '.signature.value' | base64 -d | jq` to the previous command.
 
 {{< /step >}}
 
