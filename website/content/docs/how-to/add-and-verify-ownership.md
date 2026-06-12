@@ -47,18 +47,18 @@ pushes a separate ownership record pointing back at that resource. The original 
 
 ## Add ownership information
 
-This walkthrough copies a public image **by value** into a repository you control, so everything — the resource image,
-its ownership record, and the verification — happens in one registry you own. The example uses `ghcr.io/<your-org>`;
+This walkthrough keeps the opted-in image, its ownership record, and the verification in one registry you control, so
+everything happens in a registry you own. The example uses `ghcr.io/<your-org>`;
 substitute your own repository.
 
 {{< steps >}}
 {{< step >}}
 
-### Push an image for the by-reference resource
+### Push the image for the opted-in resource
 
-The constructor in the next step includes a **by-reference** resource pointing at an image in your own repository,
-`ghcr.io/<your-org>/backend:1.0.0`. Push one there with `oras` so the reference resolves — copying a public image is
-enough:
+The constructor in the next step includes a resource that opts into ownership and points at an image in your own
+repository, `ghcr.io/<your-org>/podinfo:6.7.1`. Push one there with `oras` so the reference resolves — copying a
+public image is enough:
 
 ```bash
 oras cp ghcr.io/stefanprodan/podinfo:6.7.1 ghcr.io/<your-org>/podinfo:6.7.1
@@ -70,7 +70,7 @@ oras cp ghcr.io/stefanprodan/podinfo:6.7.1 ghcr.io/<your-org>/podinfo:6.7.1
 ### Author a component constructor that opts in
 
 A resource opts in with `options.ownershipPolicy: Always`. Each resource carries its own policy, so you can mix them
-freely. The constructor below puts the by-value and by-reference cases side by side:
+freely. The constructor below puts an opted-out and an opted-in resource side by side:
 
 ```bash
 cat > component-constructor.yaml << EOF
@@ -85,7 +85,6 @@ components:
         type: ociArtifact
         options:
           ownershipPolicy: Never
-        copyPolicy: byValue
         access:
           type: OCIImage/v1
           imageReference: ghcr.io/stefanprodan/podinfo:6.7.1
@@ -100,12 +99,12 @@ components:
 EOF
 ```
 
-The two resources differ both in how the image is stored and in whether they opt in:
+The two resources differ in whether they opt into ownership tracking:
 
-| Resource | How it's stored | Ownership |
+| Resource | Access | Ownership |
 | --- | --- | --- |
-| `backend` | **By value** (`copyPolicy: byValue`) — OCM copies the image into your component repository as a localBlob | Opted out (`Never`) — uploaded exactly as it would be otherwise, no record |
-| `backend-ref` | **By reference** (`access` only) — the image stays where it is | Opted in (`Always`) — an ownership record is pushed next to the image; because the registry is one you have write access to, the record is persisted there without copying the image |
+| `backend` | An upstream image you don't control (`ghcr.io/stefanprodan/podinfo`) | Opted out (`Never`) — no ownership record |
+| `backend-ref` | An image in a repository you own (`ghcr.io/<your-org>/podinfo`) | Opted in (`Always`) — an ownership record is pushed next to the image; because you have write access to that registry, the record is persisted there |
 
 {{< callout context="note" title="Opt-in is required" icon="outline/info-circle" >}}
 `ownershipPolicy` defaults to `Never`. Without `options.ownershipPolicy: Always`, no ownership record is created —
@@ -123,7 +122,7 @@ ocm add cv \
   --constructor component-constructor.yaml
 ```
 
-OCM copies the `backend` image into your component repository and pushes an ownership record next to the opted-in
+OCM stores the component version in `ghcr.io/<your-org>` and pushes an ownership record next to the opted-in
 `backend-ref` image. Because the record is content-addressed, re-running this command converges on the same record —
 you never end up with duplicates.
 
