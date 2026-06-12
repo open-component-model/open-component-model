@@ -27,8 +27,8 @@ For the background on *why* this works and *what* an ownership record is, see th
 
 ```mermaid
 flowchart LR
-    A["Resource in constructor<br/>options.ownershipPolicy: Always"] -->|"ocm add cv"| B["Resource image<br/>+ ownership record"]
-    B -->|"oras discover"| C["Owning component<br/>name + version"]
+  A["Resource in constructor<br/>options.ownershipPolicy: Always"] -->|"ocm add cv"| B["Resource image<br/>+ ownership record"]
+  B -->|"oras discover"| C["Owning component<br/>name + version"]
 ```
 
 Ownership tracking is **opt-in per resource**. You mark a resource with `options.ownershipPolicy: Always`, and OCM
