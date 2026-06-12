@@ -8,7 +8,7 @@ hasMermaid: true
 
 Ownership is about tracing a resource back to its owning component version. Find a resource in a registry and it
 looks like any other image: nothing on it points back to the component version it belongs to. The component version
-lists its resources, but the resources say nothing about the component version.
+lists its resources, but the resources carry no information about the component version.
 
 OCM's **ownership tracking** adds that missing reverse link. Given a resource, it lets you find the component version
 that owns it.
