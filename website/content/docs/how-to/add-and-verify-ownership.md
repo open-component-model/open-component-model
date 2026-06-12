@@ -1,7 +1,6 @@
 ---
 title: "Add and Verify Ownership Information"
 description: "Make an OCM resource traceable back to its owning component version with an ownership record, then verify the link with oras."
-icon: "🔗"
 weight: 16
 toc: true
 hasMermaid: true
