@@ -155,6 +155,42 @@ func MergeTimeoutConfig(dst, src *TimeoutConfig) TimeoutConfig {
 	return out
 }
 
+// TLSConfig holds TLS-level HTTP client settings.
+// All fields are pointers; nil means "use default / inherit from parent".
+//
+// WARNING: Disabling TLS verification (InsecureSkipVerify) makes connections
+// vulnerable to man-in-the-middle attacks. Use only in development/testing.
+//
+// +k8s:deepcopy-gen=true
+type TLSConfig struct {
+	// InsecureSkipVerify disables verification of the server's TLS certificate
+	// chain and host name. Setting this to true makes connections vulnerable to
+	// active MITM attacks; use only for development and local registry testing.
+	// A warning is logged at transport build time and on every new host connection.
+	//
+	// Nil means "unset" (TLS verification stays enabled at the top level). When
+	// TLSConfig is embedded in HostConfig, nil additionally means "inherit from
+	// the global Config"; an explicit false on a host re-enables verification
+	// even when the global config sets true. See HostConfig for per-host merge
+	// semantics.
+	InsecureSkipVerify *bool `json:"insecureSkipVerify,omitempty"`
+}
+
+// MergeTLSConfig merges src into dst. Non-nil fields in src override dst.
+func MergeTLSConfig(dst, src *TLSConfig) TLSConfig {
+	out := TLSConfig{}
+	if dst != nil {
+		out = *dst
+	}
+	if src == nil {
+		return out
+	}
+	if src.InsecureSkipVerify != nil {
+		out.InsecureSkipVerify = src.InsecureSkipVerify
+	}
+	return out
+}
+
 // RetryConfig holds HTTP client retry settings.
 // All fields are pointers; nil means "use default".
 //
@@ -238,6 +274,10 @@ func MergeRetryConfig(dst, src *RetryConfig) *RetryConfig {
 type HostConfig struct {
 	TimeoutConfig `json:",inline"`
 
+	// TLSConfig overrides TLS settings for this host.
+	// Fields set here override the corresponding top-level TLS value.
+	TLSConfig `json:",inline"`
+
 	// Retry overrides the global retry policy for this host.
 	// Fields set here override the corresponding top-level retry value.
 	Retry *RetryConfig `json:"retry,omitempty"`
@@ -246,11 +286,11 @@ type HostConfig struct {
 // Validate checks the per-host timeout and retry config for valid values.
 func (h *HostConfig) Validate() error {
 	if err := h.TimeoutConfig.Validate(); err != nil {
-		return err
+		return fmt.Errorf("invalid timeout config: %w", err)
 	}
 	if h.Retry != nil {
 		if err := h.Retry.Validate(); err != nil {
-			return fmt.Errorf("retry: %w", err)
+			return fmt.Errorf("invalid retry config: %w", err)
 		}
 	}
 	return nil
@@ -268,6 +308,11 @@ type Config struct {
 	Type runtime.Type `json:"type"`
 
 	TimeoutConfig `json:",inline"`
+
+	// TLSConfig configures TLS verification behaviour.
+	// InsecureSkipVerify disables certificate verification globally; use only for
+	// development/testing with self-signed certificates.
+	TLSConfig `json:",inline"`
 
 	// Retry configures retry behavior for transient failures.
 	// Nil uses the library default policy (5 retries, exponential backoff
@@ -287,7 +332,7 @@ func (c *Config) Validate() error {
 	}
 	if c.Retry != nil {
 		if err := c.Retry.Validate(); err != nil {
-			return fmt.Errorf("retry: %w", err)
+			return fmt.Errorf("invalid retry config: %w", err)
 		}
 	}
 	for host, hc := range c.Hosts {
@@ -367,6 +412,7 @@ func Merge(configs ...*Config) *Config {
 			continue
 		}
 		merged.TimeoutConfig = MergeTimeoutConfig(&merged.TimeoutConfig, &c.TimeoutConfig)
+		merged.TLSConfig = MergeTLSConfig(&merged.TLSConfig, &c.TLSConfig)
 		merged.Retry = MergeRetryConfig(merged.Retry, c.Retry)
 
 		if len(c.Hosts) > 0 {
