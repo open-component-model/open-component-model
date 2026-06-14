@@ -200,24 +200,13 @@ func (s *repository) fetchReference(ctx context.Context, idx v1.Index, reference
 // Push stores a new blob in the CTF archive with the expected descriptor.
 // The content is read from the provided io.Reader.
 //
-// Manifest content (OCI image manifest/index, Docker manifests, and the
-// deprecated OCI artifact manifest) is buffered, verified against the
-// expected size and digest, and tagged by digest in the CTF index. If the
-// manifest declares a subject, the referrers index under the subject's
-// referrers tag is additionally updated, implementing the fallback for the
-// unavailable Referrers API analogous to oras-go's pushWithIndexing — except
-// that a CTF never supports the Referrers API natively, so there is no
-// capability probe and the fallback always applies (see referrers.go).
-//
-// All index changes of a push are applied to a single snapshot and persisted
-// with one SetIndex, so external readers of artifact-index.json observe
-// either the pre-push or the fully pushed state, never an intermediate one.
+// Push also updates referrers for manifests with a subject field.
 func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !isIndexableManifest(expected.MediaType) {
-		// non-manifest content streams straight through to the blob store.
+	// handle MediaTypeArtifactManifest for interoperability with oras-go
+	if !introspection.IsOCICompliantMediaType(expected.MediaType) && expected.MediaType != introspection.MediaTypeArtifactManifest {
 		if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
 			return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 		}
@@ -227,17 +216,9 @@ func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 	return s.pushManifest(ctx, expected, data)
 }
 
-// isIndexableManifest reports whether content of the given media type is
-// tracked in the CTF index (tagged by digest on push): all OCI recognizable
-// manifests plus the deprecated OCI artifact manifest, which can carry a
-// subject field and is handled for interoperability with oras-go.
-func isIndexableManifest(mediaType string) bool {
-	return introspection.IsOCICompliantMediaType(mediaType) ||
-		mediaType == introspection.MediaTypeArtifactManifest
-}
-
-// pushManifest is the manifest branch of Push. The caller must hold the
-// write lock.
+// pushManifest is the manifest branch of Push.
+//
+// The caller MUST hold the write lock.
 func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
 	if expected.Size > maxManifestBytes {
 		return fmt.Errorf("content size %d of descriptor %v exceeds manifest size limit of %d bytes", expected.Size, expected.Digest, maxManifestBytes)

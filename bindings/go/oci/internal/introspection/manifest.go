@@ -14,10 +14,7 @@ const (
 
 // MediaTypeArtifactManifest is the deprecated OCI artifact manifest media type
 // (image-spec v1.1.0-rc series). oras-go/v2 defines it in internal/spec
-// (not importable), so we redeclare it here. OCM never produces artifact
-// manifests, but they can carry a subject field, so subject-aware code paths
-// (e.g. the CTF referrers tag schema fallback) handle them for interop,
-// mirroring oras-go's manifestStore.
+// (not importable).
 const MediaTypeArtifactManifest = "application/vnd.oci.artifact.manifest.v1+json"
 
 // IsOCICompliantManifest checks if a descriptor describes a manifest that is recognizable by OCI.

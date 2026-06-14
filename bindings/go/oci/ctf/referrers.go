@@ -132,7 +132,7 @@ func (s *repository) Predecessors(ctx context.Context, desc ociImageSpecV1.Descr
 // tag. If Succeeded, returns the descriptor of referrers index and the
 // referrers list.
 //
-// The caller must hold s.mu (read or write).
+// The caller MUST hold a read or a write lock.
 func (s *repository) referrersFromArtifactIndex(ctx context.Context, idx v1.Index, referrersTag string) (referrers []ociImageSpecV1.Descriptor, err error) {
 	desc, rc, err := s.fetchReference(ctx, idx, referrersTag)
 	if errors.Is(err, errdef.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {
@@ -235,7 +235,9 @@ type artifactManifest struct {
 // A nil subject is returned for manifests without one and for media types
 // that do not define a subject field (e.g. Docker manifests).
 //
-// Inspired by oras remote.indexReferrersForPush.
+// Inspired by oras remote.indexReferrersForPush. Essentially identical to the
+// original function, but returns instead of calling updateReferrersIndex
+// itself. This fits our control flow better.
 func referrerFromManifest(desc ociImageSpecV1.Descriptor, manifestJSON []byte) (referrer ociImageSpecV1.Descriptor, subject *ociImageSpecV1.Descriptor, err error) {
 	switch desc.MediaType {
 	case introspection.MediaTypeArtifactManifest:
