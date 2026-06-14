@@ -163,23 +163,38 @@ func (s *repository) exists(ctx context.Context, target ociImageSpecV1.Descripto
 func (s *repository) FetchReference(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
 	s.mu.RLock()
 
-	desc, err := s.resolve(ctx, reference)
+	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
 		s.mu.RUnlock()
-		return ociImageSpecV1.Descriptor{}, nil, err
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("unable to get index: %w", err)
 	}
 
-	b, err := s.archive.GetBlob(ctx, desc.Digest.String())
-	if err != nil {
-		s.mu.RUnlock()
-		return ociImageSpecV1.Descriptor{}, nil, err
-	}
-	rc, err := b.ReadCloser()
+	desc, rc, err := s.fetchReference(ctx, idx, reference)
 	if err != nil {
 		s.mu.RUnlock()
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
 	return desc, s.asLockedReader(rc), nil
+}
+
+// fetchReference resolves reference against the provided artifact-index
+// snapshot and opens its blob. The returned io.ReadCloser is not lock-aware;
+// callers must either hold s.mu themselves or wrap it (see
+// [repository.FetchReference]).
+func (s *repository) fetchReference(ctx context.Context, idx v1.Index, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
+	desc, err := s.resolve(ctx, idx, reference)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, err
+	}
+	b, err := s.archive.GetBlob(ctx, desc.Digest.String())
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, err
+	}
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, err
+	}
+	return desc, rc, nil
 }
 
 // Push stores a new blob in the CTF archive with the expected descriptor.
@@ -279,17 +294,19 @@ func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.D
 func (s *repository) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.resolve(ctx, reference)
-}
-
-// resolve is the internal version of Resolve that assumes the caller holds the lock.
-func (s *repository) resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
-	var b blob.ReadOnlyBlob
-
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unable to get index: %w", err)
 	}
+	return s.resolve(ctx, idx, reference)
+}
+
+// resolve walks the provided artifact-index snapshot for reference and falls
+// back to a digest lookup against the blob store. The caller must hold s.mu
+// (read or write); pulling the index out of the call lets push paths resolve
+// against the same in-memory snapshot they are about to mutate.
+func (s *repository) resolve(ctx context.Context, idx v1.Index, reference string) (ociImageSpecV1.Descriptor, error) {
+	var b blob.ReadOnlyBlob
 
 	repo := s.repo
 
@@ -312,6 +329,7 @@ func (s *repository) resolve(ctx context.Context, reference string) (ociImageSpe
 		}
 
 		var size int64
+		var err error
 		if b, err = s.archive.GetBlob(ctx, artifact.Digest); err == nil {
 			if sizeAware, ok := b.(blob.SizeAware); ok {
 				size = sizeAware.Size()

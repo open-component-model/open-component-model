@@ -13,9 +13,9 @@ import (
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
@@ -99,7 +99,7 @@ func (s *repository) Referrers(ctx context.Context, desc ociImageSpecV1.Descript
 		s.mu.RUnlock()
 		return fmt.Errorf("unable to get index: %w", err)
 	}
-	referrers, err := s.referrersFromSnapshot(ctx, idx, referrersTag)
+	referrers, err := s.referrersFromArtifactIndex(ctx, idx, referrersTag)
 	s.mu.RUnlock()
 	if err != nil {
 		return err
@@ -132,58 +132,41 @@ func (s *repository) Predecessors(ctx context.Context, desc ociImageSpecV1.Descr
 	return res, nil
 }
 
-// referrersFromSnapshot loads the referrers list stored under referrersTag,
-// resolving the tag against the provided index snapshot rather than re-reading
-// artifact-index.json. This lets [repository.Push] operate on the same
-// snapshot it is about to mutate and write back.
+// referrersFromArtifactIndex loads the referrers list stored under
+// referrersTag, resolving the tag against the provided artifact-index
+// snapshot rather than re-reading artifact-index.json. This lets
+// [repository.Push] operate on the same snapshot it is about to mutate and
+// write back.
 //
 // A missing tag entry or a dangling entry whose blob is gone is treated as
 // "no referrers" — the next push self-heals by writing a fresh index. A
 // present-but-undecodable index is an error, mirroring oras-go.
 //
 // The caller must hold s.mu (read or write).
-func (s *repository) referrersFromSnapshot(ctx context.Context, idx v1.Index, referrersTag string) (referrers []ociImageSpecV1.Descriptor, err error) {
-	var dig string
-	for _, artifact := range idx.GetArtifacts() {
-		if artifact.Repository == s.repo && artifact.Tag == referrersTag {
-			dig = artifact.Digest
-			break
-		}
-	}
-	if dig == "" {
-		// valid case: no referrers index for this subject
-		return nil, nil
-	}
-
-	b, err := s.archive.GetBlob(ctx, dig)
-	if errors.Is(err, fs.ErrNotExist) {
+func (s *repository) referrersFromArtifactIndex(ctx context.Context, idx v1.Index, referrersTag string) (referrers []ociImageSpecV1.Descriptor, err error) {
+	desc, rc, err := s.fetchReference(ctx, idx, referrersTag)
+	if errors.Is(err, errdef.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {
+		// valid case: no referrers index for this subject, or the index
+		// entry is dangling. Self-heal on the next push.
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("unable to get referrers index blob %q for referrers tag %q: %w", dig, referrersTag, err)
-	}
-	if sizeAware, ok := b.(blob.SizeAware); ok {
-		if size := sizeAware.Size(); size > maxManifestBytes {
-			return nil, fmt.Errorf("referrers index %q for referrers tag %q exceeds size limit: %d > %d", dig, referrersTag, size, maxManifestBytes)
-		}
-	}
-	rc, err := b.ReadCloser()
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("unable to read referrers index %q for referrers tag %q: %w", dig, referrersTag, err)
+		return nil, fmt.Errorf("unable to fetch referrers index for referrers tag %q: %w", referrersTag, err)
 	}
 	defer func() {
 		err = errors.Join(err, rc.Close())
 	}()
 
+	if desc.Size > maxManifestBytes {
+		return nil, fmt.Errorf("referrers index %q for referrers tag %q exceeds size limit: %d > %d", desc.Digest, referrersTag, desc.Size, maxManifestBytes)
+	}
+
 	raw, err := io.ReadAll(io.LimitReader(rc, maxManifestBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("unable to read referrers index %q for referrers tag %q: %w", dig, referrersTag, err)
+		return nil, fmt.Errorf("unable to read referrers index %q for referrers tag %q: %w", desc.Digest, referrersTag, err)
 	}
 	if len(raw) > maxManifestBytes {
-		return nil, fmt.Errorf("referrers index %q for referrers tag %q exceeds size limit of %d bytes", dig, referrersTag, maxManifestBytes)
+		return nil, fmt.Errorf("referrers index %q for referrers tag %q exceeds size limit of %d bytes", desc.Digest, referrersTag, maxManifestBytes)
 	}
 
 	var refIdx ociImageSpecV1.Index
@@ -214,7 +197,7 @@ func (s *repository) indexReferrer(ctx context.Context, idx v1.Index, subject, r
 		return err
 	}
 
-	oldReferrers, err := s.referrersFromSnapshot(ctx, idx, referrersTag)
+	oldReferrers, err := s.referrersFromArtifactIndex(ctx, idx, referrersTag)
 	if err != nil {
 		return err
 	}
