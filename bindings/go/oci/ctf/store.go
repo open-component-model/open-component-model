@@ -274,7 +274,7 @@ func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.D
 		return fmt.Errorf("unable to save manifest for descriptor %v: %w", expected, err)
 	}
 	if subject != nil {
-		if err := s.indexReferrer(ctx, idx, *subject, referrer); err != nil {
+		if err := s.updateReferrersIndex(ctx, idx, *subject, referrer); err != nil {
 			return fmt.Errorf("unable to index referrer %s for subject %s: %w", referrer.Digest, subject.Digest, err)
 		}
 	}

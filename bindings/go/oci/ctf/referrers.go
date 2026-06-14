@@ -58,20 +58,17 @@ import (
 // defaultMaxMetadataBytes.
 const maxManifestBytes = 4 * 1024 * 1024 // 4 MiB
 
+// Copied from oras: registry/remote/referrers.go
 // buildReferrersTag builds the referrers tag for the given manifest descriptor.
-// Format: <algorithm>-<hex>, e.g. "sha256-abc123...".
-//
-// Note: the spec limits the <ref> portion to 64 characters, which would
-// require truncation for sha512 digests. oras-go does not truncate; we
-// deliberately mirror oras-go for interoperability (OCM only produces sha256
-// digests, so this is a theoretical divergence).
-//
-// Reference: https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#referrers-tag-schema
+// Format: <algorithm>-<digest>
+// Reference: https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#unavailable-referrers-api
 func buildReferrersTag(desc ociImageSpecV1.Descriptor) (string, error) {
 	if err := desc.Digest.Validate(); err != nil {
-		return "", fmt.Errorf("failed to build referrers tag for %q: %w", desc.Digest, err)
+		return "", fmt.Errorf("failed to build referrers tag for %s: %w", desc.Digest, err)
 	}
-	return desc.Digest.Algorithm().String() + "-" + desc.Digest.Encoded(), nil
+	alg := desc.Digest.Algorithm().String()
+	encoded := desc.Digest.Encoded()
+	return alg + "-" + encoded, nil
 }
 
 // Referrers lists the descriptors of manifests that directly reference desc
@@ -176,7 +173,7 @@ func (s *repository) referrersFromArtifactIndex(ctx context.Context, idx v1.Inde
 	return refIdx.Manifests, nil
 }
 
-// indexReferrer updates the referrers index for subject with referrer in the
+// updateReferrersIndex updates the referrers index for subject with referrer in the
 // provided index snapshot, the write-side counterpart to
 // [repository.Referrers] (analogous to oras-go's updateReferrersIndex with a
 // single add operation). The caller must hold the write lock and persist the
@@ -191,7 +188,7 @@ func (s *repository) referrersFromArtifactIndex(ctx context.Context, idx v1.Inde
 // index blob remains (SkipReferrersGC semantics, matching the URL resolver).
 // Deleting it would be unsafe anyway, because blobs in the flat CTF blob
 // store are content-addressed and may be shared across repositories.
-func (s *repository) indexReferrer(ctx context.Context, idx v1.Index, subject, referrer ociImageSpecV1.Descriptor) error {
+func (s *repository) updateReferrersIndex(ctx context.Context, idx v1.Index, subject, referrer ociImageSpecV1.Descriptor) error {
 	referrersTag, err := buildReferrersTag(subject)
 	if err != nil {
 		return err
@@ -342,33 +339,31 @@ func addReferrer(referrers []ociImageSpecV1.Descriptor, referrer ociImageSpecV1.
 	return updated, changed
 }
 
-// generateReferrersIndex marshals referrers into the OCI image index that the
-// referrers tag schema stores, matching the shape of a Referrers API
-// response. Mirrors oras-go's generateIndex, including the empty (non-nil)
-// manifests array.
-func generateReferrersIndex(referrers []ociImageSpecV1.Descriptor) (ociImageSpecV1.Descriptor, []byte, error) {
-	if referrers == nil {
-		referrers = []ociImageSpecV1.Descriptor{}
+// Copied from oras: registry/remote/repository.go (renamed as term index is
+// very overloaded)
+// generateReferrersIndex generates an image index containing the given manifests list.
+func generateReferrersIndex(manifests []ociImageSpecV1.Descriptor) (ociImageSpecV1.Descriptor, []byte, error) {
+	if manifests == nil {
+		manifests = []ociImageSpecV1.Descriptor{} // make it an empty array to prevent potential server-side bugs
 	}
 	index := ociImageSpecV1.Index{
 		Versioned: specs.Versioned{
 			SchemaVersion: 2, // historical value. does not pertain to OCI or docker version
 		},
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
-		Manifests: referrers,
+		Manifests: manifests,
 	}
 	indexJSON, err := json.Marshal(index)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to marshal referrers index: %w", err)
 	}
-	return content.NewDescriptorFromBytes(index.MediaType, indexJSON), indexJSON, nil
+	indexDesc := content.NewDescriptorFromBytes(index.MediaType, indexJSON)
+	return indexDesc, indexJSON, nil
 }
 
+// Copied from oras: registry/remote/referrers.go
 // filterReferrers filters a slice of referrers by artifactType in place.
-// The returned slice contains matching referrers. An empty artifactType
-// matches everything; a referrer with an empty artifactType is allowed to
-// stay empty (https://github.com/opencontainers/distribution-spec/issues/458)
-// and only matches the empty filter. Mirrors oras-go's filterReferrers.
+// The returned slice contains matching referrers.
 func filterReferrers(refs []ociImageSpecV1.Descriptor, artifactType string) []ociImageSpecV1.Descriptor {
 	if artifactType == "" {
 		return refs
