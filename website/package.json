@@ -45,7 +45,7 @@
     "@types/node": "25.9.2",
     "eslint": "10.4.1",
     "globals": "17.6.0",
-    "hugo-extended": "0.162.1",
+    "hugo-extended": "0.163.0",
     "jiti": "2.7.0",
     "js-yaml": "4.2.0",
     "sass-embedded": "1.100.0",
