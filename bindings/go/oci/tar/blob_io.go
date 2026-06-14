@@ -371,31 +371,6 @@ func findSuccessorsForRoot(topLevelDesc ociImageSpecV1.Descriptor, rootChildren 
 	}
 }
 
-// InjectReferrersAsSuccessors returns a CopyGraph FindSuccessors that appends
-// referrers to the natural successors of root, so a single [oras.CopyGraph]
-// rooted at root copies root together with those referrers. Referrers attach to
-// their subject via a backward "subject" edge that CopyGraph's default successor
-// resolution does not follow, so they would otherwise never be reached from
-// root; injecting them as extra successors pulls them into the same traversal.
-//
-// Unlike [findSuccessorsForRoot], root's own successors are resolved live (via
-// [successorsWithoutSubject]) rather than supplied up front — root is copied
-// verbatim here, so its bytes are safe to re-fetch. Every descriptor, root or
-// not, has its subject stripped: the injected referrers' subject points back at
-// root, and emitting it would re-traverse root (the in-progress copy target).
-func InjectReferrersAsSuccessors(root ociImageSpecV1.Descriptor, referrers []ociImageSpecV1.Descriptor) func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-	return func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-		successors, err := successorsWithoutSubject(ctx, fetcher, desc)
-		if err != nil {
-			return nil, err
-		}
-		if content.Equal(desc, root) {
-			return append(successors, referrers...), nil
-		}
-		return successors, nil
-	}
-}
-
 // mediaTypeOCIArtifactManifest is the deprecated OCI artifact manifest (image-spec v1.1.0-rc1/rc2); the oras-go constant lives in an internal package.
 const mediaTypeOCIArtifactManifest = "application/vnd.oci.artifact.manifest.v1+json"
 

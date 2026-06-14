@@ -673,10 +673,7 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 
 	res = res.DeepCopy()
 
-	// Always carry across any referrer that already travels in the resource's
-	// layout (e.g. an ADR 0016 ownership referrer): transfer copies the existing
-	// referrers, while a fresh upload simply has none to copy.
-	desc, access, err := repo.uploadOCIImage(ctx, res.Access, b, true)
+	desc, access, err := repo.uploadOCIImage(ctx, res.Access, b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
 	}
@@ -702,9 +699,7 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 
 	src = src.DeepCopy()
 
-	// Sources never carry referrers (ADR 0016 ownership applies to resources, not
-	// sources), so never copy them here.
-	_, access, err := repo.uploadOCIImage(ctx, src.Access, b, false)
+	_, access, err := repo.uploadOCIImage(ctx, src.Access, b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload source as OCI image: %w", err)
 	}
@@ -713,7 +708,7 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 	return src, nil
 }
 
-func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob, copyReferrers bool) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
+func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
 	var access accessv1.OCIImage
 	if err := repo.scheme.Convert(newAccess, &access); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
@@ -732,12 +727,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		err = errors.Join(err, ociStore.Close())
 	}()
 
-	// A referrer is tagged by digest when written into a layout, so it appears in
-	// the index. Split the index into the main artifacts and the referrers
-	// (manifests declaring a subject): the referrers are injected as extra
-	// successors of the main in the copy below (only when copyReferrers), and
-	// holding them aside keeps main selection from tripping over them.
-	mainArtifacts, referrers := ociStore.MainArtifactsAndReferrers(ctx)
+	mainArtifacts := ociStore.MainArtifacts(ctx)
 	if len(mainArtifacts) != 1 {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("expected exactly one main artifact in OCI layout, but got %d", len(mainArtifacts))
 	}
@@ -751,16 +741,16 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("can only copy %q if it is tagged: %w", access.ImageReference, err)
 	}
 
-	// Copy the main artifact. When the resource's layout carries referrers, copy
-	// them in the same traversal: their subject edge points back at main, which
-	// CopyGraph's default successor resolution does not follow, so inject them as
-	// extra successors of main (see [tar.InjectReferrersAsSuccessors]).
-	copyOpts := repo.resourceCopyOptions.CopyGraphOptions
-	if copyReferrers && len(referrers) > 0 {
-		copyOpts.FindSuccessors = tar.InjectReferrersAsSuccessors(main, referrers)
+	// ExtendedCopyGraph copies main together with every referrer travelling in
+	// the layout (e.g. an ADR 0016 ownership referrer). A plain CopyGraph would
+	// miss them: a referrer's subject edge points back at main, which
+	// CopyGraph's default successor resolution does not follow.
+	// oci.ReadOnlyStore.Predecessors reads the layout's index.json, so the walk
+	// surfaces exactly the manifests the producer placed there.
+	extendedOpts := oras.ExtendedCopyGraphOptions{
+		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
 	}
-
-	if err := oras.CopyGraph(ctx, ociStore, store, main, copyOpts); err != nil {
+	if err := oras.ExtendedCopyGraph(ctx, ociStore, store, main, extendedOpts); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to upload resource via copy: %w", err)
 	}
 
