@@ -128,7 +128,7 @@ func (s *repository) Predecessors(ctx context.Context, desc ociImageSpecV1.Descr
 	return res, nil
 }
 
-// referrersFromIndex queries the referrers index using the the given referrers
+// referrersFromIndex queries the referrers index using the given referrers
 // tag. If Succeeded, returns the descriptor of referrers index and the
 // referrers list.
 //
