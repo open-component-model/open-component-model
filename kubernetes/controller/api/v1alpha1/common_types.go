@@ -61,6 +61,18 @@ type ObjectKey struct {
 	Name string `json:"name,omitempty"`
 }
 
+// NamespaceName references an object by name and optional namespace. Both fields
+// are optional so it can be embedded as one arm of a one-of without forcing
+// either to be set.
+type NamespaceName struct {
+	// Name of the referent.
+	// +optional
+	Name string `json:"name,omitempty"`
+	// Namespace of the referent, defaults to the embedding object's namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
 type Verification struct {
 	// Signature defines the name of the signature to be verified in the component version.
 	// +required

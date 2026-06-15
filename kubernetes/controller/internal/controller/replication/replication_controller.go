@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"golang.org/x/time/rate"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -27,6 +28,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
+	transferspec "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
@@ -324,13 +326,11 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	recursive := false
-	copyMode := transfer.CopyModeLocalBlobResources
-	if inlined := replication.Spec.TransferConfig.Inlined; inlined != nil {
-		recursive = inlined.Recursive
-		if inlined.CopyMode == v1alpha1.CopyModeAllResources {
-			copyMode = transfer.CopyModeAllResources
-		}
+	transferCfg, err := r.loadTransferConfig(ctx, replication)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to load transfer config: %w", err)
 	}
 
 	// Descriptor fetches for discovery go through the resolution service. Uncached component version
@@ -340,15 +340,14 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	// The process takes turns to complete: resolved descriptors are cache hits, each
 	// pass enqueues the next component version of the graph until all component versions are in the cache and
 	// accounted for.
-	tgd, err := transfer.BuildGraphDefinition(ctx,
-		transfer.WithTransfer(
-			transfer.Component(component.Status.Component.Component, component.Status.Component.Version),
-			transfer.FromRepository(cacheBackedRepo, sourceSpec),
-			transfer.ToRepositorySpec(targetSpec),
-		),
-		transfer.WithRecursive(recursive),
-		transfer.WithCopyMode(copyMode),
-	)
+	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg, transfer.Mapping{
+		Components: []transfer.ComponentID{{
+			Component: component.Status.Component.Component,
+			Version:   component.Status.Component.Version,
+		}},
+		Target:   targetSpec,
+		Resolver: transfer.NewRepositoryResolver(cacheBackedRepo, sourceSpec),
+	})
 	switch {
 	case errors.Is(err, workerpool.ErrResolutionInProgress):
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ResolutionInProgress, err.Error())
@@ -362,6 +361,14 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 
 		return ctrl.Result{}, fmt.Errorf("failed to build transfer graph definition: %w", err)
 	}
+
+	content, err := json.Marshal(tgd)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to marshal transfer graph definition: %w", err)
+	}
+	logger.V(1).Info("the entire transfer graph serialized", "graph", string(content))
 
 	if err := r.transfer(ctx, logger, replication, cfg, tgd, component, sourceDigest); err != nil {
 		return ctrl.Result{}, err
@@ -429,6 +436,47 @@ func errIsUnavailable(err error) bool {
 	var deletionErr util.DeletionError
 
 	return errors.As(err, &notReadyErr) || errors.As(err, &deletionErr)
+}
+
+// loadTransferConfig resolves the object referenced by spec.TransferConfig and extracts
+// the transfer.config.ocm.software entry from it.
+func (r *Reconciler) loadTransferConfig(ctx context.Context, replication *v1alpha1.Replication) (*transferspec.Config, error) {
+	tc := replication.Spec.TransferConfig
+
+	// Ref takes precedence over inlined namespace/name.
+	if tc.Ref != nil {
+		if err := tc.Ref.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid inline transfer config: %w", err)
+		}
+
+		return tc.Ref, nil
+	}
+
+	if tc.NamespaceName == nil || tc.Name == "" {
+		return nil, nil
+	}
+
+	namespace := tc.Namespace
+	if namespace == "" {
+		namespace = replication.GetNamespace()
+	}
+
+	configMap := &corev1.ConfigMap{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: tc.Name}, configMap); err != nil {
+		return nil, fmt.Errorf("failed to get transfer config ConfigMap %s/%s: %w", namespace, tc.Name, err)
+	}
+
+	genericCfg, err := configuration.GetConfigFromObject(configMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract config from ConfigMap %s/%s: %w", namespace, tc.Name, err)
+	}
+
+	cfg, err := transferspec.LookupConfig(genericCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up transfer config: %w", err)
+	}
+
+	return cfg, nil
 }
 
 // convertToTyped converts a runtime.Raw repository spec to a concrete spec.

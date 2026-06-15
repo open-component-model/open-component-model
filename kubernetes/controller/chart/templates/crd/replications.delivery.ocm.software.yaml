@@ -154,22 +154,18 @@ spec:
               transferConfig:
                 description: TransferConfig defines how the transfer is performed.
                 properties:
-                  inlined:
-                    description: Inlined defines the transfer configuration inline.
-                    properties:
-                      copyMode:
-                        default: localBlob
-                        description: CopyMode controls which resources are included
-                          in the transfer.
-                        enum:
-                        - localBlob
-                        - allResources
-                        type: string
-                      recursive:
-                        description: Recursive controls whether referenced component
-                          versions are transferred alongside the root.
-                        type: boolean
+                  name:
+                    description: Name of the referent.
+                    type: string
+                  namespace:
+                    description: Namespace of the referent, defaults to the embedding
+                      object's namespace.
+                    type: string
+                  ref:
+                    description: Ref carries the transfer config object inline on
+                      the Replication.
                     type: object
+                    x-kubernetes-preserve-unknown-fields: true
                 type: object
             required:
             - componentRef

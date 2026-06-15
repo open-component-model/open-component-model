@@ -5,19 +5,11 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	transferspec "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
 const KindReplication = "Replication"
-
-// CopyMode controls which resources are included in a transfer.
-type CopyMode string
-
-const (
-	// CopyModeLocalBlob inlines resource blobs into the component descriptor at the target. Default.
-	CopyModeLocalBlob CopyMode = "localBlob"
-	// CopyModeAllResources transfers every resource as a standalone artifact, keeping external references intact.
-	CopyModeAllResources CopyMode = "allResources"
-)
 
 // ReplicationSpec defines the desired state of Replication.
 type ReplicationSpec struct {
@@ -31,7 +23,7 @@ type ReplicationSpec struct {
 
 	// TransferConfig defines how the transfer is performed.
 	// +optional
-	TransferConfig TransferConfig `json:"transferConfig,omitempty"`
+	TransferConfig *TransferConfig `json:"transferConfig,omitempty"`
 
 	// OCMConfig defines references to secrets, config maps or ocm api
 	// objects providing configuration data including credentials.
@@ -44,27 +36,22 @@ type ReplicationSpec struct {
 	Suspend bool `json:"suspend,omitempty"`
 }
 
-// TransferConfig defines the transfer configuration for a Replication.
-//
-// NOTE: only the inlined variant is supported for now until we decide
-// what to do about the runtime config.
+// TransferConfig selects the transfer configuration for a Replication. Provide it
+// either as a reference to a ConfigMap holding a generic ocm config with a
+// transfer.config.ocm.software entry, or inline via Ref carrying the transfer
+// config object directly on the CR.
 type TransferConfig struct {
-	// Inlined defines the transfer configuration inline.
+	// NamespaceName references the ConfigMap holding the transfer config by name
+	// and optional namespace, defaulting to the Replication namespace.
 	// +optional
-	Inlined *InlineTransferConfig `json:"inlined,omitempty"`
-}
+	*NamespaceName `json:",inline"`
 
-// InlineTransferConfig defines an inlined transfer configuration.
-type InlineTransferConfig struct {
-	// Recursive controls whether referenced component versions are transferred alongside the root.
+	// Ref carries the transfer config object inline on the Replication.
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:validation:Type=object
 	// +optional
-	Recursive bool `json:"recursive,omitempty"`
-
-	// CopyMode controls which resources are included in the transfer.
-	// +kubebuilder:validation:Enum:="localBlob";"allResources"
-	// +kubebuilder:default:="localBlob"
-	// +optional
-	CopyMode CopyMode `json:"copyMode,omitempty"`
+	Ref *transferspec.Config `json:"ref,omitempty"`
 }
 
 // ReplicationStatus defines the observed state of Replication.
