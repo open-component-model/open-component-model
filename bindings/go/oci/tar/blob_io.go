@@ -128,6 +128,9 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
+	// We call the mutateParentFunc here instead of directly in FindSuccessors
+	// as the FindSuccessors path is only reached if there is a referrer in the
+	// source layout.
 	if opts.MutateParentFunc != nil {
 		if err := opts.MutateParentFunc(&index); err != nil {
 			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to mutate top level descriptor before copy: %w", err)
