@@ -214,11 +214,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	return desc, err
 }
 
-// AddLocalResource adds a local resource to the repository. An ownership referrer
-// (ADR 0016) that already travels inside the resource's layout is copied across
-// with it (transfer). Creating a fresh ownership referrer for an opted-in
-// resource is a separate step, driven by the caller via [Repository.AddOwnership]
-// once the artifact has been uploaded.
+// AddLocalResource adds a local resource to the repository.
 func (repo *Repository) AddLocalResource(
 	ctx context.Context,
 	component, version string,
@@ -255,8 +251,6 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 
 	source = source.DeepCopy()
 
-	// Sources never get an ownership referrer; the referrer logic short-circuits
-	// for non-resource artifacts anyway.
 	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content); err != nil {
 		return nil, err
 	}
@@ -578,8 +572,7 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 }
 
 // getLocalBlobFromIndexOrManifest resolves and fetches a blob from either an
-// OCI index or a manifest. It looks up the descriptor matching the given
-// reference and then:
+// OCI index or a manifest.
 func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	ctx context.Context,
 	store spec.Store,
@@ -596,28 +589,10 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 
 	// Nested manifest: copy full OCI layout
 	if index != nil && introspection.IsOCICompliantManifest(artifact) {
-		// copy the full OCI manifest and its dependency graph
-		// into an in-memory OCI layout. This is used when the descriptor refers
-		// to another OCI-compliant manifest instead of a single layer.
-		//
-		// Pull any ownership referrers (ADR 0016) of the artifact into the layout
-		// as well, so they travel with a by-value resource just as they do for
-		// the OCI-image path (see [Repository.DownloadResourceStream]). Only the
-		// main artifact is tagged, so a later re-add still resolves it as the
-		// top-level parent even with the referrer present in the index. A
-		// referrers-query hiccup must not fail an otherwise-healthy read; the
-		// callback logs and continues without them. Depth 1 keeps the walk to
-		// direct referrers of artifact, never referrers-of-referrers.
 		graph, ok := store.(content.ReadOnlyGraphStorage)
 		if !ok {
 			return nil, fmt.Errorf("store %T does not support predecessor walks", store)
 		}
-		// Pull every referrer of the artifact into the layout so they travel with
-		// a by-value resource just as they do for the OCI-image path (see
-		// [Repository.DownloadResourceStream]). Only the main artifact is tagged,
-		// so a later re-add still resolves it as the top-level parent even with
-		// the referrer present in the index. ExtendedCopyGraph's defaults walk
-		// every predecessor at unbounded depth.
 		return tar.CopyToOCILayoutInMemory(ctx, graph, artifact, tar.CopyToOCILayoutOptions{
 			ExtendedCopyGraphOptions: oras.ExtendedCopyGraphOptions{
 				CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
@@ -627,9 +602,6 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		})
 	}
 
-	// Fetch a single layer blob from the store and verify
-	// that its digest matches the expected descriptor digest. This path is used
-	// when the reference is a raw layer rather than a manifest.
 	data, err := store.Fetch(ctx, artifact)
 	if err != nil {
 		return nil, fmt.Errorf("fetch layer: %w", err)
@@ -832,9 +804,6 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
 	}
-	// DownloadResourceStream attaches any ownership referrers (ADR 0016) to the
-	// stream for locally-owned resources; Materialize then pulls them into the
-	// layout so a downstream upload can transfer them with the artifact.
 	stream, err := repo.DownloadResourceStream(ctx, res)
 	if err != nil {
 		return nil, err
