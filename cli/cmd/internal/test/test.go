@@ -68,6 +68,11 @@ func WithLogFormat(format string) Option {
 func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 	tb.Helper()
 
+	// Isolate from host config files
+	tb.Setenv("HOME", tb.TempDir())
+	tb.Setenv("XDG_CONFIG_HOME", "")
+	tb.Setenv("OCM_CONFIG", "")
+
 	opt := Options{}
 	for _, o := range opts {
 		o(&opt)
