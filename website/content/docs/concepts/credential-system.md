@@ -51,7 +51,7 @@ Not all credential sources are static key-value pairs. Docker credential helpers
 - **Consumer Identity** — a set of key-value attributes that uniquely describe a consumer (type + attributes like `hostname`, `path`)
 - **Credentials** — typed objects used to authenticate; stored natively in the credential graph
 - **Credential Type** — defines how credentials are structured (e.g., `OCICredentials/v1` for OCI username/password/token, `DirectCredentials/v1` for a generic property map)
-- **`DirectCredentials/v1`** — the universal legacy fallback (also accepted as `Credentials/v1`); stores credentials as an untyped `properties:` map; all existing configs remain valid
+- **`DirectCredentials/v1`** — the universal legacy fallback (also accepted as `Credentials/v1`); stores credentials as an untyped `properties:` map; all configs from previous versions remain valid
 - **Repository** — a fallback credential source checked only when no consumer entry matches (e.g., `DockerConfig/v1`)
 
 ## How Resolution Works

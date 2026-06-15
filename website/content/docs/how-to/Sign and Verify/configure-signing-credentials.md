@@ -246,7 +246,7 @@ ls -la /tmp/keys/private-key.pem
 
 | Command                                                                                           | Description                     |
 |---------------------------------------------------------------------------------------------------|---------------------------------|
-| [`ocm sign cv --dry-run`]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}) | Test signing configuration      |
+| [`ocm sign cv --dry-run --config .ocmconfig`]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}) | Test signing configuration      |
 | [`ocm verify cv`]({{< relref "/docs/reference/ocm-cli/ocm_verify_component-version.md" >}})       | Test verification configuration |
 
 ## Next Steps
