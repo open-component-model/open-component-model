@@ -15,10 +15,10 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
-	k8s.io/api v0.36.0
-	k8s.io/apiextensions-apiserver v0.36.0
-	k8s.io/apimachinery v0.36.0
-	k8s.io/client-go v0.36.0
+	k8s.io/api v0.36.1
+	k8s.io/apiextensions-apiserver v0.36.1
+	k8s.io/apimachinery v0.36.1
+	k8s.io/client-go v0.36.1
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/yaml v1.6.0
@@ -31,18 +31,18 @@ require (
 	golang.org/x/time v0.15.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/configuration v0.0.14
-	ocm.software/open-component-model/bindings/go/credentials v0.0.13
+	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.0
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260609144620-e2b16025c7f7
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260609144620-e2b16025c7f7
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260612063051-2d68fb4f15bc
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260612060103-25643fdae86d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260610065627-87973052ebb5
-	ocm.software/open-component-model/bindings/go/oci v0.0.45
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260612063051-2d68fb4f15bc
+	ocm.software/open-component-model/bindings/go/oci v0.0.46
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260610065627-87973052ebb5
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260612063051-2d68fb4f15bc
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260610065627-87973052ebb5
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260612063051-2d68fb4f15bc
 	sigs.k8s.io/release-utils v0.12.4
 )
 
@@ -146,11 +146,12 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 	helm.sh/helm/v4 v4.2.0 // indirect
-	k8s.io/cli-runtime v0.36.0 // indirect
+	k8s.io/cli-runtime v0.36.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.10 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260612063051-2d68fb4f15bc // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect

@@ -19,7 +19,9 @@ Set up credential configuration so OCM can find your signing keys when signing o
 
 - [OCM CLI installed]({{< relref "docs/getting-started/ocm-cli-installation.md" >}})
 - [RSA key pair generated]({{< relref "generate-signing-keys.md" >}})
-- A component version to test your configuration in your current directory (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}})) in this guide, but you can use any component version you have.
+- A component version to test your configuration in your current directory (we'll use
+  `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}))
+  in this guide, but you can use any component version you have.
 
 ## Steps
 
@@ -28,7 +30,8 @@ Set up credential configuration so OCM can find your signing keys when signing o
 
 ## Create .ocmconfig file (optional)
 
-Create `.ocmconfig` in your current directory. If you already have an `.ocmconfig` file, you can skip this step and add the credential configuration to your existing file.
+Create `.ocmconfig` in your current directory. If you already have an `.ocmconfig` file, you can skip this step and add
+the credential configuration to your existing file.
 
 ```bash
 touch .ocmconfig
@@ -50,10 +53,36 @@ See the [Consumer Identities Reference]({{< relref "docs/reference/credential-co
 
 There are two ways to configure signing credentials, either using file paths that point to your key files,
 or by including the key material directly in the config file.
-Check out the [Credential Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}})
-for more details on the supported attributes and configuration options.
+For more details on the supported attributes and configuration options, see
+[Credential Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
 
-The most convenient way to configure signing credentials is to add a consumer block to your `.ocmconfig` with the key file paths:
+The most convenient way to configure signing credentials is to add a consumer block to your `.ocmconfig` with the key
+file paths.
+
+You can use either the typed `RSACredentials/v1` (recommended for new configurations) or the legacy `Credentials/v1`:
+
+{{< tabs "signing-cred-type" >}}
+{{< tab "RSACredentials/v1 (typed)" >}}
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+          - type: RSACredentials/v1
+            privateKeyPEMFile: /tmp/keys/private-key.pem
+            publicKeyPEMFile: /tmp/keys/public-key.pem
+```
+
+`RSACredentials/v1` uses flat `camelCase` fields validated at parse time. For all supported fields, see
+[Reference: Credential Types]({{< relref "docs/reference/credential-types.md" >}}).
+{{< /tab >}}
+{{< tab "Credentials/v1 (legacy)" >}}
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -71,15 +100,21 @@ configurations:
               public_key_pem_file: /tmp/keys/public-key.pem
 ```
 
+`Credentials/v1` (an alias for `DirectCredentials/v1`) uses a nested `properties:` map with `snake_case` keys and works
+in all OCM versions.
+{{< /tab >}}
+{{< /tabs >}}
+
 **Key paths:**
 
-- `private_key_pem_file` - Required for **signing** operations
-- `public_key_pem_file` - Required for **verification** operations
+- `privateKeyPEMFile` / `private_key_pem_file` - Required for **signing** operations
+- `publicKeyPEMFile` / `public_key_pem_file` - Required for **verification** operations
 
 <br>
-It is also possible to configure the keys inline using `private_key_pem` and `public_key_pem` properties instead of file paths.
+It is also possible to configure the keys inline. With `RSACredentials/v1` use `privateKeyPEM` / `publicKeyPEM`; with `Credentials/v1` use `private_key_pem` / `public_key_pem` inside `properties:`.
 
-{{< details "Example .ocmconfig with inline keys" >}}
+{{< details "Example .ocmconfig with inline keys (RSACredentials/v1)" >}}
+
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
@@ -90,17 +125,17 @@ configurations:
           algorithm: RSASSA-PSS
           signature: default
         credentials:
-          - type: Credentials/v1
-            properties:
-              private_key_pem: |
-                -----BEGIN RSA PRIVATE KEY-----
-                MIIEpAIBAAKCAQEA...
-                -----END RSA PRIVATE KEY-----
-              public_key_pem: |
-                -----BEGIN PUBLIC KEY-----
-                MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...
-                -----END PUBLIC KEY-----
+          - type: RSACredentials/v1
+            privateKeyPEM: |
+              -----BEGIN RSA PRIVATE KEY-----
+              MIIEpAIBAAKCAQEA...
+              -----END RSA PRIVATE KEY-----
+            publicKeyPEM: |
+              -----BEGIN PUBLIC KEY-----
+              MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...
+              -----END PUBLIC KEY-----
 ```
+
 {{< /details >}}
 {{< /step >}}
 
@@ -151,19 +186,17 @@ configurations:
           algorithm: RSASSA-PSS
           signature: dev
         credentials:
-          - type: Credentials/v1
-            properties:
-              private_key_pem_file: /tmp/keys/dev/private-key.pem
-              public_key_pem_file: /tmp/keys/dev/public-key.pem
+          - type: RSACredentials/v1
+            privateKeyPEMFile: /tmp/keys/dev/private-key.pem
+            publicKeyPEMFile: /tmp/keys/dev/public-key.pem
       - identity:
           type: RSA/v1alpha1
           algorithm: RSASSA-PSS
           signature: prod
         credentials:
-          - type: Credentials/v1
-            properties:
-              private_key_pem_file: /tmp/keys/prod/private-key.pem
-              public_key_pem_file: /tmp/keys/prod/public-key.pem
+          - type: RSACredentials/v1
+            privateKeyPEMFile: /tmp/keys/prod/private-key.pem
+            publicKeyPEMFile: /tmp/keys/prod/public-key.pem
 ```
 
 Specify the signature name when signing:
@@ -177,11 +210,11 @@ ocm sign cv --dry-run --signature prod /tmp/helloworld/transport-archive//github
 
 The consumer identity for RSA signing/verification supports these attributes:
 
-| Attribute | Required | Description |
-| --- | --- | --- |
-| `type` | Yes | Must be `RSA/v1alpha1` |
-| `algorithm` | Yes | `RSASSA-PSS` (default) or `RSASSA-PKCS1-V1_5`. Required for credential matching — the lookup always includes this field. |
-| `signature` | Yes | Logical name for this key configuration (default: `default`). Must match the `--signature` CLI flag. |
+| Attribute   | Required | Description                                                                                                              |
+|-------------|----------|--------------------------------------------------------------------------------------------------------------------------|
+| `type`      | Yes      | Must be `RSA/v1alpha1`                                                                                                   |
+| `algorithm` | Yes      | `RSASSA-PSS` (default) or `RSASSA-PKCS1-V1_5`. Required for credential matching — the lookup always includes this field. |
+| `signature` | Yes      | Logical name for this key configuration (default: `default`). Must match the `--signature` CLI flag.                     |
 
 ## Troubleshooting
 
@@ -191,8 +224,10 @@ The consumer identity for RSA signing/verification supports these attributes:
 
 **Fix:** Ensure:
 
-- The file path `private_key_pem_file` is correct and the file exists
-- The `algorithm` attribute is present in the identity (e.g. `algorithm: RSASSA-PSS`). See [Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
+- The key file path is correct and the file exists (`privateKeyPEMFile` for `RSACredentials/v1`, or
+  `private_key_pem_file` inside `properties:` for `Credentials/v1`)
+- The `algorithm` attribute is present in the identity (e.g. `algorithm: RSASSA-PSS`).
+  See [Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
 - The `signature` name matches what you're using (or is `default` if not specified)
 - The file is valid YAML with correct indentation
 
@@ -209,17 +244,21 @@ ls -la /tmp/keys/private-key.pem
 
 ## CLI Reference
 
-| Command | Description |
-| --- | --- |
-| [`ocm sign cv --dry-run`]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}) | Test signing configuration |
-| [`ocm verify cv`]({{< relref "/docs/reference/ocm-cli/ocm_verify_component-version.md" >}}) | Test verification configuration |
+| Command                                                                                                               | Description                     |
+|-----------------------------------------------------------------------------------------------------------------------|---------------------------------|
+| [`ocm sign cv --dry-run --config .ocmconfig`]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}) | Test signing configuration      |
+| [`ocm verify cv`]({{< relref "/docs/reference/ocm-cli/ocm_verify_component-version.md" >}})                           | Test verification configuration |
 
 ## Next Steps
 
-- [How-to: Sign Component Versions]({{< relref "sign-component-version.md" >}}) - Sign components with your configured credentials
-- [How-to: Verify Component Versions]({{< relref "verify-component-version.md" >}}) - Verify signatures using public keys
+- [How-to: Sign Component Versions]({{< relref "sign-component-version.md" >}}) - Sign components with your configured
+  credentials
+- [How-to: Verify Component Versions]({{< relref "verify-component-version.md" >}}) - Verify signatures using public
+  keys
 
 ## Related Documentation
 
-- [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Create the key pair needed for this configuration
-- [Concept: Signing and Verification]({{< relref "signing-and-verification-concept.md" >}}) - Understand how OCM signing works
+- [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Create the key pair needed for this
+  configuration
+- [Concept: Signing and Verification]({{< relref "signing-and-verification-concept.md" >}}) - Understand how OCM signing
+  works

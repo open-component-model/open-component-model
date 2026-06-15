@@ -31,9 +31,11 @@ import (
 
 const headerRetryAfter = "Retry-After"
 
-// DefaultPolicy is a policy with fine-tuned retry parameters.
-// It uses an exponential backoff with jitter.
-var DefaultPolicy Policy = &GenericPolicy{
+// DefaultGenericPolicy holds the default retry parameters.
+// It uses an exponential backoff with jitter and is the concrete value
+// used as the fallback when no policy is configured. Callers that need
+// to inherit individual fields can read from it directly.
+var DefaultGenericPolicy = GenericPolicy{
 	Retryable: DefaultPredicate,
 	Backoff:   DefaultBackoff,
 	MinWait:   200 * time.Millisecond,
@@ -98,6 +100,18 @@ func ExponentialBackoff(backoff time.Duration, factor, jitter float64) Backoff {
 	}
 }
 
+// NewGenericPolicy returns a *GenericPolicy with DefaultPredicate and
+// DefaultBackoff and the supplied retry bounds.
+func NewGenericPolicy(maxRetries int, minWait, maxWait time.Duration) *GenericPolicy {
+	return &GenericPolicy{
+		Retryable: DefaultPredicate,
+		Backoff:   DefaultBackoff,
+		MinWait:   minWait,
+		MaxWait:   maxWait,
+		MaxRetry:  maxRetries,
+	}
+}
+
 // GenericPolicy is a configurable retry policy.
 type GenericPolicy struct {
 	Retryable Predicate
@@ -108,8 +122,9 @@ type GenericPolicy struct {
 }
 
 // Retry returns the wait duration before the next attempt, or -1 to stop.
+// MaxRetry semantics: 0 = infinite retries, -1 = disable (no retries), positive = max attempts.
 func (p *GenericPolicy) Retry(attempt int, resp *http.Response, err error) (time.Duration, error) {
-	if attempt >= p.MaxRetry {
+	if p.MaxRetry == -1 || (p.MaxRetry > 0 && attempt >= p.MaxRetry) {
 		return -1, nil
 	}
 	ok, err := p.Retryable(resp, err)
@@ -134,7 +149,7 @@ type Transport struct {
 	// Base is the underlying HTTP transport. If nil, http.DefaultTransport is used.
 	Base http.RoundTripper
 
-	// Policy returns the retry Policy for a request. If nil, DefaultPolicy is used.
+	// Policy returns the retry Policy for a request. If nil, DefaultGenericPolicy is used.
 	Policy func() Policy
 }
 
@@ -204,7 +219,7 @@ func (t *Transport) roundTrip(req *http.Request) (*http.Response, error) {
 
 func (t *Transport) policy() Policy {
 	if t.Policy == nil {
-		return DefaultPolicy
+		return &DefaultGenericPolicy
 	}
 	return t.Policy()
 }

@@ -1,7 +1,7 @@
 ---
 title: "GPG Signatures"
 description: "Learn to cryptographically sign a component version with a GPG key and verify its authenticity."
-icon: "✍️"
+icon: fingerprint
 weight: 30
 toc: true
 ---
