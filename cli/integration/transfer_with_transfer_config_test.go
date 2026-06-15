@@ -148,15 +148,18 @@ uploadType: localBlob
 		"resource access must be LocalBlob: copyMode: allResources from --transfer-config was not honored")
 }
 
-// Test_Integration_TransferWithTransferConfig_FileDrivesRecursion proves that
-// `recursive: -1` set purely in --transfer-config (no flags) actually reaches
-// the transfer engine.
+// Test_Integration_TransferWithTransferConfig_FlagOverridesFileRecursion
+// proves the override branch in buildGraphDefinitionFromArgs: a recursion
+// setting in --transfer-config can be overridden by an explicit --recursive
+// flag, and that override wins.
 //
 // The signal: a parent component references a child component, both in one
-// source CTF. With the default `recursive: 0`, only the parent lands in the
-// target. With `recursive: -1` from the file, the child must also land. The
-// assertion fails if the file is silently dropped.
-func Test_Integration_TransferWithTransferConfig_FileDrivesRecursion(t *testing.T) {
+// source CTF. The file says `recursive: 0` (no recursion) and the CLI passes
+// `--recursive`. With the override honored, the child component lands in the
+// target. If the override branch is bypassed - or if the loader silently
+// fails to read the file at all and the default of 0 stays in place - the
+// child never lands and the assertion fails.
+func Test_Integration_TransferWithTransferConfig_FlagOverridesFileRecursion(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
 
@@ -233,9 +236,9 @@ components:
 	})
 	r.NoError(addParent.ExecuteContext(t.Context()), "adding parent to source CTF should succeed")
 
-	// Drive recursion purely from the file. NO --recursive flag on the CLI.
+	// File asks for no recursion; flag asks for full recursion. The flag wins.
 	transferCfgYAML := `type: transfer.config.ocm.software/v1alpha1
-recursive: -1
+recursive: 0
 `
 	transferCfgPath := filepath.Join(t.TempDir(), "transfer-config.yaml")
 	r.NoError(os.WriteFile(transferCfgPath, []byte(transferCfgYAML), os.ModePerm))
@@ -249,12 +252,13 @@ recursive: -1
 		sourceRef, targetRef,
 		"--config", cfgPath,
 		"--transfer-config", transferCfgPath,
+		"--recursive",
 	})
 
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 
-	r.NoError(transferCMD.ExecuteContext(ctx), "config-driven recursive transfer should succeed")
+	r.NoError(transferCMD.ExecuteContext(ctx), "transfer with flag-overridden recursion should succeed")
 
 	repo := connectToOCIRegistry(t, registry)
 
@@ -262,10 +266,11 @@ recursive: -1
 	r.NoError(err, "parent component must be present in target registry")
 	r.Equal(parentComponent, parentDesc.Component.Name)
 
-	// The whole point of the test: without recursion, the child would not land
-	// here. If the file's recursive: -1 is silently dropped, this fails.
+	// The whole point of the test: with the file's `recursive: 0` honored, the
+	// child would not land. Only because --recursive overrode the file does the
+	// child reach the target.
 	childDesc, err := repo.GetComponentVersion(t.Context(), childComponent, version)
-	r.NoError(err, "child component must be present in target registry: recursive: -1 from --transfer-config was not honored")
+	r.NoError(err, "child component must be present in target registry: --recursive flag did not override the file's recursive: 0")
 	r.Equal(childComponent, childDesc.Component.Name)
 }
 
