@@ -34,7 +34,7 @@ func fetchManifest(t *testing.T, ctx context.Context, store *memory.Store, desc 
 // OCI-layout copy proxy does during artifact upload.
 func materializeOwnershipReferrer(t *testing.T, ctx context.Context, dst *memory.Store, subject ociImageSpecV1.Descriptor, artifact descriptor.Artifact, component, version string) error {
 	t.Helper()
-	referrers, err := OwnershipReferrer(artifact, component, version)(ctx, subject)
+	referrers, err := OwnershipReferrer(ctx, subject, artifact, component, version)
 	if err != nil {
 		return err
 	}

@@ -834,7 +834,7 @@ func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, 
 // subject back to the owning component version and pushes it into store. It is a
 // no-op when subject is not an OCI manifest (raw blobs get no referrer).
 func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, resource *descriptor.Resource, component, version string) error {
-	referrers, err := pack.OwnershipReferrer(resource, component, version)(ctx, subject)
+	referrers, err := pack.OwnershipReferrer(ctx, subject, resource, component, version)
 	if err != nil {
 		return fmt.Errorf("failed to build ownership referrer: %w", err)
 	}

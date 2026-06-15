@@ -2432,7 +2432,7 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 	// it the same way the repository does and assert it now exists in the store.
 	resolved, err := imgStore.Resolve(ctx, tag)
 	r.NoError(err)
-	referrers, err := pack.OwnershipReferrer(resource, component, version)(ctx, resolved)
+	referrers, err := pack.OwnershipReferrer(ctx, resolved, resource, component, version)
 	r.NoError(err)
 	r.NotEmpty(referrers, "ownership referrer must be produced for an OCI manifest subject")
 
@@ -2656,7 +2656,7 @@ func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 	r.NoError(err)
 	subject, err := componentStore.Resolve(ctx, uploaded.Access.(*v2.LocalBlob).LocalReference)
 	r.NoError(err)
-	expected, err := pack.OwnershipReferrer(uploaded, component, version)(ctx, subject)
+	expected, err := pack.OwnershipReferrer(ctx, subject, uploaded, component, version)
 	r.NoError(err)
 	r.NotEmpty(expected, "an OCI manifest subject must yield an ownership referrer")
 
@@ -2721,7 +2721,7 @@ func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
 	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
 
 	// The contract: a raw-blob subject yields no referrer, so nothing was pushed.
-	referrers, err := pack.OwnershipReferrer(resource, component, version)(ctx, rawDesc)
+	referrers, err := pack.OwnershipReferrer(ctx, rawDesc, resource, component, version)
 	r.NoError(err)
 	r.Empty(referrers, "a raw-blob subject must yield no ownership referrer")
 }
