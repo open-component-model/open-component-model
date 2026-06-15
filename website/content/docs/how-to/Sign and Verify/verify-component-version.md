@@ -188,8 +188,7 @@ Run the verify command with the verifier spec:
 
 ```bash
 ocm verify cv \
-  --config /tmp/ocm-gpg/.ocmconfig \
-  --verifier-spec /tmp/ocm-gpg/verifier-spec.yaml \
+  --verifier-spec ./signer-spec.yaml \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
@@ -216,8 +215,7 @@ If the component carries multiple signatures (e.g. a GPG signature alongside an 
 
 ```bash
 ocm verify cv \
-  --config /tmp/ocm-gpg/.ocmconfig \
-  --verifier-spec /tmp/ocm-gpg/verifier-spec.yaml \
+  --verifier-spec ./signer-spec.yaml \
   --signature prod \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
@@ -246,7 +244,7 @@ Without `--signature`, OCM uses the configuration named `default`.
 
 **Cause:** The verifier spec contains a `keyFingerprint` that doesn't match any key resolved from the public-key file.
 
-**Fix:** Either remove `keyFingerprint` from the verifier spec (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/ocm-gpg/keys/verify-key.asc` to confirm the actual fingerprint.
+**Fix:** Either remove `keyFingerprint` from the verifier spec (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}

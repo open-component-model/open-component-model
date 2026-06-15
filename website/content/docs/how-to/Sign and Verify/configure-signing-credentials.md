@@ -180,8 +180,20 @@ If your keyring contains multiple keys, pin the one to use by adding `keyFingerp
 
 ## Test the configuration
 
+The dry run signs in memory without persisting the signature, so it's a quick way to confirm OCM can locate your keys. Match the command to the algorithm you configured above:
+
+**RSA** (uses the default RSA handler — no `--signer-spec` needed):
+
 ```bash
 ocm sign cv --dry-run /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+**GPG** (requires `--signer-spec` pointing at a `GPGSigningConfiguration/v1alpha1` file — see the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}) for the spec format):
+
+```bash
+ocm sign cv --dry-run \
+  --signer-spec ./signer-spec.yaml \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
 If configured correctly, the dry run completes without "no private key found" errors.

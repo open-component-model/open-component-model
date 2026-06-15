@@ -150,11 +150,11 @@ ssb   rsa4096/23F18B76957B0A91 2026-06-15 [SEA]
 
 ### Export the keys to ASCII-armored files
 
-OCM loads GPG keys from ASCII-armored files (`.asc`). Export both — replace `FINGERPRINT` with the value from the previous step:
+OCM loads GPG keys from ASCII-armored files (`.asc`). Export both — replace `<key fingerprint>` with the value from the previous step:
 
 ```bash
-gpg --export-secret-keys --armor FINGERPRINT > /tmp/keys/signing-key.asc
-gpg --export --armor FINGERPRINT > /tmp/keys/verify-key.asc
+gpg --export-secret-keys --armor <key fingerprint> > /tmp/keys/signing-key.asc
+gpg --export --armor <key fingerprint> > /tmp/keys/verify-key.asc
 
 chmod 600 /tmp/keys/signing-key.asc
 ```

@@ -221,26 +221,23 @@ Keep this file around — the [verify how-to → GPG tab]({{< relref "verify-com
 
 ### Sign the component version
 
-Run the sign command with the signer spec:
+Run the sign command with the signer spec.
 
-{{< tabs "sign-gpg-target" >}}
-{{< tab "Local CTF Archive" >}}
+**Local CTF archive:**
 
 ```bash
 ocm sign cv \
   --signer-spec ./signer-spec.yaml \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
-{{< /tab >}}
-{{< tab "Remote OCI Registry" >}}
+
+**Remote OCI registry:**
 
 ```bash
 ocm sign cv \
   --signer-spec ./signer-spec.yaml \
   ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
 ```
-{{< /tab >}}
-{{< /tabs >}}
 
 {{< details "Expected output from signing" >}}
 
