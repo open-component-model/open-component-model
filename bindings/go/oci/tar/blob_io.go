@@ -147,8 +147,8 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 			successors []ociImageSpecV1.Descriptor
 			err        error
 		)
-		if opts.ExtendedCopyGraphOptions.FindSuccessors != nil {
-			successors, err = opts.ExtendedCopyGraphOptions.FindSuccessors(ctx, fetcher, desc)
+		if opts.FindSuccessors != nil {
+			successors, err = opts.FindSuccessors(ctx, fetcher, desc)
 		} else {
 			successors, err = content.Successors(ctx, fetcher, desc)
 		}
