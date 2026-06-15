@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
@@ -163,7 +164,7 @@ var _ = Describe("Replication Controller", func() {
 			return configMap.GetName()
 		}
 
-		newReplication := func(component *v1alpha1.Component, targetRepository *v1alpha1.Repository, transferConfig *v1alpha1.TransferConfig) *v1alpha1.Replication {
+		newReplication := func(component *v1alpha1.Component, targetRepository *v1alpha1.Repository, transferConfig []v1alpha1.TransferConfig) *v1alpha1.Replication {
 			return &v1alpha1.Replication{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "replication",
@@ -191,9 +192,9 @@ var _ = Describe("Replication Controller", func() {
 				newDescriptor(childName, "0.1.0"),
 			})
 
-			replication := newReplication(component, targetRepository, &v1alpha1.TransferConfig{
+			replication := newReplication(component, targetRepository, []v1alpha1.TransferConfig{{
 				NamespaceName: &v1alpha1.NamespaceName{Name: setupTransferConfig(ctx)},
-			})
+			}})
 			Expect(k8sClient.Create(ctx, replication)).To(Succeed())
 			DeferCleanup(func(ctx SpecContext) {
 				test.DeleteObject(ctx, k8sClient, replication)
@@ -247,12 +248,18 @@ var _ = Describe("Replication Controller", func() {
 				}),
 			})
 
-			replication := newReplication(component, targetRepository, &v1alpha1.TransferConfig{
-				Ref: &transferspec.Config{
-					Type:      ocmruntime.NewVersionedType(transferspec.ConfigType, transferspec.Version),
-					Recursive: transferspec.RecursiveInfinite,
+			transferRaw := &ocmruntime.Raw{}
+			Expect(transferspec.Scheme.Convert(&transferspec.Config{
+				Type:      ocmruntime.NewVersionedType(transferspec.ConfigType, transferspec.Version),
+				Recursive: transferspec.RecursiveInfinite,
+			}, transferRaw)).To(Succeed())
+
+			replication := newReplication(component, targetRepository, []v1alpha1.TransferConfig{{
+				Value: &genericv1.Config{
+					Type:           ocmruntime.NewVersionedType(genericv1.ConfigType, genericv1.ConfigTypeV1),
+					Configurations: []*ocmruntime.Raw{transferRaw},
 				},
-			})
+			}})
 			Expect(k8sClient.Create(ctx, replication)).To(Succeed())
 			DeferCleanup(func(ctx SpecContext) {
 				test.DeleteObject(ctx, k8sClient, replication)

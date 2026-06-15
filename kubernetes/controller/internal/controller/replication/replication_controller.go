@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -438,18 +439,36 @@ func errIsUnavailable(err error) bool {
 	return errors.As(err, &notReadyErr) || errors.As(err, &deletionErr)
 }
 
-// loadTransferConfig resolves the object referenced by spec.TransferConfig and extracts
-// the transfer.config.ocm.software entry from it.
+// loadTransferConfig resolves every spec.TransferConfig entry to its generic config
+// envelope, extracts the transfer.config.ocm.software entries, and merges them into a
+// single effective transfer config. Later entries win on conflicting fields.
 func (r *Reconciler) loadTransferConfig(ctx context.Context, replication *v1alpha1.Replication) (*transferspec.Config, error) {
-	tc := replication.Spec.TransferConfig
+	var cfgs []*transferspec.Config
 
-	// Ref takes precedence over inlined namespace/name.
-	if tc.Ref != nil {
-		if err := tc.Ref.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid inline transfer config: %w", err)
+	for _, tc := range replication.Spec.TransferConfig {
+		genericCfg, err := r.resolveGenericConfig(ctx, replication, tc)
+		if err != nil {
+			return nil, err
 		}
 
-		return tc.Ref, nil
+		cfg, err := transferspec.LookupConfig(genericCfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to look up transfer config: %w", err)
+		}
+
+		if cfg != nil {
+			cfgs = append(cfgs, cfg)
+		}
+	}
+
+	return transferspec.Merge(cfgs...), nil
+}
+
+// resolveGenericConfig returns the generic config envelope for a single TransferConfig
+// entry, preferring the inlined Value over the referenced ConfigMap.
+func (r *Reconciler) resolveGenericConfig(ctx context.Context, replication *v1alpha1.Replication, tc v1alpha1.TransferConfig) (*genericv1.Config, error) {
+	if tc.Value != nil {
+		return tc.Value, nil
 	}
 
 	if tc.NamespaceName == nil || tc.Name == "" {
@@ -471,12 +490,7 @@ func (r *Reconciler) loadTransferConfig(ctx context.Context, replication *v1alph
 		return nil, fmt.Errorf("failed to extract config from ConfigMap %s/%s: %w", namespace, tc.Name, err)
 	}
 
-	cfg, err := transferspec.LookupConfig(genericCfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to look up transfer config: %w", err)
-	}
-
-	return cfg, nil
+	return genericCfg, nil
 }
 
 // convertToTyped converts a runtime.Raw repository spec to a concrete spec.

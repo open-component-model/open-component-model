@@ -6,7 +6,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	transferspec "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	generic "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 )
 
 const KindReplication = "Replication"
@@ -21,9 +21,11 @@ type ReplicationSpec struct {
 	// +required
 	TargetRepositoryRef corev1.LocalObjectReference `json:"targetRepositoryRef"`
 
-	// TransferConfig defines how the transfer is performed.
+	// TransferConfig defines how the transfer is performed. Each entry is either a
+	// reference to a ConfigMap holding a generic ocm config, or an inline generic
+	// ocm config value. Exactly one of the two must be set per entry.
 	// +optional
-	TransferConfig *TransferConfig `json:"transferConfig,omitempty"`
+	TransferConfig []TransferConfig `json:"transferConfig,omitempty"`
 
 	// OCMConfig defines references to secrets, config maps or ocm api
 	// objects providing configuration data including credentials.
@@ -38,20 +40,20 @@ type ReplicationSpec struct {
 
 // TransferConfig selects the transfer configuration for a Replication. Provide it
 // either as a reference to a ConfigMap holding a generic ocm config with a
-// transfer.config.ocm.software entry, or inline via Ref carrying the transfer
-// config object directly on the CR.
+// transfer.config.ocm.software entry, or inline via Value carrying the generic
+// ocm config object directly on the CR. Exactly one of the two must be set.
 type TransferConfig struct {
-	// NamespaceName references the ConfigMap holding the transfer config by name
-	// and optional namespace, defaulting to the Replication namespace.
+	// NamespaceName references the ConfigMap holding the generic config by name and
+	// optional namespace, defaulting to the Replication namespace.
 	// +optional
 	*NamespaceName `json:",inline"`
 
-	// Ref carries the transfer config object inline on the Replication.
+	// Value carries the generic ocm config object inline on the Replication.
 	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:validation:Type=object
 	// +optional
-	Ref *transferspec.Config `json:"ref,omitempty"`
+	Value *generic.Config `json:"value,omitempty"`
 }
 
 // ReplicationStatus defines the observed state of Replication.

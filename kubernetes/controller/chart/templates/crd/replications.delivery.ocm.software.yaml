@@ -152,21 +152,35 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               transferConfig:
-                description: TransferConfig defines how the transfer is performed.
-                properties:
-                  name:
-                    description: Name of the referent.
-                    type: string
-                  namespace:
-                    description: Namespace of the referent, defaults to the embedding
-                      object's namespace.
-                    type: string
-                  ref:
-                    description: Ref carries the transfer config object inline on
-                      the Replication.
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
-                type: object
+                description: |-
+                  TransferConfig defines how the transfer is performed. Each entry is either a
+                  reference to a ConfigMap holding a generic ocm config, or an inline generic
+                  ocm config value. Exactly one of the two must be set per entry.
+                items:
+                  description: |-
+                    TransferConfig selects the transfer configuration for a Replication. Provide it
+                    either as a reference to a ConfigMap holding a generic ocm config with a
+                    transfer.config.ocm.software entry, or inline via Value carrying the generic
+                    ocm config object directly on the CR. Exactly one of the two must be set.
+                  properties:
+                    name:
+                      description: Name of the referent.
+                      type: string
+                    namespace:
+                      description: Namespace of the referent, defaults to the embedding
+                        object's namespace.
+                      type: string
+                    value:
+                      description: Value carries the generic ocm config object inline
+                        on the Replication.
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                  type: object
+                  x-kubernetes-validations:
+                  - message: set either the inline ConfigMap reference (name) or value,
+                      but not both
+                    rule: has(self.value) != (has(self.name) && self.name != '')
+                type: array
             required:
             - componentRef
             - targetRepositoryRef
