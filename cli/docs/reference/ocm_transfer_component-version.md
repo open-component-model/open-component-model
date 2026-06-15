@@ -27,6 +27,10 @@ OCI and CTF repositories are supported as transfer targets, while Helm repositor
 The graph is built accordingly based on the provided references.
 By default, only the component version itself is transferred, but with --copy-resources, all resources are also copied and transformed if necessary.
 
+A transfer.config.ocm.software/v1alpha1 file can be supplied via --transfer-config to set defaults for
+--recursive, --copy-resources, and --upload-as. Explicit command-line flags always override the
+values from the file.
+
 The graph is validated, and then executed unless --dry-run is set.
 
 Alternatively, --transfer-spec can be used to provide a previously saved TransformationGraphDefinition
@@ -67,6 +71,13 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghc
 # Recursively transfer a component version and all its references
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --copy-resources
 
+# Drive defaults from a transfer.config.ocm.software/v1alpha1 file (flags still win when set)
+#   type: transfer.config.ocm.software/v1alpha1
+#   recursive: -1
+#   copyMode: allResources
+#   uploadType: ociArtifact
+transfer component-version --transfer-config ./transfer-config.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+
 # Two-step transfer: generate a spec with all desired flags, then review and execute
 transfer component-version --dry-run -o yaml --copy-resources -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
 # (review/edit spec.yaml as needed, e.g. change the target registry)
@@ -76,15 +87,16 @@ transfer component-version --transfer-spec spec.yaml
 ### Options
 
 ```
-      --copy-resources         copy all resources in the component version
-      --dry-run                build and validate the graph but do not execute
-  -h, --help                   help for component-version
-  -o, --output enum            output format of the component descriptors
-                               (must be one of [json ndjson yaml]) (default yaml)
-  -r, --recursive              recursively discover and transfer component versions
-      --transfer-spec string   path to a transfer specification file (use "-" for stdin)
-  -u, --upload-as enum         Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
-                               (must be one of [default localBlob ociArtifact]) (default default)
+      --copy-resources           copy all resources in the component version
+      --dry-run                  build and validate the graph but do not execute
+  -h, --help                     help for component-version
+  -o, --output enum              output format of the component descriptors
+                                 (must be one of [json ndjson yaml]) (default yaml)
+  -r, --recursive                recursively discover and transfer component versions
+      --transfer-config string   path to a transfer.config.ocm.software/v1alpha1 file. Explicit flags (--recursive, --copy-resources, --upload-as) override values from the file.
+      --transfer-spec string     path to a transfer specification file (use "-" for stdin)
+  -u, --upload-as enum           Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
+                                 (must be one of [default localBlob ociArtifact]) (default default)
 ```
 
 ### Options inherited from parent commands
