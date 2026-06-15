@@ -1,7 +1,6 @@
 package tar
 
 import (
-	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -106,11 +105,14 @@ type CopyOCILayoutWithIndexOptions struct {
 //
 // [CopyOCILayoutWithIndexOptions.MutateParentFunc] runs once against the
 // top-level descriptor before copy. Typical use: inject annotations onto the
-// root manifest/index. The mutated descriptor reaches the destination because
-// a small in-memory proxy serves the original bytes for the post-mutation
-// digest, and the destination's Push records the mutated Descriptor in its
-// layout's index.json (registry destinations drop annotations at the wire
-// boundary; layout destinations preserve them).
+// root manifest/index. Because the contract forbids changing Digest/Size/
+// MediaType, the underlying ociStore already serves the correct bytes for the
+// mutated descriptor; no proxy is needed. The mutated descriptor reaches the
+// destination via two paths: (1) ExtendedCopyGraph pushes the root descriptor
+// directly, and (2) the FindSuccessors override below rewrites the un-mutated
+// subject edge embedded in any referrer body so dst's tagResolver records the
+// mutated Descriptor in its layout's index.json (registry destinations drop
+// annotations at the wire boundary; layout destinations preserve them).
 //
 // Returns the descriptor of the root that was copied.
 func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.ReadOnlyBlob, opts CopyOCILayoutWithIndexOptions) (top ociImageSpecV1.Descriptor, err error) {
@@ -122,9 +124,14 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 		err = errors.Join(err, ociStore.Close())
 	}()
 
-	index, proxy, err := proxyOCIStore(ctx, ociStore, &opts)
+	index, err := pickTopLevelDescriptor(ociStore)
 	if err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create proxy for OCI store: %w", err)
+		return ociImageSpecV1.Descriptor{}, err
+	}
+	if opts.MutateParentFunc != nil {
+		if err := opts.MutateParentFunc(&index); err != nil {
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to mutate top level descriptor before copy: %w", err)
+		}
 	}
 
 	// Walk: ExtendedCopyGraph reaches the mutated root only as the Subject of
@@ -156,78 +163,40 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 		return successors, nil
 	}
 
-	if err := oras.ExtendedCopyGraph(ctx, proxy, dst, index, upstream); err != nil {
+	if err := oras.ExtendedCopyGraph(ctx, ociStore, dst, index, upstream); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy graph for index from oci layout %v: %w", index, err)
 	}
 
 	return index, nil
 }
 
-func proxyOCIStore(ctx context.Context, ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (ociImageSpecV1.Descriptor, content.ReadOnlyGraphStorage, error) {
-	// if our store only has one single descriptor, we dont need to copy the top level index of the layout.
-	// instead we can use whatever top level descriptor (manifest or index) is located as singleton in the layout index.
+// pickTopLevelDescriptor selects the single top-level manifest from the
+// layout's index.json. With one manifest in the index it returns that
+// manifest; with many it returns the one tagged via
+// `org.opencontainers.image.ref.name`. Returns an error if neither rule
+// uniquely identifies a top-level descriptor.
+//
+// We need this specifically for docker (one manifest), and oras / ocm
+// packaging compat (many manifests, exactly one ref.name).
+func pickTopLevelDescriptor(ociStore *CloseableReadOnlyStore) (ociImageSpecV1.Descriptor, error) {
 	if len(ociStore.Index.Manifests) == 1 {
-		return proxyOCIStoreWithTopLevelDescriptor(ctx, 0, ociStore, opts)
+		return ociStore.Index.Manifests[0], nil
 	}
-	var topLevelNamedDescriptors []int
+	var named []int
 	for idx, manifest := range ociStore.Index.Manifests {
 		if manifest.Annotations != nil && manifest.Annotations[ociImageSpecV1.AnnotationRefName] != "" {
-			topLevelNamedDescriptors = append(topLevelNamedDescriptors, idx)
+			named = append(named, idx)
 		}
 	}
-	if len(topLevelNamedDescriptors) == 1 {
-		return proxyOCIStoreWithTopLevelDescriptor(ctx, topLevelNamedDescriptors[0], ociStore, opts)
+	if len(named) == 1 {
+		return ociStore.Index.Manifests[named[0]], nil
 	}
-
-	// we need this specifically for docker (one manifest),
-	// and oras / ocm packaging compat (many manifests, exactly one ref.name)
-	return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf(
+	return ociImageSpecV1.Descriptor{}, fmt.Errorf(
 		"multiple manifests found in oci store, "+
 			"but no manifest could be identified as the top level parent."+
 			"the store must either contain exactly one top level manifest in its index,"+
 			" or at most one manifest with the annotation %s", ociImageSpecV1.AnnotationRefName,
 	)
-}
-
-func proxyOCIStoreWithTopLevelDescriptor(ctx context.Context, idx int, ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (_ ociImageSpecV1.Descriptor, _ content.ReadOnlyGraphStorage, err error) {
-	topLevelDesc := ociStore.Index.Manifests[idx]
-	descStream, err := ociStore.Fetch(ctx, topLevelDesc)
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to fetch top level descriptor from store: %w", err)
-	}
-	defer func() {
-		err = errors.Join(err, descStream.Close())
-	}()
-	descRaw, err := content.ReadAll(descStream, topLevelDesc)
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to read top level descriptor stream: %w", err)
-	}
-
-	switch topLevelDesc.MediaType {
-	case ociImageSpecV1.MediaTypeImageManifest:
-		var manifest ociImageSpecV1.Manifest
-		if err := json.Unmarshal(descRaw, &manifest); err != nil {
-			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
-		}
-		if err := opts.MutateParentFunc(&topLevelDesc); err != nil {
-			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate manifest descriptor before copy: %w", err)
-		}
-	case ociImageSpecV1.MediaTypeImageIndex:
-		var index ociImageSpecV1.Index
-		if err := json.Unmarshal(descRaw, &index); err != nil {
-			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to unmarshal index: %w", err)
-		}
-		if err := opts.MutateParentFunc(&topLevelDesc); err != nil {
-			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate index descriptor before copy: %w", err)
-		}
-	}
-
-	proxy := &descriptorStoreProxy{
-		raw:                  descRaw,
-		desc:                 topLevelDesc,
-		ReadOnlyGraphStorage: ociStore,
-	}
-	return topLevelDesc, proxy, nil
 }
 
 // mediaTypeOCIArtifactManifest is the deprecated OCI artifact manifest (image-spec v1.1.0-rc1/rc2); the oras-go constant lives in an internal package.
@@ -299,29 +268,4 @@ func Subject(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.D
 	default:
 		return nil, nil
 	}
-}
-
-// descriptorStoreProxy serves the original bytes of the layout's top-level
-// descriptor for its post-MutateParentFunc digest, so the destination's Push
-// records the mutated Descriptor (annotations, platform) in its layout's
-// index.json. Predecessor walks (Predecessors) flow through to the underlying
-// store unchanged.
-type descriptorStoreProxy struct {
-	raw  []byte
-	desc ociImageSpecV1.Descriptor
-	content.ReadOnlyGraphStorage
-}
-
-func (p *descriptorStoreProxy) Exists(ctx context.Context, desc ociImageSpecV1.Descriptor) (bool, error) {
-	if p.desc.Digest.String() == desc.Digest.String() {
-		return true, nil
-	}
-	return p.ReadOnlyGraphStorage.Exists(ctx, desc)
-}
-
-func (p *descriptorStoreProxy) Fetch(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
-	if p.desc.Digest.String() == desc.Digest.String() {
-		return io.NopCloser(bytes.NewReader(p.raw)), nil
-	}
-	return p.ReadOnlyGraphStorage.Fetch(ctx, desc)
 }
