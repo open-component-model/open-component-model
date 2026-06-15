@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -10,43 +11,118 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd"
 	"ocm.software/open-component-model/cli/integration/internal"
 )
 
-// Test_Integration_TransferWithTransferConfig_CTFToOCI drives a CTF → OCI transfer
-// purely via a transfer.config.ocm.software/v1alpha1 wire-format file (no --recursive /
-// --copy-resources / --upload-as flags). It proves the load-decode-validate-convert
-// path between `--transfer-config <file>` and `transfer.BuildGraphDefinition` is
-// wired end-to-end.
-func Test_Integration_TransferWithTransferConfig_CTFToOCI(t *testing.T) {
+// Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode proves that
+// `copyMode: allResources` set purely in --transfer-config (no flags) actually
+// reaches the transfer engine.
+//
+// The signal: a source component has an external `OCIImage` access pointing at
+// the source registry. With the default `copyMode: localBlob`, the access stays
+// untouched in the target descriptor (it would still point at the source
+// registry). With `copyMode: allResources`, the resource is fetched and re-stored
+// as a `LocalBlob` in the target. The assertion fails if the file is silently
+// dropped.
+func Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode(t *testing.T) {
+	ctx := t.Context()
 	r := require.New(t)
 	t.Parallel()
 
-	componentName := "ocm.software/transfer-config-test"
-	componentVersion := "v1.0.0"
+	sourceRegistry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err, "should be able to start source registry container")
 
-	registry, err := internal.CreateOCIRegistry(t)
-	r.NoError(err, "should be able to start registry container")
+	targetRegistry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err, "should be able to start target registry container")
 
-	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{{
-		Host: registry.Host, Port: registry.Port,
-		User: registry.User, Password: registry.Password,
-	}})
+	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{
+		{Host: sourceRegistry.Host, Port: sourceRegistry.Port, User: sourceRegistry.User, Password: sourceRegistry.Password},
+		{Host: targetRegistry.Host, Port: targetRegistry.Port, User: targetRegistry.User, Password: targetRegistry.Password},
+	})
 	r.NoError(err)
 
-	sourceRef := createSourceCTF(t, componentName, componentVersion)
-	targetRef := fmt.Sprintf("http://%s", registry.RegistryAddress)
+	componentName := "ocm.software/transfer-config-copymode-test"
+	componentVersion := "v1.0.0"
 
-	// Wire-format config. "type" plus the three knobs - the same shape the
-	// replication controller will consume from a CRD spec.
+	// Push an OCI image to the source registry and build a CTF component that
+	// references it via OCIImage access.
+	originalData := []byte("transfer-config copyMode payload")
+	imageData, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/transfer-config-copymode:v1.0.0")
+	r.NotNil(access)
+	access.Type = ocmruntime.Type{Name: "ociArtifact", Version: "v1"}
+
+	resource := descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "test-oci-resource", Version: "v1.0.0"},
+		},
+		Type:   "ociArtifact",
+		Access: access,
+	}
+
+	// Rewrite the access to point at the local source registry, then upload.
+	targetAccess := resource.Access.DeepCopyTyped()
+	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", sourceRegistry.Reference("transfer-config-copymode:v1.0.0"))
+	resource.Access = targetAccess
+
+	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
+	uploaded, err := resourceRepo.UploadResource(ctx, &resource, inmemory.New(bytes.NewReader(imageData)), &ocicredsv1.OCICredentials{
+		Type:     ocicredsv1.OCICredentialsVersionedType,
+		Username: sourceRegistry.User,
+		Password: sourceRegistry.Password,
+	})
+	r.NoError(err, "should upload OCI artifact to source registry")
+	resource = *uploaded
+
+	uploadedAccess, ok := resource.Access.(*v1.OCIImage)
+	r.True(ok, "uploaded access should remain OCIImage")
+
+	constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: test-oci-resource
+    version: v1.0.0
+    type: ociArtifact
+    access:
+      type: %s
+      imageReference: %s
+`, componentName, componentVersion, uploadedAccess.Type, uploadedAccess.ImageReference)
+
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	sourceCTF := filepath.Join(t.TempDir(), "source-ctf")
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add", "component-version",
+		"--repository", fmt.Sprintf("ctf::%s", sourceCTF),
+		"--constructor", constructorPath,
+		"--config", cfgPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "creating source CTF should succeed")
+
+	// Drive copyMode purely from the file. NO --copy-resources flag.
 	transferCfgYAML := `type: transfer.config.ocm.software/v1alpha1
-recursive: 0
-copyMode: localBlob
-uploadType: default
+copyMode: allResources
+uploadType: localBlob
 `
 	transferCfgPath := filepath.Join(t.TempDir(), "transfer-config.yaml")
 	r.NoError(os.WriteFile(transferCfgPath, []byte(transferCfgYAML), os.ModePerm))
+
+	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
+	targetRef := fmt.Sprintf("http://%s", targetRegistry.RegistryAddress)
 
 	transferCMD := cmd.New()
 	transferCMD.SetArgs([]string{
@@ -56,35 +132,40 @@ uploadType: default
 		"--transfer-config", transferCfgPath,
 	})
 
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	transferCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	r.NoError(transferCMD.ExecuteContext(ctx), "config-driven transfer should succeed")
+	r.NoError(transferCMD.ExecuteContext(transferCtx), "config-driven transfer should succeed")
 
-	repo := connectToOCIRegistry(t, registry)
-	desc, err := repo.GetComponentVersion(t.Context(), componentName, componentVersion)
-	r.NoError(err, "should be able to retrieve transferred component")
-	r.Equal(componentName, desc.Component.Name)
-	r.Equal(componentVersion, desc.Component.Version)
+	repo := connectToOCIRegistry(t, targetRegistry)
+	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err, "transferred component must be present in target registry")
 	r.Len(desc.Component.Resources, 1)
-	r.Equal("test-resource", desc.Component.Resources[0].Name)
+
+	gotAccess := desc.Component.Resources[0].Access
+	r.NotNil(gotAccess, "resource access must not be nil")
+
+	// The whole point of the test: with localBlob copyMode (the default), this
+	// would still be OCIImage pointing at the source registry. With the file's
+	// allResources honored, the resource was fetched and re-stored locally.
+	r.Equal(v2.LocalBlobAccessType, gotAccess.GetType().Name,
+		"resource access must be LocalBlob: copyMode: allResources from --transfer-config was not honored")
 }
 
-// Test_Integration_TransferWithTransferConfig_FlagOverridesConfig_DisablesRecursion
-// proves the precedence rule with an observable end-state: --recursive=false on
-// the command line must override `recursive: true` in --transfer-config.
+// Test_Integration_TransferWithTransferConfig_FileDrivesRecursion proves that
+// `recursive: -1` set purely in --transfer-config (no flags) actually reaches
+// the transfer engine.
 //
-// Setup: a parent component references a child component, each living in its own
-// source CTF. The transfer-config asks for recursive=true (which would pull the
-// child along), but the CLI is invoked with --recursive=false. If the override
-// is honoured, only the parent reaches the target registry; if the override is
-// silently dropped, the child also lands and the test fails.
-func Test_Integration_TransferWithTransferConfig_FlagOverridesConfig_DisablesRecursion(t *testing.T) {
+// The signal: a parent component references a child component, both in one
+// source CTF. With the default `recursive: 0`, only the parent lands in the
+// target. With `recursive: -1` from the file, the child must also land. The
+// assertion fails if the file is silently dropped.
+func Test_Integration_TransferWithTransferConfig_FileDrivesRecursion(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
 
-	parentComponent := "ocm.software/transfer-config-parent"
-	childComponent := "ocm.software/transfer-config-child"
+	parentComponent := "ocm.software/transfer-config-recursive-parent"
+	childComponent := "ocm.software/transfer-config-recursive-child"
 	version := "v1.0.0"
 
 	registry, err := internal.CreateOCIRegistry(t)
@@ -135,10 +216,9 @@ components:
 	childConstructorPath := filepath.Join(t.TempDir(), "child-constructor.yaml")
 	r.NoError(os.WriteFile(childConstructorPath, []byte(childConstructor), os.ModePerm))
 
-	// Both components live in the same source CTF, so the transfer command
-	// resolves the parent's reference from the source repo without needing a
-	// resolver config. Child must be added first so its descriptor exists when
-	// parent is registered.
+	// Both components live in the same source CTF so the transfer command
+	// resolves the parent's reference without a resolver config. Child must be
+	// registered first so its descriptor exists when parent is registered.
 	sourceCTF := filepath.Join(t.TempDir(), "ctf-source")
 
 	addChild := cmd.New()
@@ -157,6 +237,7 @@ components:
 	})
 	r.NoError(addParent.ExecuteContext(t.Context()), "adding parent to source CTF should succeed")
 
+	// Drive recursion purely from the file. NO --recursive flag on the CLI.
 	transferCfgYAML := `type: transfer.config.ocm.software/v1alpha1
 recursive: -1
 `
@@ -172,23 +253,24 @@ recursive: -1
 		sourceRef, targetRef,
 		"--config", cfgPath,
 		"--transfer-config", transferCfgPath,
-		"--recursive=false",
 	})
 
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 
-	r.NoError(transferCMD.ExecuteContext(ctx), "transfer with flag-overridden recursion should succeed")
+	r.NoError(transferCMD.ExecuteContext(ctx), "config-driven recursive transfer should succeed")
 
 	repo := connectToOCIRegistry(t, registry)
 
 	parentDesc, err := repo.GetComponentVersion(t.Context(), parentComponent, version)
 	r.NoError(err, "parent component must be present in target registry")
 	r.Equal(parentComponent, parentDesc.Component.Name)
-	r.Equal(version, parentDesc.Component.Version)
 
-	_, err = repo.GetComponentVersion(t.Context(), childComponent, version)
-	r.Error(err, "child component must NOT be present in target registry: --recursive=false should have overridden the config's recursive=true")
+	// The whole point of the test: without recursion, the child would not land
+	// here. If the file's recursive: -1 is silently dropped, this fails.
+	childDesc, err := repo.GetComponentVersion(t.Context(), childComponent, version)
+	r.NoError(err, "child component must be present in target registry: recursive: -1 from --transfer-config was not honored")
+	r.Equal(childComponent, childDesc.Component.Name)
 }
 
 // Test_Integration_TransferWithTransferConfig_InvalidValueRejected ensures the
