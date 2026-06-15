@@ -29,7 +29,7 @@ flowchart TB
             id2["Identity 2<br>type: OCIRegistry<br>hostname: ghcr.io<br>path: my-org/my-repo"]
         end
         subgraph credentials ["Credentials"]
-            cred["type: Credentials/v1<br>username / password"]
+            cred["type: OCICredentials/v1<br>username / password"]
         end
         identities --> credentials
     end
@@ -49,18 +49,18 @@ Not all credential sources are static key-value pairs. Docker credential helpers
 
 - **Consumer** — a service that requires authentication (e.g., an OCI registry)
 - **Consumer Identity** — a set of key-value attributes that uniquely describe a consumer (type + attributes like `hostname`, `path`)
-- **Credentials** — key-value pairs used to authenticate (e.g., `username` / `password`)
-- **Credential Type** — defines how credentials are stored or retrieved (e.g., `Credentials/v1` for inline key-value pairs)
+- **Credentials** — typed objects used to authenticate; stored natively in the credential graph
+- **Credential Type** — defines how credentials are structured (e.g., `OCICredentials/v1` for OCI username/password/token, `DirectCredentials/v1` for a generic property map)
+- **`DirectCredentials/v1`** — the universal legacy fallback (also accepted as `Credentials/v1`); stores credentials as an untyped `properties:` map; all configs from previous versions remain valid
 - **Repository** — a fallback credential source checked only when no consumer entry matches (e.g., `DockerConfig/v1`)
 
 ## How Resolution Works
 
-When an OCM operation needs credentials, the system follows a simple precedence:
+When an OCM operation needs credentials, the system follows a three-path precedence:
 
-1. **Direct match** — look for a consumer entry whose identity attributes match the target
-2. **Repository fallback** — if no direct match exists, consult configured repositories (e.g., Docker config)
-
-This two-tier model gives you explicit control when you need it (direct consumers) while still integrating seamlessly with existing credential stores.
+1. **Direct** — the consumer entry holds credentials inline (either a typed credential like `OCICredentials/v1` or a legacy `DirectCredentials/v1`). These are stored as leaf nodes in the credential graph and returned immediately on match.
+2. **Indirect** — the credential entry refers to a plugin-backed source (e.g., `HashiCorpVault/v1alpha1`). At ingestion time the graph creates a DAG edge; at resolution time the plugin is called to fetch the actual credential. Chains of arbitrary depth are supported — credentials for one service can come from Vault, whose own credentials come from a direct entry.
+3. **Repository fallback** — consulted only when neither path above yields a result. All configured repository plugins (e.g., `DockerConfig/v1`) are queried concurrently; the first success wins.
 
 ```mermaid
 flowchart TB
@@ -69,8 +69,8 @@ flowchart TB
 
     subgraph consumers ["Consumers (checked first)"]
         direction TB
-        id1["Identity<br>hostname: ghcr.io<br>path: my-org"] --> cred1["Credentials<br>username / password"]
-        id2["Identity<br>hostname: docker.io"] --> cred1
+        id1["Identity<br>hostname: ghcr.io"] --> cred1["Direct credentials<br>OCICredentials/v1<br>username / password"]
+        id2["Identity<br>hostname: quay.io"] --> cred2["Indirect credentials<br>HashiCorpVault/v1alpha1"] --> vault["Vault plugin<br>resolves at query time"]
     end
 
     op --> repos
@@ -79,12 +79,36 @@ flowchart TB
         direction TB
         docker["DockerConfig/v1<br>~/.docker/config.json"]
     end
-
 ```
 
 {{< callout context="note" >}}
 To see resolution in action, try the [Understand Credential Resolution]({{< relref "/docs/tutorials/credential-resolution.md" >}}) tutorial.
 {{< /callout >}}
+
+## Typed vs. Legacy Credentials
+
+OCM supports both **typed** credential types and the legacy **`DirectCredentials/v1`** fallback.
+
+**Typed credential types** (e.g., `OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`) use flat, named fields and are validated at configuration parse time:
+
+```yaml
+credentials:
+  - type: OCICredentials/v1
+    username: my-user
+    password: my-password
+```
+
+**`DirectCredentials/v1`** stores credentials as an untyped `properties:` map. All existing `.ocmconfig` files using `Credentials/v1` continue to work unchanged — `Credentials/v1` is an alias for `DirectCredentials/v1`:
+
+```yaml
+credentials:
+  - type: Credentials/v1
+    properties:
+      username: my-user
+      password: my-password
+```
+
+For the full list of built-in typed credential types and their fields, see [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}).
 
 ## What's Next?
 
@@ -95,3 +119,4 @@ To see resolution in action, try the [Understand Credential Resolution]({{< relr
 ## Related Documentation
 
 - [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) — Complete list of identity types, attributes, and credential properties
+- [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}) — All built-in typed credential types and their fields
