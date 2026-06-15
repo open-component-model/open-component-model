@@ -156,9 +156,7 @@ uploadType: localBlob
 // The signal: a parent component references a child component, both in one
 // source CTF. The file says `recursive: 0` (no recursion) and the CLI passes
 // `--recursive`. With the override honored, the child component lands in the
-// target. If the override branch is bypassed - or if the loader silently
-// fails to read the file at all and the default of 0 stays in place - the
-// child never lands and the assertion fails.
+// target.
 func Test_Integration_TransferWithTransferConfig_FlagOverridesFileRecursion(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
