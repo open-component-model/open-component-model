@@ -382,9 +382,14 @@ func TestCopyOCILayoutWithIndex_IdempotencyWhenRootExistsButReferrerMissing(t *t
 	r := require.New(t)
 	const artifactType = "application/test.referrer.v1+json"
 
-	// First copy a layout with NO referrer — root and layer land in dst.
-	layoutNoRef, _, _ := buildSingleLayerOCILayout(t)
+	// First copy the artifact with no referrer attached, so only the root and
+	// layer land in dst.
+	layoutWithRef := buildLayoutWithSourceReferrer(t, artifactType)
 	dst := memory.New()
+	// Strip the referrer manifest from the source by feeding only the artifact
+	// root into a fresh layout — emulates a prior transfer that did not carry
+	// the referrer.
+	layoutNoRef := stripReferrerFromLayout(t, layoutWithRef)
 	rootNoRef, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutNoRef}, CopyOCILayoutWithIndexOptions{
 		MutateParentFunc: func(*ociImageSpecV1.Descriptor) error { return nil },
 	})
@@ -393,7 +398,6 @@ func TestCopyOCILayoutWithIndex_IdempotencyWhenRootExistsButReferrerMissing(t *t
 	// Now copy a layout that carries a referrer for the same root. The root is
 	// already in dst; the referrer must still land via ExtendedCopyGraph's
 	// per-predecessor copy.
-	layoutWithRef := buildLayoutWithSourceReferrer(t, artifactType)
 	rootWithRef, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutWithRef}, CopyOCILayoutWithIndexOptions{
 		MutateParentFunc: func(*ociImageSpecV1.Descriptor) error { return nil },
 	})
@@ -403,6 +407,36 @@ func TestCopyOCILayoutWithIndex_IdempotencyWhenRootExistsButReferrerMissing(t *t
 	predecessors, err := dst.Predecessors(t.Context(), rootWithRef)
 	r.NoError(err)
 	assert.Len(t, predecessors, 1, "missing referrer must still land even when the root already exists in dst")
+}
+
+// stripReferrerFromLayout copies layoutBytes into a fresh layout containing
+// only the tagged root manifest and its successors, dropping any referrer
+// manifests that point at the root.
+func stripReferrerFromLayout(t *testing.T, layoutBytes []byte) []byte {
+	t.Helper()
+	r := require.New(t)
+	ctx := t.Context()
+
+	src, err := ReadOCILayout(ctx, &testReadOnlyBlob{data: layoutBytes})
+	r.NoError(err)
+	defer src.Close()
+
+	var root ociImageSpecV1.Descriptor
+	for _, m := range src.Index.Manifests {
+		if m.Annotations[ociImageSpecV1.AnnotationRefName] != "" {
+			root = m
+			break
+		}
+	}
+	r.NotEmpty(root.Digest, "tagged root must exist in source layout")
+
+	var buf bytes.Buffer
+	w, err := NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	r.NoError(err)
+	r.NoError(oras.CopyGraph(ctx, src, w, root, oras.CopyGraphOptions{}))
+	r.NoError(w.Tag(ctx, root, "latest"))
+	r.NoError(w.Close())
+	return buf.Bytes()
 }
 
 func TestCopyOCILayoutWithIndex_ErrorCases(t *testing.T) {

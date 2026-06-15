@@ -127,7 +127,36 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create proxy for OCI store: %w", err)
 	}
 
-	if err := oras.ExtendedCopyGraph(ctx, proxy, dst, index, opts.ExtendedCopyGraphOptions); err != nil {
+	// Walk: ExtendedCopyGraph reaches the mutated root only as the Subject of
+	// its referrer — the un-mutated copy embedded in the referrer body. The
+	// referrer is processed first, its Subject pushed to dst, and dst's
+	// tagResolver records that un-mutated descriptor. Swap it for the mutated
+	// one in FindSuccessors so the destination index.json keeps the injected
+	// annotations.
+	upstream := opts.ExtendedCopyGraphOptions
+	innerFindSuccessors := upstream.FindSuccessors
+	upstream.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+		var (
+			successors []ociImageSpecV1.Descriptor
+			err        error
+		)
+		if innerFindSuccessors != nil {
+			successors, err = innerFindSuccessors(ctx, fetcher, desc)
+		} else {
+			successors, err = content.Successors(ctx, fetcher, desc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		for i := range successors {
+			if successors[i].Digest == index.Digest {
+				successors[i] = index
+			}
+		}
+		return successors, nil
+	}
+
+	if err := oras.ExtendedCopyGraph(ctx, proxy, dst, index, upstream); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy graph for index from oci layout %v: %w", index, err)
 	}
 
