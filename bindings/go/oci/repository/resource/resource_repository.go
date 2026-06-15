@@ -49,8 +49,6 @@ type ResourceRepository struct {
 // make sure that ResourceRepository implements the oci ResourceRepository interface
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
-// The OCI resource repository is the only implementation of the optional
-// ownership-referrer capability (ADR 0016).
 // TODO: re-enable once repository.OwnershipAwareRepository lands in main.
 // var _ repository.OwnershipAwareRepository = (*ResourceRepository)(nil)
 
@@ -151,11 +149,9 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return b, nil
 }
 
-// AddOwnership attaches an ownership referrer (ADR 0016)
-// to a by-reference OCI image resource, pushing the referrer into the registry
-// that hosts the image. It delegates to the inner repository's
-// [oci.Repository.AddOwnership], which dispatches on the resource's access type.
-// It implements [repository.OwnershipAwareRepository.AddOwnership].
+// AddOwnership attaches ownership information (i.e. the
+// component name and version) to a resource. The ownership is attached as a
+// referrer manifest pointing at the resource.
 func (p *ResourceRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
 	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {

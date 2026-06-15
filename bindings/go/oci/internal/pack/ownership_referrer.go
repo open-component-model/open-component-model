@@ -76,7 +76,7 @@ func artifactKind(artifact descriptor.Artifact) (annotations.ArtifactKind, error
 }
 
 // marshalArtifactAnnotation serialises the {identity, kind} value stored under
-// [annotations.ArtifactAnnotationKey] on an ownership referrer (ADR 0016).
+// [annotations.ArtifactAnnotationKey] on an ownership referrer.
 // The result is JCS-canonical (RFC 8785).
 func marshalArtifactAnnotation(identity runtime.Identity, kind annotations.ArtifactKind) (string, error) {
 	payload := struct {
