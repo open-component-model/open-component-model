@@ -29,21 +29,24 @@ func fetchManifest(t *testing.T, ctx context.Context, store *memory.Store, desc 
 	return m
 }
 
-// materializeOwnershipReferrer calls OwnershipReferrer and pushes every
-// returned referrer's raw bytes directly into dst, mirroring what the
-// OCI-layout copy proxy does during artifact upload.
+// materializeOwnershipReferrer calls OwnershipReferrer and pushes the empty
+// blob and the referrer manifest into dst, mirroring what the OCI-layout copy
+// proxy does during artifact upload.
 func materializeOwnershipReferrer(t *testing.T, ctx context.Context, dst *memory.Store, subject ociImageSpecV1.Descriptor, artifact descriptor.Artifact, component, version string) error {
 	t.Helper()
-	referrers, err := OwnershipReferrer(ctx, subject, artifact, component, version)
+	desc, body, err := OwnershipReferrer(ctx, subject, artifact, component, version)
 	if err != nil {
 		return err
 	}
-	for _, r := range referrers {
-		if pushErr := dst.Push(ctx, r.Descriptor, bytes.NewReader(r.Raw)); pushErr != nil {
-			if !errors.Is(pushErr, errdef.ErrAlreadyExists) {
-				return pushErr
-			}
-		}
+	if body == nil {
+		return nil
+	}
+	empty := ociImageSpecV1.DescriptorEmptyJSON
+	if pushErr := dst.Push(ctx, empty, bytes.NewReader(empty.Data)); pushErr != nil && !errors.Is(pushErr, errdef.ErrAlreadyExists) {
+		return pushErr
+	}
+	if pushErr := dst.Push(ctx, desc, bytes.NewReader(body)); pushErr != nil && !errors.Is(pushErr, errdef.ErrAlreadyExists) {
+		return pushErr
 	}
 	return nil
 }

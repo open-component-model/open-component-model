@@ -17,30 +17,26 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Referrer pairs a descriptor with its raw bytes — a referrer manifest plus
-// the bytes the destination needs to Push it.
-type Referrer struct {
-	Descriptor ociImageSpecV1.Descriptor
-	Raw        []byte
-}
-
-// OwnershipReferrer builds an ownership referrer (ADR 0016) linking the packed
-// artifact to its owning component version. Subjects that are not OCI
-// manifests are skipped with a debug log.
-func OwnershipReferrer(ctx context.Context, top ociImageSpecV1.Descriptor, artifact descriptor.Artifact, component string, version string) ([]Referrer, error) {
-	if !introspection.IsOCICompliantManifest(top) {
-		slog.DebugContext(ctx, "skipping ownership referrer: subject is not an OCI manifest", "mediaType", top.MediaType, "digest", top.Digest.String())
-		return nil, nil
+// OwnershipReferrer builds an ownership referrer - an OCI manifest with a
+// subject pointing at the OCI resource with annotations containing ownership
+// information (i.e. component name and version).
+// Returns (zero, nil, nil) if the subject is not an OCI manifest. The manifest
+// references [ociImageSpecV1.DescriptorEmptyJSON] as config and layer. The
+// caller must push that blob before the manifest.
+func OwnershipReferrer(ctx context.Context, subject ociImageSpecV1.Descriptor, artifact descriptor.Artifact, component string, version string) (ociImageSpecV1.Descriptor, []byte, error) {
+	if !introspection.IsOCICompliantManifest(subject) {
+		slog.DebugContext(ctx, "skipping ownership referrer: subject is not an OCI manifest", "mediaType", subject.MediaType, "digest", subject.Digest.String())
+		return ociImageSpecV1.Descriptor{}, nil, nil
 	}
 
 	kind, err := artifactKind(artifact)
 	if err != nil {
-		return nil, err
+		return ociImageSpecV1.Descriptor{}, nil, err
 	}
 	meta := artifact.GetElementMeta()
 	artifactValue, err := marshalArtifactAnnotation(meta.ToIdentity(), kind)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build ownership artifact annotation: %w", err)
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to build ownership artifact annotation: %w", err)
 	}
 
 	emptyDesc := ociImageSpecV1.DescriptorEmptyJSON
@@ -50,7 +46,7 @@ func OwnershipReferrer(ctx context.Context, top ociImageSpecV1.Descriptor, artif
 		ArtifactType: annotations.OwnershipArtifactType,
 		Config:       emptyDesc,
 		Layers:       []ociImageSpecV1.Descriptor{emptyDesc},
-		Subject:      &top,
+		Subject:      &subject,
 		Annotations: map[string]string{
 			annotations.OwnershipComponentName:    component,
 			annotations.OwnershipComponentVersion: version,
@@ -59,7 +55,7 @@ func OwnershipReferrer(ctx context.Context, top ociImageSpecV1.Descriptor, artif
 	}
 	body, err := json.Marshal(manifest)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal ownership referrer manifest: %w", err)
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to marshal ownership referrer manifest: %w", err)
 	}
 
 	desc := ociImageSpecV1.Descriptor{
@@ -68,11 +64,7 @@ func OwnershipReferrer(ctx context.Context, top ociImageSpecV1.Descriptor, artif
 		Digest:       digest.FromBytes(body),
 		Size:         int64(len(body)),
 	}
-
-	return []Referrer{
-		{Descriptor: desc, Raw: body},
-		{Descriptor: ociImageSpecV1.DescriptorEmptyJSON, Raw: ociImageSpecV1.DescriptorEmptyJSON.Data},
-	}, nil
+	return desc, body, nil
 }
 
 // artifactKind reports the [annotations.ArtifactKind] for the given artifact.

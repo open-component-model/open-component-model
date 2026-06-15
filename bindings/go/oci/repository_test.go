@@ -2432,11 +2432,11 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 	// it the same way the repository does and assert it now exists in the store.
 	resolved, err := imgStore.Resolve(ctx, tag)
 	r.NoError(err)
-	referrers, err := pack.OwnershipReferrer(ctx, resolved, resource, component, version)
+	referrerDesc, referrerBody, err := pack.OwnershipReferrer(ctx, resolved, resource, component, version)
 	r.NoError(err)
-	r.NotEmpty(referrers, "ownership referrer must be produced for an OCI manifest subject")
+	r.NotNil(referrerBody, "ownership referrer must be produced for an OCI manifest subject")
 
-	exists, err := imgStore.Exists(ctx, referrers[0].Descriptor)
+	exists, err := imgStore.Exists(ctx, referrerDesc)
 	r.NoError(err)
 	r.True(exists, "ownership referrer manifest must be pushed into the hosting store")
 
@@ -2452,7 +2452,7 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 	// guarantee is covered by Test_Integration_Ownership.
 	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
 
-	stillExists, err := imgStore.Exists(ctx, referrers[0].Descriptor)
+	stillExists, err := imgStore.Exists(ctx, referrerDesc)
 	r.NoError(err)
 	r.True(stillExists, "the same content-addressed referrer must remain after an idempotent re-run")
 
@@ -2656,24 +2656,24 @@ func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 	r.NoError(err)
 	subject, err := componentStore.Resolve(ctx, uploaded.Access.(*v2.LocalBlob).LocalReference)
 	r.NoError(err)
-	expected, err := pack.OwnershipReferrer(ctx, subject, uploaded, component, version)
+	expectedDesc, expectedBody, err := pack.OwnershipReferrer(ctx, subject, uploaded, component, version)
 	r.NoError(err)
-	r.NotEmpty(expected, "an OCI manifest subject must yield an ownership referrer")
+	r.NotNil(expectedBody, "an OCI manifest subject must yield an ownership referrer")
 
-	existsBefore, err := componentStore.Exists(ctx, expected[0].Descriptor)
+	existsBefore, err := componentStore.Exists(ctx, expectedDesc)
 	r.NoError(err)
 	r.False(existsBefore, "no ownership referrer must exist before AddOwnership (the layout carried none)")
 
 	// credentials are unused for the repository's own store.
 	r.NoError(repo.AddOwnership(ctx, component, version, uploaded, nil))
 
-	existsAfter, err := componentStore.Exists(ctx, expected[0].Descriptor)
+	existsAfter, err := componentStore.Exists(ctx, expectedDesc)
 	r.NoError(err)
 	r.True(existsAfter, "AddOwnership must create and push an ownership referrer for the uploaded manifest")
 
 	// Idempotent: the content-addressed referrer is unchanged by a second run.
 	r.NoError(repo.AddOwnership(ctx, component, version, uploaded, nil))
-	stillExists, err := componentStore.Exists(ctx, expected[0].Descriptor)
+	stillExists, err := componentStore.Exists(ctx, expectedDesc)
 	r.NoError(err)
 	r.True(stillExists, "re-running AddOwnership must converge on the same referrer")
 }
@@ -2721,7 +2721,7 @@ func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
 	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
 
 	// The contract: a raw-blob subject yields no referrer, so nothing was pushed.
-	referrers, err := pack.OwnershipReferrer(ctx, rawDesc, resource, component, version)
+	_, body, err := pack.OwnershipReferrer(ctx, rawDesc, resource, component, version)
 	r.NoError(err)
-	r.Empty(referrers, "a raw-blob subject must yield no ownership referrer")
+	r.Nil(body, "a raw-blob subject must yield no ownership referrer")
 }
