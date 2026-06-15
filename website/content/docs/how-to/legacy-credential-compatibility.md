@@ -1,6 +1,6 @@
 ---
 title: "Migrate Legacy Credentials"
-description: "Update your legacy OCM credential configuration to work with the new OCM."
+description: "Update your legacy OCM credential configuration to use modern field names and optional typed credentials."
 icon: "🔑"
 weight: 11
 toc: true
@@ -8,7 +8,7 @@ toc: true
 
 ## Goal
 
-Migrate an existing legacy OCM `.ocmconfig` file so it works with the new OCM.
+Update a legacy OCM `.ocmconfig` file to use modern field names and optional typed credentials. Most fields work unchanged in the new OCM; this guide covers the one renamed field (`pathprefix` → `path`) and the optional migration to typed credentials.
 
 {{< callout context="caution" >}}
 `HashiCorpVault/v1`, `GardenerConfig/v1`, and `NPMConfig/v1` are not yet available in the new OCM. If you rely on these,
