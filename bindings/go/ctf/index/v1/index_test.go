@@ -297,7 +297,7 @@ func TestRemoveArtifactByTag(t *testing.T) {
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "stable", Digest: "sha256:abc"})
 
-	if err := idx.RemoveArtifactByTag("repo1", "latest"); err != nil {
+	if err := idx.RemoveTag("repo1", "latest"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -314,7 +314,7 @@ func TestRemoveArtifactByTag_NotFound(t *testing.T) {
 	idx := NewIndex()
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
 
-	err := idx.RemoveArtifactByTag("repo1", "nonexistent")
+	err := idx.RemoveTag("repo1", "nonexistent")
 	if !errors.Is(err, ErrArtifactNotFound) {
 		t.Errorf("expected ErrArtifactNotFound, got %v", err)
 	}
@@ -326,7 +326,7 @@ func TestRemoveArtifactByTag_OnlyMatchingTag(t *testing.T) {
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo2", Tag: "latest", Digest: "sha256:abc"})
 
-	if err := idx.RemoveArtifactByTag("repo1", "latest"); err != nil {
+	if err := idx.RemoveTag("repo1", "latest"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
