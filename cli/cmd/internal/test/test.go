@@ -14,16 +14,26 @@ import (
 	"github.com/spf13/cobra"
 
 	"ocm.software/open-component-model/cli/cmd"
+	"ocm.software/open-component-model/cli/cmd/configuration"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 )
 
 // Options holds configuration for executing OCM CLI commands in tests
 type Options struct {
-	args   []string  // Command line arguments to pass to the CLI
-	in     io.Reader // Input reader to supply stdin to the command
-	out    io.Writer // Output writer to capture command output
-	errout io.Writer // Error writer to capture command errors and logs
-	format string    // Log format to use (e.g., json, text)
+	args   []string                   // Command line arguments to pass to the CLI
+	in     io.Reader                  // Input reader to supply stdin to the command
+	out    io.Writer                  // Output writer to capture command output
+	errout io.Writer                  // Error writer to capture command errors and logs
+	format string                     // Log format to use (e.g., json, text)
+	env    *configuration.Environment // Environment to dependency inject into the test execution
+}
+
+var emptyEnvironment = &configuration.Environment{
+	Stat:        func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+	Getenv:      func(_ string) string { return "" },
+	UserHomeDir: func() (string, error) { return "", nil },
+	Getwd:       func() (string, error) { return "", nil },
+	Executable:  func() (string, error) { return "", nil },
 }
 
 // Option is a function that configures Options
@@ -56,6 +66,12 @@ func WithErrorOutput(errout io.Writer) Option {
 	}
 }
 
+func WithEnv(env *configuration.Environment) Option {
+	return func(o *Options) {
+		o.env = env
+	}
+}
+
 // WithLogFormat sets the log format for the OCM CLI command
 func WithLogFormat(format string) Option {
 	return func(o *Options) {
@@ -67,11 +83,6 @@ func WithLogFormat(format string) Option {
 // It's designed to be used in tests to run OCM commands and capture their output
 func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 	tb.Helper()
-
-	// Isolate from host config files
-	tb.Setenv("HOME", tb.TempDir())
-	tb.Setenv("XDG_CONFIG_HOME", "")
-	tb.Setenv("OCM_CONFIG", "")
 
 	opt := Options{}
 	for _, o := range opts {
@@ -98,6 +109,11 @@ func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 	if opt.format == "" {
 		opt.format = log.FormatJSON
 	}
+
+	if opt.env == nil {
+		opt.env = emptyEnvironment
+	}
+
 	f := instance.PersistentFlags().Lookup(log.FormatFlagName)
 	if err := f.Value.Set(opt.format); err != nil {
 		return nil, fmt.Errorf("failed to set format: %w", err)
@@ -112,7 +128,8 @@ func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 	}
 
 	instance.SetArgs(opt.args)
-	return instance.ExecuteContextC(tb.Context())
+	ctx := configuration.ContextWithEnvironment(tb.Context(), opt.env)
+	return instance.ExecuteContextC(ctx)
 }
 
 // JSONLogReader provides functionality to read and parse JSON-formatted log output

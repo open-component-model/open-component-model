@@ -13,9 +13,18 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+var EmptyEnvironment = &Environment{
+	Stat:        func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+	Getenv:      func(_ string) string { return "" },
+	UserHomeDir: func() (string, error) { return "", nil },
+	Getwd:       func() (string, error) { return "", nil },
+	Executable:  func() (string, error) { return "", nil },
+}
+
 func TestGetOCMConfigForCommand(t *testing.T) {
 	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
+		cmd.SetContext(ContextWithEnvironment(t.Context(), EmptyEnvironment))
 		RegisterConfigFlag(cmd)
 		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "/nonexistent/path/config.yaml"))
 
@@ -26,6 +35,7 @@ func TestGetOCMConfigForCommand(t *testing.T) {
 
 	t.Run("explicit config flag with existing file succeeds", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
+		cmd.SetContext(ContextWithEnvironment(t.Context(), EmptyEnvironment))
 		RegisterConfigFlag(cmd)
 		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "testdata/.ocmconfig-1"))
 
@@ -36,10 +46,9 @@ func TestGetOCMConfigForCommand(t *testing.T) {
 
 	t.Run("no config flag uses default discovery", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
+		cmd.SetContext(ContextWithEnvironment(t.Context(), EmptyEnvironment))
 		RegisterConfigFlag(cmd)
 
-		// Should not panic; may or may not error depending on whether
-		// default config files exist on the test machine
 		_, _ = GetOCMConfigForCommand(cmd)
 	})
 
@@ -57,17 +66,6 @@ func TestGetOCMConfigForCommand(t *testing.T) {
 	})
 }
 
-func stubStat(t *testing.T, existing map[string]bool) {
-	t.Helper()
-	original := statFunc
-	t.Cleanup(func() { statFunc = original })
-	statFunc = func(path string) (os.FileInfo, error) {
-		if existing == nil || existing[path] {
-			return nil, nil
-		}
-		return nil, os.ErrNotExist
-	}
-}
 func TestGetOCMConfigPaths(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -94,7 +92,6 @@ func TestGetOCMConfigPaths(t *testing.T) {
 			envVars: map[string]string{
 				"OCM_CONFIG":      "/ocm-config",
 				"XDG_CONFIG_HOME": "/xdg",
-				"HOME":            "/home/user",
 			},
 			want: func(workingDirectory, executableDirectory string) []string {
 				return []string{
@@ -128,12 +125,22 @@ func TestGetOCMConfigPaths(t *testing.T) {
 			executableDirectory := filepath.Dir(ex)
 			t.Chdir(workingDirectory)
 
-			stubStat(t, tt.existing)
-			for k, v := range tt.envVars {
-				t.Setenv(k, v)
-			}
+			ctx := ContextWithEnvironment(t.Context(), &Environment{
+				Stat: func(path string) (os.FileInfo, error) {
+					if tt.existing == nil || tt.existing[path] {
+						return nil, nil
+					}
+					return nil, os.ErrNotExist
+				},
+				Getenv: func(key string) string {
+					return tt.envVars[key]
+				},
+				UserHomeDir: func() (string, error) { return "/home/user", nil },
+				Getwd:       func() (string, error) { return workingDirectory, nil },
+				Executable:  func() (string, error) { return ex, nil },
+			})
 
-			got, err := GetOCMConfigPaths()
+			got, err := GetOCMConfigPaths(ctx)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
