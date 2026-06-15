@@ -133,7 +133,7 @@ uploadType: localBlob
 
 	r.NoError(transferCMD.ExecuteContext(transferCtx), "config-driven transfer should succeed")
 
-	repo := connectToOCIRegistry(t, targetRegistry)
+	repo := targetRegistry.Connect(t)
 	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
 	r.NoError(err, "transferred component must be present in target registry")
 	r.Len(desc.Component.Resources, 1)
@@ -258,7 +258,7 @@ recursive: 0
 
 	r.NoError(transferCMD.ExecuteContext(ctx), "transfer with flag-overridden recursion should succeed")
 
-	repo := connectToOCIRegistry(t, registry)
+	repo := registry.Connect(t)
 
 	parentDesc, err := repo.GetComponentVersion(t.Context(), parentComponent, version)
 	r.NoError(err, "parent component must be present in target registry")
