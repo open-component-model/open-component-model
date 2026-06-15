@@ -124,8 +124,8 @@ mounts:
       matrix:
         versions: ["main"]
 
-  - source: ../kubernetes/controller/bin/gen/crd
-    target: static/main/schemas/kubernetes/controller
+  - source: ../bindings/go/http/spec/config/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/http
     sites:
       matrix:
         versions: ["main"]
@@ -171,3 +171,10 @@ mounts:
     sites:
       matrix:
         versions: ["main"]
+
+  - source: ../kubernetes/controller/bin/gen/crd
+    target: static/main/schemas/kubernetes/controller
+    sites:
+      matrix:
+        versions: ["main"]
+
