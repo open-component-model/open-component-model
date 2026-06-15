@@ -14,15 +14,21 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
-	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// OwnershipReferrer returns a [tar.ReferrersFunc] linking the packed
-// artifact to its owning component version (ADR 0016). Subjects that
-// are not OCI manifests are skipped with a debug log.
-func OwnershipReferrer(artifact descriptor.Artifact, component string, version string) tar.ReferrersFunc {
-	return func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]tar.Referrer, error) {
+// Referrer pairs a descriptor with its raw bytes — a referrer manifest plus
+// the bytes the destination needs to Push it.
+type Referrer struct {
+	Descriptor ociImageSpecV1.Descriptor
+	Raw        []byte
+}
+
+// OwnershipReferrer returns a function that builds an ownership referrer
+// (ADR 0016) linking the packed artifact to its owning component version.
+// Subjects that are not OCI manifests are skipped with a debug log.
+func OwnershipReferrer(artifact descriptor.Artifact, component string, version string) func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error) {
+	return func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error) {
 		if !introspection.IsOCICompliantManifest(top) {
 			slog.DebugContext(ctx, "skipping ownership referrer: subject is not an OCI manifest", "mediaType", top.MediaType, "digest", top.Digest.String())
 			return nil, nil
@@ -64,7 +70,7 @@ func OwnershipReferrer(artifact descriptor.Artifact, component string, version s
 			Size:         int64(len(body)),
 		}
 
-		return []tar.Referrer{
+		return []Referrer{
 			{Descriptor: desc, Raw: body},
 			{Descriptor: ociImageSpecV1.DescriptorEmptyJSON, Raw: ociImageSpecV1.DescriptorEmptyJSON.Data},
 		}, nil

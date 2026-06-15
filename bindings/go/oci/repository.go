@@ -466,26 +466,12 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
 	}
-	configureReferrerCopy(&packOptions, artifact)
 	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, packOptions)
 	if err != nil {
 		return fmt.Errorf("failed to pack resource blob: %w", err)
 	}
 
 	return nil
-}
-
-// configureReferrerCopy requests that the pack layer copy through every referrer
-// that already travels inside an artifact's incoming layout (transfer) — any
-// manifest declaring a subject, e.g. an ADR-0016 ownership referrer — so links
-// the source attached survive the upload. Creating a fresh ownership referrer for
-// an opted-in resource is a separate, caller-driven step ([Repository.AddOwnership]);
-// this only handles copy-through. Sources are not resources, so they get nothing.
-func configureReferrerCopy(packOptions *pack.Options, artifact descriptor.Artifact) {
-	if _, isResource := artifact.(*descriptor.Resource); !isResource {
-		return
-	}
-	packOptions.Referrer = tar.ReferrerSource{CopyExisting: true}
 }
 
 // GetLocalResource retrieves a local resource from the repository.
@@ -741,12 +727,6 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("can only copy %q if it is tagged: %w", access.ImageReference, err)
 	}
 
-	// ExtendedCopyGraph copies main together with every referrer travelling in
-	// the layout (e.g. an ADR 0016 ownership referrer). A plain CopyGraph would
-	// miss them: a referrer's subject edge points back at main, which
-	// CopyGraph's default successor resolution does not follow.
-	// oci.ReadOnlyStore.Predecessors reads the layout's index.json, so the walk
-	// surfaces exactly the manifests the producer placed there.
 	extendedOpts := oras.ExtendedCopyGraphOptions{
 		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
 	}
@@ -867,7 +847,7 @@ func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store
 	// empty config/layer blob — before the referrer manifest itself. Collect the
 	// manifests, push the blobs, then push the manifests; this stays correct
 	// regardless of the order pack returns them in.
-	var manifests []tar.Referrer
+	var manifests []pack.Referrer
 	for _, r := range referrers {
 		if introspection.IsOCICompliantManifest(r.Descriptor) {
 			manifests = append(manifests, r)

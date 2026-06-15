@@ -48,13 +48,6 @@ type Options struct {
 	// The zero value is policy.GlobalAccessPolicyNever, which suppresses global access by default.
 	// Set policy.GlobalAccessPolicyAuto to auto-detect based on whether the storage backend is globally reachable.
 	GlobalAccessPolicy policy.GlobalAccessPolicy
-
-	// Referrer describes the referrer to attach to a packed OCI-layout artifact.
-	// An existing referrer of its ArtifactType in the incoming layout is copied
-	// through; only when none is present is a fresh one created (e.g. an ADR 0016
-	// ownership referrer — copied on transfer, created on add). Only applies to the
-	// OCI-layout path; ignored for single-layer blobs. The zero value attaches nothing.
-	Referrer tar.ReferrerSource
 }
 
 // ArtifactBlob packs a [ociblob.ArtifactBlob] into an OCI Storage
@@ -116,11 +109,12 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 
 func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
 	index, err := tar.CopyOCILayoutWithIndex(ctx, storage, b, tar.CopyOCILayoutWithIndexOptions{
-		CopyGraphOptions: opts.CopyGraphOptions,
+		ExtendedCopyGraphOptions: oras.ExtendedCopyGraphOptions{
+			CopyGraphOptions: opts.CopyGraphOptions,
+		},
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
 			return identity.Adopt(idx, b.Artifact)
 		},
-		Referrer: opts.Referrer,
 	})
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
