@@ -114,6 +114,16 @@ type ResourceRepository interface {
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error)
 }
 
+// OwnershipAwareRepository is an optional capability of a ResourceRepository
+// or LocalResourceRepository. It attaches ownership information (i.e. the
+// component name and version) to a resource. This ownership information can be
+// used by tooling to discover the component version that owns a resource.
+type OwnershipAwareRepository interface {
+	// AddOwnership attaches ownership information (i.e. the
+	// component name and version) to a resource.
+	AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error
+}
+
 // SourceRepository defines the interface for storing and retrieving OCM sources
 // independently of component versions from a store implementation.
 // TODO https://github.com/open-component-model/ocm-project/issues/857 also provide credentials in UploadSource/DownloadSource
