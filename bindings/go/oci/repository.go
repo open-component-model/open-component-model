@@ -5,6 +5,7 @@
 package oci
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 
@@ -47,8 +49,9 @@ import (
 )
 
 var (
-	_            ComponentVersionRepository = (*Repository)(nil)
-	versionRegex                            = regexp.MustCompile(compref.VersionRegex)
+	_            ComponentVersionRepository          = (*Repository)(nil)
+	_            repository.OwnershipAwareRepository = (*Repository)(nil)
+	versionRegex                                     = regexp.MustCompile(compref.VersionRegex)
 )
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
@@ -94,10 +97,6 @@ type Repository struct {
 	// globalAccessPolicy controls whether global access references are added to local blobs.
 	// Default (zero value) is Never, suppressing global access to discourage reliance on it.
 	globalAccessPolicy GlobalAccessPolicy
-
-	// ownershipReferrerPolicy controls asset-to-owner referrer creation on
-	// by-value resource uploads (ADR 0016). Default (zero value) is Disabled.
-	ownershipReferrerPolicy OwnershipReferrerPolicy
 }
 
 // SetGlobalAccessPolicy overrides the global access policy for this repository.
@@ -214,10 +213,9 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	return desc, err
 }
 
-// AddLocalResource adds a local resource to the repository. When the
-// repository has [OwnershipReferrerPolicyEnabled] and the resource is an
-// OCI-compliant manifest, an ownership referrer is pushed alongside it
-// (ADR 0016).
+// AddLocalResource adds a local resource to the repository. Ownership referrers
+// (ADR 0016) already inside the resource's layout are copied across; creating a
+// fresh one is the caller's job via [Repository.AddOwnership].
 func (repo *Repository) AddLocalResource(
 	ctx context.Context,
 	component, version string,
@@ -235,7 +233,7 @@ func (repo *Repository) AddLocalResource(
 
 	resource = resource.DeepCopy()
 
-	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, resource, b, repo.ownershipReferrerPolicy); err != nil {
+	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, resource, b); err != nil {
 		return nil, err
 	}
 
@@ -254,7 +252,7 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 
 	source = source.DeepCopy()
 
-	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content, OwnershipReferrerPolicyDisabled); err != nil {
+	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content); err != nil {
 		return nil, err
 	}
 
@@ -443,7 +441,6 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 	version string,
 	artifact descriptor.Artifact,
 	b blob.ReadOnlyBlob,
-	ownershipReferrerPolicy OwnershipReferrerPolicy,
 ) error {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
@@ -465,15 +462,23 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
 	}
-	if ownershipReferrerPolicy == OwnershipReferrerPolicyEnabled {
-		packOptions.Referrers = []tar.ReferrersFunc{pack.OwnershipReferrer(artifact, component, version)}
-	}
+	configureReferrerCopy(&packOptions, artifact)
 	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, packOptions)
 	if err != nil {
 		return fmt.Errorf("failed to pack resource blob: %w", err)
 	}
 
 	return nil
+}
+
+// configureReferrerCopy asks the pack layer to copy through referrers already in
+// a resource's incoming layout (e.g. ADR 0016 ownership referrers) so they
+// survive the upload. Non-resources (sources) get nothing.
+func configureReferrerCopy(packOptions *pack.Options, artifact descriptor.Artifact) {
+	if _, isResource := artifact.(*descriptor.Resource); !isResource {
+		return
+	}
+	packOptions.Referrer = tar.ReferrerSource{CopyExisting: true}
 }
 
 // GetLocalResource retrieves a local resource from the repository.
@@ -600,10 +605,20 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		// copy the full OCI manifest and its dependency graph
 		// into an in-memory OCI layout. This is used when the descriptor refers
 		// to another OCI-compliant manifest instead of a single layer.
+		//
+		// Pull any ownership referrers (ADR 0016) into the layout so they travel
+		// with the by-value resource. Only the main artifact is tagged, so a later
+		// re-add still resolves it as the top-level parent.
+		refs, err := lookupOwnershipReferrers(ctx, store, artifact)
+		if err != nil {
+			// Referrer-discovery failures must not fail an otherwise-healthy read.
+			slogcontext.Log(ctx, slog.LevelWarn, "failed listing ownership referrers; continuing without them", slog.String("reference", ref), slog.Any("err", err))
+		}
 		return tar.CopyToOCILayoutInMemory(ctx, store, artifact, tar.CopyToOCILayoutOptions{
 			CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
 			Tags:             []string{version},
 			TempDir:          repo.tempDir,
+			Referrers:        refs,
 		})
 	}
 
@@ -640,7 +655,9 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 
 	res = res.DeepCopy()
 
-	desc, access, err := repo.uploadOCIImage(ctx, res.Access, b)
+	// Copy across referrers already in the resource's layout (e.g. ADR 0016
+	// ownership referrers); a fresh upload simply has none to copy.
+	desc, access, err := repo.uploadOCIImage(ctx, res.Access, b, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
 	}
@@ -666,7 +683,8 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 
 	src = src.DeepCopy()
 
-	_, access, err := repo.uploadOCIImage(ctx, src.Access, b)
+	// Ownership (ADR 0016) applies to resources only, so never copy referrers here.
+	_, access, err := repo.uploadOCIImage(ctx, src.Access, b, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload source as OCI image: %w", err)
 	}
@@ -675,7 +693,7 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 	return src, nil
 }
 
-func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
+func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob, copyReferrers bool) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
 	var access accessv1.OCIImage
 	if err := repo.scheme.Convert(newAccess, &access); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
@@ -694,7 +712,9 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		err = errors.Join(err, ociStore.Close())
 	}()
 
-	mainArtifacts := ociStore.MainArtifacts(ctx)
+	// Referrers appear in the layout index (tagged by digest); split them out so
+	// main-artifact selection ignores them. They are copied below when requested.
+	mainArtifacts, referrers := ociStore.MainArtifactsAndReferrers(ctx)
 	if len(mainArtifacts) != 1 {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("expected exactly one main artifact in OCI layout, but got %d", len(mainArtifacts))
 	}
@@ -708,7 +728,14 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("can only copy %q if it is tagged: %w", access.ImageReference, err)
 	}
 
-	if err := oras.CopyGraph(ctx, ociStore, store, main, repo.resourceCopyOptions.CopyGraphOptions); err != nil {
+	// CopyGraph does not follow subject edges, so inject the referrers as extra
+	// successors of main to copy them in the same traversal.
+	copyOpts := repo.resourceCopyOptions.CopyGraphOptions
+	if copyReferrers && len(referrers) > 0 {
+		copyOpts.FindSuccessors = tar.InjectReferrersAsSuccessors(main, referrers)
+	}
+
+	if err := oras.CopyGraph(ctx, ociStore, store, main, copyOpts); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to upload resource via copy: %w", err)
 	}
 
@@ -717,6 +744,104 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	}
 
 	return main, &access, nil
+}
+
+// AddOwnership attaches an ownership referrer (ADR 0016) to resource, linking it
+// back to the owning component version. Subject and target store derive from the
+// resource's access type (see [Repository.resolveOwnershipSubject]). The referrer
+// is deterministic, so re-runs converge on the same digest; non-manifest subjects
+// are a no-op. Opting in is the caller's decision; credentials are unused, as
+// stores come from this repository's own resolver.
+func (repo *Repository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, _ runtime.Typed) (err error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	done := log.Operation(ctx, "add ownership referrer",
+		slog.String("component", component),
+		slog.String("version", version),
+		log.IdentityLogAttr("resource", resource.ToIdentity()))
+	defer func() {
+		done(err)
+	}()
+
+	store, subject, err := repo.resolveOwnershipSubject(ctx, component, version, resource)
+	if err != nil {
+		return err
+	}
+	return repo.buildAndPushOwnershipReferrer(ctx, store, subject, resource, component, version)
+}
+
+// resolveOwnershipSubject locates the manifest an ownership referrer points at
+// and the store it is pushed into, dispatching on the resource's access type:
+//
+//   - by-value ([v2.LocalBlob]): resolved by digest in this repository's own
+//     component store (the component-version descriptor is not written yet).
+//   - by-reference ([accessv1.OCIImage]): the referenced image is the subject;
+//     the referrer is pushed into its hosting registry, the image itself stays
+//     untouched.
+func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, version string, resource *descriptor.Resource) (spec.Store, ociImageSpecV1.Descriptor, error) {
+	if v2.IsLocalBlob(resource.Access) {
+		var localBlob v2.LocalBlob
+		if err := repo.scheme.Convert(resource.Access, &localBlob); err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("by-value ownership referrer requires a local blob access: %w", err)
+		}
+		_, store, err := repo.getStore(ctx, component, version)
+		if err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, err
+		}
+		subject, err := store.Resolve(ctx, localBlob.LocalReference)
+		if err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve uploaded artifact %q for ownership referrer: %w", localBlob.LocalReference, err)
+		}
+		return store, subject, nil
+	}
+
+	var access accessv1.OCIImage
+	if err := repo.scheme.Convert(resource.Access, &access); err != nil {
+		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource access to OCI image for ownership referrer: %w", err)
+	}
+	store, err := repo.resolver.StoreForReference(ctx, access.ImageReference)
+	if err != nil {
+		return nil, ociImageSpecV1.Descriptor{}, err
+	}
+	ref, err := looseref.ParseReference(access.ImageReference)
+	if err != nil {
+		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to parse image reference %q: %w", access.ImageReference, err)
+	}
+	subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
+	if err != nil {
+		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve subject %q for ownership referrer: %w", access.ImageReference, err)
+	}
+	return store, subject, nil
+}
+
+// buildAndPushOwnershipReferrer builds the ownership referrer for subject and
+// pushes it into store; no-op when subject is not an OCI manifest.
+func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, resource *descriptor.Resource, component, version string) error {
+	referrers, err := pack.OwnershipReferrer(resource, component, version)(ctx, subject)
+	if err != nil {
+		return fmt.Errorf("failed to build ownership referrer: %w", err)
+	}
+	if len(referrers) == 0 {
+		slogcontext.Log(ctx, slog.LevelDebug, "subject is not an OCI manifest; skipping ownership referrer", log.DescriptorLogAttr(subject))
+		return nil
+	}
+	// Registries reject manifests referencing absent blobs (MANIFEST_BLOB_UNKNOWN),
+	// so push blobs first, manifests last, regardless of the order pack returned.
+	var manifests []tar.Referrer
+	for _, r := range referrers {
+		if introspection.IsOCICompliantManifest(r.Descriptor) {
+			manifests = append(manifests, r)
+			continue
+		}
+		if err := store.Push(ctx, r.Descriptor, bytes.NewReader(r.Raw)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+			return fmt.Errorf("failed to push ownership referrer blob %s: %w", r.Descriptor.Digest, err)
+		}
+	}
+	for _, r := range manifests {
+		if err := store.Push(ctx, r.Descriptor, bytes.NewReader(r.Raw)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+			return fmt.Errorf("failed to push ownership referrer %s: %w", r.Descriptor.Digest, err)
+		}
+	}
+	return nil
 }
 
 // DownloadResource downloads a [*descriptor.Resource] from the repository.
@@ -735,6 +860,17 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 		return nil, err
 	}
 	return stream.Materialize(ctx)
+}
+
+// lookupOwnershipReferrers lists subject's ownership referrers (ADR 0016) in
+// store; nil (no error) when the store cannot answer referrer queries.
+func lookupOwnershipReferrers(ctx context.Context, store content.ReadOnlyStorage, subject ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	graphStore, ok := store.(content.ReadOnlyGraphStorage)
+	if !ok {
+		slogcontext.Log(ctx, slog.LevelDebug, "source store does not support referrer discovery; skipping ownership referrers", slog.String("store", fmt.Sprintf("%T", store)))
+		return nil, nil
+	}
+	return registry.Referrers(ctx, graphStore, subject, annotations.OwnershipArtifactType)
 }
 
 // DownloadSource downloads a [*descriptor.Source] from the repository.
@@ -933,12 +1069,15 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 		if resolved.Tag != "" {
 			tags = []string{typed.ImageReference}
 		}
+		// The stream discovers the artifact's ownership referrers (ADR 0016) from
+		// src so they travel with the copy; they are attached out-of-band via the
+		// Referrers API and would otherwise be left behind.
 		return &ocistream.OCIResourceStream{
-			ReadOnlyStorage: src,
-			Descriptor:      desc,
-			CopyOpts:        repo.resourceCopyOptions.CopyGraphOptions,
-			TempDir:         repo.tempDir,
-			Tags:            tags,
+			ReadOnlyGraphStorage: src,
+			Descriptor:           desc,
+			CopyOpts:             repo.resourceCopyOptions.CopyGraphOptions,
+			TempDir:              repo.tempDir,
+			Tags:                 tags,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -965,7 +1104,15 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		return nil, err
 	}
 
-	if err := oras.CopyGraph(ctx, rs, store, rs.Root(), repo.resourceCopyOptions.CopyGraphOptions); err != nil {
+	// ExtendedCopyGraph copies the root plus its ownership referrers (ADR 0016),
+	// which plain CopyGraph would miss (subject edges point back at the root).
+	// The stream's Predecessors reports only ownership referrers, and Depth 1
+	// limits the walk to the root's direct referrers.
+	extendedOpts := oras.ExtendedCopyGraphOptions{
+		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
+		Depth:            1,
+	}
+	if err := oras.ExtendedCopyGraph(ctx, rs, store, rs.Root(), extendedOpts); err != nil {
 		return nil, fmt.Errorf("failed to stream resource via copy: %w", err)
 	}
 

@@ -42,6 +42,32 @@ func TestProcessResourceDigest_RawAccessType(t *testing.T) {
 		"ProcessResourceDigest must convert *runtime.Raw access to typed before passing to the inner repository")
 }
 
+func TestAddOwnership_RawAccessType(t *testing.T) {
+	// A resource from a component descriptor carries *runtime.Raw access;
+	// AddOwnership must convert it to the typed spec before delegating.
+	raw := &runtime.Raw{}
+	require.NoError(t, ociaccess.Scheme.Convert(&v1.OCIImage{
+		Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+		ImageReference: "nonexistent.invalid/test:v1.0.0",
+	}, raw))
+
+	res := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "test", Version: "1.0.0"},
+		},
+		Type:   "ociArtifact",
+		Access: raw,
+	}
+
+	repo := NewResourceRepository(nil)
+	err := repo.AddOwnership(t.Context(), "ocm.software/test", "1.0.0", res, nil)
+
+	// Failing on the unreachable host means conversion succeeded and the inner
+	// by-reference path was reached.
+	require.ErrorContains(t, err, "nonexistent.invalid",
+		"AddOwnership must convert *runtime.Raw access to typed and reach the inner repository")
+}
+
 func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 	r := require.New(t)
 

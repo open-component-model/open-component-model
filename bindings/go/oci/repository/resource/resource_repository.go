@@ -49,6 +49,9 @@ type ResourceRepository struct {
 // make sure that ResourceRepository implements the oci ResourceRepository interface
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
+// ResourceRepository also implements the optional ownership capability (ADR 0016).
+var _ repository.OwnershipAwareRepository = (*ResourceRepository)(nil)
+
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	options := &Options{}
 	for _, opt := range opts {
@@ -144,6 +147,34 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("error downloading resource: %w", err)
 	}
 	return b, nil
+}
+
+// AddOwnership attaches an ownership referrer (ADR 0016) to a by-reference OCI
+// image resource in its hosting registry, delegating to the inner repository's
+// [oci.Repository.AddOwnership].
+func (p *ResourceRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	if err != nil {
+		return err
+	}
+
+	// Convert *runtime.Raw access to the typed spec the inner repository
+	// dispatches on.
+	resource = resource.DeepCopy()
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	resource.Access = obj
+
+	if err := repo.AddOwnership(ctx, component, version, resource, credentials); err != nil {
+		return fmt.Errorf("error attaching ownership referrer: %w", err)
+	}
+	return nil
 }
 
 func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {

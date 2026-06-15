@@ -430,6 +430,28 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 					}
 				}
 			}
+
+			if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways && c.opts.ResourceRepositoryProvider != nil {
+				repo, err := c.opts.GetResourceRepository(ctx, resource)
+				if err != nil {
+					return nil, fmt.Errorf("error getting resource repository for ownership of %q: %w", resource.ToIdentity(), err)
+				}
+
+				var creds ocmruntime.Typed
+				if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+					if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
+						return nil, fmt.Errorf("error resolving credentials for resource by-value processing: %w", err)
+					}
+				}
+
+				if ownershipAwareRepository, ok := repo.(OwnershipAwareRepository); ok {
+					if err := ownershipAwareRepository.AddOwnership(ctx, component, version, res, creds); err != nil {
+						return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
+					}
+				} else {
+					return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
+				}
+			}
 		}
 	default:
 		return nil, fmt.Errorf("resource %q has no access type and no input method", resource.ToIdentity())
@@ -461,7 +483,7 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 	var creds ocmruntime.Typed
 	if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
 		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
-			return nil, fmt.Errorf("error resolving credentials for resource by-value processing %w", err)
+			return nil, fmt.Errorf("error resolving credentials for resource by-value processing: %w", err)
 		}
 	}
 
@@ -469,7 +491,7 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource: %w", err)
 	}
-	return addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, data)
+	return addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, data, creds)
 }
 
 func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo TargetRepository, src *constructor.Source, component, version string) (*descriptor.Source, error) {
@@ -570,7 +592,7 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	var processedResource *descriptor.Resource
 
 	if result.ProcessedBlobData != nil {
-		processedResource, err = addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, result.ProcessedBlobData)
+		processedResource, err = addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, result.ProcessedBlobData, creds)
 	} else if result.ProcessedResource != nil {
 		processedResource = result.ProcessedResource
 	}
@@ -679,6 +701,7 @@ func addColocatedResourceLocalBlob(
 	component, version string,
 	resource *constructor.Resource,
 	data blob.ReadOnlyBlob,
+	creds ocmruntime.Typed,
 ) (processed *descriptor.Resource, err error) {
 	localBlob := &v2.LocalBlob{}
 
@@ -712,6 +735,16 @@ func addColocatedResourceLocalBlob(
 	uploaded, err := repo.AddLocalResource(ctx, component, version, descResource, data)
 	if err != nil {
 		return nil, fmt.Errorf("error adding local resource %q based on input type %q as local resource to component %q : %w", resource.ToIdentity(), resource.Input.GetType(), component, err)
+	}
+
+	if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
+		ownershipAwareRepo, ok := repo.(OwnershipAwareRepository)
+		if !ok {
+			return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
+		}
+		if err := ownershipAwareRepo.AddOwnership(ctx, component, version, uploaded, creds); err != nil {
+			return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
+		}
 	}
 
 	return uploaded, nil

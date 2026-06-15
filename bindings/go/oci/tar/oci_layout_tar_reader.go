@@ -118,6 +118,32 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 // For example, if an OCI Layout was downloaded from "ghcr.io/open-component-model/ocm-layout:v1.0.0",
 // and the index contains multiple manifests, this function will return a single top-level artifact
 // referencing the main index behind the given reference.
+//
+// Referrers (manifests declaring a subject) are excluded.
 func (s *CloseableReadOnlyStore) MainArtifacts(ctx context.Context) []ociImageSpecV1.Descriptor {
-	return TopLevelArtifacts(ctx, s.ReadOnlyStore, s.Index.Manifests)
+	mainArtifacts, _ := s.MainArtifactsAndReferrers(ctx)
+	return mainArtifacts
+}
+
+// Referrers returns the manifests in the OCI layout index that declare a
+// subject, e.g. an ADR 0016 ownership referrer.
+func (s *CloseableReadOnlyStore) Referrers(ctx context.Context) []ociImageSpecV1.Descriptor {
+	_, referrers := s.MainArtifactsAndReferrers(ctx)
+	return referrers
+}
+
+// MainArtifactsAndReferrers partitions the layout index manifests in a single
+// pass: those declaring a subject are referrers; the rest are reduced via
+// [TopLevelArtifacts] to the main artifacts. A manifest that fails to fetch or
+// decode counts as a main candidate rather than being dropped.
+func (s *CloseableReadOnlyStore) MainArtifactsAndReferrers(ctx context.Context) (mainArtifacts, referrers []ociImageSpecV1.Descriptor) {
+	var candidates []ociImageSpecV1.Descriptor
+	for _, manifest := range s.Index.Manifests {
+		if subject, err := Subject(ctx, s.ReadOnlyStore, manifest); err == nil && subject != nil {
+			referrers = append(referrers, manifest)
+			continue
+		}
+		candidates = append(candidates, manifest)
+	}
+	return TopLevelArtifacts(ctx, s.ReadOnlyStore, candidates), referrers
 }

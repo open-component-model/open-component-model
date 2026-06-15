@@ -5,18 +5,21 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/memory"
+	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -27,10 +30,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
+	"ocm.software/open-component-model/bindings/go/oci/internal/pack"
 	"ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
@@ -2036,13 +2041,9 @@ func TestRepositoryHealthCheck(t *testing.T) {
 	})
 }
 
-// TestRepository_AddLocalSource_OwnershipPolicyEnabled_OCILayoutBody pins the
-// regression that enabling OwnershipReferrerPolicyEnabled must not affect
-// AddLocalSource for any OCI-packed source body. uploadAndUpdateLocalArtifact
-// is shared with AddLocalResource; AddLocalSource hardcodes the policy to
-// OwnershipReferrerPolicyDisabled so OwnershipReferrer is never invoked for
-// sources, regardless of the repository's configured policy.
-func TestRepository_AddLocalSource_OwnershipPolicyEnabled_OCILayoutBody(t *testing.T) {
+// TestRepository_AddLocalSource_OCILayoutBody verifies that AddLocalSource
+// never creates an ownership referrer for an OCI-packed source body.
+func TestRepository_AddLocalSource_OCILayoutBody(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
 
@@ -2051,7 +2052,6 @@ func TestRepository_AddLocalSource_OwnershipPolicyEnabled_OCILayoutBody(t *testi
 	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
 	repo := Repository(t,
 		ocictf.WithCTF(store),
-		oci.WithOwnershipReferrerPolicy(oci.OwnershipReferrerPolicyEnabled),
 	)
 
 	// Build an OCI-layout source body (single layer + manifest, tagged). The
@@ -2083,7 +2083,7 @@ func TestRepository_AddLocalSource_OwnershipPolicyEnabled_OCILayoutBody(t *testi
 	}
 
 	_, err = repo.AddLocalSource(ctx, "ocm.software/test-component", "1.0.0", source, inmemory.New(bytes.NewReader(layoutBytes)))
-	r.NoError(err, "AddLocalSource must not invoke OwnershipReferrer for sources, even when the policy is enabled")
+	r.NoError(err, "AddLocalSource must not invoke OwnershipReferrer for sources")
 }
 
 func buildTestManifestStream(t *testing.T) (*memory.Store, ociImageSpecV1.Descriptor) {
@@ -2176,9 +2176,9 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 			}
 
 			stream := &ocistream.OCIResourceStream{
-				ReadOnlyStorage: memStore,
-				Descriptor:      manifestDesc,
-				CopyOpts:        oras.DefaultCopyGraphOptions,
+				ReadOnlyGraphStorage: memStore,
+				Descriptor:           manifestDesc,
+				CopyOpts:             oras.DefaultCopyGraphOptions,
 			}
 
 			res, err := repo.UploadResourceStream(ctx, resource, stream)
@@ -2196,4 +2196,490 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ownershipArtifactAnnotation is a software.ocm.artifact value in the shape
+// pack.OwnershipReferrer marshals for a resource subject.
+const ownershipArtifactAnnotation = `[{"identity":{"name":"backend","version":"1.0.0"},"kind":"resource"}]`
+
+// buildLayoutWithOwnershipReferrer serializes an OCI layout tar containing a
+// tagged one-layer image and an ownership referrer (ADR 0016) whose subject is
+// that image.
+func buildLayoutWithOwnershipReferrer(t *testing.T, tag, component, version string) (layoutBytes []byte, main, referrer ociImageSpecV1.Descriptor) {
+	t.Helper()
+	r := require.New(t)
+	ctx := context.Background()
+
+	var buf bytes.Buffer
+	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	r.NoError(err)
+
+	layerData := []byte("layer-" + component)
+	layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerData)
+	r.NoError(w.Push(ctx, layer, bytes.NewReader(layerData)))
+
+	main, err = oras.PackManifest(ctx, w, oras.PackManifestVersion1_1, "application/vnd.test.artifact", oras.PackManifestOptions{
+		Layers: []ociImageSpecV1.Descriptor{layer},
+	})
+	r.NoError(err)
+
+	// PackManifest (v1.1) already pushed the empty config; tolerate the duplicate.
+	empty := ociImageSpecV1.DescriptorEmptyJSON
+	if err := w.Push(ctx, empty, bytes.NewReader(empty.Data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		r.NoError(err)
+	}
+
+	refBody, err := json.Marshal(ociImageSpecV1.Manifest{
+		Versioned:    specs.Versioned{SchemaVersion: 2},
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: annotations.OwnershipArtifactType,
+		Config:       empty,
+		Layers:       []ociImageSpecV1.Descriptor{empty},
+		Subject:      &main,
+		// Mirror the three annotations pack.OwnershipReferrer sets in production.
+		Annotations: map[string]string{
+			annotations.OwnershipComponentName:    component,
+			annotations.OwnershipComponentVersion: version,
+			annotations.ArtifactAnnotationKey:     ownershipArtifactAnnotation,
+		},
+	})
+	r.NoError(err)
+	referrer = ociImageSpecV1.Descriptor{
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: annotations.OwnershipArtifactType,
+		Digest:       digest.FromBytes(refBody),
+		Size:         int64(len(refBody)),
+	}
+	r.NoError(w.Push(ctx, referrer, bytes.NewReader(refBody)))
+
+	r.NoError(w.Tag(ctx, main, tag))
+	r.NoError(w.Close())
+	return buf.Bytes(), main, referrer
+}
+
+// TestRepository_AddLocalResource_CopiesOwnershipReferrer verifies that an
+// ownership referrer (ADR 0016) carried in a by-value resource's layout is
+// copied to the target. The resource has external relation, so no referrer is
+// created and any referrer in the target comes from the copy path.
+func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+	const (
+		tag       = "latest"
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+	)
+
+	layoutBytes, main, referrer := buildLayoutWithOwnershipReferrer(t, tag, component, version)
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	resource := &descriptor.Resource{
+		Relation:    descriptor.ExternalRelation,
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend", Version: version}},
+		Type:        "ociArtifact",
+		Access: &v2.LocalBlob{
+			LocalReference: digest.FromBytes(layoutBytes).String(),
+			MediaType:      layout.MediaTypeOCIImageLayoutTarV1,
+		},
+	}
+
+	_, err = repo.AddLocalResource(ctx, component, version, resource, inmemory.New(bytes.NewReader(layoutBytes)))
+	r.NoError(err)
+
+	componentStore, err := store.StoreForReference(ctx, store.ComponentVersionReference(ctx, component, version))
+	r.NoError(err)
+
+	mainExists, err := componentStore.Exists(ctx, main)
+	r.NoError(err)
+	r.True(mainExists, "the main artifact must be stored")
+
+	referrerExists, err := componentStore.Exists(ctx, referrer)
+	r.NoError(err)
+	r.True(referrerExists, "ownership referrer must be copied to the target even when no referrer is created")
+
+	// The copied referrer must retain its ownership annotations verbatim.
+	rc, err := componentStore.Fetch(ctx, referrer)
+	r.NoError(err)
+	defer func() { r.NoError(rc.Close()) }()
+	var copied ociImageSpecV1.Manifest
+	r.NoError(json.NewDecoder(rc).Decode(&copied))
+	r.Equal(component, copied.Annotations[annotations.OwnershipComponentName], "copied referrer must retain its component name")
+	r.Equal(version, copied.Annotations[annotations.OwnershipComponentVersion], "copied referrer must retain its component version")
+	r.Equal(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
+}
+
+// TestRepository_UploadResource_CopiesOwnershipReferrer verifies that
+// UploadResource copies an ownership referrer carried in the resource's layout
+// through to the target. External relation means no referrer is created, so
+// any referrer in the target comes from the copy path.
+func TestRepository_UploadResource_CopiesOwnershipReferrer(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+	const (
+		imageRef  = "test-image:latest"
+		tag       = "latest"
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+	)
+
+	layoutBytes, main, referrer := buildLayoutWithOwnershipReferrer(t, tag, component, version)
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	resource := &descriptor.Resource{
+		Relation:    descriptor.ExternalRelation,
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend", Version: version}},
+		Type:        "ociImage",
+		Access:      &v1.OCIImage{ImageReference: imageRef},
+	}
+
+	_, err = repo.UploadResource(ctx, resource, inmemory.New(bytes.NewReader(layoutBytes)))
+	r.NoError(err)
+
+	imgStore, err := store.StoreForReference(ctx, imageRef)
+	r.NoError(err)
+
+	mainExists, err := imgStore.Exists(ctx, main)
+	r.NoError(err)
+	r.True(mainExists, "the main artifact must be uploaded")
+
+	referrerExists, err := imgStore.Exists(ctx, referrer)
+	r.NoError(err)
+	r.True(referrerExists, "ownership referrer must ride along in the same CopyGraph as the main artifact")
+
+	// The copied referrer must retain its ownership annotations verbatim.
+	rc, err := imgStore.Fetch(ctx, referrer)
+	r.NoError(err)
+	defer func() { r.NoError(rc.Close()) }()
+	var copied ociImageSpecV1.Manifest
+	r.NoError(json.NewDecoder(rc).Decode(&copied))
+	r.Equal(component, copied.Annotations[annotations.OwnershipComponentName], "copied referrer must retain its component name")
+	r.Equal(version, copied.Annotations[annotations.OwnershipComponentVersion], "copied referrer must retain its component version")
+	r.Equal(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
+}
+
+// TestRepository_AddOwnershipByReference verifies that AddOwnership pushes an
+// ownership referrer (ADR 0016) for a by-reference OCI image into the registry
+// hosting the image, without modifying the image itself.
+func TestRepository_AddOwnershipByReference(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+	const (
+		imageRef  = "ghcr.io/acme/backend:latest"
+		tag       = "latest"
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+	)
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	// Stage a tagged image in the hosting store, mimicking a pre-existing
+	// registry image referenced by the resource.
+	imgStore, err := store.StoreForReference(ctx, imageRef)
+	r.NoError(err)
+
+	layerData := []byte("layer")
+	layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerData)
+	r.NoError(imgStore.Push(ctx, layer, bytes.NewReader(layerData)))
+
+	main, err := oras.PackManifest(ctx, imgStore, oras.PackManifestVersion1_1, "application/vnd.test.artifact", oras.PackManifestOptions{
+		Layers: []ociImageSpecV1.Descriptor{layer},
+	})
+	r.NoError(err)
+	r.NoError(imgStore.Tag(ctx, main, tag))
+
+	resource := &descriptor.Resource{
+		Relation:    descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend-image", Version: version}},
+		Type:        "ociArtifact",
+		Access:      &v1.OCIImage{ImageReference: imageRef},
+	}
+
+	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
+
+	// Build the expected content-addressed referrer the same way the repository does.
+	resolved, err := imgStore.Resolve(ctx, tag)
+	r.NoError(err)
+	referrers, err := pack.OwnershipReferrer(resource, component, version)(ctx, resolved)
+	r.NoError(err)
+	r.NotEmpty(referrers, "ownership referrer must be produced for an OCI manifest subject")
+
+	exists, err := imgStore.Exists(ctx, referrers[0].Descriptor)
+	r.NoError(err)
+	r.True(exists, "ownership referrer manifest must be pushed into the hosting store")
+
+	stillThere, err := imgStore.Exists(ctx, main)
+	r.NoError(err)
+	r.True(stillThere, "the referenced image must remain present and unchanged")
+
+	// Re-running must be idempotent: same referrer present, subject untouched.
+	// Exact-count checks need the live Referrers API, which the CTF store lacks.
+	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
+
+	stillExists, err := imgStore.Exists(ctx, referrers[0].Descriptor)
+	r.NoError(err)
+	r.True(stillExists, "the same content-addressed referrer must remain after an idempotent re-run")
+
+	resolvedAfter, err := imgStore.Resolve(ctx, tag)
+	r.NoError(err)
+	r.Equal(resolved, resolvedAfter, "the subject must be unchanged by re-running the attach")
+}
+
+// TestRepository_AddOwnership_ResolveErrors verifies that AddOwnership returns
+// an error when the subject cannot be resolved, on both the by-reference and
+// by-value access paths.
+func TestRepository_AddOwnership_ResolveErrors(t *testing.T) {
+	const (
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+		// well-formed but absent, so resolution fails rather than parsing.
+		missingDigest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	)
+	tests := []struct {
+		name    string
+		access  runtime.Typed
+		wantErr string
+	}{
+		{
+			name:    "by-reference subject does not resolve",
+			access:  &v1.OCIImage{ImageReference: "ghcr.io/acme/missing:latest"},
+			wantErr: "failed to resolve subject",
+		},
+		{
+			name:    "by-value local blob does not resolve",
+			access:  &v2.LocalBlob{LocalReference: missingDigest, MediaType: "application/octet-stream"},
+			wantErr: "failed to resolve uploaded artifact",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := context.Background()
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo := Repository(t, ocictf.WithCTF(store))
+
+			resource := &descriptor.Resource{
+				Relation:    descriptor.LocalRelation,
+				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend-image", Version: version}},
+				Type:        "ociArtifact",
+				Access:      tt.access,
+			}
+
+			err = repo.AddOwnership(ctx, component, version, resource, nil)
+			r.Error(err)
+			r.ErrorContains(err, tt.wantErr)
+		})
+	}
+}
+
+// blobValidatingResolver wraps a resolver so its stores reject manifests whose
+// referenced blobs are missing, emulating a registry's MANIFEST_BLOB_UNKNOWN
+// behaviour that the CTF store lacks.
+type blobValidatingResolver struct{ oci.Resolver }
+
+func (r blobValidatingResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
+	s, err := r.Resolver.StoreForReference(ctx, reference)
+	if err != nil {
+		return nil, err
+	}
+	return &blobValidatingStore{Store: s}, nil
+}
+
+// blobValidatingStore rejects a manifest push when a referenced blob is missing.
+type blobValidatingStore struct{ spec.Store }
+
+func (s *blobValidatingStore) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, r io.Reader) error {
+	if expected.MediaType != ociImageSpecV1.MediaTypeImageManifest {
+		return s.Store.Push(ctx, expected, r)
+	}
+	raw, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	var m ociImageSpecV1.Manifest
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return err
+	}
+	for _, ref := range append([]ociImageSpecV1.Descriptor{m.Config}, m.Layers...) {
+		exists, err := s.Store.Exists(ctx, ref)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("manifest %s references missing blob %s: MANIFEST_BLOB_UNKNOWN", expected.Digest, ref.Digest)
+		}
+	}
+	return s.Store.Push(ctx, expected, bytes.NewReader(raw))
+}
+
+// TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest verifies the
+// empty config/layer blob reaches the registry before the referrer manifest
+// that references it. The subject is staged with a non-empty config so the
+// empty blob is genuinely absent up front.
+func TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+	const (
+		imageRef  = "ghcr.io/acme/backend:latest"
+		tag       = "latest"
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+	)
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, oci.WithResolver(blobValidatingResolver{Resolver: store}))
+
+	// Stage the subject image directly on the CTF store, bypassing validation.
+	imgStore, err := store.StoreForReference(ctx, imageRef)
+	r.NoError(err)
+	layer := []byte("layer")
+	layerDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layer)
+	r.NoError(imgStore.Push(ctx, layerDesc, bytes.NewReader(layer)))
+	config := []byte(`{"architecture":"amd64","os":"linux"}`)
+	configDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageConfig, config)
+	r.NoError(imgStore.Push(ctx, configDesc, bytes.NewReader(config)))
+	manifestRaw, err := json.Marshal(ociImageSpecV1.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Config:    configDesc,
+		Layers:    []ociImageSpecV1.Descriptor{layerDesc},
+	})
+	r.NoError(err)
+	manifestDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, manifestRaw)
+	r.NoError(imgStore.Push(ctx, manifestDesc, bytes.NewReader(manifestRaw)))
+	r.NoError(imgStore.Tag(ctx, manifestDesc, tag))
+
+	emptyExists, err := imgStore.Exists(ctx, ociImageSpecV1.DescriptorEmptyJSON)
+	r.NoError(err)
+	r.False(emptyExists, "precondition: the empty config blob must be absent before the attach")
+
+	resource := &descriptor.Resource{
+		Relation:    descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend-image", Version: version}},
+		Type:        "ociArtifact",
+		Access:      &v1.OCIImage{ImageReference: imageRef},
+	}
+
+	// With the old manifest-first push order this fails MANIFEST_BLOB_UNKNOWN.
+	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
+
+	emptyExists, err = imgStore.Exists(ctx, ociImageSpecV1.DescriptorEmptyJSON)
+	r.NoError(err)
+	r.True(emptyExists, "the empty config/layer blob must be pushed during the attach")
+}
+
+// TestRepository_AddOwnership_CreatesByValueReferrer verifies that AddOwnership
+// creates and pushes an ownership referrer for a resource uploaded by value.
+// The incoming layout carries no referrer, so any referrer in the store comes
+// from creation.
+func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+	const (
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+	)
+
+	// A single-manifest OCI layout with no ownership referrer of its own.
+	layoutBytes, _ := createSingleLayerOCIImage(t, []byte("by-value payload"), "irrelevant:latest")
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	resource := &descriptor.Resource{
+		Relation:    descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend", Version: version}},
+		Type:        "ociArtifact",
+		Access: &v2.LocalBlob{
+			LocalReference: digest.FromBytes(layoutBytes).String(),
+			MediaType:      layout.MediaTypeOCIImageLayoutTarV1,
+		},
+	}
+
+	uploaded, err := repo.AddLocalResource(ctx, component, version, resource, inmemory.New(bytes.NewReader(layoutBytes)))
+	r.NoError(err)
+
+	// The uploaded resource's local reference points at the unpacked manifest,
+	// which is the referrer subject.
+	componentStore, err := store.StoreForReference(ctx, store.ComponentVersionReference(ctx, component, version))
+	r.NoError(err)
+	subject, err := componentStore.Resolve(ctx, uploaded.Access.(*v2.LocalBlob).LocalReference)
+	r.NoError(err)
+	expected, err := pack.OwnershipReferrer(uploaded, component, version)(ctx, subject)
+	r.NoError(err)
+	r.NotEmpty(expected, "an OCI manifest subject must yield an ownership referrer")
+
+	existsBefore, err := componentStore.Exists(ctx, expected[0].Descriptor)
+	r.NoError(err)
+	r.False(existsBefore, "no ownership referrer must exist before AddOwnership (the layout carried none)")
+
+	// credentials are unused for the repository's own store.
+	r.NoError(repo.AddOwnership(ctx, component, version, uploaded, nil))
+
+	existsAfter, err := componentStore.Exists(ctx, expected[0].Descriptor)
+	r.NoError(err)
+	r.True(existsAfter, "AddOwnership must create and push an ownership referrer for the uploaded manifest")
+
+	// Idempotent: the content-addressed referrer is unchanged by a second run.
+	r.NoError(repo.AddOwnership(ctx, component, version, uploaded, nil))
+	stillExists, err := componentStore.Exists(ctx, expected[0].Descriptor)
+	r.NoError(err)
+	r.True(stillExists, "re-running AddOwnership must converge on the same referrer")
+}
+
+// TestRepository_AddOwnership_RawBlobSubjectSkipped verifies that AddOwnership
+// is a no-op (nil error, no referrer) when the resolved subject is a raw blob
+// rather than an OCI manifest.
+func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+	const (
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+	)
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	// Stage a raw, non-manifest blob as the subject.
+	componentStore, err := store.StoreForReference(ctx, store.ComponentVersionReference(ctx, component, version))
+	r.NoError(err)
+	raw := []byte("not a manifest")
+	rawDesc := content.NewDescriptorFromBytes("application/octet-stream", raw)
+	r.NoError(componentStore.Push(ctx, rawDesc, bytes.NewReader(raw)))
+
+	resource := &descriptor.Resource{
+		Relation:    descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend", Version: version}},
+		Type:        "blob",
+		Access: &v2.LocalBlob{
+			LocalReference: rawDesc.Digest.String(),
+			MediaType:      "application/octet-stream",
+		},
+	}
+
+	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
+
+	// A raw-blob subject yields no referrer, so nothing was pushed.
+	referrers, err := pack.OwnershipReferrer(resource, component, version)(ctx, rawDesc)
+	r.NoError(err)
+	r.Empty(referrers, "a raw-blob subject must yield no ownership referrer")
 }

@@ -33,8 +33,15 @@ type mockTargetRepository struct {
 	components             map[string]*descriptor.Descriptor
 	addedLocalResources    []*descriptor.Resource
 	addedLocalResourceData map[string]blob.ReadOnlyBlob // resource identity -> blob data
-	addedSources           []*descriptor.Source
-	addedVersions          []*descriptor.Descriptor
+
+	// ownership attach tracking (AddOwnership).
+	ownershipCalls    int
+	ownershipResource *descriptor.Resource
+	ownershipCreds    runtime.Typed
+	ownershipErr      error // returned by AddOwnership
+
+	addedSources  []*descriptor.Source
+	addedVersions []*descriptor.Descriptor
 }
 
 func newMockTargetRepository() *mockTargetRepository {
@@ -65,6 +72,15 @@ func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, 
 	// Store the blob data so we can verify it later
 	m.addedLocalResourceData[resource.ToIdentity().String()] = data
 	return resource, nil
+}
+
+func (m *mockTargetRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.ownershipCalls++
+	m.ownershipResource = resource
+	m.ownershipCreds = credentials
+	return m.ownershipErr
 }
 
 func (m *mockTargetRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {

@@ -56,6 +56,16 @@ const (
 	ExternalRelation ResourceRelation = "external"
 )
 
+// OwnershipPolicy controls whether ownership (ADR 0016) is recorded for a resource during construction (ocm add).
+type OwnershipPolicy string
+
+const (
+	// OwnershipPolicyNever is the default: no ownership is recorded.
+	OwnershipPolicyNever OwnershipPolicy = "Never"
+	// OwnershipPolicyAlways records ownership for the resource.
+	OwnershipPolicyAlways OwnershipPolicy = "Always"
+)
+
 // A Resource is a delivery artifact, intended for deployment into a runtime environment, or describing additional content,
 // relevant for a deployment mechanism.
 // For example, installation procedures or meta-model descriptions controlling orchestration and/or deployment mechanisms.
@@ -72,11 +82,23 @@ type Resource struct {
 	// Relation describes the relation of the resource to the component.
 	// Can be a local or external resource.
 	Relation ResourceRelation `json:"-"`
+	// Options bundles optional, construction-time directives for the resource.
+	Options ResourceOptions `json:"-"`
 	// AccessOrInput defines the access or input information of the resource.
 	// In a component constructor, there is only one access or input information.
 	AccessOrInput `json:"-"`
 
+	// TODO: Options and ConstructorAttributes sit alongside each other here, which is
+	// awkward; reconcile them into a single construction-options grouping.
 	ConstructorAttributes `json:"-"`
+}
+
+// ResourceOptions bundles optional, construction-time directives for a resource.
+// +k8s:deepcopy-gen=true
+type ResourceOptions struct {
+	// OwnershipPolicy controls whether ownership is recorded for this resource.
+	// The zero value behaves like OwnershipPolicyNever.
+	OwnershipPolicy OwnershipPolicy `json:"-"`
 }
 
 // ConstructorAttributes defines additional attributes used during component construction.
