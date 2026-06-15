@@ -11,6 +11,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
@@ -43,6 +44,33 @@ type CachingResolver struct {
 
 	cacheMu sync.RWMutex
 	cache   map[string]spec.Store
+
+	// blobCache, when non-nil, is layered in front of every
+	// [*remote.Repository] this resolver hands out via
+	// [cache.Repository]. Configure via [WithBlobCache].
+	blobCache *cache.BlobCache
+
+	// referenceCache, when non-nil, short-circuits Resolve calls on
+	// every [*remote.Repository] this resolver hands out via
+	// [cache.Repository]. Configure via [WithReferenceCache].
+	referenceCache *cache.ReferenceCache
+}
+
+// SetBlobCache wires a manifest blob cache into the resolver. Stores
+// returned after this call (including those served from the resolver's
+// internal store cache) are wrapped with [cache.Repository] so their
+// Fetch consults the cache. Use [WithBlobCache] for the option-based
+// equivalent.
+func (resolver *CachingResolver) SetBlobCache(c *cache.BlobCache) {
+	resolver.blobCache = c
+}
+
+// SetReferenceCache wires a reference cache into the resolver. Stores
+// returned after this call are wrapped with [cache.Repository] so
+// their Resolve consults the cache. Use [WithReferenceCache] for the
+// option-based equivalent.
+func (resolver *CachingResolver) SetReferenceCache(c *cache.ReferenceCache) {
+	resolver.referenceCache = c
 }
 
 func (resolver *CachingResolver) SetClient(client remote.Client) {
@@ -135,9 +163,15 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		repo.Client = resolver.baseClient
 	}
 
-	resolver.addToCache(key, repo)
+	var store spec.Store = repo
 
-	return repo, nil
+	if resolver.blobCache != nil || resolver.referenceCache != nil {
+		store = cache.ProxyRepository(repo, resolver.blobCache, resolver.referenceCache)
+	}
+
+	resolver.addToCache(key, store)
+
+	return store, nil
 }
 
 func (resolver *CachingResolver) addToCache(reference string, store spec.Store) {
