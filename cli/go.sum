@@ -396,8 +396,8 @@ ocm.software/open-component-model/bindings/go/signing v0.0.0-20260612063051-2d68
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260612063051-2d68fb4f15bc/go.mod h1:lwVDnpeMZt0QaSF3Bvgy4sboB3mvtPjoe6MtenAouo8=
 ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260612060103-25643fdae86d h1:Zvz/daW89wtx1Xj/1/qnumFezIY8ObxFOyVziQc4vkM=
 ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260612060103-25643fdae86d/go.mod h1:K7vNrscE5BwATa/8DHWPVXHUqxOyHd3+a+oCb7Phn68=
-ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260612063051-2d68fb4f15bc h1:1QH/zQscdB7BlMxFWeDG1Z+Jh3DBcZfvD6FyS+HRbjo=
-ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260612063051-2d68fb4f15bc/go.mod h1:BeznS2AWMRD0M+6aq7rqSNNnhUshoZuI45bH3porBf4=
+ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260615060942-874118842472 h1:gqsMhkS69PVL8sM974bct7JERoXIoIJwDdj+KSWFg0w=
+ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260615060942-874118842472/go.mod h1:gVtxqdM9XrCf2+MNiAozJTDixDuHWcCacKV5GJ8kJ2k=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260612063051-2d68fb4f15bc h1:jBAwpO40VBVYvwJfjYWDz58dfcGvN2SScV5vr2bhlXI=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260612063051-2d68fb4f15bc/go.mod h1:QHaWhZtJaFADDWsdpnbLN49lWb2ELBMoLZ0gEoLAH5c=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=

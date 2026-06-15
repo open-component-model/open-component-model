@@ -40,7 +40,7 @@ require (
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260612063051-2d68fb4f15bc
 	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260612060103-25643fdae86d
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260612063051-2d68fb4f15bc
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260615060942-874118842472
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260612063051-2d68fb4f15bc
 	sigs.k8s.io/yaml v1.6.0
 )
