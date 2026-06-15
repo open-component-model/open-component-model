@@ -18,7 +18,7 @@ Set up credential configuration so OCM can find your signing keys when signing o
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "docs/getting-started/ocm-cli-installation.md" >}})
-- [RSA key pair generated]({{< relref "generate-signing-keys.md" >}})
+- [Key pair generated]({{< relref "generate-signing-keys.md" >}})
 - A component version to test your configuration in your current directory (we'll use
   `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}))
   in this guide, but you can use any component version you have.
@@ -58,6 +58,9 @@ For more details on the supported attributes and configuration options, see
 
 The most convenient way to configure signing credentials is to add a consumer block to your `.ocmconfig` with the key
 file paths.
+
+{{< tabs "signing-algorithm" >}}
+{{< tab "RSA" >}}
 
 You can use either the typed `RSACredentials/v1` (recommended for new configurations) or the legacy `Credentials/v1`:
 
@@ -137,6 +140,40 @@ configurations:
 ```
 
 {{< /details >}}
+
+{{< /tab >}}
+{{< tab "GPG" >}}
+
+GPG signing uses a different identity type (`GPG/v1alpha1`) and ASCII-armored OpenPGP key files (`.asc`). Generate the keys via [How-To: Generate Signing Keys → GPG]({{< relref "generate-signing-keys.md" >}}) first.
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: GPG/v1alpha1
+          signature: default
+        credentials:
+          - type: Credentials/v1
+            properties:
+              privateKeyPGPFile: /tmp/keys/signing-key.asc
+              publicKeyPGPFile: /tmp/keys/verify-key.asc
+```
+
+**Key paths:**
+
+- `privateKeyPGPFile` - Required for **signing** operations (ASCII-armored OpenPGP private key)
+- `publicKeyPGPFile` - Required for **verification** operations (ASCII-armored OpenPGP public key)
+
+{{< callout context="note" >}}
+For passphrase-protected private keys, add a `passphrase: <secret>` property next to `privateKeyPGPFile`. OCM decrypts the key in memory only; the passphrase is never written back to disk.
+{{< /callout >}}
+
+If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer spec (set in the [sign how-to]({{< relref "sign-component-version.md" >}})), not in `.ocmconfig`.
+
+{{< /tab >}}
+{{< /tabs >}}
 {{< /step >}}
 
 {{< step >}}
