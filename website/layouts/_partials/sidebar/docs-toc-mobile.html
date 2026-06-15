@@ -1,0 +1,14 @@
+<!--
+  Local override of @thulite/doks-core sidebar/docs-toc-mobile.html.
+  Uses main/toc-from-content.html instead of .TableOfContents — see
+  docs-toc-desktop.html.
+-->
+{{ $toc := partial "main/toc-from-content.html" . }}
+{{ if and (ne .Params.toc false) $toc -}}
+  <details>
+    <summary>{{ i18n "on_this_page" }}</summary>
+    <div class="page-links">
+      {{ $toc }}
+    </div>
+  </details>
+{{ end -}}
