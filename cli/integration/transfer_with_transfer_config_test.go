@@ -56,22 +56,18 @@ func Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode(t *testing.T
 	// Push an OCI image to the source registry and build a CTF component that
 	// references it via OCIImage access.
 	originalData := []byte("transfer-config copyMode payload")
-	imageData, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/transfer-config-copymode:v1.0.0")
-	r.NotNil(access)
-	access.Type = ocmruntime.Type{Name: "ociArtifact", Version: "v1"}
+	imageData := internal.CreateSingleLayerOCIImageLayoutTar(t, originalData, "ghcr.io/transfer-config-copymode:v1.0.0").Bytes()
 
 	resource := descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
 			ObjectMeta: descriptor.ObjectMeta{Name: "test-oci-resource", Version: "v1.0.0"},
 		},
-		Type:   "ociArtifact",
-		Access: access,
+		Type: "ociArtifact",
+		Access: &v1.OCIImage{
+			Type:           ocmruntime.Type{Name: "ociArtifact", Version: "v1"},
+			ImageReference: fmt.Sprintf("http://%s", sourceRegistry.Reference("transfer-config-copymode:v1.0.0")),
+		},
 	}
-
-	// Rewrite the access to point at the local source registry, then upload.
-	targetAccess := resource.Access.DeepCopyTyped()
-	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", sourceRegistry.Reference("transfer-config-copymode:v1.0.0"))
-	resource.Access = targetAccess
 
 	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
 	uploaded, err := resourceRepo.UploadResource(ctx, &resource, inmemory.New(bytes.NewReader(imageData)), &ocicredsv1.OCICredentials{
