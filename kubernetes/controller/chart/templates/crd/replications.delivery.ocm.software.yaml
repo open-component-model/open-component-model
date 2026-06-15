@@ -176,10 +176,6 @@ spec:
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
                   type: object
-                  x-kubernetes-validations:
-                  - message: set either the inline ConfigMap reference (name) or value,
-                      but not both
-                    rule: has(self.value) != (has(self.name) && self.name != '')
                 type: array
             required:
             - componentRef
