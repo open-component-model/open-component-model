@@ -10,29 +10,37 @@ import (
 )
 
 // TopLevelArtifacts returns the top-level artifacts from a list of candidates.
-// An artifact is considered a top-level artifact if it is not referenced by any other artifact.
-// If there is only one artifact in the candidates, it is automatically considered a top-level artifact.
-// It uses content.Successors to find successors of each artifact.
-// The function returns a slice of top-level artifacts.
+// An artifact is top-level when it is not contained by another candidate (not
+// one of its successors).
+//
+// The Subject edge is deliberately NOT treated as containment: a referrer points
+// "back" at its subject, so counting that edge would mark the subject as
+// referenced and wrongly hide it, surfacing the referrer instead. Referrers
+// themselves are still returned (nothing contains them); callers that want only
+// the main content artifacts must exclude referrers separately — see
+// [CloseableReadOnlyStore.MainArtifacts].
+//
+// If there is only one candidate, it is returned as-is.
 func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates []ociImageSpecV1.Descriptor) []ociImageSpecV1.Descriptor {
 	// If there's only one artifact, it's automatically a top-level artifact
 	if len(candidates) <= 1 {
 		return candidates
 	}
 
-	// Build a set of all referenced digests
+	// Build a set of all contained digests
 	var mu sync.Mutex
 	referenced := make(map[digest.Digest]struct{}, len(candidates))
 
-	// resolveReferences is a function that finds all successors of an artifact
-	// and adds their digests to the reference cache.
+	// resolveReferences records an artifact's containment successors (subject excluded).
 	resolveReferences := func(artifact ociImageSpecV1.Descriptor) {
-		if successors, err := content.Successors(ctx, fetcher, artifact); err == nil {
-			mu.Lock()
-			defer mu.Unlock()
-			for _, successor := range successors {
-				referenced[successor.Digest] = struct{}{}
-			}
+		successors, err := successorsWithoutSubject(ctx, fetcher, artifact)
+		if err != nil {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		for _, successor := range successors {
+			referenced[successor.Digest] = struct{}{}
 		}
 	}
 
@@ -47,7 +55,7 @@ func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates 
 	}
 	wg.Wait()
 
-	// Return artifacts that are not referenced by any other artifact
+	// Return artifacts that are not contained by any other artifact
 	// Pre-allocate with worst-case capacity (all candidates could be top-level)
 	topLevel := make([]ociImageSpecV1.Descriptor, 0, len(candidates))
 	for _, artifact := range candidates {

@@ -110,14 +110,28 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 	}, nil
 }
 
-// MainArtifacts returns the main artifacts from the OCI layout.
-// It uses the Index from the CloseableReadOnlyStore to get the main artifacts.
-// If the reference name is not set or cannot be assumed,
-// this is an easy way to retrieve top level artifacts for reading in case the original reference is not known.
+// MainArtifacts returns the main artifacts from the OCI layout: top-level
+// manifests that declare no subject. A subject-declaring manifest is a
+// referrer (metadata attached to another artifact) and is held aside so it
+// does not get classified as a main candidate. The remaining candidates are
+// reduced to the top-level set via [TopLevelArtifacts]. A manifest whose body
+// cannot be fetched or decoded is treated as a main candidate rather than
+// silently dropped.
+//
+// If the reference name is not set or cannot be assumed, this is an easy way
+// to retrieve top level artifacts for reading in case the original reference
+// is not known.
 //
 // For example, if an OCI Layout was downloaded from "ghcr.io/open-component-model/ocm-layout:v1.0.0",
 // and the index contains multiple manifests, this function will return a single top-level artifact
 // referencing the main index behind the given reference.
 func (s *CloseableReadOnlyStore) MainArtifacts(ctx context.Context) []ociImageSpecV1.Descriptor {
-	return TopLevelArtifacts(ctx, s.ReadOnlyStore, s.Index.Manifests)
+	var candidates []ociImageSpecV1.Descriptor
+	for _, manifest := range s.Index.Manifests {
+		if subject, err := Subject(ctx, s.ReadOnlyStore, manifest); err == nil && subject != nil {
+			continue
+		}
+		candidates = append(candidates, manifest)
+	}
+	return TopLevelArtifacts(ctx, s.ReadOnlyStore, candidates)
 }
