@@ -17,6 +17,7 @@ import (
 
 	spec "ocm.software/open-component-model/bindings/go/oci/spec"
 )
+
 // ErrTagDeletionDisabled is returned when the registry responds with 405 Method Not Allowed
 // to a tag-deletion request, indicating that the registry does not support tag deletion
 // (e.g. REGISTRY_STORAGE_DELETE_ENABLED is not set).
