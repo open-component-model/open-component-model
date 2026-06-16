@@ -17,6 +17,7 @@ import (
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 
@@ -874,6 +875,51 @@ func (repo *Repository) AddComponentVersionAlias(ctx context.Context, component,
 	if err := store.Tag(ctx, base, alias); err != nil {
 		return fmt.Errorf("failed to tag component version %s/%s with alias %q: %w",
 			component, versionOrAlias, alias, err)
+	}
+
+	return nil
+}
+
+func (repo *Repository) RemoveComponentVersionAlias(ctx context.Context, component, alias string) (err error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	done := log.Operation(ctx, "remove component version alias",
+		slog.String("component", component),
+		slog.String("alias", alias))
+	defer func() { done(err) }()
+
+	if versionRegex.MatchString(alias) {
+		return fmt.Errorf("%q is a semantic version (component version identifier), not an alias; RemoveComponentVersionAlias only removes floating alias tags such as 'edge' or 'latest'", alias)
+	}
+
+	reference, store, err := repo.getStore(ctx, component, alias)
+	if err != nil {
+		return fmt.Errorf("failed to get store for component %s alias %s: %w", component, alias, err)
+	}
+
+	base, err := store.Resolve(ctx, reference)
+	if err != nil {
+		if errors.Is(err, errdef.ErrNotFound) {
+			return errors.Join(repository.ErrNotFound,
+				fmt.Errorf("alias %q for component %q not found: %w", alias, component, err))
+		}
+		return fmt.Errorf("failed to resolve alias %q for component %q: %w", alias, component, err)
+	}
+
+	if _, err := validate.ComponentVersionDescriptor(ctx, store, base, component, reference); err != nil {
+		return fmt.Errorf("reference %q is not a valid OCM component version: %w", reference, err)
+	}
+
+	untagger, ok := store.(content.Untagger)
+	if !ok {
+		return fmt.Errorf("store does not support alias deletion for component %q", component)
+	}
+
+	err = untagger.Untag(ctx, alias)
+	if errors.Is(err, errdef.ErrNotFound) {
+		return errors.Join(repository.ErrNotFound,
+			fmt.Errorf("alias %q for component %q not found: %w", alias, component, err))
+	} else if err != nil {
+		return fmt.Errorf("failed to remove alias %q for component %q: %w", alias, component, err)
 	}
 
 	return nil

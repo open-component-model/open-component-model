@@ -1910,6 +1910,111 @@ func TestRepository_AddComponentVersionAlias_RejectsSemverAlias(t *testing.T) {
 	r.ElementsMatch([]string{"1.0.0", "2.0.0"}, versions)
 }
 
+func TestRepository_RemoveComponentVersionAlias(t *testing.T) {
+	const componentName = "ocm.software/test-component"
+
+	makeDesc := func(version string) *descriptor.Descriptor {
+		return &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider:      descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: version}},
+			},
+		}
+	}
+
+	newRepo := func(t *testing.T) *oci.Repository {
+		t.Helper()
+		fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+		require.NoError(t, err)
+		return Repository(t, ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))))
+	}
+
+	tests := []struct {
+		name   string
+		setup  func(t *testing.T, repo *oci.Repository)
+		alias  string
+		assert func(t *testing.T, repo *oci.Repository, removeErr error)
+	}{
+		{
+			name: "removes alias leaving sibling alias and semver intact",
+			setup: func(t *testing.T, repo *oci.Repository) {
+				r := require.New(t)
+				r.NoError(repo.AddComponentVersion(t.Context(), makeDesc("1.0.0")))
+				r.NoError(repo.AddComponentVersionAlias(t.Context(), componentName, "1.0.0", "latest"))
+				r.NoError(repo.AddComponentVersionAlias(t.Context(), componentName, "1.0.0", "stable"))
+			},
+			alias: "latest",
+			assert: func(t *testing.T, repo *oci.Repository, removeErr error) {
+				r := require.New(t)
+				r.NoError(removeErr)
+
+				_, err := repo.GetComponentVersion(t.Context(), componentName, "latest")
+				r.ErrorIs(err, repository.ErrNotFound, "removed alias must not resolve")
+
+				got, err := repo.GetComponentVersion(t.Context(), componentName, "stable")
+				r.NoError(err)
+				r.Equal("1.0.0", got.Component.Version, "sibling alias must still resolve")
+
+				got, err = repo.GetComponentVersion(t.Context(), componentName, "1.0.0")
+				r.NoError(err, "underlying semver version must still be accessible")
+				r.Equal("1.0.0", got.Component.Version)
+			},
+		},
+		{
+			name:  "returns ErrNotFound when the alias does not exist",
+			setup: func(*testing.T, *oci.Repository) {},
+			alias: "nonexistent",
+			assert: func(t *testing.T, _ *oci.Repository, removeErr error) {
+				require.ErrorIs(t, removeErr, repository.ErrNotFound)
+			},
+		},
+		{
+			name: "rejects a semver version string and leaves it accessible",
+			setup: func(t *testing.T, repo *oci.Repository) {
+				require.NoError(t, repo.AddComponentVersion(t.Context(), makeDesc("1.0.0")))
+			},
+			alias: "1.0.0",
+			assert: func(t *testing.T, repo *oci.Repository, removeErr error) {
+				r := require.New(t)
+				r.Error(removeErr)
+				r.Contains(removeErr.Error(), "not an alias")
+
+				got, err := repo.GetComponentVersion(t.Context(), componentName, "1.0.0")
+				r.NoError(err, "version must be unaffected after rejected removal")
+				r.Equal("1.0.0", got.Component.Version)
+			},
+		},
+		{
+			name: "removed alias does not appear in ListComponentVersions",
+			setup: func(t *testing.T, repo *oci.Repository) {
+				r := require.New(t)
+				r.NoError(repo.AddComponentVersion(t.Context(), makeDesc("1.0.0")))
+				r.NoError(repo.AddComponentVersion(t.Context(), makeDesc("2.0.0")))
+				r.NoError(repo.AddComponentVersionAlias(t.Context(), componentName, "1.0.0", "latest"))
+			},
+			alias: "latest",
+			assert: func(t *testing.T, repo *oci.Repository, removeErr error) {
+				r := require.New(t)
+				r.NoError(removeErr)
+
+				versions, err := repo.ListComponentVersions(t.Context(), componentName)
+				r.NoError(err)
+				r.ElementsMatch([]string{"1.0.0", "2.0.0"}, versions, "removed alias must not appear in version list")
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newRepo(t)
+			tc.setup(t, repo)
+			err := repo.RemoveComponentVersionAlias(t.Context(), componentName, tc.alias)
+			tc.assert(t, repo, err)
+		})
+	}
+}
+
 func TestRepository_AddComponentVersionAlias_GetLocalResource(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
