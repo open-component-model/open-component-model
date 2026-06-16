@@ -14,6 +14,7 @@ import (
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 
@@ -179,11 +180,6 @@ func TestReadOCILayout_Close(t *testing.T) {
 	assert.NoError(t, store.Close())
 }
 
-// ownershipArtifactType is the ADR-0016 artifact type carried by an ownership
-// referrer. Referrer detection keys off the subject, not the artifact type, so
-// the test pairs it with a referrer carrying a different type.
-const ownershipArtifactType = "application/vnd.ocm.software.ownership.v1+json"
-
 // TestCloseableReadOnlyStore_MainArtifacts covers main-artifact selection: a
 // manifest that declares a subject is a referrer (regardless of artifact type)
 // and is excluded; the remaining candidates are reduced to the top-level set.
@@ -194,7 +190,7 @@ func TestCloseableReadOnlyStore_MainArtifacts(t *testing.T) {
 			main = pack(t, w, "main", "", nil)
 			// Two referrers on main with different artifact types. Detection is by
 			// subject, so both must be excluded.
-			pack(t, w, "ownership-referrer", ownershipArtifactType, &main)
+			pack(t, w, "ownership-referrer", annotations.OwnershipArtifactType, &main)
 			pack(t, w, "plain-referrer", "", &main)
 		})
 
