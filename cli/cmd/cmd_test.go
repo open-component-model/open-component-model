@@ -2281,7 +2281,7 @@ func TestGetOCMConfigForCommand(t *testing.T) {
 		r.NoError(err)
 		cfg, err := configuration.GetOCMConfigForCommand(cmd)
 		r.NoError(err)
-		r.NotNil(t, cfg)
+		r.NotNil(cfg)
 	})
 
 	t.Run("no config flag uses default discovery", func(t *testing.T) {
