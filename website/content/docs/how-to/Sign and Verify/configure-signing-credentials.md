@@ -157,17 +157,17 @@ configurations:
         credentials:
           - type: Credentials/v1
             properties:
-              privateKeyPGPFile: /tmp/keys/signing-key.asc
-              publicKeyPGPFile: /tmp/keys/verify-key.asc
+              private_key_pgp_file: /tmp/keys/signing-key.asc
+              public_key_pgp_file: /tmp/keys/verify-key.asc
 ```
 
 **Key paths:**
 
-- `privateKeyPGPFile` - Required for **signing** operations (ASCII-armored OpenPGP private key)
-- `publicKeyPGPFile` - Required for **verification** operations (ASCII-armored OpenPGP public key)
+- `private_key_pgp_file` - Required for **signing** operations (ASCII-armored OpenPGP private key)
+- `public_key_pgp_file` - Required for **verification** operations (ASCII-armored OpenPGP public key)
 
 {{< callout context="note" >}}
-For passphrase-protected private keys, add a `passphrase: <secret>` property next to `privateKeyPGPFile`. OCM decrypts the key in memory only; the passphrase is never written back to disk.
+For passphrase-protected private keys, add a `pass_phrase: <secret>` property next to `private_key_pgp_file` in the `properties:` map. OCM decrypts the key in memory only; the passphrase is never written back to disk.
 {{< /callout >}}
 
 If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer spec (set in the [sign how-to]({{< relref "sign-component-version.md" >}})), not in `.ocmconfig`.
@@ -285,6 +285,20 @@ The consumer identity for RSA signing/verification supports these attributes:
 **Cause:** Key file has restrictive permissions.
 
 **Fix:** Ensure your user can read the key file:
+
+### Symptom: "no signer spec file provided" or unknown algorithm
+
+**Cause:** GPG requires an explicit `--signer-spec` file pointing to a `GPGSigningConfiguration/v1alpha1` spec. Unlike RSA, there is no default GPG handler.
+
+**Fix:** Create a `signer-spec.yaml` file (see [How-To: Sign Component Versions → GPG]({{< relref "sign-component-version.md" >}}) for the format) and pass it with `--signer-spec ./signer-spec.yaml` when signing or verifying.
+
+### Symptom: "fingerprint mismatch" or "key not found"
+
+**Cause:** The `keyFingerprint` in your signer/verifier spec does not match any key in your keyring, or the file path is incorrect.
+
+**Fix:** Verify:
+- The `privateKeyPGPFile` / `publicKeyPGPFile` paths in `.ocmconfig` are correct and the files exist
+- The `keyFingerprint` in your signer spec (if set) matches a key in those files; use `gpg --list-secret-keys` to verify available fingerprints
 
 ```bash
 chmod 600 /tmp/keys/private-key.pem
