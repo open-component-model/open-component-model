@@ -1364,6 +1364,27 @@ func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 			assertOwnershipReferrerAnnotations(t, ctx, ctfResolver, transferred,
 				component, version, "backend-image")
 		})
+
+		t.Run("streaming transfer registry → registry carries the referrer", func(t *testing.T) {
+			// Streaming twin of the registry → registry transfer above. Drives
+			// DownloadResourceStream → UploadResourceStream (the path
+			// transformer/transfer_oci_artifact.go uses) end-to-end across the
+			// wire and proves the ownership referrer rides along the same
+			// ExtendedCopyGraph traversal without tar materialization.
+			srcImageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+				fmt.Sprintf("%s/test-asset/transfer-stream-src:%s", srcReg, version),
+				[]byte("transfer-stream-payload"))
+			srcRes := byReferenceResource("backend-image", version, srcImageRef)
+			require.NoError(t, srcRepo.AddOwnership(ctx, component, version, srcRes, nil))
+
+			dstResolver, dstReg, dstRepo := startOwnershipRegistry(t, ctx)
+			dstImageRef := fmt.Sprintf("%s/test-asset/transfer-stream-dst:%s", dstReg, version)
+			transferred := transferByReferenceResourceStream(t, ctx, srcRepo, dstRepo, srcRes, dstImageRef)
+
+			assertOwnershipReferrerCount(t, ctx, dstResolver, transferred, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, dstResolver, transferred,
+				component, version, "backend-image")
+		})
 	})
 
 	t.Run("ctf", func(t *testing.T) {
@@ -1567,6 +1588,21 @@ func transferByReferenceResource(t *testing.T, ctx context.Context, src, dst *oc
 	r.NoError(err)
 	target := byReferenceResource(res.Name, res.Version, dstImageRef)
 	uploaded, err := dst.UploadResource(ctx, target, data)
+	r.NoError(err)
+	return uploaded.Access.(*v1.OCIImage).ImageReference
+}
+
+// transferByReferenceResourceStream is the streaming twin of
+// [transferByReferenceResource]: it transfers res from src to dst via
+// DownloadResourceStream → UploadResourceStream (no tar materialization).
+// This is the path [transformer/transfer_oci_artifact.go] drives.
+func transferByReferenceResourceStream(t *testing.T, ctx context.Context, src, dst *oci.Repository, res *descriptor.Resource, dstImageRef string) string {
+	t.Helper()
+	r := require.New(t)
+	stream, err := src.DownloadResourceStream(ctx, res)
+	r.NoError(err)
+	target := byReferenceResource(res.Name, res.Version, dstImageRef)
+	uploaded, err := dst.UploadResourceStream(ctx, target, stream)
 	r.NoError(err)
 	return uploaded.Access.(*v1.OCIImage).ImageReference
 }
