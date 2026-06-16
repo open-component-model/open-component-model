@@ -11,10 +11,10 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/registry v0.42.0
 	golang.org/x/crypto v0.51.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/configuration v0.0.14
+	ocm.software/open-component-model/bindings/go/configuration v0.0.15
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260612060103-25643fdae86d
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260616150525-ec39a691b9de
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.46
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
@@ -81,6 +81,6 @@ require (
 	golang.org/x/text v0.37.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260612063051-2d68fb4f15bc // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260616140550-dcb5032bec85 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
