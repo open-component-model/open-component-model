@@ -62,10 +62,7 @@ file paths.
 {{< tabs "signing-algorithm" >}}
 {{< tab "RSA" >}}
 
-You can use either the typed `RSACredentials/v1` (recommended for new configurations) or the legacy `Credentials/v1`:
-
-{{< tabs "signing-cred-type" >}}
-{{< tab "RSACredentials/v1 (typed)" >}}
+Use the typed `RSACredentials/v1` credential type:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -84,29 +81,6 @@ configurations:
 
 `RSACredentials/v1` uses flat `camelCase` fields validated at parse time. For all supported fields, see
 [Reference: Credential Types]({{< relref "docs/reference/credential-types.md" >}}).
-{{< /tab >}}
-{{< tab "Credentials/v1 (legacy)" >}}
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: credentials.config.ocm.software
-    consumers:
-      - identity:
-          type: RSA/v1alpha1
-          algorithm: RSASSA-PSS
-          signature: default
-        credentials:
-          - type: Credentials/v1
-            properties:
-              privateKeyPEMFile: /tmp/keys/private-key.pem
-              publicKeyPEMFile: /tmp/keys/public-key.pem
-```
-
-`Credentials/v1` (an alias for `DirectCredentials/v1`) uses a nested `properties:` map with `camelCase` keys and works
-in all OCM versions.
-{{< /tab >}}
-{{< /tabs >}}
 
 **Key paths:**
 
@@ -114,7 +88,7 @@ in all OCM versions.
 - `publicKeyPEMFile` - Required for **verification** operations
 
 <br>
-It is also possible to configure the keys inline. With `RSACredentials/v1` use `privateKeyPEM` / `publicKeyPEM`; with `Credentials/v1` use `privateKeyPEM` / `publicKeyPEM` inside `properties:`.
+It is also possible to configure the keys inline using `privateKeyPEM` / `publicKeyPEM`.
 
 {{< details "Example .ocmconfig with inline keys (RSACredentials/v1)" >}}
 
@@ -146,10 +120,7 @@ configurations:
 
 GPG signing uses a different identity type (`GPG/v1alpha1`) and ASCII-armored OpenPGP key files (`.asc`). Generate the keys via [How-To: Generate Signing Keys → GPG]({{< relref "generate-signing-keys.md" >}}) first.
 
-You can use either the typed `GPGCredentials/v1alpha1` (recommended for new configurations) or the legacy `Credentials/v1`:
-
-{{< tabs "signing-cred-type-gpg" >}}
-{{< tab "GPGCredentials/v1alpha1 (typed)" >}}
+Use the typed `GPGCredentials/v1alpha1` credential type:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -167,28 +138,6 @@ configurations:
 
 `GPGCredentials/v1alpha1` uses flat `camelCase` fields validated at parse time. For all supported fields, see
 [Reference: Credential Types]({{< relref "docs/reference/credential-types.md" >}}).
-{{< /tab >}}
-{{< tab "Credentials/v1 (legacy)" >}}
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: credentials.config.ocm.software
-    consumers:
-      - identity:
-          type: GPG/v1alpha1
-          signature: default
-        credentials:
-          - type: Credentials/v1
-            properties:
-              privateKeyPGPFile: /tmp/keys/signing-key.asc
-              publicKeyPGPFile: /tmp/keys/verify-key.asc
-```
-
-`Credentials/v1` (an alias for `DirectCredentials/v1`) uses a nested `properties:` map with `camelCase` keys and works
-in all OCM versions.
-{{< /tab >}}
-{{< /tabs >}}
 
 **Key paths:**
 
@@ -196,7 +145,7 @@ in all OCM versions.
 - `publicKeyPGPFile` - Required for **verification** operations (ASCII-armored OpenPGP public key)
 
 <br>
-It is also possible to configure the keys inline. With `GPGCredentials/v1alpha1` use `privateKeyPGP` / `publicKeyPGP`; with `Credentials/v1` use `privateKeyPGP` / `publicKeyPGP` inside `properties:`.
+It is also possible to configure the keys inline using `privateKeyPGP` / `publicKeyPGP`.
 
 {{< details "Example .ocmconfig with inline keys (GPGCredentials/v1alpha1)" >}}
 
@@ -223,7 +172,7 @@ configurations:
 {{< /details >}}
 
 {{< callout context="note" >}}
-For passphrase-protected private keys, add a `passphrase: <secret>` field (top-level for `GPGCredentials/v1alpha1`, or inside `properties:` for `Credentials/v1`). OCM decrypts the key in memory only; the passphrase is never written back to disk.
+For passphrase-protected private keys, add a top-level `passphrase: <secret>` field next to `privateKeyPGPFile`. OCM decrypts the key in memory only; the passphrase is never written back to disk.
 {{< /callout >}}
 
 If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer spec (set in the [sign how-to]({{< relref "sign-component-version.md" >}})), not in `.ocmconfig`.
@@ -329,8 +278,7 @@ The consumer identity for RSA signing/verification supports these attributes:
 
 **Fix:** Ensure:
 
-- The key file path is correct and the file exists (`privateKeyPEMFile` for `RSACredentials/v1`, or
-  `privateKeyPEMFile` inside `properties:` for `Credentials/v1`)
+- The key file path is correct and the file exists (`privateKeyPEMFile` for RSA, `privateKeyPGPFile` for GPG)
 - The `algorithm` attribute is present in the identity (e.g. `algorithm: RSASSA-PSS`).
   See [Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
 - The `signature` name matches what you're using (or is `default` if not specified)
