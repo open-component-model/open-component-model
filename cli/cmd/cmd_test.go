@@ -2082,27 +2082,13 @@ type: generic.config.ocm.software/v1
 configurations:
 - type: filesystem.config.ocm.software/v1alpha1
   tempFolder: /tmp/custom
-  workingDirectory: /work
-- policy: AddIfSupported
-  repositories:
-  - policy: Never
-    repository:
-      filePath: /some/repo
-      type: CommonTransportFormat/v1
-  type: ownership.config.ocm.software/v1alpha1`},
+  workingDirectory: /work`},
 			expectedOutput: `configurations:
 - tempFolder: /tmp/custom
   type: filesystem.config.ocm.software/v1alpha1
   workingDirectory: /work
 - timeout: 1m0s
   type: http.config.ocm.software/v1alpha1
-- policy: AddIfSupported
-  repositories:
-  - policy: Never
-    repository:
-      filePath: /some/repo
-      type: CommonTransportFormat/v1
-  type: ownership.config.ocm.software/v1alpha1
 type: generic.config.ocm.software/v1
 `,
 		},
@@ -2173,13 +2159,6 @@ configurations:
       filePath: /some/archive
     componentNamePattern: "ocm.software/*"
     versionConstraint: ">=1.0.0"
-- type: ownership.config.ocm.software/v1alpha1
-  policy: AddIfSupported
-  repositories:
-  - repository:
-      type: CommonTransportFormat/v1
-      filePath: /some/repo
-    policy: Never
 - type: extract.oci.artifact.ocm.software/v1alpha1
   rules:
   - filename: output.tar
@@ -2226,13 +2205,6 @@ configurations:
       type: CommonTransportFormat/v1
     versionConstraint: '>=1.0.0'
   type: resolvers.config.ocm.software/v1alpha1
-- policy: AddIfSupported
-  repositories:
-  - policy: Never
-    repository:
-      filePath: /some/repo
-      type: CommonTransportFormat/v1
-  type: ownership.config.ocm.software/v1alpha1
 - rules:
   - filename: output.tar
     layerSelectors:
