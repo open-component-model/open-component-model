@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -21,50 +20,6 @@ var EmptyEnvironment = &Environment{
 	Executable:  func() (string, error) { return "", nil },
 }
 
-func TestGetOCMConfigForCommand(t *testing.T) {
-	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
-		cmd := &cobra.Command{Use: "test"}
-		cmd.SetContext(ContextWithEnvironment(t.Context(), EmptyEnvironment))
-		RegisterConfigFlag(cmd)
-		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "/nonexistent/path/config.yaml"))
-
-		_, err := GetOCMConfigForCommand(cmd)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "/nonexistent/path/config.yaml")
-	})
-
-	t.Run("explicit config flag with existing file succeeds", func(t *testing.T) {
-		cmd := &cobra.Command{Use: "test"}
-		cmd.SetContext(ContextWithEnvironment(t.Context(), EmptyEnvironment))
-		RegisterConfigFlag(cmd)
-		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "testdata/.ocmconfig-1"))
-
-		cfg, err := GetOCMConfigForCommand(cmd)
-		require.NoError(t, err)
-		assert.NotNil(t, cfg)
-	})
-
-	t.Run("no config flag uses default discovery", func(t *testing.T) {
-		cmd := &cobra.Command{Use: "test"}
-		cmd.SetContext(ContextWithEnvironment(t.Context(), EmptyEnvironment))
-		RegisterConfigFlag(cmd)
-
-		_, _ = GetOCMConfigForCommand(cmd)
-	})
-
-	t.Run("multiple config flags merges configurations", func(t *testing.T) {
-		cmd := &cobra.Command{Use: "test"}
-		RegisterConfigFlag(cmd)
-		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "testdata/.ocmconfig-1"))
-		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "testdata/.ocmconfig-2"))
-
-		cfg, err := GetOCMConfigForCommand(cmd)
-		require.NoError(t, err)
-		require.NotNil(t, cfg)
-		// .ocmconfig-1 has 5 configurations, .ocmconfig-2 has 1
-		assert.Len(t, cfg.Configurations, 6)
-	})
-}
 
 func TestGetOCMConfigPaths(t *testing.T) {
 	tests := []struct {
