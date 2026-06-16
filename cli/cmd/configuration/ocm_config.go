@@ -45,14 +45,44 @@ func DefaultEnvironment() *Environment {
 type environmentContextKey struct{}
 
 func EnvironmentFromContext(ctx context.Context) *Environment {
+	if ctx == nil {
+		return DefaultEnvironment()
+	}
 	if r, ok := ctx.Value(environmentContextKey{}).(*Environment); ok {
-		return r
+		return normalizeEnvironment(r)
 	}
 	return DefaultEnvironment()
 }
 
 func ContextWithEnvironment(ctx context.Context, env *Environment) context.Context {
-	return context.WithValue(ctx, environmentContextKey{}, env)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, environmentContextKey{}, normalizeEnvironment(env))
+}
+
+func normalizeEnvironment(env *Environment) *Environment {
+	def := DefaultEnvironment()
+	if env == nil {
+		return def
+	}
+	out := *env
+	if out.Stat == nil {
+		out.Stat = def.Stat
+	}
+	if out.Getenv == nil {
+		out.Getenv = def.Getenv
+	}
+	if out.UserHomeDir == nil {
+		out.UserHomeDir = def.UserHomeDir
+	}
+	if out.Getwd == nil {
+		out.Getwd = def.Getwd
+	}
+	if out.Executable == nil {
+		out.Executable = def.Executable
+	}
+	return &out
 }
 
 func RegisterConfigFlag(cmd *cobra.Command) {
