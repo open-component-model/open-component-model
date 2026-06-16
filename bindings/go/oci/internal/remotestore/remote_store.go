@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"regexp"
 
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
@@ -16,11 +15,8 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
-	"ocm.software/open-component-model/bindings/go/oci/compref"
 	spec "ocm.software/open-component-model/bindings/go/oci/spec"
 )
-
-var semverRegex = regexp.MustCompile(compref.VersionRegex)
 
 // ErrTagDeletionDisabled is returned when the registry responds with 405 Method Not Allowed
 // to a tag-deletion request, indicating that the registry does not support tag deletion
