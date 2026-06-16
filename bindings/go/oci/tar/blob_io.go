@@ -183,12 +183,12 @@ const (
 	mediaTypeDockerManifestList = "application/vnd.docker.distribution.manifest.list.v2+json"
 )
 
-// classify decodes desc once and returns its subject (nil if desc is not a
+// extractSubjectAndSuccessors decodes desc once and returns its subject (nil if desc is not a
 // referrer) and its containment successors (config+layers, child manifests, or
 // blobs depending on media type). Docker manifest types have no subject and
 // are forwarded to [content.Successors]. Any other media type returns
 // (nil, nil, nil) — it is not fetched and contributes no edges.
-func classify(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) (*ociImageSpecV1.Descriptor, []ociImageSpecV1.Descriptor, error) {
+func extractSubjectAndSuccessors(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) (*ociImageSpecV1.Descriptor, []ociImageSpecV1.Descriptor, error) {
 	switch desc.MediaType {
 	case ociImageSpecV1.MediaTypeImageManifest:
 		raw, err := content.FetchAll(ctx, fetcher, desc)

@@ -13,11 +13,6 @@ import (
 // candidates. A candidate is excluded when it is a referrer (declares a
 // subject) or when another candidate contains it as a successor. The remaining
 // candidates are returned in input order.
-//
-// Each candidate is fetched and decoded once, in parallel, to determine both
-// its subject and its containment successors. A fetch or decode error for a
-// candidate is treated as "not a referrer, contributes no edges" so a transient
-// failure cannot silently drop a real top-level artifact.
 func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates []ociImageSpecV1.Descriptor) []ociImageSpecV1.Descriptor {
 	var mu sync.Mutex
 	excluded := make(map[digest.Digest]struct{}, len(candidates))
@@ -27,7 +22,7 @@ func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates 
 	for i := range candidates {
 		go func() {
 			defer wg.Done()
-			subject, successors, err := classify(ctx, fetcher, candidates[i])
+			subject, successors, err := extractSubjectAndSuccessors(ctx, fetcher, candidates[i])
 			if err != nil {
 				return
 			}
