@@ -3,7 +3,7 @@
 // What you'll learn:
 //   - Building a transfer graph that describes how to move a component version
 //   - Executing the graph to transfer a component from one CTF repository to another
-//   - Using transfer.WithTransfer, transfer.Component, transfer.FromRepository, and transfer.ToRepositorySpec
+//   - Using transfer.Mapping with transfer.NewRepositoryResolver to describe a source-to-target transfer
 //   - Driving recursive transfer of component references via transferv1alpha1.Config
 //   - Verifying the transferred component version and its resource payload in the target repository
 //   - Applying custom HTTP timeouts to the repository provider used during transfer
@@ -92,8 +92,8 @@ func TestExample_TransferCTFtoCTF(t *testing.T) {
 	targetSpec := newCTFSpecAt(t, t.TempDir())
 	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
 
-	// WithTransfer pairs the source component with a target repository and a resolver.
-	// FromRepository wraps the source repo directly — no custom resolver needed.
+	// transfer.Mapping pairs the source components with a target repository and a resolver.
+	// transfer.NewRepositoryResolver wraps the source repo directly, so no custom resolver is needed.
 	// A nil cfg uses the defaults; see TestExample_Transfer_WithTransferConfig
 	// below for driving transfer settings explicitly.
 	tgd, err := transfer.BuildGraphDefinition(ctx, nil,
