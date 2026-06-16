@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/pflag"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
 
 // OCM Configuration file and directory constants
@@ -22,8 +23,13 @@ const (
 	OCMConfigCommandArgument = "config"
 )
 
-// statFunc is the file stat function used for config discovery. Overridden in tests.
-var statFunc = os.Stat
+type OCMConfigOptions struct {
+	Stat        func(string) (os.FileInfo, error)
+	Getenv      func(string) string
+	UserHomeDir func() (string, error)
+	Getwd       func() (string, error)
+	Executable  func() (string, error)
+}
 
 func RegisterConfigFlag(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringArray(OCMConfigCommandArgument, nil, `supply configuration by a given configuration file.
@@ -60,7 +66,15 @@ func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 		paths := flag.Value.(pflag.SliceValue).GetSlice()
 		return loadAndMergeConfigs(paths, true)
 	}
-	return GetOCMConfig()
+	syscalls := ocmctx.FromContext(cmd.Context()).Syscalls()
+	options := OCMConfigOptions{
+		Stat:        syscalls.Stat,
+		Getenv:      syscalls.Getenv,
+		UserHomeDir: syscalls.UserHomeDir,
+		Getwd:       syscalls.Getwd,
+		Executable:  syscalls.Executable,
+	}
+	return GetOCMConfig(options)
 }
 
 // GetOCMConfig loads the OCM configuration file from multiple locations and returns the parsed configuration.
@@ -73,8 +87,8 @@ func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 // Returns:
 //   - *v1.Config: The parsed configuration file.
 //   - error: An error if no valid configuration file is found or if decoding fails.
-func GetOCMConfig(additional ...string) (*genericv1.Config, error) {
-	paths, err := GetOCMConfigPaths()
+func GetOCMConfig(options OCMConfigOptions, additional ...string) (*genericv1.Config, error) {
+	paths, err := GetOCMConfigPaths(options)
 	paths = append(paths, additional...)
 	if err != nil && len(additional) == 0 {
 		return nil, err
@@ -147,18 +161,18 @@ func GetConfigFromPath(path string) (_ *genericv1.Config, err error) {
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
 //   - error: An error if no configuration file is found.
-func GetOCMConfigPaths() ([]string, error) {
+func GetOCMConfigPaths(options OCMConfigOptions) ([]string, error) {
 	var paths []string
-	if path := getFromEnvironment(); path != "" {
+	if path := getFromEnvironment(options); path != "" {
 		paths = append(paths, path)
 	}
-	if subPaths := getFromXDGOrHomeDir(); len(subPaths) > 0 {
+	if subPaths := getFromXDGOrHomeDir(options); len(subPaths) > 0 {
 		paths = append(paths, subPaths...)
 	}
-	if subPaths := getFromWorkingDir(); len(subPaths) > 0 {
+	if subPaths := getFromWorkingDir(options); len(subPaths) > 0 {
 		paths = append(paths, subPaths...)
 	}
-	if subPaths := getFromExecutableDir(); len(subPaths) > 0 {
+	if subPaths := getFromExecutableDir(options); len(subPaths) > 0 {
 		paths = append(paths, subPaths...)
 	}
 
@@ -169,9 +183,9 @@ func GetOCMConfigPaths() ([]string, error) {
 	return nil, fmt.Errorf("ocm config not found in any known locations, see --help for details on how to supply configuration files")
 }
 
-func getFromEnvironment() string {
-	if env := os.Getenv(OCMConfigEnvironmentKey); env != "" {
-		if _, err := statFunc(filepath.Clean(env)); err == nil {
+func getFromEnvironment(options OCMConfigOptions) string {
+	if env := options.Getenv(OCMConfigEnvironmentKey); env != "" {
+		if _, err := options.Stat(filepath.Clean(env)); err == nil {
 			return env
 		}
 	}
@@ -185,20 +199,20 @@ func getFromEnvironment() string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func getFromXDGOrHomeDir() []string {
+func getFromXDGOrHomeDir(o OCMConfigOptions) []string {
 	paths := []string{}
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		if subPaths := checkConfigPaths(xdg); len(subPaths) > 0 {
+	if xdg := o.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		if subPaths := checkConfigPaths(o, xdg); len(subPaths) > 0 {
 			paths = append(paths, subPaths...)
 		}
 	}
 
 	// Check default XDG home ($HOME/.config)
-	if home, err := os.UserHomeDir(); err == nil {
-		if subPaths := checkConfigPaths(filepath.Join(home, ".config")); len(subPaths) > 0 {
+	if home, err := o.UserHomeDir(); err == nil {
+		if subPaths := checkConfigPaths(o, filepath.Join(home, ".config")); len(subPaths) > 0 {
 			paths = append(paths, subPaths...)
 		}
-		if subPaths := checkConfigPaths(home); len(subPaths) > 0 {
+		if subPaths := checkConfigPaths(o, home); len(subPaths) > 0 {
 			paths = append(paths, subPaths...)
 		}
 	}
@@ -210,9 +224,9 @@ func getFromXDGOrHomeDir() []string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func getFromWorkingDir() []string {
-	if wd, err := os.Getwd(); err == nil {
-		return checkConfigPaths(wd)
+func getFromWorkingDir(o OCMConfigOptions) []string {
+	if wd, err := o.Getwd(); err == nil {
+		return checkConfigPaths(o, wd)
 	}
 	return []string{}
 }
@@ -221,10 +235,10 @@ func getFromWorkingDir() []string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func getFromExecutableDir() []string {
-	if ex, err := os.Executable(); err == nil {
+func getFromExecutableDir(o OCMConfigOptions) []string {
+	if ex, err := o.Executable(); err == nil {
 		base := filepath.Dir(ex)
-		return checkConfigPaths(base)
+		return checkConfigPaths(o, base)
 	}
 	return []string{}
 }
@@ -236,11 +250,11 @@ func getFromExecutableDir() []string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func checkConfigPaths(base string) []string {
+func checkConfigPaths(o OCMConfigOptions, base string) []string {
 	paths := []string{}
 	for _, name := range []string{OCMConfigFileName, NestedOCMConfigFileName} {
 		path := filepath.Clean(filepath.Join(base, name))
-		if _, err := statFunc(path); err == nil {
+		if _, err := o.Stat(path); err == nil {
 			paths = append(paths, path)
 		}
 	}

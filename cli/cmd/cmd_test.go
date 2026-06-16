@@ -30,6 +30,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	componentversion "ocm.software/open-component-model/cli/cmd/add/component-version"
+	"ocm.software/open-component-model/cli/cmd/configuration"
 	"ocm.software/open-component-model/cli/cmd/internal/test"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
@@ -2271,4 +2272,45 @@ type: generic.config.ocm.software/v1`,
 			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()))
 		})
 	}
+}
+
+func TestGetOCMConfigForCommand(t *testing.T) {
+	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
+		r := require.New(t)
+		path := filepath.Join(t.TempDir(), "nonexistent", "path", "config.yaml")
+		_, err := test.OCM(t, test.WithArgs([]string{"--" + configuration.OCMConfigCommandArgument, path}...))
+		r.Error(err, "expected error but got none")
+		r.Contains(err.Error(), path)
+	})
+
+	t.Run("explicit config flag with existing file succeeds", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t, test.WithArgs([]string{"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-1"}...))
+		r.NoError(err)
+		cfg, err := configuration.GetOCMConfigForCommand(cmd)
+		r.NoError(err)
+		r.NotNil(cfg)
+	})
+
+	t.Run("no config flag uses default discovery", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t)
+		r.NoError(err)
+		_, err = configuration.GetOCMConfigForCommand(cmd)
+		r.Error(err, "expected error but got none")
+		r.Contains(err.Error(), "config not found in any known locations, see --help for details on how to supply configuration files")
+	})
+
+	t.Run("multiple config flags merges configurations", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t, test.WithArgs([]string{
+			"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-1",
+			"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-2",
+		}...))
+		r.NoError(err)
+		cfg, err := configuration.GetOCMConfigForCommand(cmd)
+		r.NoError(err)
+		// .ocmconfig-1 has 5 configurations, .ocmconfig-2 has 1
+		r.Len(cfg.Configurations, 6)
+	})
 }
