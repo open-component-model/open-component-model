@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
@@ -177,8 +178,12 @@ func (r *Registry) startAndReturnPlugin(ctx context.Context, plugin *mtypes.Plug
 	r.mu.Lock()
 	if existing, ok := r.constructedPlugins[plugin.ID]; ok {
 		r.mu.Unlock()
+		// Another goroutine won the race; clean up our duplicate subprocess
+		// but treat interrupt failures as best-effort — the cached plugin is
+		// already usable, and surfacing the cleanup error to the caller would
+		// fail an otherwise-successful lookup.
 		if perr := plugin.Cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
-			return nil, fmt.Errorf("failed to interrupt duplicate plugin start for %s: %w", plugin.ID, perr)
+			slog.WarnContext(ctx, "failed to interrupt duplicate plugin start", "id", plugin.ID, "err", perr)
 		}
 		return existing.Plugin, nil
 	}

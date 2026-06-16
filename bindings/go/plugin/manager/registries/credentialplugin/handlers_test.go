@@ -109,6 +109,24 @@ func TestResolveHandlerFunc(t *testing.T) {
 			},
 		},
 		{
+			name: "missing Authorization header is accepted with nil credentials",
+			handlerFunc: func() http.HandlerFunc {
+				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
+					require.Nil(t, credentials, "missing Authorization header must yield nil credentials")
+					return &runtime.Raw{Data: []byte(`{"resolved":"credentials"}`)}, nil
+				}, scheme, dummyRepo)
+			},
+			assertOutput: func(t *testing.T, resp *http.Response) {
+				require.Equal(t, http.StatusOK, resp.StatusCode)
+			},
+			request: func(base string) *http.Request {
+				parse, _ := url.Parse(base)
+				body := &bytes.Buffer{}
+				body.WriteString(`{"identity": {"id": "test-identity"}}`)
+				return &http.Request{Method: http.MethodPost, URL: parse, Body: io.NopCloser(body)}
+			},
+		},
+		{
 			name: "missing body returns 400",
 			handlerFunc: func() http.HandlerFunc {
 				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {

@@ -164,6 +164,7 @@ func TestResolve(t *testing.T) {
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ResolveEndpoint {
+						require.Empty(t, r.Header.Get("Authorization"), "nil credentials must not set Authorization header")
 						require.NoError(t, json.NewEncoder(w).Encode(map[string]string{"resolved": "credentials"}))
 						return
 					}

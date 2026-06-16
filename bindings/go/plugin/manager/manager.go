@@ -242,6 +242,7 @@ func init() {
 	scheme.MustRegisterScheme(ocmrepositoryv1.Scheme)
 	scheme.MustRegisterScheme(blobtransformerv1.Scheme)
 	scheme.MustRegisterScheme(credentialrepositoryv1.Scheme)
+	scheme.MustRegisterScheme(credentialpluginv1.Scheme)
 	scheme.MustRegisterScheme(componentlisterv1.Scheme)
 	scheme.MustRegisterScheme(digestprocessorv1.Scheme)
 	scheme.MustRegisterScheme(inputv1.Scheme)
