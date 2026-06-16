@@ -215,13 +215,6 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, nil
 	}
 
-	if component.Status.Component.RepositorySpec == nil {
-		const msg = "repository spec in component status must not be nil"
-		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, msg)
-
-		return ctrl.Result{}, fmt.Errorf("%s for component: %s", msg, component.Name)
-	}
-
 	// The target repository must exist and be ready before a transfer can run.
 	targetRepository, err := util.GetReadyObject[v1alpha1.Repository, *v1alpha1.Repository](ctx, r.Client, client.ObjectKey{
 		Namespace: replication.GetNamespace(),
