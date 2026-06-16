@@ -68,7 +68,28 @@ func WithErrorOutput(errout io.Writer) Option {
 
 func WithSyscalls(si *context.Syscalls) Option {
 	return func(o *Options) {
-		o.syscalls = si
+		if si == nil {
+			o.syscalls = nil
+			return
+		}
+
+		merged := *noopSyscalls
+		if si.Stat != nil {
+			merged.Stat = si.Stat
+		}
+		if si.Getenv != nil {
+			merged.Getenv = si.Getenv
+		}
+		if si.UserHomeDir != nil {
+			merged.UserHomeDir = si.UserHomeDir
+		}
+		if si.Getwd != nil {
+			merged.Getwd = si.Getwd
+		}
+		if si.Executable != nil {
+			merged.Executable = si.Executable
+		}
+		o.syscalls = &merged
 	}
 }
 
