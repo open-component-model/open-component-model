@@ -164,6 +164,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if !replication.GetDeletionTimestamp().IsZero() {
 		// TODO(skarlso): per ADR 0020 deletion semantics should cancel in-flight transfer, right now
 		// since the transfer is sequential, cancel is when the reconcile context is cancelled.
+		// https://github.com/open-component-model/ocm-project/issues/1148
 		if updated := controllerutil.RemoveFinalizer(replication, v1alpha1.ReplicationFinalizer); updated {
 			if err := r.Update(ctx, replication); err != nil {
 				status.MarkNotReady(r.EventRecorder, replication, v1alpha1.DeletionFailedReason, err.Error())
