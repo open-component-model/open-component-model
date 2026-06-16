@@ -407,7 +407,7 @@ func (s *repository) untag(ctx context.Context, reference string) error {
 		return fmt.Errorf("unable to get index: %w", err)
 	}
 
-	if err := idx.RemoveArtifactByTag(s.repo, tag); err != nil {
+	if err := idx.RemoveTag(s.repo, tag); err != nil {
 		if errors.Is(err, v1.ErrArtifactNotFound) {
 			return errdef.ErrNotFound
 		}
