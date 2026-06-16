@@ -1317,6 +1317,23 @@ func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 				"ocm.software/owner-b", version, "backend-image")
 		})
 
+		t.Run("multiple owners on the same by-value subject", func(t *testing.T) {
+			t.Skip("cross-component ownership for by-value resources is not yet implemented")
+			res, subjectRef := addByValueOwnedResource(t, ctx, srcResolver, srcRepo,
+				"ocm.software/by-value-multi-owner", version, "backend-image",
+				[]byte("registry-by-value-multi-owner-payload"))
+
+			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-b", version, res, nil))
+			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+
+			assertOwnershipReferrerCount(t, ctx, srcResolver, subjectRef, 2)
+			assertOwnershipReferrerPresent(t, ctx, srcResolver, subjectRef,
+				"ocm.software/owner-a", version, "backend-image")
+			assertOwnershipReferrerPresent(t, ctx, srcResolver, subjectRef,
+				"ocm.software/owner-b", version, "backend-image")
+		})
+
 		t.Run("transfer registry → registry carries the referrer", func(t *testing.T) {
 			// Push image + referrer in src; UploadResource into dst (the binding's
 			// resource-level transfer drives ExtendedCopyGraph and copies referrers).
@@ -1396,21 +1413,22 @@ func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 				owningComponent, version, "frontend")
 		})
 
-		//t.Run("multiple owners on the same subject", func(t *testing.T) {
-		//	ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
-		//	res, subjectRef := addByValueOwnedResource(t, ctx, ctfResolver, ctfRepo,
-		//		component, version, "backend-image", []byte("ctf-multi-owner-payload"))
-		//
-		//	require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
-		//	require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-b", version, res, nil))
-		//	require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
-		//
-		//	assertOwnershipReferrerCount(t, ctx, ctfResolver, subjectRef, 2)
-		//	assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
-		//		"ocm.software/owner-a", version, "backend-image")
-		//	assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
-		//		"ocm.software/owner-b", version, "backend-image")
-		//})
+		t.Run("multiple owners on the same subject", func(t *testing.T) {
+			t.Skip("cross-component ownership for by-value resources is not yet implemented")
+			ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
+			res, subjectRef := addByValueOwnedResource(t, ctx, ctfResolver, ctfRepo,
+				component, version, "backend-image", []byte("ctf-multi-owner-payload"))
+
+			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-b", version, res, nil))
+			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+
+			assertOwnershipReferrerCount(t, ctx, ctfResolver, subjectRef, 2)
+			assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
+				"ocm.software/owner-a", version, "backend-image")
+			assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
+				"ocm.software/owner-b", version, "backend-image")
+		})
 
 		t.Run("transfer CTF → registry carries the referrer", func(t *testing.T) {
 			// Stage a tagged image in the CTF and attach an ownership referrer
