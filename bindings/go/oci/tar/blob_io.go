@@ -18,11 +18,6 @@ import (
 )
 
 type CopyToOCILayoutOptions struct {
-	// ExtendedCopyGraphOptions drives the copy of base into the layout via
-	// oras.ExtendedCopyGraph: predecessors (e.g. OCI referrers) ride along with
-	// base, so a referrer whose subject edge points "backwards" at base — which
-	// a plain CopyGraph would never reach — still travels. The zero value uses
-	// oras's defaults: src.Predecessors and unbounded Depth.
 	oras.ExtendedCopyGraphOptions
 	Tags    []string
 	TempDir string
@@ -97,22 +92,7 @@ type CopyOCILayoutWithIndexOptions struct {
 // CopyOCILayoutWithIndex reads an OCI layout tarball from src, picks the
 // layout's single top-level manifest or index (or the one tagged via
 // `org.opencontainers.image.ref.name` when multiple are present), and copies
-// its full graph into dst via [oras.ExtendedCopyGraph]. Predecessors of the
-// top-level descriptor (e.g. OCI referrers carried in the source layout) ride
-// along: oras walks them via src.Predecessors and copies each as its own
-// root, so a referrer still lands when the artifact root is already present
-// in dst.
-//
-// [CopyOCILayoutWithIndexOptions.MutateParentFunc] runs once against the
-// top-level descriptor before copy. Typical use: inject annotations onto the
-// root manifest/index. Because the contract forbids changing Digest/Size/
-// MediaType, the underlying ociStore already serves the correct bytes for the
-// mutated descriptor; no proxy is needed. The mutated descriptor reaches the
-// destination via two paths: (1) ExtendedCopyGraph pushes the root descriptor
-// directly, and (2) the FindSuccessors override below rewrites the un-mutated
-// subject edge embedded in any referrer body so dst's tagResolver records the
-// mutated Descriptor in its layout's index.json (registry destinations drop
-// annotations at the wire boundary; layout destinations preserve them).
+// its full graph into dst via [oras.ExtendedCopyGraph], including referrers.
 //
 // Returns the descriptor of the root that was copied.
 func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.ReadOnlyBlob, opts CopyOCILayoutWithIndexOptions) (top ociImageSpecV1.Descriptor, err error) {
@@ -175,9 +155,6 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 // manifest; with many it returns the one tagged via
 // `org.opencontainers.image.ref.name`. Returns an error if neither rule
 // uniquely identifies a top-level descriptor.
-//
-// We need this specifically for docker (one manifest), and oras / ocm
-// packaging compat (many manifests, exactly one ref.name).
 func pickTopLevelDescriptor(ociStore *CloseableReadOnlyStore) (ociImageSpecV1.Descriptor, error) {
 	if len(ociStore.Index.Manifests) == 1 {
 		return ociStore.Index.Manifests[0], nil
@@ -202,70 +179,56 @@ func pickTopLevelDescriptor(ociStore *CloseableReadOnlyStore) (ociImageSpecV1.De
 // mediaTypeOCIArtifactManifest is the deprecated OCI artifact manifest (image-spec v1.1.0-rc1/rc2); the oras-go constant lives in an internal package.
 const mediaTypeOCIArtifactManifest = "application/vnd.oci.artifact.manifest.v1+json"
 
-// successorsWithoutSubject works like [content.Successors] but never returns
-// the Subject of an OCI image manifest, image index, or (deprecated) artifact
-// manifest. Other descriptor types fall through to [content.Successors] since
-// they have no Subject field in their schema.
-func successorsWithoutSubject(ctx context.Context, fetcher content.Fetcher, node ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-	switch node.MediaType {
+// Docker manifest media types. Carry no subject field, so they are forwarded
+// to [content.Successors] for layer/child enumeration with a nil subject.
+const (
+	mediaTypeDockerManifest     = "application/vnd.docker.distribution.manifest.v2+json"
+	mediaTypeDockerManifestList = "application/vnd.docker.distribution.manifest.list.v2+json"
+)
+
+// classify decodes desc once and returns its subject (nil if desc is not a
+// referrer) and its containment successors (config+layers, child manifests, or
+// blobs depending on media type). Docker manifest types have no subject and
+// are forwarded to [content.Successors]. Any other media type returns
+// (nil, nil, nil) — it is not fetched and contributes no edges.
+func classify(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) (*ociImageSpecV1.Descriptor, []ociImageSpecV1.Descriptor, error) {
+	switch desc.MediaType {
 	case ociImageSpecV1.MediaTypeImageManifest:
-		raw, err := content.FetchAll(ctx, fetcher, node)
+		raw, err := content.FetchAll(ctx, fetcher, desc)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var manifest ociImageSpecV1.Manifest
 		if err := json.Unmarshal(raw, &manifest); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), nil
+		return manifest.Subject, append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), nil
 	case ociImageSpecV1.MediaTypeImageIndex:
-		raw, err := content.FetchAll(ctx, fetcher, node)
+		raw, err := content.FetchAll(ctx, fetcher, desc)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var index ociImageSpecV1.Index
 		if err := json.Unmarshal(raw, &index); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return index.Manifests, nil
+		return index.Subject, index.Manifests, nil
 	case mediaTypeOCIArtifactManifest:
-		raw, err := content.FetchAll(ctx, fetcher, node)
-		if err != nil {
-			return nil, err
-		}
-		var manifest struct {
-			Blobs []ociImageSpecV1.Descriptor `json:"blobs,omitempty"`
-		}
-		if err := json.Unmarshal(raw, &manifest); err != nil {
-			return nil, err
-		}
-		return manifest.Blobs, nil
-	}
-	return content.Successors(ctx, fetcher, node)
-}
-
-// Subject returns the subject descriptor declared by desc, or nil if it has
-// none — a non-nil result means desc is a referrer. It decodes only the subject
-// field from the body of an image manifest, image index, or (deprecated)
-// artifact manifest; any other media type has no subject and is not fetched.
-//
-// This replicates oras-go's internal manifestutil.Subject, which is not
-// importable from outside oras-go.
-func Subject(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) (*ociImageSpecV1.Descriptor, error) {
-	switch desc.MediaType {
-	case ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.MediaTypeImageIndex, mediaTypeOCIArtifactManifest:
 		raw, err := content.FetchAll(ctx, fetcher, desc)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var manifest struct {
-			Subject *ociImageSpecV1.Descriptor `json:"subject,omitempty"`
+			Subject *ociImageSpecV1.Descriptor  `json:"subject,omitempty"`
+			Blobs   []ociImageSpecV1.Descriptor `json:"blobs,omitempty"`
 		}
 		if err := json.Unmarshal(raw, &manifest); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return manifest.Subject, nil
-	default:
-		return nil, nil
+		return manifest.Subject, manifest.Blobs, nil
+	case mediaTypeDockerManifest, mediaTypeDockerManifestList:
+		successors, err := content.Successors(ctx, fetcher, desc)
+		return nil, successors, err
 	}
+	return nil, nil, nil
 }
