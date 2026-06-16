@@ -91,6 +91,7 @@ func main() {
 		resolverWorkerCount       int
 		resolverWorkerQueueLength int
 		resolverSubscriberBuffer  int
+		resolverCacheTTL          int
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -116,6 +117,8 @@ func main() {
 	flag.IntVar(&resolverSubscriberBuffer, "resolver-subscriber-buffer-size", 100, //nolint:mnd // no magic number
 		"The buffer size for each subscriber's event channel. A larger buffer reduces the probability of dropped resolution events under load. "+
 			"Tune upward if the resolver_event_channel_drops_total metric is non-zero.")
+	flag.IntVar(&resolverCacheTTL, "resolver-cache-ttl", 30, //nolint:mnd // no magic number
+		"The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.")
 
 	opts := zap.Options{
 		Development: true,
@@ -144,6 +147,12 @@ func main() {
 	if resolverSubscriberBuffer > resolverWorkerQueueLength {
 		setupLog.Error(nil, "invalid flag value", "flag", "resolver-subscriber-buffer-size",
 			"value", resolverSubscriberBuffer, "reason", "must not exceed resolver-worker-queue-length")
+		os.Exit(1)
+	}
+
+	if resolverCacheTTL <= 0 {
+		setupLog.Error(nil, "invalid flag value", "flag", "resolver-cache-ttl",
+			"value", resolverCacheTTL, "reason", "must be > 0")
 		os.Exit(1)
 	}
 
@@ -255,7 +264,7 @@ func main() {
 	}
 
 	const unlimited = 0
-	ttl := time.Minute * 30
+	ttl := time.Minute * time.Duration(resolverCacheTTL)
 	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
 
 	// Create worker pool with its own dependencies
