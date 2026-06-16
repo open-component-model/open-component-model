@@ -2175,6 +2175,10 @@ configurations:
       type: CommonTransportFormat/v1
       filePath: /legacy/archive
     prefix: ocm.software/legacy
+- type: transfer.config.ocm.software/v1alpha1
+  recursive: -1
+  copyMode: allResources
+  uploadType: ociArtifact
 - type: credentials.config.ocm.software
   consumers:
   - identity:
@@ -2205,6 +2209,10 @@ configurations:
       type: CommonTransportFormat/v1
     versionConstraint: '>=1.0.0'
   type: resolvers.config.ocm.software/v1alpha1
+- copyMode: allResources
+  recursive: -1
+  type: transfer.config.ocm.software/v1alpha1
+  uploadType: ociArtifact
 - rules:
   - filename: output.tar
     layerSelectors:

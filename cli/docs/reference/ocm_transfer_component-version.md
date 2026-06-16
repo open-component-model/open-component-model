@@ -16,28 +16,37 @@ Transfer a component version between OCM repositories
 Transfer a single component version from a source repository to
 a target repository using an internally generated transformation graph.
 
-This command constructs a TransformationGraphDefinition consisting of:
-  1. CTFGetComponentVersion -> OCIGetComponentVersion
-  2. CTFAddComponentVersion -> OCIAddComponentVersion
-  3. GetOCIArtifact -> OCIAddLocalResource / AddOCIArtifact
-  4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact
-
-We support OCI and CTF as well as Helm repositories as transfer sources.
+OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
-The graph is built accordingly based on the provided references.
-By default, only the component version itself is transferred, but with --copy-resources, all resources are also copied and transformed if necessary.
 
-The graph is validated, and then executed unless --dry-run is set.
+By default, only the component version itself is transferred. Use --copy-resources to also
+copy (and, when needed, transform) the resources it references. --upload-as controls whether
+those resources land as OCI artifacts or as local blobs in the target. --recursive walks the
+component's references and transfers them too.
 
-Alternatively, --transfer-spec can be used to provide a previously saved TransformationGraphDefinition
-from a file (or stdin with "-"), enabling a two-step workflow:
-  1. Generate the spec with all desired flags (--recursive, --copy-resources, --upload-as),
-     then review: transfer cv --dry-run -o yaml --copy-resources --recursive {reference} {target} > spec.yaml
-  2. Edit the spec as needed, then execute: transfer cv --transfer-spec spec.yaml
+Driving defaults from the OCM configuration:
+  A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
+  (passed via --config) sets defaults for --recursive, --copy-resources, and --upload-as.
+  Explicit command-line flags always override the values from the configuration.
 
-Flags like --recursive, --copy-resources, and --upload-as are baked into the generated spec during
-step 1. When --transfer-spec is used in step 2, these flags are ignored because the spec already
-contains the full graph definition. Only --dry-run and --output remain meaningful in step 2.
+Two-step workflow (generate, review, replay):
+  --dry-run builds and validates the graph without executing it, and with -o yaml|json prints
+  the resulting TransformationGraphDefinition. --transfer-spec then replays a saved definition
+  from a file (or stdin with "-"):
+    1. Generate the spec:  transfer cv --dry-run -o yaml --copy-resources -r {reference} {target} > spec.yaml
+    2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
+  All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer
+  configuration entry are baked into the spec during step 1 and are therefore ignored in
+  step 2 - the spec is the full graph definition. Only --dry-run and --output remain
+  meaningful when replaying a spec.
+
+How the graph is built:
+  Internally the command assembles a TransformationGraphDefinition from these node types,
+  selected based on the source/target references:
+    1. CTFGetComponentVersion -> OCIGetComponentVersion
+    2. CTFAddComponentVersion -> OCIAddComponentVersion
+    3. GetOCIArtifact -> OCIAddLocalResource / AddOCIArtifact
+    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact
 
 ```
 ocm transfer component-version {reference} {target} [flags]
@@ -66,6 +75,17 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghc
 
 # Recursively transfer a component version and all its references
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --copy-resources
+
+# Drive defaults from the OCM configuration. With --config ./ocmconfig.yaml containing:
+#   type: generic.config.ocm.software/v1
+#   configurations:
+#   - type: transfer.config.ocm.software/v1alpha1
+#     recursive: -1
+#     copyMode: allResources
+#     uploadType: ociArtifact
+# the following invocation transfers recursively with all resources copied as OCI artifacts.
+# Any explicit flag still overrides the corresponding configuration value.
+transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
 # Two-step transfer: generate a spec with all desired flags, then review and execute
 transfer component-version --dry-run -o yaml --copy-resources -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
