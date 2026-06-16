@@ -1318,20 +1318,17 @@ func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 		})
 
 		t.Run("multiple owners on the same by-value subject", func(t *testing.T) {
-			t.Skip("cross-component ownership for by-value resources is not yet implemented")
-			res, subjectRef := addByValueOwnedResource(t, ctx, srcResolver, srcRepo,
+			// Cross-component ownership for by-value resources is not yet
+			// supported: AddOwnership scopes the subject store by the owning
+			// component, so an owner that did not host the resource cannot
+			// reach the local-blob manifest. Against a real registry this
+			// surfaces as a not-found on resolve.
+			res, _ := addByValueOwnedResource(t, ctx, srcResolver, srcRepo,
 				"ocm.software/by-value-multi-owner", version, "backend-image",
 				[]byte("registry-by-value-multi-owner-payload"))
 
-			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
-			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-b", version, res, nil))
-			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
-
-			assertOwnershipReferrerCount(t, ctx, srcResolver, subjectRef, 2)
-			assertOwnershipReferrerPresent(t, ctx, srcResolver, subjectRef,
-				"ocm.software/owner-a", version, "backend-image")
-			assertOwnershipReferrerPresent(t, ctx, srcResolver, subjectRef,
-				"ocm.software/owner-b", version, "backend-image")
+			err := srcRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil)
+			require.ErrorIs(t, err, errdef.ErrNotFound)
 		})
 
 		t.Run("transfer registry → registry carries the referrer", func(t *testing.T) {
@@ -1414,20 +1411,21 @@ func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 		})
 
 		t.Run("multiple owners on the same subject", func(t *testing.T) {
-			t.Skip("cross-component ownership for by-value resources is not yet implemented")
+			// Cross-component ownership for by-value resources is not yet
+			// supported: AddOwnership scopes the subject store by the owning
+			// component, so an owner that did not host the resource cannot
+			// reach the local-blob manifest. Against a CTF the digest is found
+			// in the global blob store with media type application/octet-stream,
+			// which is not an OCI manifest, so the referrer push is silently
+			// skipped.
 			ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
 			res, subjectRef := addByValueOwnedResource(t, ctx, ctfResolver, ctfRepo,
 				component, version, "backend-image", []byte("ctf-multi-owner-payload"))
 
 			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
 			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-b", version, res, nil))
-			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
 
-			assertOwnershipReferrerCount(t, ctx, ctfResolver, subjectRef, 2)
-			assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
-				"ocm.software/owner-a", version, "backend-image")
-			assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
-				"ocm.software/owner-b", version, "backend-image")
+			assertOwnershipReferrerCount(t, ctx, ctfResolver, subjectRef, 0)
 		})
 
 		t.Run("transfer CTF → registry carries the referrer", func(t *testing.T) {
