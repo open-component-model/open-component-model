@@ -19,6 +19,29 @@
 //   - SigstoreSigningConfiguration/v1alpha1 — passed via --signer-spec
 //   - SigstoreVerificationConfiguration/v1alpha1 — passed via --verifier-spec
 //
+// # Algorithm Versioning
+//
+// The OCM Sigstore algorithm is versioned to allow multiple generations of the
+// signing flow to coexist. The current generation is "Sigstore/v1alpha1"
+// (signing/v1alpha1.AlgorithmSigstoreV1Alpha1).
+//
+// SignConfig.SignatureAlgorithm is optional. When empty, the handler picks
+// signing/v1alpha1.AlgorithmSigstoreDefault, which is the recommended default
+// for new signatures. Bumping the default is a breaking change.
+//
+// Algorithm and bundle MediaType are validated independently on verify:
+// SignatureInfo.Algorithm must be a known Algorithm
+// (signing/v1alpha1.IsKnownAlgorithm) and SignatureInfo.MediaType must be a
+// MediaType this handler can read (signing/v1alpha1.IsAcceptableMediaType).
+// The two predicates are decoupled so a future cosign bundle wire-format
+// version that is semantically compatible can be accepted without touching
+// the Algorithm enum.
+//
+// The wire value changed from the pre-PR bare string "sigstore" to
+// "Sigstore/v1alpha1" in this generation. Signatures produced by older OCM
+// CLI versions must be re-signed; verifying them returns
+// signing/v1alpha1.ErrUnknownAlgorithm.
+//
 // # Endpoint Discovery
 //
 // Signing endpoints (Fulcio, Rekor, TSA) are configured via a signing config

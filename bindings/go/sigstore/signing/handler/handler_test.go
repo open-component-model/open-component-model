@@ -10,6 +10,7 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -304,7 +305,7 @@ func TestHandler_Sign(t *testing.T) {
 			creds: &oidcv1.OIDCIdentityToken{Token: "test-token"},
 			assertResult: func(t *testing.T, result descruntime.SignatureInfo) {
 				r := require.New(t)
-				r.Equal(v1alpha1.AlgorithmSigstore, result.Algorithm)
+				r.Equal(string(v1alpha1.AlgorithmSigstoreV1Alpha1), result.Algorithm)
 				r.Equal(v1alpha1.MediaTypeSigstoreBundle, result.MediaType)
 				decoded, err := base64.StdEncoding.DecodeString(result.Value)
 				r.NoError(err)
@@ -408,6 +409,140 @@ func TestSign_UnregisteredConfigType(t *testing.T) {
 	r.Contains(err.Error(), "convert config")
 }
 
+func TestSign_DefaultAlgorithm(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	mock := newSignMock(t, fakeBundleJSON(t))
+	h := newWithRunner(mock)
+
+	cfg := testSignConfig() // SignatureAlgorithm empty
+	result, err := h.Sign(t.Context(), testDigest(), cfg, &oidcv1.OIDCIdentityToken{Token: "test-token"})
+	r.NoError(err)
+	r.Equal(string(v1alpha1.AlgorithmSigstoreDefault), result.Algorithm)
+	r.Equal(v1alpha1.MediaTypeSigstoreBundle, result.MediaType)
+}
+
+func TestSign_ExplicitAlgorithm(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	mock := newSignMock(t, fakeBundleJSON(t))
+	h := newWithRunner(mock)
+
+	cfg := testSignConfig()
+	cfg.SignatureAlgorithm = v1alpha1.AlgorithmSigstoreV1Alpha1
+	result, err := h.Sign(t.Context(), testDigest(), cfg, &oidcv1.OIDCIdentityToken{Token: "test-token"})
+	r.NoError(err)
+	r.Equal(string(v1alpha1.AlgorithmSigstoreV1Alpha1), result.Algorithm)
+}
+
+// TestSign_UnknownAlgorithm_RejectedByValidate documents that Sign relies on
+// cfg.Validate to reject unknown algorithms (the rejection happens before
+// GetSignatureAlgorithm is consulted). The matching unit-level coverage lives
+// in TestSignConfig_Validate; this test pins the call ordering through Sign.
+func TestSign_UnknownAlgorithm_RejectedByValidate(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	h := newWithRunner(&execRecorder{})
+
+	cfg := testSignConfig()
+	cfg.SignatureAlgorithm = "Sigstore/v99alpha1"
+	_, err := h.Sign(t.Context(), testDigest(), cfg, &oidcv1.OIDCIdentityToken{Token: "test-token"})
+	r.Error(err)
+	r.ErrorIs(err, v1alpha1.ErrUnknownAlgorithm)
+}
+
+func TestVerify_EmptyAlgorithmRejected(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	h := newWithRunner(&execRecorder{})
+	cfg := testVerifyConfig()
+	signed := descruntime.Signature{
+		Name:   "test-sig",
+		Digest: testDigest(),
+		Signature: descruntime.SignatureInfo{
+			MediaType: v1alpha1.MediaTypeSigstoreBundle,
+			Value:     base64.StdEncoding.EncodeToString(fakeBundleJSON(t)),
+		},
+	}
+
+	err := h.Verify(t.Context(), signed, cfg, nil)
+	r.Error(err)
+	r.ErrorIs(err, v1alpha1.ErrAlgorithmRequired)
+}
+
+func TestVerify_UnknownAlgorithmRejected(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	h := newWithRunner(&execRecorder{})
+	cfg := testVerifyConfig()
+	signed := descruntime.Signature{
+		Name:   "test-sig",
+		Digest: testDigest(),
+		Signature: descruntime.SignatureInfo{
+			Algorithm: "Sigstore/v99alpha1",
+			MediaType: v1alpha1.MediaTypeSigstoreBundle,
+			Value:     base64.StdEncoding.EncodeToString(fakeBundleJSON(t)),
+		},
+	}
+
+	err := h.Verify(t.Context(), signed, cfg, nil)
+	r.Error(err)
+	r.ErrorIs(err, v1alpha1.ErrUnknownAlgorithm)
+}
+
+// TestVerify_LegacyBareSigstoreRejected pins the deliberate breaking change:
+// pre-PR signatures carry Algorithm: "sigstore" and must now fail with the
+// unknown-algorithm sentinel. Producers must re-sign with the OCM CLI shipped
+// alongside Sigstore/v1alpha1. The Contains assertion locks in that the
+// offending value survives wrapping (so log lines stay actionable).
+func TestVerify_LegacyBareSigstoreRejected(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	h := newWithRunner(&execRecorder{})
+	cfg := testVerifyConfig()
+	signed := descruntime.Signature{
+		Name:   "test-sig",
+		Digest: testDigest(),
+		Signature: descruntime.SignatureInfo{
+			Algorithm: "sigstore",
+			MediaType: v1alpha1.MediaTypeSigstoreBundle,
+			Value:     base64.StdEncoding.EncodeToString(fakeBundleJSON(t)),
+		},
+	}
+
+	err := h.Verify(t.Context(), signed, cfg, nil)
+	r.Error(err)
+	r.ErrorIs(err, v1alpha1.ErrUnknownAlgorithm)
+	r.Contains(err.Error(), `"sigstore"`)
+}
+
+func TestVerify_UnacceptableMediaTypeForAlgorithm(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	h := newWithRunner(&execRecorder{})
+	cfg := testVerifyConfig()
+	signed := descruntime.Signature{
+		Name:   "test-sig",
+		Digest: testDigest(),
+		Signature: descruntime.SignatureInfo{
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
+			MediaType: "application/x-unexpected",
+			Value:     base64.StdEncoding.EncodeToString(fakeBundleJSON(t)),
+		},
+	}
+
+	err := h.Verify(t.Context(), signed, cfg, nil)
+	r.Error(err)
+	r.ErrorIs(err, v1alpha1.ErrUnacceptableMediaType)
+}
+
 func TestSign_AmbientSIGSTORE_ID_TOKEN(t *testing.T) {
 	t.Setenv("SIGSTORE_ID_TOKEN", "ambient-token-from-env")
 
@@ -451,7 +586,7 @@ func TestVerify_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
 		Name:   "test-sig",
 		Digest: testDigest(),
 		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmSigstore,
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			MediaType: v1alpha1.MediaTypeSigstoreBundle,
 			Value:     base64.StdEncoding.EncodeToString(bundleJSON),
 		},
@@ -564,7 +699,7 @@ func TestHandler_Verify(t *testing.T) {
 				Name:   "test-sig",
 				Digest: testDigest(),
 				Signature: descruntime.SignatureInfo{
-					Algorithm: v1alpha1.AlgorithmSigstore,
+					Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 					MediaType: v1alpha1.MediaTypeSigstoreBundle,
 					Value:     base64.StdEncoding.EncodeToString(bundleJSON),
 				},
@@ -603,7 +738,7 @@ func TestVerify_MissingIdentity(t *testing.T) {
 		Name:   "test-sig",
 		Digest: testDigest(),
 		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmSigstore,
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			MediaType: v1alpha1.MediaTypeSigstoreBundle,
 			Value:     base64.StdEncoding.EncodeToString(bundleJSON),
 		},
@@ -628,7 +763,7 @@ func TestVerify_PrivateInfrastructureWithoutTrustedRoot(t *testing.T) {
 		Name:   "test-sig",
 		Digest: testDigest(),
 		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmSigstore,
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			MediaType: v1alpha1.MediaTypeSigstoreBundle,
 			Value:     base64.StdEncoding.EncodeToString(bundleJSON),
 		},
@@ -652,7 +787,7 @@ func TestVerify_EmptyDigestRejected(t *testing.T) {
 		Name:   "test-sig",
 		Digest: descruntime.Digest{Value: ""},
 		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmSigstore,
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			MediaType: v1alpha1.MediaTypeSigstoreBundle,
 			Value:     base64.StdEncoding.EncodeToString(bundleJSON),
 		},
@@ -682,7 +817,7 @@ func TestVerify_PrivateInfrastructureWithTrustedRootCredential(t *testing.T) {
 		Name:   "test-sig",
 		Digest: testDigest(),
 		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmSigstore,
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			MediaType: v1alpha1.MediaTypeSigstoreBundle,
 			Value:     base64.StdEncoding.EncodeToString(bundleJSON),
 		},
@@ -709,7 +844,7 @@ func TestVerify_CertificateOIDCIssuerAcceptsHTTP(t *testing.T) {
 		Name:   "test-sig",
 		Digest: testDigest(),
 		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmSigstore,
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			MediaType: v1alpha1.MediaTypeSigstoreBundle,
 			Value:     base64.StdEncoding.EncodeToString(bundleJSON),
 		},
@@ -730,7 +865,7 @@ func TestVerify_InvalidBase64Bundle(t *testing.T) {
 		Name:   "test-sig",
 		Digest: testDigest(),
 		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmSigstore,
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			MediaType: v1alpha1.MediaTypeSigstoreBundle,
 			Value:     "not-valid-base64!!!",
 		},
@@ -752,7 +887,7 @@ func TestVerify_UnregisteredConfigType(t *testing.T) {
 		Name:   "test-sig",
 		Digest: testDigest(),
 		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmSigstore,
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			MediaType: v1alpha1.MediaTypeSigstoreBundle,
 			Value:     base64.StdEncoding.EncodeToString(fakeBundleJSON(t)),
 		},
@@ -773,7 +908,7 @@ func TestVerify_UnsupportedMediaType(t *testing.T) {
 		Name:   "test-sig",
 		Digest: testDigest(),
 		Signature: descruntime.SignatureInfo{
-			Algorithm: "RSA-PSS",
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			MediaType: "application/pgp-signature",
 			Value:     "irrelevant",
 		},
@@ -781,7 +916,7 @@ func TestVerify_UnsupportedMediaType(t *testing.T) {
 
 	err := h.Verify(t.Context(), signed, cfg, nil)
 	r.Error(err)
-	r.Contains(err.Error(), "unsupported media type")
+	r.Contains(err.Error(), "media type")
 }
 
 // --- ResolveTrustedRootPath Tests ---
@@ -927,17 +1062,38 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 
 	tests := []struct {
 		name      string
+		algorithm string
 		mediaType string
-		wantErr   string
+		wantErrIs error
 	}{
 		{
 			name:      "valid sigstore bundle",
+			algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			mediaType: v1alpha1.MediaTypeSigstoreBundle,
 		},
 		{
-			name:      "unsupported media type",
+			name:      "missing algorithm",
+			algorithm: "",
+			mediaType: v1alpha1.MediaTypeSigstoreBundle,
+			wantErrIs: v1alpha1.ErrAlgorithmRequired,
+		},
+		{
+			name:      "unknown algorithm",
+			algorithm: "Sigstore/v99alpha1",
+			mediaType: v1alpha1.MediaTypeSigstoreBundle,
+			wantErrIs: v1alpha1.ErrUnknownAlgorithm,
+		},
+		{
+			name:      "legacy bare sigstore string",
+			algorithm: "sigstore",
+			mediaType: v1alpha1.MediaTypeSigstoreBundle,
+			wantErrIs: v1alpha1.ErrUnknownAlgorithm,
+		},
+		{
+			name:      "unacceptable media type",
+			algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			mediaType: "application/pgp-signature",
-			wantErr:   "unsupported media type",
+			wantErrIs: v1alpha1.ErrUnacceptableMediaType,
 		},
 	}
 
@@ -948,13 +1104,17 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 
 			h := newWithRunner(&execRecorder{})
 			signed := descruntime.Signature{
-				Name:      "my-sig",
-				Signature: descruntime.SignatureInfo{MediaType: tc.mediaType},
+				Name: "my-sig",
+				Signature: descruntime.SignatureInfo{
+					Algorithm: tc.algorithm,
+					MediaType: tc.mediaType,
+				},
 			}
 
 			id, err := h.GetVerifyingCredentialConsumerIdentity(t.Context(), signed, nil)
-			if tc.wantErr != "" {
-				r.ErrorContains(err, tc.wantErr)
+			if tc.wantErrIs != nil {
+				r.Error(err)
+				r.True(errors.Is(err, tc.wantErrIs), "expected %v, got %v", tc.wantErrIs, err)
 				return
 			}
 			r.NoError(err)
