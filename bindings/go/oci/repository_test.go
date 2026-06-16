@@ -1978,7 +1978,7 @@ func TestRepository_RemoveComponentVersionAlias(t *testing.T) {
 			assert: func(t *testing.T, repo *oci.Repository, removeErr error) {
 				r := require.New(t)
 				r.Error(removeErr)
-				r.Contains(removeErr.Error(), "uses semantic version format")
+				r.Contains(removeErr.Error(), "not an alias")
 
 				got, err := repo.GetComponentVersion(t.Context(), componentName, "1.0.0")
 				r.NoError(err, "version must be unaffected after rejected removal")
