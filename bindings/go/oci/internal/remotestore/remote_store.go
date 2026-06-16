@@ -15,7 +15,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
-	spec "ocm.software/open-component-model/bindings/go/oci/spec"
+	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
 // ErrTagDeletionDisabled is returned when the registry responds with 405 Method Not Allowed
@@ -58,7 +58,7 @@ func (r *RemoteStore) Untag(ctx context.Context, reference string) error {
 		Path:   path.Join("/v2", ref.Repository, "manifests", reference),
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint.String(), http.NoBody)
 	if err != nil {
 		return fmt.Errorf("failed to build delete request for alias %q: %w", reference, err)
 	}
