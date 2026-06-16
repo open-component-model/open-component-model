@@ -53,6 +53,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	ocispec "ocm.software/open-component-model/bindings/go/oci/spec"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
@@ -1471,6 +1472,102 @@ func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 				component, version, "backend-image")
 		})
 	})
+}
+
+// Test_Integration_OCIRepository_ReferrerChainTransfer pins that a transfer
+// driven by [oras.ExtendedCopyGraph] (via [oci.Repository.UploadResource])
+// carries arbitrary-depth referrer chains, not just the immediate referrers
+// of the transferred subject. This is independent of OCM ownership semantics:
+// we build the chain as raw OCI manifests with [ociImageSpecV1.Manifest.Subject]
+// set, then transfer the base image and verify every link survives.
+//
+//	base ◄── link1 ◄── link2 ◄── link3
+func Test_Integration_OCIRepository_ReferrerChainTransfer(t *testing.T) {
+	ctx := t.Context()
+	const (
+		version    = "v1.0.0"
+		chainDepth = 3
+	)
+
+	srcResolver, srcReg, srcRepo := startOwnershipRegistry(t, ctx)
+	dstResolver, dstReg, dstRepo := startOwnershipRegistry(t, ctx)
+
+	srcImageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+		fmt.Sprintf("%s/test-asset/chain-src:%s", srcReg, version),
+		[]byte("chain-base-payload"))
+
+	srcStore, err := srcResolver.StoreForReference(ctx, srcImageRef)
+	require.NoError(t, err)
+	srcRef, err := looseref.ParseReference(srcImageRef)
+	require.NoError(t, err)
+	baseDesc, err := srcStore.Resolve(ctx, srcRef.ReferenceOrTag())
+	require.NoError(t, err)
+
+	chain := make([]ociImageSpecV1.Descriptor, 0, chainDepth)
+	subject := baseDesc
+	for i := 0; i < chainDepth; i++ {
+		linkDesc := pushChainLink(t, ctx, srcStore, subject, fmt.Sprintf("ocm.software/test/link-%d", i+1))
+		chain = append(chain, linkDesc)
+		subject = linkDesc
+	}
+
+	srcRes := byReferenceResource("chain-image", version, srcImageRef)
+	dstImageRef := fmt.Sprintf("%s/test-asset/chain-dst:%s", dstReg, version)
+	transferred := transferByReferenceResource(t, ctx, srcRepo, dstRepo, srcRes, dstImageRef)
+
+	dstStore, err := dstResolver.StoreForReference(ctx, transferred)
+	require.NoError(t, err)
+	dstGraph, ok := dstStore.(content.ReadOnlyGraphStorage)
+	require.Truef(t, ok, "dst store %T must implement content.ReadOnlyGraphStorage", dstStore)
+	dstRef, err := looseref.ParseReference(transferred)
+	require.NoError(t, err)
+	dstBase, err := dstStore.Resolve(ctx, dstRef.ReferenceOrTag())
+	require.NoError(t, err)
+	require.Equal(t, baseDesc.Digest, dstBase.Digest, "transferred base must keep its digest")
+
+	subjectAtDst := dstBase
+	for i, want := range chain {
+		refs, err := orasregistry.Referrers(ctx, dstGraph, subjectAtDst, fmt.Sprintf("ocm.software/test/link-%d", i+1))
+		require.NoErrorf(t, err, "discover referrers for chain level %d", i+1)
+		require.Lenf(t, refs, 1, "chain level %d must surface exactly one referrer at dst", i+1)
+		assert.Equalf(t, want.Digest, refs[0].Digest,
+			"chain level %d referrer digest at dst must match src", i+1)
+		subjectAtDst = refs[0]
+	}
+}
+
+// pushChainLink writes an empty-payload OCI manifest to store with subject set
+// to the given subject and the given artifactType, returning its descriptor.
+// Each call produces a unique digest because the artifactType varies.
+func pushChainLink(t *testing.T, ctx context.Context, store ocispec.Store, subject ociImageSpecV1.Descriptor, artifactType string) ociImageSpecV1.Descriptor {
+	t.Helper()
+	r := require.New(t)
+
+	empty := ociImageSpecV1.DescriptorEmptyJSON
+	manifest := ociImageSpecV1.Manifest{
+		Versioned:    specs.Versioned{SchemaVersion: 2},
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: artifactType,
+		Config:       empty,
+		Layers:       []ociImageSpecV1.Descriptor{empty},
+		Subject:      &subject,
+	}
+	body, err := json.Marshal(manifest)
+	r.NoError(err)
+	desc := ociImageSpecV1.Descriptor{
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: artifactType,
+		Digest:       digest.FromBytes(body),
+		Size:         int64(len(body)),
+	}
+
+	if err := store.Push(ctx, empty, bytes.NewReader(empty.Data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		r.NoError(err)
+	}
+	if err := store.Push(ctx, desc, bytes.NewReader(body)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		r.NoError(err)
+	}
+	return desc
 }
 
 // startOwnershipRegistry boots a fresh htpasswd-protected distribution registry
