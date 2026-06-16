@@ -103,7 +103,7 @@ configurations:
               publicKeyPEMFile: /tmp/keys/public-key.pem
 ```
 
-`Credentials/v1` (an alias for `DirectCredentials/v1`) uses a nested `properties:` map with `camel_case` keys and works
+`Credentials/v1` (an alias for `DirectCredentials/v1`) uses a nested `properties:` map with `camelCase` keys and works
 in all OCM versions.
 {{< /tab >}}
 {{< /tabs >}}
@@ -146,6 +146,30 @@ configurations:
 
 GPG signing uses a different identity type (`GPG/v1alpha1`) and ASCII-armored OpenPGP key files (`.asc`). Generate the keys via [How-To: Generate Signing Keys → GPG]({{< relref "generate-signing-keys.md" >}}) first.
 
+You can use either the typed `GPGCredentials/v1alpha1` (recommended for new configurations) or the legacy `Credentials/v1`:
+
+{{< tabs "signing-cred-type-gpg" >}}
+{{< tab "GPGCredentials/v1alpha1 (typed)" >}}
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: GPG/v1alpha1
+          signature: default
+        credentials:
+          - type: GPGCredentials/v1alpha1
+            privateKeyPGPFile: /tmp/keys/signing-key.asc
+            publicKeyPGPFile: /tmp/keys/verify-key.asc
+```
+
+`GPGCredentials/v1alpha1` uses flat `camelCase` fields validated at parse time. For all supported fields, see
+[Reference: Credential Types]({{< relref "docs/reference/credential-types.md" >}}).
+{{< /tab >}}
+{{< tab "Credentials/v1 (legacy)" >}}
+
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
@@ -161,13 +185,45 @@ configurations:
               publicKeyPGPFile: /tmp/keys/verify-key.asc
 ```
 
+`Credentials/v1` (an alias for `DirectCredentials/v1`) uses a nested `properties:` map with `camelCase` keys and works
+in all OCM versions.
+{{< /tab >}}
+{{< /tabs >}}
+
 **Key paths:**
 
 - `privateKeyPGPFile` - Required for **signing** operations (ASCII-armored OpenPGP private key)
 - `publicKeyPGPFile` - Required for **verification** operations (ASCII-armored OpenPGP public key)
 
+<br>
+It is also possible to configure the keys inline. With `GPGCredentials/v1alpha1` use `privateKeyPGP` / `publicKeyPGP`; with `Credentials/v1` use `privateKeyPGP` / `publicKeyPGP` inside `properties:`.
+
+{{< details "Example .ocmconfig with inline keys (GPGCredentials/v1alpha1)" >}}
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: GPG/v1alpha1
+          signature: default
+        credentials:
+          - type: GPGCredentials/v1alpha1
+            privateKeyPGP: |
+              -----BEGIN PGP PRIVATE KEY BLOCK-----
+              ...
+              -----END PGP PRIVATE KEY BLOCK-----
+            publicKeyPGP: |
+              -----BEGIN PGP PUBLIC KEY BLOCK-----
+              ...
+              -----END PGP PUBLIC KEY BLOCK-----
+```
+
+{{< /details >}}
+
 {{< callout context="note" >}}
-For passphrase-protected private keys, add a `passphrase: <secret>` property next to `privateKeyPGPFile`. OCM decrypts the key in memory only; the passphrase is never written back to disk.
+For passphrase-protected private keys, add a `passphrase: <secret>` field (top-level for `GPGCredentials/v1alpha1`, or inside `properties:` for `Credentials/v1`). OCM decrypts the key in memory only; the passphrase is never written back to disk.
 {{< /callout >}}
 
 If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer spec (set in the [sign how-to]({{< relref "sign-component-version.md" >}})), not in `.ocmconfig`.
