@@ -17,7 +17,6 @@ import (
 	"oras.land/oras-go/v2/content/memory"
 
 	"ocm.software/open-component-model/bindings/go/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	ocmannotations "ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
@@ -316,32 +315,6 @@ func TestRepushReferrerIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, indexAfterFirst.Digest, indexAfterSecond.Digest)
 	assert.Len(t, listReferrers(t, repo, subject, ""), 1)
-}
-
-func TestArtifactManifestReferrer(t *testing.T) {
-	repo, _ := referrersTestRepo(t)
-	subject := pushedSubject(t, repo)
-
-	annotations := map[string]string{"ref": "artifact-manifest"}
-	manifest := artifactManifest{
-		MediaType:    introspection.MediaTypeArtifactManifest,
-		ArtifactType: testOwnershipArtifactType,
-		Subject:      &subject,
-		Annotations:  annotations,
-	}
-	raw, err := json.Marshal(manifest)
-	require.NoError(t, err)
-	refDesc := ociImageSpecV1.Descriptor{
-		MediaType: introspection.MediaTypeArtifactManifest,
-		Digest:    digest.FromBytes(raw),
-		Size:      int64(len(raw)),
-	}
-	require.NoError(t, repo.Push(t.Context(), refDesc, bytes.NewReader(raw)))
-
-	got := listReferrers(t, repo, subject, testOwnershipArtifactType)
-	require.Len(t, got, 1)
-	assert.Equal(t, refDesc.Digest, got[0].Digest)
-	assert.Equal(t, annotations, got[0].Annotations)
 }
 
 func TestIndexReferrerKeepsEmptyArtifactType(t *testing.T) {

@@ -205,8 +205,7 @@ func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// handle MediaTypeArtifactManifest for interoperability with oras-go
-	if !introspection.IsOCICompliantMediaType(expected.MediaType) && expected.MediaType != introspection.MediaTypeArtifactManifest {
+	if !introspection.IsOCICompliantMediaType(expected.MediaType) {
 		if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
 			return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 		}

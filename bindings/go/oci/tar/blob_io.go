@@ -176,9 +176,6 @@ func pickTopLevelDescriptor(ociStore *CloseableReadOnlyStore) (ociImageSpecV1.De
 	)
 }
 
-// mediaTypeOCIArtifactManifest is the deprecated OCI artifact manifest (image-spec v1.1.0-rc1/rc2); the oras-go constant lives in an internal package.
-const mediaTypeOCIArtifactManifest = "application/vnd.oci.artifact.manifest.v1+json"
-
 // Docker manifest media types. Carry no subject field, so they are forwarded
 // to [content.Successors] for layer/child enumeration with a nil subject.
 const (
@@ -213,19 +210,6 @@ func classify(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.
 			return nil, nil, err
 		}
 		return index.Subject, index.Manifests, nil
-	case mediaTypeOCIArtifactManifest:
-		raw, err := content.FetchAll(ctx, fetcher, desc)
-		if err != nil {
-			return nil, nil, err
-		}
-		var manifest struct {
-			Subject *ociImageSpecV1.Descriptor  `json:"subject,omitempty"`
-			Blobs   []ociImageSpecV1.Descriptor `json:"blobs,omitempty"`
-		}
-		if err := json.Unmarshal(raw, &manifest); err != nil {
-			return nil, nil, err
-		}
-		return manifest.Subject, manifest.Blobs, nil
 	case mediaTypeDockerManifest, mediaTypeDockerManifestList:
 		successors, err := content.Successors(ctx, fetcher, desc)
 		return nil, successors, err

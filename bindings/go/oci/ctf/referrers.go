@@ -19,7 +19,6 @@ import (
 
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
-	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 )
 
 var _ registry.ReferrerLister = (*repository)(nil)
@@ -191,16 +190,6 @@ func (s *repository) updateReferrersIndex(ctx context.Context, idx v1.Index, sub
 	return nil
 }
 
-// artifactManifest is the subset of the deprecated OCI artifact manifest
-// (introspection.MediaTypeArtifactManifest) needed for referrer indexing.
-// oras-go/v2 defines the full type in internal/spec (not importable).
-type artifactManifest struct {
-	MediaType    string                     `json:"mediaType"`
-	ArtifactType string                     `json:"artifactType,omitempty"`
-	Subject      *ociImageSpecV1.Descriptor `json:"subject,omitempty"`
-	Annotations  map[string]string          `json:"annotations,omitempty"`
-}
-
 // referrerFromManifest inspects a pushed manifest for a subject field and, if
 // present, returns the subject together with the referrer descriptor enriched
 // the way the Referrers API response requires: artifactType set (falling back
@@ -214,18 +203,6 @@ type artifactManifest struct {
 // itself. This fits our control flow better.
 func referrerFromManifest(desc ociImageSpecV1.Descriptor, manifestJSON []byte) (referrer ociImageSpecV1.Descriptor, subject *ociImageSpecV1.Descriptor, err error) {
 	switch desc.MediaType {
-	case introspection.MediaTypeArtifactManifest:
-		var manifest artifactManifest
-		if err := json.Unmarshal(manifestJSON, &manifest); err != nil {
-			return desc, nil, fmt.Errorf("failed to decode artifact manifest %s: %s: %w", desc.Digest, desc.MediaType, err)
-		}
-		if manifest.Subject == nil {
-			// no subject, no indexing needed
-			return desc, nil, nil
-		}
-		desc.ArtifactType = manifest.ArtifactType
-		desc.Annotations = manifest.Annotations
-		return desc, manifest.Subject, nil
 	case ociImageSpecV1.MediaTypeImageManifest:
 		var manifest ociImageSpecV1.Manifest
 		if err := json.Unmarshal(manifestJSON, &manifest); err != nil {
