@@ -176,7 +176,7 @@ func TestReferrerArtifactTypeFallsBackToConfigMediaType(t *testing.T) {
 	assert.Equal(t, configMediaType, got[0].ArtifactType)
 }
 
-func TestSecondReferrerRetagsIndexWithoutGC(t *testing.T) {
+func TestSecondReferrerRetagsIndexAndGCsPrior(t *testing.T) {
 	ctx := t.Context()
 	repo, archive := referrersTestRepo(t)
 	subject := pushedSubject(t, repo)
@@ -200,10 +200,17 @@ func TestSecondReferrerRetagsIndexWithoutGC(t *testing.T) {
 	assert.Contains(t, digests, ref1Desc.Digest)
 	assert.Contains(t, digests, ref2Desc.Digest)
 
-	// exactly one index entry carries the referrers tag, pointing at the new
-	// referrers index
+	// exactly one index entry refers to the referrers tag/digest, and it
+	// points at the new referrers index. The prior index has no entry.
 	idx, err := archive.GetIndex(ctx)
 	require.NoError(t, err)
+	for _, artifact := range idx.GetArtifacts() {
+		if artifact.Repository != repo.repo {
+			continue
+		}
+		assert.NotEqual(t, firstIndex.Digest.String(), artifact.Digest,
+			"prior referrers index entry should be removed")
+	}
 	var tagged []string
 	for _, artifact := range idx.GetArtifacts() {
 		if artifact.Repository == repo.repo && artifact.Tag == referrersTag {
@@ -213,13 +220,75 @@ func TestSecondReferrerRetagsIndexWithoutGC(t *testing.T) {
 	require.Len(t, tagged, 1)
 	assert.Equal(t, secondIndex.Digest.String(), tagged[0])
 
-	// no GC: the previous referrers index blob remains and is still
-	// resolvable by digest through its now untagged entry
+	// the prior referrers index blob is gone
 	blobs, err := archive.ListBlobs(ctx)
 	require.NoError(t, err)
-	assert.Contains(t, blobs, firstIndex.Digest.String())
+	assert.NotContains(t, blobs, firstIndex.Digest.String())
 	_, err = repo.Resolve(ctx, firstIndex.Digest.String())
-	assert.NoError(t, err)
+	assert.Error(t, err)
+}
+
+// TestReferrerIndexBlobsAreGCdAcrossPushes asserts that each push to a subject
+// that already has referrers retires the prior referrers index: the new index
+// supersedes the old one as the referrers tag, and the prior index blob is
+// best-effort deleted. Only the latest index blob remains on disk.
+func TestReferrerIndexBlobsAreGCdAcrossPushes(t *testing.T) {
+	ctx := t.Context()
+	repo, archive := referrersTestRepo(t)
+	subject := pushedSubject(t, repo)
+	referrersTag, err := buildReferrersTag(subject)
+	require.NoError(t, err)
+
+	const pushes = 4
+	indexDigests := make([]digest.Digest, 0, pushes)
+	for i := range pushes {
+		refDesc, refRaw := imageManifest(t, &subject, testOwnershipArtifactType, "", map[string]string{"ref": strconv.Itoa(i)})
+		require.NoError(t, repo.Push(ctx, refDesc, bytes.NewReader(refRaw)))
+		indexDesc, err := repo.Resolve(ctx, referrersTag)
+		require.NoError(t, err)
+		indexDigests = append(indexDigests, indexDesc.Digest)
+	}
+
+	// every push produced a fresh index digest; nothing was reused
+	seen := make(map[digest.Digest]struct{}, pushes)
+	for _, d := range indexDigests {
+		seen[d] = struct{}{}
+	}
+	require.Len(t, seen, pushes, "each push should produce a new referrers index digest")
+
+	// referrers list itself stays correct
+	require.Len(t, listReferrers(t, repo, subject, ""), pushes)
+
+	// only the latest index blob remains; prior indexes are GCd
+	blobs, err := archive.ListBlobs(ctx)
+	require.NoError(t, err)
+	latest := indexDigests[pushes-1]
+	assert.Contains(t, blobs, latest.String())
+	for _, d := range indexDigests[:pushes-1] {
+		assert.NotContains(t, blobs, d.String(), "stale referrers index blob %s should be GCd", d)
+	}
+
+	// only one index entry carries the referrers tag, and no entry references
+	// any of the prior referrers index digests
+	idx, err := archive.GetIndex(ctx)
+	require.NoError(t, err)
+	priorDigests := make(map[string]struct{}, pushes-1)
+	for _, d := range indexDigests[:pushes-1] {
+		priorDigests[d.String()] = struct{}{}
+	}
+	tagCount := 0
+	for _, artifact := range idx.GetArtifacts() {
+		if artifact.Repository != repo.repo {
+			continue
+		}
+		_, isPrior := priorDigests[artifact.Digest]
+		assert.False(t, isPrior, "prior referrers index %s should have no index entry", artifact.Digest)
+		if artifact.Tag == referrersTag {
+			tagCount++
+			assert.Equal(t, latest.String(), artifact.Digest)
+		}
+	}
+	assert.Equal(t, 1, tagCount, "exactly one entry should carry the referrers tag")
 }
 
 func TestRepushReferrerIsIdempotent(t *testing.T) {

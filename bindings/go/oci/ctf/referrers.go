@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
@@ -61,7 +62,7 @@ func (s *repository) Referrers(ctx context.Context, desc ociImageSpecV1.Descript
 		s.mu.RUnlock()
 		return fmt.Errorf("unable to get index: %w", err)
 	}
-	referrers, err := s.referrersFromArtifactIndex(ctx, idx, referrersTag)
+	_, referrers, err := s.referrersFromArtifactIndex(ctx, idx, referrersTag)
 	s.mu.RUnlock()
 	if err != nil {
 		return err
@@ -92,19 +93,19 @@ func (s *repository) Predecessors(ctx context.Context, desc ociImageSpecV1.Descr
 }
 
 // referrersFromIndex queries the referrers index using the given referrers
-// tag. If Succeeded, returns the descriptor of referrers index and the
-// referrers list.
+// tag. On success, returns the descriptor of the referrers index manifest
+// (zero value if no index exists) and the referrers list it contains.
 //
 // The caller MUST hold a read or a write lock.
-func (s *repository) referrersFromArtifactIndex(ctx context.Context, idx v1.Index, referrersTag string) (referrers []ociImageSpecV1.Descriptor, err error) {
+func (s *repository) referrersFromArtifactIndex(ctx context.Context, idx v1.Index, referrersTag string) (indexDesc ociImageSpecV1.Descriptor, referrers []ociImageSpecV1.Descriptor, err error) {
 	desc, rc, err := s.fetchReference(ctx, idx, referrersTag)
 	if errors.Is(err, errdef.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {
 		// valid case: no referrers index for this subject, or the index
 		// entry is dangling. Self-heal on the next push.
-		return nil, nil
+		return ociImageSpecV1.Descriptor{}, nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("unable to fetch referrers index for referrers tag %q: %w", referrersTag, err)
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("unable to fetch referrers index for referrers tag %q: %w", referrersTag, err)
 	}
 	defer func() {
 		err = errors.Join(err, rc.Close())
@@ -112,14 +113,14 @@ func (s *repository) referrersFromArtifactIndex(ctx context.Context, idx v1.Inde
 
 	raw, err := io.ReadAll(rc)
 	if err != nil {
-		return nil, fmt.Errorf("unable to read referrers index %q for referrers tag %q: %w", desc.Digest, referrersTag, err)
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("unable to read referrers index %q for referrers tag %q: %w", desc.Digest, referrersTag, err)
 	}
 
 	var refIdx ociImageSpecV1.Index
 	if err := json.Unmarshal(raw, &refIdx); err != nil {
-		return nil, fmt.Errorf("failed to decode referrers index from referrers tag %q: %w", referrersTag, err)
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to decode referrers index from referrers tag %q: %w", referrersTag, err)
 	}
-	return refIdx.Manifests, nil
+	return desc, refIdx.Manifests, nil
 }
 
 // updateReferrersIndex updates the referrers index for desc referencing subject
@@ -127,9 +128,14 @@ func (s *repository) referrersFromArtifactIndex(ctx context.Context, idx v1.Inde
 // References:
 //   - https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#pushing-manifests-with-subject
 //
-// CTF does not implement content.Deleter. Therefore, we hard code the semantics
-// of SkipReferrerGC. Since we cannot delete, we cannot end up with empty
-// referrers lists anyway.
+// CTF does not implement content.Deleter and does not implement the
+// SkipReferrerGC negotiation; this is the inline equivalent. Each push that
+// changes the index writes a new index blob, retags the referrers tag onto
+// it, and best-effort deletes the prior index blob. Failures during cleanup
+// are logged but do not fail the push: stale blobs are harmless dead weight,
+// not correctness bugs. The new index is intentionally not tagged by digest —
+// referrers indexes are bookkeeping, never resolved by digest, and a digest
+// tag would leave a dangling index entry behind on the next push.
 //
 // The caller MUST hold a write lock and MUST persist the index after the call.
 func (s *repository) updateReferrersIndex(ctx context.Context, idx v1.Index, subject, referrer ociImageSpecV1.Descriptor) error {
@@ -138,13 +144,11 @@ func (s *repository) updateReferrersIndex(ctx context.Context, idx v1.Index, sub
 		return err
 	}
 
-	oldReferrers, err := s.referrersFromArtifactIndex(ctx, idx, referrersTag)
+	oldIndexDesc, oldReferrers, err := s.referrersFromArtifactIndex(ctx, idx, referrersTag)
 	if err != nil {
 		return err
 	}
 
-	// since we cannot delete manifests, we only ever need to add referrers
-	// to the list
 	updated, changed := addReferrer(oldReferrers, referrer)
 	if !changed {
 		// the referrer is already indexed and the stored index is clean;
@@ -160,15 +164,29 @@ func (s *repository) updateReferrersIndex(ctx context.Context, idx v1.Index, sub
 		return fmt.Errorf("unable to save referrers index for referrers tag %q: %w", referrersTag, err)
 	}
 
-	// tagging the referrer index by its digest (same as we do for every other
-	// manifest in CTF, see pushManifest)
-	if err := s.applyTag(ctx, idx, newIndexDesc, newIndexDesc.Digest.String()); err != nil {
-		return fmt.Errorf("unable to tag referrers index by digest for referrers tag %q: %w", referrersTag, err)
+	hadPriorIndex := !content.Equal(oldIndexDesc, ociImageSpecV1.Descriptor{})
+
+	// Clearing the old tag before creating the new one is kind of a hack. This
+	// allows garbage collection of the old index blobs without having to
+	// extend index API.
+	if hadPriorIndex {
+		if err := idx.RemoveTag(s.repo, referrersTag); err != nil && !errors.Is(err, v1.ErrArtifactNotFound) {
+			return fmt.Errorf("unable to remove prior referrers tag %q: %w", referrersTag, err)
+		}
 	}
 
-	// retag the updated referrer index with the referrers tag schema
+	// tag the new referrer index with the referrers tag schema.
 	if err := s.applyTag(ctx, idx, newIndexDesc, referrersTag); err != nil {
 		return fmt.Errorf("unable to retag referrers index for referrers tag %q: %w", referrersTag, err)
+	}
+
+	// best-effort GC of the prior referrers index blob. The RemoveTag above
+	// dropped the only index entry; nothing else points at this blob.
+	if hadPriorIndex {
+		if err := s.archive.DeleteBlob(ctx, oldIndexDesc.Digest.String()); err != nil {
+			slog.DebugContext(ctx, "failed to delete stale referrers index blob",
+				"digest", oldIndexDesc.Digest.String(), "referrersTag", referrersTag, "error", err)
+		}
 	}
 	return nil
 }
