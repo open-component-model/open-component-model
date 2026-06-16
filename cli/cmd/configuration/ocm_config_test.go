@@ -10,7 +10,6 @@ import (
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
 
 func TestGetOCMConfigPaths(t *testing.T) {
@@ -73,20 +72,18 @@ func TestGetOCMConfigPaths(t *testing.T) {
 			t.Chdir(workingDirectory)
 
 			options := OCMConfigOptions{
-				SyscallInterface: &ocmctx.SyscallInterface{
-					Stat: func(path string) (os.FileInfo, error) {
-						if tt.existing == nil || tt.existing[path] {
-							return nil, nil
-						}
-						return nil, os.ErrNotExist
-					},
-					Getenv: func(key string) string {
-						return tt.envVars[key]
-					},
-					UserHomeDir: func() (string, error) { return "/home/user", nil },
-					Getwd:       func() (string, error) { return workingDirectory, nil },
-					Executable:  func() (string, error) { return ex, nil },
+				Stat: func(path string) (os.FileInfo, error) {
+					if tt.existing == nil || tt.existing[path] {
+						return nil, nil
+					}
+					return nil, os.ErrNotExist
 				},
+				Getenv: func(key string) string {
+					return tt.envVars[key]
+				},
+				UserHomeDir: func() (string, error) { return "/home/user", nil },
+				Getwd:       func() (string, error) { return workingDirectory, nil },
+				Executable:  func() (string, error) { return ex, nil },
 			}
 
 			got, err := GetOCMConfigPaths(options)

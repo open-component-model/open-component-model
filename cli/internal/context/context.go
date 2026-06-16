@@ -18,7 +18,7 @@ type ctxKey string
 
 const key ctxKey = "ocm.software/open-component-model/cli/internal/context"
 
-type SyscallInterface struct {
+type Syscalls struct {
 	Stat        func(string) (os.FileInfo, error)
 	Getenv      func(string) string
 	UserHomeDir func() (string, error)
@@ -68,10 +68,10 @@ type Context struct {
 	// information for type introspection and documentation.
 	subsystemRegistry *subsystem.Registry
 
-	// syscallInterface is central place that contains any syscall functions
+	// syscalls is central place that contains any syscall functions
 	// that commands may rely on instead of calling os.X directly. This enables
 	// stubbing and/or isolation from the real host system when running tests.
-	syscallInterface *SyscallInterface
+	syscalls *Syscalls
 }
 
 // WithCredentialGraph creates a new context with the given credential graph.
@@ -127,14 +127,14 @@ func WithConfiguration(ctx context.Context, cfg *genericv1.Config) context.Conte
 	return ctx
 }
 
-// WithSyscallInterface creates a new context with the given syscallInterface
+// WithSyscalls creates a new context with the given syscalls
 // After this function is called, the configuration can be retrieved from the context
-// using [FromContext] and [Context.SyscallInterface].
-func WithSyscallInterface(ctx context.Context, si *SyscallInterface) context.Context {
+// using [FromContext] and [Context.Syscalls].
+func WithSyscalls(ctx context.Context, si *Syscalls) context.Context {
 	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
-	ocmctx.syscallInterface = si
+	ocmctx.syscalls = si
 	return ctx
 }
 
@@ -194,13 +194,13 @@ func (ctx *Context) SubsystemRegistry() *subsystem.Registry {
 	return ctx.subsystemRegistry
 }
 
-func (ctx *Context) SyscallInterface() *SyscallInterface {
+func (ctx *Context) Syscalls() *Syscalls {
 	if ctx == nil {
 		return nil
 	}
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
-	return ctx.syscallInterface
+	return ctx.syscalls
 }
 
 // FromContext retrieves the OCM context from the given context.

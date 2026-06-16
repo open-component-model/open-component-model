@@ -20,15 +20,15 @@ import (
 
 // Options holds configuration for executing OCM CLI commands in tests
 type Options struct {
-	args             []string                  // Command line arguments to pass to the CLI
-	in               io.Reader                 // Input reader to supply stdin to the command
-	out              io.Writer                 // Output writer to capture command output
-	errout           io.Writer                 // Error writer to capture command errors and logs
-	format           string                    // Log format to use (e.g., json, text)
-	syscallInterface *context.SyscallInterface // Environment to dependency inject into the test execution
+	args     []string          // Command line arguments to pass to the CLI
+	in       io.Reader         // Input reader to supply stdin to the command
+	out      io.Writer         // Output writer to capture command output
+	errout   io.Writer         // Error writer to capture command errors and logs
+	format   string            // Log format to use (e.g., json, text)
+	syscalls *context.Syscalls // Environment to dependency inject into the test execution
 }
 
-var noopSyscallsInterface = &context.SyscallInterface{
+var noopSyscalls = &context.Syscalls{
 	Stat:        func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist },
 	Getenv:      func(_ string) string { return "" },
 	UserHomeDir: func() (string, error) { return "", nil },
@@ -66,9 +66,9 @@ func WithErrorOutput(errout io.Writer) Option {
 	}
 }
 
-func WithSyscallInterface(si *context.SyscallInterface) Option {
+func WithSyscalls(si *context.Syscalls) Option {
 	return func(o *Options) {
-		o.syscallInterface = si
+		o.syscalls = si
 	}
 }
 
@@ -110,8 +110,8 @@ func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 		opt.format = log.FormatJSON
 	}
 
-	if opt.syscallInterface == nil {
-		opt.syscallInterface = noopSyscallsInterface
+	if opt.syscalls == nil {
+		opt.syscalls = noopSyscalls
 	}
 
 	f := instance.PersistentFlags().Lookup(log.FormatFlagName)
@@ -128,7 +128,7 @@ func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 	}
 
 	instance.SetArgs(opt.args)
-	return instance.ExecuteContextC(context.WithSyscallInterface(tb.Context(), opt.syscallInterface))
+	return instance.ExecuteContextC(context.WithSyscalls(tb.Context(), opt.syscalls))
 }
 
 // JSONLogReader provides functionality to read and parse JSON-formatted log output

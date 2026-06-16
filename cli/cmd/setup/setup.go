@@ -146,12 +146,12 @@ func CredentialGraph(cmd *cobra.Command) error {
 	return nil
 }
 
-func SyscallInterface(cmd *cobra.Command) {
-	if ocmctx.FromContext(cmd.Context()).SyscallInterface() != nil {
+func Syscalls(cmd *cobra.Command) {
+	if ocmctx.FromContext(cmd.Context()).Syscalls() != nil {
 		return
 	}
-	cmd.SetContext(ocmctx.WithSyscallInterface(cmd.Context(),
-		&ocmctx.SyscallInterface{
+	cmd.SetContext(ocmctx.WithSyscalls(cmd.Context(),
+		&ocmctx.Syscalls{
 			Stat:        os.Stat,
 			Getenv:      os.Getenv,
 			UserHomeDir: os.UserHomeDir,

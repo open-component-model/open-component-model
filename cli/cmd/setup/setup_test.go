@@ -48,7 +48,7 @@ func TestOCMConfig(t *testing.T) {
 	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.SetContext(context.Background())
-		SyscallInterface(cmd)
+		Syscalls(cmd)
 		configuration.RegisterConfigFlag(cmd)
 		require.NoError(t, cmd.PersistentFlags().Set(configuration.OCMConfigCommandArgument, "/nonexistent/config.yaml"))
 
@@ -60,7 +60,7 @@ func TestOCMConfig(t *testing.T) {
 	t.Run("no config flag proceeds without error", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.SetContext(context.Background())
-		SyscallInterface(cmd)
+		Syscalls(cmd)
 		configuration.RegisterConfigFlag(cmd)
 
 		err := OCMConfig(cmd)
@@ -579,7 +579,7 @@ func TestPluginManager_ResolveHTTPConfig(t *testing.T) {
 	t.Run("resolves default HTTP config when none configured", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.SetContext(context.Background())
-		SyscallInterface(cmd)
+		Syscalls(cmd)
 		configuration.RegisterConfigFlag(cmd)
 
 		require.NoError(t, OCMConfig(cmd))
