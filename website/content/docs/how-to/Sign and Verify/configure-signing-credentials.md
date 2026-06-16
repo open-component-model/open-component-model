@@ -48,8 +48,7 @@ Copy the following YAML into your `.ocmconfig` file.
 We use the key pair you created in the [How-To: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}).
 If you already have a key pair that is located in a different location, simply update the file paths accordingly.
 
-All three identity attributes (`type`, `algorithm`, `signature`) are required for credential matching.
-See the [Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}) for details.
+Identity attributes are required for credential matching. The `type` and `signature` attributes apply to every identity. The `algorithm` attribute only applies to RSA — GPG and Sigstore each have a single algorithm, so it is resolved implicitly and must not be set in the identity. See the [Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}) for details.
 
 There are two ways to configure signing credentials, either using file paths that point to your key files,
 or by including the key material directly in the config file.
