@@ -146,6 +146,21 @@ func CredentialGraph(cmd *cobra.Command) error {
 	return nil
 }
 
+func SyscallInterface(cmd *cobra.Command) {
+	if ocmctx.FromContext(cmd.Context()).SyscallInterface() != nil {
+		return
+	}
+	cmd.SetContext(ocmctx.WithSyscallInterface(cmd.Context(),
+		&ocmctx.SyscallInterface{
+			Stat:        os.Stat,
+			Getenv:      os.Getenv,
+			UserHomeDir: os.UserHomeDir,
+			Getwd:       os.Getwd,
+			Executable:  os.Executable,
+		},
+	))
+}
+
 func timeoutString(t *httpv1alpha1.Timeout) string {
 	if t == nil {
 		return "<nil>"

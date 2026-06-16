@@ -1,7 +1,6 @@
 package configuration
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +11,7 @@ import (
 	"github.com/spf13/pflag"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
 
 // OCM Configuration file and directory constants
@@ -23,66 +23,8 @@ const (
 	OCMConfigCommandArgument = "config"
 )
 
-// Environment abstracts OS functions the module relies on, dependency injected during testing.
-type Environment struct {
-	Stat        func(string) (os.FileInfo, error)
-	Getenv      func(string) string
-	UserHomeDir func() (string, error)
-	Getwd       func() (string, error)
-	Executable  func() (string, error)
-}
-
-func DefaultEnvironment() *Environment {
-	return &Environment{
-		Stat:        os.Stat,
-		Getenv:      os.Getenv,
-		UserHomeDir: os.UserHomeDir,
-		Getwd:       os.Getwd,
-		Executable:  os.Executable,
-	}
-}
-
-type environmentContextKey struct{}
-
-func EnvironmentFromContext(ctx context.Context) *Environment {
-	if ctx == nil {
-		return DefaultEnvironment()
-	}
-	if r, ok := ctx.Value(environmentContextKey{}).(*Environment); ok {
-		return normalizeEnvironment(r)
-	}
-	return DefaultEnvironment()
-}
-
-func ContextWithEnvironment(ctx context.Context, env *Environment) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithValue(ctx, environmentContextKey{}, normalizeEnvironment(env))
-}
-
-func normalizeEnvironment(env *Environment) *Environment {
-	def := DefaultEnvironment()
-	if env == nil {
-		return def
-	}
-	out := *env
-	if out.Stat == nil {
-		out.Stat = def.Stat
-	}
-	if out.Getenv == nil {
-		out.Getenv = def.Getenv
-	}
-	if out.UserHomeDir == nil {
-		out.UserHomeDir = def.UserHomeDir
-	}
-	if out.Getwd == nil {
-		out.Getwd = def.Getwd
-	}
-	if out.Executable == nil {
-		out.Executable = def.Executable
-	}
-	return &out
+type OCMConfigOptions struct {
+	SyscallInterface *ocmctx.SyscallInterface
 }
 
 func RegisterConfigFlag(cmd *cobra.Command) {
@@ -120,7 +62,8 @@ func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 		paths := flag.Value.(pflag.SliceValue).GetSlice()
 		return loadAndMergeConfigs(paths, true)
 	}
-	return GetOCMConfig(cmd.Context())
+	ocmctx := ocmctx.FromContext(cmd.Context())
+	return GetOCMConfig(OCMConfigOptions{SyscallInterface: ocmctx.SyscallInterface()})
 }
 
 // GetOCMConfig loads the OCM configuration file from multiple locations and returns the parsed configuration.
@@ -133,8 +76,8 @@ func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 // Returns:
 //   - *v1.Config: The parsed configuration file.
 //   - error: An error if no valid configuration file is found or if decoding fails.
-func GetOCMConfig(ctx context.Context, additional ...string) (*genericv1.Config, error) {
-	paths, err := GetOCMConfigPaths(ctx)
+func GetOCMConfig(options OCMConfigOptions, additional ...string) (*genericv1.Config, error) {
+	paths, err := GetOCMConfigPaths(options)
 	paths = append(paths, additional...)
 	if err != nil && len(additional) == 0 {
 		return nil, err
@@ -207,19 +150,18 @@ func GetConfigFromPath(path string) (_ *genericv1.Config, err error) {
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
 //   - error: An error if no configuration file is found.
-func GetOCMConfigPaths(ctx context.Context) ([]string, error) {
-	e := EnvironmentFromContext(ctx)
+func GetOCMConfigPaths(options OCMConfigOptions) ([]string, error) {
 	var paths []string
-	if path := e.getFromEnvironment(); path != "" {
+	if path := getFromEnvironment(options); path != "" {
 		paths = append(paths, path)
 	}
-	if subPaths := e.getFromXDGOrHomeDir(); len(subPaths) > 0 {
+	if subPaths := getFromXDGOrHomeDir(options); len(subPaths) > 0 {
 		paths = append(paths, subPaths...)
 	}
-	if subPaths := e.getFromWorkingDir(); len(subPaths) > 0 {
+	if subPaths := getFromWorkingDir(options); len(subPaths) > 0 {
 		paths = append(paths, subPaths...)
 	}
-	if subPaths := e.getFromExecutableDir(); len(subPaths) > 0 {
+	if subPaths := getFromExecutableDir(options); len(subPaths) > 0 {
 		paths = append(paths, subPaths...)
 	}
 
@@ -230,9 +172,9 @@ func GetOCMConfigPaths(ctx context.Context) ([]string, error) {
 	return nil, fmt.Errorf("ocm config not found in any known locations, see --help for details on how to supply configuration files")
 }
 
-func (e *Environment) getFromEnvironment() string {
-	if env := e.Getenv(OCMConfigEnvironmentKey); env != "" {
-		if _, err := e.Stat(filepath.Clean(env)); err == nil {
+func getFromEnvironment(options OCMConfigOptions) string {
+	if env := options.SyscallInterface.Getenv(OCMConfigEnvironmentKey); env != "" {
+		if _, err := options.SyscallInterface.Stat(filepath.Clean(env)); err == nil {
 			return env
 		}
 	}
@@ -246,20 +188,20 @@ func (e *Environment) getFromEnvironment() string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func (e *Environment) getFromXDGOrHomeDir() []string {
+func getFromXDGOrHomeDir(o OCMConfigOptions) []string {
 	paths := []string{}
-	if xdg := e.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		if subPaths := e.checkConfigPaths(xdg); len(subPaths) > 0 {
+	if xdg := o.SyscallInterface.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		if subPaths := checkConfigPaths(o, xdg); len(subPaths) > 0 {
 			paths = append(paths, subPaths...)
 		}
 	}
 
 	// Check default XDG home ($HOME/.config)
-	if home, err := e.UserHomeDir(); err == nil {
-		if subPaths := e.checkConfigPaths(filepath.Join(home, ".config")); len(subPaths) > 0 {
+	if home, err := o.SyscallInterface.UserHomeDir(); err == nil {
+		if subPaths := checkConfigPaths(o, filepath.Join(home, ".config")); len(subPaths) > 0 {
 			paths = append(paths, subPaths...)
 		}
-		if subPaths := e.checkConfigPaths(home); len(subPaths) > 0 {
+		if subPaths := checkConfigPaths(o, home); len(subPaths) > 0 {
 			paths = append(paths, subPaths...)
 		}
 	}
@@ -271,9 +213,9 @@ func (e *Environment) getFromXDGOrHomeDir() []string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func (e *Environment) getFromWorkingDir() []string {
-	if wd, err := e.Getwd(); err == nil {
-		return e.checkConfigPaths(wd)
+func getFromWorkingDir(o OCMConfigOptions) []string {
+	if wd, err := o.SyscallInterface.Getwd(); err == nil {
+		return checkConfigPaths(o, wd)
 	}
 	return []string{}
 }
@@ -282,10 +224,10 @@ func (e *Environment) getFromWorkingDir() []string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func (e *Environment) getFromExecutableDir() []string {
-	if ex, err := e.Executable(); err == nil {
+func getFromExecutableDir(o OCMConfigOptions) []string {
+	if ex, err := o.SyscallInterface.Executable(); err == nil {
 		base := filepath.Dir(ex)
-		return e.checkConfigPaths(base)
+		return checkConfigPaths(o, base)
 	}
 	return []string{}
 }
@@ -297,11 +239,11 @@ func (e *Environment) getFromExecutableDir() []string {
 //
 // Returns:
 //   - []string: A slice of valid config file paths found; otherwise, an empty slice.
-func (e *Environment) checkConfigPaths(base string) []string {
+func checkConfigPaths(o OCMConfigOptions, base string) []string {
 	paths := []string{}
 	for _, name := range []string{OCMConfigFileName, NestedOCMConfigFileName} {
 		path := filepath.Clean(filepath.Join(base, name))
-		if _, err := e.Stat(path); err == nil {
+		if _, err := o.SyscallInterface.Stat(path); err == nil {
 			paths = append(paths, path)
 		}
 	}
