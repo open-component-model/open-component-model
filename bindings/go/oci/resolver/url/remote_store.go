@@ -6,12 +6,19 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"path"
 
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 )
+
+// ErrTagDeletionDisabled is returned when the registry responds with 405 Method Not Allowed
+// to a tag-deletion request, indicating that the registry does not support tag deletion
+// (e.g. REGISTRY_STORAGE_DELETE_ENABLED is not set).
+var ErrTagDeletionDisabled = fmt.Errorf("registry does not support tag deletion (405 Method Not Allowed)")
 
 // remoteStore wraps *remote.Repository and adds content.Untagger support.
 //
@@ -34,9 +41,13 @@ func (r *remoteStore) Untag(ctx context.Context, reference string) error {
 	if r.PlainHTTP {
 		scheme = "http"
 	}
-	url := fmt.Sprintf("%s://%s/v2/%s/manifests/%s", scheme, ref.Host(), ref.Repository, reference)
+	endpoint := &url.URL{
+		Scheme: scheme,
+		Host:   ref.Host(),
+		Path:   path.Join("/v2", ref.Repository, "manifests", reference),
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint.String(), nil)
 	if err != nil {
 		return fmt.Errorf("failed to build delete request for alias %q: %w", reference, err)
 	}
@@ -61,6 +72,8 @@ func (r *remoteStore) Untag(ctx context.Context, reference string) error {
 		return nil
 	case http.StatusNotFound:
 		return errdef.ErrNotFound
+	case http.StatusMethodNotAllowed:
+		return ErrTagDeletionDisabled
 	default:
 		errResp := &errcode.ErrorResponse{
 			Method:     resp.Request.Method,

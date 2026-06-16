@@ -391,10 +391,10 @@ func (s *repository) Tags(ctx context.Context, _ string, fn func(tags []string) 
 func (s *repository) Untag(ctx context.Context, reference string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.untagLocked(ctx, reference)
+	return s.untag(ctx, reference)
 }
 
-func (s *repository) untagLocked(ctx context.Context, reference string) error {
+func (s *repository) untag(ctx context.Context, reference string) error {
 	tag := reference
 	if ref, err := looseref.ParseReference(reference); err == nil && ref.Tag != "" {
 		tag = ref.Tag
