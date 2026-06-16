@@ -77,7 +77,7 @@ func (p *CredentialPlugin) GetConsumerIdentity(ctx context.Context, request cred
 	return identity, nil
 }
 
-func (p *CredentialPlugin) Resolve(ctx context.Context, request credentialpluginv1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error) {
+func (p *CredentialPlugin) Resolve(ctx context.Context, request credentialpluginv1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error) {
 	slog.InfoContext(ctx, "Resolving credentials", "id", p.ID)
 
 	credHeader, err := toCredentials(credentials)
@@ -85,8 +85,8 @@ func (p *CredentialPlugin) Resolve(ctx context.Context, request credentialplugin
 		return nil, err
 	}
 
-	var resolvedCredentials map[string]string
-	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, ResolveEndpoint, http.MethodPost, plugins.WithPayload(request), plugins.WithHeader(credHeader), plugins.WithResult(&resolvedCredentials)); err != nil {
+	resolvedCredentials := &runtime.Raw{}
+	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, ResolveEndpoint, http.MethodPost, plugins.WithPayload(request), plugins.WithHeader(credHeader), plugins.WithResult(resolvedCredentials)); err != nil {
 		return nil, fmt.Errorf("failed to resolve credentials from plugin %q: %w", p.ID, err)
 	}
 
@@ -116,7 +116,10 @@ func (p *CredentialPlugin) validateEndpoint(obj runtime.Typed) error {
 	return nil
 }
 
-func toCredentials(credentials map[string]string) (plugins.KV, error) {
+func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
+	if credentials == nil {
+		return plugins.KV{}, nil
+	}
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
 		return plugins.KV{}, err

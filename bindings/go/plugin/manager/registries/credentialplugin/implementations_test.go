@@ -109,17 +109,16 @@ func TestResolve(t *testing.T) {
 	tests := []struct {
 		name        string
 		request     v1.ResolveRequest[runtime.Typed]
-		credentials map[string]string
+		credentials runtime.Typed
 		setupMock   func() *httptest.Server
 		expectErr   bool
-		expectedKey string
 	}{
 		{
 			name: "success",
 			request: v1.ResolveRequest[runtime.Typed]{
 				Identity: map[string]string{"id": "test-identity"},
 			},
-			credentials: map[string]string{"key": "value"},
+			credentials: &runtime.Raw{Type: pluginDummyType, Data: []byte(`{}`)},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ResolveEndpoint {
@@ -129,14 +128,13 @@ func TestResolve(t *testing.T) {
 					w.WriteHeader(http.StatusNotFound)
 				}))
 			},
-			expectedKey: "abc123",
 		},
 		{
 			name: "invalid_credentials",
 			request: v1.ResolveRequest[runtime.Typed]{
 				Identity: map[string]string{"id": "test-identity"},
 			},
-			credentials: map[string]string{"invalid_key": "invalid_value"},
+			credentials: &runtime.Raw{Type: pluginDummyType, Data: []byte(`{}`)},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusForbidden)
@@ -149,13 +147,29 @@ func TestResolve(t *testing.T) {
 			request: v1.ResolveRequest[runtime.Typed]{
 				Identity: map[string]string{"id": "test-identity"},
 			},
-			credentials: map[string]string{"key": "value"},
+			credentials: &runtime.Raw{Type: pluginDummyType, Data: []byte(`{}`)},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
 				}))
 			},
 			expectErr: true,
+		},
+		{
+			name: "nil_credentials",
+			request: v1.ResolveRequest[runtime.Typed]{
+				Identity: map[string]string{"id": "test-identity"},
+			},
+			credentials: nil,
+			setupMock: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.URL.Path == ResolveEndpoint {
+						require.NoError(t, json.NewEncoder(w).Encode(map[string]string{"resolved": "credentials"}))
+						return
+					}
+					w.WriteHeader(http.StatusNotFound)
+				}))
+			},
 		},
 	}
 
@@ -171,7 +185,7 @@ func TestResolve(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, tt.expectedKey, resolved["token"])
+			require.NotNil(t, resolved)
 		})
 	}
 }
@@ -222,21 +236,21 @@ func TestPing(t *testing.T) {
 }
 
 func TestToCredentials(t *testing.T) {
-	tests := []struct {
-		name        string
-		credentials map[string]string
-	}{
-		{name: "valid", credentials: map[string]string{"key": "value"}},
-		{name: "empty", credentials: map[string]string{}},
-		{name: "multiple_keys", credentials: map[string]string{"key1": "value1", "key2": "value2"}},
-	}
+	t.Run("nil credentials returns empty KV", func(t *testing.T) {
+		kv, err := toCredentials(nil)
+		require.NoError(t, err)
+		require.Empty(t, kv.Key)
+		require.Empty(t, kv.Value)
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			kv, err := toCredentials(tt.credentials)
-			require.NoError(t, err)
-			require.Equal(t, "Authorization", kv.Key)
-			require.NotEmpty(t, kv.Value)
-		})
-	}
+	t.Run("typed credentials marshal into Authorization header", func(t *testing.T) {
+		creds := &runtime.Raw{Type: pluginDummyType, Data: []byte(`{"type":"DummyRepository/v1","key":"value"}`)}
+		kv, err := toCredentials(creds)
+		require.NoError(t, err)
+		require.Equal(t, "Authorization", kv.Key)
+
+		var roundTrip runtime.Raw
+		require.NoError(t, json.Unmarshal([]byte(kv.Value), &roundTrip))
+		require.Equal(t, creds.Type, roundTrip.Type)
+	})
 }

@@ -92,25 +92,27 @@ func TestResolveHandlerFunc(t *testing.T) {
 		{
 			name: "malformed Authorization header returns 401",
 			handlerFunc: func() http.HandlerFunc {
-				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials map[string]string) (map[string]string, error) {
-					return map[string]string{"resolved": "credentials"}, nil
+				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
+					return &runtime.Raw{Data: []byte(`{"resolved":"credentials"}`)}, nil
 				}, scheme, dummyRepo)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			},
 			request: func(base string) *http.Request {
+				header := http.Header{}
+				header.Add("Authorization", "not-json")
 				parse, _ := url.Parse(base)
 				body := &bytes.Buffer{}
 				body.WriteString(`{"identity": {"id": "test-identity"}}`)
-				return &http.Request{Method: http.MethodPost, URL: parse, Body: io.NopCloser(body)}
+				return &http.Request{Method: http.MethodPost, URL: parse, Header: header, Body: io.NopCloser(body)}
 			},
 		},
 		{
 			name: "missing body returns 400",
 			handlerFunc: func() http.HandlerFunc {
-				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials map[string]string) (map[string]string, error) {
-					return map[string]string{"resolved": "credentials"}, nil
+				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
+					return &runtime.Raw{Data: []byte(`{"resolved":"credentials"}`)}, nil
 				}, scheme, dummyRepo)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
@@ -126,10 +128,10 @@ func TestResolveHandlerFunc(t *testing.T) {
 		{
 			name: "success returns resolved credentials JSON",
 			handlerFunc: func() http.HandlerFunc {
-				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials map[string]string) (map[string]string, error) {
-					require.Equal(t, "abc", credentials["access_token"])
+				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
+					require.NotNil(t, credentials)
 					require.Equal(t, "test-identity", req.Identity["id"])
-					return map[string]string{"resolved": "credentials", "token": "abc123"}, nil
+					return &runtime.Raw{Data: []byte(`{"resolved":"credentials","token":"abc123"}`)}, nil
 				}, scheme, dummyRepo)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {

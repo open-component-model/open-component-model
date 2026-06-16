@@ -38,7 +38,7 @@ func (c *credentialPluginConverter) GetConsumerIdentity(ctx context.Context, cre
 }
 
 // Resolve converts the internal interface call to the external contract format.
-func (c *credentialPluginConverter) Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+func (c *credentialPluginConverter) Resolve(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	request := v1.ResolveRequest[runtime.Typed]{
 		Identity: identity,
 	}

@@ -14,7 +14,7 @@ import (
 // mockExternalCredentialPlugin is a test implementation of v1.CredentialPluginContract.
 type mockExternalCredentialPlugin struct {
 	getConsumerIdentityFunc func(ctx context.Context, req v1.GetConsumerIdentityRequest[runtime.Typed]) (runtime.Identity, error)
-	resolveFunc             func(ctx context.Context, req v1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error)
+	resolveFunc             func(ctx context.Context, req v1.ResolveRequest[runtime.Typed], credentials runtime.Typed) (runtime.Typed, error)
 	pingFunc                func(ctx context.Context) error
 }
 
@@ -32,11 +32,11 @@ func (m *mockExternalCredentialPlugin) GetConsumerIdentity(ctx context.Context, 
 	return runtime.Identity{"test": "identity"}, nil
 }
 
-func (m *mockExternalCredentialPlugin) Resolve(ctx context.Context, req v1.ResolveRequest[runtime.Typed], credentials map[string]string) (map[string]string, error) {
+func (m *mockExternalCredentialPlugin) Resolve(ctx context.Context, req v1.ResolveRequest[runtime.Typed], creds runtime.Typed) (runtime.Typed, error) {
 	if m.resolveFunc != nil {
-		return m.resolveFunc(ctx, req, credentials)
+		return m.resolveFunc(ctx, req, creds)
 	}
-	return map[string]string{"resolved": "credentials"}, nil
+	return &runtime.Raw{Data: []byte(`{"resolved":"credentials"}`)}, nil
 }
 
 func TestCredentialPluginConverter_GetConsumerIdentity(t *testing.T) {
@@ -56,21 +56,21 @@ func TestCredentialPluginConverter_GetConsumerIdentity(t *testing.T) {
 }
 
 func TestCredentialPluginConverter_Resolve(t *testing.T) {
-	expectedCredentials := map[string]string{"username": "testuser", "password": "testpass"}
+	expectedResolved := &runtime.Raw{Data: []byte(`{"resolved":"abc"}`)}
 	mockIdentity := runtime.Identity{"consumer": "test"}
-	inputCredentials := map[string]string{"existing": "cred"}
+	inputCredentials := &runtime.Raw{Data: []byte(`{"existing":"cred"}`)}
 	mock := &mockExternalCredentialPlugin{
-		resolveFunc: func(_ context.Context, req v1.ResolveRequest[runtime.Typed], creds map[string]string) (map[string]string, error) {
+		resolveFunc: func(_ context.Context, req v1.ResolveRequest[runtime.Typed], creds runtime.Typed) (runtime.Typed, error) {
 			require.Equal(t, mockIdentity, req.Identity)
 			require.Equal(t, inputCredentials, creds)
-			return expectedCredentials, nil
+			return expectedResolved, nil
 		},
 	}
 
 	converter := NewCredentialPluginConverter(mock)
 	resolved, err := converter.Resolve(t.Context(), mockIdentity, inputCredentials)
 	require.NoError(t, err)
-	require.Equal(t, expectedCredentials, resolved)
+	require.Equal(t, expectedResolved, resolved)
 }
 
 func TestCredentialPluginConverter_Interface(t *testing.T) {

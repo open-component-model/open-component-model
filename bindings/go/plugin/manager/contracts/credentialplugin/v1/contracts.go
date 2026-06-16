@@ -13,5 +13,5 @@ import (
 type CredentialPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
 	GetConsumerIdentity(ctx context.Context, request GetConsumerIdentityRequest[T]) (runtime.Identity, error)
-	Resolve(ctx context.Context, request ResolveRequest[T], credentials map[string]string) (map[string]string, error)
+	Resolve(ctx context.Context, request ResolveRequest[T], credentials runtime.Typed) (runtime.Typed, error)
 }

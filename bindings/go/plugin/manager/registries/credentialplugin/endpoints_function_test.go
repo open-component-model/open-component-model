@@ -24,8 +24,8 @@ func (m *mockCredentialPluginContract[T]) GetConsumerIdentity(_ context.Context,
 	return map[string]string{"id": "mock-identity"}, nil
 }
 
-func (m *mockCredentialPluginContract[T]) Resolve(_ context.Context, _ v1.ResolveRequest[T], _ map[string]string) (map[string]string, error) {
-	return map[string]string{"resolved": "mock-credentials"}, nil
+func (m *mockCredentialPluginContract[T]) Resolve(_ context.Context, _ v1.ResolveRequest[T], _ runtime.Typed) (runtime.Typed, error) {
+	return &runtime.Raw{Data: []byte(`{"resolved":"mock-credentials"}`)}, nil
 }
 
 var _ v1.CredentialPluginContract[*dummyv1.Repository] = &mockCredentialPluginContract[*dummyv1.Repository]{}
