@@ -17,7 +17,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
@@ -32,13 +31,12 @@ import (
 )
 
 const (
-	FlagDryRun         = "dry-run"
-	FlagOutput         = "output"
-	FlagRecursive      = "recursive"
-	FlagCopyResources  = "copy-resources"
-	FlagUploadAs       = "upload-as"
-	FlagTransferSpec   = "transfer-spec"
-	FlagTransferConfig = "transfer-config"
+	FlagDryRun        = "dry-run"
+	FlagOutput        = "output"
+	FlagRecursive     = "recursive"
+	FlagCopyResources = "copy-resources"
+	FlagUploadAs      = "upload-as"
+	FlagTransferSpec  = "transfer-spec"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the tracker consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -62,10 +60,10 @@ copy (and, when needed, transform) the resources it references. --upload-as cont
 those resources land as OCI artifacts or as local blobs in the target. --recursive walks the
 component's references and transfers them too.
 
-Driving defaults from a config file:
-  A transfer.config.ocm.software/v1alpha1 file can be supplied via --transfer-config to set
-  defaults for --recursive, --copy-resources, and --upload-as. Explicit command-line flags
-  always override the values from the file.
+Driving defaults from the OCM configuration:
+  A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
+  (passed via --config) sets defaults for --recursive, --copy-resources, and --upload-as.
+  Explicit command-line flags always override the values from the configuration.
 
 Two-step workflow (generate, review, replay):
   --dry-run builds and validates the graph without executing it, and with -o yaml|json prints
@@ -73,9 +71,10 @@ Two-step workflow (generate, review, replay):
   from a file (or stdin with "-"):
     1. Generate the spec:  transfer cv --dry-run -o yaml --copy-resources -r {reference} {target} > spec.yaml
     2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
-  All graph-shaping flags (--recursive, --copy-resources, --upload-as, --transfer-config) are
-  baked into the spec during step 1 and are therefore ignored in step 2 - the spec is the full
-  graph definition. Only --dry-run and --output remain meaningful when replaying a spec.
+  All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer
+  configuration entry are baked into the spec during step 1 and are therefore ignored in
+  step 2 - the spec is the full graph definition. Only --dry-run and --output remain
+  meaningful when replaying a spec.
 
 How the graph is built:
   Internally the command assembles a TransformationGraphDefinition from these node types,
@@ -106,12 +105,16 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghc
 # Recursively transfer a component version and all its references
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --copy-resources
 
-# Drive defaults from a transfer.config.ocm.software/v1alpha1 file (flags still win when set)
-#   type: transfer.config.ocm.software/v1alpha1
-#   recursive: -1
-#   copyMode: allResources
-#   uploadType: ociArtifact
-transfer component-version --transfer-config ./transfer-config.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+# Drive defaults from the OCM configuration. With --config ./ocmconfig.yaml containing:
+#   type: generic.config.ocm.software/v1
+#   configurations:
+#   - type: transfer.config.ocm.software/v1alpha1
+#     recursive: -1
+#     copyMode: allResources
+#     uploadType: ociArtifact
+# the following invocation transfers recursively with all resources copied as OCI artifacts.
+# Any explicit flag still overrides the corresponding configuration value.
+transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
 # Two-step transfer: generate a spec with all desired flags, then review and execute
 transfer component-version --dry-run -o yaml --copy-resources -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
@@ -134,7 +137,6 @@ transfer component-version --transfer-spec spec.yaml
 	enum.VarP(cmd.Flags(), FlagUploadAs, "u", uploadAsValues,
 		"Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.")
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin)")
-	cmd.Flags().String(FlagTransferConfig, "", "path to a transfer.config.ocm.software/v1alpha1 file. Explicit flags (--recursive, --copy-resources, --upload-as) override values from the file.")
 
 	return cmd
 }
@@ -149,7 +151,7 @@ func transferArgs(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return fmt.Errorf("positional arguments are not allowed when --%s is set", FlagTransferSpec)
 		}
-		ignoredFlags := []string{FlagRecursive, FlagCopyResources, FlagUploadAs, FlagTransferConfig}
+		ignoredFlags := []string{FlagRecursive, FlagCopyResources, FlagUploadAs}
 		for _, name := range ignoredFlags {
 			if cmd.Flags().Changed(name) {
 				slog.Warn(fmt.Sprintf("--%s has no effect when --%s is set", name, FlagTransferSpec))
@@ -331,13 +333,14 @@ func buildGraphDefinitionFromArgs(
 		return nil, fmt.Errorf("invalid target repository spec: %w", err)
 	}
 
-	transferCfgPath, err := cmd.Flags().GetString(FlagTransferConfig)
+	transferCfg, err := transferv1alpha1.LookupConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("getting transfer-config flag failed: %w", err)
+		return nil, fmt.Errorf("looking up transfer config failed: %w", err)
 	}
-	transferCfg, err := loadTransferConfig(transferCfgPath)
-	if err != nil {
-		return nil, err
+	if transferCfg == nil {
+		// LookupConfig returns nil when the central config has no transfer entry; start
+		// from a zero value so the override branches below can write unconditionally.
+		transferCfg = &transferv1alpha1.Config{}
 	}
 
 	if cmd.Flags().Changed(FlagRecursive) {
@@ -382,43 +385,6 @@ func buildGraphDefinitionFromArgs(
 	}
 
 	return tgd, nil
-}
-
-// loadTransferConfig reads a transfer.config.ocm.software/v1alpha1 document from disk.
-// An empty path returns a zero-valued config so callers can unconditionally apply CLI
-// flag overrides on top.
-func loadTransferConfig(path string) (_ *transferv1alpha1.Config, err error) {
-	if path == "" {
-		return &transferv1alpha1.Config{}, nil
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading transfer config %q failed: %w", path, err)
-	}
-	// errors.Join keeps a Close failure in the returned error without masking the primary one.
-	defer func() {
-		err = errors.Join(err, f.Close())
-	}()
-
-	raw := &runtime.Raw{}
-	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(f, raw); err != nil {
-		return nil, fmt.Errorf("decoding transfer config %q failed: %w", path, err)
-	}
-
-	obj, err := transferv1alpha1.Scheme.NewObject(raw.GetType())
-	if err != nil {
-		return nil, fmt.Errorf("unsupported type in transfer config %q: %w", path, err)
-	}
-	if err := transferv1alpha1.Scheme.Convert(raw, obj); err != nil {
-		return nil, fmt.Errorf("converting transfer config %q to %s failed: %w", path, transferv1alpha1.ConfigType, err)
-	}
-
-	cfg, ok := obj.(*transferv1alpha1.Config)
-	if !ok {
-		return nil, fmt.Errorf("transfer config %q decoded to unexpected type %T", path, obj)
-	}
-	return cfg, nil
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {

@@ -23,15 +23,45 @@ import (
 	"ocm.software/open-component-model/cli/integration/internal"
 )
 
+// writeOCMConfigWithCredsAndTransfer composes the central OCM config used by these tests:
+// credentials for one or more registries plus a single transfer.config.ocm.software/v1alpha1
+// entry. Inlining the YAML mirrors the pattern used elsewhere in this package (e.g.
+// transfer_helm_integration_test.go) instead of growing the shared helper for one caller.
+func writeOCMConfigWithCredsAndTransfer(t *testing.T, regs []internal.ConfigOpts, transferEntry string) string {
+	t.Helper()
+
+	cfg := "\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: credentials.config.ocm.software\n  consumers:"
+	for _, o := range regs {
+		cfg += fmt.Sprintf(`
+  - identity:
+      type: OCIRegistry
+      hostname: %q
+      port: %q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %q
+        password: %q`, o.Host, o.Port, o.User, o.Password)
+	}
+	cfg += "\n" + transferEntry + "\n"
+
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+	t.Logf("Generated config:%s", cfg)
+	return cfgPath
+}
+
 // Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode proves that
-// `copyMode: allResources` set purely in --transfer-config (no flags) actually
-// reaches the transfer engine.
+// `copyMode: allResources` set purely as a transfer.config.ocm.software/v1alpha1
+// entry in the central OCM configuration (no flags) actually reaches the
+// transfer engine.
 //
 // The signal: a source component has an external `OCIImage` access pointing at
 // the source registry. With the default `copyMode: localBlob`, the access stays
 // untouched in the target descriptor (it would still point at the source
 // registry). With `copyMode: allResources`, the resource is fetched and re-stored
-// as a `LocalBlob` in the target. The assertion fails if the file is silently
+// as a `LocalBlob` in the target. The assertion fails if the entry is silently
 // dropped.
 func Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode(t *testing.T) {
 	ctx := t.Context()
@@ -44,11 +74,13 @@ func Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode(t *testing.T
 	targetRegistry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err, "should be able to start target registry container")
 
-	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{
+	// Drive copyMode purely from the central OCM config. No --copy-resources flag.
+	cfgPath := writeOCMConfigWithCredsAndTransfer(t, []internal.ConfigOpts{
 		{Host: sourceRegistry.Host, Port: sourceRegistry.Port, User: sourceRegistry.User, Password: sourceRegistry.Password},
 		{Host: targetRegistry.Host, Port: targetRegistry.Port, User: targetRegistry.User, Password: targetRegistry.Password},
-	})
-	r.NoError(err)
+	}, `- type: transfer.config.ocm.software/v1alpha1
+  copyMode: allResources
+  uploadType: localBlob`)
 
 	componentName := "ocm.software/transfer-config-copymode-test"
 	componentVersion := "v1.0.0"
@@ -109,14 +141,6 @@ components:
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "creating source CTF should succeed")
 
-	// Drive copyMode purely from the file. NO --copy-resources flag.
-	transferCfgYAML := `type: transfer.config.ocm.software/v1alpha1
-copyMode: allResources
-uploadType: localBlob
-`
-	transferCfgPath := filepath.Join(t.TempDir(), "transfer-config.yaml")
-	r.NoError(os.WriteFile(transferCfgPath, []byte(transferCfgYAML), os.ModePerm))
-
 	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
 	targetRef := fmt.Sprintf("http://%s", targetRegistry.RegistryAddress)
 
@@ -125,7 +149,6 @@ uploadType: localBlob
 		"transfer", "component-version",
 		sourceRef, targetRef,
 		"--config", cfgPath,
-		"--transfer-config", transferCfgPath,
 	})
 
 	transferCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
@@ -142,19 +165,19 @@ uploadType: localBlob
 	r.NotNil(gotAccess, "resource access must not be nil")
 
 	// The whole point of the test: with localBlob copyMode (the default), this
-	// would still be OCIImage pointing at the source registry. With the file's
-	// allResources honored, the resource was fetched and re-stored locally.
+	// would still be OCIImage pointing at the source registry. With the central
+	// config's allResources honored, the resource was fetched and re-stored locally.
 	r.Equal(v2.LocalBlobAccessType, gotAccess.GetType().Name,
-		"resource access must be LocalBlob: copyMode: allResources from --transfer-config was not honored")
+		"resource access must be LocalBlob: copyMode: allResources from the OCM config was not honored")
 }
 
 // Test_Integration_TransferWithTransferConfig_FlagOverridesFileRecursion
 // proves the override branch in buildGraphDefinitionFromArgs: a recursion
-// setting in --transfer-config can be overridden by an explicit --recursive
-// flag, and that override wins.
+// setting in the central OCM config can be overridden by an explicit
+// --recursive flag, and that override wins.
 //
 // The signal: a parent component references a child component, both in one
-// source CTF. The file says `recursive: 0` (no recursion) and the CLI passes
+// source CTF. The config says `recursive: 0` (no recursion) and the CLI passes
 // `--recursive`. With the override honored, the child component lands in the
 // target.
 func Test_Integration_TransferWithTransferConfig_FlagOverridesFileRecursion(t *testing.T) {
@@ -168,11 +191,12 @@ func Test_Integration_TransferWithTransferConfig_FlagOverridesFileRecursion(t *t
 	registry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err, "should be able to start registry container")
 
-	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{{
+	// Config asks for no recursion; flag asks for full recursion. The flag wins.
+	cfgPath := writeOCMConfigWithCredsAndTransfer(t, []internal.ConfigOpts{{
 		Host: registry.Host, Port: registry.Port,
 		User: registry.User, Password: registry.Password,
-	}})
-	r.NoError(err)
+	}}, `- type: transfer.config.ocm.software/v1alpha1
+  recursive: 0`)
 
 	parentConstructor := fmt.Sprintf(`
 components:
@@ -234,13 +258,6 @@ components:
 	})
 	r.NoError(addParent.ExecuteContext(t.Context()), "adding parent to source CTF should succeed")
 
-	// File asks for no recursion; flag asks for full recursion. The flag wins.
-	transferCfgYAML := `type: transfer.config.ocm.software/v1alpha1
-recursive: 0
-`
-	transferCfgPath := filepath.Join(t.TempDir(), "transfer-config.yaml")
-	r.NoError(os.WriteFile(transferCfgPath, []byte(transferCfgYAML), os.ModePerm))
-
 	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, parentComponent, version)
 	targetRef := fmt.Sprintf("http://%s", registry.RegistryAddress)
 
@@ -249,7 +266,6 @@ recursive: 0
 		"transfer", "component-version",
 		sourceRef, targetRef,
 		"--config", cfgPath,
-		"--transfer-config", transferCfgPath,
 		"--recursive",
 	})
 
@@ -264,18 +280,18 @@ recursive: 0
 	r.NoError(err, "parent component must be present in target registry")
 	r.Equal(parentComponent, parentDesc.Component.Name)
 
-	// The whole point of the test: with the file's `recursive: 0` honored, the
-	// child would not land. Only because --recursive overrode the file does the
+	// The whole point of the test: with the config's `recursive: 0` honored, the
+	// child would not land. Only because --recursive overrode the config does the
 	// child reach the target.
 	childDesc, err := repo.GetComponentVersion(t.Context(), childComponent, version)
-	r.NoError(err, "child component must be present in target registry: --recursive flag did not override the file's recursive: 0")
+	r.NoError(err, "child component must be present in target registry: --recursive flag did not override the config's recursive: 0")
 	r.Equal(childComponent, childDesc.Component.Name)
 }
 
 // Test_Integration_TransferWithTransferConfig_InvalidValueRejected ensures the
-// loader's Validate() pass rejects bogus enum values cleanly instead of letting
-// them flow through to the graph builder. Pre-flight failure is the whole point
-// of having a typed wire format.
+// LookupConfig Validate() pass rejects bogus enum values cleanly instead of
+// letting them flow through to the graph builder. Pre-flight failure is the
+// whole point of having a typed wire format.
 func Test_Integration_TransferWithTransferConfig_InvalidValueRejected(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
@@ -286,27 +302,20 @@ func Test_Integration_TransferWithTransferConfig_InvalidValueRejected(t *testing
 	registry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err, "should be able to start registry container")
 
-	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{{
+	cfgPath := writeOCMConfigWithCredsAndTransfer(t, []internal.ConfigOpts{{
 		Host: registry.Host, Port: registry.Port,
 		User: registry.User, Password: registry.Password,
-	}})
-	r.NoError(err)
+	}}, `- type: transfer.config.ocm.software/v1alpha1
+  copyMode: notAValidMode`)
 
 	sourceRef := createSourceCTF(t, componentName, componentVersion)
 	targetRef := fmt.Sprintf("http://%s", registry.RegistryAddress)
-
-	transferCfgYAML := `type: transfer.config.ocm.software/v1alpha1
-copyMode: notAValidMode
-`
-	transferCfgPath := filepath.Join(t.TempDir(), "transfer-config.yaml")
-	r.NoError(os.WriteFile(transferCfgPath, []byte(transferCfgYAML), os.ModePerm))
 
 	transferCMD := cmd.New()
 	transferCMD.SetArgs([]string{
 		"transfer", "component-version",
 		sourceRef, targetRef,
 		"--config", cfgPath,
-		"--transfer-config", transferCfgPath,
 	})
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
