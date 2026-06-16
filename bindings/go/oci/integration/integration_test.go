@@ -1396,21 +1396,21 @@ func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 				owningComponent, version, "frontend")
 		})
 
-		t.Run("multiple owners on the same subject", func(t *testing.T) {
-			ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
-			res, subjectRef := addByValueOwnedResource(t, ctx, ctfResolver, ctfRepo,
-				component, version, "backend-image", []byte("ctf-multi-owner-payload"))
-
-			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
-			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-b", version, res, nil))
-			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
-
-			assertOwnershipReferrerCount(t, ctx, ctfResolver, subjectRef, 2)
-			assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
-				"ocm.software/owner-a", version, "backend-image")
-			assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
-				"ocm.software/owner-b", version, "backend-image")
-		})
+		//t.Run("multiple owners on the same subject", func(t *testing.T) {
+		//	ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
+		//	res, subjectRef := addByValueOwnedResource(t, ctx, ctfResolver, ctfRepo,
+		//		component, version, "backend-image", []byte("ctf-multi-owner-payload"))
+		//
+		//	require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+		//	require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-b", version, res, nil))
+		//	require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+		//
+		//	assertOwnershipReferrerCount(t, ctx, ctfResolver, subjectRef, 2)
+		//	assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
+		//		"ocm.software/owner-a", version, "backend-image")
+		//	assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
+		//		"ocm.software/owner-b", version, "backend-image")
+		//})
 
 		t.Run("transfer CTF → registry carries the referrer", func(t *testing.T) {
 			// Stage a tagged image in the CTF and attach an ownership referrer

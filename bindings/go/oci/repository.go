@@ -735,39 +735,42 @@ func (repo *Repository) AddOwnership(ctx context.Context, component, version str
 }
 
 func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, version string, resource *descriptor.Resource) (spec.Store, ociImageSpecV1.Descriptor, error) {
-	if v2.IsLocalBlob(resource.Access) {
-		var localBlob v2.LocalBlob
-		if err := repo.scheme.Convert(resource.Access, &localBlob); err != nil {
-			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("by-value ownership referrer requires a local blob access: %w", err)
-		}
+	typed, err := repo.scheme.NewObject(resource.Access.GetType())
+	if err != nil {
+		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("error creating resource access for ownership referrer: %w", err)
+	}
+	if err := repo.scheme.Convert(resource.Access, typed); err != nil {
+		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource access for ownership referrer: %w", err)
+	}
+
+	switch typed := typed.(type) {
+	case *v2.LocalBlob:
 		_, store, err := repo.getStore(ctx, component, version)
 		if err != nil {
 			return nil, ociImageSpecV1.Descriptor{}, err
 		}
-		subject, err := store.Resolve(ctx, localBlob.LocalReference)
+		subject, err := store.Resolve(ctx, typed.LocalReference)
 		if err != nil {
-			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve uploaded artifact %q for ownership referrer: %w", localBlob.LocalReference, err)
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve uploaded artifact %q for ownership referrer: %w", typed.LocalReference, err)
 		}
 		return store, subject, nil
+	case *accessv1.OCIImage:
+		store, err := repo.resolver.StoreForReference(ctx, typed.ImageReference)
+		if err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, err
+		}
+		ref, err := looseref.ParseReference(typed.ImageReference)
+		if err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to parse image reference %q: %w", typed.ImageReference, err)
+		}
+		subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
+		if err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve subject %q for ownership referrer: %w", typed.ImageReference, err)
+		}
+		return store, subject, nil
+	default:
+		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported resource access type for ownership referrer: %T", typed)
 	}
-
-	var access accessv1.OCIImage
-	if err := repo.scheme.Convert(resource.Access, &access); err != nil {
-		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource access to OCI image for ownership referrer: %w", err)
-	}
-	store, err := repo.resolver.StoreForReference(ctx, access.ImageReference)
-	if err != nil {
-		return nil, ociImageSpecV1.Descriptor{}, err
-	}
-	ref, err := looseref.ParseReference(access.ImageReference)
-	if err != nil {
-		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to parse image reference %q: %w", access.ImageReference, err)
-	}
-	subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
-	if err != nil {
-		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve subject %q for ownership referrer: %w", access.ImageReference, err)
-	}
-	return store, subject, nil
 }
 
 func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, resource *descriptor.Resource, component, version string) error {
