@@ -11,19 +11,13 @@ name: monorepo shared build & publish
 # either fails there will be nothing in GHCR.
 
 on:
+  # No paths filter on push: every push to main/release branches rebuilds and
+  # republishes so the floating `main` tag in GHCR tracks HEAD. PRs stay
+  # path-gated below to avoid running the full pipeline on unrelated changes.
   push:
     branches:
       - main
       - 'releases/v**'
-    paths:
-      - 'cli/**'
-      - 'kubernetes/controller/**'
-      - 'conformance/**'
-      - '.github/workflows/cli.yml'
-      - '.github/workflows/kubernetes-controller.yml'
-      - '.github/workflows/conformance.yml'
-      - '.github/workflows/pipeline.yml'
-      - '.env'
   pull_request:
     branches:
       - main

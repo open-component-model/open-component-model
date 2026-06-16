@@ -256,7 +256,7 @@ tasks:
       - '"{{.HELM_DOCS}}"'
       # Strip SHA digests from README.md for cleaner documentation
       # The digest is kept in values.yaml for security, but removed from docs for readability
-      - sed -i'' -e 's/@sha256:[a-f0-9]\{64\}//g' README.md
+      - tmp=$(mktemp) && sed 's/@sha256:[a-f0-9]\{64\}//g' README.md > "$tmp" && mv "$tmp" README.md
     sources:
       - chart/values.yaml
       - chart/README.md

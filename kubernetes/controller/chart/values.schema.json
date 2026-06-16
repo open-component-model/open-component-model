@@ -164,6 +164,9 @@
                 "resolver": {
                     "type": "object",
                     "properties": {
+                        "cacheTTL": {
+                            "type": "integer"
+                        },
                         "subscriberBufferSize": {
                             "type": "integer"
                         },
