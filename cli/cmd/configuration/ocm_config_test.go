@@ -12,15 +12,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var EmptyEnvironment = &Environment{
-	Stat:        func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist },
-	Getenv:      func(_ string) string { return "" },
-	UserHomeDir: func() (string, error) { return "", nil },
-	Getwd:       func() (string, error) { return "", nil },
-	Executable:  func() (string, error) { return "", nil },
-}
-
-
 func TestGetOCMConfigPaths(t *testing.T) {
 	tests := []struct {
 		name     string
