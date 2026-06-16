@@ -55,7 +55,6 @@ func TestSignConfig_GetSignatureAlgorithm(t *testing.T) {
 		cfg  *SignConfig
 		want SignatureAlgorithm
 	}{
-		{"nil receiver returns default", nil, AlgorithmSigstoreDefault},
 		{"empty field returns default", &SignConfig{}, AlgorithmSigstoreDefault},
 		{"explicit value passes through", &SignConfig{SignatureAlgorithm: AlgorithmSigstoreV1Alpha1}, AlgorithmSigstoreV1Alpha1},
 	}

@@ -150,8 +150,12 @@ func (c *SignConfig) Validate() error {
 
 // GetSignatureAlgorithm returns the effective signing algorithm. If
 // SignatureAlgorithm is empty, AlgorithmSigstoreDefault is returned.
+//
+// Precondition: Validate must have been called on this config and returned
+// nil. GetSignatureAlgorithm does not re-validate; any non-empty value that
+// survived Validate is returned as-is.
 func (c *SignConfig) GetSignatureAlgorithm() SignatureAlgorithm {
-	if c == nil || c.SignatureAlgorithm == "" {
+	if c.SignatureAlgorithm == "" {
 		return AlgorithmSigstoreDefault
 	}
 	return c.SignatureAlgorithm

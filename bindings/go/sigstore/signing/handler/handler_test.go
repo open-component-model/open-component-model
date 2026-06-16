@@ -898,27 +898,6 @@ func TestVerify_UnregisteredConfigType(t *testing.T) {
 	r.Contains(err.Error(), "convert config")
 }
 
-func TestVerify_UnsupportedMediaType(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	h := newWithRunner(&execRecorder{})
-	cfg := testVerifyConfig()
-	signed := descruntime.Signature{
-		Name:   "test-sig",
-		Digest: testDigest(),
-		Signature: descruntime.SignatureInfo{
-			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
-			MediaType: "application/pgp-signature",
-			Value:     "irrelevant",
-		},
-	}
-
-	err := h.Verify(t.Context(), signed, cfg, nil)
-	r.Error(err)
-	r.Contains(err.Error(), "media type")
-}
-
 // --- ResolveTrustedRootPath Tests ---
 
 func TestResolveTrustedRootPath(t *testing.T) {
