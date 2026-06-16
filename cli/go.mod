@@ -7,7 +7,6 @@ require (
 	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/jedib0t/go-pretty/v6 v6.7.10
 	github.com/nlepage/go-tarfs v1.2.1
-	github.com/opencontainers/image-spec v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -40,7 +39,7 @@ require (
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260612063051-2d68fb4f15bc
 	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260612060103-25643fdae86d
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260612063051-2d68fb4f15bc
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260615060942-874118842472
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260612063051-2d68fb4f15bc
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -99,6 +98,7 @@ require (
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
