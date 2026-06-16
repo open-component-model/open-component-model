@@ -65,12 +65,6 @@ func TestRemoteStore_Untag_ReferenceValidation(t *testing.T) {
 		{"empty string", "", true},
 		{"colon separator", "not:a:tag", true},
 		{"leading dot", ".badtag", true},
-		// semver — must be rejected; Untag is alias-only
-		{"semver major.minor.patch", "1.0.0", true},
-		{"semver with v prefix", "v1.0.0", true},
-		{"semver prerelease", "v2.3.1-rc.1", true},
-		{"semver prerelease no v", "0.0.1-alpha", true},
-		{"semver with build metadata", "v1.0.0+build.1", true},
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

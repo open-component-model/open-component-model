@@ -47,9 +47,6 @@ var (
 func (r *RemoteStore) Untag(ctx context.Context, reference string) error {
 	ref := r.Reference
 	ref.Reference = reference
-	if semverRegex.MatchString(reference) {
-		return fmt.Errorf("reference %q is a semantic version and cannot be untagged (only non-semver aliases may be removed)", reference)
-	}
 	if err := ref.ValidateReferenceAsTag(); err != nil {
 		return fmt.Errorf("invalid tag reference %q: %w", reference, err)
 	}
