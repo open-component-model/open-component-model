@@ -164,7 +164,7 @@ func TestRegistry_AddPlugin(t *testing.T) {
 
 		err := reg.AddPlugin(mtypes.Plugin{ID: "plugin-a"}, makeSpec())
 		r.Error(err)
-		r.Contains(err.Error(), "already registered")
+		r.Contains(err.Error(), "plugin with ID plugin-a already registered")
 	})
 
 	t.Run("duplicate type across plugins is rejected", func(t *testing.T) {
