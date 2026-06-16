@@ -99,22 +99,22 @@ configurations:
         credentials:
           - type: Credentials/v1
             properties:
-              private_key_pem_file: /tmp/keys/private-key.pem
-              public_key_pem_file: /tmp/keys/public-key.pem
+              privateKeyPEMFile: /tmp/keys/private-key.pem
+              publicKeyPEMFile: /tmp/keys/public-key.pem
 ```
 
-`Credentials/v1` (an alias for `DirectCredentials/v1`) uses a nested `properties:` map with `snake_case` keys and works
+`Credentials/v1` (an alias for `DirectCredentials/v1`) uses a nested `properties:` map with `camel_case` keys and works
 in all OCM versions.
 {{< /tab >}}
 {{< /tabs >}}
 
 **Key paths:**
 
-- `privateKeyPEMFile` / `private_key_pem_file` - Required for **signing** operations
-- `publicKeyPEMFile` / `public_key_pem_file` - Required for **verification** operations
+- `privateKeyPEMFile` - Required for **signing** operations
+- `publicKeyPEMFile` - Required for **verification** operations
 
 <br>
-It is also possible to configure the keys inline. With `RSACredentials/v1` use `privateKeyPEM` / `publicKeyPEM`; with `Credentials/v1` use `private_key_pem` / `public_key_pem` inside `properties:`.
+It is also possible to configure the keys inline. With `RSACredentials/v1` use `privateKeyPEM` / `publicKeyPEM`; with `Credentials/v1` use `privateKeyPEM` / `publicKeyPEM` inside `properties:`.
 
 {{< details "Example .ocmconfig with inline keys (RSACredentials/v1)" >}}
 
@@ -157,17 +157,17 @@ configurations:
         credentials:
           - type: Credentials/v1
             properties:
-              private_key_pgp_file: /tmp/keys/signing-key.asc
-              public_key_pgp_file: /tmp/keys/verify-key.asc
+              privateKeyPGPFile: /tmp/keys/signing-key.asc
+              publicKeyPGPFile: /tmp/keys/verify-key.asc
 ```
 
 **Key paths:**
 
-- `private_key_pgp_file` - Required for **signing** operations (ASCII-armored OpenPGP private key)
-- `public_key_pgp_file` - Required for **verification** operations (ASCII-armored OpenPGP public key)
+- `privateKeyPGPFile` - Required for **signing** operations (ASCII-armored OpenPGP private key)
+- `publicKeyPGPFile` - Required for **verification** operations (ASCII-armored OpenPGP public key)
 
 {{< callout context="note" >}}
-For passphrase-protected private keys, add a `pass_phrase: <secret>` property next to `private_key_pgp_file` in the `properties:` map. OCM decrypts the key in memory only; the passphrase is never written back to disk.
+For passphrase-protected private keys, add a `passphrase: <secret>` property next to `privateKeyPGPFile`. OCM decrypts the key in memory only; the passphrase is never written back to disk.
 {{< /callout >}}
 
 If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer spec (set in the [sign how-to]({{< relref "sign-component-version.md" >}})), not in `.ocmconfig`.
@@ -274,7 +274,7 @@ The consumer identity for RSA signing/verification supports these attributes:
 **Fix:** Ensure:
 
 - The key file path is correct and the file exists (`privateKeyPEMFile` for `RSACredentials/v1`, or
-  `private_key_pem_file` inside `properties:` for `Credentials/v1`)
+  `privateKeyPEMFile` inside `properties:` for `Credentials/v1`)
 - The `algorithm` attribute is present in the identity (e.g. `algorithm: RSASSA-PSS`).
   See [Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
 - The `signature` name matches what you're using (or is `default` if not specified)
@@ -285,20 +285,6 @@ The consumer identity for RSA signing/verification supports these attributes:
 **Cause:** Key file has restrictive permissions.
 
 **Fix:** Ensure your user can read the key file:
-
-### Symptom: "no signer spec file provided" or unknown algorithm
-
-**Cause:** GPG requires an explicit `--signer-spec` file pointing to a `GPGSigningConfiguration/v1alpha1` spec. Unlike RSA, there is no default GPG handler.
-
-**Fix:** Create a `signer-spec.yaml` file (see [How-To: Sign Component Versions → GPG]({{< relref "sign-component-version.md" >}}) for the format) and pass it with `--signer-spec ./signer-spec.yaml` when signing or verifying.
-
-### Symptom: "fingerprint mismatch" or "key not found"
-
-**Cause:** The `keyFingerprint` in your signer/verifier spec does not match any key in your keyring, or the file path is incorrect.
-
-**Fix:** Verify:
-- The `privateKeyPGPFile` / `publicKeyPGPFile` paths in `.ocmconfig` are correct and the files exist
-- The `keyFingerprint` in your signer spec (if set) matches a key in those files; use `gpg --list-secret-keys` to verify available fingerprints
 
 ```bash
 chmod 600 /tmp/keys/private-key.pem
