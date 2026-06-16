@@ -10,12 +10,11 @@ import (
 	extractv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	httpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/http/v1alpha1/spec"
 	ocmv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
-	ownershipv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/ownership/v1alpha1/spec"
 	resolversv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	credentialsruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -132,12 +131,6 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		return nil, fmt.Errorf("config lookup failed for resolvers: %w", err)
 	} else if resolversCfg != nil {
 		result.Configurations = append(result.Configurations, resolversCfg)
-	}
-
-	if ownershipCfg, err := ownershipv1alpha1.Lookup(cfg); err != nil {
-		return nil, fmt.Errorf("config lookup failed for ownership: %w", err)
-	} else if ownershipCfg != nil {
-		result.Configurations = append(result.Configurations, ownershipCfg)
 	}
 
 	if pluginsCfg, err := pluginsv2alpha1.LookupConfig(cfg); err != nil {
