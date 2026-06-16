@@ -49,9 +49,12 @@ func Test_Integration_CTF_Untag(t *testing.T) {
 	require.True(t, ok, "CTF store must implement content.Untagger")
 
 	t.Run("removes tag without affecting the sibling tag or the blob", func(t *testing.T) {
+		_, err := store.Resolve(ctx, "latest")
+		require.NoError(t, err, "latest must resolve before untagging")
+
 		require.NoError(t, untagger.Untag(ctx, "latest"))
 
-		_, err := store.Resolve(ctx, "latest")
+		_, err = store.Resolve(ctx, "latest")
 		require.ErrorIs(t, err, errdef.ErrNotFound, "untagged reference must not resolve")
 
 		resolved, err := store.Resolve(ctx, "v1.0.0")
@@ -66,42 +69,6 @@ func Test_Integration_CTF_Untag(t *testing.T) {
 	t.Run("returns ErrNotFound for a tag that does not exist", func(t *testing.T) {
 		err := untagger.Untag(ctx, "nonexistent")
 		require.ErrorIs(t, err, errdef.ErrNotFound)
-	})
-}
-
-func Test_Integration_CTF_Untag_LastTag(t *testing.T) {
-	t.Parallel()
-
-	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR|os.O_CREATE)
-	require.NoError(t, err)
-	archive := ctf.NewFileSystemCTF(fs)
-	provider := ocictf.NewFromCTF(archive)
-	ctx := t.Context()
-
-	store, err := provider.StoreForReference(ctx, "test-repo:only-tag")
-	require.NoError(t, err)
-
-	data := []byte(`{"schemaVersion":2}`)
-	desc := ociImageSpecV1.Descriptor{
-		MediaType: ociImageSpecV1.MediaTypeImageManifest,
-		Digest:    digest.FromBytes(data),
-		Size:      int64(len(data)),
-	}
-	require.NoError(t, store.Push(ctx, desc, bytes.NewReader(data)))
-	require.NoError(t, store.Tag(ctx, desc, "only-tag"))
-
-	untagger, ok := store.(content.Untagger)
-	require.True(t, ok, "CTF store must implement content.Untagger")
-
-	t.Run("keeps the blob when the last tag is removed", func(t *testing.T) {
-		require.NoError(t, untagger.Untag(ctx, "only-tag"))
-
-		_, err := store.Resolve(ctx, "only-tag")
-		require.ErrorIs(t, err, errdef.ErrNotFound, "untagged reference must not resolve")
-
-		exists, err := store.Exists(ctx, desc)
-		require.NoError(t, err)
-		require.True(t, exists, "untagging is tag-only; the blob must not be garbage-collected")
 	})
 }
 

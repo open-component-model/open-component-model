@@ -914,13 +914,14 @@ func (repo *Repository) RemoveComponentVersionAlias(ctx context.Context, compone
 		return fmt.Errorf("store does not support alias deletion for component %q", component)
 	}
 
-	if err := untagger.Untag(ctx, alias); err != nil {
-		if errors.Is(err, errdef.ErrNotFound) {
-			return errors.Join(repository.ErrNotFound,
-				fmt.Errorf("alias %q for component %q not found: %w", alias, component, err))
-		}
+	err = untagger.Untag(ctx, alias)
+	if errors.Is(err, errdef.ErrNotFound) {
+		return errors.Join(repository.ErrNotFound,
+			fmt.Errorf("alias %q for component %q not found: %w", alias, component, err))
+	} else if err != nil {
 		return fmt.Errorf("failed to remove alias %q for component %q: %w", alias, component, err)
 	}
+
 	return nil
 }
 

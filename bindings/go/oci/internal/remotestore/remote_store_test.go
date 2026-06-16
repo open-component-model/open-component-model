@@ -1,4 +1,4 @@
-package url
+package remotestore
 
 import (
 	"net/http"
@@ -35,7 +35,7 @@ func TestRemoteStore_Untag(t *testing.T) {
 			repo.PlainHTTP = true
 			repo.Client = &http.Client{}
 
-			store := &remoteStore{Repository: repo}
+			store := &RemoteStore{Repository: repo}
 
 			err = store.Untag(t.Context(), "v1.0.0")
 			if tc.wantErr != nil {

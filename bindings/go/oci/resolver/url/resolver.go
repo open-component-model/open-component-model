@@ -11,6 +11,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
@@ -135,7 +136,7 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		repo.Client = resolver.baseClient
 	}
 
-	store := &remoteStore{repo}
+	store := &remotestore.RemoteStore{Repository: repo}
 	resolver.addToCache(key, store)
 
 	return store, nil

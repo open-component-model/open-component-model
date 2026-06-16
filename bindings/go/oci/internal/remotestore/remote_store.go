@@ -1,4 +1,4 @@
-package url
+package remotestore
 
 import (
 	"context"
@@ -9,30 +9,37 @@ import (
 	"net/url"
 	"path"
 
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/errcode"
-)
 
+	spec "ocm.software/open-component-model/bindings/go/oci/spec"
+)
 // ErrTagDeletionDisabled is returned when the registry responds with 405 Method Not Allowed
 // to a tag-deletion request, indicating that the registry does not support tag deletion
 // (e.g. REGISTRY_STORAGE_DELETE_ENABLED is not set).
 var ErrTagDeletionDisabled = fmt.Errorf("registry does not support tag deletion (405 Method Not Allowed)")
 
-// remoteStore wraps *remote.Repository and adds content.Untagger support.
+// RemoteStore wraps *remote.Repository and adds content.Untagger support.
 //
 // oras-go implements content.Untagger only for its local OCI layout store
 // (content/oci.Store). The remote registry client (registry/remote.Repository)
 // intentionally omits it: the OCI Distribution Spec treats
 // DELETE /v2/<name>/manifests/<tag> as optional, and not all registries honor it.
-type remoteStore struct {
+type RemoteStore struct {
 	*remote.Repository
 }
 
+var (
+	_ spec.Store       = (*RemoteStore)(nil) // general store spec
+	_ content.Untagger = (*RemoteStore)(nil) // content.Untagger opt-in
+)
+
 // Untag removes the given tag from the remote registry without deleting the underlying manifest.
 // The registry must have tag deletion enabled; a 405 response means it is disabled server-side.
-func (r *remoteStore) Untag(ctx context.Context, reference string) error {
+func (r *RemoteStore) Untag(ctx context.Context, reference string) error {
 	ref := r.Reference
 	ref.Reference = reference
 	ctx = auth.AppendRepositoryScope(ctx, ref, auth.ActionDelete)
@@ -61,8 +68,7 @@ func (r *remoteStore) Untag(ctx context.Context, reference string) error {
 		return fmt.Errorf("failed to delete alias %q: %w", reference, err)
 	}
 	defer func() {
-		err := resp.Body.Close()
-		if err != nil {
+		if err := resp.Body.Close(); err != nil {
 			slog.Error("Failed to close response body for alias", "reference", reference, "err", err)
 		}
 	}()
