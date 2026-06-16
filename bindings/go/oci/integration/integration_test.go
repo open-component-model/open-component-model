@@ -1299,6 +1299,24 @@ func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 				owningComponent, version, "frontend")
 		})
 
+		t.Run("multiple owners on the same subject", func(t *testing.T) {
+			imageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+				fmt.Sprintf("%s/test-asset/multi-owner:%s", srcReg, version),
+				[]byte("multi-owner-payload"))
+
+			res := byReferenceResource("backend-image", version, imageRef)
+			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-b", version, res, nil))
+			// Re-add owner-a to confirm idempotency holds per (owner, resource) tuple.
+			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+
+			assertOwnershipReferrerCount(t, ctx, srcResolver, imageRef, 2)
+			assertOwnershipReferrerPresent(t, ctx, srcResolver, imageRef,
+				"ocm.software/owner-a", version, "backend-image")
+			assertOwnershipReferrerPresent(t, ctx, srcResolver, imageRef,
+				"ocm.software/owner-b", version, "backend-image")
+		})
+
 		t.Run("transfer registry → registry carries the referrer", func(t *testing.T) {
 			// Push image + referrer in src; UploadResource into dst (the binding's
 			// resource-level transfer drives ExtendedCopyGraph and copies referrers).
@@ -1376,6 +1394,22 @@ func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 			assertOwnershipReferrerCount(t, ctx, ctfResolver, frontendSubject, 1)
 			assertOwnershipReferrerAnnotations(t, ctx, ctfResolver, frontendSubject,
 				owningComponent, version, "frontend")
+		})
+
+		t.Run("multiple owners on the same subject", func(t *testing.T) {
+			ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
+			res, subjectRef := addByValueOwnedResource(t, ctx, ctfResolver, ctfRepo,
+				component, version, "backend-image", []byte("ctf-multi-owner-payload"))
+
+			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-b", version, res, nil))
+			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+
+			assertOwnershipReferrerCount(t, ctx, ctfResolver, subjectRef, 2)
+			assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
+				"ocm.software/owner-a", version, "backend-image")
+			assertOwnershipReferrerPresent(t, ctx, ctfResolver, subjectRef,
+				"ocm.software/owner-b", version, "backend-image")
 		})
 
 		t.Run("transfer CTF → registry carries the referrer", func(t *testing.T) {
@@ -1546,6 +1580,32 @@ func assertOwnershipReferrerCount(t *testing.T, ctx context.Context, resolver oc
 	t.Helper()
 	got := listOwnershipReferrers(t, ctx, resolver, subject)
 	require.Lenf(t, got, want, "subject %q should have %d ownership referrers, got %d", subject, want, len(got))
+}
+
+// assertOwnershipReferrerPresent asserts that at least one ownership referrer
+// on subjectRef carries the expected (component, version, resource) identity.
+// Use when a subject has multiple distinct owners and referrer order is not
+// guaranteed.
+func assertOwnershipReferrerPresent(t *testing.T, ctx context.Context, resolver oci.Resolver, subjectRef, component, version, resourceName string) {
+	t.Helper()
+	r := require.New(t)
+	for _, ref := range listOwnershipReferrers(t, ctx, resolver, subjectRef) {
+		if ref.Annotations[annotations.OwnershipComponentName] != component {
+			continue
+		}
+		if ref.Annotations[annotations.OwnershipComponentVersion] != version {
+			continue
+		}
+		var payload struct {
+			Identity map[string]string `json:"identity"`
+			Kind     string            `json:"kind"`
+		}
+		r.NoError(json.Unmarshal([]byte(ref.Annotations[annotations.ArtifactAnnotationKey]), &payload))
+		if payload.Kind == "resource" && payload.Identity["name"] == resourceName && payload.Identity["version"] == version {
+			return
+		}
+	}
+	t.Fatalf("subject %q missing ownership referrer for component=%s version=%s resource=%s", subjectRef, component, version, resourceName)
 }
 
 // assertOwnershipReferrerAnnotations asserts the first ownership referrer on
