@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"golang.org/x/time/rate"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -24,7 +23,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -321,7 +319,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	transferCfg, err := r.loadTransferConfig(ctx, replication)
+	transferCfg, err := r.loadTransferConfig(ctx, replication, component)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
 
@@ -433,58 +431,25 @@ func errIsUnavailable(err error) bool {
 	return errors.As(err, &notReadyErr) || errors.As(err, &deletionErr)
 }
 
-// loadTransferConfig resolves every spec.TransferConfig entry to its generic config
-// envelope, extracts the transfer.config.ocm.software entries, and merges them into a
-// single effective transfer config. Later entries win on conflicting fields.
-func (r *Reconciler) loadTransferConfig(ctx context.Context, replication *v1alpha1.Replication) (*transferspec.Config, error) {
-	var cfgs []*transferspec.Config
-
-	for _, tc := range replication.Spec.TransferConfig {
-		genericCfg, err := r.resolveGenericConfig(ctx, replication, tc)
-		if err != nil {
-			return nil, err
-		}
-
-		cfg, err := transferspec.LookupConfig(genericCfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to look up transfer config: %w", err)
-		}
-
-		if cfg != nil {
-			cfgs = append(cfgs, cfg)
-		}
+// loadTransferConfig resolves the effective config from the replication object and its parent component.
+// Once all configuration objects are loaded, it will look up transfer configurations and return any that it finds.
+func (r *Reconciler) loadTransferConfig(ctx context.Context, replication *v1alpha1.Replication, component *v1alpha1.Component) (*transferspec.Config, error) {
+	genericConfigs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), replication, component)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load transfer configuration: %w", err)
 	}
 
-	return transferspec.Merge(cfgs...), nil
-}
-
-// resolveGenericConfig returns the generic config envelope for a single TransferConfig
-// entry, preferring the inlined Value over the referenced ConfigMap.
-func (r *Reconciler) resolveGenericConfig(ctx context.Context, replication *v1alpha1.Replication, tc v1alpha1.TransferConfig) (*genericv1.Config, error) {
-	if tc.Value != nil {
-		return tc.Value, nil
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, replication.GetNamespace(), genericConfigs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
-	if tc.NamespaceName == nil || tc.Name == "" {
+	// no config is a valid return value
+	if cfg == nil {
 		return nil, nil
 	}
 
-	namespace := tc.Namespace
-	if namespace == "" {
-		namespace = replication.GetNamespace()
-	}
-
-	configMap := &corev1.ConfigMap{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: tc.Name}, configMap); err != nil {
-		return nil, fmt.Errorf("failed to get transfer config ConfigMap %s/%s: %w", namespace, tc.Name, err)
-	}
-
-	genericCfg, err := configuration.GetConfigFromObject(configMap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract config from ConfigMap %s/%s: %w", namespace, tc.Name, err)
-	}
-
-	return genericCfg, nil
+	return transferspec.LookupConfig(cfg.Config)
 }
 
 // convertToTyped converts a runtime.Raw repository spec to a concrete spec.

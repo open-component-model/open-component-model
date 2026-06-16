@@ -6,7 +6,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -16,11 +15,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
-	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
-	transferspec "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
@@ -164,7 +161,7 @@ var _ = Describe("Replication Controller", func() {
 			return configMap.GetName()
 		}
 
-		newReplication := func(component *v1alpha1.Component, targetRepository *v1alpha1.Repository, transferConfig []v1alpha1.TransferConfig) *v1alpha1.Replication {
+		newReplication := func(component *v1alpha1.Component, targetRepository *v1alpha1.Repository, transferConfig []v1alpha1.OCMConfiguration) *v1alpha1.Replication {
 			return &v1alpha1.Replication{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "replication",
@@ -173,7 +170,7 @@ var _ = Describe("Replication Controller", func() {
 				Spec: v1alpha1.ReplicationSpec{
 					ComponentRef:        corev1.LocalObjectReference{Name: component.GetName()},
 					TargetRepositoryRef: corev1.LocalObjectReference{Name: targetRepository.GetName()},
-					TransferConfig:      transferConfig,
+					OCMConfig:           transferConfig,
 				},
 			}
 		}
@@ -192,8 +189,8 @@ var _ = Describe("Replication Controller", func() {
 				newDescriptor(childName, "0.1.0"),
 			})
 
-			replication := newReplication(component, targetRepository, []v1alpha1.TransferConfig{{
-				NamespaceName: &v1alpha1.NamespaceName{Name: setupTransferConfig(ctx)},
+			replication := newReplication(component, targetRepository, []v1alpha1.OCMConfiguration{{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{Name: setupTransferConfig(ctx), Kind: "ConfigMap"},
 			}})
 			Expect(k8sClient.Create(ctx, replication)).To(Succeed())
 			DeferCleanup(func(ctx SpecContext) {
@@ -248,17 +245,8 @@ var _ = Describe("Replication Controller", func() {
 				}),
 			})
 
-			transferRaw := &ocmruntime.Raw{}
-			Expect(transferspec.Scheme.Convert(&transferspec.Config{
-				Type:      ocmruntime.NewVersionedType(transferspec.ConfigType, transferspec.Version),
-				Recursive: transferspec.RecursiveInfinite,
-			}, transferRaw)).To(Succeed())
-
-			replication := newReplication(component, targetRepository, []v1alpha1.TransferConfig{{
-				Value: &genericv1.Config{
-					Type:           ocmruntime.NewVersionedType(genericv1.ConfigType, genericv1.ConfigTypeV1),
-					Configurations: []*ocmruntime.Raw{transferRaw},
-				},
+			replication := newReplication(component, targetRepository, []v1alpha1.OCMConfiguration{{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{Name: setupTransferConfig(ctx), Kind: "ConfigMap"},
 			}})
 			Expect(k8sClient.Create(ctx, replication)).To(Succeed())
 			DeferCleanup(func(ctx SpecContext) {
