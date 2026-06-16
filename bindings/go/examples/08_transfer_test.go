@@ -90,14 +90,15 @@ func TestExample_TransferCTFtoCTF(t *testing.T) {
 	targetSpec := newCTFSpecAt(t, t.TempDir())
 	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
 
-	// WithTransfer pairs the source component with a target repository and a resolver.
-	// FromRepository wraps the source repo directly — no custom resolver needed.
-	tgd, err := transfer.BuildGraphDefinition(ctx,
-		transfer.WithTransfer(
-			transfer.Component(component, version),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(sourceRepo, sourceSpec),
-		),
+	// A Mapping pairs source components with a target repository and a resolver.
+	// NewRepositoryResolver wraps the source repo directly, so no custom resolver
+	// is needed. A nil config resolves to the transfer defaults.
+	tgd, err := transfer.BuildGraphDefinition(ctx, nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: component, Version: version}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotEmpty(tgd.Transformations)
@@ -202,12 +203,12 @@ configurations:
 	targetSpec := newCTFSpecAt(t, t.TempDir())
 	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
 
-	tgd, err := transfer.BuildGraphDefinition(ctx,
-		transfer.WithTransfer(
-			transfer.Component(component, version),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(sourceRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(ctx, nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: component, Version: version}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 
