@@ -264,6 +264,7 @@ func TestAddArtifact_RetagFromUntaggedToLatest(t *testing.T) {
 		t.Error("expected old artifact (sha256:old) to have its tag cleared")
 	}
 }
+
 func TestAddArtifact_MultipleUntaggedArtifacts(t *testing.T) {
 	idx := NewIndex()
 	// Add multiple untagged artifacts with different digests - all should be stored
@@ -292,7 +293,7 @@ func TestAddArtifact_MultipleUntaggedArtifacts(t *testing.T) {
 	}
 }
 
-func TestRemoveArtifactByTag(t *testing.T) {
+func TestRemoveTag(t *testing.T) {
 	idx := NewIndex()
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "stable", Digest: "sha256:abc"})
@@ -310,7 +311,7 @@ func TestRemoveArtifactByTag(t *testing.T) {
 	}
 }
 
-func TestRemoveArtifactByTag_NotFound(t *testing.T) {
+func TestRemoveTag_NotFound(t *testing.T) {
 	idx := NewIndex()
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
 
@@ -320,7 +321,7 @@ func TestRemoveArtifactByTag_NotFound(t *testing.T) {
 	}
 }
 
-func TestRemoveArtifactByTag_OnlyMatchingTag(t *testing.T) {
+func TestRemoveTag_OnlyMatchingTag(t *testing.T) {
 	idx := NewIndex()
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "v1.0.0", Digest: "sha256:abc"})
 	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
