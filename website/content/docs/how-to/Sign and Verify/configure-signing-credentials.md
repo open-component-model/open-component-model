@@ -224,6 +224,7 @@ time=2026-03-12T17:05:46.437+01:00 level=INFO msg="dry run: signature not persis
 
 {{< /details >}}
 {{< /tab >}}
+{{< /tabs >}}
 {{< /step >}}
 
 {{< /steps >}}
