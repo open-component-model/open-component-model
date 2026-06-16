@@ -118,7 +118,7 @@ func main() {
 		"The buffer size for each subscriber's event channel. A larger buffer reduces the probability of dropped resolution events under load. "+
 			"Tune upward if the resolver_event_channel_drops_total metric is non-zero.")
 	flag.IntVar(&resolverCacheTTL, "resolver-cache-ttl", 30, //nolint:mnd // no magic number
-		"The time-to-live (TTL) for the resolver cache entries in seconds.")
+		"The time-to-live (TTL) for the resolver cache entries in minutes.")
 
 	opts := zap.Options{
 		Development: true,
