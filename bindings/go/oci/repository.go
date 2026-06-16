@@ -888,7 +888,7 @@ func (repo *Repository) RemoveComponentVersionAlias(ctx context.Context, compone
 	defer func() { done(err) }()
 
 	if versionRegex.MatchString(alias) {
-		return fmt.Errorf("alias %q uses semantic version format and cannot be removed as an alias (use non-semver names like 'edge' or 'latest' instead)", alias)
+		return fmt.Errorf("%q is a semantic version (component version identifier), not an alias; RemoveComponentVersionAlias only removes floating alias tags such as 'edge' or 'latest'", alias)
 	}
 
 	reference, store, err := repo.getStore(ctx, component, alias)
