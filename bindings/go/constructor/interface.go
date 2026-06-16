@@ -161,19 +161,6 @@ type ExternalComponentRepositoryProvider interface {
 	GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error)
 }
 
-type ResourceRepository interface {
-	// ResourceConsumerIdentityProvider that resolves the identity of the given resource to use for credential resolution.
-	// These can then be passed to DownloadResource.
-	ResourceConsumerIdentityProvider
-	// DownloadResource downloads a resource from the repository.
-	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (content blob.ReadOnlyBlob, err error)
-}
-
-type ResourceRepositoryProvider interface {
-	// GetResourceRepository returns the target ocm resource repository for the given resource specification in the constructor.
-	GetResourceRepository(ctx context.Context, comp *constructor.Resource) (ResourceRepository, error)
-}
-
 type ResourceConsumerIdentityProvider interface {
 	// GetResourceCredentialConsumerIdentity resolves the identity of the given [constructor.Resource] to use for credential resolution.
 	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error)
