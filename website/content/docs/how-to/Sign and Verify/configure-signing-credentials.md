@@ -193,15 +193,6 @@ The dry run signs in memory without persisting the signature, so it's a quick wa
 ```bash
 ocm sign cv --dry-run /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
-{{< /tab >}}
-{{< tab "GPG" >}}
-**GPG** (requires `--signer-spec` pointing at a `GPGSigningConfiguration/v1alpha1` file — see the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}) for the spec format):
-
-```bash
-ocm sign cv --dry-run \
-  --signer-spec ./signer-spec.yaml \
-  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
-```
 
 If configured correctly, the dry run completes without "no private key found" errors.
 
@@ -220,6 +211,45 @@ signature:
   value: 0cb48e5867575151fca94e995fc03c6df734163aed8fbee46231c9b36e59956d51df60263d8cd58e3de7662b2fbc3c4f800107d96b4fc27e7a16807388f7e5a73d2269290c0f367d0eb92d930b485054911c10e22ed1fe6c5bfab441f1af28d8deec4df8d67ca5a54fa4495510e2fff809fe8162f875d6b91a6bc1d29e7466f113a9d9d23f16956588a5792e4c7553a8ceb6f8c630aa6090aceb83e763734c33902d4697beadc65a6bc4761e6221ec49a6882bd46c87a14c5a5c24c70bf95880d0a43b176a5bf6200837ce344abff360e13f07db35290b3e1e3639a0fdc87252542965ea95231444807564c718734ccf10a5dbbb58a8b11f7df418002e6bebfa
 
 time=2026-03-12T17:05:46.437+01:00 level=INFO msg="dry run: signature not persisted"
+```
+
+{{< /details >}}
+{{< /tab >}}
+
+{{< tab "GPG" >}}
+**GPG** (requires `--signer-spec` pointing at a `GPGSigningConfiguration/v1alpha1` file — see the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}) for the spec format):
+
+```bash
+ocm sign cv --dry-run \
+  --signer-spec ./signer-spec.yaml \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+If configured correctly, the dry run completes without "no private key found" errors.
+
+{{< details "Expected output" >}}
+
+```text
+digest:
+  hashAlgorithm: SHA-256
+  normalisationAlgorithm: jsonNormalisation/v4alpha1
+  value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
+name: default
+signature:
+  algorithm: GPG
+  mediaType: application/vnd.ocm.signature.gpg
+  value: |-
+    -----BEGIN PGP SIGNATURE-----
+
+    wsGpBAABCABdBYJqMYiKCRB0vWiFKz87GDUUAAAAAAAcABBzYWx0QG5vdGF0aW9u
+    cy5vcGVucGdwanMub3Jnna9mTDE6s2TgixavxY2HgBYhBNFEh4hYDHyZ/JZi4XS9
+    aIUrPzsYAAAOWA/+Jck5Nvq1yWxoIht6TCv0HpQKjhRy3txVemq1oJvt1a9eukvX
+    ...
+    DNcbgT3EjqN6YOIA1MENuzdqdwNv9SoC+Ixex0DeHVHyKsOFsuD+3uEWoNc=
+    =JoWY
+    -----END PGP SIGNATURE-----
+
+time=2026-06-16T19:31:54.138+02:00 level=INFO msg="dry run: signature not persisted"
 ```
 
 {{< /details >}}
