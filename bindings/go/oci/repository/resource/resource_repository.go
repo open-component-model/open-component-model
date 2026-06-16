@@ -157,9 +157,6 @@ func (p *ResourceRepository) AddOwnership(ctx context.Context, component, versio
 	if err != nil {
 		return err
 	}
-
-	// Convert the access from *runtime.Raw to the typed access spec so the inner
-	// repository's type-switch can match it.
 	resource = resource.DeepCopy()
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
