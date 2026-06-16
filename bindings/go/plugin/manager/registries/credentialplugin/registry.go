@@ -101,42 +101,69 @@ func (r *Registry) GetCredentialPlugin(ctx context.Context, typed runtime.Typed)
 		return nil, fmt.Errorf("credential plugin lookup requires a non-nil typed argument")
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	_, _ = r.scheme.DefaultType(typed)
-	typ := typed.GetType()
-	if typ.IsEmpty() {
-		return nil, fmt.Errorf("credential plugin lookup requires a type")
-	}
-
-	// Check internal plugins first.
-	if plugin, ok := r.internalPlugins[typ]; ok {
-		return plugin, nil
-	}
-
-	// Fall back to external plugins.
-	externalPlugin, err := r.getPlugin(ctx, typ)
+	res, err := r.lookup(typed)
 	if err != nil {
 		return nil, err
 	}
+	if res.internal != nil {
+		return res.internal, nil
+	}
+	if res.cached != nil {
+		return NewCredentialPluginConverter(res.cached), nil
+	}
 
+	// Start the subprocess without holding the registry lock so concurrent
+	// lookups for other types proceed and Shutdown is not blocked on plugin boot.
+	externalPlugin, err := r.startAndReturnPlugin(ctx, &res.plugin)
+	if err != nil {
+		return nil, err
+	}
 	return NewCredentialPluginConverter(externalPlugin), nil
 }
 
-func (r *Registry) getPlugin(ctx context.Context, typ runtime.Type) (credentialpluginv1.CredentialPluginContract[runtime.Typed], error) {
-	plugin, ok := r.registry[typ]
-	if !ok {
-		return nil, fmt.Errorf("no credential plugin registered for type %s", typ)
-	}
-
-	if existingPlugin, ok := r.constructedPlugins[plugin.ID]; ok {
-		return existingPlugin.Plugin, nil
-	}
-
-	return r.startAndReturnPlugin(ctx, &plugin)
+// lookupResult carries the outcome of a registry lookup. Exactly one of
+// internal, cached, or plugin is set on success: internal for a builtin
+// plugin, cached for an already-started external plugin, or plugin for a
+// discovered external plugin descriptor that the caller must start.
+type lookupResult struct {
+	internal credentials.CredentialPlugin
+	cached   credentialpluginv1.CredentialPluginContract[runtime.Typed]
+	plugin   mtypes.Plugin
 }
 
+func (r *Registry) lookup(typed runtime.Typed) (lookupResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// DefaultType resolves short-type aliases registered via the internal
+	// scheme (see RegisterInternalCredentialPlugin). External plugins arrive
+	// as *runtime.Raw with the type already set, which is not a registered
+	// prototype and is rejected here — the subsequent map lookup uses the
+	// raw GetType() value, so the failure is benign.
+	_, _ = r.scheme.DefaultType(typed)
+	typ := typed.GetType()
+	if typ.IsEmpty() {
+		return lookupResult{}, fmt.Errorf("credential plugin lookup requires a type")
+	}
+
+	if internal, ok := r.internalPlugins[typ]; ok {
+		return lookupResult{internal: internal}, nil
+	}
+
+	plugin, ok := r.registry[typ]
+	if !ok {
+		return lookupResult{}, fmt.Errorf("no credential plugin registered for type %s", typ)
+	}
+	if existing, ok := r.constructedPlugins[plugin.ID]; ok {
+		return lookupResult{cached: existing.Plugin}, nil
+	}
+	return lookupResult{plugin: plugin}, nil
+}
+
+// startAndReturnPlugin starts the subprocess, waits for it to be ready, and
+// registers it in constructedPlugins. If a concurrent caller already won the
+// race and registered a plugin for the same ID, the freshly started subprocess
+// is interrupted and the existing instance is returned instead.
 func (r *Registry) startAndReturnPlugin(ctx context.Context, plugin *mtypes.Plugin) (credentialpluginv1.CredentialPluginContract[runtime.Typed], error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
@@ -147,13 +174,22 @@ func (r *Registry) startAndReturnPlugin(ctx context.Context, plugin *mtypes.Plug
 		return nil, fmt.Errorf("failed to wait for plugin to start: %w", err)
 	}
 
-	go plugins.StartLogStreamer(r.ctx, plugin)
-
+	r.mu.Lock()
+	if existing, ok := r.constructedPlugins[plugin.ID]; ok {
+		r.mu.Unlock()
+		if perr := plugin.Cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
+			return nil, fmt.Errorf("failed to interrupt duplicate plugin start for %s: %w", plugin.ID, perr)
+		}
+		return existing.Plugin, nil
+	}
 	instance := NewCredentialPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: instance,
 		cmd:    plugin.Cmd,
 	}
+	r.mu.Unlock()
+
+	go plugins.StartLogStreamer(r.ctx, plugin)
 
 	return instance, nil
 }
