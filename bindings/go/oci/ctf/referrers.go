@@ -237,23 +237,24 @@ func referrerFromManifest(desc ociImageSpecV1.Descriptor, manifestJSON []byte) (
 	}
 }
 
+type referrerKey struct {
+	mediaType string
+	digest    digest.Digest
+	size      int64
+}
+
+func referrerKeyOf(d ociImageSpecV1.Descriptor) referrerKey {
+	return referrerKey{mediaType: d.MediaType, digest: d.Digest, size: d.Size}
+}
+
 // addReferrer adds a referrer to a list of referrers.
 // Returns the updated referrers list and a boolean indicating if the list
 // was changed.
 //
 // Inspired by oras remote.applyReferrerChanges.
 func addReferrer(referrers []ociImageSpecV1.Descriptor, referrer ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, bool) {
-	type key struct {
-		mediaType string
-		digest    digest.Digest
-		size      int64
-	}
-	keyOf := func(d ociImageSpecV1.Descriptor) key {
-		return key{mediaType: d.MediaType, digest: d.Digest, size: d.Size}
-	}
-
 	// clean up - deduplicate and remove empty entries
-	seen := make(map[key]struct{}, len(referrers)+1)
+	seen := make(map[referrerKey]struct{}, len(referrers)+1)
 	updated := make([]ociImageSpecV1.Descriptor, 0, len(referrers)+1)
 	changed := false
 	for _, r := range referrers {
@@ -262,17 +263,17 @@ func addReferrer(referrers []ociImageSpecV1.Descriptor, referrer ociImageSpecV1.
 			changed = true
 			continue
 		}
-		if _, ok := seen[keyOf(r)]; ok {
+		if _, ok := seen[referrerKeyOf(r)]; ok {
 			// skip duplicates
 			changed = true
 			continue
 		}
-		seen[keyOf(r)] = struct{}{}
+		seen[referrerKeyOf(r)] = struct{}{}
 		updated = append(updated, r)
 	}
 
 	// add referrer if not already present
-	if _, ok := seen[keyOf(referrer)]; !ok {
+	if _, ok := seen[referrerKeyOf(referrer)]; !ok {
 		updated = append(updated, referrer)
 		changed = true
 	}
