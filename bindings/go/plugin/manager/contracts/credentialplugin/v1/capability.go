@@ -5,7 +5,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const CredentialPluginType types.PluginType = "credentialPlugin" //nolint:gosec // not hardcoded cred
+const CredentialPluginType types.PluginType = "credentialPlugin" //nolint:gosec // G101 false positive: plugin-type discriminator, not a credential value
 
 var Scheme *runtime.Scheme
 

@@ -28,11 +28,11 @@ func RegisterCredentialPlugin[T runtime.Typed](
 	// Setup handlers for CredentialPlugin.
 	c.Handlers = append(c.Handlers,
 		endpoints.Handler{
-			Handler:  GetConsumerIdentityHandlerFunc(handler.GetConsumerIdentity, c.Scheme, proto),
+			Handler:  GetConsumerIdentityHandlerFunc(handler.GetConsumerIdentity),
 			Location: GetConsumerIdentityEndpoint,
 		},
 		endpoints.Handler{
-			Handler:  ResolveHandlerFunc(handler.Resolve, c.Scheme, proto),
+			Handler:  ResolveHandlerFunc(handler.Resolve),
 			Location: ResolveEndpoint,
 		},
 	)

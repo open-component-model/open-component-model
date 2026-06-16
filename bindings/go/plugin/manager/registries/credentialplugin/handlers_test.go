@@ -11,17 +11,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentialplugin/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestGetConsumerIdentityHandlerFunc(t *testing.T) {
-	scheme := runtime.NewScheme()
-	dummytype.MustAddToScheme(scheme)
-	dummyRepo := &dummyv1.Repository{}
-
 	tests := []struct {
 		name         string
 		handlerFunc  func() http.HandlerFunc
@@ -33,7 +28,7 @@ func TestGetConsumerIdentityHandlerFunc(t *testing.T) {
 			handlerFunc: func() http.HandlerFunc {
 				return GetConsumerIdentityHandlerFunc(func(ctx context.Context, req v1.GetConsumerIdentityRequest[*dummyv1.Repository]) (runtime.Identity, error) {
 					return map[string]string{"id": "test-identity"}, nil
-				}, scheme, dummyRepo)
+				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -48,7 +43,7 @@ func TestGetConsumerIdentityHandlerFunc(t *testing.T) {
 			handlerFunc: func() http.HandlerFunc {
 				return GetConsumerIdentityHandlerFunc(func(ctx context.Context, req v1.GetConsumerIdentityRequest[*dummyv1.Repository]) (runtime.Identity, error) {
 					return map[string]string{"id": "test-identity", "type": "test-type"}, nil
-				}, scheme, dummyRepo)
+				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				defer resp.Body.Close()
@@ -79,10 +74,6 @@ func TestGetConsumerIdentityHandlerFunc(t *testing.T) {
 }
 
 func TestResolveHandlerFunc(t *testing.T) {
-	scheme := runtime.NewScheme()
-	dummytype.MustAddToScheme(scheme)
-	dummyRepo := &dummyv1.Repository{}
-
 	tests := []struct {
 		name         string
 		handlerFunc  func() http.HandlerFunc
@@ -94,7 +85,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 			handlerFunc: func() http.HandlerFunc {
 				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
 					return &runtime.Raw{Data: []byte(`{"resolved":"credentials"}`)}, nil
-				}, scheme, dummyRepo)
+				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
@@ -114,7 +105,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
 					require.Nil(t, credentials, "missing Authorization header must yield nil credentials")
 					return &runtime.Raw{Data: []byte(`{"resolved":"credentials"}`)}, nil
-				}, scheme, dummyRepo)
+				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -131,7 +122,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 			handlerFunc: func() http.HandlerFunc {
 				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
 					return &runtime.Raw{Data: []byte(`{"resolved":"credentials"}`)}, nil
-				}, scheme, dummyRepo)
+				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -150,7 +141,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 					require.NotNil(t, credentials)
 					require.Equal(t, "test-identity", req.Identity["id"])
 					return &runtime.Raw{Data: []byte(`{"resolved":"credentials","token":"abc123"}`)}, nil
-				}, scheme, dummyRepo)
+				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				defer resp.Body.Close()
