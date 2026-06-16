@@ -381,3 +381,37 @@ func (s *repository) Tags(ctx context.Context, _ string, fn func(tags []string) 
 	s.mu.RUnlock()
 	return fn(tags)
 }
+
+// Untag removes a tag from the CTF archive's index.
+// The reference should be in the format "repository:tag", but can also be just a tag.
+// Following the content.Untagger contract, only the tag entry is removed —
+// the manifest and its blobs are NOT deleted. Floating tags always point to
+// manifests that remain referenced by their component version entry, so no
+// blob ever becomes unreachable through this operation.
+func (s *repository) Untag(ctx context.Context, reference string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.untag(ctx, reference)
+}
+
+func (s *repository) untag(ctx context.Context, reference string) error {
+	tag := reference
+	if ref, err := looseref.ParseReference(reference); err == nil && ref.Tag != "" {
+		tag = ref.Tag
+	}
+	idx, err := s.archive.GetIndex(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to get index: %w", err)
+	}
+
+	if err := idx.RemoveTag(s.repo, tag); err != nil {
+		if errors.Is(err, v1.ErrArtifactNotFound) {
+			return errdef.ErrNotFound
+		}
+		return fmt.Errorf("unable to remove tag %q: %w", tag, err)
+	}
+	if err := s.archive.SetIndex(ctx, idx); err != nil {
+		return fmt.Errorf("unable to persist index after tag removal: %w", err)
+	}
+	return nil
+}
