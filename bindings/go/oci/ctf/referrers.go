@@ -21,12 +21,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 )
 
-// maxManifestBytes caps how much manifest or referrers-index content is read
-// into memory, both when buffering a pushed manifest to inspect its subject
-// and when loading a referrers index. It matches oras-go's
-// defaultMaxMetadataBytes.
-const maxManifestBytes = 4 * 1024 * 1024 // 4 MiB
-
 var _ registry.ReferrerLister = (*repository)(nil)
 
 // buildReferrersTag builds the referrers tag for the given manifest descriptor.
@@ -116,16 +110,9 @@ func (s *repository) referrersFromArtifactIndex(ctx context.Context, idx v1.Inde
 		err = errors.Join(err, rc.Close())
 	}()
 
-	if desc.Size > maxManifestBytes {
-		return nil, fmt.Errorf("referrers index %q for referrers tag %q exceeds size limit: %d > %d", desc.Digest, referrersTag, desc.Size, maxManifestBytes)
-	}
-
-	raw, err := io.ReadAll(io.LimitReader(rc, maxManifestBytes+1))
+	raw, err := io.ReadAll(rc)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read referrers index %q for referrers tag %q: %w", desc.Digest, referrersTag, err)
-	}
-	if len(raw) > maxManifestBytes {
-		return nil, fmt.Errorf("referrers index %q for referrers tag %q exceeds size limit of %d bytes", desc.Digest, referrersTag, maxManifestBytes)
 	}
 
 	var refIdx ociImageSpecV1.Index

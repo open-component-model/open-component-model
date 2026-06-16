@@ -324,13 +324,6 @@ func TestPushVerifiesManifestContent(t *testing.T) {
 		Size:      int64(len(good)) - 1,
 	}
 	require.Error(t, repo.Push(ctx, wrongSize, bytes.NewReader(good)))
-
-	oversize := ociImageSpecV1.Descriptor{
-		MediaType: ociImageSpecV1.MediaTypeImageManifest,
-		Digest:    digest.FromBytes(good),
-		Size:      maxManifestBytes + 1,
-	}
-	require.Error(t, repo.Push(ctx, oversize, bytes.NewReader(nil)))
 }
 
 func TestReferrersIsPermissiveAndQuietOnMiss(t *testing.T) {

@@ -220,9 +220,6 @@ func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 //
 // The caller MUST hold the write lock.
 func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
-	if expected.Size > maxManifestBytes {
-		return fmt.Errorf("content size %d of descriptor %v exceeds manifest size limit of %d bytes", expected.Size, expected.Digest, maxManifestBytes)
-	}
 	// Buffer the manifest so its subject can be inspected. content.ReadAll
 	// also verifies the content against the expected size and digest, which
 	// SaveBlob alone does not (it trusts the descriptor's digest).
