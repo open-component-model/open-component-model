@@ -148,10 +148,14 @@ function hasAnyImportForVersion(parsed, version) {
     return parsed?.imports?.some(i => i?.mounts?.some(m => m?.sites?.matrix?.versions?.includes(version))) ?? false;
 }
 
-// True if every module path returned by buildModuleBlocks has a matching import.
-// A mismatch (hasAny=true, hasAll=false) indicates a corrupted partial state.
-function hasAllImportsForVersion(parsed, version) {
-    const { imports: expected } = buildModuleBlocks(version, `${version}.0`);
+// True if every module path returned by buildModuleBlocks(version, _, deps)
+// has a matching import. `deps` must be the resolved CLI module versions so
+// that bindings absent from this release are excluded from the expected set
+// (otherwise we would always report "incomplete" for older releases that
+// lack newer bindings). A mismatch (hasAny=true, hasAll=false) indicates a
+// corrupted partial state.
+function hasAllImportsForVersion(parsed, version, deps) {
+    const { imports: expected } = buildModuleBlocks(version, `${version}.0`, deps);
     const existingByPath = new Map(
         (parsed?.imports || [])
             .filter(i => i?.mounts?.some(m => m?.sites?.matrix?.versions?.includes(version)))
@@ -165,11 +169,19 @@ function hasAllImportsForVersion(parsed, version) {
 
 /**
  * Resolve dependency versions from a go.mod file.
- * Runs `go mod edit -json <goModPath>` and extracts the version for each requested module path.
+ * Runs `go mod edit -json <goModPath>` and extracts the version for each
+ * requested module path.
+ *
+ * Modules in `modulePaths` that don't appear in the file are treated as
+ * "binding not part of this release" (e.g. introduced after the snapshot
+ * was taken) and are skipped with a warning. Callers (buildModuleBlocks,
+ * updateImportTags) treat a missing entry as "do not emit/touch the import
+ * for this binding."
  *
  * @param {string} goModPath - absolute path to go.mod
  * @param {string[]} modulePaths - module paths to look up
- * @returns {Object<string, string>} map of modulePath -> version (e.g. "v0.0.7")
+ * @returns {Object<string, string>} map of modulePath -> version (e.g. "v0.0.7"),
+ *          missing entries omitted
  */
 function resolveGoModVersions(goModPath, modulePaths) {
     const absPath = path.resolve(goModPath);
@@ -186,7 +198,11 @@ function resolveGoModVersions(goModPath, modulePaths) {
 
     const missing = modulePaths.filter(p => !result[p]);
     if (missing.length) {
-        fail(`Could not resolve versions for: ${missing.join(', ')} in ${goModPath}`);
+        console.warn(
+            `[WARN] ${missing.length} binding(s) not in ${path.basename(goModPath)} - ` +
+            `skipping their imports for this version (likely introduced after this release):\n  ` +
+            missing.join('\n  ')
+        );
     }
 
     return result;
@@ -205,22 +221,30 @@ const CLI_DERIVED_MODULES = [
     'ocm.software/open-component-model/bindings/go/sigstore',
 ];
 
-// Build import blocks for a given version (pure when deps are passed, testable)
+// Build import blocks for a given version (pure when deps are passed, testable).
+// Bindings whose version is not in `deps` (e.g. introduced after this release)
+// are filtered out at the end - their `version` is `undefined` and we drop the
+// import block entirely. The always-pinned entries (website/cli/controller) use
+// `v${fullVersion}` so they're never dropped.
 function buildModuleBlocks(version, fullVersion, deps) {
-    const constructorVersion = deps?.['ocm.software/open-component-model/bindings/go/constructor'] || 'latest';
-    const credentialsVersion = deps?.['ocm.software/open-component-model/bindings/go/credentials'] || 'latest';
-    const descriptorVersion = deps?.['ocm.software/open-component-model/bindings/go/descriptor/v2'] || 'latest';
-    const gpgVersion = deps?.['ocm.software/open-component-model/bindings/go/gpg'] || 'latest';
-    const helmVersion = deps?.['ocm.software/open-component-model/bindings/go/helm'] || 'latest';
-    const httpVersion = deps?.['ocm.software/open-component-model/bindings/go/http'] || 'latest';
-    const ociVersion = deps?.['ocm.software/open-component-model/bindings/go/oci'] || 'latest';
-    const rsaVersion = deps?.['ocm.software/open-component-model/bindings/go/rsa'] || 'latest';
-    const sigstoreVersion = deps?.['ocm.software/open-component-model/bindings/go/sigstore'] || 'latest';
+    const constructorVersion = deps?.['ocm.software/open-component-model/bindings/go/constructor'];
+    const credentialsVersion = deps?.['ocm.software/open-component-model/bindings/go/credentials'];
+    const descriptorVersion = deps?.['ocm.software/open-component-model/bindings/go/descriptor/v2'];
+    const gpgVersion = deps?.['ocm.software/open-component-model/bindings/go/gpg'];
+    const helmVersion = deps?.['ocm.software/open-component-model/bindings/go/helm'];
+    const httpVersion = deps?.['ocm.software/open-component-model/bindings/go/http'];
+    const ociVersion = deps?.['ocm.software/open-component-model/bindings/go/oci'];
+    const rsaVersion = deps?.['ocm.software/open-component-model/bindings/go/rsa'];
+    const sigstoreVersion = deps?.['ocm.software/open-component-model/bindings/go/sigstore'];
 
+    // Hugo passes `version:` verbatim to `go mod download <path>@<version>`,
+    // which expects a Go module version (e.g. v0.9.0), not the git tag form
+    // (<subdir>/v0.9.0). Go's resolver maps tag->version internally based on
+    // the module path's subdir, so callers always use the bare SemVer.
     const imports = [
         {
             path: 'ocm.software/open-component-model/website',
-            version: `website/v${fullVersion}`,
+            version: `v${fullVersion}`,
             mounts: [{
                 files: ['**', '!blog/**'],
                 source: 'content/',
@@ -230,7 +254,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         {
             path: 'ocm.software/open-component-model/cli',
-            version: `cli/v${fullVersion}`,
+            version: `v${fullVersion}`,
             mounts: [{
                 source: 'docs/reference',
                 target: 'content/docs/reference/ocm-cli',
@@ -239,7 +263,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         {
             path: 'ocm.software/open-component-model/bindings/go/constructor',
-            version: `bindings/go/constructor/${constructorVersion}`,
+            version: constructorVersion,
             mounts: [{
                 source: 'spec/v1/resources',
                 target: `static/${version}/schemas/bindings/go/constructor`,
@@ -248,7 +272,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         {
             path: 'ocm.software/open-component-model/bindings/go/descriptor/v2',
-            version: `bindings/go/descriptor/v2/${descriptorVersion}`,
+            version: descriptorVersion,
             mounts: [{
                 source: 'resources',
                 target: `static/${version}/schemas/bindings/go/descriptor/v2`,
@@ -257,7 +281,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         {
             path: 'ocm.software/open-component-model/bindings/go/http',
-            version: `bindings/go/http/${httpVersion}`,
+            version: httpVersion,
             mounts: [{
                 source: 'spec/config/v1alpha1/schemas',
                 target: `static/${version}/schemas/bindings/go/http`,
@@ -266,7 +290,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         {
             path: 'ocm.software/open-component-model/bindings/go/oci',
-            version: `bindings/go/oci/${ociVersion}`,
+            version: ociVersion,
             mounts: [{
                 source: 'spec/credentials/v1/schemas',
                 target: `static/${version}/schemas/bindings/go/credentials/oci/v1`,
@@ -275,7 +299,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         {
             path: 'ocm.software/open-component-model/bindings/go/helm',
-            version: `bindings/go/helm/${helmVersion}`,
+            version: helmVersion,
             mounts: [{
                 source: 'spec/credentials/v1/schemas',
                 target: `static/${version}/schemas/bindings/go/credentials/helm/v1`,
@@ -284,7 +308,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         {
             path: 'ocm.software/open-component-model/bindings/go/rsa',
-            version: `bindings/go/rsa/${rsaVersion}`,
+            version: rsaVersion,
             mounts: [{
                 source: 'spec/credentials/v1/schemas',
                 target: `static/${version}/schemas/bindings/go/credentials/rsa/v1`,
@@ -293,7 +317,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         {
             path: 'ocm.software/open-component-model/bindings/go/gpg',
-            version: `bindings/go/gpg/${gpgVersion}`,
+            version: gpgVersion,
             mounts: [{
                 source: 'spec/credentials/v1alpha1/schemas',
                 target: `static/${version}/schemas/bindings/go/credentials/gpg/v1alpha1`,
@@ -302,7 +326,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         {
             path: 'ocm.software/open-component-model/bindings/go/sigstore',
-            version: `bindings/go/sigstore/${sigstoreVersion}`,
+            version: sigstoreVersion,
             mounts: [
                 {
                     source: 'spec/credentials/oidcidentitytoken/v1alpha1/schemas',
@@ -318,7 +342,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         {
             path: 'ocm.software/open-component-model/bindings/go/credentials',
-            version: `bindings/go/credentials/${credentialsVersion}`,
+            version: credentialsVersion,
             mounts: [{
                 source: 'spec/config/v1/schemas',
                 target: `static/${version}/schemas/bindings/go/credentials/direct/v1`,
@@ -327,7 +351,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         {
             path: 'ocm.software/open-component-model/kubernetes/controller',
-            version: `kubernetes/controller/v${fullVersion}`,
+            version: `v${fullVersion}`,
             mounts: [{
                 source: 'config/crd/bases',
                 target: `static/${version}/schemas/kubernetes/controller`,
@@ -336,7 +360,11 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
     ];
 
-    return { imports };
+    // Drop CLI-derived bindings whose version didn't resolve from cli-go.mod.
+    // resolveGoModVersions emits a warning for those; here we just filter out
+    // their import blocks so we don't emit `version: undefined`. Always-pinned
+    // entries (website/cli/controller, version=`v${fullVersion}`) survive.
+    return { imports: imports.filter(i => i.version !== undefined) };
 }
 
 /**
@@ -378,30 +406,28 @@ function updateImportTags(parsed, version, fullVersion, deps) {
         if (!matchesVersion) continue;
 
         let newTag = null;
-        if (imp.path.endsWith('/website')) {
-            newTag = `website/v${fullVersion}`;
-        } else if (imp.path.endsWith('/cli')) {
-            newTag = `cli/v${fullVersion}`;
-        } else if (imp.path.endsWith('/kubernetes/controller')) {
-            newTag = `kubernetes/controller/v${fullVersion}`;
+        if (imp.path.endsWith('/website') ||
+            imp.path.endsWith('/cli') ||
+            imp.path.endsWith('/kubernetes/controller')) {
+            newTag = `v${fullVersion}`;
         } else if (deps && imp.path.endsWith('/bindings/go/constructor')) {
-            newTag = `bindings/go/constructor/${deps['ocm.software/open-component-model/bindings/go/constructor']}`;
+            newTag = deps['ocm.software/open-component-model/bindings/go/constructor'];
         } else if (deps && imp.path.endsWith('/bindings/go/descriptor/v2')) {
-            newTag = `bindings/go/descriptor/v2/${deps['ocm.software/open-component-model/bindings/go/descriptor/v2']}`;
+            newTag = deps['ocm.software/open-component-model/bindings/go/descriptor/v2'];
         } else if (deps && imp.path.endsWith('/bindings/go/http')) {
-            newTag = `bindings/go/http/${deps['ocm.software/open-component-model/bindings/go/http']}`;
+            newTag = deps['ocm.software/open-component-model/bindings/go/http'];
         } else if (deps && imp.path.endsWith('/bindings/go/oci')) {
-            newTag = `bindings/go/oci/${deps['ocm.software/open-component-model/bindings/go/oci']}`;
+            newTag = deps['ocm.software/open-component-model/bindings/go/oci'];
         } else if (deps && imp.path.endsWith('/bindings/go/helm')) {
-            newTag = `bindings/go/helm/${deps['ocm.software/open-component-model/bindings/go/helm']}`;
+            newTag = deps['ocm.software/open-component-model/bindings/go/helm'];
         } else if (deps && imp.path.endsWith('/bindings/go/rsa')) {
-            newTag = `bindings/go/rsa/${deps['ocm.software/open-component-model/bindings/go/rsa']}`;
+            newTag = deps['ocm.software/open-component-model/bindings/go/rsa'];
         } else if (deps && imp.path.endsWith('/bindings/go/gpg')) {
-            newTag = `bindings/go/gpg/${deps['ocm.software/open-component-model/bindings/go/gpg']}`;
+            newTag = deps['ocm.software/open-component-model/bindings/go/gpg'];
         } else if (deps && imp.path.endsWith('/bindings/go/sigstore')) {
-            newTag = `bindings/go/sigstore/${deps['ocm.software/open-component-model/bindings/go/sigstore']}`;
+            newTag = deps['ocm.software/open-component-model/bindings/go/sigstore'];
         } else if (deps && imp.path.endsWith('/bindings/go/credentials')) {
-            newTag = `bindings/go/credentials/${deps['ocm.software/open-component-model/bindings/go/credentials']}`;
+            newTag = deps['ocm.software/open-component-model/bindings/go/credentials'];
         }
 
         if (newTag && imp.version !== newTag) {
@@ -421,7 +447,7 @@ function removeImportsForVersion(parsed, version) {
     );
 }
 
-// Update hugo.yaml: add version, set default, retire old
+// Update hugo.yaml: add version, set default, retire old.
 async function updateHugoConfig(version) {
     const content = await fsp.readFile(HUGO_CONFIG, 'utf-8').catch(e => fail(`Read hugo.yaml: ${e.message}`));
     const parsed = yaml.load(content) || {};
@@ -456,15 +482,16 @@ async function updateHugoConfig(version) {
     return retired;
 }
 
-// Update module.yaml: ensure imports exist for a version, update tags, optionally retire old version
+// Update module.yaml: ensure imports exist for a version, update tags,
+// optionally retire old version.
 async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion } = {}) {
     const content = await fsp.readFile(MODULE_CONFIG, 'utf-8').catch(e => fail(`Read module.yaml: ${e.message}`));
     const parsed = yaml.load(content) || {};
 
-    const hasAllImports = hasAllImportsForVersion(parsed, version);
-    const hasAnyImport = hasAnyImportForVersion(parsed, version);
-
     const deps = resolveGoModVersions(cliGomod, CLI_DERIVED_MODULES);
+
+    const hasAllImports = hasAllImportsForVersion(parsed, version, deps);
+    const hasAnyImport = hasAnyImportForVersion(parsed, version);
 
     if (hasAllImports) {
         const changed = updateImportTags(parsed, version, fullVersion, deps);
