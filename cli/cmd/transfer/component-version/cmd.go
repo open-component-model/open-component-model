@@ -18,6 +18,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/transfer"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -51,28 +52,37 @@ func New() *cobra.Command {
 		Long: `Transfer a single component version from a source repository to
 a target repository using an internally generated transformation graph.
 
-This command constructs a TransformationGraphDefinition consisting of:
-  1. CTFGetComponentVersion -> OCIGetComponentVersion
-  2. CTFAddComponentVersion -> OCIAddComponentVersion
-  3. GetOCIArtifact -> OCIAddLocalResource / AddOCIArtifact
-  4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact
-
-We support OCI and CTF as well as Helm repositories as transfer sources.
+OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
-The graph is built accordingly based on the provided references.
-By default, only the component version itself is transferred, but with --copy-resources, all resources are also copied and transformed if necessary.
 
-The graph is validated, and then executed unless --dry-run is set.
+By default, only the component version itself is transferred. Use --copy-resources to also
+copy (and, when needed, transform) the resources it references. --upload-as controls whether
+those resources land as OCI artifacts or as local blobs in the target. --recursive walks the
+component's references and transfers them too.
 
-Alternatively, --transfer-spec can be used to provide a previously saved TransformationGraphDefinition
-from a file (or stdin with "-"), enabling a two-step workflow:
-  1. Generate the spec with all desired flags (--recursive, --copy-resources, --upload-as),
-     then review: transfer cv --dry-run -o yaml --copy-resources --recursive {reference} {target} > spec.yaml
-  2. Edit the spec as needed, then execute: transfer cv --transfer-spec spec.yaml
+Driving defaults from the OCM configuration:
+  A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
+  (passed via --config) sets defaults for --recursive, --copy-resources, and --upload-as.
+  Explicit command-line flags always override the values from the configuration.
 
-Flags like --recursive, --copy-resources, and --upload-as are baked into the generated spec during
-step 1. When --transfer-spec is used in step 2, these flags are ignored because the spec already
-contains the full graph definition. Only --dry-run and --output remain meaningful in step 2.`,
+Two-step workflow (generate, review, replay):
+  --dry-run builds and validates the graph without executing it, and with -o yaml|json prints
+  the resulting TransformationGraphDefinition. --transfer-spec then replays a saved definition
+  from a file (or stdin with "-"):
+    1. Generate the spec:  transfer cv --dry-run -o yaml --copy-resources -r {reference} {target} > spec.yaml
+    2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
+  All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer
+  configuration entry are baked into the spec during step 1 and are therefore ignored in
+  step 2 - the spec is the full graph definition. Only --dry-run and --output remain
+  meaningful when replaying a spec.
+
+How the graph is built:
+  Internally the command assembles a TransformationGraphDefinition from these node types,
+  selected based on the source/target references:
+    1. CTFGetComponentVersion -> OCIGetComponentVersion
+    2. CTFAddComponentVersion -> OCIAddComponentVersion
+    3. GetOCIArtifact -> OCIAddLocalResource / AddOCIArtifact
+    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact`,
 		Example: strings.TrimSpace(`
 # Transfer a component version from a CTF archive to an OCI registry
 transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm
@@ -95,6 +105,17 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghc
 # Recursively transfer a component version and all its references
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --copy-resources
 
+# Drive defaults from the OCM configuration. With --config ./ocmconfig.yaml containing:
+#   type: generic.config.ocm.software/v1
+#   configurations:
+#   - type: transfer.config.ocm.software/v1alpha1
+#     recursive: -1
+#     copyMode: allResources
+#     uploadType: ociArtifact
+# the following invocation transfers recursively with all resources copied as OCI artifacts.
+# Any explicit flag still overrides the corresponding configuration value.
+transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+
 # Two-step transfer: generate a spec with all desired flags, then review and execute
 transfer component-version --dry-run -o yaml --copy-resources -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
 # (review/edit spec.yaml as needed, e.g. change the target registry)
@@ -109,13 +130,17 @@ transfer component-version --transfer-spec spec.yaml
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
 	cmd.Flags().Bool(FlagCopyResources, false, "copy all resources in the component version")
-	enum.VarP(cmd.Flags(), FlagUploadAs, "u", []string{UploadAsDefault.String(), UploadAsLocalBlob.String(), UploadAsOciArtifact.String()}, "Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.")
+	uploadAsValues := make([]string, len(transferv1alpha1.AllUploadTypes))
+	for i, t := range transferv1alpha1.AllUploadTypes {
+		uploadAsValues[i] = string(t)
+	}
+	enum.VarP(cmd.Flags(), FlagUploadAs, "u", uploadAsValues,
+		"Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.")
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin)")
 
 	return cmd
 }
 
-// transferArgs validates positional arguments based on whether --transfer-spec is set.
 func transferArgs(cmd *cobra.Command, args []string) error {
 	specPath, err := cmd.Flags().GetString(FlagTransferSpec)
 	if err != nil {
@@ -308,44 +333,52 @@ func buildGraphDefinitionFromArgs(
 		return nil, fmt.Errorf("invalid target repository spec: %w", err)
 	}
 
-	recursive, err := cmd.Flags().GetBool(FlagRecursive)
+	transferCfg, err := transferv1alpha1.LookupConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("getting recursive flag failed: %w", err)
+		return nil, fmt.Errorf("looking up transfer config failed: %w", err)
+	}
+	if transferCfg == nil {
+		// LookupConfig returns nil when the central config has no transfer entry; start
+		// from a zero value so the override branches below can write unconditionally.
+		transferCfg = &transferv1alpha1.Config{}
 	}
 
-	copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
-	if err != nil {
-		return nil, fmt.Errorf("getting copy-resources flag failed: %w", err)
+	if cmd.Flags().Changed(FlagRecursive) {
+		recursive, err := cmd.Flags().GetBool(FlagRecursive)
+		if err != nil {
+			return nil, fmt.Errorf("getting recursive flag failed: %w", err)
+		}
+		if recursive {
+			transferCfg.Recursive = transferv1alpha1.RecursiveInfinite
+		} else {
+			transferCfg.Recursive = transferv1alpha1.RecursiveNone
+		}
+	}
+	if cmd.Flags().Changed(FlagCopyResources) {
+		copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
+		if err != nil {
+			return nil, fmt.Errorf("getting copy-resources flag failed: %w", err)
+		}
+		if copyResources {
+			transferCfg.CopyMode = transferv1alpha1.CopyModeAllResources
+		} else {
+			transferCfg.CopyMode = transferv1alpha1.CopyModeLocalBlobResources
+		}
+	}
+	if cmd.Flags().Changed(FlagUploadAs) {
+		uploadAs, err := enum.Get(cmd.Flags(), FlagUploadAs)
+		if err != nil {
+			return nil, fmt.Errorf("getting upload-as flag failed: %w", err)
+		}
+		transferCfg.UploadType = transferv1alpha1.UploadType(uploadAs)
 	}
 
-	copyMode := transfer.CopyModeLocalBlobResources
-	if copyResources {
-		copyMode = transfer.CopyModeAllResources
-	}
-
-	uploadType, err := enum.Get(cmd.Flags(), FlagUploadAs)
-	if err != nil {
-		return nil, fmt.Errorf("getting upload-as flag failed: %w", err)
-	}
-
-	upTyp := transfer.UploadAsDefault
-	switch uploadType {
-	case UploadAsLocalBlob.String():
-		upTyp = transfer.UploadAsLocalBlob
-	case UploadAsOciArtifact.String():
-		upTyp = transfer.UploadAsOciArtifact
-	}
-
-	tgd, err := transfer.BuildGraphDefinition(
-		ctx,
-		transfer.WithTransfer(
-			transfer.Component(fromSpec.Component, fromSpec.Version),
-			transfer.ToRepositorySpec(toSpec),
-			transfer.FromResolver(repoProvider),
-		),
-		transfer.WithRecursive(recursive),
-		transfer.WithCopyMode(copyMode),
-		transfer.WithUploadType(upTyp),
+	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: fromSpec.Component, Version: fromSpec.Version}},
+			Target:     toSpec,
+			Resolver:   repoProvider,
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("building graph definition failed: %w", err)
