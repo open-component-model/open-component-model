@@ -471,7 +471,7 @@ func TestVerify_EmptyAlgorithmRejected(t *testing.T) {
 
 	err := h.Verify(t.Context(), signed, cfg, nil)
 	r.Error(err)
-	r.ErrorIs(err, v1alpha1.ErrAlgorithmRequired)
+	r.ErrorContains(err, "signature.Algorithm is required")
 }
 
 func TestVerify_UnknownAlgorithmRejected(t *testing.T) {
@@ -535,7 +535,7 @@ func TestVerify_UnacceptableMediaTypeForAlgorithm(t *testing.T) {
 
 	err := h.Verify(t.Context(), signed, cfg, nil)
 	r.Error(err)
-	r.ErrorIs(err, v1alpha1.ErrUnacceptableMediaType)
+	r.ErrorContains(err, "unsupported media type")
 }
 
 func TestSign_AmbientSIGSTORE_ID_TOKEN(t *testing.T) {
@@ -1035,10 +1035,11 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		algorithm string
-		mediaType string
-		wantErrIs error
+		name        string
+		algorithm   string
+		mediaType   string
+		wantErrIs   error
+		wantErrText string
 	}{
 		{
 			name:      "valid sigstore bundle",
@@ -1046,10 +1047,10 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 			mediaType: v1alpha1.MediaTypeSigstoreBundle,
 		},
 		{
-			name:      "missing algorithm",
-			algorithm: "",
-			mediaType: v1alpha1.MediaTypeSigstoreBundle,
-			wantErrIs: v1alpha1.ErrAlgorithmRequired,
+			name:        "missing algorithm",
+			algorithm:   "",
+			mediaType:   v1alpha1.MediaTypeSigstoreBundle,
+			wantErrText: "signature.Algorithm is required",
 		},
 		{
 			name:      "unknown algorithm",
@@ -1063,10 +1064,10 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 			mediaType: v1alpha1.MediaTypeSigstoreBundle,
 		},
 		{
-			name:      "unacceptable media type",
-			algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
-			mediaType: "application/pgp-signature",
-			wantErrIs: v1alpha1.ErrUnacceptableMediaType,
+			name:        "unacceptable media type",
+			algorithm:   string(v1alpha1.AlgorithmSigstoreV1Alpha1),
+			mediaType:   "application/pgp-signature",
+			wantErrText: "unsupported media type",
 		},
 	}
 
@@ -1085,9 +1086,13 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 			}
 
 			id, err := h.GetVerifyingCredentialConsumerIdentity(t.Context(), signed, nil)
-			if tc.wantErrIs != nil {
+			switch {
+			case tc.wantErrIs != nil:
 				r.Error(err)
 				r.True(errors.Is(err, tc.wantErrIs), "expected %v, got %v", tc.wantErrIs, err)
+				return
+			case tc.wantErrText != "":
+				r.ErrorContains(err, tc.wantErrText)
 				return
 			}
 			r.NoError(err)

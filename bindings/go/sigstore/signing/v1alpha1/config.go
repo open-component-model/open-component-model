@@ -142,7 +142,9 @@ func (c *SignConfig) Validate() error {
 			return err
 		}
 	}
-	if c.SignatureAlgorithm != "" && !IsKnownAlgorithm(c.SignatureAlgorithm) {
+	switch c.SignatureAlgorithm {
+	case "", AlgorithmSigstoreV1Alpha1, AlgorithmSigstoreLegacy:
+	default:
 		return fmt.Errorf("SignatureAlgorithm: %w: %q", ErrUnknownAlgorithm, c.SignatureAlgorithm)
 	}
 	return nil

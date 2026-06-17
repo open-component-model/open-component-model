@@ -1,10 +1,8 @@
 package v1alpha1
 
-// SignatureAlgorithm identifies an OCM-versioned Sigstore signing algorithm.
-//
-// The Algorithm captures the domain contract of the signing flow — what
-// goes into the bundle, which cosign conventions apply, how verification is
-// performed — and evolves independently from the on-the-wire bundle MediaType.
+import "errors"
+
+// SignatureAlgorithm is the OCM-versioned Sigstore signing algorithm.
 //
 // +ocm:jsonschema-gen:enum=Sigstore/v1alpha1
 // +ocm:jsonschema-gen:enum:deprecated=sigstore
@@ -30,15 +28,7 @@ const (
 	MediaTypeSigstoreBundle = "application/vnd.dev.sigstore.bundle.v0.3+json"
 )
 
-// IsKnownAlgorithm reports whether the handler implements the given algorithm.
-// AlgorithmSigstoreLegacy is accepted as an alias for AlgorithmSigstoreV1Alpha1.
-func IsKnownAlgorithm(alg SignatureAlgorithm) bool {
-	return alg == AlgorithmSigstoreV1Alpha1 || alg == AlgorithmSigstoreLegacy
-}
-
-// IsAcceptableMediaType reports whether the handler can read a bundle with
-// this MediaType. Independent of Algorithm: both checks must pass on verify,
-// but they are evaluated separately and can evolve on different schedules.
-func IsAcceptableMediaType(mt string) bool {
-	return mt == MediaTypeSigstoreBundle
-}
+// ErrUnknownAlgorithm is returned when SignConfig.SignatureAlgorithm or the
+// algorithm of a signature being verified is set to a value the handler does
+// not implement.
+var ErrUnknownAlgorithm = errors.New("unknown sigstore algorithm")

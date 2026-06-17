@@ -173,9 +173,6 @@ func (h *Handler) Verify(
 		return fmt.Errorf("convert config: %w", err)
 	}
 
-	// Empty Algorithm is rejected (not defaulted) because OCM signatures must
-	// be produced by the OCM CLI; an unset value indicates a foreign or
-	// malformed signature. See v1alpha1/errors.go for the sentinel set.
 	if err := validateSignatureEnvelope(ctx, signed.Signature); err != nil {
 		return err
 	}
@@ -316,29 +313,32 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	return id, nil
 }
 
-// validateSignatureEnvelope enforces that the signature carries a known OCM
-// Sigstore Algorithm and a MediaType this handler can read. Returns the
-// matching sentinel error wrapped with the offending value, or nil on success.
+// validateSignatureEnvelope checks the signature carries a known OCM Sigstore
+// algorithm and an acceptable bundle MediaType. Empty Algorithm is rejected
+// (not defaulted): an OCM signature without a declared algorithm is foreign
+// or malformed.
 func validateSignatureEnvelope(ctx context.Context, sig descruntime.SignatureInfo) error {
 	if sig.Algorithm == "" {
 		slog.WarnContext(ctx, "sigstore verify rejected",
 			"reason", "algorithm-required",
 			"mediaType", sig.MediaType)
-		return v1alpha1.ErrAlgorithmRequired
+		return fmt.Errorf("signature.Algorithm is required for sigstore verification")
 	}
-	if !v1alpha1.IsKnownAlgorithm(v1alpha1.SignatureAlgorithm(sig.Algorithm)) {
+	switch v1alpha1.SignatureAlgorithm(sig.Algorithm) {
+	case v1alpha1.AlgorithmSigstoreV1Alpha1, v1alpha1.AlgorithmSigstoreLegacy:
+	default:
 		slog.WarnContext(ctx, "sigstore verify rejected",
 			"reason", "unknown-algorithm",
 			"algorithm", sig.Algorithm,
 			"mediaType", sig.MediaType)
 		return fmt.Errorf("%w: %q", v1alpha1.ErrUnknownAlgorithm, sig.Algorithm)
 	}
-	if !v1alpha1.IsAcceptableMediaType(sig.MediaType) {
+	if sig.MediaType != v1alpha1.MediaTypeSigstoreBundle {
 		slog.WarnContext(ctx, "sigstore verify rejected",
 			"reason", "unacceptable-mediatype",
 			"algorithm", sig.Algorithm,
 			"mediaType", sig.MediaType)
-		return fmt.Errorf("%w: %q", v1alpha1.ErrUnacceptableMediaType, sig.MediaType)
+		return fmt.Errorf("unsupported media type %q for sigstore verification", sig.MediaType)
 	}
 	return nil
 }

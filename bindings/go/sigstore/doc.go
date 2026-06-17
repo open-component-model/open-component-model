@@ -21,25 +21,14 @@
 //
 // # Algorithm Versioning
 //
-// The OCM Sigstore algorithm is versioned to allow multiple generations of the
-// signing flow to coexist. The current generation is "Sigstore/v1alpha1"
-// (signing/v1alpha1.AlgorithmSigstoreV1Alpha1).
+// The OCM Sigstore algorithm is versioned. The current generation is
+// "Sigstore/v1alpha1" (signing/v1alpha1.AlgorithmSigstoreV1Alpha1); when
+// SignConfig.SignatureAlgorithm is empty, signing/v1alpha1.AlgorithmSigstoreDefault
+// is used.
 //
-// SignConfig.SignatureAlgorithm is optional. When empty, the handler picks
-// signing/v1alpha1.AlgorithmSigstoreDefault, which is the recommended default
-// for new signatures. Bumping the default is a breaking change.
-//
-// Algorithm and bundle MediaType are validated independently on verify:
-// SignatureInfo.Algorithm must be a known Algorithm
-// (signing/v1alpha1.IsKnownAlgorithm) and SignatureInfo.MediaType must be a
-// MediaType this handler can read (signing/v1alpha1.IsAcceptableMediaType).
-// The two predicates are decoupled so a future cosign bundle wire-format
-// version that is semantically compatible can be accepted without touching
-// the Algorithm enum.
-//
-// The wire value evolved from the bare string "sigstore" to "Sigstore/v1alpha1".
-// Older signatures verify under signing/v1alpha1.AlgorithmSigstoreLegacy as an
-// alias; new signatures always emit AlgorithmSigstoreV1Alpha1.
+// The bare string "sigstore" emitted by pre-versioning OCM CLIs is accepted
+// on verify under signing/v1alpha1.AlgorithmSigstoreLegacy as an alias for
+// AlgorithmSigstoreV1Alpha1; new signatures always emit AlgorithmSigstoreV1Alpha1.
 //
 // # Endpoint Discovery
 //
