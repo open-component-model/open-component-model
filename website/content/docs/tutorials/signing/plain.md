@@ -156,10 +156,9 @@ configurations:
           algorithm: RSASSA-PSS
           signature: default
         credentials:
-          - type: Credentials/v1
-            properties:
-              private_key_pem_file: /tmp/ocm-signing-tutorial/keys/private-key.pem
-              public_key_pem_file: /tmp/ocm-signing-tutorial/keys/public-key.pem  
+          - type: RSACredentials/v1
+            privateKeyPEMFile: /tmp/ocm-signing-tutorial/keys/private-key.pem
+            publicKeyPEMFile: /tmp/ocm-signing-tutorial/keys/public-key.pem  
 EOF
 ```
 
