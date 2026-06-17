@@ -783,6 +783,7 @@ func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store
 		slogcontext.Log(ctx, slog.LevelDebug, "subject is not an OCI manifest; skipping ownership referrer", log.DescriptorLogAttr(subject))
 		return nil
 	}
+	warnOnConflictingOwnership(ctx, store, subject, component)
 	// OCI registries reject a manifest that references blobs not yet present
 	// (MANIFEST_BLOB_UNKNOWN), so push the referrer's empty config/layer blob
 	// before the manifest itself.
@@ -794,6 +795,24 @@ func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store
 		return fmt.Errorf("failed to push ownership referrer %s: %w", desc.Digest, err)
 	}
 	return nil
+}
+
+func warnOnConflictingOwnership(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, component string) {
+	refs, err := registry.Referrers(ctx, store, subject, annotations.OwnershipArtifactType)
+	if err != nil {
+		slogcontext.Log(ctx, slog.LevelDebug, "failed to inspect existing ownership referrers", log.DescriptorLogAttr(subject), slog.Any("error", err))
+		return
+	}
+	for _, ref := range refs {
+		existing, ok := ref.Annotations[annotations.OwnershipComponentName]
+		if !ok || existing == component {
+			continue
+		}
+		slogcontext.Log(ctx, slog.LevelWarn, "subject has conflicting ownership information",
+			log.DescriptorLogAttr(subject),
+			slog.String("existing_component", existing),
+			slog.String("new_component", component))
+	}
 }
 
 // DownloadResource downloads a [*descriptor.Resource] from the repository.
