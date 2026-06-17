@@ -175,28 +175,9 @@ func (h *Handler) Verify(
 
 	// Empty Algorithm is rejected (not defaulted) because OCM signatures must
 	// be produced by the OCM CLI; an unset value indicates a foreign or
-	// malformed signature. See v1alpha1/errors.go for the sentinel set; see
-	// the package doc for why SignatureInfo.Algorithm crosses the package
-	// boundary as a plain string.
-	if signed.Signature.Algorithm == "" {
-		slog.WarnContext(ctx, "sigstore verify rejected",
-			"reason", "algorithm-required",
-			"mediaType", signed.Signature.MediaType)
-		return v1alpha1.ErrAlgorithmRequired
-	}
-	if !v1alpha1.IsKnownAlgorithm(v1alpha1.SignatureAlgorithm(signed.Signature.Algorithm)) {
-		slog.WarnContext(ctx, "sigstore verify rejected",
-			"reason", "unknown-algorithm",
-			"algorithm", signed.Signature.Algorithm,
-			"mediaType", signed.Signature.MediaType)
-		return fmt.Errorf("%w: %q", v1alpha1.ErrUnknownAlgorithm, signed.Signature.Algorithm)
-	}
-	if !v1alpha1.IsAcceptableMediaType(signed.Signature.MediaType) {
-		slog.WarnContext(ctx, "sigstore verify rejected",
-			"reason", "unacceptable-mediatype",
-			"algorithm", signed.Signature.Algorithm,
-			"mediaType", signed.Signature.MediaType)
-		return fmt.Errorf("%w: %q", v1alpha1.ErrUnacceptableMediaType, signed.Signature.MediaType)
+	// malformed signature. See v1alpha1/errors.go for the sentinel set.
+	if err := validateSignatureEnvelope(ctx, signed.Signature); err != nil {
+		return err
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -327,29 +308,39 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	signature descruntime.Signature,
 	_ runtime.Typed,
 ) (runtime.Identity, error) {
-	if signature.Signature.Algorithm == "" {
-		slog.WarnContext(ctx, "sigstore verify rejected",
-			"reason", "algorithm-required",
-			"mediaType", signature.Signature.MediaType)
-		return nil, v1alpha1.ErrAlgorithmRequired
-	}
-	if !v1alpha1.IsKnownAlgorithm(v1alpha1.SignatureAlgorithm(signature.Signature.Algorithm)) {
-		slog.WarnContext(ctx, "sigstore verify rejected",
-			"reason", "unknown-algorithm",
-			"algorithm", signature.Signature.Algorithm,
-			"mediaType", signature.Signature.MediaType)
-		return nil, fmt.Errorf("%w: %q", v1alpha1.ErrUnknownAlgorithm, signature.Signature.Algorithm)
-	}
-	if !v1alpha1.IsAcceptableMediaType(signature.Signature.MediaType) {
-		slog.WarnContext(ctx, "sigstore verify rejected",
-			"reason", "unacceptable-mediatype",
-			"algorithm", signature.Signature.Algorithm,
-			"mediaType", signature.Signature.MediaType)
-		return nil, fmt.Errorf("%w: %q", v1alpha1.ErrUnacceptableMediaType, signature.Signature.MediaType)
+	if err := validateSignatureEnvelope(ctx, signature.Signature); err != nil {
+		return nil, err
 	}
 	id := credentialIdentity(verifierv1.VersionedType)
 	id[verifierv1.IdentityAttributeSignature] = signature.Name
 	return id, nil
+}
+
+// validateSignatureEnvelope enforces that the signature carries a known OCM
+// Sigstore Algorithm and a MediaType this handler can read. Returns the
+// matching sentinel error wrapped with the offending value, or nil on success.
+func validateSignatureEnvelope(ctx context.Context, sig descruntime.SignatureInfo) error {
+	if sig.Algorithm == "" {
+		slog.WarnContext(ctx, "sigstore verify rejected",
+			"reason", "algorithm-required",
+			"mediaType", sig.MediaType)
+		return v1alpha1.ErrAlgorithmRequired
+	}
+	if !v1alpha1.IsKnownAlgorithm(v1alpha1.SignatureAlgorithm(sig.Algorithm)) {
+		slog.WarnContext(ctx, "sigstore verify rejected",
+			"reason", "unknown-algorithm",
+			"algorithm", sig.Algorithm,
+			"mediaType", sig.MediaType)
+		return fmt.Errorf("%w: %q", v1alpha1.ErrUnknownAlgorithm, sig.Algorithm)
+	}
+	if !v1alpha1.IsAcceptableMediaType(sig.MediaType) {
+		slog.WarnContext(ctx, "sigstore verify rejected",
+			"reason", "unacceptable-mediatype",
+			"algorithm", sig.Algorithm,
+			"mediaType", sig.MediaType)
+		return fmt.Errorf("%w: %q", v1alpha1.ErrUnacceptableMediaType, sig.MediaType)
+	}
+	return nil
 }
 
 func credentialIdentity(identityType runtime.Type) runtime.Identity {
