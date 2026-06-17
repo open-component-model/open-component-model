@@ -23,6 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/internal/policy"
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
@@ -309,8 +310,9 @@ func setGlobalAccess(baseReference string, desc ociImageSpecV1.Descriptor, local
 // TODO(jakobmoellerdev): Eventually we should find a smarter solution to determine if a store is global.
 func backedByGlobalStore(storage content.Storage) bool {
 	switch storage.(type) {
-	// for ORAS repositories, we know they are global if they are remote repositories.
 	case *remote.Repository:
+		return true
+	case *remotestore.RemoteStore:
 		return true
 	default:
 		return false
