@@ -803,16 +803,26 @@ func warnOnConflictingOwnership(ctx context.Context, store spec.Store, subject o
 		slogcontext.Log(ctx, slog.LevelDebug, "failed to inspect existing ownership referrers", log.DescriptorLogAttr(subject), slog.Any("error", err))
 		return
 	}
+	seen := make(map[string]struct{})
+	var conflicting []string
 	for _, ref := range refs {
 		existing, ok := ref.Annotations[annotations.OwnershipComponentName]
 		if !ok || existing == component {
 			continue
 		}
-		slogcontext.Log(ctx, slog.LevelWarn, "subject has conflicting ownership information",
-			log.DescriptorLogAttr(subject),
-			slog.String("existing_component", existing),
-			slog.String("new_component", component))
+		if _, dup := seen[existing]; dup {
+			continue
+		}
+		seen[existing] = struct{}{}
+		conflicting = append(conflicting, existing)
 	}
+	if len(conflicting) == 0 {
+		return
+	}
+	slogcontext.Log(ctx, slog.LevelWarn, "subject has conflicting ownership information",
+		log.DescriptorLogAttr(subject),
+		slog.Any("existing_components", conflicting),
+		slog.String("new_component", component))
 }
 
 // DownloadResource downloads a [*descriptor.Resource] from the repository.
