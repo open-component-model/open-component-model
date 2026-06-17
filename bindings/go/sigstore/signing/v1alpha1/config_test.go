@@ -26,6 +26,7 @@ func TestSignConfig_Validate(t *testing.T) {
 		{name: "invalid issuer with query", cfg: SignConfig{Issuer: "https://dex.example.com?foo=bar"}, wantErr: "must not contain a query"},
 		{name: "invalid issuer with fragment", cfg: SignConfig{Issuer: "https://dex.example.com#frag"}, wantErr: "must not contain a fragment"},
 		{name: "valid known SignatureAlgorithm", cfg: SignConfig{SignatureAlgorithm: AlgorithmSigstoreV1Alpha1}},
+		{name: "valid legacy SignatureAlgorithm alias", cfg: SignConfig{SignatureAlgorithm: AlgorithmSigstoreLegacy}},
 		{name: "invalid unknown SignatureAlgorithm", cfg: SignConfig{SignatureAlgorithm: "Sigstore/v99alpha1"}, wantErrIs: ErrUnknownAlgorithm},
 	}
 
@@ -56,6 +57,7 @@ func TestSignConfig_GetSignatureAlgorithm(t *testing.T) {
 		want SignatureAlgorithm
 	}{
 		{"empty field returns default", &SignConfig{}, AlgorithmSigstoreDefault},
+		{"legacy alias canonicalizes to default", &SignConfig{SignatureAlgorithm: AlgorithmSigstoreLegacy}, AlgorithmSigstoreDefault},
 		{"explicit value passes through", &SignConfig{SignatureAlgorithm: AlgorithmSigstoreV1Alpha1}, AlgorithmSigstoreV1Alpha1},
 	}
 

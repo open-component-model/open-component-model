@@ -495,12 +495,10 @@ func TestVerify_UnknownAlgorithmRejected(t *testing.T) {
 	r.ErrorIs(err, v1alpha1.ErrUnknownAlgorithm)
 }
 
-// TestVerify_LegacyBareSigstoreRejected pins the deliberate breaking change:
-// pre-PR signatures carry Algorithm: "sigstore" and must now fail with the
-// unknown-algorithm sentinel. Producers must re-sign with the OCM CLI shipped
-// alongside Sigstore/v1alpha1. The Contains assertion locks in that the
-// offending value survives wrapping (so log lines stay actionable).
-func TestVerify_LegacyBareSigstoreRejected(t *testing.T) {
+// TestVerify_LegacyBareSigstoreAccepted pins the backwards-compatible alias:
+// pre-PR signatures carry Algorithm: "sigstore" and must verify under the
+// AlgorithmSigstoreLegacy alias.
+func TestVerify_LegacyBareSigstoreAccepted(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
@@ -510,16 +508,13 @@ func TestVerify_LegacyBareSigstoreRejected(t *testing.T) {
 		Name:   "test-sig",
 		Digest: testDigest(),
 		Signature: descruntime.SignatureInfo{
-			Algorithm: "sigstore",
+			Algorithm: string(v1alpha1.AlgorithmSigstoreLegacy),
 			MediaType: v1alpha1.MediaTypeSigstoreBundle,
 			Value:     base64.StdEncoding.EncodeToString(fakeBundleJSON(t)),
 		},
 	}
 
-	err := h.Verify(t.Context(), signed, cfg, nil)
-	r.Error(err)
-	r.ErrorIs(err, v1alpha1.ErrUnknownAlgorithm)
-	r.Contains(err.Error(), `"sigstore"`)
+	r.NoError(h.Verify(t.Context(), signed, cfg, nil))
 }
 
 func TestVerify_UnacceptableMediaTypeForAlgorithm(t *testing.T) {
@@ -1063,10 +1058,9 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 			wantErrIs: v1alpha1.ErrUnknownAlgorithm,
 		},
 		{
-			name:      "legacy bare sigstore string",
-			algorithm: "sigstore",
+			name:      "legacy bare sigstore alias",
+			algorithm: string(v1alpha1.AlgorithmSigstoreLegacy),
 			mediaType: v1alpha1.MediaTypeSigstoreBundle,
-			wantErrIs: v1alpha1.ErrUnknownAlgorithm,
 		},
 		{
 			name:      "unacceptable media type",

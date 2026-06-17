@@ -9,6 +9,11 @@
     {
       "description": "AlgorithmSigstoreDefault is the algorithm the handler picks when\nSignConfig.SignatureAlgorithm is empty. Bumping this default is a\nbreaking change.",
       "const": "Sigstore/v1alpha1"
+    },
+    {
+      "deprecated": true,
+      "description": "AlgorithmSigstoreLegacy is the bare wire value emitted by OCM CLIs\nbefore the versioned identifier was introduced. Accepted on verify as\nan alias for AlgorithmSigstoreV1Alpha1; never produced on sign.",
+      "const": "sigstore"
     }
   ]
 }

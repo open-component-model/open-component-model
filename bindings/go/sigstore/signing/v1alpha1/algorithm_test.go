@@ -16,6 +16,7 @@ func TestIsKnownAlgorithm(t *testing.T) {
 	}{
 		{"v1alpha1 is known", AlgorithmSigstoreV1Alpha1, true},
 		{"default alias is known", AlgorithmSigstoreDefault, true},
+		{"legacy bare alias is known", AlgorithmSigstoreLegacy, true},
 		{"empty is not known", "", false},
 		{"future version is not known", "Sigstore/v2alpha1", false},
 		{"unrelated value is not known", "RSASSA-PSS", false},

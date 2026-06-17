@@ -7,12 +7,18 @@ package v1alpha1
 // performed — and evolves independently from the on-the-wire bundle MediaType.
 //
 // +ocm:jsonschema-gen:enum=Sigstore/v1alpha1
+// +ocm:jsonschema-gen:enum:deprecated=sigstore
 type SignatureAlgorithm string
 
 const (
 	// AlgorithmSigstoreV1Alpha1 is the first generation of the OCM Sigstore
 	// signing flow, implemented on top of cosign v3.
 	AlgorithmSigstoreV1Alpha1 SignatureAlgorithm = "Sigstore/v1alpha1"
+
+	// AlgorithmSigstoreLegacy is the bare wire value emitted by OCM CLIs
+	// before the versioned identifier was introduced. Accepted on verify as
+	// an alias for AlgorithmSigstoreV1Alpha1; never produced on sign.
+	AlgorithmSigstoreLegacy SignatureAlgorithm = "sigstore"
 
 	// AlgorithmSigstoreDefault is the algorithm the handler picks when
 	// SignConfig.SignatureAlgorithm is empty. Bumping this default is a
@@ -25,8 +31,9 @@ const (
 )
 
 // IsKnownAlgorithm reports whether the handler implements the given algorithm.
+// AlgorithmSigstoreLegacy is accepted as an alias for AlgorithmSigstoreV1Alpha1.
 func IsKnownAlgorithm(alg SignatureAlgorithm) bool {
-	return alg == AlgorithmSigstoreV1Alpha1
+	return alg == AlgorithmSigstoreV1Alpha1 || alg == AlgorithmSigstoreLegacy
 }
 
 // IsAcceptableMediaType reports whether the handler can read a bundle with

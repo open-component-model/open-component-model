@@ -37,10 +37,9 @@
 // version that is semantically compatible can be accepted without touching
 // the Algorithm enum.
 //
-// The wire value changed from the pre-PR bare string "sigstore" to
-// "Sigstore/v1alpha1" in this generation. Signatures produced by older OCM
-// CLI versions must be re-signed; verifying them returns
-// signing/v1alpha1.ErrUnknownAlgorithm.
+// The wire value evolved from the bare string "sigstore" to "Sigstore/v1alpha1".
+// Older signatures verify under signing/v1alpha1.AlgorithmSigstoreLegacy as an
+// alias; new signatures always emit AlgorithmSigstoreV1Alpha1.
 //
 // # Endpoint Discovery
 //
