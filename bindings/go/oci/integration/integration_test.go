@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -22,13 +23,16 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
 	"golang.org/x/crypto/bcrypt"
+	"oras.land/oras-go/v2/content"
 	orasoci "oras.land/oras-go/v2/content/oci"
 	"oras.land/oras-go/v2/errdef"
+	orasregistry "oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
@@ -45,11 +49,14 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	ocispec "ocm.software/open-component-model/bindings/go/oci/spec"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -1217,4 +1224,576 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 	r.Equal("ociArtifact", resultAccess.Type.Name)
 	r.Equal("v1", resultAccess.Type.Version)
 	r.Equal(fmt.Sprintf("http://%s", to), resultAccess.ImageReference)
+}
+
+// Test_Integration_OCIRepository_Ownership exercises the OCI binding's
+// ownership-referrer surface (ADR 0016) against both a containerised registry
+// and a CTF: AddOwnership creates a single content-addressed referrer per
+// subject (idempotent across re-runs), siblings stay isolated, and a
+// resource-level transfer (UploadResource) carries the referrer along to the
+// target — registry→registry and registry→CTF.
+func Test_Integration_OCIRepository_Ownership(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	const (
+		component = "ocm.software/test-asset"
+		version   = "v1.0.0"
+	)
+
+	t.Run("registry", func(t *testing.T) {
+		srcResolver, srcReg, srcRepo := startOwnershipRegistry(t, ctx)
+
+		t.Run("by-reference subject", func(t *testing.T) {
+			imageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+				fmt.Sprintf("%s/test-asset/by-reference:%s", srcReg, version),
+				[]byte("by-reference-payload"))
+
+			res := byReferenceResource("backend-image", version, imageRef)
+			require.NoError(t, srcRepo.AddOwnership(ctx, component, version, res, nil))
+
+			assertOwnershipReferrerCount(t, ctx, srcResolver, imageRef, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, srcResolver, imageRef,
+				component, version, "backend-image")
+		})
+
+		t.Run("by-value subject", func(t *testing.T) {
+			res, subjectRef := addByValueOwnedResource(t, ctx, srcResolver, srcRepo,
+				"ocm.software/by-value-asset", version, "backend-image",
+				[]byte("registry-by-value-payload"))
+			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/by-value-asset", version, res, nil))
+
+			assertOwnershipReferrerCount(t, ctx, srcResolver, subjectRef, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, srcResolver, subjectRef,
+				"ocm.software/by-value-asset", version, "backend-image")
+		})
+
+		t.Run("re-run is idempotent (single content-addressed referrer)", func(t *testing.T) {
+			imageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+				fmt.Sprintf("%s/test-asset/idempotent:%s", srcReg, version),
+				[]byte("idempotent-payload"))
+
+			res := byReferenceResource("backend-image", version, imageRef)
+			require.NoError(t, srcRepo.AddOwnership(ctx, component, version, res, nil))
+			require.NoError(t, srcRepo.AddOwnership(ctx, component, version, res, nil))
+
+			assertOwnershipReferrerCount(t, ctx, srcResolver, imageRef, 1)
+		})
+
+		t.Run("siblings get isolated referrers", func(t *testing.T) {
+			const owningComponent = "ocm.software/siblings"
+			backendRes, backendSubject := addByValueOwnedResource(t, ctx, srcResolver, srcRepo,
+				owningComponent, version, "backend", []byte("siblings-backend"))
+			frontendRes, frontendSubject := addByValueOwnedResource(t, ctx, srcResolver, srcRepo,
+				owningComponent, version, "frontend", []byte("siblings-frontend"))
+
+			require.NoError(t, srcRepo.AddOwnership(ctx, owningComponent, version, backendRes, nil))
+			require.NoError(t, srcRepo.AddOwnership(ctx, owningComponent, version, frontendRes, nil))
+
+			require.NotEqual(t, backendSubject, frontendSubject,
+				"siblings must have distinct subject references")
+			assertOwnershipReferrerCount(t, ctx, srcResolver, backendSubject, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, srcResolver, backendSubject,
+				owningComponent, version, "backend")
+			assertOwnershipReferrerCount(t, ctx, srcResolver, frontendSubject, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, srcResolver, frontendSubject,
+				owningComponent, version, "frontend")
+		})
+
+		t.Run("multiple owners on the same subject", func(t *testing.T) {
+			imageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+				fmt.Sprintf("%s/test-asset/multi-owner:%s", srcReg, version),
+				[]byte("multi-owner-payload"))
+
+			res := byReferenceResource("backend-image", version, imageRef)
+			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-b", version, res, nil))
+			// Re-add owner-a to confirm idempotency holds per (owner, resource) tuple.
+			require.NoError(t, srcRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+
+			assertOwnershipReferrerCount(t, ctx, srcResolver, imageRef, 2)
+			assertOwnershipReferrerPresent(t, ctx, srcResolver, imageRef,
+				"ocm.software/owner-a", version, "backend-image")
+			assertOwnershipReferrerPresent(t, ctx, srcResolver, imageRef,
+				"ocm.software/owner-b", version, "backend-image")
+		})
+
+		t.Run("multiple owners on the same by-value subject", func(t *testing.T) {
+			// Cross-component ownership for by-value resources is not yet
+			// supported: AddOwnership scopes the subject store by the owning
+			// component, so an owner that did not host the resource cannot
+			// reach the local-blob manifest. Against a real registry this
+			// surfaces as a not-found on resolve.
+			res, _ := addByValueOwnedResource(t, ctx, srcResolver, srcRepo,
+				"ocm.software/by-value-multi-owner", version, "backend-image",
+				[]byte("registry-by-value-multi-owner-payload"))
+
+			err := srcRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil)
+			require.ErrorIs(t, err, errdef.ErrNotFound)
+		})
+
+		t.Run("transfer registry → registry carries the referrer", func(t *testing.T) {
+			// Push image + referrer in src; UploadResource into dst (the binding's
+			// resource-level transfer drives ExtendedCopyGraph and copies referrers).
+			srcImageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+				fmt.Sprintf("%s/test-asset/transfer-src:%s", srcReg, version),
+				[]byte("transfer-payload"))
+			srcRes := byReferenceResource("backend-image", version, srcImageRef)
+			require.NoError(t, srcRepo.AddOwnership(ctx, component, version, srcRes, nil))
+
+			dstResolver, dstReg, dstRepo := startOwnershipRegistry(t, ctx)
+			dstImageRef := fmt.Sprintf("%s/test-asset/transfer-dst:%s", dstReg, version)
+			transferred := transferByReferenceResource(t, ctx, srcRepo, dstRepo, srcRes, dstImageRef)
+
+			assertOwnershipReferrerCount(t, ctx, dstResolver, transferred, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, dstResolver, transferred,
+				component, version, "backend-image")
+		})
+
+		t.Run("transfer registry → CTF carries the referrer", func(t *testing.T) {
+			srcImageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+				fmt.Sprintf("%s/test-asset/transfer-ctf-src:%s", srcReg, version),
+				[]byte("transfer-ctf-payload"))
+			srcRes := byReferenceResource("backend-image", version, srcImageRef)
+			require.NoError(t, srcRepo.AddOwnership(ctx, component, version, srcRes, nil))
+
+			ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
+			dstImageRef := fmt.Sprintf("ocm.software/test-asset/transfer-ctf-dst:%s", version)
+			transferred := transferByReferenceResource(t, ctx, srcRepo, ctfRepo, srcRes, dstImageRef)
+
+			assertOwnershipReferrerCount(t, ctx, ctfResolver, transferred, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, ctfResolver, transferred,
+				component, version, "backend-image")
+		})
+
+		t.Run("streaming transfer registry → registry carries the referrer", func(t *testing.T) {
+			// Streaming twin of the registry → registry transfer above. Drives
+			// DownloadResourceStream → UploadResourceStream (the path
+			// transformer/transfer_oci_artifact.go uses) end-to-end across the
+			// wire and proves the ownership referrer rides along the same
+			// ExtendedCopyGraph traversal without tar materialization.
+			srcImageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+				fmt.Sprintf("%s/test-asset/transfer-stream-src:%s", srcReg, version),
+				[]byte("transfer-stream-payload"))
+			srcRes := byReferenceResource("backend-image", version, srcImageRef)
+			require.NoError(t, srcRepo.AddOwnership(ctx, component, version, srcRes, nil))
+
+			dstResolver, dstReg, dstRepo := startOwnershipRegistry(t, ctx)
+			dstImageRef := fmt.Sprintf("%s/test-asset/transfer-stream-dst:%s", dstReg, version)
+			transferred := transferByReferenceResourceStream(t, ctx, srcRepo, dstRepo, srcRes, dstImageRef)
+
+			assertOwnershipReferrerCount(t, ctx, dstResolver, transferred, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, dstResolver, transferred,
+				component, version, "backend-image")
+		})
+	})
+
+	t.Run("ctf", func(t *testing.T) {
+		t.Run("by-value subject", func(t *testing.T) {
+			ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
+			res, subjectRef := addByValueOwnedResource(t, ctx, ctfResolver, ctfRepo,
+				component, version, "backend-image", []byte("ctf-by-value-payload"))
+			require.NoError(t, ctfRepo.AddOwnership(ctx, component, version, res, nil))
+
+			assertOwnershipReferrerCount(t, ctx, ctfResolver, subjectRef, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, ctfResolver, subjectRef,
+				component, version, "backend-image")
+		})
+
+		t.Run("re-run is idempotent (single content-addressed referrer)", func(t *testing.T) {
+			ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
+			res, subjectRef := addByValueOwnedResource(t, ctx, ctfResolver, ctfRepo,
+				component, version, "backend-image", []byte("ctf-idempotent-payload"))
+
+			require.NoError(t, ctfRepo.AddOwnership(ctx, component, version, res, nil))
+			require.NoError(t, ctfRepo.AddOwnership(ctx, component, version, res, nil))
+
+			assertOwnershipReferrerCount(t, ctx, ctfResolver, subjectRef, 1)
+		})
+
+		t.Run("siblings get isolated referrers", func(t *testing.T) {
+			const owningComponent = "ocm.software/ctf-siblings"
+			ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
+			backendRes, backendSubject := addByValueOwnedResource(t, ctx, ctfResolver, ctfRepo,
+				owningComponent, version, "backend", []byte("ctf-siblings-backend"))
+			frontendRes, frontendSubject := addByValueOwnedResource(t, ctx, ctfResolver, ctfRepo,
+				owningComponent, version, "frontend", []byte("ctf-siblings-frontend"))
+
+			require.NoError(t, ctfRepo.AddOwnership(ctx, owningComponent, version, backendRes, nil))
+			require.NoError(t, ctfRepo.AddOwnership(ctx, owningComponent, version, frontendRes, nil))
+
+			require.NotEqual(t, backendSubject, frontendSubject,
+				"siblings must have distinct subject references")
+			assertOwnershipReferrerCount(t, ctx, ctfResolver, backendSubject, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, ctfResolver, backendSubject,
+				owningComponent, version, "backend")
+			assertOwnershipReferrerCount(t, ctx, ctfResolver, frontendSubject, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, ctfResolver, frontendSubject,
+				owningComponent, version, "frontend")
+		})
+
+		t.Run("multiple owners on the same subject", func(t *testing.T) {
+			// Cross-component ownership for by-value resources is not yet
+			// supported: AddOwnership scopes the subject store by the owning
+			// component, so an owner that did not host the resource cannot
+			// reach the local-blob manifest. Against a CTF the digest is found
+			// in the global blob store with media type application/octet-stream,
+			// which is not an OCI manifest, so the referrer push is silently
+			// skipped.
+			ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
+			res, subjectRef := addByValueOwnedResource(t, ctx, ctfResolver, ctfRepo,
+				component, version, "backend-image", []byte("ctf-multi-owner-payload"))
+
+			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-a", version, res, nil))
+			require.NoError(t, ctfRepo.AddOwnership(ctx, "ocm.software/owner-b", version, res, nil))
+
+			assertOwnershipReferrerCount(t, ctx, ctfResolver, subjectRef, 0)
+		})
+
+		t.Run("transfer CTF → registry carries the referrer", func(t *testing.T) {
+			// Stage a tagged image in the CTF and attach an ownership referrer
+			// to it. Transferring the resource to a registry must carry the
+			// referrer along — the binding's UploadResource drives
+			// ExtendedCopyGraph and pulls the referrers out of the archive.
+			ctfResolver, ctfRepo := newCTFOwnershipRepo(t)
+			ctfImageRef := pushOwnershipByReferenceImage(t, ctx, ctfRepo,
+				fmt.Sprintf("ocm.software/test-asset/transfer-ctf-src:%s", version),
+				[]byte("ctf-to-registry-payload"))
+			srcRes := byReferenceResource("backend-image", version, ctfImageRef)
+			require.NoError(t, ctfRepo.AddOwnership(ctx, component, version, srcRes, nil))
+			assertOwnershipReferrerCount(t, ctx, ctfResolver, ctfImageRef, 1)
+
+			dstResolver, dstReg, dstRepo := startOwnershipRegistry(t, ctx)
+			dstImageRef := fmt.Sprintf("%s/test-asset/transfer-ctf-dst:%s", dstReg, version)
+			transferred := transferByReferenceResource(t, ctx, ctfRepo, dstRepo, srcRes, dstImageRef)
+
+			assertOwnershipReferrerCount(t, ctx, dstResolver, transferred, 1)
+			assertOwnershipReferrerAnnotations(t, ctx, dstResolver, transferred,
+				component, version, "backend-image")
+		})
+	})
+}
+
+// Test_Integration_OCIRepository_ReferrerChainTransfer pins that a transfer
+// driven by [oras.ExtendedCopyGraph] (via [oci.Repository.UploadResource])
+// carries arbitrary-depth referrer chains, not just the immediate referrers
+// of the transferred subject. This is independent of OCM ownership semantics:
+// we build the chain as raw OCI manifests with [ociImageSpecV1.Manifest.Subject]
+// set, then transfer the base image and verify every link survives.
+//
+//	base ◄── link1 ◄── link2 ◄── link3
+func Test_Integration_OCIRepository_ReferrerChainTransfer(t *testing.T) {
+	ctx := t.Context()
+	const (
+		version    = "v1.0.0"
+		chainDepth = 3
+	)
+
+	srcResolver, srcReg, srcRepo := startOwnershipRegistry(t, ctx)
+	dstResolver, dstReg, dstRepo := startOwnershipRegistry(t, ctx)
+
+	srcImageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+		fmt.Sprintf("%s/test-asset/chain-src:%s", srcReg, version),
+		[]byte("chain-base-payload"))
+
+	srcStore, err := srcResolver.StoreForReference(ctx, srcImageRef)
+	require.NoError(t, err)
+	srcRef, err := looseref.ParseReference(srcImageRef)
+	require.NoError(t, err)
+	baseDesc, err := srcStore.Resolve(ctx, srcRef.ReferenceOrTag())
+	require.NoError(t, err)
+
+	chain := make([]ociImageSpecV1.Descriptor, 0, chainDepth)
+	subject := baseDesc
+	for i := 0; i < chainDepth; i++ {
+		linkDesc := pushChainLink(t, ctx, srcStore, subject, fmt.Sprintf("ocm.software/test/link-%d", i+1))
+		chain = append(chain, linkDesc)
+		subject = linkDesc
+	}
+
+	srcRes := byReferenceResource("chain-image", version, srcImageRef)
+	dstImageRef := fmt.Sprintf("%s/test-asset/chain-dst:%s", dstReg, version)
+	transferred := transferByReferenceResource(t, ctx, srcRepo, dstRepo, srcRes, dstImageRef)
+
+	dstStore, err := dstResolver.StoreForReference(ctx, transferred)
+	require.NoError(t, err)
+	dstGraph, ok := dstStore.(content.ReadOnlyGraphStorage)
+	require.Truef(t, ok, "dst store %T must implement content.ReadOnlyGraphStorage", dstStore)
+	dstRef, err := looseref.ParseReference(transferred)
+	require.NoError(t, err)
+	dstBase, err := dstStore.Resolve(ctx, dstRef.ReferenceOrTag())
+	require.NoError(t, err)
+	require.Equal(t, baseDesc.Digest, dstBase.Digest, "transferred base must keep its digest")
+
+	subjectAtDst := dstBase
+	for i, want := range chain {
+		refs, err := orasregistry.Referrers(ctx, dstGraph, subjectAtDst, fmt.Sprintf("ocm.software/test/link-%d", i+1))
+		require.NoErrorf(t, err, "discover referrers for chain level %d", i+1)
+		require.Lenf(t, refs, 1, "chain level %d must surface exactly one referrer at dst", i+1)
+		assert.Equalf(t, want.Digest, refs[0].Digest,
+			"chain level %d referrer digest at dst must match src", i+1)
+		subjectAtDst = refs[0]
+	}
+}
+
+// pushChainLink writes an empty-payload OCI manifest to store with subject set
+// to the given subject and the given artifactType, returning its descriptor.
+// Each call produces a unique digest because the artifactType varies.
+func pushChainLink(t *testing.T, ctx context.Context, store ocispec.Store, subject ociImageSpecV1.Descriptor, artifactType string) ociImageSpecV1.Descriptor {
+	t.Helper()
+	r := require.New(t)
+
+	empty := ociImageSpecV1.DescriptorEmptyJSON
+	manifest := ociImageSpecV1.Manifest{
+		Versioned:    specs.Versioned{SchemaVersion: 2},
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: artifactType,
+		Config:       empty,
+		Layers:       []ociImageSpecV1.Descriptor{empty},
+		Subject:      &subject,
+	}
+	body, err := json.Marshal(manifest)
+	r.NoError(err)
+	desc := ociImageSpecV1.Descriptor{
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: artifactType,
+		Digest:       digest.FromBytes(body),
+		Size:         int64(len(body)),
+	}
+
+	if err := store.Push(ctx, empty, bytes.NewReader(empty.Data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		r.NoError(err)
+	}
+	if err := store.Push(ctx, desc, bytes.NewReader(body)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		r.NoError(err)
+	}
+	return desc
+}
+
+// startOwnershipRegistry boots a fresh htpasswd-protected distribution registry
+// and returns a resolver, the registry's host:port, and an oci.Repository
+// backed by it. The container is torn down on test cleanup.
+func startOwnershipRegistry(t *testing.T, ctx context.Context) (*urlresolver.CachingResolver, string, *oci.Repository) {
+	t.Helper()
+	r := require.New(t)
+
+	password := generateRandomPassword(t, passwordLength)
+	htpasswd := generateHtpasswd(t, testUsername, password)
+	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
+		registry.WithHtpasswd(htpasswd),
+		testcontainers.WithEnv(map[string]string{
+			"REGISTRY_VALIDATION_DISABLED": "true",
+		}),
+		testcontainers.WithLogger(log.TestLogger(t)),
+	)
+	r.NoError(err)
+	t.Cleanup(func() {
+		r.NoError(testcontainers.TerminateContainer(registryContainer))
+	})
+
+	address, err := registryContainer.HostAddress(ctx)
+	r.NoError(err)
+
+	resolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(address),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(createAuthClient(address, testUsername, password)),
+	)
+	r.NoError(err)
+
+	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+	return resolver, address, repo
+}
+
+// newCTFOwnershipRepo returns a CTF-backed resolver and oci.Repository over
+// a fresh on-disk archive in t.TempDir().
+func newCTFOwnershipRepo(t *testing.T) (*ocictf.Store, *oci.Repository) {
+	t.Helper()
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	require.NoError(t, err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo, err := oci.NewRepository(ocictf.WithCTF(store), oci.WithTempDir(t.TempDir()))
+	require.NoError(t, err)
+	return store, repo
+}
+
+// pushOwnershipByReferenceImage uploads a one-layer OCI image to imageRef in
+// repo via UploadResource (no ownership referrer attached) and returns the
+// resolved image reference suitable as a subject for AddOwnership.
+func pushOwnershipByReferenceImage(t *testing.T, ctx context.Context, repo *oci.Repository, imageRef string, payload []byte) string {
+	t.Helper()
+	r := require.New(t)
+	data, access := createSingleLayerOCIImage(t, payload, imageRef)
+	uploaded, err := repo.UploadResource(ctx, &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "image", Version: "v1.0.0"}},
+		Type:        "ociArtifact",
+		Access:      access,
+	}, inmemory.New(bytes.NewReader(data)))
+	r.NoError(err)
+	return uploaded.Access.(*v1.OCIImage).ImageReference
+}
+
+// byReferenceResource builds a [*descriptor.Resource] with an OCIImage access
+// pointing at imageRef.
+func byReferenceResource(name, version, imageRef string) *descriptor.Resource {
+	return &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: name, Version: version}},
+		Type:        "ociArtifact",
+		Access: &v1.OCIImage{
+			Type:           ocmruntime.NewVersionedType(v1.OCIImageType, v1.Version),
+			ImageReference: imageRef,
+		},
+	}
+}
+
+// addByValueOwnedResource adds a single-layer OCI image as a local-blob
+// resource on repo and returns the uploaded resource together with the full
+// OCI subject reference (component-descriptors repo @ local-blob digest)
+// against which an ownership referrer would be discovered.
+func addByValueOwnedResource(t *testing.T, ctx context.Context, resolver oci.Resolver, repo *oci.Repository, component, version, resourceName string, payload []byte) (*descriptor.Resource, string) {
+	t.Helper()
+	r := require.New(t)
+	data, _ := createSingleLayerOCIImage(t, payload)
+	res, err := repo.AddLocalResource(ctx, component, version, &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: resourceName, Version: version}},
+		Type:        "ociArtifact",
+		Relation:    descriptor.LocalRelation,
+		Access: &v2.LocalBlob{
+			Type:           ocmruntime.Type{Name: v2.LocalBlobAccessType, Version: v2.LocalBlobAccessTypeVersion},
+			MediaType:      layout.MediaTypeOCIImageLayoutTarGzipV1,
+			LocalReference: digest.FromBytes(data).String(),
+		},
+	}, inmemory.New(bytes.NewReader(data)))
+	r.NoError(err)
+
+	ref, err := looseref.ParseReference(resolver.ComponentVersionReference(ctx, component, version))
+	r.NoError(err)
+	ref.Tag = ""
+	ref.Reference.Reference = res.Access.(*v2.LocalBlob).LocalReference
+	return res, ref.String()
+}
+
+// transferByReferenceResource transfers res from src to dst by downloading the
+// resource and uploading it to dstImageRef on dst. The binding's
+// UploadResource drives ExtendedCopyGraph and pulls the resource's
+// ownership referrers along. Returns the uploaded image reference on dst.
+func transferByReferenceResource(t *testing.T, ctx context.Context, src, dst *oci.Repository, res *descriptor.Resource, dstImageRef string) string {
+	t.Helper()
+	r := require.New(t)
+	data, err := src.DownloadResource(ctx, res)
+	r.NoError(err)
+	target := byReferenceResource(res.Name, res.Version, dstImageRef)
+	uploaded, err := dst.UploadResource(ctx, target, data)
+	r.NoError(err)
+	return uploaded.Access.(*v1.OCIImage).ImageReference
+}
+
+// transferByReferenceResourceStream is the streaming twin of
+// [transferByReferenceResource]: it transfers res from src to dst via
+// DownloadResourceStream → UploadResourceStream (no tar materialization).
+// This is the path [transformer/transfer_oci_artifact.go] drives.
+func transferByReferenceResourceStream(t *testing.T, ctx context.Context, src, dst *oci.Repository, res *descriptor.Resource, dstImageRef string) string {
+	t.Helper()
+	r := require.New(t)
+	stream, err := src.DownloadResourceStream(ctx, res)
+	r.NoError(err)
+	target := byReferenceResource(res.Name, res.Version, dstImageRef)
+	uploaded, err := dst.UploadResourceStream(ctx, target, stream)
+	r.NoError(err)
+	return uploaded.Access.(*v1.OCIImage).ImageReference
+}
+
+// listOwnershipReferrers walks the OCI Referrers API for the subject
+// identified by reference (a full OCI reference, by tag or digest) and
+// returns every referrer carrying [annotations.OwnershipArtifactType].
+func listOwnershipReferrers(t *testing.T, ctx context.Context, resolver oci.Resolver, reference string) []ociImageSpecV1.Descriptor {
+	t.Helper()
+	r := require.New(t)
+	store, err := resolver.StoreForReference(ctx, reference)
+	r.NoError(err)
+	graphStore, ok := store.(content.ReadOnlyGraphStorage)
+	r.Truef(ok, "store %T must implement content.ReadOnlyGraphStorage for referrers discovery", store)
+	ref, err := looseref.ParseReference(reference)
+	r.NoError(err)
+	subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
+	r.NoError(err)
+	refs, err := orasregistry.Referrers(ctx, graphStore, subject, annotations.OwnershipArtifactType)
+	r.NoError(err)
+	return refs
+}
+
+// assertOwnershipReferrerCount asserts that exactly want ownership referrers
+// (artifact type [annotations.OwnershipArtifactType]) are indexed for subject.
+func assertOwnershipReferrerCount(t *testing.T, ctx context.Context, resolver oci.Resolver, subject string, want int) {
+	t.Helper()
+	got := listOwnershipReferrers(t, ctx, resolver, subject)
+	require.Lenf(t, got, want, "subject %q should have %d ownership referrers, got %d", subject, want, len(got))
+}
+
+// assertOwnershipReferrerPresent asserts that at least one ownership referrer
+// on subjectRef carries the expected (component, version, resource) identity.
+// Use when a subject has multiple distinct owners and referrer order is not
+// guaranteed.
+func assertOwnershipReferrerPresent(t *testing.T, ctx context.Context, resolver oci.Resolver, subjectRef, component, version, resourceName string) {
+	t.Helper()
+	r := require.New(t)
+	for _, ref := range listOwnershipReferrers(t, ctx, resolver, subjectRef) {
+		if ref.Annotations[annotations.OwnershipComponentName] != component {
+			continue
+		}
+		if ref.Annotations[annotations.OwnershipComponentVersion] != version {
+			continue
+		}
+		var payload struct {
+			Identity map[string]string `json:"identity"`
+			Kind     string            `json:"kind"`
+		}
+		r.NoError(json.Unmarshal([]byte(ref.Annotations[annotations.ArtifactAnnotationKey]), &payload))
+		if payload.Kind == "resource" && payload.Identity["name"] == resourceName && payload.Identity["version"] == version {
+			return
+		}
+	}
+	t.Fatalf("subject %q missing ownership referrer for component=%s version=%s resource=%s", subjectRef, component, version, resourceName)
+}
+
+// assertOwnershipReferrerAnnotations asserts the first ownership referrer on
+// subject carries the expected component/version/resource identity in its
+// annotations and that its manifest's subject digest matches the resolved
+// subject manifest digest (the Referrers API indexes by subject, so a stale
+// or wrong subject digest would still appear in the listing).
+func assertOwnershipReferrerAnnotations(t *testing.T, ctx context.Context, resolver oci.Resolver, subjectRef, component, version, resourceName string) {
+	t.Helper()
+	r := require.New(t)
+	referrers := listOwnershipReferrers(t, ctx, resolver, subjectRef)
+	r.NotEmpty(referrers, "subject %q must carry an ownership referrer", subjectRef)
+	ref := referrers[0]
+
+	assert.Equal(t, component, ref.Annotations[annotations.OwnershipComponentName])
+	assert.Equal(t, version, ref.Annotations[annotations.OwnershipComponentVersion])
+
+	var payload struct {
+		Identity map[string]string `json:"identity"`
+		Kind     string            `json:"kind"`
+	}
+	r.NoError(json.Unmarshal([]byte(ref.Annotations[annotations.ArtifactAnnotationKey]), &payload))
+	assert.Equal(t, "resource", payload.Kind)
+	assert.Equal(t, resourceName, payload.Identity["name"])
+	assert.Equal(t, version, payload.Identity["version"])
+
+	store, err := resolver.StoreForReference(ctx, subjectRef)
+	r.NoError(err)
+	sref, err := looseref.ParseReference(subjectRef)
+	r.NoError(err)
+	subject, err := store.Resolve(ctx, sref.ReferenceOrTag())
+	r.NoError(err)
+
+	rc, err := store.Fetch(ctx, ref)
+	r.NoError(err)
+	defer func() { r.NoError(rc.Close()) }()
+	var manifest ociImageSpecV1.Manifest
+	r.NoError(json.NewDecoder(rc).Decode(&manifest))
+	r.NotNil(manifest.Subject, "ownership referrer manifest must carry a subject")
+	assert.Equal(t, subject.Digest, manifest.Subject.Digest,
+		"referrer subject digest must match the resolved subject manifest digest")
 }
