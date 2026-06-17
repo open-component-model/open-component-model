@@ -98,11 +98,9 @@ tasks:
 
   run:
     desc: "Run the controller manager locally (installs CRDs into the current kube-context first)"
-    deps: [manifests, generate, fmt, vet]
+    deps: [manifests, generate, fmt, vet, helm/install-crds]
     cmds:
-      - task: helm/install-crds
       - 'go run {{.TASKFILE_DIR}}/cmd/main.go'
-
 
   # Always build only for the host architecture.
   # We force "linux" OS because all Docker base images are Linux,
