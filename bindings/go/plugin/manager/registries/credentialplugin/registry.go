@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
@@ -102,70 +101,36 @@ func (r *Registry) GetCredentialPlugin(ctx context.Context, typed runtime.Typed)
 		return nil, fmt.Errorf("credential plugin lookup requires a non-nil typed argument")
 	}
 
-	res, err := r.lookup(typed)
-	if err != nil {
-		return nil, err
-	}
-	if res.internal != nil {
-		return res.internal, nil
-	}
-	if res.cached != nil {
-		return NewCredentialPluginConverter(res.cached), nil
-	}
-
-	// Start the subprocess without holding the registry lock so concurrent
-	// lookups for other types proceed and Shutdown is not blocked on plugin boot.
-	externalPlugin, err := r.startAndReturnPlugin(ctx, &res.plugin)
-	if err != nil {
-		return nil, err
-	}
-	return NewCredentialPluginConverter(externalPlugin), nil
-}
-
-// lookupResult carries the outcome of a registry lookup. Exactly one of
-// internal, cached, or plugin is set on success: internal for a builtin
-// plugin, cached for an already-started external plugin, or plugin for a
-// discovered external plugin descriptor that the caller must start.
-type lookupResult struct {
-	internal credentials.CredentialPlugin
-	cached   credentialpluginv1.CredentialPluginContract[runtime.Typed]
-	plugin   mtypes.Plugin
-}
-
-func (r *Registry) lookup(typed runtime.Typed) (lookupResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// DefaultType resolves short-type aliases registered via the internal
-	// scheme (see RegisterInternalCredentialPlugin). External plugins arrive
-	// as *runtime.Raw with the type already set, which is not a registered
-	// prototype and is rejected here — the subsequent map lookup uses the
-	// raw GetType() value, so the failure is benign.
 	_, _ = r.scheme.DefaultType(typed)
 	typ := typed.GetType()
 	if typ.IsEmpty() {
-		return lookupResult{}, fmt.Errorf("credential plugin lookup requires a type")
+		return nil, fmt.Errorf("credential plugin lookup requires a type")
 	}
 
 	if internal, ok := r.internalPlugins[typ]; ok {
-		return lookupResult{internal: internal}, nil
+		return internal, nil
 	}
 
 	plugin, ok := r.registry[typ]
 	if !ok {
-		return lookupResult{}, fmt.Errorf("no credential plugin registered for type %s", typ)
+		return nil, fmt.Errorf("no credential plugin registered for type %s", typ)
 	}
+
 	if existing, ok := r.constructedPlugins[plugin.ID]; ok {
-		return lookupResult{cached: existing.Plugin}, nil
+		return NewCredentialPluginConverter(existing.Plugin), nil
 	}
-	return lookupResult{plugin: plugin}, nil
+
+	external, err := startAndReturnPlugin(ctx, r, &plugin)
+	if err != nil {
+		return nil, err
+	}
+	return NewCredentialPluginConverter(external), nil
 }
 
-// startAndReturnPlugin starts the subprocess, waits for it to be ready, and
-// registers it in constructedPlugins. If a concurrent caller already won the
-// race and registered a plugin for the same ID, the freshly started subprocess
-// is interrupted and the existing instance is returned instead.
-func (r *Registry) startAndReturnPlugin(ctx context.Context, plugin *mtypes.Plugin) (credentialpluginv1.CredentialPluginContract[runtime.Typed], error) {
+func startAndReturnPlugin(ctx context.Context, r *Registry, plugin *mtypes.Plugin) (credentialpluginv1.CredentialPluginContract[runtime.Typed], error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
@@ -175,26 +140,15 @@ func (r *Registry) startAndReturnPlugin(ctx context.Context, plugin *mtypes.Plug
 		return nil, fmt.Errorf("failed to wait for plugin to start: %w", err)
 	}
 
-	r.mu.Lock()
-	if existing, ok := r.constructedPlugins[plugin.ID]; ok {
-		r.mu.Unlock()
-		// Another goroutine won the race; clean up our duplicate subprocess
-		// but treat interrupt failures as best-effort — the cached plugin is
-		// already usable, and surfacing the cleanup error to the caller would
-		// fail an otherwise-successful lookup.
-		if perr := plugin.Cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
-			slog.WarnContext(ctx, "failed to interrupt duplicate plugin start", "id", plugin.ID, "err", perr)
-		}
-		return existing.Plugin, nil
-	}
+	// start log streaming once the plugin is up and running.
+	// use the baseCtx here from the manager here so the streaming isn't stopped when the request is stopped.
+	go plugins.StartLogStreamer(r.ctx, plugin)
+
 	instance := NewCredentialPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: instance,
 		cmd:    plugin.Cmd,
 	}
-	r.mu.Unlock()
-
-	go plugins.StartLogStreamer(r.ctx, plugin)
 
 	return instance, nil
 }
