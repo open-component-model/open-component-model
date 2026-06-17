@@ -127,10 +127,9 @@ Use the shell commands below to generate the files with the correct paths automa
 </span></span></span><span class=line><span class=cl><span class=s>          algorithm: RSASSA-PSS
 </span></span></span><span class=line><span class=cl><span class=s>          signature: default
 </span></span></span><span class=line><span class=cl><span class=s>        credentials:
-</span></span></span><span class=line><span class=cl><span class=s>          - type: Credentials/v1
-</span></span></span><span class=line><span class=cl><span class=s>            properties:
-</span></span></span><span class=line><span class=cl><span class=s>              private_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/leaf.key)
-</span></span></span><span class=line><span class=cl><span class=s>              public_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/chain.pem)
+</span></span></span><span class=line><span class=cl><span class=s>          - type: RSACredentials/v1
+</span></span></span><span class=line><span class=cl><span class=s>            privateKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/leaf.key)
+</span></span></span><span class=line><span class=cl><span class=s>            publicKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/chain.pem)
 </span></span></span><span class=line><span class=cl><span class=s>EOF</span>
 </span></span><span class=line><span class=cl>
 </span></span><span class=line><span class=cl><span class=c1># Verifier configuration</span>
@@ -144,10 +143,9 @@ Use the shell commands below to generate the files with the correct paths automa
 </span></span></span><span class=line><span class=cl><span class=s>          algorithm: RSASSA-PSS
 </span></span></span><span class=line><span class=cl><span class=s>          signature: default
 </span></span></span><span class=line><span class=cl><span class=s>        credentials:
-</span></span></span><span class=line><span class=cl><span class=s>          - type: Credentials/v1
-</span></span></span><span class=line><span class=cl><span class=s>            properties:
-</span></span></span><span class=line><span class=cl><span class=s>              public_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/root.crt)
-</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div><div class="callout callout-caution d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><div class=callout-content><div class=callout-title>Trust anchor isolation</div><div class=callout-body><p>When a self-signed certificate is supplied as <code>public_key_pem_file</code> for verification,
+</span></span></span><span class=line><span class=cl><span class=s>          - type: RSACredentials/v1
+</span></span></span><span class=line><span class=cl><span class=s>            publicKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/root.crt)
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div><div class="callout callout-caution d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><div class=callout-content><div class=callout-title>Trust anchor isolation</div><div class=callout-body><p>When a self-signed certificate is supplied as <code>publicKeyPEMFile</code> for verification,
 OCM uses it as an <strong>isolated trust anchor</strong> and bypasses the system root store entirely.
 Only signatures rooted in that specific CA will verify successfully.</p></div></div></div><p>For the full credential property and consumer identity reference, see <a href=/docs/reference/credential-consumer-identities/>Credential Consumer Identities &ndash; RSA/v1alpha1</a>.</p></li><li><h3 id=create-a-signer-spec-file>Create a signer spec file<a href=#create-a-signer-spec-file class=anchor aria-hidden=true>#</a></h3><p>The <code>--signer-spec</code> flag enables the PEM encoding policy. Create the spec file:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>cat &gt; ~/.ocm/keys/pem-demo/pem-signer.yaml <span class=s>&lt;&lt;EOF
 </span></span></span><span class=line><span class=cl><span class=s>type: RSASigningConfiguration/v1alpha1
@@ -225,10 +223,9 @@ Use the shell commands below to generate the files with the correct paths automa
 </span></span></span><span class=line><span class=cl><span class=s>          algorithm: RSASSA-PSS
 </span></span></span><span class=line><span class=cl><span class=s>          signature: default
 </span></span></span><span class=line><span class=cl><span class=s>        credentials:
-</span></span></span><span class=line><span class=cl><span class=s>          - type: Credentials/v1
-</span></span></span><span class=line><span class=cl><span class=s>            properties:
-</span></span></span><span class=line><span class=cl><span class=s>              private_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/leaf.key)
-</span></span></span><span class=line><span class=cl><span class=s>              public_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/chain.pem)
+</span></span></span><span class=line><span class=cl><span class=s>          - type: RSACredentials/v1
+</span></span></span><span class=line><span class=cl><span class=s>            privateKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/leaf.key)
+</span></span></span><span class=line><span class=cl><span class=s>            publicKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/chain.pem)
 </span></span></span><span class=line><span class=cl><span class=s>EOF</span>
 </span></span><span class=line><span class=cl>
 </span></span><span class=line><span class=cl><span class=c1># Verifier configuration</span>
@@ -242,10 +239,9 @@ Use the shell commands below to generate the files with the correct paths automa
 </span></span></span><span class=line><span class=cl><span class=s>          algorithm: RSASSA-PSS
 </span></span></span><span class=line><span class=cl><span class=s>          signature: default
 </span></span></span><span class=line><span class=cl><span class=s>        credentials:
-</span></span></span><span class=line><span class=cl><span class=s>          - type: Credentials/v1
-</span></span></span><span class=line><span class=cl><span class=s>            properties:
-</span></span></span><span class=line><span class=cl><span class=s>              public_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/root.crt)
-</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div><div class="callout callout-caution d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><div class=callout-content><div class=callout-title>Trust anchor isolation</div><div class=callout-body><p>When a self-signed certificate is supplied as <code>public_key_pem_file</code> for verification,
+</span></span></span><span class=line><span class=cl><span class=s>          - type: RSACredentials/v1
+</span></span></span><span class=line><span class=cl><span class=s>            publicKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/root.crt)
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div><div class="callout callout-caution d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><div class=callout-content><div class=callout-title>Trust anchor isolation</div><div class=callout-body><p>When a self-signed certificate is supplied as <code>publicKeyPEMFile</code> for verification,
 OCM uses it as an <strong>isolated trust anchor</strong> and bypasses the system root store entirely.
 Only signatures rooted in that specific CA will verify successfully.</p></div></div></div><p>For the full credential property and consumer identity reference, see <a href=/docs/reference/credential-consumer-identities/>Credential Consumer Identities &ndash; RSA/v1alpha1</a>.</p></li><li><h3 id=create-signer-spec-file>Create signer spec file<a href=#create-signer-spec-file class=anchor aria-hidden=true>#</a></h3><p>The <code>--signer-spec</code> flag enables the PEM encoding policy. Create the spec file:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>cat &gt; ~/.ocm/keys/pem-demo/pem-signer.yaml <span class=s>&lt;&lt;EOF
 </span></span></span><span class=line><span class=cl><span class=s>type: RSASigningConfiguration/v1alpha1
@@ -279,7 +275,7 @@ media type stored alongside the signature and selects the correct handler automa
 </span></span><span class=line><span class=cl><span class=c1># Verify the leaf is correctly signed</span>
 </span></span><span class=line><span class=cl>openssl verify -CAfile root.crt leaf.crt
 </span></span><span class=line><span class=cl>openssl verify -CAfile root.crt -untrusted intermediate.crt leaf.crt</span></span></code></pre></div></figure></div><h3 id=certificate-signed-by-unknown-authority>&ldquo;certificate signed by unknown authority&rdquo;<a href=#certificate-signed-by-unknown-authority class=anchor aria-hidden=true>#</a></h3><p>The root CA in the verification config doesn&rsquo;t match the root that signed the embedded chain.
-Check that <code>public_key_pem_file</code> points to the correct root CA.</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>openssl verify -CAfile root.crt leaf.crt
+Check that <code>publicKeyPEMFile</code> points to the correct root CA.</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>openssl verify -CAfile root.crt leaf.crt
 </span></span><span class=line><span class=cl>openssl verify -CAfile root.crt -untrusted intermediate.crt leaf.crt</span></span></code></pre></div></figure></div><h3 id=could-not-resolve-credentials-for-identity>&ldquo;could not resolve credentials for identity&rdquo;<a href=#could-not-resolve-credentials-for-identity class=anchor aria-hidden=true>#</a></h3><p>The consumer identity in <code>.ocmconfig</code> doesn&rsquo;t match what OCM looks up. Confirm:</p><ul><li><code>type: RSA/v1alpha1</code> is spelled correctly</li><li><code>algorithm</code> matches the value in the signer spec (<code>RSASSA-PSS</code>)</li><li><code>signature</code> matches the <code>--signature</code> flag value (default: <code>default</code>)</li></ul><h3 id=signature-already-exists>&ldquo;signature already exists&rdquo;<a href=#signature-already-exists class=anchor aria-hidden=true>#</a></h3><p>Use <code>--force</code> to overwrite or choose a different name with <code>--signature</code>.</p><h2 id=related-documentation>Related Documentation<a href=#related-documentation class=anchor aria-hidden=true>#</a></h2><ul><li><a href=/docs/tutorials/signing/plain-signatures/>Plain Signatures</a> &ndash; Basic key-pair signing without certificate chains</li><li><a href=/docs/tutorials/signing/sigstore-keyless/>Sigstore (Keyless)</a> &ndash; Identity-based signing — no keys to manage</li><li><a href=/docs/how-to/sign-and-verify/configure-credentials-for-signing/>Configure Credentials for Signing</a> &ndash; Full credential configuration reference</li></ul><div class="page-footer-meta d-flex flex-column flex-md-row justify-content-between"></div><div class="page-nav d-flex flex-column flex-sm-row"><div class="card w-100"><div class="card-body d-flex"><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
 						<path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
 						<path d="M5 12l14 0"></path>
