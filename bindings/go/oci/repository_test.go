@@ -2423,7 +2423,7 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 		Relation:    descriptor.LocalRelation,
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend-image", Version: version}},
 		Type:        "ociArtifact",
-		Access:      &v1.OCIImage{ImageReference: imageRef},
+		Access:      &v1.OCIImage{Type: runtime.NewVersionedType(v1.OCIImageType, v1.Version), ImageReference: imageRef},
 	}
 
 	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
@@ -2480,12 +2480,12 @@ func TestRepository_AddOwnership_ResolveErrors(t *testing.T) {
 	}{
 		{
 			name:    "by-reference subject does not resolve",
-			access:  &v1.OCIImage{ImageReference: "ghcr.io/acme/missing:latest"},
+			access:  &v1.OCIImage{Type: runtime.NewVersionedType(v1.OCIImageType, v1.Version), ImageReference: "ghcr.io/acme/missing:latest"},
 			wantErr: "failed to resolve subject",
 		},
 		{
 			name:    "by-value local blob does not resolve",
-			access:  &v2.LocalBlob{LocalReference: missingDigest, MediaType: "application/octet-stream"},
+			access:  &v2.LocalBlob{Type: runtime.NewVersionedType(descriptor.LocalBlobAccessType, descriptor.LocalBlobAccessTypeVersion), LocalReference: missingDigest, MediaType: "application/octet-stream"},
 			wantErr: "failed to resolve uploaded artifact",
 		},
 	}
@@ -2603,7 +2603,7 @@ func TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest(t *testing.
 		Relation:    descriptor.LocalRelation,
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend-image", Version: version}},
 		Type:        "ociArtifact",
-		Access:      &v1.OCIImage{ImageReference: imageRef},
+		Access:      &v1.OCIImage{Type: runtime.NewVersionedType(v1.OCIImageType, v1.Version), ImageReference: imageRef},
 	}
 
 	// With the old manifest-first push order this fails MANIFEST_BLOB_UNKNOWN.
@@ -2713,6 +2713,7 @@ func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend", Version: version}},
 		Type:        "blob",
 		Access: &v2.LocalBlob{
+			Type:           runtime.NewVersionedType(descriptor.LocalBlobAccessType, descriptor.LocalBlobAccessTypeVersion),
 			LocalReference: rawDesc.Digest.String(),
 			MediaType:      "application/octet-stream",
 		},
