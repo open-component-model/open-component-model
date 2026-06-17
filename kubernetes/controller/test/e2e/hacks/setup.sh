@@ -117,3 +117,30 @@ flux install || exit 1
 
 # Install kro operators
 helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.0 || exit 1
+
+# Install ArgoCD (used by the argocd-helm example, tested in e2e_argocd_test.go).
+# Chart 9.5.21 ships ArgoCD v3.4.3; plain-HTTP OCI support (insecureOciForceHttp)
+# requires >= v3.1.
+helm install argocd oci://ghcr.io/argoproj/argo-helm/argo-cd \
+  --namespace argocd --create-namespace --version=9.5.21 --wait || exit 1
+
+# Register the in-cluster OCI registry as an ArgoCD Helm repository so the
+# Application can pull the chart over plain HTTP from image-registry:5000.
+# url omits the oci:// scheme; enableOCI + insecureOCIForceHttp select the
+# plain-HTTP OCI code path. Do NOT also set "insecure": with both set, Helm v4
+# lets --insecure-skip-tls-verify win and drops --plain-http.
+kubectl apply -f - <<EOF || exit 1
+apiVersion: v1
+kind: Secret
+metadata:
+  name: image-registry-oci
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  name: image-registry
+  url: image-registry:5000
+  type: helm
+  enableOCI: "true"
+  insecureOCIForceHttp: "true"
+EOF

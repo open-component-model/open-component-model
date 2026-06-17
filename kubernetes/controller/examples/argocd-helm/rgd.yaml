@@ -1,0 +1,53 @@
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: argocd-helm
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: ArgocdHelm
+    spec:
+      prefix: string | default="argocd-helm"
+  resources:
+    - id: resourceChart
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.prefix}-resource-chart-name"
+        spec:
+          componentRef:
+            name: argocd-helm-component
+          resource:
+            byReference:
+              resource:
+                name: helm-resource
+          additionalStatusFields:
+            registry: resource.access.toOCI().registry
+            repository: resource.access.toOCI().repository
+            tag: resource.access.toOCI().tag
+            digest: resource.access.toOCI().digest
+    - id: application
+      template:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: "${schema.spec.prefix}-application"
+          namespace: argocd
+        spec:
+          project: default
+          source:
+            repoURL: ${resourceChart.status.additional.registry}
+            chart: ${resourceChart.status.additional.repository}
+            targetRevision: ${resourceChart.status.additional.tag}
+            helm:
+              releaseName: argocd-helm
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: default
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true

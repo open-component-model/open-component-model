@@ -1,0 +1,42 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: argocd-helm-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: argocd-helm-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/argocd-helm
+  repositoryRef:
+    name: argocd-helm-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: argocd-helm-resource-rgd
+spec:
+  componentRef:
+    name: argocd-helm-component
+  resource:
+    byReference:
+      resource:
+        name: kro-rgd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: argocd-helm-deployer
+spec:
+  resourceRef:
+    name: argocd-helm-resource-rgd
+    namespace: default

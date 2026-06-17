@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: ArgocdHelm
+metadata:
+  name: argocd-helm
+spec:
+  prefix: argocd-helm
