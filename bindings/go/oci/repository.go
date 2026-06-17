@@ -49,10 +49,9 @@ import (
 )
 
 var (
-	_ ComponentVersionRepository = (*Repository)(nil)
-	// TODO: re-enable once repository.OwnershipAwareRepository lands in main.
-	// _            repository.OwnershipAwareRepository = (*Repository)(nil)
-	versionRegex = regexp.MustCompile(compref.VersionRegex)
+	_            ComponentVersionRepository          = (*Repository)(nil)
+	_            repository.OwnershipAwareRepository = (*Repository)(nil)
+	versionRegex                                     = regexp.MustCompile(compref.VersionRegex)
 )
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.

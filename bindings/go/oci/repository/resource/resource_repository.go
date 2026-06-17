@@ -47,10 +47,10 @@ type ResourceRepository struct {
 }
 
 // make sure that ResourceRepository implements the oci ResourceRepository interface
-var _ repository.ResourceRepository = (*ResourceRepository)(nil)
-
-// TODO: re-enable once repository.OwnershipAwareRepository lands in main.
-// var _ repository.OwnershipAwareRepository = (*ResourceRepository)(nil)
+var (
+	_ repository.ResourceRepository       = (*ResourceRepository)(nil)
+	_ repository.OwnershipAwareRepository = (*ResourceRepository)(nil)
+)
 
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	options := &Options{}
