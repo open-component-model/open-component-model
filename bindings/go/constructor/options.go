@@ -21,6 +21,11 @@ type Options struct {
 	// The ExternalComponentRepositoryProvider is OPTIONAL, if no externally referenced components need to be resolved.
 	ExternalComponentRepositoryProvider
 
+	// While constructing a component version, the constructor library will use the given resource repository provider
+	// to get the resource repository for the component specification when processing resources by value.
+	// The ResourceRepositoryProvider is OPTIONAL, if no resources need to be processed by value.
+	ResourceRepositoryProvider
+
 	// While constructing a component version, the constructor library will use the given resource input method provider
 	// to get the resource input method for the component specification when processing resources with an input method.
 	// The ResourceInputMethodProvider is OPTIONAL if no resources need to be processed.
