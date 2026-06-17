@@ -1,39 +1,22 @@
-// Package ctf provides various interfaces and types for working with Common Transport Format Archives (CTF)
+// Package ctf implements the Common Transport Format (CTF): a filesystem
+// layout that realizes a subset of oras OCI interfaces. It can hold a
+// selection of repositories and artifacts that can be imported back into
+// any OCI registry. It implements the referrer tag schema.
 //
-// The Common Transport Format describes a file system structure that can be
-// used for the representation of [content](https://github.com/opencontainers/image-spec)
-// of an OCI repository.
+// Layout:
 //
-// Therefore, it can be used to describe a subset of repositories of an OCI registry with a subset of
-// artifacts, that can then be imported again into any OCI registry.
+//   - artifact-index.json — index of contained repositories and artifacts (OCI
+//     image and index manifests).
+//   - blobs/ — flat directory of blobs referenced by the index. Each
+//     filename is the blob digest with the algorithm separator ":" replaced
+//     by ".". Blobs not referenced by the index SHOULD be ignored.
 //
-// # A CTF is a file or directory containing
+// A CTF may be stored as a directory (FormatDirectory), an uncompressed TAR
+// (FormatTAR), or a gzipped TAR (FormatTGZ). In archive form, the index
+// SHOULD be the first entry.
 //
-//   - artifact-index.json: This JSON file describes the contained artifact (versions).
-//
-//   - blobs
-//
-//     The blobs directory contains the blobs described by the
-//     artifact index as a flat file list. These are layer blobs or artifact
-//     blobs for the artifact descriptors.
-//
-//     Every file has a filename according
-//     to its digest (https://github.com/opencontainers/image-spec/blob/main/descriptor.md#digests).
-//     Hereby the algorithm separator character is replaced by a dot (".").
-//
-//     Every file SHOULD be referenced, directly or indirectly, in the artifact
-//     descriptor by a descriptor according the OCI Image Specification (https://github.com/opencontainers/image-spec/blob/main/descriptor.md).
-//
-//     The artifact index describes the OCI manifests (image manifests and index
-//     manifests), which refer to further non-manifest blobs.
-//     Files not referenced by the artifacts described by the index SHOULD be ignored.
-//
-// The FileFormat of a CTF can differ: as directory of an
-// operating system file system or a virtual file system (FormatDirectory) or as content of
-// a TAR archive (unzipped - FormatTAR or zipped - FormatTGZ).
-// The descriptor SHOULD be the first file if stored in an archive.
-//
-// This package also offers a legacy compatibility layer access for the ArtifactSet, a now no longer recommended
-// artifact format that was used in the past by OCM CLI to package local blobs. We now instead recommend packaging
-// in the format of OCI Image Layouts as they are almost identical. See ArtifactSet for more details.
+// This package also exposes a legacy compatibility layer for ArtifactSet, a
+// deprecated format previously used by the OCM CLI to package local blobs.
+// New code should use OCI Image Layouts instead; see ArtifactSet for
+// details.
 package ctf
