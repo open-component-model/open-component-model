@@ -74,6 +74,12 @@ func TestGetConsumerIdentityHandlerFunc(t *testing.T) {
 }
 
 func TestResolveHandlerFunc(t *testing.T) {
+	var (
+		nilCredsObserved bool
+		successCreds     runtime.Typed
+		successIdentity  string
+	)
+
 	tests := []struct {
 		name         string
 		handlerFunc  func() http.HandlerFunc
@@ -103,12 +109,13 @@ func TestResolveHandlerFunc(t *testing.T) {
 			name: "missing Authorization header is accepted with nil credentials",
 			handlerFunc: func() http.HandlerFunc {
 				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
-					require.Nil(t, credentials, "missing Authorization header must yield nil credentials")
+					nilCredsObserved = credentials == nil
 					return &runtime.Raw{Data: []byte(`{"resolved":"credentials"}`)}, nil
 				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				require.Equal(t, http.StatusOK, resp.StatusCode)
+				require.True(t, nilCredsObserved, "missing Authorization header must yield nil credentials")
 			},
 			request: func(base string) *http.Request {
 				parse, _ := url.Parse(base)
@@ -138,14 +145,16 @@ func TestResolveHandlerFunc(t *testing.T) {
 			name: "success returns resolved credentials JSON",
 			handlerFunc: func() http.HandlerFunc {
 				return ResolveHandlerFunc(func(ctx context.Context, req v1.ResolveRequest[*dummyv1.Repository], credentials runtime.Typed) (runtime.Typed, error) {
-					require.NotNil(t, credentials)
-					require.Equal(t, "test-identity", req.Identity["id"])
+					successCreds = credentials
+					successIdentity = req.Identity["id"]
 					return &runtime.Raw{Data: []byte(`{"resolved":"credentials","token":"abc123"}`)}, nil
 				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
+				require.NotNil(t, successCreds)
+				require.Equal(t, "test-identity", successIdentity)
 				content, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
 				require.Contains(t, string(content), `"resolved":"credentials"`)
