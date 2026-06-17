@@ -152,6 +152,7 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 // AddOwnership attaches ownership information (i.e. the
 // component name and version) to a resource. The ownership is attached as a
 // referrer manifest pointing at the resource.
+// Caution: EXPERIMENTAL
 func (p *ResourceRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
 	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {

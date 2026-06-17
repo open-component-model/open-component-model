@@ -717,6 +717,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 // AddOwnership attaches ownership information (i.e. the
 // component name and version) to a resource. The ownership is attached as a
 // referrer manifest pointing at the resource.
+// Caution: EXPERIMENTAL
 func (repo *Repository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, _ runtime.Typed) (err error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "add ownership referrer",
