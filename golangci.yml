@@ -28,10 +28,12 @@ linters:
     - gochecknoglobals
     - gochecknoinits
     - gocognit
+    - goconst
     - gocyclo
     - godot
     - godox
     - gomoddirectives
+    - gomodguard
     - inamedparam
     - interfacebloat
     - intrange
