@@ -227,15 +227,15 @@ const CLI_DERIVED_MODULES = [
 // import block entirely. The always-pinned entries (website/cli/controller) use
 // `v${fullVersion}` so they're never dropped.
 function buildModuleBlocks(version, fullVersion, deps) {
-    const constructorVersion = deps?.['ocm.software/open-component-model/bindings/go/constructor'];
-    const credentialsVersion = deps?.['ocm.software/open-component-model/bindings/go/credentials'];
-    const descriptorVersion = deps?.['ocm.software/open-component-model/bindings/go/descriptor/v2'];
-    const gpgVersion = deps?.['ocm.software/open-component-model/bindings/go/gpg'];
-    const helmVersion = deps?.['ocm.software/open-component-model/bindings/go/helm'];
-    const httpVersion = deps?.['ocm.software/open-component-model/bindings/go/http'];
-    const ociVersion = deps?.['ocm.software/open-component-model/bindings/go/oci'];
-    const rsaVersion = deps?.['ocm.software/open-component-model/bindings/go/rsa'];
-    const sigstoreVersion = deps?.['ocm.software/open-component-model/bindings/go/sigstore'];
+    const constructorVersion = deps?.['ocm.software/open-component-model/bindings/go/constructor'] || 'latest';
+    const credentialsVersion = deps?.['ocm.software/open-component-model/bindings/go/credentials'] || 'latest';
+    const descriptorVersion = deps?.['ocm.software/open-component-model/bindings/go/descriptor/v2'] || 'latest';
+    const gpgVersion = deps?.['ocm.software/open-component-model/bindings/go/gpg'] || 'latest';
+    const helmVersion = deps?.['ocm.software/open-component-model/bindings/go/helm'] || 'latest';
+    const httpVersion = deps?.['ocm.software/open-component-model/bindings/go/http'] || 'latest';
+    const ociVersion = deps?.['ocm.software/open-component-model/bindings/go/oci'] || 'latest';
+    const rsaVersion = deps?.['ocm.software/open-component-model/bindings/go/rsa'] || 'latest';
+    const sigstoreVersion = deps?.['ocm.software/open-component-model/bindings/go/sigstore'] || 'latest';
 
     // Hugo passes `version:` verbatim to `go mod download <path>@<version>`,
     // which expects a Go module version (e.g. v0.9.0), not the git tag form
