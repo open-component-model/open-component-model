@@ -137,6 +137,8 @@ func startAndReturnPlugin(ctx context.Context, r *Registry, plugin *mtypes.Plugi
 
 	client, loc, err := plugins.WaitForPlugin(ctx, plugin)
 	if err != nil {
+		// Kill the orphaned subprocess to prevent resource leak
+		_ = plugin.Cmd.Process.Kill()
 		return nil, fmt.Errorf("failed to wait for plugin to start: %w", err)
 	}
 
