@@ -114,7 +114,7 @@ test('buildModuleBlocks: website import has correct tag format', () => {
     const { imports } = buildModuleBlocks('0.3', '0.3.0');
     const website = imports.find(i => i.path.endsWith('/website'));
     assert.ok(website, 'website import should exist');
-    assert.equal(website.version, 'website/v0.3.0');
+    assert.equal(website.version, 'v0.3.0');
     assert.deepEqual(website.mounts[0].files, ['**', '!blog/**']);
     assert.equal(website.mounts[0].source, 'content/');
     assert.equal(website.mounts[0].target, 'content');
@@ -125,7 +125,7 @@ test('buildModuleBlocks: CLI import has correct tag format', () => {
     const { imports } = buildModuleBlocks('0.3', '0.3.5');
     const cli = imports.find(i => i.path.endsWith('/cli'));
     assert.ok(cli, 'CLI import should exist');
-    assert.equal(cli.version, 'cli/v0.3.5');
+    assert.equal(cli.version, 'v0.3.5');
     assert.equal(cli.mounts[0].target, 'content/docs/reference/ocm-cli');
     assert.deepEqual(cli.mounts[0].sites.matrix.versions, ['0.3']);
 });
@@ -134,7 +134,7 @@ test('buildModuleBlocks: controller import has correct tag format', () => {
     const { imports } = buildModuleBlocks('0.3', '0.3.2');
     const controller = imports.find(i => i.path.endsWith('/kubernetes/controller'));
     assert.ok(controller, 'controller import should exist');
-    assert.equal(controller.version, 'kubernetes/controller/v0.3.2');
+    assert.equal(controller.version, 'v0.3.2');
     assert.deepEqual(controller.mounts[0].sites.matrix.versions, ['0.3']);
 });
 
@@ -149,15 +149,15 @@ test('buildModuleBlocks: bindings use fallback tag when no deps provided', () =>
     const oci = imports.find(i => i.path.endsWith('/bindings/go/oci'));
     const rsa = imports.find(i => i.path.endsWith('/bindings/go/rsa'));
     const sigstore = imports.find(i => i.path.endsWith('/bindings/go/sigstore'));
-    assert.equal(constructor.version, 'bindings/go/constructor/latest');
-    assert.equal(credentials.version, 'bindings/go/credentials/latest');
-    assert.equal(descriptor.version, 'bindings/go/descriptor/v2/latest');
-    assert.equal(gpg.version, 'bindings/go/gpg/latest');
-    assert.equal(helm.version, 'bindings/go/helm/latest');
-    assert.equal(http.version, 'bindings/go/http/latest');
-    assert.equal(oci.version, 'bindings/go/oci/latest');
-    assert.equal(rsa.version, 'bindings/go/rsa/latest');
-    assert.equal(sigstore.version, 'bindings/go/sigstore/latest');
+    assert.equal(constructor.version, 'latest');
+    assert.equal(credentials.version, 'latest');
+    assert.equal(descriptor.version, 'latest');
+    assert.equal(gpg.version, 'latest');
+    assert.equal(helm.version, 'latest');
+    assert.equal(http.version, 'latest');
+    assert.equal(oci.version, 'latest');
+    assert.equal(rsa.version, 'latest');
+    assert.equal(sigstore.version, 'latest');
 });
 
 test('buildModuleBlocks: bindings use resolved versions when deps provided', () => {
@@ -182,15 +182,15 @@ test('buildModuleBlocks: bindings use resolved versions when deps provided', () 
     const oci = imports.find(i => i.path.endsWith('/bindings/go/oci'));
     const rsa = imports.find(i => i.path.endsWith('/bindings/go/rsa'));
     const sigstore = imports.find(i => i.path.endsWith('/bindings/go/sigstore'));
-    assert.equal(constructor.version, 'bindings/go/constructor/v0.0.7');
-    assert.equal(credentials.version, 'bindings/go/credentials/v0.0.13');
-    assert.equal(descriptor.version, 'bindings/go/descriptor/v2/v2.0.3-alpha3');
-    assert.equal(gpg.version, 'bindings/go/gpg/v0.0.1');
-    assert.equal(helm.version, 'bindings/go/helm/v0.0.1');
-    assert.equal(http.version, 'bindings/go/http/v0.0.5');
-    assert.equal(oci.version, 'bindings/go/oci/v0.0.46');
-    assert.equal(rsa.version, 'bindings/go/rsa/v0.0.1');
-    assert.equal(sigstore.version, 'bindings/go/sigstore/v0.0.1');
+    assert.equal(constructor.version, 'v0.0.7');
+    assert.equal(credentials.version, 'v0.0.13');
+    assert.equal(descriptor.version, 'v2.0.3-alpha3');
+    assert.equal(gpg.version, 'v0.0.1');
+    assert.equal(helm.version, 'v0.0.1');
+    assert.equal(http.version, 'v0.0.5');
+    assert.equal(oci.version, 'v0.0.46');
+    assert.equal(rsa.version, 'v0.0.1');
+    assert.equal(sigstore.version, 'v0.0.1');
 });
 
 test('buildModuleBlocks: version matrix uses X.Y not X.Y.Z', () => {
@@ -546,18 +546,18 @@ test('updateImportTags: updates versioned tags for matching version', () => {
     const changed = updateImportTags(parsed, '0.3', '0.3.1', deps);
     assert.equal(changed, true);
     const byPath = Object.fromEntries(parsed.imports.map(i => [i.path, i.version]));
-    assert.equal(byPath['ocm.software/open-component-model/website'], 'website/v0.3.1');
-    assert.equal(byPath['ocm.software/open-component-model/cli'], 'cli/v0.3.1');
-    assert.equal(byPath['ocm.software/open-component-model/bindings/go/constructor'], 'bindings/go/constructor/v0.0.8');
-    assert.equal(byPath['ocm.software/open-component-model/bindings/go/credentials'], 'bindings/go/credentials/v0.0.14');
-    assert.equal(byPath['ocm.software/open-component-model/bindings/go/descriptor/v2'], 'bindings/go/descriptor/v2/v2.0.4');
-    assert.equal(byPath['ocm.software/open-component-model/bindings/go/gpg'], 'bindings/go/gpg/v0.0.2');
-    assert.equal(byPath['ocm.software/open-component-model/bindings/go/helm'], 'bindings/go/helm/v0.0.2');
-    assert.equal(byPath['ocm.software/open-component-model/bindings/go/http'], 'bindings/go/http/v0.0.5');
-    assert.equal(byPath['ocm.software/open-component-model/bindings/go/oci'], 'bindings/go/oci/v0.0.47');
-    assert.equal(byPath['ocm.software/open-component-model/bindings/go/rsa'], 'bindings/go/rsa/v0.0.2');
-    assert.equal(byPath['ocm.software/open-component-model/bindings/go/sigstore'], 'bindings/go/sigstore/v0.0.2');
-    assert.equal(byPath['ocm.software/open-component-model/kubernetes/controller'], 'kubernetes/controller/v0.3.1');
+    assert.equal(byPath['ocm.software/open-component-model/website'], 'v0.3.1');
+    assert.equal(byPath['ocm.software/open-component-model/cli'], 'v0.3.1');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/constructor'], 'v0.0.8');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/credentials'], 'v0.0.14');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/descriptor/v2'], 'v2.0.4');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/gpg'], 'v0.0.2');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/helm'], 'v0.0.2');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/http'], 'v0.0.5');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/oci'], 'v0.0.47');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/rsa'], 'v0.0.2');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/sigstore'], 'v0.0.2');
+    assert.equal(byPath['ocm.software/open-component-model/kubernetes/controller'], 'v0.3.1');
 });
 
 test('updateImportTags: does not update bindings when no deps provided', () => {
@@ -581,20 +581,20 @@ test('updateImportTags: does not change imports for other versions', () => {
         imports: [
             {
                 path: 'ocm.software/open-component-model/cli',
-                version: 'cli/v0.2.0',
+                version: 'v0.2.0',
                 mounts: [{ sites: { matrix: { versions: ['0.2'] } } }]
             },
             {
                 path: 'ocm.software/open-component-model/cli',
-                version: 'cli/v0.3.0',
+                version: 'v0.3.0',
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
             },
         ]
     };
 
     updateImportTags(parsed, '0.3', '0.3.1');
-    assert.equal(parsed.imports[0].version, 'cli/v0.2.0'); // unchanged
-    assert.equal(parsed.imports[1].version, 'cli/v0.3.1'); // updated
+    assert.equal(parsed.imports[0].version, 'v0.2.0'); // unchanged
+    assert.equal(parsed.imports[1].version, 'v0.3.1'); // updated
 });
 
 test('updateImportTags: returns false when already up to date', () => {
@@ -602,7 +602,7 @@ test('updateImportTags: returns false when already up to date', () => {
         imports: [
             {
                 path: 'ocm.software/open-component-model/cli',
-                version: 'cli/v0.3.1',
+                version: 'v0.3.1',
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
             },
         ]
