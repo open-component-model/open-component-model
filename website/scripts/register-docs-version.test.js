@@ -6,6 +6,21 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags } = require('./register-docs-version');
 
+// Resolved CLI-derived versions for tests that need every binding import emitted.
+// buildModuleBlocks now drops bindings whose version is undefined (filter at the
+// end), so tests asserting "all 12 imports" / "all schema targets" must pass deps.
+const ALL_DEPS = {
+    'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.7',
+    'ocm.software/open-component-model/bindings/go/credentials': 'v0.0.13',
+    'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.3-alpha3',
+    'ocm.software/open-component-model/bindings/go/gpg': 'v0.0.1',
+    'ocm.software/open-component-model/bindings/go/helm': 'v0.0.1',
+    'ocm.software/open-component-model/bindings/go/http': 'v0.0.5',
+    'ocm.software/open-component-model/bindings/go/oci': 'v0.0.46',
+    'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.1',
+    'ocm.software/open-component-model/bindings/go/sigstore': 'v0.0.1',
+};
+
 // --- parseArguments ---
 
 test('parseArguments: valid version derives X.Y', () => {
@@ -88,20 +103,20 @@ test('hasAllImportsForVersion: returns false for wrong version', () => {
 });
 
 test('hasAllImportsForVersion: returns false when sigstore has only one of its two mounts', () => {
-    const { imports } = buildModuleBlocks('0.3', '0.3.0');
+    const { imports } = buildModuleBlocks('0.3', '0.3.0', ALL_DEPS);
     // Truncate sigstore to a single mount (simulates a partially-written module.yaml)
     const truncated = imports.map(i =>
         i.path.endsWith('/bindings/go/sigstore')
             ? { ...i, mounts: [i.mounts[0]] }
             : i
     );
-    assert.equal(hasAllImportsForVersion({ imports: truncated }, '0.3'), false);
+    assert.equal(hasAllImportsForVersion({ imports: truncated }, '0.3', ALL_DEPS), false);
 });
 
 // --- buildModuleBlocks ---
 
 test('buildModuleBlocks: returns 12 imports (website + CLI + 9 bindings + controller)', () => {
-    const { imports } = buildModuleBlocks('0.3', '0.3.0');
+    const { imports } = buildModuleBlocks('0.3', '0.3.0', ALL_DEPS);
     assert.equal(imports.length, 12);
 });
 
@@ -138,26 +153,15 @@ test('buildModuleBlocks: controller import has correct tag format', () => {
     assert.deepEqual(controller.mounts[0].sites.matrix.versions, ['0.3']);
 });
 
-test('buildModuleBlocks: bindings use fallback tag when no deps provided', () => {
+test('buildModuleBlocks: bindings are dropped when no deps provided', () => {
+    // Without deps, every CLI-derived binding resolves to undefined and is
+    // filtered out; only the always-pinned imports (website/cli/controller) survive.
     const { imports } = buildModuleBlocks('0.3', '0.3.0');
-    const constructor = imports.find(i => i.path.endsWith('/bindings/go/constructor'));
-    const credentials = imports.find(i => i.path.endsWith('/bindings/go/credentials'));
-    const descriptor = imports.find(i => i.path.endsWith('/bindings/go/descriptor/v2'));
-    const gpg = imports.find(i => i.path.endsWith('/bindings/go/gpg'));
-    const helm = imports.find(i => i.path.endsWith('/bindings/go/helm'));
-    const http = imports.find(i => i.path.endsWith('/bindings/go/http'));
-    const oci = imports.find(i => i.path.endsWith('/bindings/go/oci'));
-    const rsa = imports.find(i => i.path.endsWith('/bindings/go/rsa'));
-    const sigstore = imports.find(i => i.path.endsWith('/bindings/go/sigstore'));
-    assert.equal(constructor.version, 'latest');
-    assert.equal(credentials.version, 'latest');
-    assert.equal(descriptor.version, 'latest');
-    assert.equal(gpg.version, 'latest');
-    assert.equal(helm.version, 'latest');
-    assert.equal(http.version, 'latest');
-    assert.equal(oci.version, 'latest');
-    assert.equal(rsa.version, 'latest');
-    assert.equal(sigstore.version, 'latest');
+    const bindingPaths = imports
+        .map(i => i.path)
+        .filter(p => p.includes('/bindings/go/'));
+    assert.deepEqual(bindingPaths, []);
+    assert.equal(imports.length, 3);
 });
 
 test('buildModuleBlocks: bindings use resolved versions when deps provided', () => {
@@ -201,7 +205,7 @@ test('buildModuleBlocks: version matrix uses X.Y not X.Y.Z', () => {
 });
 
 test('buildModuleBlocks: schema imports have correct targets with version prefix', () => {
-    const { imports } = buildModuleBlocks('2.0', '2.0.0');
+    const { imports } = buildModuleBlocks('2.0', '2.0.0', ALL_DEPS);
     const targets = imports.flatMap(i => i.mounts.map(m => m.target)).sort();
     assert.deepEqual(targets, [
         'content',
@@ -221,7 +225,7 @@ test('buildModuleBlocks: schema imports have correct targets with version prefix
 });
 
 test('buildModuleBlocks: schema imports have correct sources', () => {
-    const { imports } = buildModuleBlocks('0.3', '0.3.0');
+    const { imports } = buildModuleBlocks('0.3', '0.3.0', ALL_DEPS);
     const schemaImports = imports.filter(i => !i.path.endsWith('/cli') && !i.path.endsWith('/website'));
     const sources = schemaImports.flatMap(i => i.mounts.map(m => m.source)).sort();
     assert.deepEqual(sources, [
