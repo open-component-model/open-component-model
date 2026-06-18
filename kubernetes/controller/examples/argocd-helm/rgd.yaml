@@ -41,7 +41,7 @@ spec:
             chart: ${resourceChart.status.additional.repository}
             targetRevision: ${resourceChart.status.additional.tag}
             helm:
-              releaseName: argocd-helm
+              releaseName: ${schema.spec.prefix}
           destination:
             server: https://kubernetes.default.svc
             namespace: default

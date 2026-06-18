@@ -119,7 +119,7 @@ flux install || exit 1
 helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.0 || exit 1
 
 # Install ArgoCD (used by the argocd-helm example, tested in e2e_argocd_test.go).
-# Chart 9.5.21 ships ArgoCD v3.4.3; plain-HTTP OCI support (insecureOciForceHttp)
+# Chart 9.5.21 ships ArgoCD v3.4.3; plain-HTTP OCI support (insecureOCIForceHttp)
 # requires >= v3.1.
 helm install argocd oci://ghcr.io/argoproj/argo-helm/argo-cd \
   --namespace argocd --create-namespace --version=9.5.21 --wait || exit 1
