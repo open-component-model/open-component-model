@@ -29,21 +29,24 @@ func fetchManifest(t *testing.T, ctx context.Context, store *memory.Store, desc 
 	return m
 }
 
-// materializeOwnershipReferrer calls OwnershipReferrer and pushes every
-// returned referrer's raw bytes directly into dst, mirroring what the
-// OCI-layout copy proxy does during artifact upload.
+// materializeOwnershipReferrer calls OwnershipReferrer and pushes the empty
+// blob and the referrer manifest into dst, mirroring what the OCI-layout copy
+// proxy does during artifact upload.
 func materializeOwnershipReferrer(t *testing.T, ctx context.Context, dst *memory.Store, subject ociImageSpecV1.Descriptor, artifact descriptor.Artifact, component, version string) error {
 	t.Helper()
-	referrers, err := OwnershipReferrer(artifact, component, version)(ctx, subject)
+	desc, body, err := OwnershipReferrer(ctx, subject, artifact, component, version)
 	if err != nil {
 		return err
 	}
-	for _, r := range referrers {
-		if pushErr := dst.Push(ctx, r.Descriptor, bytes.NewReader(r.Raw)); pushErr != nil {
-			if !errors.Is(pushErr, errdef.ErrAlreadyExists) {
-				return pushErr
-			}
-		}
+	if body == nil {
+		return nil
+	}
+	empty := ociImageSpecV1.DescriptorEmptyJSON
+	if pushErr := dst.Push(ctx, empty, bytes.NewReader(empty.Data)); pushErr != nil && !errors.Is(pushErr, errdef.ErrAlreadyExists) {
+		return pushErr
+	}
+	if pushErr := dst.Push(ctx, desc, bytes.NewReader(body)); pushErr != nil && !errors.Is(pushErr, errdef.ErrAlreadyExists) {
+		return pushErr
 	}
 	return nil
 }
@@ -110,6 +113,18 @@ func TestPushOwnershipReferrer(t *testing.T) {
 			assert.Falsef(t, hasCreated,
 				"ownership referrer must not carry %s; its presence would make the manifest digest non-deterministic across re-runs",
 				ociImageSpecV1.AnnotationCreated)
+		})
+
+		t.Run("artifactType and annotation keys match the ADR-0016 literals", func(t *testing.T) {
+			// Every other assertion here routes through the annotations.* constants, so a
+			// typo in a constant would still pass. ADR 0016 fixes these exact wire strings.
+			assert.Equal(t, "application/vnd.ocm.software.ownership.v1+json", m.ArtifactType)
+			_, hasName := m.Annotations["software.ocm.component.name"]
+			_, hasVersion := m.Annotations["software.ocm.component.version"]
+			_, hasArtifact := m.Annotations["software.ocm.artifact"]
+			assert.True(t, hasName, "referrer must carry the literal software.ocm.component.name annotation")
+			assert.True(t, hasVersion, "referrer must carry the literal software.ocm.component.version annotation")
+			assert.True(t, hasArtifact, "referrer must carry the literal software.ocm.artifact annotation")
 		})
 	})
 
