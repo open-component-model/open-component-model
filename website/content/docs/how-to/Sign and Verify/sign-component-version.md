@@ -286,7 +286,7 @@ digest:
   value: 91dd197868907487e62872695db1fa7b397fde300bcbae23e24abc188fb147ad
 name: default
 signature:
-  algorithm: sigstore
+  algorithm: Sigstore/v1alpha1
   mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
   value: ...
 
@@ -316,7 +316,7 @@ signatures:
       normalisationAlgorithm: jsonNormalisation/v4alpha1
       value: 91dd197...
     signature:
-      algorithm: sigstore
+      algorithm: Sigstore/v1alpha1
       mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
       value: <base64-bundle>
 ```
@@ -497,7 +497,7 @@ Identical to the interactive flow:
 ocm get cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0 -o yaml
 ```
 
-The `signatures` section carries `algorithm: sigstore` and the bundle in the `value` field. The bundle embeds the Fulcio cert with the workflow's identity (`https://github.com/<org>/<repo>/.github/workflows/<file>@refs/heads/<branch>`) and the GitHub Actions OIDC issuer — those are what the verify how-to uses to check the signature.
+The `signatures` section carries `algorithm: Sigstore/v1alpha1` and the bundle in the `value` field. The bundle embeds the Fulcio cert with the workflow's identity (`https://github.com/<org>/<repo>/.github/workflows/<file>@refs/heads/<branch>`) and the GitHub Actions OIDC issuer — those are what the verify how-to uses to check the signature.
 
 {{< /step >}}
 

@@ -354,7 +354,7 @@ The mechanism is the same; only the issuer URL and identity shape are provider-s
   REF=ctf::./ctf//github.com/acme.org/helloworld:1.0.0
 
   ocm get cv "$REF" -o yaml \
-    | yq '.[].signatures[]? | select(.signature.algorithm == "sigstore") | .signature.value' \
+    | yq '.[].signatures[]? | select(.signature.algorithm == "Sigstore/v1alpha1") | .signature.value' \
     | head -1 | base64 -d | jq -r '.verificationMaterial.certificate.rawBytes' \
     | base64 -d | openssl x509 -inform DER -noout -text \
     | awk '

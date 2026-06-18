@@ -201,7 +201,7 @@ digest:
   value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
 name: default
 signature:
-  algorithm: sigstore
+  algorithm: Sigstore/v1alpha1
   mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
   value: eyJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi92bmQuZGV2LnNpZ3N0b3JlLmJ1bmRsZS52MC4z...
 
@@ -220,7 +220,7 @@ Before verifying, take a look at what was actually written to the component desc
 
 ```bash
 ocm get cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 -o yaml \
-  | yq '.[0].signatures[] | select(.signature.algorithm == "sigstore")'
+  | yq '.[0].signatures[] | select(.signature.algorithm == "Sigstore/v1alpha1")'
 ```
 
 You should see your signature with the recorded identity:
@@ -232,7 +232,7 @@ digest:
   normalisationAlgorithm: jsonNormalisation/v4alpha1
   value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
 signature:
-  algorithm: sigstore
+  algorithm: Sigstore/v1alpha1
   mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
   value: <base64-encoded Sigstore bundle>
 ```
