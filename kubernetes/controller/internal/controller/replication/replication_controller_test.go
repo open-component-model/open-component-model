@@ -6,6 +6,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -51,13 +52,7 @@ var _ = Describe("Replication Controller", func() {
 				HaveField("Finalizers", ContainElement(v1alpha1.ReplicationFinalizer)),
 			)
 
-			Eventually(func(g Gomega) {
-				g.Expect(komega.Get(replication)()).To(Succeed())
-				ready := apimeta.FindStatusCondition(replication.Status.Conditions, v1alpha1.ReadyCondition)
-				g.Expect(ready).NotTo(BeNil())
-				g.Expect(ready.Status).To(Equal(metav1.ConditionFalse))
-				g.Expect(ready.Reason).To(Equal(v1alpha1.ResourceIsNotAvailable))
-			}, timeout, interval).Should(Succeed())
+			test.WaitForNotReadyObject(ctx, k8sClient, replication, "ResourceIsNotAvailable")
 		})
 	})
 
