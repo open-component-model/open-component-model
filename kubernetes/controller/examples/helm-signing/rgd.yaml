@@ -27,6 +27,7 @@ spec:
             repository: resource.access.toOCI().repository
             digest: resource.access.toOCI().digest
             tag: resource.access.toOCI().tag
+    # Deployment using FluxCD
     - id: ocirepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1
@@ -56,6 +57,7 @@ spec:
             kind: OCIRepository
             name: ${ocirepository.metadata.name}
             namespace: default
+    # Deployment using ArgoCD
     - id: argocdApplication
       template:
         apiVersion: argoproj.io/v1alpha1

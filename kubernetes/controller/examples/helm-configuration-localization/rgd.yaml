@@ -47,6 +47,7 @@ spec:
             registry: resource.access.toOCI().registry
             repository: resource.access.toOCI().repository
             tag: resource.access.toOCI().tag
+    # Deployment using FluxCD
     - id: ocirepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1
@@ -84,6 +85,7 @@ spec:
             # Configuration
             ui:
               message: ${schema.spec.podinfo.message}
+    # Deployment using ArgoCD
     - id: argocdApplication
       template:
         apiVersion: argoproj.io/v1alpha1
@@ -99,6 +101,14 @@ spec:
             chart: podinfo
             helm:
               releaseName: ${schema.spec.prefix}-argocd
+              valuesObject:
+                # Localization
+                image:
+                  repository: ${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}
+                  tag: ${resourceImage.status.additional.tag} # Using the tag for e2e-tests but the reference can be used as well
+                # Configuration
+                ui:
+                  message: ${schema.spec.podinfo.message}
             path: .
             repoURL: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
             targetRevision: ${resourceChart.status.additional.tag}
