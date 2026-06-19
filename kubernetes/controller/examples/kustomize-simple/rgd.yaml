@@ -22,6 +22,7 @@ spec:
             byReference:
               resource:
                 name: kustomize-resource
+    # Deployment using FluxCD
     - id: gitrepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1
@@ -70,3 +71,50 @@ spec:
               target:
                 kind: HorizontalPodAutoscaler
                 name: .*
+    # Deployment using ArgoCD
+    - id: argocdApplication
+      template:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: "${schema.spec.prefix}"
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: default
+          source:
+            repoURL: ${resourceKustomization.status.resource.access.repoUrl}
+            targetRevision: ${resourceKustomization.status.resource.access.commit}
+            path: "kustomize"
+            kustomize:
+              patches:
+                - patch: |
+                    - op: replace
+                      path: /metadata/name
+                      value: kustomize-simple-argocd-podinfo
+                    - op: add
+                      path: /spec/template/metadata/labels/app.kubernetes.io~1name
+                      value: kustomize-simple-argocd-podinfo
+                  target:
+                    kind: Deployment
+                    name: podinfo
+                - patch: |
+                    - op: replace
+                      path: /spec/minReplicas
+                      value: 1
+                    - op: replace
+                      path: /spec/maxReplicas
+                      value: 1
+                  target:
+                    kind: HorizontalPodAutoscaler
+                    name: podinfo
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: default-argocd
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true
