@@ -8,9 +8,11 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
@@ -54,7 +56,7 @@ var _ = Describe("Replication Controller", func() {
 				ready := apimeta.FindStatusCondition(replication.Status.Conditions, v1alpha1.ReadyCondition)
 				g.Expect(ready).NotTo(BeNil())
 				g.Expect(ready.Status).To(Equal(metav1.ConditionFalse))
-				g.Expect(ready.Reason).To(Equal(v1alpha1.ReplicationFailedReason))
+				g.Expect(ready.Reason).To(Equal(v1alpha1.ResourceIsNotAvailable))
 			}, timeout, interval).Should(Succeed())
 		})
 	})
@@ -74,6 +76,25 @@ var _ = Describe("Replication Controller", func() {
 			recorder = record.NewFakeRecorder(32)
 			componentName = "ocm.software/replication-parent-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			childName = "ocm.software/replication-child-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			By("verifying every replication in the namespace drains its finalizer and is deleted")
+			replications := &v1alpha1.ReplicationList{}
+			Expect(k8sClient.List(ctx, replications, client.InNamespace(namespace.GetName()))).To(Succeed())
+
+			for i := range replications.Items {
+				replication := &replications.Items[i]
+				Expect(k8sClient.Delete(ctx, replication)).To(Or(Succeed(), MatchError(errors.IsNotFound, "replication should already be gone")))
+
+				Eventually(func(g Gomega) {
+					err := k8sClient.Get(ctx, client.ObjectKeyFromObject(replication), &v1alpha1.Replication{})
+					g.Expect(errors.IsNotFound(err)).To(BeTrue(), "replication %s still exists, finalizer was not removed", replication.GetName())
+				}, timeout, interval).Should(Succeed())
+			}
+
+			Expect(k8sClient.List(ctx, replications, client.InNamespace(namespace.GetName()))).To(Succeed())
+			Expect(replications.Items).To(BeEmpty())
 		})
 
 		newDescriptor := func(name, version string, refs ...descruntime.Reference) *descruntime.Descriptor {
@@ -193,9 +214,6 @@ var _ = Describe("Replication Controller", func() {
 				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{Name: setupTransferConfig(ctx), Kind: "ConfigMap"},
 			}})
 			Expect(k8sClient.Create(ctx, replication)).To(Succeed())
-			DeferCleanup(func(ctx SpecContext) {
-				test.DeleteObject(ctx, k8sClient, replication)
-			})
 
 			Eventually(func(g Gomega) {
 				g.Expect(komega.Get(replication)()).To(Succeed())
@@ -249,9 +267,6 @@ var _ = Describe("Replication Controller", func() {
 				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{Name: setupTransferConfig(ctx), Kind: "ConfigMap"},
 			}})
 			Expect(k8sClient.Create(ctx, replication)).To(Succeed())
-			DeferCleanup(func(ctx SpecContext) {
-				test.DeleteObject(ctx, k8sClient, replication)
-			})
 
 			Eventually(func(g Gomega) {
 				g.Expect(komega.Get(replication)()).To(Succeed())

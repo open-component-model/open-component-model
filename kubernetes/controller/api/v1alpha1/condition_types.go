@@ -77,12 +77,9 @@ const (
 	// ComponentDriftResolutionInProgress the component and the deployer are catching up.
 	ComponentDriftResolutionInProgress = "ComponentDriftResolutionInProgress"
 
-	// TransferCompleteReason is used when a Replication transfer completed successfully.
-	TransferCompleteReason = "TransferComplete"
-
 	// TransferInProgressReason is used when a Replication transfer is in flight.
 	TransferInProgressReason = "TransferInProgress"
 
-	// IdleReason is used when no Replication transfer is pending or in flight.
-	IdleReason = "Idle"
+	// TransferCompleteReason is used when no Replication transfer is done.
+	TransferCompleteReason = "TransferComplete"
 )

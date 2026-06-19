@@ -115,8 +115,13 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 // whose given field index matches the changed object's name.
 func (r *Reconciler) replicationsForIndex(index string) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		resource, ok := obj.(*v1alpha1.Resource)
+		if !ok {
+			return []reconcile.Request{}
+		}
+
 		list := &v1alpha1.ReplicationList{}
-		if err := r.List(ctx, list, client.MatchingFields{index: obj.GetName()}); err != nil {
+		if err := r.List(ctx, list, client.MatchingFields{index: resource.GetName()}); err != nil {
 			return nil
 		}
 
@@ -155,10 +160,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		}
 	}(ctx)
 
-	if replication.Spec.Suspend {
-		return ctrl.Result{}, nil
-	}
-
+	// Deletion is handled before suspend so a suspended Replication can still be drained.
 	if !replication.GetDeletionTimestamp().IsZero() {
 		// TODO(skarlso): per ADR 0020 deletion semantics should cancel in-flight transfer, right now
 		// since the transfer is sequential, cancel is when the reconcile context is cancelled.
@@ -171,6 +173,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			}
 		}
 
+		return ctrl.Result{}, nil
+	}
+
+	if replication.Spec.Suspend {
 		return ctrl.Result{}, nil
 	}
 
@@ -195,7 +201,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		Name:      replication.Spec.ComponentRef.Name,
 	})
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ResourceIsNotAvailable, err.Error())
 
 		if errIsUnavailable(err) {
 			logger.Info("source component is not available, waiting for component event", "error", err)
@@ -204,14 +210,6 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		}
 
 		return ctrl.Result{}, fmt.Errorf("failed to get ready component: %w", err)
-	}
-
-	if component.Status.Component.Digest == nil || component.Status.Component.Digest.Value == "" {
-		const msg = "source component digest not yet available"
-		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, msg)
-		logger.Info(msg, "component", replication.Spec.ComponentRef.Name)
-
-		return ctrl.Result{}, nil
 	}
 
 	// The target repository must exist and be ready before a transfer can run.
@@ -238,6 +236,11 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to configure context: %w", err)
 	}
 
+	// The target repository's credentials might live on its own config and are not gathered by
+	// GetEffectiveConfig. We add them here explicitly so the credential graph can authenticate
+	// if additional ocmconfigs are defined by the targetRepositroy.
+	configs = append(configs, targetRepository.GetEffectiveOCMConfig()...)
+
 	// Persist the effective config immediately so the deferred patch keeps it even if a later step fails.
 	if !equality.Semantic.DeepEqual(replication.Status.EffectiveOCMConfig, configs) {
 		replication.Status.EffectiveOCMConfig = configs
@@ -252,7 +255,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		status.SetCondition(replication, metav1.Condition{
 			Type:    v1alpha1.TransferInProgressCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  v1alpha1.IdleReason,
+			Reason:  v1alpha1.TransferCompleteReason,
 			Message: "source digest already transferred",
 		})
 		status.MarkReady(r.EventRecorder, replication, "Successfully transferred component version %s", component.Status.Component.Version)
@@ -319,11 +322,15 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	transferCfg, err := r.loadTransferConfig(ctx, replication, component)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
+	// Reuse the configurations already loaded above to look up transfer settings; a nil cfg is valid.
+	var transferCfg *transferspec.Config
+	if cfg != nil {
+		transferCfg, err = transferspec.LookupConfig(cfg.Config)
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to load transfer config: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to load transfer config: %w", err)
+		}
 	}
 
 	// Descriptor fetches for discovery go through the resolution service. Uncached component version
@@ -416,7 +423,7 @@ func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replicati
 	status.SetCondition(replication, metav1.Condition{
 		Type:    v1alpha1.TransferInProgressCondition,
 		Status:  metav1.ConditionFalse,
-		Reason:  v1alpha1.IdleReason,
+		Reason:  v1alpha1.TransferCompleteReason,
 		Message: fmt.Sprintf("transferred component version %s", component.Status.Component.Version),
 	})
 	return nil
@@ -429,27 +436,6 @@ func errIsUnavailable(err error) bool {
 	var deletionErr util.DeletionError
 
 	return errors.As(err, &notReadyErr) || errors.As(err, &deletionErr)
-}
-
-// loadTransferConfig resolves the effective config from the replication object and its parent component.
-// Once all configuration objects are loaded, it will look up transfer configurations and return any that it finds.
-func (r *Reconciler) loadTransferConfig(ctx context.Context, replication *v1alpha1.Replication, component *v1alpha1.Component) (*transferspec.Config, error) {
-	genericConfigs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), replication, component)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load transfer configuration: %w", err)
-	}
-
-	cfg, err := configuration.LoadConfigurations(ctx, r.Client, replication.GetNamespace(), genericConfigs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load configurations: %w", err)
-	}
-
-	// no config is a valid return value
-	if cfg == nil {
-		return nil, nil
-	}
-
-	return transferspec.LookupConfig(cfg.Config)
 }
 
 // convertToTyped converts a runtime.Raw repository spec to a concrete spec.
