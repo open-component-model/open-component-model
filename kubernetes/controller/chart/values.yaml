@@ -27,6 +27,8 @@ manager:
     workerQueueLength: 1000
     # -- Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric.
     subscriberBufferSize: 100
+    # -- The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.
+    cacheTTL: 30
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache

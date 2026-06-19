@@ -2,6 +2,7 @@ package context
 
 import (
 	"context"
+	"os"
 	"sync"
 
 	"github.com/spf13/cobra"
@@ -16,6 +17,14 @@ import (
 type ctxKey string
 
 const key ctxKey = "ocm.software/open-component-model/cli/internal/context"
+
+type Syscalls struct {
+	Stat        func(string) (os.FileInfo, error)
+	Getenv      func(string) string
+	UserHomeDir func() (string, error)
+	Getwd       func() (string, error)
+	Executable  func() (string, error)
+}
 
 // Context is the OCM Command Line context.
 // It contains pointers to centrally managed structures that are created
@@ -58,6 +67,11 @@ type Context struct {
 	// Subsystems are logical groupings of OCM types that provide runtime scheme
 	// information for type introspection and documentation.
 	subsystemRegistry *subsystem.Registry
+
+	// syscalls is central place that contains any syscall functions
+	// that commands may rely on instead of calling os.X directly. This enables
+	// stubbing and/or isolation from the real host system when running tests.
+	syscalls *Syscalls
 }
 
 // WithCredentialGraph creates a new context with the given credential graph.
@@ -110,6 +124,17 @@ func WithConfiguration(ctx context.Context, cfg *genericv1.Config) context.Conte
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
 	ocmctx.configuration = cfg
+	return ctx
+}
+
+// WithSyscalls creates a new context with the given syscalls
+// After this function is called, the configuration can be retrieved from the context
+// using [FromContext] and [Context.Syscalls].
+func WithSyscalls(ctx context.Context, si *Syscalls) context.Context {
+	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
+	ocmctx.mu.Lock()
+	defer ocmctx.mu.Unlock()
+	ocmctx.syscalls = si
 	return ctx
 }
 
@@ -167,6 +192,15 @@ func (ctx *Context) SubsystemRegistry() *subsystem.Registry {
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
 	return ctx.subsystemRegistry
+}
+
+func (ctx *Context) Syscalls() *Syscalls {
+	if ctx == nil {
+		return nil
+	}
+	ctx.mu.RLock()
+	defer ctx.mu.RUnlock()
+	return ctx.syscalls
 }
 
 // FromContext retrieves the OCM context from the given context.
