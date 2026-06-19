@@ -7,7 +7,6 @@ require (
 	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/jedib0t/go-pretty/v6 v6.7.10
 	github.com/nlepage/go-tarfs v1.2.1
-	github.com/opencontainers/image-spec v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -18,30 +17,30 @@ require (
 	golang.org/x/term v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260612061043-c5a9d0c81b2a
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260616162616-fac66c3e8710
 	ocm.software/open-component-model/bindings/go/configuration v0.0.15
 	ocm.software/open-component-model/bindings/go/constructor v0.0.10
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
-	ocm.software/open-component-model/bindings/go/ctf v0.4.0
+	ocm.software/open-component-model/bindings/go/ctf v0.4.1
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260612063051-2d68fb4f15bc
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260612060103-25643fdae86d
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260616162616-fac66c3e8710
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260616162616-fac66c3e8710
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260612063051-2d68fb4f15bc
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260612063051-2d68fb4f15bc
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260612091318-a153e075bdfd
+	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260616162616-fac66c3e8710
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260616162616-fac66c3e8710
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260616162616-fac66c3e8710
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260612061043-c5a9d0c81b2a
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260616162616-fac66c3e8710
 	ocm.software/open-component-model/bindings/go/oci v0.0.46
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.9
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260612063051-2d68fb4f15bc
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260616162616-fac66c3e8710
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260612063051-2d68fb4f15bc
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260612060103-25643fdae86d
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260612063051-2d68fb4f15bc
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260612063051-2d68fb4f15bc
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260616162616-fac66c3e8710
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260616162616-fac66c3e8710
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260616162616-fac66c3e8710
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260616162616-fac66c3e8710
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -99,6 +98,7 @@ require (
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect

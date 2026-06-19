@@ -134,6 +134,119 @@ head -n 1 /tmp/keys/public-key.pem
 ```
 
 {{< /tab >}}
+{{< tab "GPG" >}}
+
+Verify a GPG (OpenPGP) signature using the public key configured in `.ocmconfig`. The same `signer-spec.yaml` you used to sign doubles as the verifier spec — no separate file is needed.
+
+To run this you need the signer's public key on disk and pointed at by `publicKeyPGPFile` in `.ocmconfig`. With Sigstore (other tabs) you don't install a public key at all — you just declare which identity you trust.
+
+<!-- markdownlint-disable-next-line MD024 -->
+## You'll end up with
+
+- Confidence that a GPG-signed component version is authentic and hasn't been tampered with
+
+**Estimated time:** ~2 minutes
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Prerequisites
+
+- [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
+- [Verification credentials configured]({{< relref "configure-signing-credentials.md" >}}) with the public key
+- A GPG-signed component version (see the [Sign Component Versions]({{< relref "sign-component-version.md" >}}) how-to)
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Steps
+
+{{< steps >}}
+
+{{< step >}}
+
+### Point `.ocmconfig` at the signer's public key
+
+If you signed locally, the same `.ocmconfig` you wrote on the sign page already works — skip to the next step.
+
+If you're verifying a signature **someone else** produced, follow [How-To: Configure Signing Credentials → GPG]({{< relref "configure-signing-credentials.md" >}}) using only the signer's public key (`publicKeyPGPFile`); the `privateKeyPGPFile` entry is not needed for verification.
+
+Reuse the same one-line verifier spec from the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}) — the GPG signer spec doubles as a verifier spec:
+
+```yaml
+# verifier-spec.yaml
+type: GPGSigningConfiguration/v1alpha1
+```
+
+{{< callout context="note" >}}
+`signature: default` matches the default name `ocm verify` looks for. If the signature was created with `--signature <name>`, set the same value in the consumer identity and pass `--signature <name>` on the command line.
+{{< /callout >}}
+
+{{< /step >}}
+
+{{< step >}}
+
+### Verify the component version
+
+Run the verify command with the verifier spec:
+
+```bash
+ocm verify cv \
+  --verifier-spec ./signer-spec.yaml \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+<details>
+<summary>Expected output</summary>
+
+```text
+time=2026-06-15T12:03:39.929+02:00 level=INFO msg="verifying signature" name=default
+time=2026-06-15T12:03:39.930+02:00 level=INFO msg="signature verification completed" name=default duration=894.458µs
+time=2026-06-15T12:03:39.930+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"
+```
+
+</details>
+
+The command exits with status code `0` on success.
+
+{{< /step >}}
+
+{{< step >}}
+
+### Verify a specific signature (optional)
+
+If the component carries multiple signatures (e.g. a GPG signature alongside an RSA one), select the one to verify by name:
+
+```bash
+ocm verify cv \
+  --verifier-spec ./signer-spec.yaml \
+  --signature prod \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+Without `--signature`, OCM uses the configuration named `default`.
+
+{{< /step >}}
+{{< /steps >}}
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Troubleshooting
+
+### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify: openpgp: signature made by unknown entity`
+
+**Cause:** The public key in `.ocmconfig` doesn't match the key that signed — most often because you exported a different key, or the signer rotated their key after signing.
+
+**Fix:** Confirm `publicKeyPGPFile` points at the verifier-key file the signer actually shared. If you signed locally, re-run the export step from the sign how-to to regenerate `verify-key.asc` from the same fingerprint.
+
+### Symptom: `SIGNATURE VERIFICATION FAILED: load GPG public key: load public key: open ...: no such file or directory`
+
+**Cause:** The `publicKeyPGPFile` path in `.ocmconfig` doesn't exist on disk.
+
+**Fix:** Check the path is correct and readable. Absolute paths avoid working-directory surprises.
+
+### Symptom: `SIGNATURE VERIFICATION FAILED: no key matching fingerprint "..." found in keyring`
+
+**Cause:** The verifier spec contains a `keyFingerprint` that doesn't match any key resolved from the public-key file.
+
+**Fix:** Either remove `keyFingerprint` from the verifier spec (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
+
+{{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}
 
 Verify a [Sigstore](https://www.sigstore.dev/) keyless signature made by a person who logged in via a browser. There's no public key to install on this side either — you tell OCM **which identity you trust**, and it checks the signature was made by that identity.

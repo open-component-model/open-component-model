@@ -16,6 +16,7 @@ import (
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	pluginsv2alpha1 "ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
@@ -131,6 +132,12 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		return nil, fmt.Errorf("config lookup failed for resolvers: %w", err)
 	} else if resolversCfg != nil {
 		result.Configurations = append(result.Configurations, resolversCfg)
+	}
+
+	if transferCfg, err := transferv1alpha1.LookupConfig(cfg); err != nil {
+		return nil, fmt.Errorf("config lookup failed for transfer: %w", err)
+	} else if transferCfg != nil {
+		result.Configurations = append(result.Configurations, transferCfg)
 	}
 
 	if pluginsCfg, err := pluginsv2alpha1.LookupConfig(cfg); err != nil {
