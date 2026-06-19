@@ -113,6 +113,11 @@ test('hasAllImportsForVersion: returns false when sigstore has only one of its t
     assert.equal(hasAllImportsForVersion({ imports: truncated }, '0.3', ALL_DEPS), false);
 });
 
+test('hasAllImportsForVersion: returns true when deps-threaded full import set is present', () => {
+    const { imports } = buildModuleBlocks('0.3', '0.3.0', ALL_DEPS);
+    assert.equal(hasAllImportsForVersion({ imports }, '0.3', ALL_DEPS), true);
+});
+
 // --- buildModuleBlocks ---
 
 test('buildModuleBlocks: returns 12 imports (website + CLI + 9 bindings + controller)', () => {
@@ -623,27 +628,24 @@ test('updateImportTags: returns false on null/empty parsed', () => {
 // --- patch recovery: missing imports yields same result as fresh creation ---
 
 test('updateImportTags: patching freshly-built blocks equals building directly with patch version', () => {
+    // Derive both dep maps from ALL_DEPS so adding a new binding to ALL_DEPS
+    // automatically flows through this test - only the versions that actually
+    // change in the 0.3.0 -> 0.3.1 patch scenario are listed as overrides.
+    const depsInitial = {
+        ...ALL_DEPS,
+        'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.3',
+        'ocm.software/open-component-model/bindings/go/http': 'v0.0.4',
+    };
     const deps = {
+        ...ALL_DEPS,
         'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.8',
         'ocm.software/open-component-model/bindings/go/credentials': 'v0.0.14',
         'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.4',
         'ocm.software/open-component-model/bindings/go/gpg': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/helm': 'v0.0.2',
-        'ocm.software/open-component-model/bindings/go/http': 'v0.0.5',
         'ocm.software/open-component-model/bindings/go/oci': 'v0.0.47',
         'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/sigstore': 'v0.0.2',
-    };
-    const depsInitial = {
-        'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.7',
-        'ocm.software/open-component-model/bindings/go/credentials': 'v0.0.13',
-        'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.3',
-        'ocm.software/open-component-model/bindings/go/gpg': 'v0.0.1',
-        'ocm.software/open-component-model/bindings/go/helm': 'v0.0.1',
-        'ocm.software/open-component-model/bindings/go/http': 'v0.0.4',
-        'ocm.software/open-component-model/bindings/go/oci': 'v0.0.46',
-        'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.1',
-        'ocm.software/open-component-model/bindings/go/sigstore': 'v0.0.1',
     };
 
     // Path A: build at 0.3.0 with old deps, then patch to 0.3.1 with new deps
