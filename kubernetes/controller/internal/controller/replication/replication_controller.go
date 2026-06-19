@@ -115,13 +115,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 // whose given field index matches the changed object's name.
 func (r *Reconciler) replicationsForIndex(index string) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
-		resource, ok := obj.(*v1alpha1.Resource)
-		if !ok {
-			return []reconcile.Request{}
-		}
-
 		list := &v1alpha1.ReplicationList{}
-		if err := r.List(ctx, list, client.MatchingFields{index: resource.GetName()}); err != nil {
+		if err := r.List(ctx, list, client.MatchingFields{index: obj.GetName()}); err != nil {
 			return nil
 		}
 
