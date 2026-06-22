@@ -208,17 +208,21 @@ function resolveGoModVersions(goModPath, modulePaths) {
     return result;
 }
 
+// Shared prefix for every Go module path in this repo; kept as a single
+// constant so the long FQN doesn't get repeated dozens of times below.
+const MODULE_PREFIX = 'ocm.software/open-component-model';
+
 // Modules whose versions are derived from the CLI's go.mod
 const CLI_DERIVED_MODULES = [
-    'ocm.software/open-component-model/bindings/go/constructor',
-    'ocm.software/open-component-model/bindings/go/credentials',
-    'ocm.software/open-component-model/bindings/go/descriptor/v2',
-    'ocm.software/open-component-model/bindings/go/gpg',
-    'ocm.software/open-component-model/bindings/go/helm',
-    'ocm.software/open-component-model/bindings/go/http',
-    'ocm.software/open-component-model/bindings/go/oci',
-    'ocm.software/open-component-model/bindings/go/rsa',
-    'ocm.software/open-component-model/bindings/go/sigstore',
+    `${MODULE_PREFIX}/bindings/go/constructor`,
+    `${MODULE_PREFIX}/bindings/go/credentials`,
+    `${MODULE_PREFIX}/bindings/go/descriptor/v2`,
+    `${MODULE_PREFIX}/bindings/go/gpg`,
+    `${MODULE_PREFIX}/bindings/go/helm`,
+    `${MODULE_PREFIX}/bindings/go/http`,
+    `${MODULE_PREFIX}/bindings/go/oci`,
+    `${MODULE_PREFIX}/bindings/go/rsa`,
+    `${MODULE_PREFIX}/bindings/go/sigstore`,
 ];
 
 // Build import blocks for a given version (pure when deps are passed, testable).
@@ -227,15 +231,15 @@ const CLI_DERIVED_MODULES = [
 // import block entirely. The always-pinned entries (website/cli/controller) use
 // `v${fullVersion}` so they're never dropped.
 function buildModuleBlocks(version, fullVersion, deps) {
-    const constructorVersion = deps?.['ocm.software/open-component-model/bindings/go/constructor'];
-    const credentialsVersion = deps?.['ocm.software/open-component-model/bindings/go/credentials'];
-    const descriptorVersion = deps?.['ocm.software/open-component-model/bindings/go/descriptor/v2'];
-    const gpgVersion = deps?.['ocm.software/open-component-model/bindings/go/gpg'];
-    const helmVersion = deps?.['ocm.software/open-component-model/bindings/go/helm'];
-    const httpVersion = deps?.['ocm.software/open-component-model/bindings/go/http'];
-    const ociVersion = deps?.['ocm.software/open-component-model/bindings/go/oci'];
-    const rsaVersion = deps?.['ocm.software/open-component-model/bindings/go/rsa'];
-    const sigstoreVersion = deps?.['ocm.software/open-component-model/bindings/go/sigstore'];
+    const constructorVersion = deps?.[`${MODULE_PREFIX}/bindings/go/constructor`];
+    const credentialsVersion = deps?.[`${MODULE_PREFIX}/bindings/go/credentials`];
+    const descriptorVersion = deps?.[`${MODULE_PREFIX}/bindings/go/descriptor/v2`];
+    const gpgVersion = deps?.[`${MODULE_PREFIX}/bindings/go/gpg`];
+    const helmVersion = deps?.[`${MODULE_PREFIX}/bindings/go/helm`];
+    const httpVersion = deps?.[`${MODULE_PREFIX}/bindings/go/http`];
+    const ociVersion = deps?.[`${MODULE_PREFIX}/bindings/go/oci`];
+    const rsaVersion = deps?.[`${MODULE_PREFIX}/bindings/go/rsa`];
+    const sigstoreVersion = deps?.[`${MODULE_PREFIX}/bindings/go/sigstore`];
 
     // Hugo passes `version:` verbatim to `go mod download <path>@<version>`,
     // which expects a Go module version (e.g. v0.9.0), not the git tag form
@@ -243,7 +247,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
     // the module path's subdir, so callers always use the bare SemVer.
     const imports = [
         {
-            path: 'ocm.software/open-component-model/website',
+            path: `${MODULE_PREFIX}/website`,
             version: `v${fullVersion}`,
             mounts: [{
                 files: ['**', '!blog/**'],
@@ -253,7 +257,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: 'ocm.software/open-component-model/cli',
+            path: `${MODULE_PREFIX}/cli`,
             version: `v${fullVersion}`,
             mounts: [{
                 source: 'docs/reference',
@@ -262,7 +266,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: 'ocm.software/open-component-model/bindings/go/constructor',
+            path: `${MODULE_PREFIX}/bindings/go/constructor`,
             version: constructorVersion,
             mounts: [{
                 source: 'spec/v1/resources',
@@ -271,7 +275,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: 'ocm.software/open-component-model/bindings/go/descriptor/v2',
+            path: `${MODULE_PREFIX}/bindings/go/descriptor/v2`,
             version: descriptorVersion,
             mounts: [{
                 source: 'resources',
@@ -280,7 +284,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: 'ocm.software/open-component-model/bindings/go/http',
+            path: `${MODULE_PREFIX}/bindings/go/http`,
             version: httpVersion,
             mounts: [{
                 source: 'spec/config/v1alpha1/schemas',
@@ -289,7 +293,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: 'ocm.software/open-component-model/bindings/go/oci',
+            path: `${MODULE_PREFIX}/bindings/go/oci`,
             version: ociVersion,
             mounts: [{
                 source: 'spec/credentials/v1/schemas',
@@ -298,7 +302,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: 'ocm.software/open-component-model/bindings/go/helm',
+            path: `${MODULE_PREFIX}/bindings/go/helm`,
             version: helmVersion,
             mounts: [{
                 source: 'spec/credentials/v1/schemas',
@@ -307,7 +311,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: 'ocm.software/open-component-model/bindings/go/rsa',
+            path: `${MODULE_PREFIX}/bindings/go/rsa`,
             version: rsaVersion,
             mounts: [{
                 source: 'spec/credentials/v1/schemas',
@@ -316,7 +320,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: 'ocm.software/open-component-model/bindings/go/gpg',
+            path: `${MODULE_PREFIX}/bindings/go/gpg`,
             version: gpgVersion,
             mounts: [{
                 source: 'spec/credentials/v1alpha1/schemas',
@@ -325,7 +329,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: 'ocm.software/open-component-model/bindings/go/sigstore',
+            path: `${MODULE_PREFIX}/bindings/go/sigstore`,
             version: sigstoreVersion,
             mounts: [
                 {
@@ -341,7 +345,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             ]
         },
         {
-            path: 'ocm.software/open-component-model/bindings/go/credentials',
+            path: `${MODULE_PREFIX}/bindings/go/credentials`,
             version: credentialsVersion,
             mounts: [{
                 source: 'spec/config/v1/schemas',
@@ -350,7 +354,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: 'ocm.software/open-component-model/kubernetes/controller',
+            path: `${MODULE_PREFIX}/kubernetes/controller`,
             version: `v${fullVersion}`,
             mounts: [{
                 source: 'config/crd/bases',
@@ -411,23 +415,23 @@ function updateImportTags(parsed, version, fullVersion, deps) {
             imp.path.endsWith('/kubernetes/controller')) {
             newTag = `v${fullVersion}`;
         } else if (deps && imp.path.endsWith('/bindings/go/constructor')) {
-            newTag = deps['ocm.software/open-component-model/bindings/go/constructor'];
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/constructor`];
         } else if (deps && imp.path.endsWith('/bindings/go/descriptor/v2')) {
-            newTag = deps['ocm.software/open-component-model/bindings/go/descriptor/v2'];
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/descriptor/v2`];
         } else if (deps && imp.path.endsWith('/bindings/go/http')) {
-            newTag = deps['ocm.software/open-component-model/bindings/go/http'];
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/http`];
         } else if (deps && imp.path.endsWith('/bindings/go/oci')) {
-            newTag = deps['ocm.software/open-component-model/bindings/go/oci'];
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/oci`];
         } else if (deps && imp.path.endsWith('/bindings/go/helm')) {
-            newTag = deps['ocm.software/open-component-model/bindings/go/helm'];
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/helm`];
         } else if (deps && imp.path.endsWith('/bindings/go/rsa')) {
-            newTag = deps['ocm.software/open-component-model/bindings/go/rsa'];
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/rsa`];
         } else if (deps && imp.path.endsWith('/bindings/go/gpg')) {
-            newTag = deps['ocm.software/open-component-model/bindings/go/gpg'];
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/gpg`];
         } else if (deps && imp.path.endsWith('/bindings/go/sigstore')) {
-            newTag = deps['ocm.software/open-component-model/bindings/go/sigstore'];
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/sigstore`];
         } else if (deps && imp.path.endsWith('/bindings/go/credentials')) {
-            newTag = deps['ocm.software/open-component-model/bindings/go/credentials'];
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/credentials`];
         }
 
         if (newTag && imp.version !== newTag) {
