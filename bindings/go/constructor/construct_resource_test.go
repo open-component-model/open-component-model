@@ -63,40 +63,6 @@ func (m *mockInputMethodProvider) GetResourceInputMethod(ctx context.Context, re
 	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", resource.Input.GetType())
 }
 
-// mockResourceRepository implements ResourceRepository for testing
-type mockResourceRepository struct {
-	downloadData blob.ReadOnlyBlob
-	fail         bool
-}
-
-func (m *mockResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
-	identity = runtime.Identity{}
-	identity.SetType(runtime.NewVersionedType("mock", "v1"))
-	return identity, nil
-}
-
-func (m *mockResourceRepository) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
-	identity = runtime.Identity{}
-	identity.SetType(runtime.NewVersionedType("mock", "v1"))
-	return identity, nil
-}
-
-func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	if m.fail {
-		return nil, fmt.Errorf("simulated download failure")
-	}
-	return m.downloadData, nil
-}
-
-// mockResourceRepositoryProvider implements ResourceRepositoryProvider for testing
-type mockResourceRepositoryProvider struct {
-	repo ResourceRepository
-}
-
-func (m *mockResourceRepositoryProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (ResourceRepository, error) {
-	return m.repo, nil
-}
-
 // mockAccess implements runtime.Typed for testing
 type mockAccess struct {
 	Type        string `json:"type"`
@@ -409,71 +375,6 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 	assert.Equal(t, mockCredProvider.called["mock/v1"], 1)
 }
 
-func TestConstructWithResourceByValue(t *testing.T) {
-	// Create a mock blob with test data
-	mockBlob := &mockBlob{
-		mediaType: "application/octet-stream",
-		data:      []byte("test data"),
-	}
-
-	// Create a mock resource repository
-	mockRepo := &mockResourceRepository{
-		downloadData: mockBlob,
-	}
-
-	// Create a mock resource repository provider
-	mockRepoProvider := &mockResourceRepositoryProvider{
-		repo: mockRepo,
-	}
-
-	constructor := setupTestComponent(t, `
-      - name: test-resource
-        version: v1.0.0
-        relation: external
-        type: blob
-        copyPolicy: byValue
-        access:
-          type: mock/v1
-          mediaType: application/octet-stream
-          reference: test-ref
-          description: "This is a test resource"
-`)
-
-	// Create a mock target repository
-	mockTargetRepo := newMockTargetRepository()
-
-	// Create the constructor with our mocks
-	opts := Options{
-		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
-		ResourceRepositoryProvider: mockRepoProvider,
-	}
-
-	constructorInstance := NewDefaultConstructor(constructor, opts)
-	graph := constructorInstance.GetGraph()
-
-	// Process the constructor
-	err := constructorInstance.Construct(context.Background())
-	require.NoError(t, err)
-	descs := collectDescriptors(t, graph)
-	require.NoError(t, err)
-	require.Len(t, descs, 1)
-
-	// Verify the results
-	desc := descs[0]
-	verifyBasicComponent(t, desc)
-
-	// Verify the resource was processed correctly
-	resource := desc.Component.Resources[0]
-	assert.Equal(t, "test-resource", resource.Name)
-	assert.Equal(t, "v1.0.0", resource.Version)
-	assert.Equal(t, descriptor.ExternalRelation, resource.Relation)
-	assert.NotNil(t, resource.Access)
-
-	// Verify the repository was called correctly
-	assert.Len(t, mockTargetRepo.addedLocalResources, 1)
-	assert.Len(t, mockTargetRepo.addedVersions, 1)
-}
-
 func TestConstructWithResourceDigest(t *testing.T) {
 	// Create a mock digest processor
 	mockProcessor := &mockDigestProcessor{
@@ -672,46 +573,6 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 	err := constructorInstance.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error resolving credentials for resource input method")
-}
-
-func TestConstructWithResourceByValueFailure(t *testing.T) {
-	// Create a mock resource repository that fails to download
-	mockRepo := &mockResourceRepository{
-		downloadData: nil,
-		fail:         true,
-	}
-
-	// Create a mock resource repository provider
-	mockRepoProvider := &mockResourceRepositoryProvider{
-		repo: mockRepo,
-	}
-
-	constructor := setupTestComponent(t, `
-      - name: test-resource
-        version: v1.0.0
-        relation: external
-        type: blob
-        copyPolicy: byValue
-        access:
-          type: mock/v1
-          mediaType: application/octet-stream
-          reference: test-ref
-`)
-
-	// Create a mock target repository
-	mockTargetRepo := newMockTargetRepository()
-
-	// Create the constructor with our mocks
-	opts := Options{
-		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
-		ResourceRepositoryProvider: mockRepoProvider,
-	}
-	constructorInstance := NewDefaultConstructor(constructor, opts)
-
-	// Process the constructor and expect an error
-	err := constructorInstance.Construct(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error downloading resource")
 }
 
 func TestConstructWithMultipleResources(t *testing.T) {

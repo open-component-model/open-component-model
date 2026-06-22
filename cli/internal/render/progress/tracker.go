@@ -148,7 +148,7 @@ func (t *Tracker[T]) interceptSlog(vis Visualizer[T]) {
 
 func isTerminal(out io.Writer) bool {
 	if f, ok := out.(*os.File); ok {
-		return term.IsTerminal(int(f.Fd())) //nolint:gosec // G115
+		return term.IsTerminal(int(f.Fd()))
 	}
 	return false
 }

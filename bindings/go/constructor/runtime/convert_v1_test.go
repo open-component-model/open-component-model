@@ -34,9 +34,6 @@ func TestConvertToRuntimeResource(t *testing.T) {
 				},
 				Type:     "test-type",
 				Relation: v1.LocalRelation,
-				ConstructorAttributes: v1.ConstructorAttributes{
-					CopyPolicy: v1.CopyPolicyByValue,
-				},
 			},
 			want: Resource{
 				ElementMeta: ElementMeta{
@@ -50,9 +47,6 @@ func TestConvertToRuntimeResource(t *testing.T) {
 				},
 				Type:     "test-type",
 				Relation: LocalRelation,
-				ConstructorAttributes: ConstructorAttributes{
-					CopyPolicy: CopyPolicyByValue,
-				},
 			},
 		},
 		{

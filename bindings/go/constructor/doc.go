@@ -87,10 +87,8 @@
 //   - ResourceInputMethodProvider: Provider for resource input methods
 //   - SourceInputMethodProvider: Provider for source input methods
 //   - Options.ConcurrencyLimit: Maximum number of concurrent operations on resources and sources
-//   - Options.ProcessResourceByValue: Function to determine if a resource should be added to the component by value
 //   - CredentialProvider: Function to resolve credentials for resources and sources
 //   - ResourceDigestProcessorProvider: Provider for processing resource digests when adding resources by reference
-//   - ResourceRepositoryProvider: Provider for resource repositories when processing resources by value
 //   - TargetRepositoryProvider: Provider for target repositories when adding component versions
 //
 // Specification and Serialization:
