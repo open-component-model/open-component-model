@@ -113,7 +113,7 @@ test('hasAllImportsForVersion: returns false when sigstore has only one of its t
     assert.equal(hasAllImportsForVersion({ imports: truncated }, '0.3', ALL_DEPS), false);
 });
 
-test('hasAllImportsForVersion: returns true when deps-threaded full import set is present', () => {
+test('hasAllImportsForVersion: returns true when the full import set (built with deps) is present', () => {
     const { imports } = buildModuleBlocks('0.3', '0.3.0', ALL_DEPS);
     assert.equal(hasAllImportsForVersion({ imports }, '0.3', ALL_DEPS), true);
 });
