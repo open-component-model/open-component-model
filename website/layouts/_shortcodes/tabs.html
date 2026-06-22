@@ -17,13 +17,13 @@
 -->
 
 {{ if .Inner }}{{ end }}
-{{ $id := .Get 0 }}
+{{ $id := .Get 0 | default (printf "group-%d" .Ordinal) }}
 {{ $group := printf "tabs-%s" $id }}
 
 <nav>
-  <div class="nav nav-tabs" id="nav-tab" role="tablist">
+  <div class="nav nav-tabs" id="{{ $group }}-tablist" role="tablist">
   {{ range $index, $tab := .Scratch.Get $group -}}
-    <button data-toggle-tab="{{ $tab.Name | lower }}" class="nav-link{{ if not $index }} active{{ end }}" id="{{ printf "%s-%d" $group $index }}-tab" data-bs-toggle="tab" data-bs-target="#{{ printf "%s-%d" $group $index }}" type="button" role="tab" aria-controls="{{ printf "%s-%d" $group $index }}" aria-selected="true">
+    <button data-toggle-tab="{{ $tab.Name | lower }}" class="nav-link{{ if not $index }} active{{ end }}" id="{{ printf "%s-%d" $group $index }}-tab" data-bs-toggle="tab" data-bs-target="#{{ printf "%s-%d" $group $index }}" type="button" role="tab" aria-controls="{{ printf "%s-%d" $group $index }}" aria-selected="{{ if not $index }}true{{ else }}false{{ end }}">
       {{ $tab.Name -}}
     </button>
   {{ end -}}
@@ -36,7 +36,7 @@
   outer tab's RenderString — Goldmark would turn lines indented by 4+ spaces
   into an escaped code block.
 -->
-<div class="tab-content" id="nav-tabContent">
+<div class="tab-content" id="{{ $group }}-content">
 {{- $seen := dict -}}
 {{- range $index, $tab := .Scratch.Get $group -}}
 {{- $content := $tab.Content | $.Page.RenderString -}}
