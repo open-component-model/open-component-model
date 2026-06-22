@@ -1,0 +1,78 @@
+# Password-protected registry (basic-auth credentials scenario).
+# Reachable from the host as localhost:31002 (transfer target);
+# from inside the cluster as
+# protected-registry1-internal.default.svc.cluster.local:5002.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: protected-registry1
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: protected-registry1
+  template:
+    metadata:
+      labels:
+        app: protected-registry1
+    spec:
+      containers:
+        - name: protected-registry1
+          image: registry:2
+          ports:
+            - containerPort: 5000
+          volumeMounts:
+            - name: registry-auth-volume
+              mountPath: /etc/registry
+              readOnly: true
+          env:
+            - name: REGISTRY_HTTP_SECRET
+              value: "myRandomSecretKey"
+            - name: REGISTRY_AUTH
+              value: "htpasswd"
+            - name: REGISTRY_AUTH_HTPASSWD_PATH
+              value: "/etc/registry/htpasswd"
+            - name: REGISTRY_AUTH_HTPASSWD_REALM
+              value: "Registry Realm"
+      volumes:
+        - name: registry-auth-volume
+          secret:
+            secretName: registry-secret1
+---
+# External NodePort for `ocm transfer` from the host.
+apiVersion: v1
+kind: Service
+metadata:
+  name: protected-registry1-external
+  namespace: default
+spec:
+  type: NodePort
+  ports:
+    - port: 5002
+      targetPort: 5000
+      nodePort: 31002
+  selector:
+    app: protected-registry1
+---
+# In-cluster ClusterIP referenced by the bootstrap.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: protected-registry1-internal
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5002
+      targetPort: 5000
+  selector:
+    app: protected-registry1
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: registry-secret1
+type: Opaque
+data:
+  htpasswd: YWRtaW46JDJ5JDA1JDJKN3N4MDEwbnpNTGNpNktkcVpmbE9mYmxnU2Q2eU9nMW9Wd1hSdHBtOWFXbFA1L25iLlZHCgo=

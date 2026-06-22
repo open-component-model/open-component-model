@@ -1,0 +1,24 @@
+requires:
+  - kro
+  - flux-source
+  - flux-helm
+
+deploy:
+  - apply: bootstrap.yaml
+    waitFor:
+      - kubectl: "--for=create --for=condition=Ready=true rgd/helm-fluxcd-simple"
+  - apply: instance.yaml
+    waitFor:
+      - kubectl: "--for=create --for=condition=Available deployment.apps/helm-fluxcd-simple-podinfo"
+      - kubectl: "--for=condition=Ready=true pod -l app.kubernetes.io/name=helm-fluxcd-simple-podinfo"
+debug:
+  - kubectl: get pods -n flux-system -o wide
+    label: flux-pods
+  - kubectl: get events -n flux-system --sort-by=.lastTimestamp
+    label: flux-events
+  - kubectl: get helmrelease -A -o wide
+    label: helmreleases
+  - kubectl: get ocirepository -A -o wide
+    label: ocirepositories
+  - kubectl: get kustomization -A -o wide
+    label: kustomizations

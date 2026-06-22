@@ -34,3 +34,6 @@ go.work.sum
 dist/
 output/
 /.project
+
+# Superpowers plans/specs (local dev artifacts)
+docs/superpowers/

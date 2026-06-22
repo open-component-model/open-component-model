@@ -73,22 +73,92 @@ tasks:
 
 
   test/e2e/setup/local:
-    desc: "Set up a local Kind cluster for E2E tests"
+    desc: "Set up a local Kind cluster for E2E tests. Pass `-- --all-components` to also pre-install all components."
     deps:
-      # We depend on a locally built image, so we need to load that into the local machine.
       - task: docker-build
         vars:
           LOAD: "true"
     cmds:
-      - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} bash test/e2e/hacks/setup.sh'
+      - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} bash {{.TASKFILE_DIR}}/test/e2e/setup/local.sh {{.CLI_ARGS}}'
       - 'kind load docker-image {{.CONTROLLER_IMG}}'
 
+  test/e2e/teardown:
+    desc: "Delete the local Kind cluster and registry used by E2E tests"
+    cmds:
+      - 'kind delete cluster 2>/dev/null || true'
+      - 'docker rm -f image-registry 2>/dev/null || true'
+
+  test/e2e/fresh:
+    desc: "Teardown, setup, and run E2E tests from scratch. Pass a scenario via `--`, e.g. `task test/e2e/fresh -- helm/fluxcd/kro/simple`."
+    cmds:
+      - task: test/e2e/teardown
+      - task: test/e2e/setup/local
+      - task: test/e2e
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
+
   test/e2e:
-    desc: "Run end-to-end tests against a running cluster"
+    desc: "Run end-to-end tests against a running cluster. Pass a scenario folder via `--`, e.g. `task test/e2e -- helm/fluxcd/kro/simple`. Omit to run all scenarios."
     dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
     cmds:
       - task: helm/install
-      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v
+      - |
+        focus_args=()
+        cli='{{.CLI_ARGS}}'
+        if [ -n "$cli" ]; then
+          # Strip a leading --focus= or --focus prefix if present.
+          case "$cli" in
+            --focus=*) cli="${cli#--focus=}" ;;
+            "--focus "*) cli="${cli#--focus }" ;;
+          esac
+          # If the value already looks like a regex (starts with ^), pass
+          # it through verbatim (e.g. from cmd/shard CI output). Otherwise
+          # anchor it so "helm/fluxcd/kro/nested" matches exactly that scenario
+          # and not "helm/fluxcd/kro/nested-signed".
+          if [[ "$cli" == ^* ]]; then
+            focus_args=(-ginkgo.focus="$cli")
+          else
+            focus_args=(-ginkgo.focus="^.*${cli}$")
+          fi
+        fi
+        PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v "${focus_args[@]}"
+
+  test/e2e/parallel:
+    desc: "Run e2e tests in parallel using the ginkgo CLI. Defaults to 20 processes. Pass --procs=N to override, or a focus via `--`, e.g. `task test/e2e/parallel -- helm/fluxcd/kro/simple`."
+    dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
+    cmds:
+      - task: helm/install
+      - |
+        procs=20
+        focus_args=()
+        cli='{{.CLI_ARGS}}'
+        if [ -n "$cli" ]; then
+          # Allow --procs=N as the first arg to override parallelism.
+          case "$cli" in
+            --procs=*)
+              procs="${cli#--procs=}"
+              cli=""
+              ;;
+          esac
+        fi
+        if [ -n "$cli" ]; then
+          case "$cli" in
+            --focus=*) cli="${cli#--focus=}" ;;
+            "--focus "*) cli="${cli#--focus }" ;;
+          esac
+          if [[ "$cli" == ^* ]]; then
+            focus_args=(--focus="$cli")
+          else
+            focus_args=(--focus="^.*${cli}$")
+          fi
+        fi
+        PROJECT_DIR='{{.TASKFILE_DIR}}' \
+          "$(go env GOPATH)/bin/ginkgo" \
+            --procs="${procs}" \
+            --timeout=30m \
+            -v \
+            "${focus_args[@]}" \
+            '{{.TASKFILE_DIR}}/test/e2e/'
 
   # Build
   build:

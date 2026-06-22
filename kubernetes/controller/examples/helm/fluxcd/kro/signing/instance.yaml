@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmFluxcdSigning
+metadata:
+  name: helm-fluxcd-signing
+spec:
+  prefix: "helm-fluxcd-signing"

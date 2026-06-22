@@ -1,0 +1,8 @@
+requires:
+  - kro
+
+deploy:
+  - apply: bootstrap.yaml
+    waitFor:
+      - kubectl: "--for=create --for=condition=Available deployment.apps/k8s-manifest-simple-podinfo"
+      - kubectl: "--for=condition=Ready=true pod -l app.kubernetes.io/name=k8s-manifest-simple-podinfo"

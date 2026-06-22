@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmFluxcdNested
+metadata:
+  name: helm-fluxcd-nested
+spec:
+  prefix: helm-fluxcd-nested

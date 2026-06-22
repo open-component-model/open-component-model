@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmFluxcdSimple
+metadata:
+  name: helm-fluxcd-simple
+spec:
+  prefix: helm-fluxcd-simple

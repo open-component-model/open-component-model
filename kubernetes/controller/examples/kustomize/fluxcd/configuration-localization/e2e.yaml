@@ -1,0 +1,38 @@
+requires:
+  - kro
+  - flux-source
+  - flux-kustomize
+
+prepare:
+  components:
+    - copyResources: true
+
+deploy:
+  - apply: bootstrap.yaml
+    waitFor:
+      - kubectl: "--for=create --for=condition=Ready=true rgd/kustomize-fluxcd-configuration-localization"
+  - apply: instance.yaml
+    waitFor:
+      - kubectl: "--for=create --for=condition=Available deployment.apps/kustomize-fluxcd-configuration-localization-podinfo"
+      - kubectl: "--for=condition=Ready=true pod -l app.kubernetes.io/name=kustomize-fluxcd-configuration-localization-podinfo"
+
+assert:
+  fieldEquals:
+    - resource: pod -l app.kubernetes.io/name=kustomize-fluxcd-configuration-localization-podinfo
+      jsonPath: "'{.items[0].spec.containers[0].image}'"
+      value: ${IMAGE_REGISTRY_HOST}/stefanprodan/podinfo:6.9.1
+    - resource: pod -l app.kubernetes.io/name=kustomize-fluxcd-configuration-localization-podinfo
+      jsonPath: "'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'"
+      value: kustomize-fluxcd-configuration-localization
+
+debug:
+  - kubectl: get pods -n flux-system -o wide
+    label: flux-pods
+  - kubectl: get events -n flux-system --sort-by=.lastTimestamp
+    label: flux-events
+  - kubectl: get helmrelease -A -o wide
+    label: helmreleases
+  - kubectl: get ocirepository -A -o wide
+    label: ocirepositories
+  - kubectl: get kustomization -A -o wide
+    label: kustomizations

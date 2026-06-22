@@ -1,0 +1,76 @@
+# Password-protected registry (docker-config-json credentials scenario).
+# Reachable from the host as localhost:31003;
+# from inside the cluster as
+# protected-registry2-internal.default.svc.cluster.local:5003.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: protected-registry2
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: protected-registry2
+  template:
+    metadata:
+      labels:
+        app: protected-registry2
+    spec:
+      containers:
+        - name: protected-registry2
+          image: registry:2
+          ports:
+            - containerPort: 5000
+          volumeMounts:
+            - name: registry-auth-volume
+              mountPath: /etc/registry
+              readOnly: true
+          env:
+            - name: REGISTRY_HTTP_SECRET
+              value: "myRandomSecretKey"
+            - name: REGISTRY_AUTH
+              value: "htpasswd"
+            - name: REGISTRY_AUTH_HTPASSWD_PATH
+              value: "/etc/registry/htpasswd"
+            - name: REGISTRY_AUTH_HTPASSWD_REALM
+              value: "Registry Realm"
+      volumes:
+        - name: registry-auth-volume
+          secret:
+            secretName: registry-secret2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: protected-registry2-external
+  namespace: default
+spec:
+  type: NodePort
+  ports:
+    - port: 5003
+      targetPort: 5000
+      nodePort: 31003
+  selector:
+    app: protected-registry2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: protected-registry2-internal
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5003
+      targetPort: 5000
+  selector:
+    app: protected-registry2
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: registry-secret2
+type: Opaque
+data:
+  htpasswd: YWRtaW4yOiQyeSQwNSR3aEk2dHREZGFZR1BhTllraUhycWRPSnVxY2lKRnU5aUJ1S0NobzZzTk9YblllTlJBUzBmdQoK
