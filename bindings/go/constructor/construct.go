@@ -389,10 +389,6 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 
 	switch {
 	case resource.HasInput():
-		if resource.CopyPolicy != "" && resource.CopyPolicy != constructor.CopyPolicyByValue {
-			return nil, fmt.Errorf("invalid copy policy %q for resource %q, "+
-				"due to an input specification an empty policy or %q is expected", resource.CopyPolicy, resource.ToIdentity(), constructor.CopyPolicyByValue)
-		}
 		logger.Debug("processing resource with input method")
 		res, err = c.processResourceWithInput(ctx, targetRepo, resource, component, version)
 	case resource.HasAccess():
@@ -404,30 +400,25 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 			logger.Debug("defaulting resource version to component version as no resource version was set")
 			resource.Version = version
 		}
-		if byValue := resource.CopyPolicy == constructor.CopyPolicyByValue; byValue {
-			logger.Debug("processing resource by value")
-			res, err = c.processResourceByValue(ctx, targetRepo, resource, component, version)
-		} else {
-			logger.Debug("processing resource with existing access")
-			res = constructor.ConvertToDescriptorResource(resource)
+		logger.Debug("processing resource with existing access")
+		res = constructor.ConvertToDescriptorResource(resource)
 
-			if c.opts.ResourceDigestProcessorProvider != nil {
-				var digestProcessor ResourceDigestProcessor
-				if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
-					logger.Debug("processing resource digest")
-					var creds ocmruntime.Typed
-					if c.opts.Resolver != nil {
-						if identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res); err == nil {
-							if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
-								return nil, fmt.Errorf("error resolving credentials for resource digest processor: %w", err)
-							}
-						} else {
-							logger.Debug("no credential consumer identity found for resource digest processor, skipping credential resolution")
+		if c.opts.ResourceDigestProcessorProvider != nil {
+			var digestProcessor ResourceDigestProcessor
+			if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
+				logger.Debug("processing resource digest")
+				var creds ocmruntime.Typed
+				if c.opts.Resolver != nil {
+					if identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res); err == nil {
+						if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
+							return nil, fmt.Errorf("error resolving credentials for resource digest processor: %w", err)
 						}
+					} else {
+						logger.Debug("no credential consumer identity found for resource digest processor, skipping credential resolution")
 					}
-					if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
-						return nil, fmt.Errorf("error processing resource %q with digest processor: %w", resource.ToIdentity(), err)
-					}
+				}
+				if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
+					return nil, fmt.Errorf("error processing resource %q with digest processor: %w", resource.ToIdentity(), err)
 				}
 			}
 		}
@@ -446,30 +437,6 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 	logger.Debug("resource processed successfully")
 
 	return res, nil
-}
-
-func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetRepo TargetRepository, resource *constructor.Resource, component, version string) (*descriptor.Resource, error) {
-	repo, err := c.opts.GetResourceRepository(ctx, resource)
-	if err != nil {
-		return nil, err
-	}
-
-	converted := constructor.ConvertToDescriptorResource(resource)
-
-	// best effort to resolve credentials for by value resource download.
-	// if no identity is resolved, we assume resolution is simply skipped.
-	var creds ocmruntime.Typed
-	if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
-		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
-			return nil, fmt.Errorf("error resolving credentials for resource by-value processing %w", err)
-		}
-	}
-
-	data, err := repo.DownloadResource(ctx, converted, creds)
-	if err != nil {
-		return nil, fmt.Errorf("error downloading resource: %w", err)
-	}
-	return addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, data)
 }
 
 func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo TargetRepository, src *constructor.Source, component, version string) (*descriptor.Source, error) {

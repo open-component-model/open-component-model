@@ -92,9 +92,6 @@ func ConvertFromV1Resource(resource *v1.Resource) Resource {
 		ElementMeta: ConvertFromV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    ResourceRelation(resource.Relation),
-		ConstructorAttributes: ConstructorAttributes{
-			CopyPolicy: CopyPolicy(resource.CopyPolicy),
-		},
 	}
 
 	if resource.SourceRefs != nil {
@@ -128,9 +125,6 @@ func ConvertToV1Resource(resource *Resource) (*v1.Resource, error) {
 		ElementMeta: ConvertToV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    v1.ResourceRelation(resource.Relation),
-		ConstructorAttributes: v1.ConstructorAttributes{
-			CopyPolicy: v1.CopyPolicy(resource.CopyPolicy),
-		},
 	}
 
 	if resource.SourceRefs != nil {
@@ -172,9 +166,6 @@ func ConvertFromV1Source(source *v1.Source) Source {
 	target := Source{
 		ElementMeta: ConvertFromV1ElementMeta(source.ElementMeta),
 		Type:        source.Type,
-		ConstructorAttributes: ConstructorAttributes{
-			CopyPolicy: CopyPolicy(source.CopyPolicy),
-		},
 	}
 
 	if source.Access != nil {
@@ -197,9 +188,6 @@ func ConvertToV1Source(source *Source) (*v1.Source, error) {
 	target := v1.Source{
 		ElementMeta: ConvertToV1ElementMeta(source.ElementMeta),
 		Type:        source.Type,
-		ConstructorAttributes: v1.ConstructorAttributes{
-			CopyPolicy: v1.CopyPolicy(source.CopyPolicy),
-		},
 	}
 
 	if source.HasInput() {
@@ -305,9 +293,6 @@ func ConvertToRuntimeConstructorResource(resource v1.Resource) Resource {
 		ElementMeta: ConvertFromV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    ResourceRelation(resource.Relation),
-		ConstructorAttributes: ConstructorAttributes{
-			CopyPolicy: CopyPolicy(resource.CopyPolicy),
-		},
 	}
 
 	if resource.HasInput() {
@@ -325,9 +310,6 @@ func ConvertToRuntimeConstructorSource(source v1.Source) Source {
 	target := Source{
 		ElementMeta: ConvertFromV1ElementMeta(source.ElementMeta),
 		Type:        source.Type,
-		ConstructorAttributes: ConstructorAttributes{
-			CopyPolicy: CopyPolicy(source.CopyPolicy),
-		},
 	}
 
 	if source.HasInput() {
