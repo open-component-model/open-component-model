@@ -38,7 +38,7 @@ var _ = Describe("Replication E2E Tests", func() {
 			)).To(Succeed())
 
 			By("bootstrapping the replication example")
-			Expect(utils.DeployResource(ctx, filepath.Join(exampleDir, Bootstrap))).To(Succeed())
+			Expect(utils.DeployResource(ctx, filepath.Join(exampleDir, Manifests))).To(Succeed())
 
 			By("waiting for the source component to be ready")
 			Expect(utils.WaitForResource(ctx, "condition=Ready=true", timeout,

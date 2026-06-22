@@ -15,6 +15,7 @@ import (
 const (
 	ComponentConstructor = "component-constructor.yaml"
 	Bootstrap            = "bootstrap.yaml"
+	Manifests            = "manifests.yaml"
 	Rgd                  = "rgd.yaml"
 	Instance             = "instance.yaml"
 	K8sManifest          = "k8s-manifest.yaml"
