@@ -26,6 +26,9 @@ jobs:
       with:
         app-id: ${{ secrets.OCMBOT_APP_ID }}
         private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+        repositories: ${{ github.event.repository.name }}
+        # Fire the `ocm-cli-release` repository_dispatch event.
+        permission-contents: write
     - name: Ensure proper version
       env:
         TOKEN: ${{ steps.generate_token.outputs.token }}
