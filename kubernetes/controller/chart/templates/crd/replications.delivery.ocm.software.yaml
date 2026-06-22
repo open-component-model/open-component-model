@@ -313,6 +313,33 @@ spec:
                       == "Repository" || self.kind == "Component" || self.kind ==
                       "Resource" || self.kind == "Replication"))
                 type: array
+              lastFailedTransferEvents:
+                description: |-
+                  LastFailedTransferEvents contains detailed events about the transfer if it failed.
+                  If it's empty, there was no failed last transfer. Is cleaned upon a successful transfer.
+                items:
+                  description: |-
+                    TransferEvent captures a single failed transformation observed during a
+                    replication transfer.
+                  properties:
+                    error:
+                      description: Error is the error message reported by the failed
+                        transformation.
+                      type: string
+                    id:
+                      description: ID is the identifier of the transformation that
+                        failed.
+                      type: string
+                    name:
+                      description: Name is the display name of the transformation
+                        in the form "ID [Type]".
+                      type: string
+                  required:
+                  - error
+                  - id
+                  - name
+                  type: object
+                type: array
               lastTransferredDigest:
                 description: LastTransferredDigest records the component digest of
                   the last successful transfer.

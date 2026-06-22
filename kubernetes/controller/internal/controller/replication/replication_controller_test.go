@@ -2,6 +2,7 @@ package replication
 
 import (
 	"bytes"
+	"encoding/json"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -20,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
@@ -278,6 +280,44 @@ var _ = Describe("Replication Controller", func() {
 				g.Expect(inProgress.Reason).To(Equal(v1alpha1.ReplicationFailedReason))
 				g.Expect(inProgress.Message).To(ContainSubstring(childName))
 			}, timeout, interval).Should(Succeed())
+		})
+
+		It("records the failed transfer events when the transfer cannot write to the target", func(ctx SpecContext) {
+			component, _, _ := setupSourceAndTarget(ctx, []*descruntime.Descriptor{
+				newDescriptor(componentName, "1.0.0"),
+			})
+
+			// Create the CTF so it exists, then reference it read-only. Discovery and
+			// the graph build only read, so they succeed; the transfer write phase fails.
+			readonlyPath := GinkgoT().TempDir()
+			test.SetupCTFComponentVersionRepository(ctx, readonlyPath, nil)
+			readonlySpec, err := json.Marshal(&ctf.Repository{
+				Type:       ocmruntime.Type{Version: "v1", Name: "ctf"},
+				FilePath:   readonlyPath,
+				AccessMode: ctf.AccessModeReadOnly,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			targetRepository := test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), "readonly-target-repository", readonlySpec)
+
+			replication := newReplication(component, targetRepository, []v1alpha1.OCMConfiguration{{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{Name: setupTransferConfig(ctx), Kind: "ConfigMap"},
+			}})
+			Expect(k8sClient.Create(ctx, replication)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				g.Expect(komega.Get(replication)()).To(Succeed())
+				ready := apimeta.FindStatusCondition(replication.Status.Conditions, v1alpha1.ReadyCondition)
+				g.Expect(ready).NotTo(BeNil())
+				g.Expect(ready.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(ready.Reason).To(Equal(v1alpha1.ReplicationFailedReason))
+
+				g.Expect(replication.Status.LastFailedTransferEvents).NotTo(BeEmpty())
+			}, timeout, interval).Should(Succeed())
+
+			last := replication.Status.LastFailedTransferEvents[0]
+			Expect(last.ID).NotTo(BeEmpty())
+			Expect(last.Name).NotTo(BeEmpty())
+			Expect(last.Error).NotTo(BeEmpty())
 		})
 	})
 

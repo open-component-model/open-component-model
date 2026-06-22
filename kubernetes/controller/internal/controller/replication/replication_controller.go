@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -28,6 +29,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferspec "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
@@ -391,30 +393,51 @@ func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replicati
 		}
 	}
 
+	events := make(chan graphRuntime.ProgressEvent)
+
 	transferGraph, err := transfer.NewDefaultBuilder(
 		r.PluginManager.ComponentVersionRepositoryRegistry,
 		r.PluginManager.ResourcePluginRegistry,
 		credGraph,
-	).BuildAndCheck(tgd)
+	).WithEvents(events).BuildAndCheck(tgd)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())
 
 		return fmt.Errorf("failed to build transformation graph: %w", err)
 	}
 
+	var failed []v1alpha1.TransferEvent
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for e := range events {
+			if e.Err != nil {
+				failed = append(failed, toFailedTransferEvent(e))
+			}
+		}
+	}()
+
 	logger.Info("executing transfer",
 		"component", component.Status.Component.Component,
 		"version", component.Status.Component.Version,
 		"sourceDigest", sourceDigest,
 		"transformations", len(tgd.Transformations))
-	if err := transferGraph.Process(ctx); err != nil {
-		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())
 
-		return fmt.Errorf("failed to process transformation graph: %w", err)
+	processErr := transferGraph.Process(ctx)
+	wg.Wait()
+
+	if processErr != nil {
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, processErr.Error())
+		replication.Status.LastFailedTransferEvents = failed
+
+		return fmt.Errorf("failed to process transformation graph: %w", processErr)
 	}
 
 	replication.Status.LastTransferredVersion = component.Status.Component.Version
 	replication.Status.LastTransferredDigest = sourceDigest
+	replication.Status.LastFailedTransferEvents = nil
 	status.SetCondition(replication, metav1.Condition{
 		Type:    v1alpha1.TransferInProgressCondition,
 		Status:  metav1.ConditionFalse,
@@ -422,6 +445,17 @@ func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replicati
 		Message: fmt.Sprintf("transferred component version %s", component.Status.Component.Version),
 	})
 	return nil
+}
+
+// toFailedTransferEvent convert ProgressEvents to minimal, serializable objects.
+func toFailedTransferEvent(e graphRuntime.ProgressEvent) v1alpha1.TransferEvent {
+	t := e.Transformation
+
+	return v1alpha1.TransferEvent{
+		ID:    t.ID,
+		Name:  fmt.Sprintf("%s [%s]", t.ID, t.Type.Name),
+		Error: e.Err.Error(),
+	}
 }
 
 // errIsUnavailable checks if during a Get of an object we detected either not ready error

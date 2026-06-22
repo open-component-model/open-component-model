@@ -49,6 +49,11 @@ type ReplicationStatus struct {
 	// +optional
 	LastTransferredDigest string `json:"lastTransferredDigest,omitempty"`
 
+	// LastFailedTransferEvents contains detailed events about the transfer if it failed.
+	// If it's empty, there was no failed last transfer. Is cleaned upon a successful transfer.
+	// +optional
+	LastFailedTransferEvents []TransferEvent `json:"lastFailedTransferEvents,omitempty"`
+
 	// Component reflects the currently observed source component version.
 	// +optional
 	Component *ComponentInfo `json:"component,omitempty"`
@@ -58,6 +63,22 @@ type ReplicationStatus struct {
 	// in the order the configuration data was applied.
 	// +optional
 	EffectiveOCMConfig []OCMConfiguration `json:"effectiveOCMConfig,omitempty"`
+}
+
+// TransferEvent captures a single failed transformation observed during a
+// replication transfer.
+type TransferEvent struct {
+	// ID is the identifier of the transformation that failed.
+	// +required
+	ID string `json:"id,omitempty"`
+
+	// Name is the display name of the transformation in the form "ID [Type]".
+	// +required
+	Name string `json:"name,omitempty"`
+
+	// Error is the error message reported by the failed transformation.
+	// +required
+	Error string `json:"error,omitempty"`
 }
 
 // Replication is the Schema for the replications API.
