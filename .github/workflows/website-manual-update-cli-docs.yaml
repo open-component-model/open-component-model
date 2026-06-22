@@ -31,10 +31,9 @@ jobs:
         permission-contents: write
     - name: Ensure proper version
       env:
-        TOKEN: ${{ steps.generate_token.outputs.token }}
         INPUT_VERSION: ${{ github.event.inputs.version }}
       run: |
-        curl -sSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/open-component-model/ocm/releases > releases.json
+        curl -sSL -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/open-component-model/ocm/releases > releases.json
         jq -r '.[] | .tag_name' releases.json | grep -v -E '.*-rc|latest' > versions.txt
         if grep -Fxq "${INPUT_VERSION}" versions.txt; then
           echo "Version (${INPUT_VERSION}) found!"
