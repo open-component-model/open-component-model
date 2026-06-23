@@ -27,14 +27,23 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// mockTargetRepository implements TargetRepository for testing
+// mockTargetRepository implements TargetRepository for testing. It also
+// implements the optional [repository.OwnershipAwareRepository] capability so the by-value
+// ownership attach (ADR 0016) can be asserted.
 type mockTargetRepository struct {
 	mu                     sync.Mutex
 	components             map[string]*descriptor.Descriptor
 	addedLocalResources    []*descriptor.Resource
 	addedLocalResourceData map[string]blob.ReadOnlyBlob // resource identity -> blob data
-	addedSources           []*descriptor.Source
-	addedVersions          []*descriptor.Descriptor
+
+	// ownership attach tracking (AddOwnership).
+	ownershipCalls    int
+	ownershipResource *descriptor.Resource
+	ownershipCreds    runtime.Typed
+	ownershipErr      error // returned by AddOwnership
+
+	addedSources  []*descriptor.Source
+	addedVersions []*descriptor.Descriptor
 }
 
 func newMockTargetRepository() *mockTargetRepository {
@@ -65,6 +74,18 @@ func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, 
 	// Store the blob data so we can verify it later
 	m.addedLocalResourceData[resource.ToIdentity().String()] = data
 	return resource, nil
+}
+
+// AddOwnership records the by-value ownership attach (ADR 0016) so tests
+// can assert the opt-in reached the repository. It implements the optional
+// [repository.OwnershipAwareRepository] capability.
+func (m *mockTargetRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.ownershipCalls++
+	m.ownershipResource = resource
+	m.ownershipCreds = credentials
+	return m.ownershipErr
 }
 
 func (m *mockTargetRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {

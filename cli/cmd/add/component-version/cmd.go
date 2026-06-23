@@ -150,6 +150,29 @@ Example:
             type: ociArtifact
             imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
 
+Ownership:
+
+Ownership records a link from a resource back to the component version that owns it,
+so a consumer who encounters the resource's artifact in a registry can trace it back to
+that component version. A resource opts in by setting "options.ownershipPolicy" to
+"Always" (the default is "Never"):
+
+  resources:
+    - name: my-image
+      type: ociImage
+      version: ${COMPONENT_VERSION}
+      options:
+        ownershipPolicy: Always
+      access:
+        type: ociArtifact
+        imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
+
+When enabled, an ownership manifest (artifact type "application/vnd.ocm.software.ownership.v1+json")
+is attached to the resource's manifest: pushed into the component repository for by-value
+resources, or next to the image in its hosting registry for by-reference resources (the image
+bytes are left unchanged, so existing signatures stay valid). The policy is a construction-time
+directive and is not persisted to the component descriptor.
+
 Repository Reference Format:
 	[type::]{repository}
 
@@ -463,6 +486,11 @@ func (prov *constructorProvider) GetResourceRepository(ctx context.Context, reso
 	return &constructorPlugin{plugin: plugin}, nil
 }
 
+var (
+	_ constructor.ResourceRepository      = (*constructorPlugin)(nil)
+	_ repository.OwnershipAwareRepository = (*constructorPlugin)(nil)
+)
+
 type constructorPlugin struct {
 	plugin resource.Repository
 }
@@ -473,6 +501,20 @@ func (c *constructorPlugin) GetResourceCredentialConsumerIdentity(ctx context.Co
 
 func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (content blob.ReadOnlyBlob, err error) {
 	return c.plugin.DownloadResource(ctx, res, credentials)
+}
+
+// AddOwnership records ownership (ADR 0016) by
+// delegating to the resolved plugin when it implements
+// [repository.OwnershipAwareRepository] (the in-process OCI resource repository
+// does). When it does not (e.g. the out-of-process plugin bridge), it returns an
+// error: the resource explicitly opted into ownership (policy "Always"), so a
+// repository that cannot record ownership is a hard failure rather than a silent no-op.
+func (c *constructorPlugin) AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error {
+	ownershipAwareRepo, ok := c.plugin.(repository.OwnershipAwareRepository)
+	if !ok {
+		return fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", res.ToIdentity(), "Always", c.plugin)
+	}
+	return ownershipAwareRepo.AddOwnership(ctx, component, version, res, credentials)
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {

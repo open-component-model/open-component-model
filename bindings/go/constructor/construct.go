@@ -389,6 +389,10 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 
 	switch {
 	case resource.HasInput():
+		if resource.CopyPolicy != "" && resource.CopyPolicy != constructor.CopyPolicyByValue {
+			return nil, fmt.Errorf("invalid copy policy %q for resource %q, "+
+				"due to an input specification an empty policy or %q is expected", resource.CopyPolicy, resource.ToIdentity(), constructor.CopyPolicyByValue)
+		}
 		logger.Debug("processing resource with input method")
 		res, err = c.processResourceWithInput(ctx, targetRepo, resource, component, version)
 	case resource.HasAccess():
@@ -400,25 +404,56 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 			logger.Debug("defaulting resource version to component version as no resource version was set")
 			resource.Version = version
 		}
-		logger.Debug("processing resource with existing access")
-		res = constructor.ConvertToDescriptorResource(resource)
+		if byValue := resource.CopyPolicy == constructor.CopyPolicyByValue; byValue {
+			logger.Debug("processing resource by value")
+			res, err = c.processResourceByValue(ctx, targetRepo, resource, component, version)
+		} else {
+			logger.Debug("processing resource with existing access")
+			res = constructor.ConvertToDescriptorResource(resource)
 
-		if c.opts.ResourceDigestProcessorProvider != nil {
-			var digestProcessor ResourceDigestProcessor
-			if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
-				logger.Debug("processing resource digest")
-				var creds ocmruntime.Typed
-				if c.opts.Resolver != nil {
-					if identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res); err == nil {
-						if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
-							return nil, fmt.Errorf("error resolving credentials for resource digest processor: %w", err)
+			if c.opts.ResourceDigestProcessorProvider != nil {
+				var digestProcessor ResourceDigestProcessor
+				if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
+					logger.Debug("processing resource digest")
+					var creds ocmruntime.Typed
+					if c.opts.Resolver != nil {
+						if identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res); err == nil {
+							if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
+								return nil, fmt.Errorf("error resolving credentials for resource digest processor: %w", err)
+							}
+						} else {
+							logger.Debug("no credential consumer identity found for resource digest processor, skipping credential resolution")
 						}
-					} else {
-						logger.Debug("no credential consumer identity found for resource digest processor, skipping credential resolution")
+					}
+					if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
+						return nil, fmt.Errorf("error processing resource %q with digest processor: %w", resource.ToIdentity(), err)
 					}
 				}
-				if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
-					return nil, fmt.Errorf("error processing resource %q with digest processor: %w", resource.ToIdentity(), err)
+			}
+
+			// A resource kept by reference still belongs to this component version, so its
+			// ownership (ADR 0016) is recorded in the registry that hosts it. Only resources
+			// that opt in via OwnershipPolicyAlways get one, and the hosting resource repository
+			// is resolved only for those, so resources that don't opt in never reach it.
+			if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways && c.opts.ResourceRepositoryProvider != nil {
+				repo, err := c.opts.GetResourceRepository(ctx, resource)
+				if err != nil {
+					return nil, fmt.Errorf("error getting resource repository for ownership of %q: %w", resource.ToIdentity(), err)
+				}
+
+				var creds ocmruntime.Typed
+				if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+					if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
+						return nil, fmt.Errorf("error resolving credentials for resource by-value processing: %w", err)
+					}
+				}
+
+				if ownershipAwareRepository, ok := repo.(repository.OwnershipAwareRepository); ok {
+					if err := ownershipAwareRepository.AddOwnership(ctx, component, version, res, creds); err != nil {
+						return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
+					}
+				} else {
+					return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
 				}
 			}
 		}
@@ -437,6 +472,30 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 	logger.Debug("resource processed successfully")
 
 	return res, nil
+}
+
+func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetRepo TargetRepository, resource *constructor.Resource, component, version string) (*descriptor.Resource, error) {
+	repo, err := c.opts.GetResourceRepository(ctx, resource)
+	if err != nil {
+		return nil, err
+	}
+
+	converted := constructor.ConvertToDescriptorResource(resource)
+
+	// best effort to resolve credentials for by value resource download.
+	// if no identity is resolved, we assume resolution is simply skipped.
+	var creds ocmruntime.Typed
+	if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
+			return nil, fmt.Errorf("error resolving credentials for resource by-value processing: %w", err)
+		}
+	}
+
+	data, err := repo.DownloadResource(ctx, converted, creds)
+	if err != nil {
+		return nil, fmt.Errorf("error downloading resource: %w", err)
+	}
+	return addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, data, creds)
 }
 
 func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo TargetRepository, src *constructor.Source, component, version string) (*descriptor.Source, error) {
@@ -537,7 +596,7 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	var processedResource *descriptor.Resource
 
 	if result.ProcessedBlobData != nil {
-		processedResource, err = addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, result.ProcessedBlobData)
+		processedResource, err = addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, result.ProcessedBlobData, creds)
 	} else if result.ProcessedResource != nil {
 		processedResource = result.ProcessedResource
 	}
@@ -646,6 +705,7 @@ func addColocatedResourceLocalBlob(
 	component, version string,
 	resource *constructor.Resource,
 	data blob.ReadOnlyBlob,
+	creds ocmruntime.Typed,
 ) (processed *descriptor.Resource, err error) {
 	localBlob := &v2.LocalBlob{}
 
@@ -679,6 +739,22 @@ func addColocatedResourceLocalBlob(
 	uploaded, err := repo.AddLocalResource(ctx, component, version, descResource, data)
 	if err != nil {
 		return nil, fmt.Errorf("error adding local resource %q based on input type %q as local resource to component %q : %w", resource.ToIdentity(), resource.Input.GetType(), component, err)
+	}
+
+	// A by-value (or input-method) resource that opts in via OwnershipPolicyAlways
+	// gets ownership (ADR 0016) pointing the uploaded
+	// artifact back at the owning component version. Recording it requires a target
+	// repository that implements [OwnershipAwareRepository]; one that cannot (e.g. the
+	// out-of-process plugin bridge, or the deprecated fallback) makes construction fail
+	// rather than silently dropping an explicitly requested ownership link.
+	if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
+		if ownershipAwareRepo, ok := repo.(repository.OwnershipAwareRepository); ok {
+			if err := ownershipAwareRepo.AddOwnership(ctx, component, version, uploaded, creds); err != nil {
+				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
+			}
+		} else {
+			return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
+		}
 	}
 
 	return uploaded, nil

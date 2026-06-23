@@ -7,13 +7,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -61,6 +61,66 @@ func (m *mockInputMethodProvider) GetResourceInputMethod(ctx context.Context, re
 		return method, nil
 	}
 	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", resource.Input.GetType())
+}
+
+// mockResourceRepository implements ResourceRepository for testing. It serves
+// downloads (downloadData/fail) and records how AddOwnership was invoked
+// so the constructor's by-reference ownership attach chain can be asserted.
+type mockResourceRepository struct {
+	downloadData blob.ReadOnlyBlob
+	fail         bool
+
+	identityErr error // returned by GetResourceCredentialConsumerIdentity
+	attachErr   error // returned by AddOwnership
+
+	attachCalls  int
+	gotComponent string
+	gotVersion   string
+	gotCreds     runtime.Typed
+}
+
+func (m *mockResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+	if m.identityErr != nil {
+		return nil, m.identityErr
+	}
+	identity = runtime.Identity{}
+	identity.SetType(runtime.NewVersionedType("mock", "v1"))
+	return identity, nil
+}
+
+func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	if m.fail {
+		return nil, fmt.Errorf("simulated download failure")
+	}
+	return m.downloadData, nil
+}
+
+func (m *mockResourceRepository) AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error {
+	m.attachCalls++
+	m.gotComponent = component
+	m.gotVersion = version
+	m.gotCreds = credentials
+	return m.attachErr
+}
+
+// mockResourceRepositoryProvider implements ResourceRepositoryProvider for testing
+type mockResourceRepositoryProvider struct {
+	repo ResourceRepository
+}
+
+func (m *mockResourceRepositoryProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (ResourceRepository, error) {
+	return m.repo, nil
+}
+
+// mockResourceRepositoryProviderWithError returns its repo and a fixed error, so the
+// "could not resolve the resource repository" branch can be exercised.
+type mockResourceRepositoryProviderWithError struct {
+	repo ResourceRepository
+	err  error
+}
+
+func (m *mockResourceRepositoryProviderWithError) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (ResourceRepository, error) {
+	return m.repo, m.err
 }
 
 // mockAccess implements runtime.Typed for testing
@@ -373,6 +433,133 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 
 	// Verify the credential provider was called
 	assert.Equal(t, mockCredProvider.called["mock/v1"], 1)
+}
+
+func TestConstructWithResourceByValue(t *testing.T) {
+	// Create a mock blob with test data
+	mockBlob := &mockBlob{
+		mediaType: "application/octet-stream",
+		data:      []byte("test data"),
+	}
+
+	// Create a mock resource repository
+	mockRepo := &mockResourceRepository{
+		downloadData: mockBlob,
+	}
+
+	// Create a mock resource repository provider
+	mockRepoProvider := &mockResourceRepositoryProvider{
+		repo: mockRepo,
+	}
+
+	constructor := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: external
+        type: blob
+        copyPolicy: byValue
+        access:
+          type: mock/v1
+          mediaType: application/octet-stream
+          reference: test-ref
+          description: "This is a test resource"
+`)
+
+	// Create a mock target repository
+	mockTargetRepo := newMockTargetRepository()
+
+	// Create the constructor with our mocks
+	opts := Options{
+		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
+		ResourceRepositoryProvider: mockRepoProvider,
+	}
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
+
+	// Process the constructor
+	err := constructorInstance.Construct(context.Background())
+	require.NoError(t, err)
+	descs := collectDescriptors(t, graph)
+	require.NoError(t, err)
+	require.Len(t, descs, 1)
+
+	// Verify the results
+	desc := descs[0]
+	verifyBasicComponent(t, desc)
+
+	// Verify the resource was processed correctly
+	resource := desc.Component.Resources[0]
+	assert.Equal(t, "test-resource", resource.Name)
+	assert.Equal(t, "v1.0.0", resource.Version)
+	assert.Equal(t, descriptor.ExternalRelation, resource.Relation)
+	assert.NotNil(t, resource.Access)
+
+	// Verify the repository was called correctly
+	assert.Len(t, mockTargetRepo.addedLocalResources, 1)
+	assert.Len(t, mockTargetRepo.addedVersions, 1)
+
+	// The resource did not opt into ownership, so the by-value add must
+	// not attach one: AddOwnership is never called. The opt-in lives on the runtime
+	// resource options, not on descriptor.Resource.
+	assert.Zero(t, mockTargetRepo.ownershipCalls, "a resource that did not opt in must not attach ownership")
+}
+
+// TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn proves the
+// ADR-0016 opt-in drives a by-value AddOwnership call on the target repository
+// (when it supports the capability), sourced from the runtime resource options —
+// not from descriptor.Resource, which no longer carries the policy. It also
+// asserts the uploaded resource and the resolved credentials are forwarded. This
+// is the by-value half of the opt-in wiring; the by-reference half is covered by
+// TestDefaultConstructor_attachOwnership_CallSiteGating. The error case asserts an
+// AddOwnership failure propagates and fails the add rather than being swallowed.
+func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
+	const (
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+	)
+	tests := []struct {
+		name         string
+		policy       constructorruntime.OwnershipPolicy
+		ownershipErr error
+		wantCalls    int
+		wantErr      bool
+	}{
+		{name: "opted in (Always)", policy: constructorruntime.OwnershipPolicyAlways, wantCalls: 1},
+		{name: "not opted in (Never)", policy: constructorruntime.OwnershipPolicyNever, wantCalls: 0},
+		{name: "opted in but attach fails", policy: constructorruntime.OwnershipPolicyAlways, ownershipErr: fmt.Errorf("attach boom"), wantCalls: 1, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newMockTargetRepository()
+			repo.ownershipErr = tt.ownershipErr
+			res := &constructorruntime.Resource{
+				ElementMeta: constructorruntime.ElementMeta{ObjectMeta: constructorruntime.ObjectMeta{Name: "backend-image", Version: version}},
+				Type:        "ociArtifact",
+				Relation:    constructorruntime.LocalRelation,
+				Options:     constructorruntime.ResourceOptions{OwnershipPolicy: tt.policy},
+			}
+			data := &mockBlob{mediaType: "application/octet-stream", data: []byte("payload")}
+			creds := &mockAccess{Type: "mock/v1"}
+
+			out, err := addColocatedResourceLocalBlob(context.Background(), repo, component, version, res, data, creds)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorContains(t, err, "error attaching ownership")
+				assert.ErrorContains(t, err, "attach boom")
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, out)
+			}
+
+			assert.Equal(t, tt.wantCalls, repo.ownershipCalls,
+				"by-value add must attach ownership iff the runtime options opt in")
+			if tt.wantCalls > 0 && !tt.wantErr {
+				assert.Same(t, out, repo.ownershipResource, "the uploaded resource must be forwarded to AddOwnership")
+				assert.Equal(t, creds, repo.ownershipCreds, "credentials must be forwarded to AddOwnership")
+			}
+		})
+	}
 }
 
 func TestConstructWithResourceDigest(t *testing.T) {
@@ -757,4 +944,219 @@ func TestConstructCredentialsPassedAsDirectCredentials(t *testing.T) {
 	require.True(t, ok, "expected *credconfigv1.DirectCredentials, got %T", mockInput.capturedCreds)
 	assert.Equal(t, "testuser", dc.Properties["username"])
 	assert.Equal(t, "testpass", dc.Properties["password"])
+}
+
+// TestDefaultConstructor_attachOwnership_CallSiteGating proves the gates
+// that now live at the by-reference call site (processResource): the hosting
+// resource repository is resolved — and AddOwnership reached — only
+// when the resource opts in via OwnershipPolicyAlways and a provider is
+// configured. A non-opted-in resource must never touch the resource repository,
+// which is what keeps non-OCI by-reference accesses out of OCI-specific
+// resolution.
+func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
+	const (
+		component = "ocm.software/test-component"
+		version   = "v1.0.0"
+	)
+
+	// byReferenceResource builds a by-reference (access, not input) resource with
+	// the given ownership policy. An empty policy leaves the options block off.
+	byReferenceResource := func(policy string) string {
+		options := ""
+		if policy != "" {
+			options = fmt.Sprintf("\n        options:\n          ownershipPolicy: %s", policy)
+		}
+		return fmt.Sprintf(`
+      - name: backend-image
+        version: %s
+        relation: local
+        type: ociArtifact%s
+        access:
+          type: mock/v1
+          mediaType: application/octet-stream
+          reference: test-ref
+`, version, options)
+	}
+
+	tests := []struct {
+		name string
+		// policy is the resource's ownershipPolicy ("" => no opt-in).
+		policy string
+		// provider builds opts.ResourceRepositoryProvider; nil means "not configured".
+		provider   func(attacher *mockResourceRepository) ResourceRepositoryProvider
+		wantErr    string
+		wantAttach int
+	}{
+		{
+			name:   "no opt-in never resolves the resource repository",
+			policy: "",
+			provider: func(a *mockResourceRepository) ResourceRepositoryProvider {
+				return &mockResourceRepositoryProvider{repo: a}
+			},
+			wantAttach: 0,
+		},
+		{
+			name:       "opted in but no provider configured is a no-op",
+			policy:     "Always",
+			provider:   func(*mockResourceRepository) ResourceRepositoryProvider { return nil },
+			wantAttach: 0,
+		},
+		{
+			name:   "opted in resolves the repository and attaches",
+			policy: "Always",
+			provider: func(a *mockResourceRepository) ResourceRepositoryProvider {
+				return &mockResourceRepositoryProvider{repo: a}
+			},
+			wantAttach: 1,
+		},
+		{
+			name:   "opted in surfaces a provider resolution failure",
+			policy: "Always",
+			provider: func(*mockResourceRepository) ResourceRepositoryProvider {
+				return &mockResourceRepositoryProviderWithError{err: fmt.Errorf("boom")}
+			},
+			wantErr: "error getting resource repository for ownership",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attacher := &mockResourceRepository{}
+			c := setupTestComponent(t, byReferenceResource(tt.policy))
+			opts := Options{
+				TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: newMockTargetRepository()},
+				ResourceRepositoryProvider: tt.provider(attacher),
+			}
+			instance := NewDefaultConstructor(c, opts)
+
+			err := instance.Construct(context.Background())
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAttach, attacher.attachCalls)
+			if tt.wantAttach > 0 {
+				assert.Equal(t, component, attacher.gotComponent)
+				assert.Equal(t, version, attacher.gotVersion)
+			}
+		})
+	}
+}
+
+// nonOwnershipAwareResourceRepository is a [ResourceRepository] that does NOT
+// implement [repository.OwnershipAwareRepository]. Used to drive the
+// "policy=Always but repo cannot record" hard-error branch in
+// [DefaultConstructor.processResource].
+type nonOwnershipAwareResourceRepository struct{}
+
+func (n *nonOwnershipAwareResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
+	id := runtime.Identity{}
+	id.SetType(runtime.NewVersionedType("mock", "v1"))
+	return id, nil
+}
+
+func (n *nonOwnershipAwareResourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	return nil, nil
+}
+
+// nonOwnershipAwareTargetRepository is a [TargetRepository] that does NOT
+// implement [repository.OwnershipAwareRepository]. Used to drive the
+// "policy=Always but repo cannot record" hard-error branch in
+// [addColocatedResourceLocalBlob].
+type nonOwnershipAwareTargetRepository struct {
+	inner *mockTargetRepository
+}
+
+func newNonOwnershipAwareTargetRepository() *nonOwnershipAwareTargetRepository {
+	return &nonOwnershipAwareTargetRepository{inner: newMockTargetRepository()}
+}
+
+func (n *nonOwnershipAwareTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	return n.inner.AddLocalResource(ctx, component, version, resource, data)
+}
+
+func (n *nonOwnershipAwareTargetRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
+	return n.inner.AddLocalSource(ctx, component, version, source, data)
+}
+
+func (n *nonOwnershipAwareTargetRepository) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
+	return n.inner.AddComponentVersion(ctx, desc)
+}
+
+func (n *nonOwnershipAwareTargetRepository) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
+	return n.inner.GetComponentVersion(ctx, name, version)
+}
+
+// TestProcessResource_OwnershipAlways_NonOwnershipAwareRepo_HardErrors covers
+// the by-reference branch in [DefaultConstructor.processResource]: when a
+// resource opts into ADR-0016 ownership via OwnershipPolicyAlways and a
+// ResourceRepositoryProvider is configured but the resolved repository does
+// not implement [repository.OwnershipAwareRepository], construction must fail
+// rather than silently drop the explicitly requested ownership link.
+func TestProcessResource_OwnershipAlways_NonOwnershipAwareRepo_HardErrors(t *testing.T) {
+	c := setupTestComponent(t, `
+      - name: backend-image
+        version: v1.0.0
+        relation: local
+        type: ociArtifact
+        options:
+          ownershipPolicy: Always
+        access:
+          type: mock/v1
+          mediaType: application/octet-stream
+          reference: test-ref
+`)
+
+	opts := Options{
+		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: newMockTargetRepository()},
+		ResourceRepositoryProvider: &mockResourceRepositoryProvider{
+			repo: &nonOwnershipAwareResourceRepository{},
+		},
+	}
+
+	err := NewDefaultConstructor(c, opts).Construct(context.Background())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "cannot record")
+	assert.ErrorContains(t, err, "Always")
+}
+
+// TestAddColocatedResourceLocalBlob_OwnershipAlways_NonOwnershipAwareRepo_HardErrors
+// covers the by-value branch in [addColocatedResourceLocalBlob]: when an
+// input-method resource opts into ADR-0016 ownership via OwnershipPolicyAlways
+// but the target repository does not implement
+// [repository.OwnershipAwareRepository], the by-value add must fail rather
+// than silently drop the link.
+func TestAddColocatedResourceLocalBlob_OwnershipAlways_NonOwnershipAwareRepo_HardErrors(t *testing.T) {
+	mockMethod := &mockInputMethod{
+		processedBlob: &mockBlob{mediaType: "application/octet-stream", data: []byte("payload")},
+	}
+	mockProvider := &mockInputMethodProvider{
+		methods: map[runtime.Type]ResourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): mockMethod,
+		},
+	}
+
+	c := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: local
+        type: blob
+        options:
+          ownershipPolicy: Always
+        input:
+          type: mock/v1
+`)
+
+	opts := Options{
+		ResourceInputMethodProvider: mockProvider,
+		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: newNonOwnershipAwareTargetRepository()},
+	}
+
+	err := NewDefaultConstructor(c, opts).Construct(context.Background())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "cannot record")
+	assert.ErrorContains(t, err, "Always")
 }
