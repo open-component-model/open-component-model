@@ -559,7 +559,7 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 	)
 	logger.Debug("processing reference")
 
-	referencedComponentDigest, err := c.getComponentDigest(ctx, reference.ToIdentity().String(), referencedComponent)
+	referencedComponentDigest, err := c.getComponentDigest(ctx, reference.ToComponentIdentity().String(), referencedComponent)
 	if err != nil {
 		return nil, fmt.Errorf("error getting digest for referenced component %q: %w", reference.ToIdentity(), err)
 	}

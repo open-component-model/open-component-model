@@ -731,6 +731,95 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 	}
 }
 
+// TestConstructWithSharedReferenceNameAcrossComponents is a regression test for
+// https://github.com/open-component-model/open-component-model/issues/2838.
+// Two components use the SAME local reference name ("leaf") to point at DIFFERENT
+// referenced components. The component digest cache must be keyed by the referenced
+// component identity, not by the local reference name, otherwise the second parent
+// gets the first parent's referenced digest. That, of course, fails later
+// by a recursive transfer with a digest mismatch.
+func TestConstructWithSharedReferenceNameAcrossComponents(t *testing.T) {
+	t.Parallel()
+
+	yamlData := `
+components:
+  - name: ocm.software/repro/leaf-a
+    version: 1.0.0
+    provider:
+      name: ocm.software
+  - name: ocm.software/repro/leaf-b
+    version: 1.0.0
+    provider:
+      name: ocm.software
+  - name: ocm.software/repro/parent-a
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    componentReferences:
+      - name: leaf
+        version: 1.0.0
+        componentName: ocm.software/repro/leaf-a
+  - name: ocm.software/repro/parent-b
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    componentReferences:
+      - name: leaf
+        version: 1.0.0
+        componentName: ocm.software/repro/leaf-b
+`
+
+	var constructor constructorv1.ComponentConstructor
+	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &constructor))
+	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
+
+	mockRepo := newMockTargetRepository()
+	opts := Options{
+		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
+	}
+	constructorInstance := NewDefaultConstructor(converted, opts)
+	graph := constructorInstance.GetGraph()
+
+	require.NoError(t, constructorInstance.Construct(t.Context()))
+
+	descMap := make(map[string]*descriptor.Descriptor)
+	for _, d := range collectDescriptors(t, graph) {
+		descMap[d.Component.Name] = d
+	}
+
+	refDigest := func(componentName, referencedComponentName string) descriptor.Digest {
+		t.Helper()
+		desc := descMap[componentName]
+		require.NotNil(t, desc, "component %q not constructed", componentName)
+		for _, ref := range desc.Component.References {
+			if ref.Component == referencedComponentName {
+				return ref.Digest
+			}
+		}
+		t.Fatalf("component %q has no reference to %q", componentName, referencedComponentName)
+		return descriptor.Digest{}
+	}
+
+	expectedDigest := func(referencedComponentName string) descriptor.Digest {
+		t.Helper()
+		referenced := descMap[referencedComponentName]
+		require.NotNil(t, referenced)
+		digest, err := calculateDigest(referenced)
+		require.NoError(t, err)
+		return *digest
+	}
+
+	digestA := refDigest("ocm.software/repro/parent-a", "ocm.software/repro/leaf-a")
+	digestB := refDigest("ocm.software/repro/parent-b", "ocm.software/repro/leaf-b")
+
+	assert.Equal(t, expectedDigest("ocm.software/repro/leaf-a"), digestA,
+		"parent-a must stamp leaf-a's digest into its reference")
+	assert.Equal(t, expectedDigest("ocm.software/repro/leaf-b"), digestB,
+		"parent-b must stamp leaf-b's digest into its reference")
+	assert.NotEqual(t, digestA.Value, digestB.Value,
+		"references to different components must not share a digest despite the same local reference name")
+}
+
 func TestConstructWithSourceBlobToCTF(t *testing.T) {
 	t.Parallel()
 
