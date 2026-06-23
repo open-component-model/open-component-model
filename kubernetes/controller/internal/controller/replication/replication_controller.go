@@ -260,13 +260,6 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, nil
 	}
 
-	status.SetCondition(replication, metav1.Condition{
-		Type:    v1alpha1.TransferInProgressCondition,
-		Status:  metav1.ConditionTrue,
-		Reason:  v1alpha1.TransferInProgressReason,
-		Message: fmt.Sprintf("transferring component version %s", component.Status.Component.Version),
-	})
-
 	// if there was an error, clear the in progress condition.
 	defer func() {
 		if retErr != nil {
@@ -366,6 +359,13 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to marshal transfer graph definition: %w", err)
 	}
 	logger.V(1).Info("the entire transfer graph serialized", "graph", string(content))
+
+	status.SetCondition(replication, metav1.Condition{
+		Type:    v1alpha1.TransferInProgressCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  v1alpha1.TransferInProgressReason,
+		Message: fmt.Sprintf("transferring component version %s", component.Status.Component.Version),
+	})
 
 	if err := r.transfer(ctx, logger, replication, cfg, tgd, component, sourceDigest); err != nil {
 		return ctrl.Result{}, err

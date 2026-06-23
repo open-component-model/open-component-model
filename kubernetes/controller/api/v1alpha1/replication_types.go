@@ -70,15 +70,15 @@ type ReplicationStatus struct {
 type TransferEvent struct {
 	// ID is the identifier of the transformation that failed.
 	// +required
-	ID string `json:"id,omitempty"`
+	ID string `json:"id"`
 
 	// Name is the display name of the transformation in the form "ID [Type]".
 	// +required
-	Name string `json:"name,omitempty"`
+	Name string `json:"name"`
 
 	// Error is the error message reported by the failed transformation.
 	// +required
-	Error string `json:"error,omitempty"`
+	Error string `json:"error"`
 }
 
 // Replication is the Schema for the replications API.
