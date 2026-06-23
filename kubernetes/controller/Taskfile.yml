@@ -97,10 +97,10 @@ tasks:
     cmd: 'go build -o bin/manager {{.TASKFILE_DIR}}/cmd/main.go'
 
   run:
-    desc: "Run the controller manager locally"
-    deps: [manifests, generate, fmt, vet]
-    cmd: 'go run {{.TASKFILE_DIR}}/cmd/main.go'
-
+    desc: "Run the controller manager locally (installs CRDs into the current kube-context first)"
+    deps: [manifests, generate, fmt, vet, helm/install-crds]
+    cmds:
+      - 'go run {{.TASKFILE_DIR}}/cmd/main.go'
 
   # Always build only for the host architecture.
   # We force "linux" OS because all Docker base images are Linux,
@@ -243,6 +243,11 @@ tasks:
           --create-namespace \
           --wait \
           --timeout 120s
+
+  helm/install-crds:
+    desc: "Render the chart CRDs and apply them to the current kube-context"
+    deps: [helm/generate-crds]
+    cmd: 'helm template ocm-k8s-toolkit chart/ --show-only "templates/crd/*.yaml" | kubectl apply --server-side --force-conflicts -f -'
 
   helm/uninstall:
     desc: "Uninstall the Helm chart"

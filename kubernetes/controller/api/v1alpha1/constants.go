@@ -25,4 +25,6 @@ const (
 	// RepositoryFinalizer makes sure that the OCM repository is only deleted when it is no longer referenced by any
 	// other component.
 	RepositoryFinalizer = "finalizers.ocm.software/repository"
+	// ReplicationFinalizer makes sure that an in-flight transfer is drained before the Replication is removed.
+	ReplicationFinalizer = "finalizers.ocm.software/replication"
 )
