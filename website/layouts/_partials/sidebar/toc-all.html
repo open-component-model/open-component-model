@@ -67,20 +67,56 @@
     {{- end -}}
   {{- end -}}
 
-  {{- $md := "" -}}
+  {{- /* Compute each item's nesting depth and build a flat entry list with
+       absolute-path hrefs so the page's <base href> does not interfere. */ -}}
+  {{- $entries := slice -}}
   {{- range $items -}}
     {{- if eq .type "group" -}}
-      {{- $md = printf "%s\n- **%s**" $md .name -}}
+      {{- $entries = $entries | append (dict "depth" 0 "href" "" "text" .name "link" false) -}}
     {{- else if eq .type "page-heading" -}}
-      {{- $count := sub .level $minLevel -}}
-      {{- $indent := strings.Repeat $count "  " -}}
-      {{- $md = printf "%s\n%s- [%s](#%s)" $md $indent .text .id -}}
+      {{- $depth := sub .level $minLevel -}}
+      {{- $href := printf "%s#%s" $.RelPermalink .id -}}
+      {{- $entries = $entries | append (dict "depth" $depth "href" $href "text" .text "link" true) -}}
     {{- else if eq .type "tab-heading" -}}
-      {{- $count := add 1 (sub .level $minLevel) -}}
-      {{- $indent := strings.Repeat $count "  " -}}
-      {{- $md = printf "%s\n%s- [%s](#%s)" $md $indent .text .id -}}
+      {{- $depth := add 1 (sub .level $minLevel) -}}
+      {{- $href := printf "%s#%s" $.RelPermalink .id -}}
+      {{- $entries = $entries | append (dict "depth" $depth "href" $href "text" .text "link" true) -}}
     {{- end -}}
   {{- end -}}
 
-  {{ $.RenderString $md }}
+  {{- /* Build nested <ul><li> HTML directly, tracking depth to open/close
+       <ul> elements. Using direct HTML avoids $.RenderString and the
+       render-link hook, which would emit bare #fragment hrefs that the
+       page's <base href> resolves against the wrong origin. */ -}}
+  {{- $prevDepth := 0 -}}
+  {{- $html := "<ul>" -}}
+  {{- $first := true -}}
+  {{- range $entries -}}
+    {{- $d := .depth -}}
+    {{- if $first -}}
+      {{- $first = false -}}
+    {{- else if gt $d $prevDepth -}}
+      {{- range seq 1 (sub $d $prevDepth) -}}
+        {{- $html = printf "%s<ul>" $html -}}
+      {{- end -}}
+    {{- else if lt $d $prevDepth -}}
+      {{- range seq 1 (sub $prevDepth $d) -}}
+        {{- $html = printf "%s</li></ul>" $html -}}
+      {{- end -}}
+      {{- $html = printf "%s</li>" $html -}}
+    {{- else -}}
+      {{- $html = printf "%s</li>" $html -}}
+    {{- end -}}
+    {{- if .link -}}
+      {{- $html = printf `%s<li><a href="%s">%s</a>` $html .href .text -}}
+    {{- else -}}
+      {{- $html = printf "%s<li><strong>%s</strong>" $html .text -}}
+    {{- end -}}
+    {{- $prevDepth = $d -}}
+  {{- end -}}
+  {{- range seq 0 $prevDepth -}}
+    {{- $html = printf "%s</li></ul>" $html -}}
+  {{- end -}}
+
+  {{ $html | safeHTML }}
 {{- end -}}
