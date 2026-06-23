@@ -1,0 +1,9 @@
+# see https://github.com/actions/labeler?tab=readme-ov-file#match-object to configure correctly
+#
+# Note: most kind/* and area/* labels are applied by the conventional-commit-labeler
+# job in .github/workflows/pull-request.yaml based on the PR title. Only rules that
+# can't be expressed via a Conventional Commit type/scope belong here.
+component/github-actions:
+- any:
+  - changed-files:
+    - any-glob-to-any-file: ['.github/**']
