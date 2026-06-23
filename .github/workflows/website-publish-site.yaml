@@ -41,7 +41,6 @@ jobs:
     permissions:
       contents: write
       id-token: write
-      pull-requests: write
 
     steps:
       - name: Get OCMBot installation token
