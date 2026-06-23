@@ -15,6 +15,7 @@ import (
 const (
 	ComponentConstructor = "component-constructor.yaml"
 	Bootstrap            = "bootstrap.yaml"
+	Manifests            = "manifests.yaml"
 	Rgd                  = "rgd.yaml"
 	Instance             = "instance.yaml"
 	K8sManifest          = "k8s-manifest.yaml"
@@ -24,7 +25,8 @@ const (
 
 // ignoreExamples lists examples that are tested elsewhere or should be skipped.
 var ignoreExamples = map[string]struct{}{
-	"applyset-pruning": {}, // tested in e2e_applyset_test.go
+	"applyset-pruning":   {}, // tested in e2e_applyset_test.go
+	"replication-simple": {}, // tested in e2e_replication_test.go
 }
 
 var _ = Describe("controller", func() {
