@@ -5,6 +5,7 @@
   "author": "open-component-model",
   "license": "Apache-2.0",
   "scripts": {
+    "prebuild": "node scripts/extract-toc.mjs",
     "build": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo --minify --gc",
     "clean:build": "shx rm -rf public resources .hugo_build.lock",
     "clean:install": "shx rm -rf node_modules package-lock.json yarn.lock pnpm-lock.yaml",

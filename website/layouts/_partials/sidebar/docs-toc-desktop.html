@@ -1,16 +1,10 @@
-{{- /*
-  Local override of @thulite/doks-core docs-toc-desktop partial.
-
-  Replaces .TableOfContents + the separate toc-extra partial with a single
-  toc-all call. toc-all scans .Content for all headings in document order so
-  that tab group labels appear at the correct position in the TOC rather than
-  appended at the end.
-*/ -}}
-{{- $_ := .Content -}}
+{{- /* Local override: use pre-built TOC data from scripts/extract-toc.mjs
+     instead of .TableOfContents, so shortcode headings (tabs, steps) appear
+     in document order. Falls back to .TableOfContents via toc-data.html. */ -}}
 <div class="page-links">
-  {{- $hasToc := or (.Scratch.Get "toc-extra") (partial "private/has-headings.html" .) -}}
+  {{- $hasToc := or (index site.Data.toc .File.Path) (partial "private/has-headings.html" .) -}}
   {{- if $hasToc -}}
     <h3>{{ i18n "on_this_page" }}</h3>
-    <nav id="toc">{{ partial "sidebar/toc-all.html" . }}</nav>
+    <nav id="toc">{{ partial "sidebar/toc-data.html" . }}</nav>
   {{- end -}}
 </div>
