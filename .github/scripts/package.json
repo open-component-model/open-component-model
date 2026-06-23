@@ -9,9 +9,6 @@
     "@octokit/graphql": "9.0.3"
   },
   "overrides": {
-    "@actions/github": {
-      "undici": "^6.27.0"
-    },
     "@actions/http-client": {
       "undici": "^6.27.0"
     }
