@@ -37,7 +37,7 @@ Component Repositories, and Component Versions.&lt;/p&gt;</description></item><i
  &lt;figcaption class="header"&gt;
  &lt;span class="title"&gt;&lt;/span&gt;
  &lt;/figcaption&gt;
- &lt;pre tabindex="0"&gt;&lt;code&gt; --config stringArray supply configuration by a given configuration file.
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
  By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
  1. The path specified in the OCM_CONFIG environment variable
  2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
@@ -54,7 +54,7 @@ Component Repositories, and Component Versions.&lt;/p&gt;</description></item><i
  - $EXE_DIR/ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
- Using the option, the specified configuration file(s) will be used instead of the lookup above.
+ Using the option, this configuration file be used instead of the lookup above.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
  text: Output logs in human-readable text format, suitable for console output
@@ -138,7 +138,7 @@ to enable it. You can execute the following once:&lt;/p&gt;</description></item>
  &lt;figcaption class="header"&gt;
  &lt;span class="title"&gt;&lt;/span&gt;
  &lt;/figcaption&gt;
- &lt;pre tabindex="0"&gt;&lt;code&gt; --config stringArray supply configuration by a given configuration file.
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
  By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
  1. The path specified in the OCM_CONFIG environment variable
  2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
@@ -155,7 +155,7 @@ to enable it. You can execute the following once:&lt;/p&gt;</description></item>
  - $EXE_DIR/ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
- Using the option, the specified configuration file(s) will be used instead of the lookup above.
+ Using the option, this configuration file be used instead of the lookup above.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
  text: Output logs in human-readable text format, suitable for console output
@@ -221,7 +221,7 @@ use OCM commands or configure OCM resources, you specify types from these subsys
  &lt;figcaption class="header"&gt;
  &lt;span class="title"&gt;&lt;/span&gt;
  &lt;/figcaption&gt;
- &lt;pre tabindex="0"&gt;&lt;code&gt; --config stringArray supply configuration by a given configuration file.
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
  By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
  1. The path specified in the OCM_CONFIG environment variable
  2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
@@ -238,7 +238,7 @@ use OCM commands or configure OCM resources, you specify types from these subsys
  - $EXE_DIR/ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
- Using the option, the specified configuration file(s) will be used instead of the lookup above.
+ Using the option, this configuration file be used instead of the lookup above.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
  text: Output logs in human-readable text format, suitable for console output
@@ -287,7 +287,7 @@ and usage of using your command. For example:&lt;/p&gt;</description></item><ite
  &lt;figcaption class="header"&gt;
  &lt;span class="title"&gt;&lt;/span&gt;
  &lt;/figcaption&gt;
- &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get {component-version|component-versions|cv|cvs|config|cfg} [flags]&lt;/code&gt;&lt;/pre&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm get {component-version|component-versions|cv|cvs} [flags]&lt;/code&gt;&lt;/pre&gt;
  &lt;/figure&gt;
 &lt;/div&gt;
 &lt;h3 id="options"&gt;Options&lt;/h3&gt;
@@ -311,7 +311,7 @@ and usage of using your command. For example:&lt;/p&gt;</description></item><ite
  &lt;figcaption class="header"&gt;
  &lt;span class="title"&gt;&lt;/span&gt;
  &lt;/figcaption&gt;
- &lt;pre tabindex="0"&gt;&lt;code&gt; --config stringArray supply configuration by a given configuration file.
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
  By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
  1. The path specified in the OCM_CONFIG environment variable
  2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
@@ -328,7 +328,7 @@ and usage of using your command. For example:&lt;/p&gt;</description></item><ite
  - $EXE_DIR/ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
- Using the option, the specified configuration file(s) will be used instead of the lookup above.
+ Using the option, this configuration file be used instead of the lookup above.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
  text: Output logs in human-readable text format, suitable for console output
@@ -353,18 +353,13 @@ and usage of using your command. For example:&lt;/p&gt;</description></item><ite
 &lt;ul&gt;
 &lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
 &lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/"&gt;ocm get component-version&lt;/a&gt;	 - Get component version(s) from an OCM repository&lt;/li&gt;
-&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-get-config/"&gt;ocm get config&lt;/a&gt;	 - Display the effective merged OCM configuration&lt;/li&gt;
 &lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-get-types/"&gt;ocm get types&lt;/a&gt;	 - Describe OCM types and their configuration schema&lt;/li&gt;
 &lt;/ul&gt;</description></item><item><title>ocm get component-version</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-get-component-version/</guid><description>&lt;h2 id="ocm-get-component-version"&gt;ocm get component-version&lt;/h2&gt;
 &lt;p&gt;Get component version(s) from an OCM repository&lt;/p&gt;
 &lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
 &lt;p&gt;Get component version(s) from an OCM repository.&lt;/p&gt;
 &lt;p&gt;The format of a component reference is:
-[type::]{repository}/[valid-prefix]/{component}[:version]&lt;/p&gt;</description></item><item><title>ocm get config</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-get-config/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-get-config/</guid><description>&lt;h2 id="ocm-get-config"&gt;ocm get config&lt;/h2&gt;
-&lt;p&gt;Display the effective merged OCM configuration&lt;/p&gt;
-&lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
-&lt;p&gt;Evaluate the command line arguments and all explicitly or implicitly used
-configuration files and display the merged effective configuration as a single object.&lt;/p&gt;</description></item><item><title>ocm get types</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-get-types/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-get-types/</guid><description>&lt;h2 id="ocm-get-types"&gt;ocm get types&lt;/h2&gt;
+[type::]{repository}/[valid-prefix]/{component}[:version]&lt;/p&gt;</description></item><item><title>ocm get types</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-get-types/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-get-types/</guid><description>&lt;h2 id="ocm-get-types"&gt;ocm get types&lt;/h2&gt;
 &lt;p&gt;Describe OCM types and their configuration schema&lt;/p&gt;
 &lt;h3 id="synopsis"&gt;Synopsis&lt;/h3&gt;
 &lt;p&gt;Describe OCM types registered in various subsystems.&lt;/p&gt;
@@ -405,7 +400,7 @@ use OCM commands or configure OCM resources, you specify types from these subsys
  &lt;figcaption class="header"&gt;
  &lt;span class="title"&gt;&lt;/span&gt;
  &lt;/figcaption&gt;
- &lt;pre tabindex="0"&gt;&lt;code&gt; --config stringArray supply configuration by a given configuration file.
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
  By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
  1. The path specified in the OCM_CONFIG environment variable
  2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
@@ -422,7 +417,7 @@ use OCM commands or configure OCM resources, you specify types from these subsys
  - $EXE_DIR/ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
- Using the option, the specified configuration file(s) will be used instead of the lookup above.
+ Using the option, this configuration file be used instead of the lookup above.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
  text: Output logs in human-readable text format, suitable for console output
@@ -447,4 +442,81 @@ use OCM commands or configure OCM resources, you specify types from these subsys
 &lt;ul&gt;
 &lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm/"&gt;ocm&lt;/a&gt;	 - The official Open Component Model (OCM) CLI&lt;/li&gt;
 &lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/"&gt;ocm plugin registry&lt;/a&gt;	 - Manage plugin registries&lt;/li&gt;
+&lt;/ul&gt;</description></item><item><title>ocm plugin registry</title><link>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry/</guid><description>&lt;h2 id="ocm-plugin-registry"&gt;ocm plugin registry&lt;/h2&gt;
+&lt;p&gt;Manage plugin registries&lt;/p&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt;ocm plugin registry {get|list} [flags]&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options"&gt;Options&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; -h, --help help for registry&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="options-inherited-from-parent-commands"&gt;Options inherited from parent commands&lt;/h3&gt;
+
+
+
+&lt;div class="expressive-code"&gt;
+ &lt;figure class="frame not-content"&gt;
+ &lt;figcaption class="header"&gt;
+ &lt;span class="title"&gt;&lt;/span&gt;
+ &lt;/figcaption&gt;
+ &lt;pre tabindex="0"&gt;&lt;code&gt; --config string supply configuration by a given configuration file.
+ By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
+ 1. The path specified in the OCM_CONFIG environment variable
+ 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user&amp;#39;s home directory
+ - $XDG_CONFIG_HOME/ocm/config
+ - $XDG_CONFIG_HOME/.ocmconfig
+ - $HOME/.config/ocm/config
+ - $HOME/.config/.ocmconfig
+ - $HOME/.ocm/config
+ - $HOME/.ocmconfig
+ 3. The current working directory:
+ - $PWD/ocm/config
+ - $PWD/.ocmconfig
+ 4. The directory of the current executable:
+ - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocmconfig
+ If multiple configuration files are found, they will be merged in the order they are discovered.
+ Using the option, this configuration file be used instead of the lookup above.
+ --logformat enum set the log output format that is used to print individual logs
+ json: Output logs in JSON format, suitable for machine processing
+ text: Output logs in human-readable text format, suitable for console output
+ (must be one of [json text]) (default text)
+ --loglevel enum sets the logging level
+ debug: Show all logs including detailed debugging information
+ info: Show informational messages and above
+ warn: Show warnings and errors only (default)
+ error: Show errors only
+ (must be one of [debug error info warn]) (default info)
+ --logoutput enum set the log output destination
+ stdout: Write logs to standard output
+ stderr: Write logs to standard error, useful for separating logs from normal output
+ (must be one of [stderr stdout]) (default stderr)
+ --plugin-directory string default directory path for ocm plugins. (default &amp;#34;$HOME/.config/ocm/plugins&amp;#34;)
+ --plugin-shutdown-timeout duration Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
+ --temp-folder string Specify a custom temporary folder path for filesystem operations.
+ --working-directory string Specify a custom working directory path to load resources from.&lt;/code&gt;&lt;/pre&gt;
+ &lt;/figure&gt;
+&lt;/div&gt;
+&lt;h3 id="see-also"&gt;SEE ALSO&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin/"&gt;ocm plugin&lt;/a&gt;	 - Manage OCM plugins&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-get/"&gt;ocm plugin registry get&lt;/a&gt;	 - Get information about specified plugin from a plugin registry.&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://ocm.software/docs/reference/ocm-cli/ocm-plugin-registry-list/"&gt;ocm plugin registry list&lt;/a&gt;	 - List available plugin binaries from a plugin registry.&lt;/li&gt;
 &lt;/ul&gt;</description></item></channel></rss>
