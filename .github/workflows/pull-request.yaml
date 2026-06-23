@@ -119,14 +119,10 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with:
-          sparse-checkout: |
-            .github/config/labeler.yml
-          persist-credentials: false
+      # No checkout needed: actions/labeler@v6 reads the configuration from the
+      # base repository via the GitHub API when the file is not present on disk.
+      # The config lives at the action's default path (.github/labeler.yml).
       - uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213 # v6
-        with:
-          configuration-path: .github/config/labeler.yml
   size-labeler:
     # codelytv/pr-size-labeler Dockerfile downloads x86_64-only docpars binary.
     # Serialized after the kind labelers because pr-size-labeler@v1 PUTs the full
