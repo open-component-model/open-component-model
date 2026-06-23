@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1/schemas/SignatureAlgorithm.schema.json",
   "title": "SignatureAlgorithm",
   "type": "string",
-  "description": "SignatureAlgorithm is the OCM-versioned Sigstore signing algorithm.",
+  "description": "SignatureAlgorithm is the OCM-versioned Sigstore signing algorithm.\n\nAccepted values:\n- [AlgorithmSigstoreV1Alpha1] — canonical wire value \"Sigstore/v1alpha1\".\nUse this for new signatures; [AlgorithmSigstoreDefault] points here.\n- [AlgorithmSigstoreLegacy] — bare \"sigstore\" string emitted by\npre-versioning OCM CLIs. Accepted on verify only; never produced on sign.",
   "oneOf": [
     {
       "description": "AlgorithmSigstoreDefault is the algorithm the handler picks when\nSignConfig.SignatureAlgorithm is empty. Bumping this default is a\nbreaking change.",

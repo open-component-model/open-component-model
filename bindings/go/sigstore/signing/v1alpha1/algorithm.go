@@ -4,6 +4,12 @@ import "errors"
 
 // SignatureAlgorithm is the OCM-versioned Sigstore signing algorithm.
 //
+// Accepted values:
+//   - [AlgorithmSigstoreV1Alpha1] — canonical wire value "Sigstore/v1alpha1".
+//     Use this for new signatures; [AlgorithmSigstoreDefault] points here.
+//   - [AlgorithmSigstoreLegacy] — bare "sigstore" string emitted by
+//     pre-versioning OCM CLIs. Accepted on verify only; never produced on sign.
+//
 // +ocm:jsonschema-gen:enum=Sigstore/v1alpha1
 // +ocm:jsonschema-gen:enum:deprecated=sigstore
 type SignatureAlgorithm string

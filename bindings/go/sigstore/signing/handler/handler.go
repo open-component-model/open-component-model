@@ -173,8 +173,8 @@ func (h *Handler) Verify(
 		return fmt.Errorf("convert config: %w", err)
 	}
 
-	if err := validateSignatureEnvelope(ctx, signed.Signature); err != nil {
-		return err
+	if err := validateSignatureEnvelope(signed.Signature); err != nil {
+		return fmt.Errorf("verify: %w", err)
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -301,12 +301,12 @@ func (*Handler) GetSigningCredentialConsumerIdentity(
 }
 
 func (*Handler) GetVerifyingCredentialConsumerIdentity(
-	ctx context.Context,
+	_ context.Context,
 	signature descruntime.Signature,
 	_ runtime.Typed,
 ) (runtime.Identity, error) {
-	if err := validateSignatureEnvelope(ctx, signature.Signature); err != nil {
-		return nil, err
+	if err := validateSignatureEnvelope(signature.Signature); err != nil {
+		return nil, fmt.Errorf("verifying credential identity: %w", err)
 	}
 	id := credentialIdentity(verifierv1.VersionedType)
 	id[verifierv1.IdentityAttributeSignature] = signature.Name
@@ -317,27 +317,16 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 // algorithm and an acceptable bundle MediaType. Empty Algorithm is rejected
 // (not defaulted): an OCM signature without a declared algorithm is foreign
 // or malformed.
-func validateSignatureEnvelope(ctx context.Context, sig descruntime.SignatureInfo) error {
+func validateSignatureEnvelope(sig descruntime.SignatureInfo) error {
 	if sig.Algorithm == "" {
-		slog.WarnContext(ctx, "sigstore verify rejected",
-			"reason", "algorithm-required",
-			"mediaType", sig.MediaType)
 		return fmt.Errorf("signature.Algorithm is required for sigstore verification")
 	}
 	switch v1alpha1.SignatureAlgorithm(sig.Algorithm) {
 	case v1alpha1.AlgorithmSigstoreV1Alpha1, v1alpha1.AlgorithmSigstoreLegacy:
 	default:
-		slog.WarnContext(ctx, "sigstore verify rejected",
-			"reason", "unknown-algorithm",
-			"algorithm", sig.Algorithm,
-			"mediaType", sig.MediaType)
 		return fmt.Errorf("%w: %q", v1alpha1.ErrUnknownAlgorithm, sig.Algorithm)
 	}
 	if sig.MediaType != v1alpha1.MediaTypeSigstoreBundle {
-		slog.WarnContext(ctx, "sigstore verify rejected",
-			"reason", "unacceptable-mediatype",
-			"algorithm", sig.Algorithm,
-			"mediaType", sig.MediaType)
 		return fmt.Errorf("unsupported media type %q for sigstore verification", sig.MediaType)
 	}
 	return nil

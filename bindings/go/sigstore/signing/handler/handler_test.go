@@ -10,7 +10,6 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -437,10 +436,6 @@ func TestSign_ExplicitAlgorithm(t *testing.T) {
 	r.Equal(string(v1alpha1.AlgorithmSigstoreV1Alpha1), result.Algorithm)
 }
 
-// TestSign_UnknownAlgorithm_RejectedByValidate documents that Sign relies on
-// cfg.Validate to reject unknown algorithms (the rejection happens before
-// GetSignatureAlgorithm is consulted). The matching unit-level coverage lives
-// in TestSignConfig_Validate; this test pins the call ordering through Sign.
 func TestSign_UnknownAlgorithm_RejectedByValidate(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
@@ -495,9 +490,6 @@ func TestVerify_UnknownAlgorithmRejected(t *testing.T) {
 	r.ErrorIs(err, v1alpha1.ErrUnknownAlgorithm)
 }
 
-// TestVerify_LegacyBareSigstoreAccepted pins the backwards-compatible alias:
-// pre-PR signatures carry Algorithm: "sigstore" and must verify under the
-// AlgorithmSigstoreLegacy alias.
 func TestVerify_LegacyBareSigstoreAccepted(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
@@ -1035,39 +1027,46 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		algorithm   string
-		mediaType   string
-		wantErrIs   error
-		wantErrText string
+		name      string
+		algorithm string
+		mediaType string
+		wantErr   require.ErrorAssertionFunc
 	}{
 		{
 			name:      "valid sigstore bundle",
 			algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			mediaType: v1alpha1.MediaTypeSigstoreBundle,
+			wantErr:   require.NoError,
 		},
 		{
-			name:        "missing algorithm",
-			algorithm:   "",
-			mediaType:   v1alpha1.MediaTypeSigstoreBundle,
-			wantErrText: "signature.Algorithm is required",
+			name:      "missing algorithm",
+			algorithm: "",
+			mediaType: v1alpha1.MediaTypeSigstoreBundle,
+			wantErr: func(t require.TestingT, err error, _ ...any) {
+				require.ErrorContains(t, err, "signature.Algorithm is required")
+			},
 		},
 		{
 			name:      "unknown algorithm",
 			algorithm: "Sigstore/v99alpha1",
 			mediaType: v1alpha1.MediaTypeSigstoreBundle,
-			wantErrIs: v1alpha1.ErrUnknownAlgorithm,
+			wantErr: func(t require.TestingT, err error, _ ...any) {
+				require.ErrorIs(t, err, v1alpha1.ErrUnknownAlgorithm)
+			},
 		},
 		{
 			name:      "legacy bare sigstore alias",
 			algorithm: string(v1alpha1.AlgorithmSigstoreLegacy),
 			mediaType: v1alpha1.MediaTypeSigstoreBundle,
+			wantErr:   require.NoError,
 		},
 		{
-			name:        "unacceptable media type",
-			algorithm:   string(v1alpha1.AlgorithmSigstoreV1Alpha1),
-			mediaType:   "application/pgp-signature",
-			wantErrText: "unsupported media type",
+			name:      "unacceptable media type",
+			algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
+			mediaType: "application/pgp-signature",
+			wantErr: func(t require.TestingT, err error, _ ...any) {
+				require.ErrorContains(t, err, "unsupported media type")
+			},
 		},
 	}
 
@@ -1086,16 +1085,10 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 			}
 
 			id, err := h.GetVerifyingCredentialConsumerIdentity(t.Context(), signed, nil)
-			switch {
-			case tc.wantErrIs != nil:
-				r.Error(err)
-				r.True(errors.Is(err, tc.wantErrIs), "expected %v, got %v", tc.wantErrIs, err)
-				return
-			case tc.wantErrText != "":
-				r.ErrorContains(err, tc.wantErrText)
+			tc.wantErr(t, err)
+			if err != nil {
 				return
 			}
-			r.NoError(err)
 			r.Equal(verifierv1.VersionedType, id.GetType())
 			r.Equal("my-sig", id[verifierv1.IdentityAttributeSignature])
 			r.Len(id, 2)
