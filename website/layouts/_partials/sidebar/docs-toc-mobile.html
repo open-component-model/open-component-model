@@ -1,0 +1,18 @@
+{{- /*
+  Local override of @thulite/doks-core docs-toc-mobile partial.
+
+  Replaces .TableOfContents + the separate toc-extra partial with a single
+  toc-all call. toc-all scans .Content for all headings in document order so
+  that tab group labels appear at the correct position in the TOC rather than
+  appended at the end.
+*/ -}}
+{{- $_ := .Content -}}
+{{- $hasToc := or (.Scratch.Get "toc-extra") (partial "private/has-headings.html" .) -}}
+{{- if and (ne .Params.toc false) $hasToc -}}
+  <details>
+    <summary>{{ i18n "on_this_page" }}</summary>
+    <div class="page-links">
+      {{ partial "sidebar/toc-all.html" . }}
+    </div>
+  </details>
+{{- end -}}

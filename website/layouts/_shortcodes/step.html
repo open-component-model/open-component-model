@@ -1,0 +1,29 @@
+<!--
+  Local override of @thulite/doks-core step shortcode.
+
+  Identical rendering to the theme version, but also registers headings found
+  inside the step content into Page.Scratch "toc-extra" so the TOC partial
+  can include them (see layouts/_partials/sidebar/docs-toc-*.html).
+-->
+<li>
+  {{- $rendered := .Inner | page.RenderString -}}
+  {{- /* Skip heading collection when nested inside a tab — tabs.html scans the
+       rendered tab content and collects all headings (including those from steps)
+       after dedup. Only collect for standalone steps (steps not inside a tab). */ -}}
+  {{- $inTab := false -}}
+  {{- with .Parent -}}{{- with .Parent -}}{{- if eq .Name "tab" -}}{{- $inTab = true -}}{{- end -}}{{- end -}}{{- end -}}
+  {{- if not $inTab -}}
+    {{- range findRE `<h[2-6][^>]*id="[^"]+"` $rendered -}}
+      {{- $level := replaceRE `<h([2-6]).*` "$1" . | int -}}
+      {{- $id := replaceRE `.*\bid="([^"]+)".*` "$1" . -}}
+      {{- $textMatches := findRE (printf `<h[2-6][^>]*id="%s"[^>]*>[^<]+` $id) $rendered -}}
+      {{- with index $textMatches 0 -}}
+        {{- $text := replaceRE `<h[2-6][^>]*>` "" . | strings.TrimSpace -}}
+        {{- if $text -}}
+          {{- page.Scratch.Add "toc-extra" (slice (dict "type" "heading" "level" $level "id" $id "text" $text)) -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{ $rendered | safeHTML }}
+</li>
