@@ -16,11 +16,11 @@
     "dev": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --noHTTPCache",
     "hugo": "./node_modules/.bin/hugo",
     "info": "npm list",
-    "lint:markdown": "markdownlint-cli2 \"*.md\" \"content/**/*.md\"",
-    "lint:scripts": "eslint --cache assets/js",
+    "lint:markdown": "markdownlint-cli2 --config ../.github/config/website.markdownlint-cli2.yaml \"**/*.md\" \"!node_modules/**\" \"!content_versioned/version-legacy/**\"",
+    "lint:scripts": "eslint --cache assets/js scripts",
     "lint:styles": "stylelint --cache \"assets/scss/**/*.{css,sass,scss}\"",
     "lint": "npm run lint:scripts && npm run lint:styles && npm run lint:markdown",
-    "lint:scripts:fix": "eslint --cache --fix assets/js",
+    "lint:scripts:fix": "eslint --cache --fix assets/js scripts",
     "mod:clean": "npm run hugo -- mod clean",
     "mod:tidy": "npm run hugo -- mod tidy",
     "mod:get": "npm run hugo -- mod get",
@@ -42,15 +42,15 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/js-yaml": "4.0.9",
-    "@types/node": "25.9.1",
-    "eslint": "10.4.1",
+    "@types/node": "25.9.4",
+    "eslint": "10.5.0",
     "globals": "17.6.0",
-    "hugo-extended": "0.162.1",
+    "hugo-extended": "0.163.2",
     "jiti": "2.7.0",
     "js-yaml": "4.2.0",
     "sass-embedded": "1.100.0",
     "shx": "0.4.0",
-    "typescript-eslint": "8.60.0"
+    "typescript-eslint": "8.61.1"
   },
   "overrides": {
     "semver": "^7.5.4",
@@ -64,5 +64,5 @@
     "node": ">=25.8.0",
     "npm": ">=11.11.0"
   },
-  "packageManager": "npm@11.16.0"
+  "packageManager": "npm@11.17.0"
 }

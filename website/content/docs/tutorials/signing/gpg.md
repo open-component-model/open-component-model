@@ -1,7 +1,7 @@
 ---
 title: "GPG Signatures"
 description: "Learn to cryptographically sign a component version with a GPG key and verify its authenticity."
-icon: "✍️"
+icon: fingerprint
 weight: 30
 toc: true
 ---
@@ -207,10 +207,9 @@ configurations:
           type: GPG/v1alpha1
           signature: default
         credentials:
-          - type: Credentials/v1
-            properties:
-              privateKeyPGPFile: /tmp/ocm-gpg-tutorial/keys/signing-key.asc
-              publicKeyPGPFile: /tmp/ocm-gpg-tutorial/keys/verify-key.asc
+          - type: GPGCredentials/v1alpha1
+            privateKeyPGPFile: /tmp/ocm-gpg-tutorial/keys/signing-key.asc
+            publicKeyPGPFile: /tmp/ocm-gpg-tutorial/keys/verify-key.asc
 EOF
 
 # Signer spec: selects the GPG signing handler
@@ -349,11 +348,10 @@ Yes. Add the `passphrase` property to your credentials block:
 
 ```yaml
 credentials:
-  - type: Credentials/v1
-    properties:
-      privateKeyPGPFile: /path/to/signing-key.asc
-      publicKeyPGPFile: /path/to/verify-key.asc
-      passphrase: my-secret-passphrase
+  - type: GPGCredentials/v1alpha1
+    privateKeyPGPFile: /path/to/signing-key.asc
+    publicKeyPGPFile: /path/to/verify-key.asc
+    passphrase: my-secret-passphrase
 ```
 
 OCM decrypts the key in-memory only; the passphrase is never written to disk.

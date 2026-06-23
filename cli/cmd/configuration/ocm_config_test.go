@@ -1,9 +1,10 @@
 package configuration
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -11,35 +12,89 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func TestGetOCMConfigForCommand(t *testing.T) {
-	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
-		cmd := &cobra.Command{Use: "test"}
-		RegisterConfigFlag(cmd)
-		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "/nonexistent/path/config.yaml"))
+func TestGetOCMConfigPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing map[string]bool
+		envVars  map[string]string
+		want     func(workingDirectory, executableDirectory string) []string
+		wantErr  bool
+	}{
+		{
+			name:     "env var set and file exists",
+			existing: map[string]bool{"/custom/config": true},
+			envVars:  map[string]string{"OCM_CONFIG": "/custom/config"},
+			want:     func(string, string) []string { return []string{"/custom/config"} },
+		},
+		{
+			name:     "env var set but file does not exist",
+			existing: map[string]bool{},
+			envVars:  map[string]string{"OCM_CONFIG": "/missing/config"},
+			wantErr:  true,
+		},
+		{
+			name:     "all files found across all locations in documented order",
+			existing: nil, // all paths exist
+			envVars: map[string]string{
+				"OCM_CONFIG":      "/ocm-config",
+				"XDG_CONFIG_HOME": "/xdg",
+			},
+			want: func(workingDirectory, executableDirectory string) []string {
+				return []string{
+					"/ocm-config",
+					"/xdg/.ocm/config",
+					"/xdg/.ocmconfig",
+					"/home/user/.config/.ocm/config",
+					"/home/user/.config/.ocmconfig",
+					"/home/user/.ocm/config",
+					"/home/user/.ocmconfig",
+					filepath.Join(workingDirectory, ".ocm/config"),
+					filepath.Join(workingDirectory, ".ocmconfig"),
+					filepath.Join(executableDirectory, ".ocm/config"),
+					filepath.Join(executableDirectory, ".ocmconfig"),
+				}
+			},
+		},
+		{
+			name:     "no files found returns error",
+			existing: map[string]bool{},
+			envVars:  map[string]string{},
+			wantErr:  true,
+		},
+	}
 
-		_, err := GetOCMConfigForCommand(cmd)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "/nonexistent/path/config.yaml")
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workingDirectory := t.TempDir()
+			ex, err := os.Executable()
+			require.NoError(t, err)
+			executableDirectory := filepath.Dir(ex)
+			t.Chdir(workingDirectory)
 
-	t.Run("explicit config flag with existing file succeeds", func(t *testing.T) {
-		cmd := &cobra.Command{Use: "test"}
-		RegisterConfigFlag(cmd)
-		require.NoError(t, cmd.PersistentFlags().Set(OCMConfigCommandArgument, "testdata/.ocmconfig-1"))
+			options := OCMConfigOptions{
+				Stat: func(path string) (os.FileInfo, error) {
+					if tt.existing == nil || tt.existing[path] {
+						return nil, nil
+					}
+					return nil, os.ErrNotExist
+				},
+				Getenv: func(key string) string {
+					return tt.envVars[key]
+				},
+				UserHomeDir: func() (string, error) { return "/home/user", nil },
+				Getwd:       func() (string, error) { return workingDirectory, nil },
+				Executable:  func() (string, error) { return ex, nil },
+			}
 
-		cfg, err := GetOCMConfigForCommand(cmd)
-		require.NoError(t, err)
-		assert.NotNil(t, cfg)
-	})
-
-	t.Run("no config flag uses default discovery", func(t *testing.T) {
-		cmd := &cobra.Command{Use: "test"}
-		RegisterConfigFlag(cmd)
-
-		// Should not panic; may or may not error depending on whether
-		// default config files exist on the test machine
-		_, _ = GetOCMConfigForCommand(cmd)
-	})
+			got, err := GetOCMConfigPaths(options)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want(workingDirectory, executableDirectory), got)
+		})
+	}
 }
 
 func TestGetFlattenedGetConfigFromPath(t *testing.T) {

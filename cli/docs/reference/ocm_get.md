@@ -12,7 +12,7 @@ sidebar:
 Get anything from OCM
 
 ```
-ocm get {component-version|component-versions|cv|cvs} [flags]
+ocm get {component-version|component-versions|cv|cvs|config|cfg} [flags]
 ```
 
 ### Options
@@ -24,7 +24,7 @@ ocm get {component-version|component-versions|cv|cvs} [flags]
 ### Options inherited from parent commands
 
 ```
-      --config string                      supply configuration by a given configuration file.
+      --config stringArray                 supply configuration by a given configuration file.
                                            By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
                                            1. The path specified in the OCM_CONFIG environment variable
                                            2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
@@ -41,7 +41,7 @@ ocm get {component-version|component-versions|cv|cvs} [flags]
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
-                                           Using the option, this configuration file be used instead of the lookup above.
+                                           Using the option, the specified configuration file(s) will be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -66,5 +66,6 @@ ocm get {component-version|component-versions|cv|cvs} [flags]
 
 * [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
 * [ocm get component-version]({{< relref "ocm_get_component-version.md" >}})	 - Get component version(s) from an OCM repository
+* [ocm get config]({{< relref "ocm_get_config.md" >}})	 - Display the effective merged OCM configuration
 * [ocm get types]({{< relref "ocm_get_types.md" >}})	 - Describe OCM types and their configuration schema
 

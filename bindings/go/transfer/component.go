@@ -54,45 +54,12 @@ type Mapping struct {
 	Resolver resolvers.ComponentVersionRepositoryResolver
 }
 
-// TransferOption configures a [Mapping].
-type TransferOption func(*Mapping)
-
-// Component adds a source component version to a transfer mapping.
-func Component(component, version string) TransferOption {
-	return func(m *Mapping) {
-		m.Components = append(m.Components, ComponentID{Component: component, Version: version})
-	}
-}
-
-// ToRepositorySpec sets the target repository specification for a transfer mapping.
-func ToRepositorySpec(target runtime.Typed) TransferOption {
-	return func(m *Mapping) {
-		m.Target = target
-	}
-}
-
-// FromLister sets a dynamic lister as the source for a transfer mapping.
-// Cannot be combined with [Component] in the same [WithTransfer] call.
-func FromLister(lister ComponentVersionLister) TransferOption {
-	return func(m *Mapping) {
-		m.ComponentLister = lister
-	}
-}
-
-// FromResolver sets an explicit resolver for this mapping's source components.
-func FromResolver(r resolvers.ComponentVersionRepositoryResolver) TransferOption {
-	return func(m *Mapping) {
-		m.Resolver = r
-	}
-}
-
-// FromRepository wraps a [repository.ComponentVersionRepository] and its specification in a
-// simple resolver and sets it on the mapping. The repoSpec is needed so that the graph builder
-// can determine the correct transformation types (OCI vs CTF) for resource get/add operations.
-func FromRepository(repo repository.ComponentVersionRepository, repoSpec runtime.Typed) TransferOption {
-	return func(m *Mapping) {
-		m.Resolver = &repoResolver{repo: repo, spec: repoSpec}
-	}
+// NewRepositoryResolver wraps a single [repository.ComponentVersionRepository] and its
+// specification in a [resolvers.ComponentVersionRepositoryResolver] for use as a
+// [Mapping.Resolver]. The repoSpec is needed so that the graph builder can determine
+// the correct transformation types (OCI vs CTF) for resource get/add operations.
+func NewRepositoryResolver(repo repository.ComponentVersionRepository, repoSpec runtime.Typed) resolvers.ComponentVersionRepositoryResolver {
+	return &repoResolver{repo: repo, spec: repoSpec}
 }
 
 // repoResolver wraps a single ComponentVersionRepository as a ComponentVersionRepositoryResolver.

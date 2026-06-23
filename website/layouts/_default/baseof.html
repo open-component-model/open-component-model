@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ .Site.LanguageCode | default "en" }}" data-bs-theme="{{ site.Params.doks.colorMode | default "auto" }}">
+<html lang="{{ .Site.Language.Locale | default "en" }}" data-bs-theme="{{ site.Params.doks.colorMode | default "auto" }}">
 {{ partial "head/head" . }}
 {{ partial "head/body-class" . }}
 

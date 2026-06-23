@@ -27,11 +27,11 @@ ocm download plugin [flags]
 ### Examples
 
 ```
- # Download a plugin binary with resource name 'helminput' and version 'v0.0.0-main'
-  ocm download plugin ghcr.io/open-component-model/plugins//ocm.software/plugins/helminput:0.0.0-main
+ # Download a plugin binary with resource name '<my-plugin-component>' and version '<version>'
+  ocm download plugin <oci-repository>//<my-plugin-component>:<version>
 
   # Download a platform-specific plugin binary with extra identity parameters with specified output location.
-  ocm download plugin ghcr.io/open-component-model/plugins//ocm.software/plugins/helminput:0.0.0-main --extra-identity os=linux,arch=amd64 --output ./plugins/ocm-plugin-linux-amd64
+  ocm download plugin <oci-repository>//<my-plugin-component>:<version> --extra-identity os=linux,arch=amd64 --output ./plugins/ocm-plugin-linux-amd64
 ```
 
 ### Options
@@ -50,7 +50,7 @@ ocm download plugin [flags]
 ### Options inherited from parent commands
 
 ```
-      --config string                      supply configuration by a given configuration file.
+      --config stringArray                 supply configuration by a given configuration file.
                                            By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
                                            1. The path specified in the OCM_CONFIG environment variable
                                            2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
@@ -67,7 +67,7 @@ ocm download plugin [flags]
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
-                                           Using the option, this configuration file be used instead of the lookup above.
+                                           Using the option, the specified configuration file(s) will be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output

@@ -1,7 +1,7 @@
 ---
 title: "Certificate Chains (PEM)"
 description: "Sign and verify component versions using PEM-encoded signatures with an X.509 certificate chain and a dedicated trust anchor."
-icon: "🔐"
+icon: certificate
 weight: 20
 toc: true
 ---
@@ -173,10 +173,9 @@ configurations:
           algorithm: RSASSA-PSS
           signature: default
         credentials:
-          - type: Credentials/v1
-            properties:
-              private_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/leaf.key)
-              public_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/chain.pem)
+          - type: RSACredentials/v1
+            privateKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/leaf.key)
+            publicKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/chain.pem)
 EOF
 
 # Verifier configuration
@@ -190,14 +189,13 @@ configurations:
           algorithm: RSASSA-PSS
           signature: default
         credentials:
-          - type: Credentials/v1
-            properties:
-              public_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/root.crt)
+          - type: RSACredentials/v1
+            publicKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/root.crt)
 EOF
 ```
 
 {{< callout context="caution" title="Trust anchor isolation" >}}
-When a self-signed certificate is supplied as `public_key_pem_file` for verification,
+When a self-signed certificate is supplied as `publicKeyPEMFile` for verification,
 OCM uses it as an **isolated trust anchor** and bypasses the system root store entirely.
 Only signatures rooted in that specific CA will verify successfully.
 {{< /callout >}}
@@ -404,10 +402,9 @@ configurations:
           algorithm: RSASSA-PSS
           signature: default
         credentials:
-          - type: Credentials/v1
-            properties:
-              private_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/leaf.key)
-              public_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/chain.pem)
+          - type: RSACredentials/v1
+            privateKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/leaf.key)
+            publicKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/chain.pem)
 EOF
 
 # Verifier configuration
@@ -421,14 +418,13 @@ configurations:
           algorithm: RSASSA-PSS
           signature: default
         credentials:
-          - type: Credentials/v1
-            properties:
-              public_key_pem_file: $(realpath ~/.ocm/keys/pem-demo/root.crt)
+          - type: RSACredentials/v1
+            publicKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/root.crt)
 EOF
 ```
 
 {{< callout context="caution" title="Trust anchor isolation" >}}
-When a self-signed certificate is supplied as `public_key_pem_file` for verification,
+When a self-signed certificate is supplied as `publicKeyPEMFile` for verification,
 OCM uses it as an **isolated trust anchor** and bypasses the system root store entirely.
 Only signatures rooted in that specific CA will verify successfully.
 {{< /callout >}}
@@ -553,7 +549,7 @@ openssl verify -CAfile root.crt -untrusted intermediate.crt leaf.crt
 ### "certificate signed by unknown authority"
 
 The root CA in the verification config doesn't match the root that signed the embedded chain.
-Check that `public_key_pem_file` points to the correct root CA.
+Check that `publicKeyPEMFile` points to the correct root CA.
 
 ```bash
 openssl verify -CAfile root.crt leaf.crt
@@ -575,4 +571,5 @@ Use `--force` to overwrite or choose a different name with `--signature`.
 ## Related Documentation
 
 - [Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) -- Basic key-pair signing without certificate chains
+- [Sigstore (Keyless)]({{< relref "docs/tutorials/signing/sigstore.md" >}}) -- Identity-based signing — no keys to manage
 - [Configure Credentials for Signing]({{< relref "configure-signing-credentials.md" >}}) -- Full credential configuration reference

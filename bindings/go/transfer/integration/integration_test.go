@@ -40,8 +40,8 @@ import (
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-
 	"ocm.software/open-component-model/bindings/go/transfer"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
 const (
@@ -198,12 +198,12 @@ func Test_Integration_TransferLocalBlob_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err, "graph definition should build successfully")
 	r.NotNil(tgd)
@@ -323,12 +323,12 @@ func Test_Integration_TransferDescriptorOnly_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -392,12 +392,12 @@ func Test_Integration_TransferMultipleResources_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -462,12 +462,12 @@ func Test_Integration_TransferCTFToCTF(t *testing.T) {
 		AccessMode: "readwrite|create",
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -523,13 +523,15 @@ func Test_Integration_TransferMultipleComponents_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(component1Name, component1Version),
-			transfer.Component(component2Name, component2Version),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{
+				{Component: component1Name, Version: component1Version},
+				{Component: component2Name, Version: component2Version},
+			},
+			Target:   targetSpec,
+			Resolver: transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -585,7 +587,7 @@ func Test_Integration_TransferWithFromRepository(t *testing.T) {
 		"repo-resource": []byte("from-repository data"),
 	})
 
-	// 3. Build the transfer graph using FromRepository instead of FromResolver.
+	// 3. Build the transfer graph using NewRepositoryResolver instead of a full resolver.
 	sourceSpec := &ctfrepospec.Repository{
 		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
 		FilePath: sourceCTFPath,
@@ -595,12 +597,12 @@ func Test_Integration_TransferWithFromRepository(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -701,12 +703,12 @@ func Test_Integration_TransferRecursive_CTFToOCI(t *testing.T) {
 	}
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithRecursive(true),
-		transfer.WithTransfer(
-			transfer.Component(parentName, parentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+		&transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite},
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: parentName, Version: parentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -872,12 +874,12 @@ func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T
 	)
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithCopyMode(transfer.CopyModeAllResources),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -1013,12 +1015,12 @@ func Test_Integration_TransferOCIArtifact_OCIToOCI(t *testing.T) {
 	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
 
 	// CTF → source OCI (seed).
-	seedTGD, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(sourceSpec),
-			transfer.FromRepository(ctfRepo, ctfSpec),
-		),
+	seedTGD, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     sourceSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, ctfSpec),
+		},
 	)
 	r.NoError(err)
 	seedGraph, err := b.BuildAndCheck(seedTGD)
@@ -1043,13 +1045,15 @@ func Test_Integration_TransferOCIArtifact_OCIToOCI(t *testing.T) {
 	r.NoError(err)
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithCopyMode(transfer.CopyModeAllResources),
-		transfer.WithUploadType(transfer.UploadAsOciArtifact),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(sourceRepo, sourceSpec),
-		),
+		&transferv1alpha1.Config{
+			CopyMode:   transferv1alpha1.CopyModeAllResources,
+			UploadType: transferv1alpha1.UploadAsOciArtifact,
+		},
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 
@@ -1235,13 +1239,15 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	)
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithCopyMode(transfer.CopyModeAllResources),
-		transfer.WithUploadType(transfer.UploadAsOciArtifact),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+		&transferv1alpha1.Config{
+			CopyMode:   transferv1alpha1.CopyModeAllResources,
+			UploadType: transferv1alpha1.UploadAsOciArtifact,
+		},
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)

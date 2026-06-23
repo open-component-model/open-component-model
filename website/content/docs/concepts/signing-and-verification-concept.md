@@ -301,7 +301,6 @@ sovereign-cloud deployments where egress to public or on-premise infrastructure 
 signature:
   algorithm: sigstore
   mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
-  issuer: https://github.com/login/oauth
   value: <base64-encoded Sigstore bundle>
 ```
 

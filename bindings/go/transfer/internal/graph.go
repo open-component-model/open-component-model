@@ -15,6 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
@@ -52,8 +53,8 @@ type TransferRoot struct {
 //
 // The process has two phases:
 //
-//  1. Discovery: A concurrent DAG discoverer resolves each root component and, if recursive is true,
-//     follows component references to build a complete dependency graph. During discovery, each
+//  1. Discovery: A concurrent DAG discoverer resolves each root component and, if recursion is
+//     enabled, follows component references to build a complete dependency graph. During discovery, each
 //     component's target repositories and resolver are tracked in shared maps (targetMap, resolverMap)
 //     that the discoverer propagates from parent to child.
 //
@@ -67,9 +68,7 @@ type TransferRoot struct {
 func BuildGraphDefinition(
 	ctx context.Context,
 	roots map[string]TransferRoot,
-	recursive bool,
-	copyMode int,
-	uploadType int,
+	cfg transferv1alpha1.Config,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	// Seed the targetMap and resolverMap from explicit roots.
 	// These maps are shared with the discoverer and multiResolver:
@@ -87,7 +86,7 @@ func BuildGraphDefinition(
 	}
 
 	disc := &discoverer{
-		recursive:         recursive,
+		recursive:         cfg.Recursive,
 		discoveredDigests: make(map[string]descruntime.Digest),
 		targetMap:         targetMap,
 		resolverMap:       resolverMap,
@@ -101,7 +100,7 @@ func BuildGraphDefinition(
 		expectedDigest: func(id runtime.Identity) *descruntime.Digest {
 			disc.mu.Lock()
 			defer disc.mu.Unlock()
-			if !disc.recursive {
+			if disc.recursive == 0 {
 				return nil
 			}
 			dig, ok := disc.discoveredDigests[id.String()]
@@ -113,7 +112,7 @@ func BuildGraphDefinition(
 	}
 
 	slog.DebugContext(ctx, "starting component discovery",
-		"roots", dagRoots, "recursive", recursive)
+		"roots", dagRoots, "recursive", cfg.Recursive)
 
 	dr := dagsync.NewGraphDiscoverer(&dagsync.GraphDiscovererOptions[string, *discoveryValue]{
 		Roots:      dagRoots,
@@ -136,7 +135,7 @@ func BuildGraphDefinition(
 	// Phase 2: walk the discovered DAG and generate transformation nodes per (component, target) pair.
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, copyMode, uploadType)
+		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, cfg.CopyMode, cfg.UploadType)
 	})
 	if err != nil {
 		return nil, err
@@ -163,8 +162,8 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	d *dag.DirectedAcyclicGraph[string],
 	targetMap map[string][]runtime.Typed,
 	tgd *transformv1alpha1.TransformationGraphDefinition,
-	copyMode int,
-	uploadType int,
+	copyMode transferv1alpha1.CopyMode,
+	uploadType transferv1alpha1.UploadType,
 ) error {
 	slog.DebugContext(ctx, "building transformations for discovered components",
 		"components", len(d.Vertices))
@@ -227,7 +226,16 @@ func fillGraphDefinitionWithPrefetchedComponents(
 // processResources iterates over resources in a v2 descriptor and creates the appropriate
 // get/add transformation pairs based on access type, copy mode, and upload type.
 // It returns CEL spec-field expressions for all Get transformations that buffer content to disk.
-func processResources(ctx context.Context, v2desc *descriptorv2.Descriptor, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, copyMode int, uploadType int) (map[int]string, []string, error) {
+func processResources(
+	ctx context.Context,
+	v2desc *descriptorv2.Descriptor,
+	id string,
+	val *discoveryValue,
+	tgd *transformv1alpha1.TransformationGraphDefinition,
+	toSpec runtime.Typed,
+	copyMode transferv1alpha1.CopyMode,
+	uploadType transferv1alpha1.UploadType,
+) (map[int]string, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 	resourceTransformIDs := make(map[int]string)
@@ -242,7 +250,7 @@ func processResources(ctx context.Context, v2desc *descriptorv2.Descriptor, id s
 			return nil, nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
 		}
 
-		if copyMode == CopyModeLocalBlobResources && !descriptorv2.IsLocalBlob(access) {
+		if copyMode == transferv1alpha1.CopyModeLocalBlobResources && !descriptorv2.IsLocalBlob(access) {
 			logSkippedResource(ctx, component, version, resource, copyMode, uploadType)
 			continue
 		}
@@ -256,9 +264,9 @@ func processResources(ctx context.Context, v2desc *descriptorv2.Descriptor, id s
 	return resourceTransformIDs, fileExpressions, nil
 }
 
-func logSkippedResource(ctx context.Context, component, version string, resource descriptorv2.Resource, copyMode, uploadType int) {
+func logSkippedResource(ctx context.Context, component, version string, resource descriptorv2.Resource, copyMode transferv1alpha1.CopyMode, uploadType transferv1alpha1.UploadType) {
 	logLevel := slog.LevelDebug
-	if uploadType == UploadAsOciArtifact {
+	if uploadType == transferv1alpha1.UploadAsOciArtifact {
 		logLevel = slog.LevelWarn
 	}
 	slog.Log(ctx, logLevel,
@@ -277,9 +285,9 @@ func logSkippedResource(ctx context.Context, component, version string, resource
 // target repository.
 // It returns CEL spec-field expressions for the file buffers produced, referencing consumer spec
 // fields (not producer outputs) so the DAG edge points from consumer to the cleanup node.
-func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType int) ([]string, error) {
+func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType transferv1alpha1.UploadType) ([]string, error) {
 	_, isOCITarget := toSpec.(*oci.Repository)
-	uploadAsArtifact := isOCITarget && uploadType == UploadAsOciArtifact
+	uploadAsArtifact := isOCITarget && uploadType == transferv1alpha1.UploadAsOciArtifact
 
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
@@ -321,7 +329,6 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 	return nil, nil
 }
 
-// addDescriptorToEnvironment marshals the v2 descriptor and adds it to the graph environment.
 func addDescriptorToEnvironment(v2desc *descriptorv2.Descriptor, id string, tgd *transformv1alpha1.TransformationGraphDefinition) error {
 	rawV2Desc, err := json.Marshal(v2desc)
 	if err != nil {
@@ -392,17 +399,17 @@ func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTra
 		"resources": resourcesArray,
 	}
 
-	setOptionalField(componentMap, "labels", id, v2desc.Component.Labels != nil)
-	setOptionalField(componentMap, "repositoryContexts", id, v2desc.Component.RepositoryContexts != nil)
-	setOptionalField(componentMap, "sources", id, v2desc.Component.Sources != nil)
-	setOptionalField(componentMap, "componentReferences", id, v2desc.Component.References != nil)
+	setOptionalField(componentMap, "labels", id, len(v2desc.Component.Labels) != 0)
+	setOptionalField(componentMap, "repositoryContexts", id, len(v2desc.Component.RepositoryContexts) != 0)
+	setOptionalField(componentMap, "sources", id, len(v2desc.Component.Sources) != 0)
+	setOptionalField(componentMap, "componentReferences", id, len(v2desc.Component.References) != 0)
 
 	descSpecMap := map[string]any{
 		"meta":      fmt.Sprintf("${environment.%s.meta}", id),
 		"component": componentMap,
 	}
 
-	if v2desc.Signatures != nil {
+	if len(v2desc.Signatures) != 0 {
 		descSpecMap["signatures"] = fmt.Sprintf("${environment.%s.signatures}", id)
 	}
 
