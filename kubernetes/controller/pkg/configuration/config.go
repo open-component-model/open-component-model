@@ -24,6 +24,7 @@ import (
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	ocicredentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	transferspec "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
@@ -44,6 +45,9 @@ var allowedConfigTypes = append(
 	// path-matcher resolvers (v1alpha1)
 	runtime.NewVersionedType(resolversv1alpha1spec.ConfigType, resolversv1alpha1spec.Version),
 	runtime.NewUnversionedType(resolversv1alpha1spec.ConfigType),
+	// transfer settings
+	runtime.NewVersionedType(transferspec.ConfigType, transferspec.Version),
+	runtime.NewUnversionedType(transferspec.ConfigType),
 )
 
 // filterAllowedConfigTypes filters the provided config to only include config entries whose
