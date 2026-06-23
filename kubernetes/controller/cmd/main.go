@@ -46,6 +46,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/replication"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
@@ -88,6 +89,7 @@ func main() {
 		deployerDownloadCacheSize int
 		deployerMaxResourceSize   string
 		resourceConcurrency       int
+		replicationConcurrency    int
 		resolverWorkerCount       int
 		resolverWorkerQueueLength int
 		resolverSubscriberBuffer  int
@@ -110,6 +112,8 @@ func main() {
 		"Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. \"2Mi\", \"512Ki\"). \"0\" disables the limit.")
 	flag.IntVar(&resourceConcurrency, "resource-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The resource controller concurrency. This is the number of active resource controller workers that can be kept alive.")
+	flag.IntVar(&replicationConcurrency, "replication-controller-concurrency", 4, //nolint:mnd // no magic number
+		"The replication controller concurrency. This is the number of active replication controller workers that can be kept alive.")
 	flag.IntVar(&resolverWorkerCount, "resolver-worker-count", 10, //nolint:mnd // no magic number
 		"This is the number of active resolver workers.")
 	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 1000, //nolint:mnd // no magic number
@@ -319,6 +323,20 @@ func main() {
 		PluginManager: pm,
 	}).SetupWithManager(ctx, mgr, resourceConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Resource")
+		os.Exit(1)
+	}
+
+	if err = (&replication.Reconciler{
+		BaseReconciler: &ocm.BaseReconciler{
+			Client:        mgr.GetClient(),
+			Scheme:        mgr.GetScheme(),
+			EventRecorder: eventsRecorder,
+		},
+		Resolver:         resolver,
+		PluginManager:    pm,
+		RepositoryScheme: ocirepository.Scheme,
+	}).SetupWithManager(ctx, mgr, replicationConcurrency); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Replication")
 		os.Exit(1)
 	}
 
