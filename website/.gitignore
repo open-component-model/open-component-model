@@ -12,4 +12,3 @@ node_modules/
 public/
 resources/_gen/
 tmp/*
-data/toc.json
