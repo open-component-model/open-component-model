@@ -170,6 +170,9 @@ jobs:
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the submodule tag.
+          permission-contents: write
       - name: Setup git config
         run: |
           git config user.name "GitHub Actions Bot"

@@ -70,6 +70,19 @@ jobs:
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Post per-PR check results.
+          permission-checks: write
+          # Push Renovate branches.
+          permission-contents: write
+          # Maintain the dependency dashboard issue.
+          permission-issues: write
+          # Open and update dependency-update PRs.
+          permission-pull-requests: write
+          # Post commit statuses on Renovate PRs.
+          permission-statuses: write
+          # Bump action SHAs in .github/workflows/*.
+          permission-workflows: write
 
       - name: Ensure Dry-Run on Pull Requests
         if: ${{ github.event_name == 'pull_request' }}
