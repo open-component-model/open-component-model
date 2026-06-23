@@ -7,5 +7,10 @@
   "devDependencies": {
     "@actions/github-script": "github:actions/github-script",
     "@octokit/graphql": "9.0.3"
+  },
+  "overrides": {
+    "@actions/http-client": {
+      "undici": "^6.27.0"
+    }
   }
 }
