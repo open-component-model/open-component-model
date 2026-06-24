@@ -1,4 +1,10 @@
 import { Tab } from 'bootstrap';
+// Bootstrap registers its data-api (click handlers for data-bs-toggle=*) when
+// the module is imported. Dropdown and Offcanvas are not used directly but must
+// be imported so the version-switcher and mobile nav work without loading the
+// full bootstrap.js bundle.
+import 'bootstrap/js/src/dropdown.js';
+import 'bootstrap/js/src/offcanvas.js';
 
 // Custom JS for OCM website
 // Necessity: Sidebar section links (<a> inside <summary>) need special click
