@@ -384,6 +384,12 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 	)
 	logger.Debug("processing resource")
 
+	if c.opts.ComponentVersionConflictPolicy == ComponentVersionConflictReplace &&
+		resource.Options.OwnershipPolicy != constructor.OwnershipPolicyAlways {
+		logger.WarnContext(ctx, "replace requested with ownership policy other than Always; any pre-existing ownership referrer attached to this resource by a prior add will remain",
+			"ownership_policy", resource.Options.OwnershipPolicy)
+	}
+
 	var res *descriptor.Resource
 	var err error
 
