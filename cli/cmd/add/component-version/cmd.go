@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
@@ -483,38 +482,17 @@ func (prov *constructorProvider) GetResourceRepository(ctx context.Context, reso
 	if err != nil {
 		return nil, fmt.Errorf("getting plugin for resource %q failed: %w", resource.Access, err)
 	}
-	return &constructorPlugin{plugin: plugin}, nil
+	return &constructorPlugin{Repository: plugin}, nil
 }
 
-var (
-	_ constructor.ResourceRepository      = (*constructorPlugin)(nil)
-	_ repository.OwnershipAwareRepository = (*constructorPlugin)(nil)
-)
+var _ constructor.ResourceRepository = (*constructorPlugin)(nil)
 
 type constructorPlugin struct {
-	plugin resource.Repository
+	resource.Repository
 }
 
 func (c *constructorPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
-	return c.plugin.GetResourceCredentialConsumerIdentity(ctx, constructorruntime.ConvertToDescriptorResource(resource))
-}
-
-func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (content blob.ReadOnlyBlob, err error) {
-	return c.plugin.DownloadResource(ctx, res, credentials)
-}
-
-// AddOwnership records ownership (ADR 0016) by
-// delegating to the resolved plugin when it implements
-// [repository.OwnershipAwareRepository] (the in-process OCI resource repository
-// does). When it does not (e.g. the out-of-process plugin bridge), it returns an
-// error: the resource explicitly opted into ownership (policy "Always"), so a
-// repository that cannot record ownership is a hard failure rather than a silent no-op.
-func (c *constructorPlugin) AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error {
-	ownershipAwareRepo, ok := c.plugin.(repository.OwnershipAwareRepository)
-	if !ok {
-		return fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", res.ToIdentity(), "Always", c.plugin)
-	}
-	return ownershipAwareRepo.AddOwnership(ctx, component, version, res, credentials)
+	return c.Repository.GetResourceCredentialConsumerIdentity(ctx, constructorruntime.ConvertToDescriptorResource(resource))
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
