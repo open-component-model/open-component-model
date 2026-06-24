@@ -40,12 +40,12 @@ tasks:
 
   # Development
   manifests:
-    desc: "Generate raw CRD and RBAC YAML into bin/gen (consumed by helm/generate-crds and helm/generate-rbac)"
+    desc: "Generate raw CRD into config/crd/bases and RBAC YAML into bin/gen (consumed by helm/generate-crds and helm/generate-rbac)"
     deps: [controller-gen]
     cmds:
-      - rm -rf bin/gen
-      - mkdir -p bin/gen/crd bin/gen/rbac
-      - '"{{.CONTROLLER_GEN}}" rbac:roleName=manager-role crd paths="{{ .TASKFILE_DIR }}/..." output:rbac:artifacts:config=bin/gen/rbac output:crd:artifacts:config=bin/gen/crd'
+      - rm -rf bin/gen config/crd/bases
+      - mkdir -p bin/gen/rbac config/crd/bases
+      - '"{{.CONTROLLER_GEN}}" rbac:roleName=manager-role crd paths="{{ .TASKFILE_DIR }}/..." output:rbac:artifacts:config=bin/gen/rbac output:crd:artifacts:config=config/crd/bases'
 
   generate:
     desc: "Generate Go deepcopy and runtime.Object implementations"
@@ -163,7 +163,7 @@ tasks:
   helm/generate-crds:
     desc: "Generate Helm-wrapped CRD templates from controller-gen output"
     deps: [manifests, yq]
-    cmd: 'YQ="{{.YQ}}" {{.TASKFILE_DIR}}/hack/helm.generate.sh {{.TASKFILE_DIR}}/bin/gen/crd {{.TASKFILE_DIR}}/chart'
+    cmd: 'YQ="{{.YQ}}" {{.TASKFILE_DIR}}/hack/helm.generate.sh {{.TASKFILE_DIR}}/config/crd/bases {{.TASKFILE_DIR}}/chart'
 
   helm/generate-rbac:
     desc: "Generate chart/templates/rbac/manager-role.yaml from controller-gen RBAC output"
