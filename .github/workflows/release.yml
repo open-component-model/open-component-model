@@ -694,6 +694,7 @@ jobs:
           node scripts/register-docs-version.js "$VERSION" \
             --cli-gomod "$CLI_GOMOD" \
             2>&1 | tee "$LOG_FILE"
+          rc=${PIPESTATUS[0]}
           # Write the logs to the output so they can be included in the PR body. There might be warnings about missing
           # modules (diff between CLI_DERIVED_MODULES and CLI_GOMOD) that are not fatal but need to be validated
           # manually.
@@ -702,6 +703,7 @@ jobs:
             cat "$LOG_FILE"
             echo '__REGISTER_EOF__'
           } >> "$GITHUB_OUTPUT"
+          exit "$rc"
 
       - name: Generate App Token
         id: get_token
