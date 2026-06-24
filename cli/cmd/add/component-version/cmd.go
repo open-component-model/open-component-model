@@ -151,10 +151,10 @@ Example:
 
 Ownership:
 
-Ownership records a link from a resource back to the component version that owns it,
-so a consumer who encounters the resource's artifact in a registry can trace it back to
-that component version. A resource opts in by setting "options.ownershipPolicy" to
-"Always" (the default is "Never"):
+Ownership attaches ownership information (i.e. the component name and version) 
+to a resource. This enables a consumer who encounters the resource in a storage
+system to trace it back to the component that owns it. A resource opts in by 
+setting "options.ownershipPolicy" to "Always" (the default is "Never"):
 
   resources:
     - name: my-image
@@ -166,11 +166,8 @@ that component version. A resource opts in by setting "options.ownershipPolicy" 
         type: ociArtifact
         imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
 
-When enabled, an ownership manifest (artifact type "application/vnd.ocm.software.ownership.v1+json")
-is attached to the resource's manifest: pushed into the component repository for by-value
-resources, or next to the image in its hosting registry for by-reference resources (the image
-bytes are left unchanged, so existing signatures stay valid). The policy is a construction-time
-directive and is not persisted to the component descriptor.
+The policy is a construction-time directive and is not persisted to the 
+component descriptor.
 
 Repository Reference Format:
 	[type::]{repository}
