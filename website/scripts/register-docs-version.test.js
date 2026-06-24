@@ -135,6 +135,9 @@ test('buildModuleBlocks: website import has correct tag format', () => {
     const website = imports.find(i => i.path.endsWith('/website'));
     assert.ok(website, 'website import should exist');
     assert.equal(website.version, 'v0.3.0');
+    // Self-import: suppress transitive imports so the explicit pins in
+    // module.yaml are the only source of truth for the 0.X version slot.
+    assert.equal(website.ignoreImports, true);
     assert.deepEqual(website.mounts[0].files, ['**', '!blog/**']);
     assert.equal(website.mounts[0].source, 'content/');
     assert.equal(website.mounts[0].target, 'content');

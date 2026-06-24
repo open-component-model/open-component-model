@@ -249,6 +249,14 @@ function buildModuleBlocks(version, fullVersion, deps) {
         {
             path: `${MODULE_PREFIX}/website`,
             version: `v${fullVersion}`,
+            // The website module is a self-import: its own `module.yaml` declares
+            // transitive imports (cli, bindings, controller) pinned at whatever
+            // versions were current when the tag was cut. Hugo's "first-wins"
+            // module resolution lets those stale pins override the explicit
+            // imports we list further down. `ignoreImports: true` tells Hugo
+            // to load only this module's `mounts:`, not its `imports:`, so the
+            // pins below are the only source of truth for the 0.X version slot.
+            ignoreImports: true,
             mounts: [{
                 files: ['**', '!blog/**'],
                 source: 'content/',
