@@ -43,7 +43,7 @@ tasks:
     desc: "Generate raw CRD into config/crd/bases and RBAC YAML into bin/gen (consumed by helm/generate-crds and helm/generate-rbac)"
     deps: [controller-gen]
     cmds:
-      - rm -rf bin/gen
+      - rm -rf bin/gen config/crd/bases
       - mkdir -p bin/gen/rbac config/crd/bases
       - '"{{.CONTROLLER_GEN}}" rbac:roleName=manager-role crd paths="{{ .TASKFILE_DIR }}/..." output:rbac:artifacts:config=bin/gen/rbac output:crd:artifacts:config=config/crd/bases'
 
