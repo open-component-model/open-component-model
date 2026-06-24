@@ -141,6 +141,7 @@ mounts:
 imports:
   - path: ocm.software/open-component-model/website
     version: v0.9.0
+    ignoreImports: true
     mounts:
       - files:
           - '**'
