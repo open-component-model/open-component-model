@@ -709,8 +709,7 @@ jobs:
           commit-message: "[github-actions] automated change"
           add-paths: |
             website/config/
-          branch: website/version-release/auto
-          branch-suffix: ${{ needs.prepare.outputs.base_version }}
+          branch: website/version-release/${{ needs.prepare.outputs.base_version }}
           delete-branch: true
           sign-commits: true
           body: |

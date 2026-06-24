@@ -8,7 +8,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/registry v0.42.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-00010101000000-000000000000
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260622160215-34734c11bd87
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260623111413-06562f059855
 	ocm.software/open-component-model/bindings/go/oci v0.0.46
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
@@ -77,7 +77,7 @@ require (
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260622160215-34734c11bd87 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260623114549-5fc54191d79d // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 )

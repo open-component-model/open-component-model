@@ -10,8 +10,8 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260622160215-34734c11bd87
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260622160215-34734c11bd87
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260623114549-5fc54191d79d
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260623111413-06562f059855
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.46
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
