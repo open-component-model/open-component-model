@@ -135,6 +135,40 @@ func TestConvertToRuntimeResource(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "resource with ownership policy Always",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicyAlways},
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: OwnershipPolicyAlways},
+			},
+		},
+		{
+			name: "resource with ownership policy Never",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicyNever},
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: OwnershipPolicyNever},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1364,6 +1398,55 @@ func TestConvertToV1Resource(t *testing.T) {
 				},
 			},
 			wantErr: false,
+		},
+		{
+			name: "resource with ownership policy Always",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: OwnershipPolicyAlways},
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicyAlways},
+			},
+		},
+		{
+			name: "resource with ownership policy Never",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: OwnershipPolicyNever},
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicyNever},
+			},
+		},
+		{
+			name: "resource with empty ownership policy omits options",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type: "test-type",
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type: "test-type",
+			},
 		},
 	}
 
