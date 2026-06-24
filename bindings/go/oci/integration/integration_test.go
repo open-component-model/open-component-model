@@ -1350,6 +1350,20 @@ func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 				component, version, "backend-image")
 		})
 
+		t.Run("transfer registry → registry without prior AddOwnership carries no referrer", func(t *testing.T) {
+			srcImageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+				fmt.Sprintf("%s/test-asset/transfer-no-referrer-src:%s", srcReg, version),
+				[]byte("transfer-no-referrer-payload"))
+			assertOwnershipReferrerCount(t, ctx, srcResolver, srcImageRef, 0)
+
+			srcRes := byReferenceResource("backend-image", version, srcImageRef)
+			dstResolver, dstReg, dstRepo := startOwnershipRegistry(t, ctx)
+			dstImageRef := fmt.Sprintf("%s/test-asset/transfer-no-referrer-dst:%s", dstReg, version)
+			transferred := transferByReferenceResource(t, ctx, srcRepo, dstRepo, srcRes, dstImageRef)
+
+			assertOwnershipReferrerCount(t, ctx, dstResolver, transferred, 0)
+		})
+
 		t.Run("transfer registry → CTF carries the referrer", func(t *testing.T) {
 			srcImageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
 				fmt.Sprintf("%s/test-asset/transfer-ctf-src:%s", srcReg, version),
