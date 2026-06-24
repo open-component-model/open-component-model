@@ -128,10 +128,6 @@ type Resource struct {
 	Options *ResourceOptions `json:"options,omitempty"`
 
 	AccessOrInput `json:",inline"`
-
-	// TODO: Options and ConstructorAttributes sit alongside each other here, which is
-	// awkward; reconcile them into a single construction-options grouping.
-	ConstructorAttributes `json:",inline"`
 }
 
 // ResourceOptions bundles optional, construction-time directives for a resource.
@@ -144,30 +140,6 @@ type ResourceOptions struct {
 	// "Never" when unset.
 	OwnershipPolicy OwnershipPolicy `json:"ownershipPolicy,omitempty"`
 }
-
-// ConstructorAttributes defines additional attributes used in a component constructor context.
-// +k8s:deepcopy-gen=true
-type ConstructorAttributes struct {
-	CopyPolicy `json:"copyPolicy,omitempty"`
-}
-
-// CopyPolicy defines how the given object should be added during the component construction.
-// If set to "reference", the object is copied by reference, otherwise it is copied by value.
-// Note that an object that is copied by reference may still have its access type modified.
-// This can happen when the access is pinned at the point of the component construction.
-//
-//   - A typical example of "by value" copying is an image that should be stored in the component version,
-//     and not in the original registry.
-//   - A typical example of "by reference" copying is an image that is already stored in the correct registry
-//     and should be referenced by the component version.
-type CopyPolicy string
-
-const (
-	// CopyPolicyByReference defines that the resource is copied by reference. See CopyPolicy for details.
-	CopyPolicyByReference CopyPolicy = "byReference"
-	// CopyPolicyByValue defines that the resource is copied by value. See CopyPolicy for details.
-	CopyPolicyByValue CopyPolicy = "byValue"
-)
 
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.
 // Source elements do not have specific additional formal attributes.

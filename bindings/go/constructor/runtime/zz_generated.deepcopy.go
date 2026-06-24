@@ -268,6 +268,7 @@ func (in *Resource) DeepCopyInto(out *Resource) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	out.Options = in.Options
 	in.AccessOrInput.DeepCopyInto(&out.AccessOrInput)
 	return
 }

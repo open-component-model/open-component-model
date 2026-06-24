@@ -113,9 +113,6 @@ func ConvertFromV1Resource(resource *v1.Resource) Resource {
 		Type:        resource.Type,
 		Relation:    ResourceRelation(resource.Relation),
 		Options:     ConvertFromV1ResourceOptions(resource.Options),
-		ConstructorAttributes: ConstructorAttributes{
-			CopyPolicy: CopyPolicy(resource.CopyPolicy),
-		},
 	}
 
 	if resource.SourceRefs != nil {
@@ -150,9 +147,6 @@ func ConvertToV1Resource(resource *Resource) (*v1.Resource, error) {
 		Type:        resource.Type,
 		Relation:    v1.ResourceRelation(resource.Relation),
 		Options:     ConvertToV1ResourceOptions(resource.Options),
-		ConstructorAttributes: v1.ConstructorAttributes{
-			CopyPolicy: v1.CopyPolicy(resource.CopyPolicy),
-		},
 	}
 
 	if resource.SourceRefs != nil {
@@ -322,9 +316,6 @@ func ConvertToRuntimeConstructorResource(resource v1.Resource) Resource {
 		Type:        resource.Type,
 		Relation:    ResourceRelation(resource.Relation),
 		Options:     ConvertFromV1ResourceOptions(resource.Options),
-		ConstructorAttributes: ConstructorAttributes{
-			CopyPolicy: CopyPolicy(resource.CopyPolicy),
-		},
 	}
 
 	if resource.HasInput() {

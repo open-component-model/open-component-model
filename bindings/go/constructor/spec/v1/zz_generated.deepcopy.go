@@ -190,7 +190,7 @@ func (in *Resource) DeepCopyInto(out *Resource) {
 	if in.Options != nil {
 		in, out := &in.Options, &out.Options
 		*out = new(ResourceOptions)
-		(*in).DeepCopyInto(*out)
+		**out = **in
 	}
 	in.AccessOrInput.DeepCopyInto(&out.AccessOrInput)
 	return
