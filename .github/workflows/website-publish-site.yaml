@@ -69,21 +69,6 @@ jobs:
           hugo-version: '0.160.0'
           extended: true
 
-      - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version-file: kubernetes/controller/go.mod
-          cache-dependency-path: kubernetes/controller/go.sum
-
-      - name: Generate controller CRDs for `main` site version
-        working-directory: kubernetes/controller
-        env:
-          CONTROLLER_TOOLS_VERSION: v0.20.1
-        run: |
-          mkdir -p bin/gen/crd
-          go run "sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_TOOLS_VERSION}" \
-            crd paths="./..." output:crd:artifacts:config=bin/gen/crd
-
       - name: Install deps and Build
         working-directory: website
         run: |

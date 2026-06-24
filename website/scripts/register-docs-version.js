@@ -497,15 +497,23 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
     const hasAllImports = hasAllImportsForVersion(parsed, version, deps);
     const hasAnyImport = hasAnyImportForVersion(parsed, version);
 
-    if (hasAllImports) {
+    if (hasAllImports || hasAnyImport) {
+        if (!hasAllImports) {
+            // Partial block: a previous release did not cover every module in
+            // CLI_DERIVED_MODULES. updateImportTags only bumps tags on imports
+            // that already exist, so the gaps stay gaps - warn the reviewer to
+            // fix them by hand before merging.
+            console.warn(
+                `[WARN] module.yaml: incomplete block for ${version}. ` +
+                `Updating tags on existing entries only - fix the missing imports manually before merging.`
+            );
+        }
         const changed = updateImportTags(parsed, version, fullVersion, deps);
         if (changed) {
             console.log(`module.yaml: updated import tags for version ${version} to ${fullVersion}.`);
         } else {
             console.log(`module.yaml: version ${version} already up to date.`);
         }
-    } else if (hasAnyImport) {
-        fail(`module.yaml: incomplete block for ${version}. Fix manually.`);
     } else {
         const { imports } = buildModuleBlocks(version, fullVersion, deps);
         parsed.imports = parsed.imports || [];
