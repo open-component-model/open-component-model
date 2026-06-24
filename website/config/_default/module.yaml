@@ -132,7 +132,7 @@ mounts:
       matrix:
         versions:
           - main
-  - source: ../kubernetes/controller/bin/gen/crd
+  - source: ../kubernetes/controller/config/crd/bases
     target: static/main/schemas/kubernetes/controller
     sites:
       matrix:
