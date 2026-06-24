@@ -296,6 +296,15 @@ sequenceDiagram
     Proxy-->>Ext: consistent dependency graph
 ```
 
+### New binding lifecycle
+
+A binding that has never been tagged is pinned via commit pseudo-version (`v0.0.0-<ts>-<sha>`) by the
+bulk release rather than receiving a semver tag. This is intentional: a binding stays unversioned until
+a developer explicitly tags it (`bindings/go/newbinding/v0.0.1`), which signals it is ready for stable
+versioning. Once a tag exists, `planRelease` takes the normal semver path and `pinDeps` uses
+`go mod edit -require` instead of `go get @commit`. The gate summary lists all modules being pinned by
+commit so reviewers can bootstrap a binding before approving if they choose to.
+
 ---
 
 ## Implementation
@@ -319,59 +328,6 @@ from the binding test matrix since they have dedicated CI workflows. Adding a ne
 `pipeline.yml` (which calls `cli.yml` and `kubernetes-controller.yml`) includes `bindings/**` in its `paths` filter so
 that `cli` and `kubernetes/controller` are rebuilt and tested whenever any binding changes, catching API breakage in
 consumers.
-
----
-
-## Known Limitations and Open Items
-
-The following gaps were identified during implementation and adversarial review. Items marked **deferred** are
-tracked as follow-up work; items marked **in-progress** have a fix ready but not yet merged.
-
-### Release pipeline (`release-bindings.js`)
-
-* **New binding bootstrap gap (deferred):** Adding a new binding and consuming it in the same PR works
-  correctly during development and CI — `task init/go.work` discovers the new `go.mod` automatically, and
-  any consumer (another binding, `cli`, `kubernetes/controller`) that adds a `require` for it resolves via
-  `go.work` against the local tree. The Go sentinel placeholder version
-  (`v0.0.0-00010101000000-000000000000`) is safe in `go.mod` while `go.work` is present.
-
-  The gap is at **release time**. `planRelease` finds no previous tag for the new binding, so
-  `computeNextTag` returns `null` and the module falls through to the `commitPins` path: `pinDeps` runs
-  `go get <module>@<headCommit>`, replacing the sentinel with a real pseudo-version
-  (`v0.0.0-<ts>-<sha>`) in every dependent's `go.mod`. That pseudo-version then appears in the published
-  `go.mod` of all consumers (including `cli`), visible to external `go get` users.
-
-  This path **does work** — the commit is on the release branch and publicly accessible. The real concerns
-  are cosmetic and long-term: external consumers see an opaque `v0.0.0-<ts>-<sha>` instead of a meaningful
-  semver, and the pseudo-version is permanently published and unretractable — recovery requires a full new
-  release of every dependent.
-
-  **Fix:** manually tag a new binding (`bindings/go/newbinding/v0.0.1`) before triggering the first bulk
-  release. With a tag present, `planRelease` takes the normal semver path, `pinDeps` uses
-  `go mod edit -require` instead of `go get @commit`, and no pseudo-version reaches a published `go.mod`.
-  A bootstrap path in `planRelease` (auto-assign `v0.0.1` for untagged modules) is a deferred improvement.
-
-### CI
-
-* **Stale `go.work` on self-hosted runners (deferred fix):** `task init/go.work` skips generation if `go.work`
-  exists (`status: find go.work`). On reused self-hosted runners, a stale file from a previous checkout causes
-  Go tooling to resolve against the wrong module graph silently. Fix: prefix all CI `task init/go.work` calls
-  with `rm -f go.work go.work.sum`.
-
-* **Flaky integration tests block unrelated PRs (deferred):** `check-completion` blocks merge on any failure in
-  `run_tests`. A flaky testcontainer timeout in one binding blocks a PR that only touches another. Per-job
-  `timeout-minutes` and non-blocking integration status checks are the planned mitigation.
-
-* **Docs-only PRs run the full binding matrix (deferred):** `ci.yml` has no `paths-ignore` filter. A PR
-  touching only `docs/*.md` or `website/` runs the full 31-module lint and test matrix. Adding
-  `paths-ignore: ['docs/**', '*.md', 'website/**']` to the `pull_request` trigger is a planned improvement.
-
-* **Developer onboarding:** New contributors must run `task init/go.work` after cloning before their IDE
-  workspace resolves cross-module imports. This is documented in `bindings/go/CONTRIBUTING.md` but not yet
-  linked from the root `README.md`.
-
-External tooling evaluated (OpenTelemetry `multimod`, Kubernetes release process) is summarised in
-*External Alternatives Evaluated* above.
 
 ---
 
