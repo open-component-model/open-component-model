@@ -132,12 +132,12 @@ type Resource struct {
 
 // ResourceOptions bundles optional, construction-time directives for a resource.
 // These options influence how the resource is handled during construction
-// (ocm add/create) but are not themselves persisted to the component descriptor.
+// but are not themselves persisted to the component descriptor.
 // +k8s:deepcopy-gen=true
 type ResourceOptions struct {
-	// OwnershipPolicy controls whether ownership
-	// (ADR 0016) is recorded for this resource during construction. Defaults to
-	// "Never" when unset.
+	// OwnershipPolicy controls whether ownership information (i.e. component
+	// name and version) are attached to this resource during construction.
+	// Defaults to "Never" when unset.
 	OwnershipPolicy OwnershipPolicy `json:"ownershipPolicy,omitempty"`
 }
 
