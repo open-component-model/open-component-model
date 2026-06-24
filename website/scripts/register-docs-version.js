@@ -505,7 +505,10 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
             console.log(`module.yaml: version ${version} already up to date.`);
         }
     } else if (hasAnyImport) {
-        fail(`module.yaml: incomplete block for ${version}. Fix manually.`);
+        console.warn(
+            `[WARN] module.yaml: incomplete block for ${version}. ` +
+            `Leaving existing entries untouched - fix manually before merging.`
+        );
     } else {
         const { imports } = buildModuleBlocks(version, fullVersion, deps);
         parsed.imports = parsed.imports || [];
