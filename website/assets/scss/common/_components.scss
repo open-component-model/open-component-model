@@ -69,3 +69,18 @@
 .docs-content details summary {
   font-size: 0.95rem;
 }
+
+/* --------------------------------------------
+   Tab pane labels (no-JS fallback)
+   --------------------------------------------
+   Each tab pane carries its tab name as a label (see the local tabs
+   shortcode override). Hidden by default; the <noscript> styles in
+   head/custom-head.html show it when the panes stack as plain sections
+   because JavaScript is disabled. */
+.tab-pane > .tab-pane-label {
+  display: none;
+  margin: 1rem 0 0.5rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--toc-box-border);
+  padding-bottom: 0.25rem;
+}
