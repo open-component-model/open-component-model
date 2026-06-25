@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
@@ -148,26 +149,6 @@ Example:
           access:
             type: ociArtifact
             imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
-
-Ownership:
-
-Ownership attaches ownership information (i.e. the component name and version) 
-to a resource. This enables a consumer who encounters the resource in a storage
-system to trace it back to the component that owns it. A resource opts in by 
-setting "options.ownershipPolicy" to "Always" (the default is "Never"):
-
-  resources:
-    - name: my-image
-      type: ociImage
-      version: ${COMPONENT_VERSION}
-      options:
-        ownershipPolicy: Always
-      access:
-        type: ociArtifact
-        imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
-
-The policy is a construction-time directive and is not persisted to the 
-component descriptor.
 
 Repository Reference Format:
 	[type::]{repository}
@@ -479,17 +460,19 @@ func (prov *constructorProvider) GetResourceRepository(ctx context.Context, reso
 	if err != nil {
 		return nil, fmt.Errorf("getting plugin for resource %q failed: %w", resource.Access, err)
 	}
-	return &constructorPlugin{Repository: plugin}, nil
+	return &constructorPlugin{plugin: plugin}, nil
 }
 
-var _ constructor.ResourceRepository = (*constructorPlugin)(nil)
-
 type constructorPlugin struct {
-	resource.Repository
+	plugin resource.Repository
 }
 
 func (c *constructorPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
-	return c.Repository.GetResourceCredentialConsumerIdentity(ctx, constructorruntime.ConvertToDescriptorResource(resource))
+	return c.plugin.GetResourceCredentialConsumerIdentity(ctx, constructorruntime.ConvertToDescriptorResource(resource))
+}
+
+func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (content blob.ReadOnlyBlob, err error) {
+	return c.plugin.DownloadResource(ctx, res, credentials)
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
