@@ -567,7 +567,7 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	var processedResource *descriptor.Resource
 
 	if result.ProcessedBlobData != nil {
-		processedResource, err = addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, result.ProcessedBlobData, creds)
+		processedResource, err = addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, result.ProcessedBlobData)
 	} else if result.ProcessedResource != nil {
 		// TODO(fabianburth): https://github.com/open-component-model/ocm-project/issues/1167
 		//   this cannot handle ownership attachement
@@ -686,7 +686,6 @@ func addColocatedResourceLocalBlob(
 	component, version string,
 	resource *constructor.Resource,
 	data blob.ReadOnlyBlob,
-	creds ocmruntime.Typed,
 ) (processed *descriptor.Resource, err error) {
 	localBlob := &v2.LocalBlob{}
 
@@ -724,7 +723,9 @@ func addColocatedResourceLocalBlob(
 
 	if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
 		if ownershipAwareRepo, ok := repo.(repository.OwnershipAwareRepository); ok {
-			if err := ownershipAwareRepo.AddOwnership(ctx, component, version, uploaded, creds); err != nil {
+			// repo is a component version repository on the local-blob path;
+			// it is already authenticated, so no per-call credentials are passed.
+			if err := ownershipAwareRepo.AddOwnership(ctx, component, version, uploaded, nil); err != nil {
 				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 			}
 		} else {

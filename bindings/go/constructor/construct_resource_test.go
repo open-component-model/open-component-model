@@ -306,9 +306,8 @@ func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 				Options:     constructorruntime.ResourceOptions{OwnershipPolicy: tt.policy},
 			}
 			data := &mockBlob{mediaType: "application/octet-stream", data: []byte("payload")}
-			creds := &mockAccess{Type: "mock/v1"}
 
-			out, err := addColocatedResourceLocalBlob(context.Background(), tt.repo, component, version, res, data, creds)
+			out, err := addColocatedResourceLocalBlob(context.Background(), tt.repo, component, version, res, data)
 			if tt.wantErr {
 				require.Error(t, err)
 				for _, s := range tt.wantErrContains {
@@ -324,7 +323,7 @@ func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 					"by-value add must attach ownership iff the runtime options opt in")
 				if tt.wantCalls > 0 && !tt.wantErr {
 					assert.Same(t, out, attacher.ownershipResource, "the uploaded resource must be forwarded to AddOwnership")
-					assert.Equal(t, creds, attacher.ownershipCreds, "credentials must be forwarded to AddOwnership")
+					assert.Nil(t, attacher.ownershipCreds, "AddOwnership on a component version repository must receive nil credentials")
 				}
 			}
 		})
