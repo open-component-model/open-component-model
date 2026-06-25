@@ -773,28 +773,29 @@ func TestDefaultConstructor_OwnershipAttachment(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			attacher := newMockOwnershipAwareResourceRepository()
-			options := ""
-			if tt.policy != "" {
-				options = fmt.Sprintf("\n        options:\n          ownershipPolicy: %s", tt.policy)
+			resource := &constructorruntime.Resource{
+				ElementMeta: constructorruntime.ElementMeta{
+					ObjectMeta: constructorruntime.ObjectMeta{
+						Name:    "backend-image",
+						Version: version,
+					},
+				},
+				Type:     "ociArtifact",
+				Relation: constructorruntime.LocalRelation,
+				AccessOrInput: constructorruntime.AccessOrInput{
+					Access: &runtime.Raw{
+						Type: runtime.NewVersionedType("mock", "v1"),
+						Data: []byte(`{"type":"mock/v1","mediaType":"application/octet-stream","reference":"test-ref"}`),
+					},
+				},
+				Options: constructorruntime.ResourceOptions{OwnershipPolicy: constructorruntime.OwnershipPolicy(tt.policy)},
 			}
-			resource := fmt.Sprintf(`
-      - name: backend-image
-        version: %s
-        relation: local
-        type: ociArtifact%s
-        access:
-          type: mock/v1
-          mediaType: application/octet-stream
-          reference: test-ref
-`, version, options)
-			c := setupTestComponent(t, resource)
 			opts := Options{
-				TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: newMockTargetRepository()},
 				ResourceRepositoryProvider: tt.provider(attacher),
 			}
-			instance := NewDefaultConstructor(c, opts)
+			c := NewDefaultConstructor(&constructorruntime.ComponentConstructor{}, opts).(*DefaultConstructor)
 
-			err := instance.Construct(context.Background())
+			_, err := c.processResource(context.Background(), newMockTargetRepository(), resource, component, version)
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
