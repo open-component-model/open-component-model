@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -15,35 +16,18 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/input/file"
+	filev1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-const ownershipYAML = `
-components:
-  - name: ocm.software/owned
-    version: v1.0.0
-    provider:
-      name: ocm
-    resources:
-      - name: data
-        version: v1.0.0
-        relation: local
-        type: ociArtifact
-        options:
-          ownershipPolicy: Always
-        input:
-          type: blob/v1
-`
 
 func Test_Integration_OCI_OwnershipPolicy_Always(t *testing.T) {
 	t.Parallel()
@@ -71,12 +55,39 @@ func runOwnershipConstruct(t *testing.T, repo *ocmoci.Repository) {
 	_, ok := repository.ComponentVersionRepository(repo).(repository.OwnershipAwareRepository)
 	r.True(ok, "OCI repository must implement OwnershipAwareRepository")
 
+	workingDir := t.TempDir()
+	imagePath := filepath.Join(workingDir, "image.tar.gz")
+	r.NoError(os.WriteFile(imagePath, singleLayerOCILayoutTarGzip(t, []byte("payload")), 0o600))
+
+	specYAML := []byte(`
+components:
+  - name: ocm.software/owned
+    version: v1.0.0
+    provider:
+      name: ocm
+    resources:
+      - name: data
+        version: v1.0.0
+        relation: local
+        type: ociArtifact
+        options:
+          ownershipPolicy: Always
+        input:
+          type: file/v1
+          path: image.tar.gz
+          mediaType: ` + layout.MediaTypeOCIImageLayoutTarGzipV1 + `
+`)
 	var spec constructorv1.ComponentConstructor
-	r.NoError(yaml.Unmarshal([]byte(ownershipYAML), &spec))
+	r.NoError(yaml.Unmarshal(specYAML, &spec))
 	converted := constructorruntime.ConvertToRuntimeConstructor(&spec)
 
+	fileMethod, err := file.NewInputMethod(workingDir)
+	r.NoError(err)
+	registry := constructor.New(file.Scheme)
+	registry.MustRegisterResourceInputMethod(&filev1.File{}, fileMethod)
+
 	opts := constructor.Options{
-		ResourceInputMethodProvider: ociLayoutBlobInputProvider{t: t},
+		ResourceInputMethodProvider: registry,
 		TargetRepositoryProvider:    ownershipTargetRepositoryProvider{repo: repo},
 	}
 	r.NoError(constructor.NewDefaultConstructor(converted, opts).Construct(ctx))
@@ -101,30 +112,6 @@ type ownershipTargetRepositoryProvider struct {
 
 func (p ownershipTargetRepositoryProvider) GetTargetRepository(_ context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
 	return p.repo, nil
-}
-
-type ociLayoutBlobInputProvider struct {
-	t *testing.T
-}
-
-func (p ociLayoutBlobInputProvider) GetResourceInputMethod(_ context.Context, _ *constructorruntime.Resource) (constructor.ResourceInputMethod, error) {
-	return ociLayoutBlobInputMethod{t: p.t}, nil
-}
-
-type ociLayoutBlobInputMethod struct {
-	t *testing.T
-}
-
-func (ociLayoutBlobInputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, _ *constructorruntime.Resource) (runtime.Identity, error) {
-	return nil, nil
-}
-
-func (m ociLayoutBlobInputMethod) ProcessResource(_ context.Context, resource *constructorruntime.Resource, _ runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
-	payload := []byte("payload-for-" + resource.ElementMeta.ToIdentity().String())
-	data := singleLayerOCILayoutTarGzip(m.t, payload)
-	return &constructor.ResourceInputMethodResult{
-		ProcessedBlobData: inmemory.New(bytes.NewReader(data), inmemory.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)),
-	}, nil
 }
 
 func singleLayerOCILayoutTarGzip(t *testing.T, layerData []byte) []byte {
