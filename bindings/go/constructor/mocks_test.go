@@ -9,7 +9,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -43,10 +42,6 @@ func (m *mockTargetRepository) GetComponentVersion(ctx context.Context, name, ve
 		return desc, nil
 	}
 	return nil, fmt.Errorf("component version %q not found: %w", name+":"+version, repository.ErrNotFound)
-}
-
-func (m *mockTargetRepository) GetTargetRepository(ctx context.Context, component *constructorv1.Component) (TargetRepository, error) {
-	return m, nil
 }
 
 func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
@@ -95,9 +90,6 @@ func (o *mockOwnershipAttacher) AddOwnership(ctx context.Context, component, ver
 	return o.ownershipErr
 }
 
-// mockOwnershipAwareTargetRepository combines [mockTargetRepository] with
-// [mockOwnershipAttacher] so it satisfies both [TargetRepository] and
-// [repository.OwnershipAwareRepository].
 type mockOwnershipAwareTargetRepository struct {
 	*mockTargetRepository
 	*mockOwnershipAttacher
@@ -110,7 +102,6 @@ func newMockOwnershipAwareTargetRepository() *mockOwnershipAwareTargetRepository
 	}
 }
 
-// mockTargetRepositoryProvider implements [TargetRepositoryProvider] for testing.
 type mockTargetRepositoryProvider struct {
 	repo TargetRepository
 }
@@ -119,21 +110,6 @@ func (m *mockTargetRepositoryProvider) GetTargetRepository(ctx context.Context, 
 	return m.repo, nil
 }
 
-// componentVersionRepoProvider adapts a [repository.ComponentVersionRepository]
-// into a [TargetRepositoryProvider]. The repo already structurally satisfies
-// [TargetRepository].
-type componentVersionRepoProvider struct {
-	repo repository.ComponentVersionRepository
-}
-
-func (c *componentVersionRepoProvider) GetTargetRepository(ctx context.Context, component *constructorruntime.Component) (TargetRepository, error) {
-	return c.repo, nil
-}
-
-// mockResourceRepository is a bare [ResourceRepository] without ownership
-// support. Compose it with [mockOwnershipAttacher] via
-// [mockOwnershipAwareResourceRepository] to opt into
-// [repository.OwnershipAwareRepository].
 type mockResourceRepository struct {
 	downloadData blob.ReadOnlyBlob
 	fail         bool
@@ -157,9 +133,6 @@ func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource 
 	return m.downloadData, nil
 }
 
-// mockOwnershipAwareResourceRepository combines [mockResourceRepository] with
-// [mockOwnershipAttacher] so it satisfies both [ResourceRepository] and
-// [repository.OwnershipAwareRepository].
 type mockOwnershipAwareResourceRepository struct {
 	*mockResourceRepository
 	*mockOwnershipAttacher
@@ -172,8 +145,6 @@ func newMockOwnershipAwareResourceRepository() *mockOwnershipAwareResourceReposi
 	}
 }
 
-// mockResourceRepositoryProvider implements [ResourceRepositoryProvider] for testing.
-// Set err to exercise the "could not resolve the resource repository" branch.
 type mockResourceRepositoryProvider struct {
 	repo ResourceRepository
 	err  error
@@ -183,7 +154,6 @@ func (m *mockResourceRepositoryProvider) GetResourceRepository(ctx context.Conte
 	return m.repo, m.err
 }
 
-// mockInputMethod implements [ResourceInputMethod] for testing.
 type mockInputMethod struct {
 	processedResource *descriptor.Resource
 	processedBlob     blob.ReadOnlyBlob
@@ -215,7 +185,6 @@ func (m *mockInputMethod) ProcessResource(ctx context.Context, resource *constru
 	return nil, nil
 }
 
-// mockInputMethodProvider implements [ResourceInputMethodProvider] for testing.
 type mockInputMethodProvider struct {
 	methods map[runtime.Type]ResourceInputMethod
 }
@@ -227,7 +196,6 @@ func (m *mockInputMethodProvider) GetResourceInputMethod(ctx context.Context, re
 	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", resource.Input.GetType())
 }
 
-// mockSourceInputMethod implements [SourceInputMethod] for testing.
 type mockSourceInputMethod struct {
 	processedSource *descriptor.Source
 	processedBlob   blob.ReadOnlyBlob
@@ -257,7 +225,6 @@ func (m *mockSourceInputMethod) ProcessSource(ctx context.Context, source *const
 	return nil, nil
 }
 
-// mockSourceInputMethodProvider implements [SourceInputMethodProvider] for testing.
 type mockSourceInputMethodProvider struct {
 	methods map[runtime.Type]SourceInputMethod
 }
@@ -269,7 +236,6 @@ func (m *mockSourceInputMethodProvider) GetSourceInputMethod(ctx context.Context
 	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", source.Input.GetType())
 }
 
-// mockDigestProcessor implements [ResourceDigestProcessor] for testing.
 type mockDigestProcessor struct {
 	processedDigest *descriptor.Digest
 }
@@ -291,7 +257,6 @@ func (m *mockDigestProcessor) ProcessResourceDigest(ctx context.Context, resourc
 	return resource, nil
 }
 
-// mockDigestProcessorProvider implements [ResourceDigestProcessorProvider] for testing.
 type mockDigestProcessorProvider struct {
 	processor ResourceDigestProcessor
 }
@@ -300,7 +265,6 @@ func (m *mockDigestProcessorProvider) GetDigestProcessor(ctx context.Context, re
 	return m.processor, nil
 }
 
-// mockCredentialProvider implements CredentialProvider for testing.
 type mockCredentialProvider struct {
 	called      map[string]int
 	credentials map[string]map[string]string
@@ -322,7 +286,6 @@ func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.I
 	}, nil
 }
 
-// mockAccess implements [runtime.Typed] for testing.
 type mockAccess struct {
 	Type        string `json:"type"`
 	MediaType   string `json:"mediaType"`
@@ -347,7 +310,6 @@ func (m *mockAccess) DeepCopyTyped() runtime.Typed {
 	}
 }
 
-// mockBlob implements [blob.ReadOnlyBlob] for testing.
 type mockBlob struct {
 	mediaType string
 	data      []byte
@@ -365,7 +327,6 @@ func (m *mockBlob) ReadCloser() (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(m.data)), nil
 }
 
-// mockInputType implements [runtime.Typed] for testing.
 type mockInputType struct {
 	Type runtime.Type
 }
@@ -384,8 +345,6 @@ func (m *mockInputType) DeepCopyTyped() runtime.Typed {
 	}
 }
 
-// mockCallbackTracker tracks which constructor lifecycle callbacks fired and
-// in what order.
 type mockCallbackTracker struct {
 	startComponentCalled bool
 	endComponentCalled   bool

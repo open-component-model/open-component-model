@@ -748,7 +748,7 @@ components:
 
 	opts := Options{
 		SourceInputMethodProvider: sourceProvider,
-		TargetRepositoryProvider:  &componentVersionRepoProvider{repo: ctfRepo},
+		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: ctfRepo},
 	}
 
 	constructorInstance := NewDefaultConstructor(converted, opts)
