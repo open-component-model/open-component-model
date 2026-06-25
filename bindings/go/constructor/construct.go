@@ -569,6 +569,13 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	if result.ProcessedBlobData != nil {
 		processedResource, err = addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, result.ProcessedBlobData, creds)
 	} else if result.ProcessedResource != nil {
+		// TODO(fabianburth): https://github.com/open-component-model/ocm-project/issues/1167
+		//   this cannot handle ownership attachement
+		//   input either needs an AddOwnership method OR we need to change
+		//   the architecture of input to no longer allow it to upload immediately
+		//   and instead return a blob.
+		//   I believe this is currently dead code anyway, as the helm input method
+		//   also sets ProcessedBlobData and thus, hits the path above.
 		processedResource = result.ProcessedResource
 	}
 
