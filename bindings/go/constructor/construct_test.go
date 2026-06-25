@@ -127,35 +127,15 @@ func (m *mockTargetRepositoryProvider) GetTargetRepository(ctx context.Context, 
 	return m.repo, nil
 }
 
-// componentVersionRepoProvider wraps a ComponentVersionRepository to provide it as TargetRepository
+// componentVersionRepoProvider adapts a [repository.ComponentVersionRepository]
+// into a [TargetRepositoryProvider]. The repo already structurally satisfies
+// [TargetRepository].
 type componentVersionRepoProvider struct {
 	repo repository.ComponentVersionRepository
 }
 
 func (c *componentVersionRepoProvider) GetTargetRepository(ctx context.Context, component *constructorruntime.Component) (TargetRepository, error) {
-	// Wrap the ComponentVersionRepository to implement TargetRepository
-	return &targetRepoWrapper{repo: c.repo}, nil
-}
-
-// targetRepoWrapper wraps a ComponentVersionRepository to implement TargetRepository
-type targetRepoWrapper struct {
-	repo repository.ComponentVersionRepository
-}
-
-func (t *targetRepoWrapper) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
-	return t.repo.GetComponentVersion(ctx, name, version)
-}
-
-func (t *targetRepoWrapper) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
-	return t.repo.AddComponentVersion(ctx, desc)
-}
-
-func (t *targetRepoWrapper) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	return t.repo.AddLocalResource(ctx, component, version, resource, data)
-}
-
-func (t *targetRepoWrapper) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	return t.repo.AddLocalSource(ctx, component, version, source, data)
+	return c.repo, nil
 }
 
 // mockBlob implements blob.ReadOnlyBlob for testing
