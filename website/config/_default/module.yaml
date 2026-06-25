@@ -140,7 +140,7 @@ mounts:
           - main
 imports:
   - path: ocm.software/open-component-model/website
-    version: v0.9.0
+    version: v0.9.1
     ignoreImports: true
     ignoreConfig: true
     mounts:
@@ -154,7 +154,7 @@ imports:
             versions:
               - '0.9'
   - path: ocm.software/open-component-model/cli
-    version: v0.9.0
+    version: v0.9.1
     mounts:
       - source: docs/reference
         target: content/docs/reference/ocm-cli
@@ -241,7 +241,7 @@ imports:
             versions:
               - '0.9'
   - path: ocm.software/open-component-model/kubernetes/controller
-    version: v0.9.0
+    version: v0.9.1
     mounts:
       - source: config/crd/bases
         target: static/0.9/schemas/kubernetes/controller
