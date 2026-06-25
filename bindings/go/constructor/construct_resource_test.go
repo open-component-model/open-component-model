@@ -428,7 +428,7 @@ func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 		component = "ocm.software/test-component"
 		version   = "1.0.0"
 	)
-	ownershipAwareWithAttachErr := newMockTargetRepository()
+	ownershipAwareWithAttachErr := newMockOwnershipAwareTargetRepository()
 	ownershipAwareWithAttachErr.ownershipErr = fmt.Errorf("attach boom")
 
 	tests := []struct {
@@ -442,13 +442,13 @@ func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 		{
 			name:      "opted in (Always)",
 			policy:    constructorruntime.OwnershipPolicyAlways,
-			repo:      newMockTargetRepository(),
+			repo:      newMockOwnershipAwareTargetRepository(),
 			wantCalls: 1,
 		},
 		{
 			name:      "not opted in (Never)",
 			policy:    constructorruntime.OwnershipPolicyNever,
-			repo:      newMockTargetRepository(),
+			repo:      newMockOwnershipAwareTargetRepository(),
 			wantCalls: 0,
 		},
 		{
@@ -462,7 +462,7 @@ func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 		{
 			name:            "opted in but repo cannot record ownership",
 			policy:          constructorruntime.OwnershipPolicyAlways,
-			repo:            newNonOwnershipAwareTargetRepository(),
+			repo:            newMockTargetRepository(),
 			wantCalls:       0,
 			wantErr:         true,
 			wantErrContains: []string{"cannot record", "Always"},
@@ -490,7 +490,7 @@ func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 				require.NotNil(t, out)
 			}
 
-			if attacher, ok := tt.repo.(*mockTargetRepository); ok {
+			if attacher, ok := tt.repo.(*mockOwnershipAwareTargetRepository); ok {
 				assert.Equal(t, tt.wantCalls, attacher.ownershipCalls,
 					"by-value add must attach ownership iff the runtime options opt in")
 				if tt.wantCalls > 0 && !tt.wantErr {
@@ -886,37 +886,11 @@ func TestConstructCredentialsPassedAsDirectCredentials(t *testing.T) {
 	assert.Equal(t, "testpass", dc.Properties["password"])
 }
 
-// TestDefaultConstructor_attachOwnership_CallSiteGating proves the gates
-// that now live at the by-reference call site (processResource): the hosting
-// resource repository is resolved — and AddOwnership reached — only
-// when the resource opts in via OwnershipPolicyAlways and a provider is
-// configured. A non-opted-in resource must never touch the resource repository,
-// which is what keeps non-OCI by-reference accesses out of OCI-specific
-// resolution.
 func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 	const (
 		component = "ocm.software/test-component"
 		version   = "v1.0.0"
 	)
-
-	// byReferenceResource builds a by-reference (access, not input) resource with
-	// the given ownership policy. An empty policy leaves the options block off.
-	byReferenceResource := func(policy string) string {
-		options := ""
-		if policy != "" {
-			options = fmt.Sprintf("\n        options:\n          ownershipPolicy: %s", policy)
-		}
-		return fmt.Sprintf(`
-      - name: backend-image
-        version: %s
-        relation: local
-        type: ociArtifact%s
-        access:
-          type: mock/v1
-          mediaType: application/octet-stream
-          reference: test-ref
-`, version, options)
-	}
 
 	tests := []struct {
 		name string
@@ -970,7 +944,21 @@ func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			attacher := &mockResourceRepository{}
-			c := setupTestComponent(t, byReferenceResource(tt.policy))
+			options := ""
+			if tt.policy != "" {
+				options = fmt.Sprintf("\n        options:\n          ownershipPolicy: %s", tt.policy)
+			}
+			resource := fmt.Sprintf(`
+      - name: backend-image
+        version: %s
+        relation: local
+        type: ociArtifact%s
+        access:
+          type: mock/v1
+          mediaType: application/octet-stream
+          reference: test-ref
+`, version, options)
+			c := setupTestComponent(t, resource)
 			opts := Options{
 				TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: newMockTargetRepository()},
 				ResourceRepositoryProvider: tt.provider(attacher),
@@ -998,42 +986,6 @@ func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 // implement [repository.OwnershipAwareRepository]. Used by the by-reference
 // "repo cannot record ownership" case in
 // [TestDefaultConstructor_attachOwnership_CallSiteGating].
-type nonOwnershipAwareResourceRepository struct{}
-
-func (n *nonOwnershipAwareResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
-	id := runtime.Identity{}
-	id.SetType(runtime.NewVersionedType("mock", "v1"))
-	return id, nil
-}
-
-func (n *nonOwnershipAwareResourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	return nil, nil
-}
-
-// nonOwnershipAwareTargetRepository is a [TargetRepository] that does NOT
-// implement [repository.OwnershipAwareRepository]. Used by the by-value
-// "repo cannot record ownership" case in
-// [TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn].
-type nonOwnershipAwareTargetRepository struct {
-	inner *mockTargetRepository
-}
-
-func newNonOwnershipAwareTargetRepository() *nonOwnershipAwareTargetRepository {
-	return &nonOwnershipAwareTargetRepository{inner: newMockTargetRepository()}
-}
-
-func (n *nonOwnershipAwareTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	return n.inner.AddLocalResource(ctx, component, version, resource, data)
-}
-
-func (n *nonOwnershipAwareTargetRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	return n.inner.AddLocalSource(ctx, component, version, source, data)
-}
-
-func (n *nonOwnershipAwareTargetRepository) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
-	return n.inner.AddComponentVersion(ctx, desc)
-}
-
-func (n *nonOwnershipAwareTargetRepository) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
-	return n.inner.GetComponentVersion(ctx, name, version)
+type nonOwnershipAwareResourceRepository struct {
+	ResourceRepository
 }

@@ -27,20 +27,16 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// mockTargetRepository is a bare [TargetRepository] without ownership support.
+// Compose it with [mockOwnershipAttacher] via [mockOwnershipAwareTargetRepository]
+// to opt into [repository.OwnershipAwareRepository].
 type mockTargetRepository struct {
 	mu                     sync.Mutex
 	components             map[string]*descriptor.Descriptor
 	addedLocalResources    []*descriptor.Resource
 	addedLocalResourceData map[string]blob.ReadOnlyBlob // resource identity -> blob data
-
-	// ownership attach tracking (AddOwnership).
-	ownershipCalls    int
-	ownershipResource *descriptor.Resource
-	ownershipCreds    runtime.Typed
-	ownershipErr      error
-
-	addedSources  []*descriptor.Source
-	addedVersions []*descriptor.Descriptor
+	addedSources           []*descriptor.Source
+	addedVersions          []*descriptor.Descriptor
 }
 
 func newMockTargetRepository() *mockTargetRepository {
@@ -73,15 +69,6 @@ func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, 
 	return resource, nil
 }
 
-func (m *mockTargetRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.ownershipCalls++
-	m.ownershipResource = resource
-	m.ownershipCreds = credentials
-	return m.ownershipErr
-}
-
 func (m *mockTargetRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -96,6 +83,39 @@ func (m *mockTargetRepository) AddComponentVersion(ctx context.Context, desc *de
 	key := desc.Component.Name + ":" + desc.Component.Version
 	m.components[key] = desc
 	return nil
+}
+
+// mockOwnershipAttacher records calls to [repository.OwnershipAwareRepository.AddOwnership].
+type mockOwnershipAttacher struct {
+	mu                sync.Mutex
+	ownershipCalls    int
+	ownershipResource *descriptor.Resource
+	ownershipCreds    runtime.Typed
+	ownershipErr      error
+}
+
+func (o *mockOwnershipAttacher) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.ownershipCalls++
+	o.ownershipResource = resource
+	o.ownershipCreds = credentials
+	return o.ownershipErr
+}
+
+// mockOwnershipAwareTargetRepository combines [mockTargetRepository] with
+// [mockOwnershipAttacher] so it satisfies both [TargetRepository] and
+// [repository.OwnershipAwareRepository].
+type mockOwnershipAwareTargetRepository struct {
+	*mockTargetRepository
+	*mockOwnershipAttacher
+}
+
+func newMockOwnershipAwareTargetRepository() *mockOwnershipAwareTargetRepository {
+	return &mockOwnershipAwareTargetRepository{
+		mockTargetRepository:  newMockTargetRepository(),
+		mockOwnershipAttacher: &mockOwnershipAttacher{},
+	}
 }
 
 // mockTargetRepositoryProvider implements TargetRepositoryProvider for testing
