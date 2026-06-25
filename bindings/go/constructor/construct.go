@@ -435,20 +435,20 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 				return nil, fmt.Errorf("error getting resource repository for ownership of %q: %w", resource.ToIdentity(), err)
 			}
 
+			ownershipAwareRepository, ok := repo.(repository.OwnershipAwareRepository)
+			if !ok {
+				return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
+			}
 			var creds ocmruntime.Typed
 			if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
 				if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
 					return nil, fmt.Errorf("error resolving credentials for resource by-value processing: %w", err)
 				}
 			}
-
-			if ownershipAwareRepository, ok := repo.(repository.OwnershipAwareRepository); ok {
-				if err := ownershipAwareRepository.AddOwnership(ctx, component, version, res, creds); err != nil {
-					return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
-				}
-			} else {
-				return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
+			if err := ownershipAwareRepository.AddOwnership(ctx, component, version, res, creds); err != nil {
+				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 			}
+
 		}
 	default:
 		return nil, fmt.Errorf("resource %q has no access type and no input method", resource.ToIdentity())

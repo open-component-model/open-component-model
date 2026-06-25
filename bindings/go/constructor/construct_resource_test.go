@@ -63,9 +63,6 @@ func (m *mockInputMethodProvider) GetResourceInputMethod(ctx context.Context, re
 	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", resource.Input.GetType())
 }
 
-// mockResourceRepository implements ResourceRepository for testing. It serves
-// downloads (downloadData/fail) and records how AddOwnership was invoked
-// so the constructor's by-reference ownership attach chain can be asserted.
 type mockResourceRepository struct {
 	downloadData blob.ReadOnlyBlob
 	fail         bool
