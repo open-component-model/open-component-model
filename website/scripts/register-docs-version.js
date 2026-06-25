@@ -249,6 +249,13 @@ function buildModuleBlocks(version, fullVersion, deps) {
         {
             path: `${MODULE_PREFIX}/website`,
             version: `v${fullVersion}`,
+            // Self-import: treat the snapshot as a content-only tarball.
+            // ignoreImports drops its transitive version pins (which override
+            // ours via Hugo's first-wins resolution); ignoreConfig also drops
+            // its mounts/params/hugo.yaml so the parent project is the sole
+            // source of truth for theme, params, and module graph.
+            ignoreImports: true,
+            ignoreConfig: true,
             mounts: [{
                 files: ['**', '!blog/**'],
                 source: 'content/',

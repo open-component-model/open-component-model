@@ -55,7 +55,7 @@ sitemap:
   priority: 0.5
 caches:
   getresource:
-    dir: ':cacheDir/:project'
+    dir: :cacheDir/:project
     maxAge: -1
 taxonomies:
   contributor: contributors
