@@ -715,7 +715,7 @@ func TestConstructCredentialsPassedAsDirectCredentials(t *testing.T) {
 	assert.Equal(t, "testpass", dc.Properties["password"])
 }
 
-func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
+func TestDefaultConstructor_OwnershipAttachment(t *testing.T) {
 	const (
 		component = "ocm.software/test-component"
 		version   = "v1.0.0"
@@ -739,10 +739,10 @@ func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 			wantAttach: 0,
 		},
 		{
-			name:       "opted in but no provider configured is a no-op",
-			policy:     "Always",
-			provider:   func(*mockOwnershipAwareResourceRepository) ResourceRepositoryProvider { return nil },
-			wantAttach: 0,
+			name:     "opted in but no provider configured is an error",
+			policy:   "Always",
+			provider: func(*mockOwnershipAwareResourceRepository) ResourceRepositoryProvider { return nil },
+			wantErr:  "no resource repository provider is configured",
 		},
 		{
 			name:   "opted in resolves the repository and attaches",

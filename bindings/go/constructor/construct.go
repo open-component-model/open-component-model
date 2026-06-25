@@ -429,7 +429,10 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 			}
 		}
 
-		if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways && c.opts.ResourceRepositoryProvider != nil {
+		if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
+			if c.opts.ResourceRepositoryProvider == nil {
+				return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but no resource repository provider is configured", resource.ToIdentity(), resource.Options.OwnershipPolicy)
+			}
 			repo, err := c.opts.GetResourceRepository(ctx, resource)
 			if err != nil {
 				return nil, fmt.Errorf("error getting resource repository for ownership of %q: %w", resource.ToIdentity(), err)
