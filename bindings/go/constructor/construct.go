@@ -443,9 +443,13 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 				return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
 			}
 			var creds ocmruntime.Typed
-			if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
-				if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
-					return nil, fmt.Errorf("error resolving credentials for resource processing: %w", err)
+			if c.opts.Resolver != nil {
+				if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+					if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
+						return nil, fmt.Errorf("error resolving credentials for resource ownership: %w", err)
+					}
+				} else {
+					logger.Debug("no credential consumer identity found for resource ownership, skipping credential resolution")
 				}
 			}
 			if err := ownershipAwareRepository.AddOwnership(ctx, component, version, res, creds); err != nil {
