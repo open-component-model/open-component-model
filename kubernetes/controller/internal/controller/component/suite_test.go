@@ -26,7 +26,7 @@ import (
 
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -63,7 +63,7 @@ var _ = BeforeSuite(func() {
 	By("bootstrapping test environment")
 
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "bin", "gen", "crd")},
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 
 		// The BinaryAssetsDirectory is only required if you want to run the tests directly

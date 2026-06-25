@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -397,14 +398,14 @@ func NewRepositorySpec(name string, components map[string][]string, failPolicy .
 type MockProvider struct{}
 
 func (m MockProvider) GetComponentVersionRepositoryScheme() *runtime.Scheme {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 var _ repository.ComponentVersionRepositoryProvider = MockProvider{}
 
 func (m MockProvider) GetJSONSchemaForRepositorySpecification(typ runtime.Type) ([]byte, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
@@ -412,7 +413,7 @@ func (m MockProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ct
 	return nil, nil
 }
 
-func (m MockProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
+func (m MockProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials runtime.Typed) (repository.ComponentVersionRepository, error) {
 	switch spec := repositorySpecification.(type) {
 	case *RepositorySpec:
 		switch spec.Policy {
@@ -435,7 +436,7 @@ type MockRepository struct {
 }
 
 func (m MockRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
@@ -460,27 +461,27 @@ func (m MockRepository) GetComponentVersion(ctx context.Context, component, vers
 }
 
 func (m MockRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (m MockRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (m MockRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (m MockRepository) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (m MockRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 

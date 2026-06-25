@@ -31,6 +31,9 @@ env:
 jobs:
   renovate:
     runs-on: ubuntu-24.04-arm
+    environment:
+      name: automation
+      deployment: false
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -42,7 +45,7 @@ jobs:
       # Restore previous cache artifact if enabled
       - name: Restore renovate cache artifact
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled' }}
-        uses: dawidd6/action-download-artifact@8305c0f1062bb0d184d09ef4493ecb9288447732 # v20
+        uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
         continue-on-error: true
         with:
           name: ${{ env.cache_key }}
@@ -63,31 +66,41 @@ jobs:
 
       - if: ${{ github.event_name != 'pull_request' && github.repository_owner == 'open-component-model' }}
         id: generate_token
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Post per-PR check results.
+          permission-checks: write
+          # Push Renovate branches.
+          permission-contents: write
+          # Maintain the dependency dashboard issue.
+          permission-issues: write
+          # Open and update dependency-update PRs.
+          permission-pull-requests: write
+          # Post commit statuses on Renovate PRs.
+          permission-statuses: write
+          # Bump action SHAs in .github/workflows/*.
+          permission-workflows: write
 
       - name: Ensure Dry-Run on Pull Requests
         if: ${{ github.event_name == 'pull_request' }}
         run: echo "RENOVATE_DRY_RUN=extract" >> $GITHUB_ENV
 
       - name: Run
-        uses: renovatebot/github-action@83ec54fee49ab67d9cd201084c1ff325b4b462e4 # v46.1.10
+        uses: renovatebot/github-action@693b9ef15eec82123529a37c782242f091365961 # v46.1.14
         with:
           env-regex: |
-            ^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|GONOPROXY|GOPRIVATE|NODE_OPTIONS|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$
+            ^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
         env:
-          GONOPROXY: 'ocm.software/open-component-model/*'
-          GOPRIVATE: 'ocm.software/open-component-model/*'
           RENOVATE_ONBOARDING: 'false'
           RENOVATE_USERNAME: 'ocmbot[bot]'
           RENOVATE_PLATFORM: 'github'
           RENOVATE_PLATFORM_COMMIT: 'true'
           RENOVATE_REPOSITORIES: "${{ github.repository }}"
           RENOVATE_REPOSITORY_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.repoCache || 'enabled' }}
-          RENOVATE_ALLOWED_ENV: 'GONOPROXY,GOPRIVATE'
           RENOVATE_ALLOWED_COMMANDS: |
             ^./.github/scripts/renovate-post-upgrade.sh$
 

@@ -34,7 +34,7 @@ jobs:
       changelog_b64: ${{ steps.changelog.outputs.changelog_b64 }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -161,7 +161,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
       - name: Generate token
@@ -170,6 +170,9 @@ jobs:
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the submodule tag.
+          permission-contents: write
       - name: Setup git config
         run: |
           git config user.name "GitHub Actions Bot"
@@ -188,17 +191,3 @@ jobs:
           git tag -a "$tag" -F .tagmsg
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push origin "$tag"
-
-  build:
-    name: Build Helm Plugin for ${{ needs.version.outputs.new_tag }}
-    if: ${{ contains(needs.version.outputs.new_tag, 'bindings/go/helm') }}
-    needs: [ version, release ]
-    uses: ./.github/workflows/publish-helminput-plugin-component.yaml
-    permissions:
-      # write is now requested because the helminput flow also triggers the registry update.
-      contents: write
-      id-token: write
-      attestations: write
-      packages: write
-    with:
-      ref: ${{ needs.version.outputs.new_tag }}

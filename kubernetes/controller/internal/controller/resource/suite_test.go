@@ -27,7 +27,7 @@ import (
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
@@ -68,7 +68,7 @@ var _ = BeforeSuite(func() {
 
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "..", "bin", "gen", "crd"),
+			filepath.Join("..", "..", "..", "config", "crd", "bases"),
 		},
 		ErrorIfCRDPathMissing: true,
 

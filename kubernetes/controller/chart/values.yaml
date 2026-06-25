@@ -12,7 +12,7 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest@sha256:7d0d8d1609af8480ee3e16399b182ee2cfb5ca33359a7e2843710d23350c6feb
+    tag: latest@sha256:787fcdc29027fd05acbebb68ae46c01511ee7f0b8ac3442d9677d207daa2299b
     # -- Image pull policy
     pullPolicy: IfNotPresent
   ## Controller concurrency settings
@@ -27,6 +27,8 @@ manager:
     workerQueueLength: 1000
     # -- Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric.
     subscriberBufferSize: 100
+    # -- The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.
+    cacheTTL: 30
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache

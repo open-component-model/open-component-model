@@ -42,7 +42,7 @@ type Signer interface {
 	// Instead, the signer MUST use the provided credentials and well-known attributes to sign the digest specification.
 	// The signer SHOULD fallback to environment or implementation
 	// defaults based on its configuration when no credentials are provided.
-	Sign(ctx context.Context, unsigned descruntime.Digest, config runtime.Typed, credentials map[string]string) (signed descruntime.SignatureInfo, err error)
+	Sign(ctx context.Context, unsigned descruntime.Digest, config runtime.Typed, credentials runtime.Typed) (signed descruntime.SignatureInfo, err error)
 }
 
 // Verifier validates signatures and digests for a Component Descriptor.
@@ -72,5 +72,5 @@ type Verifier interface {
 	// If the media type cannot be verified, the signature verification MUST fail.
 	// The verifier SHOULD fallback to environment or implementation
 	// defaults based on its configuration when no credentials are provided.
-	Verify(ctx context.Context, signed descruntime.Signature, config runtime.Typed, credentials map[string]string) error
+	Verify(ctx context.Context, signed descruntime.Signature, config runtime.Typed, credentials runtime.Typed) error
 }

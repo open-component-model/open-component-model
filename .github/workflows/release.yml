@@ -1,0 +1,742 @@
+name: Release
+
+# Unified release flow. Creates a single v0.X.Y version covering both CLI and
+# controller. I replaced cli-release.yml and controller-release.yml with this trigger.
+#
+# Tag scheme on each release:
+#   v0.X.Y                              This is the main release version that will get released.
+#   kubernetes/controller/v0.X.Y        Go-module tag for controller API so we don't break people who import it.
+#   cli/v0.X.Y                          CLI tags for consumption on from the website.
+#   website/v0.X.Y                      Website tag, used by Hugo module imports for versioned docs.
+#                                       Final-only — no RC counterpart, since the docs site has no RC artifacts to validate.
+#
+# Flow remains the same. Release manager selects a release branch, hits release, then gates will take
+# care of the rest.
+
+run-name: Release ${{ github.ref_name }}${{ github.event.inputs.dry_run == 'true' && ' (dry-run)' || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry-run RC phase without pushing tags or creating releases."
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  CONTROLLER_PATH: kubernetes/controller
+  GH_REPO: ${{ github.repository }}
+  # Image refs (CLI_IMAGE, CONTROLLER_IMAGE, CONTROLLER_CHART) are set per-job
+  # via a "Compute image refs" step that lowercases github.repository_owner.
+  # GHRC does not like uppercase names for repositories.
+
+concurrency:
+  cancel-in-progress: false
+  group: release-${{ github.ref_name }}
+
+jobs:
+  # ===========================================================================
+  # PHASE 1: RELEASE CANDIDATE
+  # ===========================================================================
+
+  # === Copied from release-candidate-version.yml ===
+  # Changes vs the original:
+  #   removed the `component_path` input since it's not per component anymore.
+  #   cliff config path change: `${component_path}/cliff.toml` → `cliff.toml` (root).
+  #   canonical tag added: v* alongside the existing per-component tags.
+  #   Outputs added: `cli_module_*_tag` and `controller_module_*_tag` (RC + promotion).
+  prepare:
+    name: Prepare Release Metadata
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      new_tag: ${{ steps.compute.outputs.new_tag }}
+      new_version: ${{ steps.compute.outputs.new_version }}
+      base_version: ${{ steps.compute.outputs.base_version }}
+      promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
+      cli_module_rc_tag: ${{ steps.compute.outputs.cli_module_rc_tag }}
+      cli_module_promotion_tag: ${{ steps.compute.outputs.cli_module_promotion_tag }}
+      controller_module_rc_tag: ${{ steps.compute.outputs.controller_module_rc_tag }}
+      controller_module_promotion_tag: ${{ steps.compute.outputs.controller_module_promotion_tag }}
+      website_module_promotion_tag: ${{ steps.compute.outputs.website_module_promotion_tag }}
+      changelog_artifact: changelog-${{ steps.compute.outputs.new_version }}
+      changelog_range: ${{ steps.compute.outputs.changelog_range }}
+      set_latest: ${{ steps.latest.outputs.set_latest }}
+      highest_previous_release_version: ${{ steps.latest.outputs.highest_previous_release_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Compute next RC version
+        id: compute
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          BRANCH: ${{ github.ref_name }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
+            await script.default({ core });
+
+      - name: Generate changelog with git-cliff
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
+        with:
+          version: 'v2.12.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          config: cliff.toml
+          args: |
+            --include-path "cli/**" \
+            --include-path "kubernetes/controller/**" \
+            --tag-pattern "^v\\d+\\.\\d+\\.\\d+(?:[-\\w\\.]+)?$" \
+            --ignore-tags "^v\\d+\\.\\d+\\.\\d+-rc\\.\\d+$" \
+            --tag "${{ steps.compute.outputs.new_tag }}" \
+            -o "$RUNNER_TEMP/CHANGELOG.md" \
+            --use-branch-tags \
+            ${{ steps.compute.outputs.changelog_range && format('-- "{0}"', steps.compute.outputs.changelog_range) || '--latest' }}
+
+      - name: Summarize changelog
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          CHANGELOG_FILE: ${{ runner.temp }}/CHANGELOG.md
+          TAG: ${{ steps.compute.outputs.new_tag }}
+        with:
+          script: |
+            const fs = require("fs");
+            const tag = process.env.TAG;
+            const today = new Date().toISOString().split("T")[0];
+
+            let log = "";
+            if (fs.existsSync(process.env.CHANGELOG_FILE)) {
+              log = fs.readFileSync(process.env.CHANGELOG_FILE, "utf8").trim();
+            }
+
+            if (!log) {
+              log = `## [${tag}] - ${today}\n\nNo changes since the previous release.`;
+              core.info(`Generated fallback changelog for ${tag}`);
+              fs.writeFileSync(process.env.CHANGELOG_FILE, log);
+            }
+
+            await core.summary.addRaw(log).write();
+
+      - name: Upload changelog artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: changelog-${{ steps.compute.outputs.new_version }}
+          path: ${{ runner.temp }}/CHANGELOG.md
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Determine if release should be latest
+        id: latest
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          NEW_RELEASE_VERSION: ${{ steps.compute.outputs.base_version }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
+            await script.determineLatestRelease({ core, github, context });
+  # === release-candidate-version.yml ===
+
+  # === Copied from controller-release.yml::tag_rc ===
+  # Changes vs the original:
+  #   calls `createRcTags` (plural) instead of `createRcTag`
+  #   passes both CANONICAL_TAG and a comma-separated ADDITIONAL_TAGS list
+  #   so cli/v* and kubernetes/controller/v* are emitted on the same commit
+  tag_rc:
+    name: Create and Push RC Tags
+    runs-on: ubuntu-24.04-arm
+    environment:
+      name: automation
+      deployment: false
+    needs: [prepare]
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    permissions:
+      contents: write
+    outputs:
+      pushed: ${{ steps.tag.outputs.pushed }}
+    steps:
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the RC tags (canonical + cli/controller side tags).
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.ref_name }}
+          token: ${{ steps.get_token.outputs.token }}
+          fetch-tags: true
+          # persist-credentials kept (intentionally) — create-tag.js does
+          # `git push origin refs/tags/...` which needs the app token persisted
+          # in .git/config to authenticate. Zizmor flags this; accepted.
+
+      - name: Setup git config
+        env:
+          GIT_USER: ${{ github.actor }}
+        run: |
+          git config --global user.name "$GIT_USER"
+          git config --global user.email "$GIT_USER@users.noreply.github.com"
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY_FOR_SIGNING }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_tag_gpgsign: true
+
+      - name: Create RC tags (canonical + cli + controller side tags)
+        id: tag
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          CANONICAL_TAG: ${{ needs.prepare.outputs.new_tag }}
+          ADDITIONAL_TAGS: ${{ needs.prepare.outputs.cli_module_rc_tag }},${{ needs.prepare.outputs.controller_module_rc_tag }}
+        with:
+          github-token: ${{ steps.get_token.outputs.token }}
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
+            await script.createRcTags({ core });
+  # === controller-release.yml::tag_rc ===
+
+  # === This is completely new. It starts the orchestration process for building and testing the components. ===
+  # It uses the new workflow helper called `pipeline.yaml`.
+  # This will execute conformance tests, e2e tests, validations and builds for the respective components.
+  # This pipeline here is a daily pipeline as well.
+  build_and_test:
+    name: Build and Test
+    if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
+    needs: [prepare, tag_rc]
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    uses: ./.github/workflows/pipeline.yml
+    with:
+      ref: ${{ needs.prepare.outputs.new_tag }}
+      build_version: ${{ needs.prepare.outputs.base_version }}
+
+  # === Copied from cli-release.yml::release_rc + controller-release.yml::release_rc ===
+  # Combines into one pre-release containing both CLI assets (binaries + OCI tarballs)
+  # and the controller chart. Summary will have digests for both.
+  release_rc:
+    name: Create RC Pre-Release
+    if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
+    needs: [prepare, tag_rc, build_and_test]
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download changelog
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ needs.prepare.outputs.changelog_artifact }}
+          path: ${{ runner.temp }}
+
+      - name: Download CLI artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ needs.build_and_test.outputs.cli_artifact_name }}
+          path: ${{ runner.temp }}/cli-assets
+
+      - name: Download controller chart artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ needs.build_and_test.outputs.controller_chart_artifact_name }}
+          path: ${{ runner.temp }}/chart-assets
+
+      - name: Create RC pre-release
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
+        with:
+          name: OCM ${{ needs.prepare.outputs.new_version }}
+          tag_name: ${{ needs.prepare.outputs.new_tag }}
+          body_path: ${{ runner.temp }}/CHANGELOG.md
+          fail_on_unmatched_files: true
+          prerelease: true
+          files: |
+            ${{ runner.temp }}/cli-assets/bin/ocm-*
+            ${{ runner.temp }}/cli-assets/oci/*
+            ${{ runner.temp }}/chart-assets/chart-*.tgz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summarize RC release
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          CLI_MODULE_RC_TAG: ${{ needs.prepare.outputs.cli_module_rc_tag }}
+          CONTROLLER_MODULE_RC_TAG: ${{ needs.prepare.outputs.controller_module_rc_tag }}
+          IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
+          CHART_DIGEST: ${{ needs.build_and_test.outputs.controller_chart_digest }}
+          CLI_IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const release = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: process.env.RC_TAG,
+            });
+            const assetsCount = release.data.assets?.length || 0;
+
+            await core.summary
+              .addHeading('RC Release Published')
+              .addTable([
+                [{ data: 'Field', header: true }, { data: 'Value', header: true }],
+                ['RC Tag', process.env.RC_TAG],
+                ['CLI Module RC Tag', process.env.CLI_MODULE_RC_TAG],
+                ['Controller Module RC Tag', process.env.CONTROLLER_MODULE_RC_TAG],
+                ['Version', process.env.RC_VERSION],
+                ['CLI Image Digest', (process.env.CLI_IMAGE_DIGEST || 'N/A').substring(0, 19) + '...'],
+                ['Controller Image Digest', (process.env.IMAGE_DIGEST || 'N/A').substring(0, 19) + '...'],
+                ['Chart Digest', (process.env.CHART_DIGEST || 'N/A').substring(0, 19) + '...'],
+                ['Uploaded Assets', String(assetsCount)],
+              ])
+              .addEOL()
+              .addLink('View Release', release.data.html_url)
+              .write();
+  # === cli-release.yml::release_rc + controller-release.yml::release_rc ===
+
+  # ===========================================================================
+  # PHASE 2: FINAL RELEASE (after environment gate)
+  # ===========================================================================
+
+  # === Copied from cli-release.yml::verify_attestations + controller-release.yml::verify_attestations and merged ===
+  # All four attestation verifications:
+  #   CLI binaries (cli-release.yml)
+  #   CLI OCI image (cli-release.yml)
+  #   Controller image (controller-release.yml)
+  #   Controller chart (controller-release.yml)
+  verify_attestations:
+    name: Verify RC Attestations
+    needs: [prepare, build_and_test, release_rc]
+    runs-on: ubuntu-24.04-arm
+    environment:
+      name: release
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Compute image refs (lowercase owner)
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          OWNER="${OWNER,,}"
+          {
+            echo "CLI_IMAGE=ghcr.io/$OWNER/cli"
+            echo "CONTROLLER_IMAGE=ghcr.io/$OWNER/kubernetes/controller"
+            echo "CONTROLLER_CHART=ghcr.io/$OWNER/kubernetes/controller/chart"
+          } >> "$GITHUB_ENV"
+
+      - name: Download RC binaries from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+        run: |
+          gh release download "$RC_TAG" \
+            --repo "$GH_REPO" \
+            --pattern "ocm-*" \
+            --dir "${{ runner.temp }}/binaries"
+
+      - name: Verify CLI binary attestations
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for file in ${{ runner.temp }}/binaries/ocm-*; do
+            echo "Verifying $(basename "$file")..."
+            gh attestation verify "$file" --repo "$GH_REPO"
+          done
+
+      - name: Verify CLI OCI attestation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
+        run: |
+          gh attestation verify "oci://$CLI_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO"
+
+      - name: Verify controller image attestation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
+        run: |
+          gh attestation verify "oci://$CONTROLLER_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO"
+
+      - name: Verify chart attestation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHART_DIGEST: ${{ needs.build_and_test.outputs.controller_chart_digest }}
+        run: |
+          gh attestation verify "oci://$CONTROLLER_CHART@${CHART_DIGEST}" --repo "$GH_REPO"
+  # === cli-release.yml::verify_attestations + controller-release.yml::verify_attestations ===
+
+  # === Copied from controller-release.yml::promote_and_release_final + cli-release.yml::promote_final + cli-release.yml::release_final and merged ===
+  # These are literally copied verbatim from the original files from the above sentence.
+  # All I changed was applying some of the zizmor stuff.
+  promote_and_release_final:
+    name: Promote and Release Final
+    needs: [prepare, build_and_test, verify_attestations]
+    runs-on: ubuntu-24.04-arm
+    environment:
+      name: automation
+      deployment: false
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Compute image refs (lowercase owner)
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          OWNER="${OWNER,,}"
+          {
+            echo "CLI_IMAGE=ghcr.io/$OWNER/cli"
+            echo "CONTROLLER_IMAGE=ghcr.io/$OWNER/kubernetes/controller"
+            echo "CONTROLLER_CHART=ghcr.io/$OWNER/kubernetes/controller/chart"
+          } >> "$GITHUB_ENV"
+
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the final/promotion tags (canonical + cli/controller/website side tags).
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+          token: ${{ steps.get_token.outputs.token }}
+          fetch-tags: true
+          # persist-credentials kept (intentionally) — create-tag.js does
+          # `git push origin refs/tags/...` which needs the app token persisted
+          # in .git/config to authenticate. Zizmor flags this; accepted.
+
+      - name: Setup git config
+        env:
+          GIT_USER: ${{ github.actor }}
+        run: |
+          git config --global user.name "$GIT_USER"
+          git config --global user.email "$GIT_USER@users.noreply.github.com"
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY_FOR_SIGNING }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_tag_gpgsign: true
+
+      - name: Create final tags (canonical + cli + controller side tags)
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+          ADDITIONAL_TAGS: ${{ needs.prepare.outputs.cli_module_promotion_tag }},${{ needs.prepare.outputs.controller_module_promotion_tag }},${{ needs.prepare.outputs.website_module_promotion_tag }}
+        with:
+          github-token: ${{ steps.get_token.outputs.token }}
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
+            await script.createNewReleaseTags({ core });
+
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+
+      - name: Log in to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote CLI image tags
+        env:
+          CLI_IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
+          NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
+          SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
+        run: |
+          set -euo pipefail
+          oras tag "$CLI_IMAGE@${CLI_IMAGE_DIGEST}" "${NEW_RELEASE_VERSION}"
+          if [ "${SET_LATEST}" = "true" ]; then
+            oras tag "$CLI_IMAGE:${NEW_RELEASE_VERSION}" "latest"
+          fi
+
+      - name: Promote controller image tags
+        env:
+          IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
+          NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
+          SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
+        run: |
+          set -euo pipefail
+          oras tag "$CONTROLLER_IMAGE@${IMAGE_DIGEST}" "${NEW_RELEASE_VERSION}"
+          if [ "${SET_LATEST}" = "true" ]; then
+            oras tag "$CONTROLLER_IMAGE:${NEW_RELEASE_VERSION}" "latest"
+          fi
+
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v4.2.0
+
+      - name: Re-package final chart
+        working-directory: ${{ env.CONTROLLER_PATH }}
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+          IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
+        run: |
+          set -euo pipefail
+          task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_DIGEST="${IMAGE_DIGEST}" IMAGE_REPOSITORY="$CONTROLLER_IMAGE"
+
+      - name: Verify chart equivalence (RC vs final)
+        working-directory: ${{ env.CONTROLLER_PATH }}
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          RC_VERSION: ${{ needs.prepare.outputs.new_version }}
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          mkdir -p "$work/rc" "$work/final"
+          trap 'rm -rf "$work"' EXIT
+
+          gh release download "${RC_TAG}" \
+            --repo "$GH_REPO" \
+            --pattern "chart-${RC_VERSION}.tgz" \
+            --dir "$work"
+
+          tar -xzf "$work/chart-${RC_VERSION}.tgz" -C "$work/rc" --strip-components=1
+          tar -xzf "dist/chart-${VERSION}.tgz" -C "$work/final" --strip-components=1
+
+          # Normalize version-dependent fields so RC and final become byte-comparable.
+          #   - Chart.yaml: drop version + appVersion (always differ between RC and final).
+          #   - values.yaml: strip the tag portion before "@" in manager.image.tag, leaving
+          #     the @<digest> intact. Contract: the chart MUST pin the manager image by
+          #     digest (image:tag@sha256:...) for this normalization to be meaningful.
+          #     If a future change ships a tag-only pin (no @<digest>), this regex would
+          #     clear the whole string and could mask real drift between RC and final.
+          for dir in "$work/rc" "$work/final"; do
+            grep -q '@sha256:' "$dir/values.yaml" \
+              || { echo "::error::$dir/values.yaml is not digest-pinned"; exit 1; }          
+            yq -i 'del(.version, .appVersion)' "$dir/Chart.yaml"
+            yq -i '.manager.image.tag |= sub("^[^@]*", "")' "$dir/values.yaml"
+          done
+
+          diff -r "$work/rc" "$work/final"
+
+      - name: Push final chart
+        working-directory: ${{ env.CONTROLLER_PATH }}
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+        run: |
+          set -euo pipefail
+          task helm/push VERSION="${VERSION}" REGISTRY="$CONTROLLER_IMAGE"
+
+      - name: Resolve final chart digest
+        id: chart-digest
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+        run: |
+          set -euo pipefail
+          echo "digest=$(oras resolve $CONTROLLER_CHART:${VERSION})" >> "$GITHUB_OUTPUT"
+
+      - name: Attest final chart
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-digest: ${{ steps.chart-digest.outputs.digest }}
+          subject-name: ${{ env.CONTROLLER_CHART }}
+          push-to-registry: true
+
+      - name: Get RC release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+        run: |
+          set -euo pipefail
+          gh release view "${RC_TAG}" \
+            --repo "$GH_REPO" --json body --jq '.body' > "${{ runner.temp }}/CHANGELOG.md"
+
+      - name: Stage final assets
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ runner.temp }}/final-assets"
+          # CLI binaries + OCI tarballs come from the RC release (already validated by attestation verify).
+          gh release download "${RC_TAG}" \
+            --repo "$GH_REPO" \
+            --pattern "ocm-*" \
+            --pattern "*.tar" \
+            --dir "${{ runner.temp }}/final-assets"
+          # Repackaged final chart from the working directory.
+          cp "${{ env.CONTROLLER_PATH }}/dist/chart-${VERSION}.tgz" "${{ runner.temp }}/final-assets/"
+
+      - name: Publish final release
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
+          NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
+          NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
+          COMPONENT_NAME: OCM
+          ASSETS_DIR: ${{ runner.temp }}/final-assets
+          NOTES_FILE: ${{ runner.temp }}/CHANGELOG.md
+          IMAGE_REPO: ${{ env.CONTROLLER_IMAGE }}
+          IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
+          CHART_REPO: ${{ env.CONTROLLER_CHART }}
+          SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
+          HIGHEST_PREVIOUS_RELEASE_VERSION: ${{ needs.prepare.outputs.highest_previous_release_version }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/publish-final-release.js');
+            await script.default({ github, context, core });
+  # === controller-release.yml::promote_and_release_final + cli-release.yml::promote_final + cli-release.yml::release_final ===
+
+  verify_install_script:
+    name: Verify install script for ${{ needs.prepare.outputs.base_version }}
+    needs: [prepare, promote_and_release_final]
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    uses: ./.github/workflows/website-live-test-install-script.yml
+    with:
+      version: ${{ needs.prepare.outputs.base_version }}
+    permissions:
+      contents: read
+
+  # === Website version release ===
+  # Replaces the old standalone website-version-release.yml. Runs after the
+  # final promotion succeeded, when the website/v0.X.Y tag exists. Opens a PR
+  # to main pinning Hugo module imports to the just-created website tag, with
+  # binding versions resolved from the released CLI module's go.mod.
+  create_website_update_pr:
+    name: Open website update PR
+    needs: [prepare, promote_and_release_final]
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    runs-on: ubuntu-24.04-arm
+    environment:
+      name: automation
+      deployment: false
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          # Docs PR targets main, so we check out main rather than the release branch.
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: cli/go.mod
+          cache: false
+
+      - name: Fetch CLI go.mod at release tag
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+        run: |
+          set -euo pipefail
+          git fetch origin "refs/tags/cli/v${VERSION}:refs/tags/cli/v${VERSION}" --no-tags
+          git show "cli/v${VERSION}:cli/go.mod" > "${{ runner.temp }}/cli-go.mod"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Release docs version
+        id: register
+        working-directory: website
+        env:
+          VERSION: ${{ needs.prepare.outputs.base_version }}
+          CLI_GOMOD: ${{ runner.temp }}/cli-go.mod
+          LOG_FILE: ${{ runner.temp }}/register.log
+        run: |
+          set +e
+          node scripts/register-docs-version.js "$VERSION" \
+            --cli-gomod "$CLI_GOMOD" \
+            2>&1 | tee "$LOG_FILE"
+          rc=${PIPESTATUS[0]}
+          # Write the logs to the output so they can be included in the PR body. There might be warnings about missing
+          # modules (diff between CLI_DERIVED_MODULES and CLI_GOMOD) that are not fatal but need to be validated
+          # manually.
+          {
+            echo 'log<<__REGISTER_EOF__'
+            cat "$LOG_FILE"
+            echo '__REGISTER_EOF__'
+          } >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the branch and create the signed commit via GraphQL.
+          permission-contents: write
+          # Open the website docs release PR.
+          permission-pull-requests: write
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          base: main
+          token: ${{ steps.get_token.outputs.token }}
+          title: "chore(website): release docs version ${{ needs.prepare.outputs.base_version }}"
+          commit-message: "[github-actions] automated change"
+          add-paths: |
+            website/config/
+          branch: website/version-release/${{ needs.prepare.outputs.base_version }}
+          delete-branch: true
+          sign-commits: true
+          body: |
+            Automated docs release for version ${{ needs.prepare.outputs.base_version }}.
+
+            Triggered by tag `website/v${{ needs.prepare.outputs.base_version }}`.
+
+            Output of `register-docs-version.js`:
+
+            ````
+            ${{ steps.register.outputs.log }}
+            ````
+  # === Website version release ===

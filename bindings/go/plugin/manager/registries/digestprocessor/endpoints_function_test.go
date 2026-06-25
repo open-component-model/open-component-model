@@ -24,7 +24,7 @@ func (m *mockPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest
 	panic("implement me")
 }
 
-func (m *mockPlugin) ProcessResourceDigest(ctx context.Context, req *v1.ProcessResourceDigestRequest, credentials map[string]string) (*v1.ProcessResourceDigestResponse, error) {
+func (m *mockPlugin) ProcessResourceDigest(ctx context.Context, req *v1.ProcessResourceDigestRequest, credentials runtime.Typed) (*v1.ProcessResourceDigestResponse, error) {
 	//TODO implement me
 	panic("implement me")
 }

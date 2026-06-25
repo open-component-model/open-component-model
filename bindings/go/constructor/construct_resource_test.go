@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -22,6 +23,7 @@ import (
 type mockInputMethod struct {
 	processedResource *descriptor.Resource
 	processedBlob     blob.ReadOnlyBlob
+	capturedCreds     runtime.Typed
 }
 
 func (m *mockInputMethod) GetInputMethodScheme() *runtime.Scheme {
@@ -34,7 +36,8 @@ func (m *mockInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Cont
 	return id, nil
 }
 
-func (m *mockInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, creds map[string]string) (*ResourceInputMethodResult, error) {
+func (m *mockInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, creds runtime.Typed) (*ResourceInputMethodResult, error) {
+	m.capturedCreds = creds
 	if m.processedResource != nil {
 		return &ResourceInputMethodResult{
 			ProcessedResource: m.processedResource,
@@ -58,40 +61,6 @@ func (m *mockInputMethodProvider) GetResourceInputMethod(ctx context.Context, re
 		return method, nil
 	}
 	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", resource.Input.GetType())
-}
-
-// mockResourceRepository implements ResourceRepository for testing
-type mockResourceRepository struct {
-	downloadData blob.ReadOnlyBlob
-	fail         bool
-}
-
-func (m *mockResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
-	identity = runtime.Identity{}
-	identity.SetType(runtime.NewVersionedType("mock", "v1"))
-	return identity, nil
-}
-
-func (m *mockResourceRepository) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
-	identity = runtime.Identity{}
-	identity.SetType(runtime.NewVersionedType("mock", "v1"))
-	return identity, nil
-}
-
-func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
-	if m.fail {
-		return nil, fmt.Errorf("simulated download failure")
-	}
-	return m.downloadData, nil
-}
-
-// mockResourceRepositoryProvider implements ResourceRepositoryProvider for testing
-type mockResourceRepositoryProvider struct {
-	repo ResourceRepository
-}
-
-func (m *mockResourceRepositoryProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (ResourceRepository, error) {
-	return m.repo, nil
 }
 
 // mockAccess implements runtime.Typed for testing
@@ -134,7 +103,7 @@ func (m *mockDigestProcessor) GetResourceDigestProcessorCredentialConsumerIdenti
 	return identity, nil
 }
 
-func (m *mockDigestProcessor) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
+func (m *mockDigestProcessor) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	if m.processedDigest != nil {
 		resource.Digest = m.processedDigest
 	}
@@ -157,24 +126,19 @@ type mockCredentialProvider struct {
 	fail        bool
 }
 
-func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	m.called[identity.GetType().String()]++
 	if m.fail {
 		return nil, fmt.Errorf("simulated credential resolution failure")
 	}
-	return m.credentials[identity.GetType().String()], nil
-}
-
-func (m *mockCredentialProvider) ResolveTyped(ctx context.Context, identity runtime.Typed) (runtime.Typed, error) {
-	id, ok := identity.(runtime.Identity)
-	if !ok {
-		return nil, fmt.Errorf("unsupported identity type")
+	creds := m.credentials[identity.GetType().String()]
+	if creds == nil {
+		return nil, nil
 	}
-	creds, err := m.Resolve(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return runtime.Identity(creds), nil
+	return &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: creds,
+	}, nil
 }
 
 // setupTestComponent creates a basic component constructor for testing
@@ -411,71 +375,6 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 	assert.Equal(t, mockCredProvider.called["mock/v1"], 1)
 }
 
-func TestConstructWithResourceByValue(t *testing.T) {
-	// Create a mock blob with test data
-	mockBlob := &mockBlob{
-		mediaType: "application/octet-stream",
-		data:      []byte("test data"),
-	}
-
-	// Create a mock resource repository
-	mockRepo := &mockResourceRepository{
-		downloadData: mockBlob,
-	}
-
-	// Create a mock resource repository provider
-	mockRepoProvider := &mockResourceRepositoryProvider{
-		repo: mockRepo,
-	}
-
-	constructor := setupTestComponent(t, `
-      - name: test-resource
-        version: v1.0.0
-        relation: external
-        type: blob
-        copyPolicy: byValue
-        access:
-          type: mock/v1
-          mediaType: application/octet-stream
-          reference: test-ref
-          description: "This is a test resource"
-`)
-
-	// Create a mock target repository
-	mockTargetRepo := newMockTargetRepository()
-
-	// Create the constructor with our mocks
-	opts := Options{
-		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
-		ResourceRepositoryProvider: mockRepoProvider,
-	}
-
-	constructorInstance := NewDefaultConstructor(constructor, opts)
-	graph := constructorInstance.GetGraph()
-
-	// Process the constructor
-	err := constructorInstance.Construct(context.Background())
-	require.NoError(t, err)
-	descs := collectDescriptors(t, graph)
-	require.NoError(t, err)
-	require.Len(t, descs, 1)
-
-	// Verify the results
-	desc := descs[0]
-	verifyBasicComponent(t, desc)
-
-	// Verify the resource was processed correctly
-	resource := desc.Component.Resources[0]
-	assert.Equal(t, "test-resource", resource.Name)
-	assert.Equal(t, "v1.0.0", resource.Version)
-	assert.Equal(t, descriptor.ExternalRelation, resource.Relation)
-	assert.NotNil(t, resource.Access)
-
-	// Verify the repository was called correctly
-	assert.Len(t, mockTargetRepo.addedLocalResources, 1)
-	assert.Len(t, mockTargetRepo.addedVersions, 1)
-}
-
 func TestConstructWithResourceDigest(t *testing.T) {
 	// Create a mock digest processor
 	mockProcessor := &mockDigestProcessor{
@@ -676,46 +575,6 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "error resolving credentials for resource input method")
 }
 
-func TestConstructWithResourceByValueFailure(t *testing.T) {
-	// Create a mock resource repository that fails to download
-	mockRepo := &mockResourceRepository{
-		downloadData: nil,
-		fail:         true,
-	}
-
-	// Create a mock resource repository provider
-	mockRepoProvider := &mockResourceRepositoryProvider{
-		repo: mockRepo,
-	}
-
-	constructor := setupTestComponent(t, `
-      - name: test-resource
-        version: v1.0.0
-        relation: external
-        type: blob
-        copyPolicy: byValue
-        access:
-          type: mock/v1
-          mediaType: application/octet-stream
-          reference: test-ref
-`)
-
-	// Create a mock target repository
-	mockTargetRepo := newMockTargetRepository()
-
-	// Create the constructor with our mocks
-	opts := Options{
-		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
-		ResourceRepositoryProvider: mockRepoProvider,
-	}
-	constructorInstance := NewDefaultConstructor(constructor, opts)
-
-	// Process the constructor and expect an error
-	err := constructorInstance.Construct(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error downloading resource")
-}
-
 func TestConstructWithMultipleResources(t *testing.T) {
 	// Create mock input methods for different resource types
 	mockInput1 := &mockInputMethod{
@@ -833,4 +692,69 @@ components:
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedLocalResources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
+}
+
+// TestConstructCredentialsPassedAsDirectCredentials verifies that credentials resolved by
+// the credential provider are forwarded to ProcessResource as *credconfigv1.DirectCredentials,
+// not as a raw runtime.Identity or any other type.
+func TestConstructCredentialsPassedAsDirectCredentials(t *testing.T) {
+	mockInput := &mockInputMethod{
+		processedResource: &descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-resource",
+					Version: "v1.0.0",
+				},
+			},
+			Access: &v2.LocalBlob{
+				MediaType: "application/octet-stream",
+			},
+			Relation: descriptor.LocalRelation,
+		},
+	}
+
+	mockProvider := &mockInputMethodProvider{
+		methods: map[runtime.Type]ResourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): mockInput,
+		},
+	}
+
+	mockCredProvider := &mockCredentialProvider{
+		called: make(map[string]int),
+		credentials: map[string]map[string]string{
+			"mock/v1": {
+				"username": "testuser",
+				"password": "testpass",
+			},
+		},
+	}
+
+	constructor := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: local
+        type: blob
+        input:
+          type: mock/v1
+`)
+
+	mockRepo := newMockTargetRepository()
+
+	opts := Options{
+		ResourceInputMethodProvider: mockProvider,
+		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
+		Resolver:                    mockCredProvider,
+	}
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	err := constructorInstance.Construct(context.Background())
+	require.NoError(t, err)
+
+	// Credentials must arrive as *DirectCredentials so that typed credential
+	// implementations (helm, oci, etc.) can inspect or convert them correctly.
+	require.NotNil(t, mockInput.capturedCreds, "expected credentials to be forwarded to ProcessResource")
+	dc, ok := mockInput.capturedCreds.(*credconfigv1.DirectCredentials)
+	require.True(t, ok, "expected *credconfigv1.DirectCredentials, got %T", mockInput.capturedCreds)
+	assert.Equal(t, "testuser", dc.Properties["username"])
+	assert.Equal(t, "testpass", dc.Properties["password"])
 }

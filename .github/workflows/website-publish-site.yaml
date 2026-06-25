@@ -13,7 +13,14 @@ on:
       # CRDs are generated from api/v1alpha1 at build time via controller-gen.
       - 'cli/docs/reference/**'
       - 'bindings/go/constructor/spec/v1/resources/**'
+      - 'bindings/go/credentials/spec/config/v1/schemas/**'
       - 'bindings/go/descriptor/v2/resources/**'
+      - 'bindings/go/gpg/spec/credentials/v1alpha1/schemas/**'
+      - 'bindings/go/helm/spec/credentials/v1/schemas/**'
+      - 'bindings/go/http/spec/config/v1alpha1/schemas/**'
+      - 'bindings/go/oci/spec/credentials/v1/schemas/**'
+      - 'bindings/go/rsa/spec/credentials/v1/schemas/**'
+      - 'bindings/go/sigstore/spec/credentials/**'
       - 'kubernetes/controller/api/v1alpha1/**'
 
 permissions:
@@ -27,29 +34,34 @@ jobs:
     name: Publish Site
     # peaceiris/actions-hugo v3 produces wrong filename casing for Hugo >= v0.103.0 on ARM64.
     runs-on: ubuntu-latest
+    environment:
+      name: automation
+      deployment: false
 
     permissions:
       contents: write
       id-token: write
-      pull-requests: write
 
     steps:
       - name: Get OCMBot installation token
         id: generate_token
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a #v2
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app_id: ${{ secrets.OCMBOT_APP_ID }}
-          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the built site to the gh-pages branch.
+          permission-contents: write
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: 25.5.0
+          node-version: 25.8.1
 
       - name: Setup Hugo
         uses: peaceiris/actions-hugo@2752ce1d29631191ea3f27c23495fa06139a5b78 # v3
@@ -57,46 +69,14 @@ jobs:
           hugo-version: '0.160.0'
           extended: true
 
-      - name: Setup Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-        with:
-          go-version-file: kubernetes/controller/go.mod
-          cache-dependency-path: kubernetes/controller/go.sum
-
-      - name: Generate controller CRDs for `main` site version
-        working-directory: kubernetes/controller
-        env:
-          CONTROLLER_TOOLS_VERSION: v0.20.1
-        run: |
-          mkdir -p bin/gen/crd
-          go run "sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_TOOLS_VERSION}" \
-            crd paths="./..." output:crd:artifacts:config=bin/gen/crd
-
       - name: Install deps and Build
         working-directory: website
         run: |
           npm ci
           npm run build
 
-      - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
-        with:
-          python-version: '3.14'
-
-      - name: Generate Schema
-        working-directory: website
-        run: |
-          python3 -m pip install json-schema-for-humans==1.5.1
-          generate-schema-doc --config-file generate-schema.yaml static/schemas/component-descriptor-v2 schema-v2.html
-
-      - name: Copy Schema
-        working-directory: website
-        run: |
-          mkdir -p public/docs/overview/specification
-          cp schema-v2.html schema_doc.css schema_doc.min.js public/docs/overview/specification
-
       - name: Publish as GitHub Pages
-        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e #v4
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
         env:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         with:

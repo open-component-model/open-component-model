@@ -25,9 +25,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 func TestResolveComponentVersion_Success(t *testing.T) {
@@ -533,7 +533,7 @@ func (p *mockPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
 func (p *mockPlugin) GetComponentVersionRepository(
 	_ context.Context,
 	_ ocmruntime.Typed,
-	_ map[string]string,
+	_ ocmruntime.Typed,
 ) (repository.ComponentVersionRepository, error) {
 	// Return the plugin itself as it implements the repository interface
 	return p, nil

@@ -24,16 +24,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       with:
         persist-credentials: false
     - name: Setup JSON Schema
-      uses: sourcemeta/jsonschema@cfd763b5bf08f819f2ab1667717c14568bd48935 # v13.6.0
+      uses: sourcemeta/jsonschema@cb9ec0145533126399065ffa13d3638842c65e25 # v15.6.3
     - name: Lint JSON Schemas
       run: |
-        jsonschema lint $(git ls-files '**/schemas/*.schema.json') \
+        jsonschema lint $(git ls-files '**/schemas/*.schema.json' | grep -v 'testutils') \
           --verbose \
-          --exclude additional_properties_default \
+          --exclude orphan_definitions \
           --exclude enum_with_type \
           --exclude description_trailing_period \
           --exclude top_level_examples

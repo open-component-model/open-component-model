@@ -20,7 +20,7 @@ type mockPlugin struct {
 	contracts.EmptyBasePlugin
 }
 
-func (m *mockPlugin) ListComponents(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) (*v1.ListComponentsResponse, error) {
+func (m *mockPlugin) ListComponents(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials runtime.Typed) (*v1.ListComponentsResponse, error) {
 	return &v1.ListComponentsResponse{}, nil
 }
 

@@ -1,0 +1,147 @@
+name: E2E
+
+# Reusable E2E run for the Kubernetes controller. Invoked by pipeline.yml as a
+# sibling of conformance so the two run concurrently off the same controller
+# build. Extracted from kubernetes-controller.yml, where it used to be the tail
+# job and serialized ahead of conformance.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "The ref to test on (branch or tag). Defaults to the current ref."
+        type: string
+        required: false
+      controller_image_artifact:
+        description: "Artifact name containing the controller OCI layout."
+        type: string
+        required: true
+      controller_version:
+        description: "Controller image version/tag (matches the built artifact)."
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+# No concurrency block: this workflow is workflow_call-only. The caller
+# (pipeline.yml, "monorepo shared build & publish") controls concurrency for
+# the whole chain. Declaring our own would collide with siblings because
+# github.workflow inherits the caller's name in workflow_call context.
+# Same pattern as conformance.yml and kubernetes-controller.yml.
+
+env:
+  LOCATION: "kubernetes/controller"
+  REGISTRY: ghcr.io
+  REF: ${{ inputs.ref || github.head_ref || github.ref_name }}
+  CHECKOUT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
+jobs:
+  e2e:
+    name: E2E Tests (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    # Extend the matrix with additional architectures if needed in the future.
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64]
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Compute image refs
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "IMAGE_NAME=${REGISTRY}/${OWNER,,}/kubernetes/controller" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.REF }}
+          sparse-checkout: |
+            ${{ env.LOCATION }}
+            Taskfile.yml
+            .env
+            website/static/install.sh
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: ${{ env.LOCATION }}/go.mod
+          cache-dependency-path: ${{ env.LOCATION }}/go.sum
+
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up docker
+        uses: docker/setup-docker-action@0234bb73ccb40f0c430b795634f9247e2b5c2d23 # v5
+
+      - name: Setup ocm
+        run: bash website/static/install.sh
+
+      - name: Setup Flux CLI
+        uses: fluxcd/flux2/action@1fd61a06264d71cf445ed55c4f14d401d26a1c64 # v2.8.8
+
+      - name: Install Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v4.2.0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ inputs.controller_image_artifact }}
+          path: ${{ env.LOCATION }}/tmp/oci
+
+      - name: Extract OCI layout from tar
+        working-directory: ${{ env.LOCATION }}
+        run: task oci/extract TAR_PATH=tmp/oci/controller.tar OUTPUT_DIR=tmp/oci-dir
+
+      - name: Ensure skopeo is installed
+        run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
+
+      - name: Extract image for E2E testing
+        # Skopeo can extract by platform (--override-arch) AND convert to docker-archive.
+        # Skopeo is pre-installed on ubuntu-latest but may be missing on ARM runners.
+        # Set tag to "latest" to match the controller's Helm chart default for E2E testing
+        working-directory: ${{ env.LOCATION }}
+        env:
+          VERSION: ${{ inputs.controller_version }}
+        run: |
+          mkdir -p tmp/docker
+          skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
+            oci:tmp/oci-dir:${VERSION} \
+            docker-archive:tmp/docker/controller.tar:${IMAGE_NAME}:latest
+          echo "CONTROLLER_IMG=${IMAGE_NAME}:${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Run E2E tests
+        run: |
+          set -a && source ${{ env.LOCATION }}/.env && set +a
+          bash ${{ env.LOCATION }}/test/e2e/hacks/setup.sh
+          kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller.tar"
+          task ${{ env.LOCATION }}:test/e2e
+
+      - name: Debug cluster state
+        if: failure()
+        run: |
+          echo "::group::Controller pods"
+          kubectl -n ocm-k8s-toolkit-system get pods -o wide
+          echo "::endgroup::"
+
+          echo "::group::Controller logs (last 80 lines)"
+          kubectl -n ocm-k8s-toolkit-system logs deploy/ocm-k8s-toolkit-controller-manager --tail=80 --all-containers || true
+          echo "::endgroup::"
+
+          echo "::group::Namespace events"
+          kubectl -n ocm-k8s-toolkit-system get events --sort-by=.lastTimestamp || true
+          echo "::endgroup::"
+
+          echo "::group::Helm release"
+          helm list -n ocm-k8s-toolkit-system
+          echo "::endgroup::"

@@ -6,9 +6,70 @@ import (
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+func TestProcessResourceDigest_RawAccessType(t *testing.T) {
+	// v2.Resource.Access is always *runtime.Raw when deserialized from a component
+	// descriptor, so this path is exercised on every real resource coming from an OCI
+	// registry.
+	raw := &runtime.Raw{}
+	require.NoError(t, ociaccess.Scheme.Convert(&v1.OCIImage{
+		Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+		ImageReference: "nonexistent.invalid/test:v1.0.0",
+	}, raw))
+
+	res := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "test", Version: "1.0.0"},
+		},
+		Type:   "ociArtifact",
+		Access: raw,
+	}
+
+	repo := NewResourceRepository(nil)
+	_, err := repo.ProcessResourceDigest(t.Context(), res, nil)
+
+	// Without the fix: error is "unsupported resource access type: *runtime.Raw"
+	// With the fix:    error is a network/DNS failure reaching nonexistent.invalid
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "unsupported resource access type",
+		"ProcessResourceDigest must convert *runtime.Raw access to typed before passing to the inner repository")
+}
+
+func TestAddOwnership_RawAccessType(t *testing.T) {
+	// As with ProcessResourceDigest, a resource coming from a component descriptor
+	// carries *runtime.Raw access. AddOwnership must convert it to the typed
+	// spec before handing off to the inner repository's AddOwnership, which then
+	// dispatches on the typed access to the by-reference path.
+	raw := &runtime.Raw{}
+	require.NoError(t, ociaccess.Scheme.Convert(&v1.OCIImage{
+		Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+		ImageReference: "nonexistent.invalid/test:v1.0.0",
+	}, raw))
+
+	res := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "test", Version: "1.0.0"},
+		},
+		Type:   "ociArtifact",
+		Access: raw,
+	}
+
+	repo := NewResourceRepository(nil)
+	err := repo.AddOwnership(t.Context(), "ocm.software/test", "1.0.0", res, nil)
+
+	// Conversion succeeded only if execution reached the inner AddOwnership by-reference
+	// path and failed resolving the unreachable host. Assert that positively so a reworded
+	// conversion error can't make this pass for the wrong reason.
+	require.ErrorContains(t, err, "nonexistent.invalid",
+		"AddOwnership must convert *runtime.Raw access to typed and reach the inner repository")
+}
 
 func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 	r := require.New(t)

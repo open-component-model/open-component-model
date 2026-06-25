@@ -23,7 +23,7 @@ func (m *MockResourceInputMethod) GetResourceCredentialConsumerIdentity(ctx cont
 	return runtime.Identity{}, nil
 }
 
-func (m *MockResourceInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials map[string]string) (*ResourceInputMethodResult, error) {
+func (m *MockResourceInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*ResourceInputMethodResult, error) {
 	return &ResourceInputMethodResult{
 		ProcessedResource: &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{
@@ -48,7 +48,7 @@ func (m *MockSourceInputMethod) GetSourceCredentialConsumerIdentity(ctx context.
 	return runtime.Identity{}, nil
 }
 
-func (m *MockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorruntime.Source, credentials map[string]string) (*SourceInputMethodResult, error) {
+func (m *MockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorruntime.Source, credentials runtime.Typed) (*SourceInputMethodResult, error) {
 	return &SourceInputMethodResult{
 		ProcessedSource: &descriptor.Source{
 			ElementMeta: descriptor.ElementMeta{

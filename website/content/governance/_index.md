@@ -23,11 +23,7 @@ The full list of voting members, the project charter, and contribution guideline
 
 SIGs are focused working groups that own specific areas of the project and move it forward. Following the example of CNCF projects, we defined a framework for SIGs to help contributors collaborate effectively.
 
-The **[SIG Handbook](https://github.com/open-component-model/open-component-model/blob/main/docs/community/SIGs/SIG-Handbook.md)** covers:
-
-- goals and motivation behind SIGs
-- roles and responsibilities
-- how to propose, establish, and run a SIG
+See the [SIG Handbook](https://github.com/open-component-model/open-component-model/blob/main/docs/community/SIGs/SIG-Handbook.md) for goals, roles, lifecycle, and how to propose a new SIG.
 
 ### SIG Runtime
 
@@ -39,14 +35,12 @@ SIG Runtime owns the core runtime layer of OCM -- the Go language bindings, the 
 
 Concretely, SIG Runtime maintains the modular Go runtime library, a production-grade Kubernetes controller with native Flux and Kro integration, and the OCM CLI as the primary developer toolchain. It also curates reference patterns and documentation for authoring, curation, and dissemination of OCM components.
 
-The SIG participates in the monthly OCM community call and can be reached via the [mailing list](mailto:open-component-model-sig-runtime@lists.neonephos.org) or [Zulip chat](https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support). The full charter is in the [open-component-model](https://github.com/open-component-model/open-component-model/tree/main/docs/community/SIGs/Runtime) repository.
+Channels, meeting time, and full scope are in the [SIG Runtime charter](https://github.com/open-component-model/open-component-model/tree/main/docs/community/SIGs/Runtime).
 
   </div>
 </div>
 
 ### How to get involved
 
-- **Curious?** Start with the [SIG Handbook](https://github.com/open-component-model/open-component-model/blob/main/docs/community/SIGs/SIG-Handbook.md).
-- **Have a topic in mind?** Follow the handbook's steps to **propose a SIG** and gather interested contributors.
-- **Prefer to join later?** Keep an eye on this page -- we'll announce and list new SIGs here.
-- **Want to connect with others?** Visit the [Community]({{< relref "community/_index.md" >}}) page for community calls, and more.
+- **Join a SIG:** see [Contributing to an OCM SIG](https://github.com/open-component-model/open-component-model/blob/main/docs/community/SIGs/CONTRIBUTING.md).
+- **Propose a new SIG:** follow [Section 2.3 of the Handbook](https://github.com/open-component-model/open-component-model/blob/main/docs/community/SIGs/SIG-Handbook.md#23-sig-creation--charter-requirements).

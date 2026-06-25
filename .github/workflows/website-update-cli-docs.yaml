@@ -18,6 +18,9 @@ jobs:
     name: Update website/content_versioned/version-legacy/docs/reference/ocm-cli
     if: github.event.client_payload != '' || github.event.inputs.tag != ''
     runs-on: ubuntu-24.04-arm
+    environment:
+      name: automation
+      deployment: false
     env:
       TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
       REF: main
@@ -26,13 +29,13 @@ jobs:
       id-token: 'write'
       pull-requests: 'write'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
           ref: ${{ env.REF }}
 
       - name: Setup Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: '${{ github.workspace }}/website/hack/generate-cli-docs/go.mod'
 
@@ -45,10 +48,15 @@ jobs:
 
       - name: Get OCMBot installation token
         id: generate_token
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app_id: ${{ secrets.OCMBOT_APP_ID }}
-          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the branch and create the signed commit via GraphQL.
+          permission-contents: write
+          # Open the docs-update PR.
+          permission-pull-requests: write
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8

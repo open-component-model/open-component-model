@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"sync"
 
-	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -45,7 +44,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 	var (
 		wg       sync.WaitGroup
 		mu       sync.Mutex
-		resolved map[string]string
+		resolved runtime.Typed
 		errs     []error
 	)
 
@@ -56,7 +55,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 	resolve := func(plugin RepositoryPlugin, cfg runtime.Typed) {
 		defer wg.Done()
 
-		var credentials map[string]string
+		var credentials runtime.Typed
 		// Obtain the consumer identity for the repository configuration.
 		if cfgIdentity, err := plugin.ConsumerIdentityForConfig(ctx, cfg); err == nil {
 			// Attempt to resolve direct credentials from the graph.
@@ -64,7 +63,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 			// This is because the usage of repository credentials resolved by other repository credentials
 			// would require dynamic recursion detection via stack and would make the code significantly more complex.
 			if typed, err := g.resolveFromGraph(ctx, cfgIdentity); err == nil {
-				credentials = typedToMap(typed)
+				credentials = typed
 			}
 		}
 		slog.DebugContext(ctx, "Resolving credentials via repository", "identity", identity, "config", cfg)
@@ -106,12 +105,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 		return nil, errors.Join(ErrNoIndirectCredentials, fmt.Errorf("no repository plugin could resolve credentials for identity %q", node))
 	}
 
-	// Wrap and cache the resolved credentials.
-	typed := &v1.DirectCredentials{
-		Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
-		Properties: resolved,
-	}
-	g.setCredentials(node, typed)
+	g.setCredentials(node, resolved)
 
-	return typed, nil
+	return resolved, nil
 }

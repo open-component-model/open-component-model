@@ -167,10 +167,20 @@
       matchPackageNames: [
         'ocm.software/open-component-model/**',
       ],
+      // Combine minor and patch updates into a single PR.
+      separateMinorPatch: false,
       'schedule': [
         '* 22,0-6 * * *' // At every minute past hour 22 and every hour from 0 through 6.
       ],
       minimumReleaseAge: null,
+    },
+    {
+      // The internal org workflows repo is tracked on @main intentionally
+      // (see .github/workflows/stale.yaml). Disable Renovate so it does not
+      // re-pin the ref to a SHA and then bump it on every upstream commit.
+      matchManagers: ['github-actions'],
+      matchDepNames: ['open-component-model/.github'],
+      enabled: false,
     },
   ],
   customDatasources: {

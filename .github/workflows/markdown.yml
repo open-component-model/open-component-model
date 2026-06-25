@@ -17,7 +17,7 @@ jobs:
     name: Lint Markdown (website)
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
       - uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd # v23
@@ -34,11 +34,11 @@ jobs:
     # which is an amd64-only image with no ARM64 manifest.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
       - name: Spellcheck
-        uses: rojopolis/spellcheck-github-actions@e3cd8e9aec4587ec73bc0e60745aafd45c37aa2e # v0
+        uses: rojopolis/spellcheck-github-actions@390a08ee9c46943112f21d2ff671649a2bacd33f # v0
         with:
           config_path: .github/config/spellcheck.yml
           task_name: Markdown
@@ -52,12 +52,12 @@ jobs:
       checks: write
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 2
           persist-credentials: false
       - name: Run linkspector
-        uses: umbrelladocs/action-linkspector@963b6264d7de32c904942a70b488d3407453049e # v1
+        uses: umbrelladocs/action-linkspector@6c637d70424624231467a4ca918be54fa3b792d0 # v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
@@ -74,73 +74,74 @@ jobs:
       checks: write
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 2
           persist-credentials: false
 
       - name: Check for website changes
         id: check_changes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # HEAD is the PR merge commit, so HEAD^1 is the base branch tip
+        # (fetch-depth: 2 above makes both available).
         run: |
-          CHANGED=$(gh pr diff ${{ github.event.pull_request.number }} --name-only | grep -c '^website/' || true)
-          echo "has_website_changes=$([[ "$CHANGED" -gt 0 ]] && echo true || echo false)" >> $GITHUB_OUTPUT
+          CHANGED=$(git diff --name-only HEAD^1 HEAD | grep -c '^website/' || true)
+          echo "has_website_changes=$([[ "$CHANGED" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
       - name: Wait for Netlify Deploy Preview
         if: steps.check_changes.outputs.has_website_changes == 'true'
         id: wait_for_preview
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Poll the netlify/ocm-website/deploy-preview commit status rather
+        # than Netlify's check suite — the status is posted as soon as the
+        # preview is ready, while the check suite shows up minutes later
+        # (or not at all). A single deploy takes ~6 minutes, but Netlify
+        # builds one deploy at a time, so push bursts can queue up delays
+        # beyond that; on a timeout, re-run the job once the queue drains.
         run: |
           set -euo pipefail
-          echo "Waiting up to 10 minutes for Netlify deploy preview..."
+          echo "Waiting up to 30 minutes for Netlify deploy preview..."
           export REPO="${{ github.repository }}"
           export SHA="${{ github.event.pull_request.head.sha }}"
+          export GITHUB_OUTPUT
 
-          timeout 600 bash -c '
+          if ! timeout 1800 bash -c '
+            ELAPSED=0
             while true; do
-              SUITE_JSON=$(gh api repos/"$REPO"/commits/"$SHA"/check-suites 2>/dev/null)
-              if [ -z "$SUITE_JSON" ] || ! echo "$SUITE_JSON" | jq .check_suites > /dev/null 2>&1; then
+              if ! STATUS_JSON=$(gh api repos/"$REPO"/commits/"$SHA"/status 2>/dev/null) \
+                || ! echo "$STATUS_JSON" | jq -e .statuses > /dev/null 2>&1; then
                 echo "[ERROR] gh api or jq failed, retrying..."
-                sleep 5
+                sleep 15; ELAPSED=$((ELAPSED + 15))
                 continue
               fi
-              NETLIFY_SUITE=$(echo "$SUITE_JSON" | jq "[ .check_suites[] | select(.app.slug == \"netlify\") ]")
-              NETLIFY_SUITE_LEN=$(echo "$NETLIFY_SUITE" | jq length)
-              if ! [[ "$NETLIFY_SUITE_LEN" =~ ^[0-9]+$ ]] || [ "$NETLIFY_SUITE_LEN" -eq 0 ]; then
-                echo "No Netlify suite found. Waiting..."
-                sleep 5
+              PREVIEW_STATUS=$(echo "$STATUS_JSON" | jq "[ .statuses[] | select(.context==\"netlify/ocm-website/deploy-preview\") ]")
+              if [ "$(echo "$PREVIEW_STATUS" | jq length)" -eq 0 ]; then
+                echo "No deploy-preview status yet (${ELAPSED}s elapsed). Waiting..."
+                sleep 30; ELAPSED=$((ELAPSED + 30))
                 continue
               fi
-              SUITE_ID=$(echo "$NETLIFY_SUITE" | jq -r ".[0].id")
-              STATUS=$(echo "$NETLIFY_SUITE" | jq -r ".[0].status")
-              CONCLUSION=$(echo "$NETLIFY_SUITE" | jq -r ".[0].conclusion")
-              echo "Netlify suite status: $STATUS, conclusion: $CONCLUSION"
-              if [ "$STATUS" = "completed" ]; then
-                if [[ "$CONCLUSION" = "success" || "$CONCLUSION" = "neutral" ]]; then
-                  STATUS_JSON=$(gh api repos/"$REPO"/commits/"$SHA"/status 2>/dev/null)
-                  STATUS_CODE=$?
-                  if [ $STATUS_CODE -ne 0 ]; then
-                    echo "[ERROR] gh api status call failed."
+              STATE=$(echo "$PREVIEW_STATUS" | jq -r ".[0].state")
+              echo "Deploy preview state: $STATE (${ELAPSED}s elapsed)"
+              case "$STATE" in
+                success)
+                  PREVIEW_URL=$(echo "$PREVIEW_STATUS" | jq -r ".[0].target_url")
+                  if [ -z "$PREVIEW_URL" ] || [ "$PREVIEW_URL" = "null" ]; then
+                    echo "[ERROR] Deploy preview succeeded but has no target_url."
                     exit 1
                   fi
-                  PREVIEW_STATUS=$(echo "$STATUS_JSON" | jq ".statuses[] | select(.context==\"netlify/ocm-website/deploy-preview\")")
-                  PREVIEW_URL=$(echo "$PREVIEW_STATUS" | jq -r ".target_url")
                   echo "Deploy Preview ready: $PREVIEW_URL"
-                  echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+                  echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
                   exit 0
-                else
-                  echo "Deploy failed: $CONCLUSION"
+                  ;;
+                failure|error)
+                  echo "Deploy failed: $STATE"
                   exit 1
-                fi
-              fi
-              sleep 15
+                  ;;
+              esac
+              sleep 30; ELAPSED=$((ELAPSED + 30))
             done
-          '
-
-          if [ $? -eq 124 ]; then
-            echo "Timeout after 10 minutes"
+          '; then
+            echo "Netlify deploy preview did not report success within 30 minutes."
             exit 1
           fi
 
@@ -166,7 +167,7 @@ jobs:
 
       - name: Run linkspector
         if: steps.check_changes.outputs.has_website_changes == 'true'
-        uses: umbrelladocs/action-linkspector@963b6264d7de32c904942a70b488d3407453049e # v1
+        uses: umbrelladocs/action-linkspector@6c637d70424624231467a4ca918be54fa3b792d0 # v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
@@ -178,7 +179,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
