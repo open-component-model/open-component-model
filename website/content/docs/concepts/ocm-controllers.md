@@ -83,7 +83,7 @@ See [Kubernetes Deployer]({{< relref "kubernetes-deployer.md" >}}) for a full de
 
 A `Replication` moves a component version from one OCM repository to another, without deploying anything.
 
-A `Replication` references a `Component` for its source and a `Repository` for its target. It watches the source `Component`'s status and, whenever the resolved version changes, transfers that version, together with the full graph of components it references, into the target repository. It is the controller equivalent of `ocm transfer`, and fits delivery pipelines, promotion between environments, and backup or air-gap scenarios where a management cluster mirrors content into a downstream registry.
+It references a `Component` for its source and a `Repository` for its target. It watches the source `Component`'s status and, whenever the resolved version changes, transfers that version, together with the full graph of components it references, into the target repository. It is the controller equivalent of `ocm transfer`, and fits delivery pipelines, promotion between environments, and backup or air-gap scenarios where a management cluster mirrors content into a downstream registry.
 
 ```mermaid
 flowchart LR
