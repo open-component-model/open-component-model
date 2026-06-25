@@ -576,6 +576,9 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 		//   and instead return a blob.
 		//   I believe this is currently dead code anyway, as the helm input method
 		//   also sets ProcessedBlobData and thus, hits the path above.
+		if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
+			return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but input method returned a pre-processed resource which does not support ownership attachment", resource.ToIdentity(), resource.Options.OwnershipPolicy)
+		}
 		processedResource = result.ProcessedResource
 	}
 
