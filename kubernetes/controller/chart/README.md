@@ -116,7 +116,7 @@ templates:
 task helm/generate
 ```
 
-This runs `controller-gen` to produce raw CRDs into `bin/gen/crd` and a raw
+This runs `controller-gen` to produce raw CRDs into `config/crd/bases` and a raw
 ClusterRole into `bin/gen/rbac`, then invokes two post-processors:
 
 - `hack/helm.generate.sh` reformats the CRDs and injects Helm template wrappers
