@@ -60,18 +60,10 @@ Add the component version to a CTF archive:
 
 ```bash
 ocm add cv --repository ctf::<path/to/archive> \
-  --constructor constructor.yaml \
-  --skip-reference-digest-processing
+  --constructor constructor.yaml
 ```
 
 {{< /step >}}
-
-{{<callout context="caution" title="Why --skip-reference-digest-processing?" icon="outline/alert-triangle">}}
-The `--skip-reference-digest-processing` flag is required because the `Helm/v1` access type currently cannot be fully resolved during `add cv`.
-The chart is not downloaded at this stage, so digest calculation is not possible. The digests are computed later during transfer when the chart is
-actually fetched.
-Full Helm support is being tracked as a future feature in [ocm-project#911](https://github.com/open-component-model/ocm-project/issues/911).
-{{< /callout >}}
 
 {{< step >}}
 
