@@ -442,7 +442,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 			var creds ocmruntime.Typed
 			if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
 				if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
-					return nil, fmt.Errorf("error resolving credentials for resource by-value processing: %w", err)
+					return nil, fmt.Errorf("error resolving credentials for resource processing: %w", err)
 				}
 			}
 			if err := ownershipAwareRepository.AddOwnership(ctx, component, version, res, creds); err != nil {
