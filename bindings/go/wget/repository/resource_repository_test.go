@@ -15,6 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/wget/access/spec/v1"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
+	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
 func wgetResource(t *testing.T, serverURL string, spec map[string]any) *descruntime.Resource {
@@ -126,9 +127,10 @@ func TestDownloadResource(t *testing.T) {
 			"url": server.URL + "/resource",
 		})
 
-		creds := map[string]string{
-			"username": "myuser",
-			"password": "mypass",
+		creds := &credv1.WgetCredentials{
+			Type:     runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+			Username: "myuser",
+			Password: "mypass",
 		}
 		b, err := repo.DownloadResource(t.Context(), resource, creds)
 		require.NoError(t, err)
@@ -277,8 +279,9 @@ func TestDownloadResource(t *testing.T) {
 			"url": server.URL + "/resource",
 		})
 
-		creds := map[string]string{
-			"identityToken": "my-token-value",
+		creds := &credv1.WgetCredentials{
+			Type:          runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+			IdentityToken: "my-token-value",
 		}
 		b, err := repo.DownloadResource(t.Context(), resource, creds)
 		require.NoError(t, err)

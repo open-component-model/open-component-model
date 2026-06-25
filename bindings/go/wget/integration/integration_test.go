@@ -23,6 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/access"
 	v1 "ocm.software/open-component-model/bindings/go/wget/access/spec/v1"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
+	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
 // newFileServer starts an httptest server that serves files from the given directory,
@@ -70,7 +71,9 @@ func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	t.Helper()
 	rc, err := b.ReadCloser()
 	require.NoError(t, err)
-	defer rc.Close()
+	defer func(rc io.ReadCloser) {
+		_ = rc.Close()
+	}(rc)
 	data, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	return data
@@ -202,7 +205,9 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		// Verify it's actually gzipped by decompressing
 		rc, err := b.ReadCloser()
 		r.NoError(err)
-		defer rc.Close()
+		defer func(rc io.ReadCloser) {
+			_ = rc.Close()
+		}(rc)
 		gz, err := gzip.NewReader(rc)
 		r.NoError(err)
 		decompressed, err := io.ReadAll(gz)
@@ -233,7 +238,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		// Server that echoes back the custom header in the response body
 		echoSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Content-Type", "text/plain")
-			fmt.Fprintf(w, "X-Request-ID: %s", req.Header.Get("X-Request-ID"))
+			_, _ = fmt.Fprintf(w, "X-Request-ID: %s", req.Header.Get("X-Request-ID"))
 		}))
 		t.Cleanup(echoSrv.Close)
 
@@ -264,7 +269,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 				"method": req.Method,
 				"body":   string(body),
 			})
-			w.Write(resp)
+			_, _ = w.Write(resp)
 		}))
 		t.Cleanup(echoSrv.Close)
 
@@ -365,9 +370,10 @@ func Test_Integration_WgetWithAuthentication(t *testing.T) {
 			"url": srv.URL + "/hello.txt",
 		})
 
-		creds := map[string]string{
-			"username": testUser,
-			"password": testPass,
+		creds := &credv1.WgetCredentials{
+			Type:     runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+			Username: testUser,
+			Password: testPass,
 		}
 
 		b, err := repo.DownloadResource(t.Context(), resource, creds)
@@ -394,9 +400,10 @@ func Test_Integration_WgetWithAuthentication(t *testing.T) {
 			"url": srv.URL + "/hello.txt",
 		})
 
-		creds := map[string]string{
-			"username": "wrong",
-			"password": "wrong",
+		creds := &credv1.WgetCredentials{
+			Type:     runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+			Username: "wrong",
+			Password: "wrong",
 		}
 
 		_, err := repo.DownloadResource(t.Context(), resource, creds)

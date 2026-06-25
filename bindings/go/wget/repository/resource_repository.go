@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 
@@ -17,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/access"
 	v1 "ocm.software/open-component-model/bindings/go/wget/access/spec/v1"
+	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
 var wgetAccess = access.NewWgetAccess()
@@ -62,7 +64,7 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 }
 
 // DownloadResource downloads a resource from the URL specified in the wget access spec.
-func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
 	}
@@ -128,7 +130,11 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	if err != nil {
 		return nil, fmt.Errorf("error performing HTTP request to %s: %w", safeURL.String(), err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.WarnContext(ctx, "failed to close HTTP response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("HTTP request to %s returned status %d", safeURL.String(), resp.StatusCode)
@@ -167,34 +173,39 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 }
 
 // UploadResource is not supported for wget access types.
-func (r *ResourceRepository) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+func (r *ResourceRepository) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("upload is not supported for wget access type")
 }
 
 // applyCredentials applies OCM credentials to the HTTP request or client.
-// Supported credential keys (in priority order):
+// Supported credential types (in priority order):
 //   - username + password: HTTP Basic Authentication
 //   - identityToken: Bearer token in the Authorization header
 //   - certificate + privateKey (+ optional certificateAuthority): mTLS client certificate
-func applyCredentials(req *http.Request, client **http.Client, credentials map[string]string) error {
-	if len(credentials) == 0 {
+//
+// Both WgetCredentials/v1 and legacy DirectCredentials/v1 are accepted.
+func applyCredentials(req *http.Request, client **http.Client, credentials runtime.Typed) error {
+	if credentials == nil {
 		return nil
 	}
 
-	if username, ok := credentials["username"]; ok {
-		password := credentials["password"]
-		req.SetBasicAuth(username, password)
+	creds, err := credv1.ConvertToWgetCredentials(credentials)
+	if err != nil {
+		return fmt.Errorf("error converting credentials: %w", err)
+	}
+
+	if creds.Username != "" {
+		req.SetBasicAuth(creds.Username, creds.Password)
 		return nil
 	}
 
-	if token, ok := credentials["identityToken"]; ok {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if creds.IdentityToken != "" {
+		req.Header.Set("Authorization", "Bearer "+creds.IdentityToken)
 		return nil
 	}
 
-	if certPEM, ok := credentials["certificate"]; ok {
-		keyPEM := credentials["privateKey"]
-		cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+	if creds.Certificate != "" {
+		cert, err := tls.X509KeyPair([]byte(creds.Certificate), []byte(creds.PrivateKey))
 		if err != nil {
 			return fmt.Errorf("invalid certificate/privateKey for mTLS: %w", err)
 		}
@@ -204,9 +215,9 @@ func applyCredentials(req *http.Request, client **http.Client, credentials map[s
 			Certificates: []tls.Certificate{cert},
 		}
 
-		if caPEM, ok := credentials["certificateAuthority"]; ok {
+		if creds.CertificateAuthority != "" {
 			pool := x509.NewCertPool()
-			if !pool.AppendCertsFromPEM([]byte(caPEM)) {
+			if !pool.AppendCertsFromPEM([]byte(creds.CertificateAuthority)) {
 				return fmt.Errorf("failed to parse certificateAuthority PEM")
 			}
 			tlsCfg.RootCAs = pool

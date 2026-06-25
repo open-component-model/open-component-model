@@ -22,8 +22,8 @@ func init() {
 func MustAddToScheme(scheme *runtime.Scheme) {
 	wget := &v1.Wget{}
 	scheme.MustRegisterWithAlias(wget,
-		runtime.NewVersionedType("wget", v1.Version),
-		runtime.NewUnversionedType("wget"),
+		runtime.NewVersionedType(WgetConsumerType, v1.Version),
+		runtime.NewUnversionedType(WgetConsumerType),
 	)
 }
 
