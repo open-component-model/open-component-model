@@ -37,6 +37,9 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
+          "const": "Wget/v1"
+        },
+        {
           "const": "wget/v1"
         },
         {

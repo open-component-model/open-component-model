@@ -11,7 +11,7 @@ import (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Wget struct {
-	// +ocm:jsonschema-gen:enum=wget/v1
+	// +ocm:jsonschema-gen:enum=Wget/v1,wget/v1
 	// +ocm:jsonschema-gen:enum:deprecated=wget
 	Type runtime.Type `json:"type"`
 
