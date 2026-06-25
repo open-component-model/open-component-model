@@ -448,7 +448,6 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 			if err := ownershipAwareRepository.AddOwnership(ctx, component, version, res, creds); err != nil {
 				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 			}
-
 		}
 	default:
 		return nil, fmt.Errorf("resource %q has no access type and no input method", resource.ToIdentity())

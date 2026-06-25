@@ -284,11 +284,6 @@ components:
 	assertOwnershipReferrer(t, ctx, dstResolver, subject, component, ownershipVersion, resourceName, true)
 }
 
-// --- ocm transfer: driving the real `ocm transfer component-version` command ----
-
-// transferComponentVersion transfers component/version from srcReg into a fresh
-// target registry via the real `ocm transfer component-version` CLI command and
-// returns the target's resolver and repository for asserting the result.
 func transferComponentVersion(t *testing.T, ctx context.Context, srcReg *internal.OCIRegistry, component, version string, copyResources bool, uploadAs string) (*urlresolver.CachingResolver, *oci.Repository) {
 	t.Helper()
 	r := require.New(t)
