@@ -9,9 +9,9 @@ toc: true
 ## Goal
 
 Use the OCM Kubernetes controller to transfer a component version, together with
-the full graph of components it references, from one OCM repository to another.
-The transfer re-runs automatically whenever the source `Component` resolves to a
-new version.
+the full graph of components it references (if recursion is enabled), from one OCM
+repository to another. The transfer re-runs automatically whenever the source
+`Component` resolves to a new version.
 
 ## Prerequisites
 
@@ -35,15 +35,19 @@ A `Replication` references two objects:
 - `spec.targetRepositoryRef`, the `Repository` the content is written to.
 
 When the source `Component`'s resolved version changes, the controller walks the
-component's reference graph and transfers every referenced component version into
-the target. It records the transferred version and digest in its status and
-treats an unchanged digest as a no-op, so it never re-transfers content that is
-already present.
+component's reference graph and transfers the component version into the target.
+It records the transferred version and digest in its status and treats an unchanged
+digest as a no-op, so it never re-transfers content that is already present.
 
 Transfer behaviour (recursion depth, copy mode, upload type) and the registry
 credentials are supplied as OCM configuration through `ocmConfig`. In the steps
 below the configuration lives in a single `Secret` that the `Component`
 propagates to the `Replication`.
+
+The configuration influences the way the transfer happens. For example, if `recursive`
+is set to none zero number, it will copy all references of a component. `copyMode`
+determines which resources are copied during a transfer operation. These options are the
+same they are on the CLI side.
 
 ## Steps
 
@@ -96,12 +100,6 @@ Push both components to the source registry:
 ```bash
 ocm add cv --repository ghcr.io/<source-namespace> --constructor component-constructor.yaml
 ```
-
-{{< callout context="note" title="Unique reference names" icon="outline/info-circle" >}}
-Keep component reference names unique across the constructor. The constructor's
-digest cache is keyed by the local reference identity, so reusing a name across
-components can stamp the wrong digest into a reference.
-{{< /callout >}}
 
 {{< /step >}}
 {{< step >}}
@@ -182,10 +180,11 @@ kubectl apply -f transfer-config.yaml
 
 The `transfer.config.ocm.software` entry controls the transfer itself:
 
-- `recursive: -1` follows component references to unlimited depth (`0` disables
-  recursion, a positive number limits it).
+- `recursive: -1` follows component references; `0` disables recursion.
 - `copyMode: localBlob` and `uploadType: ociArtifact` copy resource content into
   the target and re-upload OCI artifacts as artifacts rather than as plain blobs.
+- using `copyMode: allResources` with `uploadType: ociArtifact` will initiate a
+  streaming upload if the resource is an oci type (ociArtifact, for example).
 
 {{< callout context="note" title="Credential identities" icon="outline/info-circle" >}}
 List a consumer for every host involved. If your source and target live on

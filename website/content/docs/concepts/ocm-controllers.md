@@ -83,7 +83,15 @@ See [Kubernetes Deployer]({{< relref "kubernetes-deployer.md" >}}) for a full de
 
 A `Replication` moves a component version from one OCM repository to another, without deploying anything.
 
+<<<<<<< Updated upstream
 It references a `Component` for its source and a `Repository` for its target. It watches the source `Component`'s status and, whenever the resolved version changes, transfers that version, together with the full graph of components it references, into the target repository. It is the controller equivalent of `ocm transfer`, and fits delivery pipelines, promotion between environments, and backup or air-gap scenarios where a management cluster mirrors content into a downstream registry.
+=======
+A `Replication` references a `Component` for its source and a `Repository` for its target. It watches the source
+`Component`'s status and, whenever the resolved version changes, transfers that version, together with the full
+graph of components it references (if recursion is enabled), into the target repository. It is the controller
+equivalent of `ocm transfer`, and fits delivery pipelines, promotion between environments, and backup or air-gap
+scenarios where a management cluster mirrors content into a downstream registry.
+>>>>>>> Stashed changes
 
 ```mermaid
 flowchart LR
@@ -109,7 +117,7 @@ A few more things about replication:
 - The transferred version is the one recorded in the source `Component`'s *status*, meaning a version that has already been successfully reconciled (and verified, if verification is configured). It does not re-evaluate the `Component`'s semver constraint itself.
 - A successful transfer records the source digest in `status.lastTransferredDigest`. A reconciliation observing the same digest is a no-op, so re-applying or requeueing does not re-transfer unchanged content.
 - First, it walks the component's reference graph through the [resolution worker pool](#asynchronous-component-resolution), reporting `ResolutionInProgress` until every referenced descriptor is available. Then, it executes the transfer, reporting `TransferInProgress` until completion. Per-transformation failures are recorded in `status.lastFailedTransferEvents` and cleared on the next success.
-- Recursion depth, copy mode, upload type, and the credentials for the target registry are supplied as OCM configuration referenced from `spec.ocmConfig` (a `Secret`, `ConfigMap`, or `OCMConfiguration` object carrying a `transfer.config.ocm.software` entry). See [Replicate Component Versions with the Controller]({{< relref "docs/how-to/replicate-component-versions-controller.md" >}}) for a concrete example.
+- Recursion depth, copy mode, upload type, and the credentials for the target registry are supplied as OCM configuration referenced from `spec.ocmConfig` (a `Secret` or a `ConfigMap` object carrying a `transfer.config.ocm.software` entry). See [Replicate Component Versions with the Controller]({{< relref "docs/how-to/replicate-component-versions-controller.md" >}}) for a concrete example.
 
 [API reference]({{< relref "/docs/reference/kubernetes-api/replication.md" >}})
 
