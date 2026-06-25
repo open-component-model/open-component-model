@@ -13,6 +13,8 @@ import (
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/content"
+	orasregistry "oras.land/oras-go/v2/registry"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -20,18 +22,22 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/ctf"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/input/file"
 	filev1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Test_Integration_OCI_OwnershipPolicy_Always(t *testing.T) {
 	t.Parallel()
-	runOwnershipConstruct(t, launchRegistryOCIRepository(t))
+	repo, resolver := launchRegistryOCIRepository(t)
+	runOwnershipConstruct(t, repo, resolver)
 }
 
 func Test_Integration_CTF_OwnershipPolicy_Always(t *testing.T) {
@@ -44,10 +50,10 @@ func Test_Integration_CTF_OwnershipPolicy_Always(t *testing.T) {
 	repo, err := ocmoci.NewRepository(ocmoci.WithResolver(store), ocmoci.WithTempDir(t.TempDir()))
 	r.NoError(err)
 
-	runOwnershipConstruct(t, repo)
+	runOwnershipConstruct(t, repo, store)
 }
 
-func runOwnershipConstruct(t *testing.T, repo *ocmoci.Repository) {
+func runOwnershipConstruct(t *testing.T, repo *ocmoci.Repository, resolver ocmoci.Resolver) {
 	t.Helper()
 	ctx := context.Background()
 	r := require.New(t)
@@ -59,15 +65,19 @@ func runOwnershipConstruct(t *testing.T, repo *ocmoci.Repository) {
 	imagePath := filepath.Join(workingDir, "image.tar.gz")
 	r.NoError(os.WriteFile(imagePath, singleLayerOCILayoutTarGzip(t, []byte("payload")), 0o600))
 
+	const (
+		componentName    = "ocm.software/owned"
+		componentVersion = "v1.0.0"
+	)
 	specYAML := []byte(`
 components:
-  - name: ocm.software/owned
-    version: v1.0.0
+  - name: ` + componentName + `
+    version: ` + componentVersion + `
     provider:
       name: ocm
     resources:
       - name: data
-        version: v1.0.0
+        version: ` + componentVersion + `
         relation: local
         type: ociArtifact
         options:
@@ -92,18 +102,38 @@ components:
 	}
 	r.NoError(constructor.NewDefaultConstructor(converted, opts).Construct(ctx))
 
-	desc, err := repo.GetComponentVersion(ctx, "ocm.software/owned", "v1.0.0")
+	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
 	r.NoError(err)
 	r.Len(desc.Component.Resources, 1)
 	r.Equal("data", desc.Component.Resources[0].Name)
+
+	localBlob := &descruntime.LocalBlob{}
+	raw, ok := desc.Component.Resources[0].Access.(*ocmruntime.Raw)
+	r.Truef(ok, "resource access must decode to runtime.Raw, got %T", desc.Component.Resources[0].Access)
+	r.NoError(json.Unmarshal(raw.Data, localBlob))
+	r.NotEmpty(localBlob.LocalReference, "uploaded resource must carry a non-empty LocalReference")
+
+	store, err := resolver.StoreForReference(ctx, resolver.ComponentVersionReference(ctx, componentName, componentVersion))
+	r.NoError(err)
+	graphStore, ok := store.(content.ReadOnlyGraphStorage)
+	r.Truef(ok, "store %T must implement content.ReadOnlyGraphStorage for referrers discovery", store)
+
+	subject, err := store.Resolve(ctx, localBlob.LocalReference)
+	r.NoError(err)
+
+	refs, err := orasregistry.Referrers(ctx, graphStore, subject, annotations.OwnershipArtifactType)
+	r.NoError(err)
+	r.Lenf(refs, 1, "expected exactly one ownership referrer on subject %s", subject.Digest)
+	r.Equal(componentName, refs[0].Annotations[annotations.OwnershipComponentName])
+	r.Equal(componentVersion, refs[0].Annotations[annotations.OwnershipComponentVersion])
 }
 
-func launchRegistryOCIRepository(t *testing.T) *ocmoci.Repository {
+func launchRegistryOCIRepository(t *testing.T) (*ocmoci.Repository, ocmoci.Resolver) {
 	t.Helper()
-	cvr := launchRegistryRepository(t)
+	cvr, resolver := launchRegistryRepositoryWithResolver(t)
 	repo, ok := cvr.(*ocmoci.Repository)
 	require.True(t, ok, "launchRegistryRepository must return *ocmoci.Repository")
-	return repo
+	return repo, resolver
 }
 
 type ownershipTargetRepositoryProvider struct {
