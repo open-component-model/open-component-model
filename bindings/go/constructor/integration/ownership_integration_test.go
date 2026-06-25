@@ -22,7 +22,7 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/ctf"
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/input/file"
 	filev1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci"
@@ -31,7 +31,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Test_Integration_OCI_OwnershipPolicy_Always(t *testing.T) {
@@ -107,10 +106,8 @@ components:
 	r.Len(desc.Component.Resources, 1)
 	r.Equal("data", desc.Component.Resources[0].Name)
 
-	localBlob := &descruntime.LocalBlob{}
-	raw, ok := desc.Component.Resources[0].Access.(*ocmruntime.Raw)
-	r.Truef(ok, "resource access must decode to runtime.Raw, got %T", desc.Component.Resources[0].Access)
-	r.NoError(json.Unmarshal(raw.Data, localBlob))
+	localBlob := &descriptorv2.LocalBlob{}
+	r.NoError(descriptorv2.Scheme.Convert(desc.Component.Resources[0].Access, localBlob))
 	r.NotEmpty(localBlob.LocalReference, "uploaded resource must carry a non-empty LocalReference")
 
 	store, err := resolver.StoreForReference(ctx, resolver.ComponentVersionReference(ctx, componentName, componentVersion))
