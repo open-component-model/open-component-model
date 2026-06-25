@@ -1226,12 +1226,6 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 	r.Equal(fmt.Sprintf("http://%s", to), resultAccess.ImageReference)
 }
 
-// Test_Integration_OCIRepository_Ownership exercises the OCI binding's
-// ownership-referrer surface (ADR 0016) against both a containerised registry
-// and a CTF: AddOwnership creates a single content-addressed referrer per
-// subject (idempotent across re-runs), siblings stay isolated, and a
-// resource-level transfer (UploadResource) carries the referrer along to the
-// target — registry→registry and registry→CTF.
 func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

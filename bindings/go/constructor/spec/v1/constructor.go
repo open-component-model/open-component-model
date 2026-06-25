@@ -91,7 +91,7 @@ const (
 	ExternalRelation ResourceRelation = "external"
 )
 
-// OwnershipPolicy controls whether ownership (ADR 0016) is recorded for a resource during construction (ocm add/create).
+// OwnershipPolicy controls whether ownership is attached to a resource during construction.
 type OwnershipPolicy string
 
 const (
