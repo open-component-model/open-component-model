@@ -63,12 +63,12 @@ A new, self-contained Go module at `bindings/go/wget/` that implements:
 ```go
 // bindings/go/wget/access/spec/v1
 type Wget struct {
-    URL        string            `json:"url"`
-    MediaType  string            `json:"mediaType,omitempty"`
-    Header     map[string]string `json:"header,omitempty"`
-    Verb       string            `json:"verb,omitempty"`
-    Body       string            `json:"body,omitempty"`
-    NoRedirect bool              `json:"noRedirect,omitempty"`
+    URL        string              `json:"url"`
+    MediaType  string              `json:"mediaType,omitempty"`
+    Header     map[string][]string `json:"header,omitempty"`
+    Verb       string              `json:"verb,omitempty"`
+    Body       []byte              `json:"body,omitempty"`
+    NoRedirect bool                `json:"noRedirect,omitempty"`
 }
 ```
 
@@ -84,14 +84,17 @@ type Wget struct {
 
 Credential identities are resolved from URL components (scheme, hostname, port, path), consistent with how other access types derive consumer identities. The consumer type is set to `wget`.
 
-In v1, credentials are passed as `map[string]string` using the legacy key convention (see [ADR 0021](0021_typed_credentials.md) for the ongoing migration to typed credentials):
+Credentials are passed as a typed `WgetCredentials/v1` struct (see `bindings/go/wget/spec/credentials/v1`), aligned with the typed credential system from [ADR 0021](0021_typed_credentials.md). Legacy `DirectCredentials/v1` (key-value map) is also accepted for backwards compatibility via automatic conversion.
 
-| Credential key    | HTTP mapping         |
-|-------------------|----------------------|
-| `username`+`password` | `Authorization: Basic <base64>` |
-| `identityToken`   | `Authorization: Bearer <token>` |
+The following credential fields are supported, applied in priority order (highest first):
 
-A future v2 spec should define a `WgetCredentials` typed struct aligned with the typed credential system introduced in ADR 0021, avoiding the silent key-name mismatch bugs documented there.
+| Priority | Credential field(s)                          | HTTP mapping                              |
+|----------|----------------------------------------------|-------------------------------------------|
+| 1 (high) | `username` + `password`                      | `Authorization: Basic <base64>`           |
+| 2        | `identityToken`                              | `Authorization: Bearer <token>`           |
+| 3 (low)  | `certificate` + `privateKey` (+ optional `certificateAuthority`) | mTLS client certificate |
+
+Only the highest-priority non-empty credential is applied; lower-priority fields are ignored when a higher-priority one is present.
 
 #### High-level Architecture
 
@@ -105,7 +108,7 @@ sequenceDiagram
     User->>OCM CLI: ocm download resources <ref> <resource-name>
     OCM CLI->>ResourceRepository (wget): DownloadResource(ctx, resource, credentials)
     ResourceRepository (wget)->>ResourceRepository (wget): Parse wget/v1 spec (URL, headers, verb, body)
-    ResourceRepository (wget)->>ResourceRepository (wget): Map credentials → Basic Auth / Bearer
+    ResourceRepository (wget)->>ResourceRepository (wget): Convert credentials → Basic Auth / Bearer / mTLS
     ResourceRepository (wget)->>HTTP Server: HTTP request
     HTTP Server-->>ResourceRepository (wget): HTTP response body
     ResourceRepository (wget)-->>OCM CLI: blob.ReadOnlyBlob (with MediaType)
@@ -179,4 +182,4 @@ The module is published as `bindings/go/wget` within the monorepo. It can be:
 
 ## Conclusion
 
-The `wget` access type fills a concrete gap in OCM's Go bindings: without it, component versions cannot faithfully describe the majority of publicly distributed artifacts (release binaries, package files, upstream manifests). The standalone module approach keeps the implementation isolated, consistently with the rest of the `bindings/go/` ecosystem, and leaves the door open for a future v2 spec (e.g., adding Range support or mTLS). As a secondary outcome, the AI-generated first implementation (PR #2063) demonstrates that OCM's modular architecture has the right separation of concerns for community and automated extension.
+The `wget` access type fills a concrete gap in OCM's Go bindings: without it, component versions cannot faithfully describe the majority of publicly distributed artifacts (release binaries, package files, upstream manifests). The standalone module approach keeps the implementation isolated, consistently with the rest of the `bindings/go/` ecosystem, and leaves the door open for future enhancements (e.g., Range request support). As a secondary outcome, the AI-generated first implementation (PR #2063) demonstrates that OCM's modular architecture has the right separation of concerns for community and automated extension.
