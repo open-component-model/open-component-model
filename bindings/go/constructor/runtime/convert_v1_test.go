@@ -169,6 +169,23 @@ func TestConvertToRuntimeResource(t *testing.T) {
 				Options: ResourceOptions{OwnershipPolicy: OwnershipPolicyNever},
 			},
 		},
+		{
+			name: "resource with unknown ownership policy",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: "bogus"},
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: "bogus"},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1446,6 +1463,23 @@ func TestConvertToV1Resource(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
 				},
 				Type: "test-type",
+			},
+		},
+		{
+			name: "resource with unknown ownership policy",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: "bogus"},
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: "bogus"},
 			},
 		},
 	}
