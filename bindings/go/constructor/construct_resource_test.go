@@ -68,12 +68,6 @@ type mockResourceRepository struct {
 	fail         bool
 
 	identityErr error
-	attachErr   error
-	attachCalls int
-
-	gotComponent string
-	gotVersion   string
-	gotCreds     runtime.Typed
 }
 
 func (m *mockResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
@@ -92,12 +86,19 @@ func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource 
 	return m.downloadData, nil
 }
 
-func (m *mockResourceRepository) AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error {
-	m.attachCalls++
-	m.gotComponent = component
-	m.gotVersion = version
-	m.gotCreds = credentials
-	return m.attachErr
+// mockOwnershipAwareResourceRepository combines [mockResourceRepository] with
+// [mockOwnershipAttacher] so it satisfies both [ResourceRepository] and
+// [repository.OwnershipAwareRepository].
+type mockOwnershipAwareResourceRepository struct {
+	*mockResourceRepository
+	*mockOwnershipAttacher
+}
+
+func newMockOwnershipAwareResourceRepository() *mockOwnershipAwareResourceRepository {
+	return &mockOwnershipAwareResourceRepository{
+		mockResourceRepository: &mockResourceRepository{},
+		mockOwnershipAttacher:  &mockOwnershipAttacher{},
+	}
 }
 
 // mockResourceRepositoryProvider implements ResourceRepositoryProvider for testing.
@@ -897,14 +898,14 @@ func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 		// policy is the resource's ownershipPolicy ("" => no opt-in).
 		policy string
 		// provider builds opts.ResourceRepositoryProvider; nil means "not configured".
-		provider   func(attacher *mockResourceRepository) ResourceRepositoryProvider
+		provider   func(attacher *mockOwnershipAwareResourceRepository) ResourceRepositoryProvider
 		wantErr    string
 		wantAttach int
 	}{
 		{
 			name:   "no opt-in never resolves the resource repository",
 			policy: "",
-			provider: func(a *mockResourceRepository) ResourceRepositoryProvider {
+			provider: func(a *mockOwnershipAwareResourceRepository) ResourceRepositoryProvider {
 				return &mockResourceRepositoryProvider{repo: a}
 			},
 			wantAttach: 0,
@@ -912,13 +913,13 @@ func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 		{
 			name:       "opted in but no provider configured is a no-op",
 			policy:     "Always",
-			provider:   func(*mockResourceRepository) ResourceRepositoryProvider { return nil },
+			provider:   func(*mockOwnershipAwareResourceRepository) ResourceRepositoryProvider { return nil },
 			wantAttach: 0,
 		},
 		{
 			name:   "opted in resolves the repository and attaches",
 			policy: "Always",
-			provider: func(a *mockResourceRepository) ResourceRepositoryProvider {
+			provider: func(a *mockOwnershipAwareResourceRepository) ResourceRepositoryProvider {
 				return &mockResourceRepositoryProvider{repo: a}
 			},
 			wantAttach: 1,
@@ -926,7 +927,7 @@ func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 		{
 			name:   "opted in surfaces a provider resolution failure",
 			policy: "Always",
-			provider: func(*mockResourceRepository) ResourceRepositoryProvider {
+			provider: func(*mockOwnershipAwareResourceRepository) ResourceRepositoryProvider {
 				return &mockResourceRepositoryProvider{err: fmt.Errorf("boom")}
 			},
 			wantErr: "error getting resource repository for ownership",
@@ -934,8 +935,8 @@ func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 		{
 			name:   "opted in but repo cannot record ownership",
 			policy: "Always",
-			provider: func(*mockResourceRepository) ResourceRepositoryProvider {
-				return &mockResourceRepositoryProvider{repo: &nonOwnershipAwareResourceRepository{}}
+			provider: func(*mockOwnershipAwareResourceRepository) ResourceRepositoryProvider {
+				return &mockResourceRepositoryProvider{repo: &mockResourceRepository{}}
 			},
 			wantErr: "cannot record",
 		},
@@ -943,7 +944,7 @@ func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			attacher := &mockResourceRepository{}
+			attacher := newMockOwnershipAwareResourceRepository()
 			options := ""
 			if tt.policy != "" {
 				options = fmt.Sprintf("\n        options:\n          ownershipPolicy: %s", tt.policy)
@@ -973,19 +974,11 @@ func TestDefaultConstructor_attachOwnership_CallSiteGating(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantAttach, attacher.attachCalls)
+			assert.Equal(t, tt.wantAttach, attacher.ownershipCalls)
 			if tt.wantAttach > 0 {
-				assert.Equal(t, component, attacher.gotComponent)
-				assert.Equal(t, version, attacher.gotVersion)
+				assert.Equal(t, component, attacher.ownershipComponent)
+				assert.Equal(t, version, attacher.ownershipVersion)
 			}
 		})
 	}
-}
-
-// nonOwnershipAwareResourceRepository is a [ResourceRepository] that does NOT
-// implement [repository.OwnershipAwareRepository]. Used by the by-reference
-// "repo cannot record ownership" case in
-// [TestDefaultConstructor_attachOwnership_CallSiteGating].
-type nonOwnershipAwareResourceRepository struct {
-	ResourceRepository
 }

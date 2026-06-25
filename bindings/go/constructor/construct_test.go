@@ -87,17 +87,21 @@ func (m *mockTargetRepository) AddComponentVersion(ctx context.Context, desc *de
 
 // mockOwnershipAttacher records calls to [repository.OwnershipAwareRepository.AddOwnership].
 type mockOwnershipAttacher struct {
-	mu                sync.Mutex
-	ownershipCalls    int
-	ownershipResource *descriptor.Resource
-	ownershipCreds    runtime.Typed
-	ownershipErr      error
+	mu                 sync.Mutex
+	ownershipCalls     int
+	ownershipComponent string
+	ownershipVersion   string
+	ownershipResource  *descriptor.Resource
+	ownershipCreds     runtime.Typed
+	ownershipErr       error
 }
 
 func (o *mockOwnershipAttacher) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.ownershipCalls++
+	o.ownershipComponent = component
+	o.ownershipVersion = version
 	o.ownershipResource = resource
 	o.ownershipCreds = credentials
 	return o.ownershipErr
