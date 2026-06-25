@@ -173,14 +173,6 @@ stringData:
                 properties:
                   username: <username>
                   password: <token>
-          - identity:
-              type: OCIRepository
-              hostname: ghcr.io
-            credentials:
-              - type: Credentials
-                properties:
-                  username: <username>
-                  password: <token>
 EOF
 ```
 
@@ -197,8 +189,8 @@ The `transfer.config.ocm.software` entry controls the transfer itself:
 
 {{< callout context="note" title="Credential identities" icon="outline/info-circle" >}}
 List a consumer for every host involved. If your source and target live on
-different registries, add an entry per hostname. The `OCIRegistry` and
-`OCIRepository` identity types cover the pull and push paths used during a
+different registries, add an entry per hostname. The `OCIRegistry` 
+identity type cover the pull and push paths used during a
 transfer.
 {{< /callout >}}
 
