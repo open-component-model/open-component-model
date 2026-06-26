@@ -212,7 +212,7 @@ components:
 	assertOwnershipReferrer(t, ctx, resolver, subject, component, ownershipVersion, resourceName, true)
 }
 
-func Test_Integration_Ownership_Transfer_UploadAsOCIArtifact_ByValue(t *testing.T) {
+func Test_Integration_Ownership_Transfer_ByValue(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
@@ -243,12 +243,12 @@ components:
           mediaType: application/vnd.ocm.software.oci.layout.v1+tar+gzip
 `, component, ownershipVersion, resourceName))
 
-	dstResolver, dstRepo := transferComponentVersion(t, ctx, srcReg, component, ownershipVersion, true, "ociArtifact")
-	subject := ociImageReference(t, ctx, dstRepo, component, ownershipVersion, runtime.Identity{"name": resourceName, "version": ownershipVersion})
+	dstResolver, dstRepo := transferComponentVersion(t, ctx, srcReg, component, ownershipVersion, true, "localBlob")
+	subject := localBlobSubjectReference(t, ctx, dstResolver, dstRepo, component, ownershipVersion, runtime.Identity{"name": resourceName, "version": ownershipVersion})
 	assertOwnershipReferrer(t, ctx, dstResolver, subject, component, ownershipVersion, resourceName, true)
 }
 
-func Test_Integration_Ownership_Transfer_UploadAsOCIArtifact_ByReference(t *testing.T) {
+func Test_Integration_Ownership_Transfer_ByReference(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
