@@ -20,8 +20,8 @@ for cmd in "${cmds[@]}"; do
 done
 
 ## Check that there is not a kind cluster already running
-if kind get clusters | grep -q "^kind$"; then
-  echo "A kind cluster is already running. Please delete it before running this script."
+if kind get clusters | grep -q "^ocm-e2e$"; then
+  echo "Kind cluster 'ocm-e2e' is already running. Please delete it before running this script."
   exit 1
 fi
 
@@ -41,7 +41,7 @@ fi
 
 # Create registry container unless it already exists
 ## Required to store the controller image and have a registry to transfer OCM component versions to test localization.
-reg_name='image-registry'
+reg_name='ocm-e2e-image-registry'
 reg_port='5000'
 if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true)" != 'true' ]; then
   docker run \
@@ -56,7 +56,7 @@ KIND_NODE_IMAGE="kindest/node:v${KIND_NODE_IMAGE_VERSION}"
 # - Containerd config patches to add registry mirrors and configs for the internal registries.
 # - http-alias and insecure_skip_verify.
 CONTAINERD_CONFIG_PATH="/etc/containerd/certs.d"
-cat <<EOF | kind create cluster --image="${KIND_NODE_IMAGE}" --config=-
+cat <<EOF | kind create cluster --name ocm-e2e --image="${KIND_NODE_IMAGE}" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
@@ -83,7 +83,7 @@ add_hosts_toml() {
 EOF
 }
 
-for node in $(kind get nodes); do
+for node in $(kind get nodes --name ocm-e2e); do
   add_hosts_toml "${node}" "${CONTAINERD_CONFIG_PATH}/${reg_name}:${reg_port}" "http://${reg_name}:${reg_port}"
   add_hosts_toml "${node}" "${CONTAINERD_CONFIG_PATH}/localhost:31002" "registry-internal.default.svc.cluster.local:5002"
   add_hosts_toml "${node}" "${CONTAINERD_CONFIG_PATH}/localhost:31003" "registry-internal.default.svc.cluster.local:5003"
@@ -92,7 +92,7 @@ done
 # Connect the registry to the cluster network if not already connected.
 ## This allows kind to bootstrap the network but ensures they're on the same network.
 if [ "$(docker inspect -f='{{json .NetworkSettings.Networks.kind}}' "${reg_name}")" = 'null' ]; then
-  docker network connect "kind" "${reg_name}"
+  docker network connect --alias image-registry "kind" "${reg_name}"
 fi
 
 # Make sure the image registry is resolvable using localhost
@@ -101,11 +101,10 @@ if [[ ! -f /etc/hosts ]]; then
   exit 1
 fi
 
-if ! grep -q "${reg_name}" /etc/hosts; then
+if ! grep -q ${reg_name} /etc/hosts; then
   echo "adding '127.0.0.1 ${reg_name}' to /etc/hosts"
   echo "127.0.0.1 ${reg_name}" | sudo tee -a /etc/hosts
 fi
-
 # Create private image registries in cluster
 kubectl apply -f "${image_registries}" || exit 1
 kubectl apply -f "${rbac}" || exit 1
@@ -114,6 +113,42 @@ kubectl wait pod -l app=protected-registry2 --for condition=Ready --timeout 5m |
 
 # Install flux operators
 flux install || exit 1
+# Install argo cd
+kubectl create namespace argocd
+kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml || exit 1
+
+kubectl wait -n argocd deployment \
+    argocd-server \
+    argocd-repo-server \
+    argocd-redis \
+    argocd-dex-server \
+    argocd-applicationset-controller \
+    argocd-notifications-controller \
+    --for=condition=Available --timeout=5m || exit 1
+    
+# Register the local OCI registry with ArgoCD as an insecure (plain HTTP) Helm OCI
+# credential template. Any Application whose repoURL starts with oci://ocm-e2e-image-registry:5000
+# inherits these settings. insecureOCIForceHttp is required because the local registry
+# serves plain HTTP; ArgoCD otherwise defaults to HTTPS and fails the chart pull.
+# IMPORTANT: the url must use "image-registry" (the docker network alias), not the
+# container name, because that is the hostname the OCM controller resolves and
+# surfaces in resource.status.additional.registry — which kro then copies verbatim
+# into the ArgoCD Application's repoURL. The credential template only matches when
+# the url prefix is identical to the Application's repoURL.
+kubectl apply -n argocd -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${reg_name}-creds
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repo-creds
+stringData:
+  url: oci://${reg_name}:${reg_port}
+  type: helm
+  enableOCI: "true"
+  insecureOCIForceHttp: "true"
+EOF
 
 # Install kro operators
 helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.0 || exit 1

@@ -47,7 +47,10 @@ type ResourceRepository struct {
 }
 
 // make sure that ResourceRepository implements the oci ResourceRepository interface
-var _ repository.ResourceRepository = (*ResourceRepository)(nil)
+var (
+	_ repository.ResourceRepository       = (*ResourceRepository)(nil)
+	_ repository.OwnershipAwareRepository = (*ResourceRepository)(nil)
+)
 
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	options := &Options{}
@@ -144,6 +147,32 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("error downloading resource: %w", err)
 	}
 	return b, nil
+}
+
+// AddOwnership attaches ownership information (i.e. the
+// component name and version) to a resource. The ownership is attached as a
+// referrer manifest pointing at the resource.
+// Caution: EXPERIMENTAL
+func (p *ResourceRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	if err != nil {
+		return err
+	}
+	resource = resource.DeepCopy()
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	resource.Access = obj
+
+	if err := repo.AddOwnership(ctx, component, version, resource, credentials); err != nil {
+		return fmt.Errorf("error attaching ownership referrer: %w", err)
+	}
+	return nil
 }
 
 func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {

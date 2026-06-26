@@ -18,6 +18,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	blobtransformerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	componentlisterv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
+	credentialpluginv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentialplugin/v1"
 	credentialrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	digestprocessorv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
@@ -178,6 +179,7 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 	errs = errors.Join(errs,
 		pm.ComponentVersionRepositoryRegistry.Shutdown(ctx),
 		pm.ComponentListerRegistry.Shutdown(ctx),
+		pm.CredentialPluginRegistry.Shutdown(ctx),
 		pm.CredentialRepositoryRegistry.Shutdown(ctx),
 		pm.InputRegistry.Shutdown(ctx),
 		pm.DigestProcessorRegistry.Shutdown(ctx),
@@ -240,6 +242,7 @@ func init() {
 	scheme.MustRegisterScheme(ocmrepositoryv1.Scheme)
 	scheme.MustRegisterScheme(blobtransformerv1.Scheme)
 	scheme.MustRegisterScheme(credentialrepositoryv1.Scheme)
+	scheme.MustRegisterScheme(credentialpluginv1.Scheme)
 	scheme.MustRegisterScheme(componentlisterv1.Scheme)
 	scheme.MustRegisterScheme(digestprocessorv1.Scheme)
 	scheme.MustRegisterScheme(inputv1.Scheme)
@@ -334,6 +337,11 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 		case *signinghandlerv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding signing handler plugin", "id", plugin.ID)
 			if err := pm.SigningRegistry.AddPlugin(plugin, capability); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+			}
+		case *credentialpluginv1.CapabilitySpec:
+			slog.DebugContext(ctx, "adding credential plugin", "id", plugin.ID)
+			if err := pm.CredentialPluginRegistry.AddPlugin(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		default:

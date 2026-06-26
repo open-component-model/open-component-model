@@ -164,6 +164,165 @@ See [Configure Signing Credentials]({{< relref "configure-signing-credentials.md
 See [How-To: Configure Credentials for Multiple Registries]({{< relref "configure-multiple-credentials.md" >}}) for details.
 
 {{< /tab >}}
+{{< tab "GPG" >}}
+
+Sign with an OpenPGP (GPG) key pair. The same key you already use to sign Git tags or release artifacts works for OCM — there's no separate keyring to maintain.
+
+Unlike RSA (which is the default handler when no signer spec is given), GPG requires an explicit signer spec.
+With Sigstore (other tabs) you skip the key-pair setup entirely.
+
+<!-- markdownlint-disable-next-line MD024 -->
+## You'll end up with
+
+- A component version with a GPG signature (ASCII-armored OpenPGP detached signature) attached
+
+**Estimated time:** ~3 minutes
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Prerequisites
+
+- [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
+- [Signing credentials configured]({{< relref "configure-signing-credentials.md" >}})
+- A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
+
+{{< callout context="note" >}}
+For the end-to-end learning walkthrough including key rotation and best practices, see [Tutorial: GPG Signatures]({{< relref "docs/tutorials/signing/gpg.md" >}}).
+{{< /callout >}}
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Steps
+
+{{< steps >}}
+
+{{< step >}}
+
+### Create the GPG signer spec
+
+Create a `signer-spec.yaml` that selects the GPG signing handler. RSA is the default when no signer spec is given, so this one-line file is what tells `ocm sign` to use GPG:
+
+```yaml
+# signer-spec.yaml
+type: GPGSigningConfiguration/v1alpha1
+```
+
+If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint`:
+
+```yaml
+# signer-spec.yaml
+type: GPGSigningConfiguration/v1alpha1
+keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+```
+
+Keep this file around — the [verify how-to → GPG tab]({{< relref "verify-component-version.md" >}}) reuses it as a verifier spec.
+
+{{< /step >}}
+
+{{< step >}}
+
+### Sign the component version
+
+Run the sign command with the signer spec.
+
+**Local CTF archive:**
+
+```bash
+ocm sign cv \
+  --signer-spec ./signer-spec.yaml \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+**Remote OCI registry:**
+
+```bash
+ocm sign cv \
+  --signer-spec ./signer-spec.yaml \
+  ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
+```
+
+{{< details "Expected output from signing" >}}
+
+```text
+digest:
+  hashAlgorithm: SHA-256
+  normalisationAlgorithm: jsonNormalisation/v4alpha1
+  value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
+name: default
+signature:
+  algorithm: GPG
+  mediaType: application/vnd.ocm.signature.gpg
+  value: |-
+    -----BEGIN PGP SIGNATURE-----
+
+    wsGpBAABCABdBYJqL83zCRAj8Yt2lXsKkTUUAAAAAAAcABBzYWx0QG5vdGF0aW9u
+    ...
+    =3vok
+    -----END PGP SIGNATURE-----
+
+time=2026-06-15T12:03:31.435+02:00 level=INFO msg="signed successfully" name=default digest=4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha1
+```
+{{< /details >}}
+
+{{< /step >}}
+
+{{< step >}}
+
+### Verify the signature was added
+
+Check that the signature is present in the component descriptor:
+
+```bash
+ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -o yaml
+```
+
+Look for the `signatures` section in the output:
+
+```yaml
+signatures:
+  - name: default
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v4alpha1
+      value: 4e37618...
+    signature:
+      algorithm: GPG
+      mediaType: application/vnd.ocm.signature.gpg
+      value: |-
+        -----BEGIN PGP SIGNATURE-----
+        ...
+        -----END PGP SIGNATURE-----
+```
+
+{{< /step >}}
+{{< /steps >}}
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Troubleshooting
+
+### Symptom: `Error: signing failed: private key not found in credentials`
+
+**Cause:** No matching `GPG/v1alpha1` consumer entry in `.ocmconfig` — either the consumer block is missing, the `signature:` name doesn't match `--signature`, or `privateKeyPGPFile` isn't set.
+
+**Fix:** Confirm the consumer block exists and the `signature:` value matches. Without `--signature`, OCM looks for `signature: default`. See [How-To: Configure Signing Credentials → GPG]({{< relref "configure-signing-credentials.md" >}}).
+
+### Symptom: `Error: signing failed: private key not found` (preceded by `no signer spec file provided, using default`)
+
+**Cause:** `--signer-spec` was forgotten. OCM defaulted to RSA, then couldn't find an RSA private key.
+
+**Fix:** Pass `--signer-spec /path/to/signer-spec.yaml` so the GPG handler is selected.
+
+### Symptom: `Error: signature "default" already exists`
+
+**Cause:** The component version already carries a signature with that name.
+
+**Fix:** Pass `--force` to overwrite, or pick a different `--signature <name>` to add a second signature alongside the first.
+
+### Symptom: `Error: reading signer spec ...: no such file or directory`
+
+**Cause:** The path passed to `--signer-spec` is wrong.
+
+**Fix:** Double-check the path is reachable from your current working directory. Absolute paths are easiest.
+
+{{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}
 
 Sign with [Sigstore](https://www.sigstore.dev/) by logging in via your browser — no key pair to generate, no public key to distribute. (For CI/CD pipelines without a browser, see the next tab.)

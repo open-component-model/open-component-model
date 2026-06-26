@@ -19,7 +19,7 @@ ocm plugin registry get <plugin-name[:version]> [flags]
 
 ```
   # Get information about specified plugin from a plugin registry.
-  ocm plugin registry get helminput
+  ocm plugin registry get <oci-repository>//<my-plugin-component>
 ```
 
 ### Options

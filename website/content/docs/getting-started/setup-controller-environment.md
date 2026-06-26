@@ -232,6 +232,10 @@ helm install ocm-k8s-toolkit "oci://ghcr.io/open-component-model/kubernetes/cont
   --create-namespace
 ```
 
+{{<callout context="note" title="Resource names follow the release name" icon="outline/info-circle">}}
+The release name `ocm-k8s-toolkit` used above gives the controller's resources predictable names, such as the service account `ocm-k8s-toolkit-controller-manager`. If you install under a different release name — or via a GitOps tool such as Flux that alters the effective release name — add `--set fullnameOverride=ocm-k8s-toolkit` to keep these names stable. This matters when you [configure custom RBAC]({{< relref "/docs/how-to/custom-rbac.md" >}}), which binds to the service account by name.
+{{</callout>}}
+
 <details>
 <summary>You should see this output</summary>
 

@@ -170,6 +170,9 @@ jobs:
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the RC tags (canonical + cli/controller side tags).
+          permission-contents: write
 
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -260,7 +263,7 @@ jobs:
           path: ${{ runner.temp }}/chart-assets
 
       - name: Create RC pre-release
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
           name: OCM ${{ needs.prepare.outputs.new_version }}
           tag_name: ${{ needs.prepare.outputs.new_tag }}
@@ -417,6 +420,9 @@ jobs:
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the final/promotion tags (canonical + cli/controller/website side tags).
+          permission-contents: write
 
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -654,7 +660,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: cli/go.mod
           cache: false
@@ -677,10 +683,27 @@ jobs:
         run: npm ci
 
       - name: Release docs version
+        id: register
         working-directory: website
         env:
           VERSION: ${{ needs.prepare.outputs.base_version }}
-        run: node scripts/register-docs-version.js "$VERSION" --cli-gomod "${{ runner.temp }}/cli-go.mod"
+          CLI_GOMOD: ${{ runner.temp }}/cli-go.mod
+          LOG_FILE: ${{ runner.temp }}/register.log
+        run: |
+          set +e
+          node scripts/register-docs-version.js "$VERSION" \
+            --cli-gomod "$CLI_GOMOD" \
+            2>&1 | tee "$LOG_FILE"
+          rc=${PIPESTATUS[0]}
+          # Write the logs to the output so they can be included in the PR body. There might be warnings about missing
+          # modules (diff between CLI_DERIVED_MODULES and CLI_GOMOD) that are not fatal but need to be validated
+          # manually.
+          {
+            echo 'log<<__REGISTER_EOF__'
+            cat "$LOG_FILE"
+            echo '__REGISTER_EOF__'
+          } >> "$GITHUB_OUTPUT"
+          exit "$rc"
 
       - name: Generate App Token
         id: get_token
@@ -688,6 +711,11 @@ jobs:
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the branch and create the signed commit via GraphQL.
+          permission-contents: write
+          # Open the website docs release PR.
+          permission-pull-requests: write
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
@@ -698,12 +726,17 @@ jobs:
           commit-message: "[github-actions] automated change"
           add-paths: |
             website/config/
-          branch: website/version-release/auto
-          branch-suffix: ${{ needs.prepare.outputs.base_version }}
+          branch: website/version-release/${{ needs.prepare.outputs.base_version }}
           delete-branch: true
           sign-commits: true
           body: |
             Automated docs release for version ${{ needs.prepare.outputs.base_version }}.
 
             Triggered by tag `website/v${{ needs.prepare.outputs.base_version }}`.
+
+            Output of `register-docs-version.js`:
+
+            ````
+            ${{ steps.register.outputs.log }}
+            ````
   # === Website version release ===
