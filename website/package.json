@@ -43,7 +43,7 @@
     "@eslint/js": "10.0.1",
     "@types/node": "25.9.4",
     "eslint": "10.5.0",
-    "globals": "17.6.0",
+    "globals": "17.7.0",
     "hugo-extended": "0.163.3",
     "jiti": "2.7.0",
     "js-yaml": "5.0.0",
