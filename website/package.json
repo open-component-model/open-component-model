@@ -43,13 +43,13 @@
     "@eslint/js": "10.0.1",
     "@types/node": "25.9.4",
     "eslint": "10.5.0",
-    "globals": "17.6.0",
+    "globals": "17.7.0",
     "hugo-extended": "0.163.3",
     "jiti": "2.7.0",
     "js-yaml": "5.0.0",
     "sass-embedded": "1.100.0",
     "shx": "0.4.0",
-    "typescript-eslint": "8.61.1"
+    "typescript-eslint": "8.62.0"
   },
   "overrides": {
     "semver": "^7.5.4",
