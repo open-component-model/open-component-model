@@ -479,10 +479,19 @@ func (prov *constructorProvider) GetResourceRepository(ctx context.Context, reso
 	if err != nil {
 		return nil, fmt.Errorf("getting plugin for resource %q failed: %w", resource.Access, err)
 	}
+	if ownershipAware, ok := plugin.(repository.OwnershipAwareRepository); ok {
+		return &ownershipAwareConstructorPlugin{
+			constructorPlugin:        constructorPlugin{Repository: plugin},
+			OwnershipAwareRepository: ownershipAware,
+		}, nil
+	}
 	return &constructorPlugin{Repository: plugin}, nil
 }
 
-var _ constructor.ResourceRepository = (*constructorPlugin)(nil)
+var (
+	_ constructor.ResourceRepository      = (*constructorPlugin)(nil)
+	_ repository.OwnershipAwareRepository = (*ownershipAwareConstructorPlugin)(nil)
+)
 
 type constructorPlugin struct {
 	resource.Repository
@@ -490,6 +499,11 @@ type constructorPlugin struct {
 
 func (c *constructorPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	return c.Repository.GetResourceCredentialConsumerIdentity(ctx, constructorruntime.ConvertToDescriptorResource(resource))
+}
+
+type ownershipAwareConstructorPlugin struct {
+	constructorPlugin
+	repository.OwnershipAwareRepository
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
