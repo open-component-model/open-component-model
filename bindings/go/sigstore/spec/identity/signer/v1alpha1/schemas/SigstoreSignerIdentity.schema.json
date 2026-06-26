@@ -8,7 +8,7 @@
   "properties": {
     "algorithm": {
       "type": "string",
-      "description": "Algorithm restricts this identity to a specific signing algorithm.\nFor Sigstore keyless signing the value is \"Sigstore/v1alpha1\" (v1alpha1.AlgorithmSigstoreV1Alpha1).\nOmit to match all algorithms."
+      "description": "Algorithm restricts this identity to a specific signing algorithm.\nPopulated from SignConfig.GetSignatureAlgorithm(); the canonical value is\n\"Sigstore/v1alpha1\" (v1alpha1.AlgorithmSigstoreV1Alpha1). Omit to match all algorithms."
     },
     "clientID": {
       "type": "string",

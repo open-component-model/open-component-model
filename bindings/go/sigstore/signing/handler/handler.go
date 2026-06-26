@@ -291,6 +291,7 @@ func (*Handler) GetSigningCredentialConsumerIdentity(
 	}
 	id := credentialIdentity(signerv1.VersionedType)
 	id[signerv1.IdentityAttributeSignature] = name
+	id[signerv1.IdentityAttributeAlgorithm] = string(cfg.GetSignatureAlgorithm())
 	if cfg.Issuer != "" {
 		id[signerv1.IdentityAttributeIssuer] = cfg.Issuer
 	}
@@ -310,6 +311,7 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	}
 	id := credentialIdentity(verifierv1.VersionedType)
 	id[verifierv1.IdentityAttributeSignature] = signature.Name
+	id[verifierv1.IdentityAttributeAlgorithm] = signature.Signature.Algorithm
 	return id, nil
 }
 

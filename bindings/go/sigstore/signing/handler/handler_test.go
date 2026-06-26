@@ -974,7 +974,7 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 		{
 			name:    "minimal (public sigstore)",
 			cfg:     testSignConfig(),
-			wantLen: 2,
+			wantLen: 3,
 		},
 		{
 			name: "enterprise with issuer and clientID",
@@ -986,7 +986,7 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 				c.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
 				return c
 			}(),
-			wantLen:      4,
+			wantLen:      5,
 			wantIssuer:   "https://keycloak.corp.example.com/realms/sigstore",
 			wantClientID: "corp-sigstore",
 		},
@@ -997,7 +997,7 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 				c.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
 				return c
 			}(),
-			wantLen:    3,
+			wantLen:    4,
 			wantIssuer: "https://dex.example.com",
 		},
 	}
@@ -1012,6 +1012,7 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 			r.NoError(err)
 			r.Equal(signerv1.VersionedType, id.GetType())
 			r.Equal("my-sig", id[signerv1.IdentityAttributeSignature])
+			r.Equal(string(v1alpha1.AlgorithmSigstoreDefault), id[signerv1.IdentityAttributeAlgorithm])
 			r.Len(id, tc.wantLen)
 			if tc.wantIssuer != "" {
 				r.Equal(tc.wantIssuer, id[signerv1.IdentityAttributeIssuer])
@@ -1091,7 +1092,8 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 			}
 			r.Equal(verifierv1.VersionedType, id.GetType())
 			r.Equal("my-sig", id[verifierv1.IdentityAttributeSignature])
-			r.Len(id, 2)
+			r.Equal(tc.algorithm, id[verifierv1.IdentityAttributeAlgorithm])
+			r.Len(id, 3)
 		})
 	}
 }
