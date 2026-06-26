@@ -9,9 +9,9 @@ require (
 	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.42.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/constructor v0.0.9
+	ocm.software/open-component-model/bindings/go/constructor v0.0.10
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260625065312-d374c10f9e61
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260625124717-3c92d1c39f1d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
 	ocm.software/open-component-model/bindings/go/oci v0.0.47
@@ -81,7 +81,7 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.15 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260625071532-ea5a17b8a42c // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260625124717-3c92d1c39f1d // indirect
 )
 
 replace ocm.software/open-component-model/bindings/go/constructor => ../
