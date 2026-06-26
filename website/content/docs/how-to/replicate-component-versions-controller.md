@@ -41,8 +41,9 @@ digest as a no-op, so it never re-transfers content that is already present.
 
 Transfer behaviour (recursion depth, copy mode, upload type) and the registry
 credentials are supplied as OCM configuration through `ocmConfig`. In the steps
-below the configuration lives in a single `Secret` that the `Component`
-propagates to the `Replication`.
+below they live in two `Secret`s: the `Component` carries the credentials and
+propagates them down, while the `Replication` declares the transfer settings
+itself and references the `Component` to merge in those propagated credentials.
 
 The configuration influences the way the transfer happens. For example, if `recursive`
 is set to none zero number, it will copy all references of a component. `copyMode`
@@ -59,6 +60,9 @@ same they are on the CLI side.
 To show recursion in action, build a small graph: a parent component that
 references a child, each carrying a blob. Replicating the parent pulls the child
 along with it.
+
+<details>
+  <summary>component-constructor.yaml</summary>
 
 ```bash
 echo "parent payload" > parent.txt
@@ -95,6 +99,8 @@ components:
 EOF
 ```
 
+</details>
+
 Push both components to the source registry:
 
 ```bash
@@ -109,6 +115,9 @@ ocm add cv --repository ghcr.io/<source-namespace> --constructor component-const
 Both repositories are plain `Repository` objects pointing at OCI registries. The
 source holds the component you already published; the target is where the
 transfer writes.
+
+<details>
+  <summary>repositories.yaml</summary>
 
 ```bash
 cat <<EOF > repositories.yaml
@@ -134,6 +143,8 @@ spec:
 EOF
 ```
 
+</details>
+
 ```bash
 kubectl apply -f repositories.yaml
 ```
@@ -143,11 +154,37 @@ kubectl apply -f repositories.yaml
 
 ### Create the transfer configuration and credentials
 
-Store the transfer settings and the registry credentials in a single `Secret`
-under the `.ocmconfig` key. The controller reads this as OCM configuration.
+Store the configuration in two `Secret`s under the `.ocmconfig` key. The
+`ocm-credentials` Secret holds the registry credentials and is propagated by the
+`Component`; the `ocm-transfer-config` Secret holds the transfer settings and is
+referenced directly by the `Replication`. The controller reads both as OCM
+configuration.
+
+<details>
+  <summary>config.yaml</summary>
 
 ```bash
-cat <<EOF > transfer-config.yaml
+cat <<EOF > config.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ocm-credentials
+type: Opaque
+stringData:
+  .ocmconfig: |
+    type: generic.config.ocm.software/v1
+    configurations:
+      - type: credentials.config.ocm.software
+        consumers:
+          - identity:
+              type: OCIRegistry
+              hostname: ghcr.io
+            credentials:
+              - type: Credentials
+                properties:
+                  username: <username>
+                  password: <token>
+---
 apiVersion: v1
 kind: Secret
 metadata:
@@ -161,21 +198,13 @@ stringData:
         recursive: -1
         copyMode: localBlob
         uploadType: ociArtifact
-      - type: credentials.config.ocm.software
-        consumers:
-          - identity:
-              type: OCIRegistry
-              hostname: ghcr.io
-            credentials:
-              - type: Credentials
-                properties:
-                  username: <username>
-                  password: <token>
 EOF
 ```
 
+</details>
+
 ```bash
-kubectl apply -f transfer-config.yaml
+kubectl apply -f config.yaml
 ```
 
 The `transfer.config.ocm.software` entry controls the transfer itself:
@@ -186,11 +215,11 @@ The `transfer.config.ocm.software` entry controls the transfer itself:
 - using `copyMode: allResources` with `uploadType: ociArtifact` will initiate a
   streaming upload if the resource is an oci type (ociArtifact, for example).
 
-{{< callout context="note" title="Credential identities" icon="outline/info-circle" >}}
-List a consumer for every host involved. If your source and target live on
-different registries, add an entry per hostname. The `OCIRegistry` 
-identity type cover the pull and push paths used during a
-transfer.
+{{< callout context="note" title="Propagating a single config" icon="outline/info-circle" >}}
+Splitting the configuration is optional. If you set `policy: Propagate`, you can
+keep everything (transfer settings and credentials) in one config on the
+`Component` and propagate the whole thing down to the `Replication`, instead of
+having the `Replication` declare its own transfer config.
 {{< /callout >}}
 
 {{< /step >}}
@@ -198,9 +227,12 @@ transfer.
 
 ### Create the source `Component`
 
-The `Component` resolves the version to replicate. Reference the transfer `Secret`
-with `policy: Propagate` so the configuration and credentials flow on to the
+The `Component` resolves the version to replicate. Reference the `ocm-credentials`
+`Secret` with `policy: Propagate` so the credentials flow on to the
 `Replication`.
+
+<details>
+  <summary>component.yaml</summary>
 
 ```bash
 cat <<EOF > component.yaml
@@ -216,10 +248,12 @@ spec:
   interval: 10m
   ocmConfig:
     - kind: Secret
-      name: ocm-transfer-config
+      name: ocm-credentials
       policy: Propagate
 EOF
 ```
+
+</details>
 
 ```bash
 kubectl apply -f component.yaml
@@ -237,8 +271,13 @@ kubectl get component replication-component -o wide
 ### Create the `Replication`
 
 The `Replication` ties the source `Component` to the target `Repository`. It
-inherits the transfer configuration and credentials propagated from the
-`Component`.
+declares the transfer settings through its own `ocmConfig`. Because declaring an
+`ocmConfig` opts out of automatic inheritance from the parent, it also references
+the `Component` explicitly to pull in the registry credentials the `Component`
+propagates.
+
+<details>
+  <summary>replication.yaml</summary>
 
 ```bash
 cat <<EOF > replication.yaml
@@ -251,18 +290,25 @@ spec:
     name: replication-component
   targetRepositoryRef:
     name: replication-target
+  ocmConfig:
+    - kind: Secret
+      name: ocm-transfer-config
+    - kind: Component
+      apiVersion: delivery.ocm.software/v1alpha1
+      name: replication-component
 EOF
 ```
+
+</details>
 
 ```bash
 kubectl apply -f replication.yaml
 ```
 
-{{< callout context="note" title="Attaching config directly" icon="outline/info-circle" >}}
-Instead of relying on propagation, you can reference the configuration `Secret`
-directly from the `Replication` with its own `spec.ocmConfig`. The effective
-configuration is the combination of what the `Component` propagates, what the
-`Replication` declares, and the target `Repository`'s configuration.
+{{< callout context="note" title="Effective configuration" icon="outline/info-circle" >}}
+The effective configuration the `Replication` reconciles with is the combination
+of what it declares in its own `spec.ocmConfig`, what the `Component` propagates,
+and the target `Repository`'s configuration.
 {{< /callout >}}
 
 {{< /step >}}
