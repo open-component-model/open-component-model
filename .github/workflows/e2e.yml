@@ -124,7 +124,7 @@ jobs:
         run: |
           set -a && source ${{ env.LOCATION }}/.env && set +a
           bash ${{ env.LOCATION }}/test/e2e/hacks/setup.sh
-          kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller.tar"
+          kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller.tar" --name ocm-e2e
           task ${{ env.LOCATION }}:test/e2e
 
       - name: Debug cluster state

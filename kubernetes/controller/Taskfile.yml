@@ -81,14 +81,29 @@ tasks:
           LOAD: "true"
     cmds:
       - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} bash test/e2e/hacks/setup.sh'
-      - 'kind load docker-image {{.CONTROLLER_IMG}}'
+      - 'kind load docker-image {{.CONTROLLER_IMG}} --name ocm-e2e'
+
+  test/e2e/setup/teardown:
+    desc: "Delete the 'ocm-e2e' Kind cluster and its registry. Only affects resources created by test/e2e/setup/local."
+    cmds:
+      - 'kind delete cluster --name ocm-e2e 2>/dev/null || true'
+      - 'docker rm -f ocm-e2e-registry 2>/dev/null || true'
 
   test/e2e:
-    desc: "Run end-to-end tests against a running cluster"
-    dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
+    desc: "Run end-to-end tests against a running cluster. Pass ginkgo flags via `--`, e.g. `task test/e2e -- -ginkgo.focus=helm-simple`. Omit to run all scenarios."
+    dotenv: [ '{{.TASKFILE_DIR}}/test/e2e/hacks/.env' ]
     cmds:
       - task: helm/install
-      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v
+      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v {{.CLI_ARGS}}
+
+  test/e2e/fresh:
+    desc: "Teardown, setup, and run E2E tests from scratch. Pass ginkgo flags via `--`, e.g. `task test/e2e/fresh -- -ginkgo.focus=helm-simple`."
+    cmds:
+      - task: test/e2e/setup/teardown
+      - task: test/e2e/setup/local
+      - task: test/e2e
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   # Build
   build:
