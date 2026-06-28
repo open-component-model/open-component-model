@@ -251,19 +251,25 @@ window present in manual releases.
 After publishing new tags, `pinDeps` updates every binding's and every consumer's `go.mod` to the authoritative
 version of each internal binding dep:
 
-- **Released this run** → `go mod edit -require` to the new tag.
-- **Already released (unchanged this run)** → `go mod edit -require` to `latestTag()`, ensuring consumers stay
-  current with any upstream releases that happened outside the current run.
-- **New binding with no prior tag** → skipped; see *New binding lifecycle* below.
-
-```text
-resolvePins(ordered, tags, consumers, getDeps, getLatestTag) → Map<module, [{name, version}]>
-
-for dep in module's internal binding deps:
-    if dep in tags:          use tags[dep]          # released this run
-    elif latestTag(dep):     use latestTag(dep)      # already released
-    else:                    skip                    # no tag yet
+```mermaid
+flowchart TD
+    A([for each dep in\nmodule's binding deps]) --> B{dep in\nordered set?}
+    B -- No\nexternal package --> Z([ignore])
+    B -- Yes\ninternal binding --> C{dep released\nthis run?}
+    C -- Yes\ndep in tags --> D[go mod edit -require\nto new tag]
+    C -- No\nskipped / unchanged --> E{latestTag dep\nnot null?}
+    E -- Yes\nalready released --> F[go mod edit -require\nto latest existing tag]
+    E -- No\nnever tagged --> G([skip\nbootstrap manually first])
+    D --> H([next dep])
+    F --> H
+    Z --> H
+    G --> H
 ```
+
+- **Released this run**: `go mod edit -require` to the new tag computed by `planRelease`.
+- **Skipped/unchanged with an existing tag**: `go mod edit -require` to `latestTag()`, ensuring consumers stay
+  current with upstream releases that happened outside the current run.
+- **Never tagged**: skipped; see *New binding lifecycle* below.
 
 `pinDeps` applies the result with `go mod edit -require` — a pure file edit, no network access. `go.sum` is not
 updated during the release; it is computed on the first standalone (non-workspace) build after the proxy has indexed
