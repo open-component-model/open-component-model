@@ -83,7 +83,19 @@ type: ociImage
 version: ${COMPONENT_VERSION}
 access:
 type: ociArtifact
-imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}</p><p>Repository Reference Format:
+imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}</p><p>Ownership:</p><p>Ownership attaches ownership information (i.e. the component name and version)
+to a resource. This enables a consumer who encounters the resource in a storage
+system to trace it back to the component that owns it. A resource opts in by
+setting &ldquo;options.ownershipPolicy&rdquo; to &ldquo;Always&rdquo; (the default is &ldquo;Never&rdquo;):</p><p>resources:
+- name: my-image
+type: ociImage
+version: ${COMPONENT_VERSION}
+options:
+ownershipPolicy: Always
+access:
+type: ociArtifact
+imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}</p><p>The policy is a construction-time directive and is not persisted to the
+component descriptor.</p><p>Repository Reference Format:
 [type::]{repository}</p><p>For known types, currently only {OCIRepository|CommonTransportFormat} are supported, which can be shortened to {OCI|oci|CTF|ctf} respectively for convenience.</p><p>If no type is given, the repository specification is interpreted based on introspection and heuristics:</p><ul><li>URL schemes or domain patterns -> OCI registry</li><li>Local paths -> CTF archive</li></ul><p>In case the CTF archive does not exist, it will be created by default.
 If not specified, it will be created with the name &ldquo;transport-archive&rdquo;.</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>ocm add component-version [flags]</code></pre></figure></div><h3 id=examples>Examples<a href=#examples class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>Adding component versions to a CTF archive:
 
