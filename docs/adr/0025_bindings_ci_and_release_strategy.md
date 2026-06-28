@@ -65,7 +65,7 @@ Four concrete problems had to be solved:
 
 ### Structural direction
 
-* **Keep Go modules, improve tooling**: retain independent `go.mod` per binding; use `go.work` (gitignored,
+* **Keep Go modules, improve tooling**: retain independent `go.mod` per binding; use `go.work` (git-ignored,
   generated in CI and locally via `task init/go.work`) and fix CI to use it. Reduces PR friction without changing
   the module boundary model.
 * **Ditch Go modules, shared library**: remove per-binding `go.mod` files; fold all bindings into a single shared
@@ -139,11 +139,10 @@ releasing new bindings.
 
 * **Pros:** Always catches cross-module regressions. Zero-config enrollment for new bindings — adding a module
   under `bindings/go/` is sufficient. Unit tests run in a single job via `task bindings/test`
-  (`go test ./bindings/go/...`): one runner, one Go setup, shared build cache. Docs-only PRs are excluded
-  via `paths-ignore`.
-* **Cons:** All binding unit tests run on every code-touching PR. Integration tests run as a parallel matrix
-  because they are I/O-bound (testcontainers, live network calls) and `sigstore/integration` requires a
-  different runner architecture.
+  (`go test ./bindings/go/...`): one runner, one Go setup, shared build cache.
+* **Cons:** All binding unit tests run on every code-touching PR. Docs-only PRs can be excluded via
+  `paths-ignore`. Integration tests run as a parallel matrix because they are I/O-bound (testcontainers,
+  live network calls) and `sigstore/integration` requires a different runner architecture.
 
 **Change-based filtering (not selected)**
 
@@ -153,15 +152,15 @@ releasing new bindings.
 
 ### Sparse-checkout strategy
 
-**Full checkout for lint and unit tests, sparse for integration (selected)**
+**Full checkout for lint, sparse for unit and integration tests (selected)**
 
 * **Pros:** `task lint` runs `golangci-lint` across all modules in one pass via `go work edit -json`.
-  `task bindings/test` runs `go test ./bindings/go/...` — one compiler invocation, shared build cache,
-  one runner. Integration tests run as a sparse-checkout matrix where parallelism genuinely helps
-  (I/O-bound, `sigstore/integration` needs a different runner). Sparse-checkout remains for
-  `kubernetes/controller` and `e2e`/`conformance` which have no reason to pull all of `bindings/`.
-* **Cons:** Lint and unit jobs download the full repository. Acceptable given the monorepo size and the
-  simplicity gained.
+  Unit tests use sparse-checkout scoped to `bindings/` so each module only downloads what it needs.
+  Integration tests run as a sparse-checkout matrix where parallelism genuinely helps (I/O-bound,
+  `sigstore/integration` needs a different runner). Sparse-checkout remains for `kubernetes/controller`
+  and `e2e`/`conformance` which have no reason to pull all of `bindings/`.
+* **Cons:** Lint downloads the full repository. Acceptable given the monorepo size and the simplicity
+  gained.
 
 **Per-module matrix with sparse-checkout (not selected)**
 
@@ -205,7 +204,7 @@ The authoritative Go version is stored in `.go-version` (repo root). All CI jobs
 ```
 
 `task init/go.work` uses `status: find go.work` so it is a no-op if the file already exists, but since it is
-gitignored it will never be present after a fresh checkout.
+git-ignored it will never be present after a fresh checkout.
 
 ### Where sparse-checkout is used
 
@@ -310,7 +309,7 @@ sequenceDiagram
 ### New binding lifecycle
 
 A binding that has never been tagged is skipped by `planRelease` — it appears in the gate summary as
-`(no prior tag; skipped)` and receives no semver tag in the bulk release. To enrol a new binding:
+`(no prior tag; skipped)` and receives no semver tag in the bulk release. To enroll a new binding:
 
 1. Merge the binding's implementation to `main`.
 2. Manually trigger `release-go-submodule.yaml` targeting the new binding to create its initial tag
@@ -358,8 +357,10 @@ Using `go mod edit -json` (toolchain-authoritative) rather than regex parsing en
 
 ### Consumer trigger
 
-`pipeline.yml` includes `bindings/**` in its `paths` filter so that `cli` and `kubernetes/controller` are rebuilt
-and tested whenever any binding changes, catching API breakage in consumers before a release.
+`pipeline.yml` triggers on changes to `cli/**`, `kubernetes/controller/**`, and `conformance/**`. Binding changes
+do not directly trigger the pipeline; instead, API breakage in consumers is caught when the binding release
+workflow (`release-bindings.yaml`) pins consumers and the subsequent RC build runs with `GOWORK=off`, validating
+the pinned graph end-to-end before any tag is promoted.
 
 ---
 
@@ -386,7 +387,7 @@ exactly what `buildGraph` does — it confirms our approach is correct prior art
 
 The chosen approach directly addresses each identified pain point:
 
-* **PR overhead**: `go.work` (gitignored, generated in CI and locally via `task init/go.work`) allows developers
+* **PR overhead**: `go.work` (git-ignored, generated in CI and locally via `task init/go.work`) allows developers
   to make cross-binding changes in a single PR. The workspace ensures all interdependent modules resolve against
   the current tree, not published versions, so a change spanning `bindings/go/credentials` and `bindings/go/helm`
   can be reviewed and merged together.
