@@ -65,9 +65,9 @@ Four concrete problems had to be solved:
 
 ### Structural direction
 
-* **Keep Go modules, improve tooling**: retain independent `go.mod` per binding; use `go.work` (committed to the repo,
-  regenerated when the module set changes) and fix CI to use it. Reduces PR friction without changing the module
-  boundary model.
+* **Keep Go modules, improve tooling**: retain independent `go.mod` per binding; use `go.work` (gitignored,
+  generated in CI and locally via `task init/go.work`) and fix CI to use it. Reduces PR friction without changing
+  the module boundary model.
 * **Ditch Go modules, shared library**: remove per-binding `go.mod` files; fold all bindings into a single shared
   library consumed directly by `cli` and `kubernetes/controller`. Eliminates the boundary model entirely.
 
@@ -123,8 +123,8 @@ releasing new bindings.
 
 * **Pros:** Preserves independent versioning; external consumers can depend on specific binding versions.
   `go.work` eliminates multi-PR sequential chains during development.
-* **Cons:** Still requires a release workflow that understands dependency order; `go.work` must be kept in sync
-  as modules are added or removed.
+* **Cons:** Still requires a release workflow that understands dependency order; `go.work` must be regenerated
+  when modules are added or removed.
 
 **Ditch Go modules, shared library (not selected)**
 
@@ -186,38 +186,36 @@ releasing new bindings.
 
 ## go.work Management
 
-### go.work is committed to the repository
+### Why go.work is not committed
 
-`go.work` is committed at the repository root and references all Go modules in the tree. Committing it ensures every
-contributor and CI environment uses an identical workspace without a generation step after checkout.
+`go.work` is listed in `.gitignore` and generated in CI via `task init/go.work`. This avoids the problem of a
+committed `go.work` referencing all 20+ modules while a sparse checkout only has a subset — Go tooling would fail
+on missing paths. By generating `go.work` after checkout, the workspace is automatically scoped to the checked-out
+tree.
 
-When a module is added or removed, `task init/go.work` regenerates the file:
-
-```sh
-go work init
-go work use <module1> <module2> ...  # all go.mod paths discovered by find
-```
-
-The task uses `status: find go.work` so it is a no-op when the file already exists. Run it explicitly after adding
-or removing a `go.mod`.
+`discoverModules()` in `.github/scripts/release-bindings.js` reads the workspace via `go work edit -json` to
+enumerate all binding modules without any hardcoded list.
 
 The authoritative Go version is stored in `.go-version` (repo root). All CI jobs that need a workspace use:
 
 ```sh
 # 1. actions/setup-go with go-version-file: .go-version
 # 2. arduino/setup-task
-# 3. task init/go.work  (no-op if go.work already checked out)
+# 3. task init/go.work   # go work init + go work use for all checked-out go.mod files
 ```
+
+`task init/go.work` uses `status: find go.work` so it is a no-op if the file already exists, but since it is
+gitignored it will never be present after a fresh checkout.
 
 ### Where sparse-checkout is used
 
-| Job                           | Sparse checkout                               | Workspace            |
-|-------------------------------|-----------------------------------------------|----------------------|
-| `golangci_lint`               | full checkout                                 | committed `go.work`  |
-| `test-bindings` unit          | `bindings/`                                   | committed `go.work`  |
-| `test-bindings` integration   | `bindings/<module>/integration` (per-matrix)  | committed `go.work`  |
-| `kubernetes-controller` build | `kubernetes/controller/ + bindings/ + config` | committed `go.work`  |
-| `e2e`, `conformance`          | module-specific + config                      | none                 |
+| Job                           | Sparse checkout                               | Workspace               |
+|-------------------------------|-----------------------------------------------|-------------------------|
+| `golangci_lint`               | full checkout                                 | `task init/go.work`     |
+| `test-bindings` unit          | `bindings/`                                   | `task init/go.work`     |
+| `test-bindings` integration   | `bindings/<module>/integration` (per-matrix)  | `task init/go.work`     |
+| `kubernetes-controller` build | `kubernetes/controller/ + bindings/ + config` | `task init/go.work`     |
+| `e2e`, `conformance`          | module-specific + config                      | none                    |
 
 ---
 
@@ -382,10 +380,10 @@ exactly what `buildGraph` does — it confirms our approach is correct prior art
 
 The chosen approach directly addresses each identified pain point:
 
-* **PR overhead**: `go.work` (committed to the repo, regenerated via `task init/go.work` when modules change)
-  allows developers to make cross-binding changes in a single PR. The workspace ensures all interdependent modules
-  resolve against the current tree, not published versions, so a change spanning `bindings/go/credentials` and
-  `bindings/go/helm` can be reviewed and merged together.
+* **PR overhead**: `go.work` (gitignored, generated in CI and locally via `task init/go.work`) allows developers
+  to make cross-binding changes in a single PR. The workspace ensures all interdependent modules resolve against
+  the current tree, not published versions, so a change spanning `bindings/go/credentials` and `bindings/go/helm`
+  can be reviewed and merged together.
 * **CI complexity**: module discovery is two steps with no filtering logic. New bindings enroll automatically. All
   binding tests always run, eliminating the correctness gaps that came with change-based filtering.
 * **Release friction**: the phased bulk release computes dependency order, runs tests, gates on human approval, and
