@@ -2311,10 +2311,6 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 // the shape pack.OwnershipReferrer marshals for a resource subject.
 const ownershipArtifactAnnotation = `[{"identity":{"name":"backend","version":"1.0.0"},"kind":"resource"}]`
 
-// buildLayoutWithOwnershipReferrer serializes an OCI layout tar containing a
-// one-layer image (tagged) and an ADR 0016 ownership referrer whose subject is
-// that image — i.e. what GetLocalResource produces on the source side after
-// pulling the referrer into the layout.
 func buildLayoutWithOwnershipReferrer(t *testing.T, tag, component, version string) (layoutBytes []byte, main, referrer ociImageSpecV1.Descriptor) {
 	t.Helper()
 	r := require.New(t)
@@ -2346,9 +2342,6 @@ func buildLayoutWithOwnershipReferrer(t *testing.T, tag, component, version stri
 		Config:       empty,
 		Layers:       []ociImageSpecV1.Descriptor{empty},
 		Subject:      &main,
-		// Mirror the three annotations production pack.OwnershipReferrer sets,
-		// including the required software.ocm.artifact, so the layout carries a
-		// spec-faithful ADR 0016 referrer rather than an incomplete one.
 		Annotations: map[string]string{
 			annotations.OwnershipComponentName:    component,
 			annotations.OwnershipComponentVersion: version,
@@ -2369,14 +2362,6 @@ func buildLayoutWithOwnershipReferrer(t *testing.T, tag, component, version stri
 	return buf.Bytes(), main, referrer
 }
 
-// TestRepository_AddLocalResource_CopiesOwnershipReferrer proves the add-side
-// copy path (ADR 0016): a by-value resource whose incoming layout already
-// carries an ownership referrer transfers that referrer to the target even when
-// referrer *creation* does not apply. The resource has external relation, so no
-// referrer is created — any referrer in the target therefore proves the copy
-// path ran. This is the upload half that pairs with GetLocalResource's referrer
-// fetch, giving the local-resource path the same transfer behavior as the
-// OCI-image path.
 func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -2419,7 +2404,7 @@ func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 	r.NoError(err)
 	r.True(referrerExists, "ownership referrer must be copied to the target even when no referrer is created")
 
-	// Existence isn't enough: the copied referrer must carry its ADR 0016 ownership
+	// Existence isn't enough: the copied referrer must carry its ownership
 	// annotations verbatim, so fetch the manifest and check all three.
 	rc, err := componentStore.Fetch(ctx, referrer)
 	r.NoError(err)
@@ -2566,11 +2551,6 @@ func TestRepository_AddOwnershipByReference(t *testing.T) {
 	r.Equal(resolved, resolvedAfter, "the subject must be unchanged by re-running the attach")
 }
 
-// TestRepository_AddOwnership_ResolveErrors covers the subject-resolution failure
-// branches of AddOwnership (ADR 0016) on both access paths. These are the branches
-// most likely to regress silently: a by-reference image whose reference resolves to
-// nothing, and a by-value local blob whose digest is not present in the component
-// store. Both must surface as an error rather than a quietly-skipped referrer.
 func TestRepository_AddOwnership_ResolveErrors(t *testing.T) {
 	const (
 		component = "ocm.software/test-component"
@@ -2658,12 +2638,6 @@ func (s *blobValidatingStore) Push(ctx context.Context, expected ociImageSpecV1.
 	return s.Store.Push(ctx, expected, bytes.NewReader(raw))
 }
 
-// TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest guards the push
-// order (ADR 0016): the referrer manifest references the empty config/layer
-// blob, so that blob must reach the registry before the manifest or a conformant
-// registry rejects it with MANIFEST_BLOB_UNKNOWN. The subject image is staged
-// with a real (non-empty) config so the empty blob is genuinely absent up front —
-// otherwise the subject's own empty config would pre-seed it and mask the bug.
 func TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -2719,13 +2693,6 @@ func TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest(t *testing.
 	r.True(emptyExists, "the empty config/layer blob must be pushed during the attach")
 }
 
-// TestRepository_AddOwnership_CreatesByValueReferrer proves the by-value create
-// path (ADR 0016): after a resource is uploaded by value into the
-// component's own store, AddOwnership resolves the uploaded manifest and pushes a
-// fresh ownership referrer for it. The incoming layout carries no referrer, so a
-// referrer landing in the store can only have come from creation. This backs the
-// constructor's OwnershipAwareRepository capability for the by-value path; the
-// by-reference half is TestRepository_AddOwnershipByReference.
 func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()

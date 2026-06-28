@@ -115,9 +115,7 @@ func TestPushOwnershipReferrer(t *testing.T) {
 				ociImageSpecV1.AnnotationCreated)
 		})
 
-		t.Run("artifactType and annotation keys match the ADR-0016 literals", func(t *testing.T) {
-			// Every other assertion here routes through the annotations.* constants, so a
-			// typo in a constant would still pass. ADR 0016 fixes these exact wire strings.
+		t.Run("artifactType and annotation keys match the literals", func(t *testing.T) {
 			assert.Equal(t, "application/vnd.ocm.software.ownership.v1+json", m.ArtifactType)
 			_, hasName := m.Annotations["software.ocm.component.name"]
 			_, hasVersion := m.Annotations["software.ocm.component.version"]

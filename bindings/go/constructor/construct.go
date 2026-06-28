@@ -384,6 +384,12 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 	)
 	logger.Debug("processing resource")
 
+	if c.opts.ComponentVersionConflictPolicy == ComponentVersionConflictReplace &&
+		resource.Options.OwnershipPolicy != constructor.OwnershipPolicyAlways {
+		logger.WarnContext(ctx, "replace requested with ownership policy other than Always; any pre-existing ownership referrer attached to this resource by a prior add will remain",
+			"ownership_policy", resource.Options.OwnershipPolicy)
+	}
+
 	var res *descriptor.Resource
 	var err error
 
@@ -420,6 +426,34 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 				if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
 					return nil, fmt.Errorf("error processing resource %q with digest processor: %w", resource.ToIdentity(), err)
 				}
+			}
+		}
+
+		if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
+			if c.opts.ResourceRepositoryProvider == nil {
+				return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but no resource repository provider is configured", resource.ToIdentity(), resource.Options.OwnershipPolicy)
+			}
+			repo, err := c.opts.GetResourceRepository(ctx, resource)
+			if err != nil {
+				return nil, fmt.Errorf("error getting resource repository for ownership of %q: %w", resource.ToIdentity(), err)
+			}
+
+			ownershipAwareRepository, ok := repo.(repository.OwnershipAwareRepository)
+			if !ok {
+				return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
+			}
+			var creds ocmruntime.Typed
+			if c.opts.Resolver != nil {
+				if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+					if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
+						return nil, fmt.Errorf("error resolving credentials for resource ownership: %w", err)
+					}
+				} else {
+					logger.Debug("no credential consumer identity found for resource ownership, skipping credential resolution")
+				}
+			}
+			if err := ownershipAwareRepository.AddOwnership(ctx, component, version, res, creds); err != nil {
+				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 			}
 		}
 	default:
@@ -539,6 +573,16 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	if result.ProcessedBlobData != nil {
 		processedResource, err = addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, result.ProcessedBlobData)
 	} else if result.ProcessedResource != nil {
+		// TODO(fabianburth): https://github.com/open-component-model/ocm-project/issues/1167
+		//   this cannot handle ownership attachement
+		//   input either needs an AddOwnership method OR we need to change
+		//   the architecture of input to no longer allow it to upload immediately
+		//   and instead return a blob.
+		//   I believe this is currently dead code anyway, as the helm input method
+		//   also sets ProcessedBlobData and thus, hits the path above.
+		if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
+			return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but input method returned a pre-processed resource which does not support ownership attachment", resource.ToIdentity(), resource.Options.OwnershipPolicy)
+		}
 		processedResource = result.ProcessedResource
 	}
 
@@ -679,6 +723,18 @@ func addColocatedResourceLocalBlob(
 	uploaded, err := repo.AddLocalResource(ctx, component, version, descResource, data)
 	if err != nil {
 		return nil, fmt.Errorf("error adding local resource %q based on input type %q as local resource to component %q : %w", resource.ToIdentity(), resource.Input.GetType(), component, err)
+	}
+
+	if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
+		if ownershipAwareRepo, ok := repo.(repository.OwnershipAwareRepository); ok {
+			// repo is a component version repository on the local-blob path;
+			// it is already authenticated, so no per-call credentials are passed.
+			if err := ownershipAwareRepo.AddOwnership(ctx, component, version, uploaded, nil); err != nil {
+				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
+			}
+		} else {
+			return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
+		}
 	}
 
 	return uploaded, nil

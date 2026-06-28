@@ -135,6 +135,10 @@ test('buildModuleBlocks: website import has correct tag format', () => {
     const website = imports.find(i => i.path.endsWith('/website'));
     assert.ok(website, 'website import should exist');
     assert.equal(website.version, 'v0.3.0');
+    // Self-import: treat the snapshot as a content-only tarball - the parent
+    // project owns the module graph (ignoreImports) and config (ignoreConfig).
+    assert.equal(website.ignoreImports, true);
+    assert.equal(website.ignoreConfig, true);
     assert.deepEqual(website.mounts[0].files, ['**', '!blog/**']);
     assert.equal(website.mounts[0].source, 'content/');
     assert.equal(website.mounts[0].target, 'content');
