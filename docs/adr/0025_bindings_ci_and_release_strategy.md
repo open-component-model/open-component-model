@@ -39,11 +39,9 @@ Four concrete problems had to be solved:
 1. **Scalable CI enrollment**: the binding set grows over time; CI must cover all bindings without requiring a config
    change each time one is added.
 2. **Cross-module regressions**: a change to `bindings/go/credentials` can silently break `bindings/go/helm` or `cli` if
-   only
-   the changed module is tested.
-3. **Workspace management**: the repo-wide `go.work` at the root is always present in sparse-checkout;
-   root-level files cannot be excluded and `go.work` can conflict with module-specific CI jobs that check out only a
-   subset of the tree.
+   only the changed module is tested.
+3. **Workspace management**: the repo-wide `go.work` at the root is always present; it must reflect the checked-out
+   tree so that workspace-aware commands resolve all dependencies locally during development and CI.
 4. **Coordinated releases**: bindings must be released in dependency order; a manual per-module release can leave
    dependent modules in an inconsistent state.
 
@@ -67,8 +65,9 @@ Four concrete problems had to be solved:
 
 ### Structural direction
 
-* **Keep Go modules, improve tooling**: retain independent `go.mod` per binding; use `go.work` (gitignored,
-  generated in CI) and fix CI to use it. Reduces PR friction without changing the module boundary model.
+* **Keep Go modules, improve tooling**: retain independent `go.mod` per binding; use `go.work` (committed to the repo,
+  regenerated when the module set changes) and fix CI to use it. Reduces PR friction without changing the module
+  boundary model.
 * **Ditch Go modules, shared library**: remove per-binding `go.mod` files; fold all bindings into a single shared
   library consumed directly by `cli` and `kubernetes/controller`. Eliminates the boundary model entirely.
 
@@ -79,11 +78,10 @@ Four concrete problems had to be solved:
 
 ### Sparse-checkout strategy
 
-* **Keep sparse-checkout**: each CI job checks out only what it needs (e.g., `bindings/` for unit tests, one module +
-  `bindings/` for lint). Requires `rm go.work && task init/go.work` after checkout to produce a scoped workspace
-  matching the checked-out tree.
-* **Full checkout everywhere**: every CI job checks out the entire repository. `task init/go.work` always produces a
-  correct workspace since the full tree is present; no sparse-checkout scoping is needed.
+* **Full checkout for lint/unit, sparse for integration**: lint and unit tests check out the full repository so
+  `go.work` covers all modules. Integration tests use sparse-checkout per module since they are I/O-bound and
+  parallelism helps.
+* **Per-module matrix with sparse-checkout everywhere**: each CI job checks out only its module.
 
 ### Release strategy
 
@@ -94,14 +92,14 @@ Four concrete problems had to be solved:
 
 ## Decision Outcome
 
-Keep Go modules with `go.work`, always test all bindings in CI, and use the automated phased bulk release as the
-canonical path. The manual per-module release is retained for isolated hotfixes. The sparse-checkout strategy is an
-open decision (see *Pros and Cons* below).
+Keep Go modules with a committed `go.work`, always test all bindings in CI, and use the automated phased bulk release
+as the canonical path. The manual per-module release is retained for isolated hotfixes and for bootstrapping new
+bindings. Lint and unit tests use a full checkout; integration tests use sparse-checkout in a parallel matrix.
 
 **Why keep Go modules over a shared library:** Ditching Go modules would eliminate independent versioning, making it
 impossible for external consumers to take only the bindings they need at a specific version. The binding boundary model
-has value; the friction was in the tooling around it, not in the model itself. Adding `go.work` (gitignored, generated
-in CI from the checked-out tree) recovers the developer-experience benefit without sacrificing the boundary model.
+has value; the friction was in the tooling around it, not in the model itself. Adding `go.work` recovers the
+developer-experience benefit without sacrificing the boundary model.
 
 **Why always test all bindings over change-based filtering:** Unit tests for all bindings run as a single
 `go test ./bindings/go/...` invocation — one job, one runner, shared build cache. The cost is low enough
@@ -112,7 +110,8 @@ also gives a stronger correctness guarantee with no filtering logic to maintain.
 order, runs tests, requires human review of the plan before any tags are pushed, and pins consumer `go.mod` files
 (`cli`, `kubernetes/controller`) atomically in the same release commit. Manual per-module releases cannot guarantee
 dependency ordering and create a consistency window (see *Release Strategy* below). The manual workflow is kept as an
-escape hatch for genuine single-module hotfixes with no consumers to update.
+escape hatch for genuine single-module hotfixes with no consumers to update, and as the mechanism for initially
+releasing new bindings.
 
 ---
 
@@ -124,8 +123,8 @@ escape hatch for genuine single-module hotfixes with no consumers to update.
 
 * **Pros:** Preserves independent versioning; external consumers can depend on specific binding versions.
   `go.work` eliminates multi-PR sequential chains during development.
-* **Cons:** Still requires a release workflow that understands dependency order; `go.work` complicates CI
-  sparse-checkout (see *Sparse-Checkout and go.work Management*).
+* **Cons:** Still requires a release workflow that understands dependency order; `go.work` must be kept in sync
+  as modules are added or removed.
 
 **Ditch Go modules, shared library (not selected)**
 
@@ -154,7 +153,7 @@ escape hatch for genuine single-module hotfixes with no consumers to update.
 
 ### Sparse-checkout strategy
 
-**Full checkout for lint and unit tests (selected)**
+**Full checkout for lint and unit tests, sparse for integration (selected)**
 
 * **Pros:** `task lint` runs `golangci-lint` across all modules in one pass via `go work edit -json`.
   `task bindings/test` runs `go test ./bindings/go/...` — one compiler invocation, shared build cache,
@@ -178,49 +177,47 @@ escape hatch for genuine single-module hotfixes with no consumers to update.
 * **Pros:** Dependency order guaranteed; human review gate before any tags pushed; consumers pinned atomically.
 * **Cons:** More complex workflow; requires a plan step that probes the dependency graph.
 
-**Manual per-module release (kept for hotfixes only)**
+**Manual per-module release (kept for hotfixes and bootstrapping)**
 
 * **Pros:** Simple; developer controls exactly which version and when.
 * **Cons:** No dependency ordering; creates a consistency window between dependent modules (see below).
 
 ---
 
-## Sparse-Checkout and go.work Management
+## go.work Management
 
-### Why go.work is not committed
+### go.work is committed to the repository
 
-`go.work` is listed in `.gitignore` and generated in CI via `task init/go.work`. This avoids the problem of a committed
-`go.work` referencing all 20+ modules while a sparse checkout only has a subset — Go tooling would fail on missing paths.
-By generating `go.work` after checkout, the workspace is automatically scoped to the checked-out tree.
+`go.work` is committed at the repository root and references all Go modules in the tree. Committing it ensures every
+contributor and CI environment uses an identical workspace without a generation step after checkout.
 
-The authoritative Go version is stored in `.go-version` (repo root). All CI jobs use `go-version-file: .go-version` for
-`actions/setup-go`, then run `task init/go.work` to produce the workspace. The task uses `status: find go.work` to skip
-re-generation if the file already exists, but since the file is gitignored it will never be present after a fresh
-checkout.
-
-**CI step order for jobs that need a workspace:**
+When a module is added or removed, `task init/go.work` regenerates the file:
 
 ```sh
-# 1. Install Task (arduino/setup-task)
-# 2. setup-go with go-version-file: .go-version
-# 3. task init/go.work  (go work init + go work use for all checked-out go.mod files)
+go work init
+go work use <module1> <module2> ...  # all go.mod paths discovered by find
 ```
 
-### Why all binding source must be checked out together
+The task uses `status: find go.work` so it is a no-op when the file already exists. Run it explicitly after adding
+or removing a `go.mod`.
 
-If the unit test job checked out only the changed binding, `task init/go.work` would produce a workspace with only that
-module, and compilation would fail or silently use stale cached builds of its dependencies. Checking out all of
-`bindings/` ensures every dependency is present and the workspace reflects the current tree.
+The authoritative Go version is stored in `.go-version` (repo root). All CI jobs that need a workspace use:
 
-### Where sparse-checkout is still used
+```sh
+# 1. actions/setup-go with go-version-file: .go-version
+# 2. arduino/setup-task
+# 3. task init/go.work  (no-op if go.work already checked out)
+```
 
-| Job                           | Sparse checkout                               | Workspace                  |
-|-------------------------------|-----------------------------------------------|----------------------------|
-| `golangci_lint`               | full checkout                                 | `task init/go.work`        |
-| `test-bindings` unit          | `bindings/`                                   | `task init/go.work`        |
-| `test-bindings` integration   | full checkout                                 | `task init/go.work`        |
-| `kubernetes-controller` build | `kubernetes/controller/ + bindings/ + config` | `task init/go.work`        |
-| `e2e`, `conformance`          | module-specific + config                      | none (no workspace needed) |
+### Where sparse-checkout is used
+
+| Job                           | Sparse checkout                               | Workspace            |
+|-------------------------------|-----------------------------------------------|----------------------|
+| `golangci_lint`               | full checkout                                 | committed `go.work`  |
+| `test-bindings` unit          | `bindings/`                                   | committed `go.work`  |
+| `test-bindings` integration   | `bindings/<module>/integration` (per-matrix)  | committed `go.work`  |
+| `kubernetes-controller` build | `kubernetes/controller/ + bindings/ + config` | committed `go.work`  |
+| `e2e`, `conformance`          | module-specific + config                      | none                 |
 
 ---
 
@@ -229,52 +226,61 @@ module, and compilation would fail or silently use stale cached builds of its de
 ### Consistency window in manual per-module releases
 
 If `bindings/go/helm` depends on `bindings/go/credentials` and a developer manually releases
-`bindings/go/credentials@v1.2.0`, the
-`go.mod` of `bindings/go/helm` still pins the old version until a follow-up PR updates it. During that window,
-`bindings/go/helm` is internally consistent via `go.work` in local development, but its published `go.mod` references
-the old API. Any consumer resolving via `go get` (not `go.work`) gets a mixed build. The
-`concurrency: group: binding-release` guard prevents concurrent releases from racing but does not close this window.
-
-### Open issue: manual release on a release branch
-
-_This is a hard edge-case and might not need consideration._
-
-If a release branch (`releases/X.Y`) is cut and a developer manually triggers `release-go-submodule.yaml` for a binding
-in the meantime, the new tag is based on `main`, not the release branch. The release branch would then use a tag that
-includes commits not present on the branch, or miss the tag entirely. The shared concurrency group prevents concurrent
-workflow runs but does not prevent this conceptual ordering conflict. This remains an open problem; the interim guidance
-is to avoid manual releases after a release branch is cut and coordinate with the release manager.
+`bindings/go/credentials@v1.2.0`, the `go.mod` of `bindings/go/helm` still pins the old version until a follow-up
+PR updates it. During that window, `bindings/go/helm` is internally consistent via `go.work` in local development,
+but its published `go.mod` references the old API. Any consumer resolving via `go get` (not `go.work`) gets a mixed
+build. The `concurrency: group: binding-release` guard prevents concurrent releases from racing but does not close
+this window.
 
 ### Phased bulk release
 
 `release-bindings.yaml` runs four ordered phases:
 
-1. **Plan**: compute next tags for every binding with unreleased commits; determine bump kind (patch/minor/major) from
-   commit messages; detect breaking changes; topologically sort by the dependency graph.
-2. **Test**: run unit and integration tests for every module to be released.
-3. **Gate**: environment approval where a reviewer sees the full plan and test results before any tags are pushed.
-4. **Release**: pin `go.mod` files in dependent bindings to the exact new tags of their dependencies; commit the pin
-   updates; create GPG-signed tags; push; pin `cli` and `kubernetes/controller` `go.mod` files to the new binding
-   versions.
+1. **Plan**: discover all binding modules; topologically sort by the dependency graph derived from
+   `go mod edit -json`; compute next semver tags for modules with unreleased commits; detect breaking
+   changes from Conventional Commit markers (`feat!:`, `BREAKING CHANGE:`).
+2. **Test**: run unit and integration tests for every changed module in parallel.
+3. **Gate**: environment approval — a reviewer sees the full plan (changed modules, next tags, bump kinds,
+   changelogs) and test results before any tags are pushed.
+4. **Release**: pin `go.mod` files; commit the pin updates; create and push unsigned annotated tags;
+   pin `cli` and `kubernetes/controller` `go.mod` files.
 
-This ensures dependency order is respected, `go.mod` files in dependent bindings are updated atomically in the same
-release commit, and consumers are pinned in the same operation, closing the consistency window.
+This ensures dependency order is respected and consumers are pinned in the same operation, closing the consistency
+window present in manual releases.
+
+### Dependency pinning (`pinDeps`)
+
+After publishing new tags, `pinDeps` updates every binding's and every consumer's `go.mod` to the authoritative
+version of each internal binding dep:
+
+- **Released this run** → `go mod edit -require` to the new tag.
+- **Already released (unchanged this run)** → `go mod edit -require` to `latestTag()`, ensuring consumers stay
+  current with any upstream releases that happened outside the current run.
+- **New binding with no prior tag** → skipped; see *New binding lifecycle* below.
+
+```
+resolvePins(ordered, tags, consumers, getDeps, getLatestTag) → Map<module, [{name, version}]>
+
+for dep in module's internal binding deps:
+    if dep in tags:          use tags[dep]          # released this run
+    elif latestTag(dep):     use latestTag(dep)      # already released
+    else:                    skip                    # no tag yet
+```
+
+`pinDeps` applies the result with `go mod edit -require` — a pure file edit, no network access. `go.sum` is not
+updated during the release; it is computed on the first standalone (non-workspace) build after the proxy has indexed
+the new tags.
 
 ### go.work in the release build
 
 PR and CI builds use `go.work` throughout so that in-flight binding changes resolve against the local tree without
 requiring published tags.
 
-Release builds (`cli.yml`, `kubernetes-controller.yml` called from `release.yml`) run with `GOWORK=off` and
-`GOPROXY=direct`. By the time these builds run, `release-bindings.yaml` has already pushed all binding semver tags
-and committed the `go.mod` pins. Disabling the workspace forces the build to resolve dependencies exclusively from
-those pins — exactly the dependency graph external consumers will get via `go get`. This validates that the pins
-are correct and catches any MVS or graph-pruning divergence between workspace and standalone resolution before the
-RC tag is created.
-
-The pins serve a different audience: **external consumers** who `go get` `cli` or `controller` outside the monorepo.
-They have no `go.work`, so Go falls through to `go.mod`, which must reference the correct binding versions for the
-module proxy to assemble the right dependency graph.
+Release builds (`cli.yml`, `kubernetes-controller.yml` called from `release.yml`) run with `GOWORK=off`. By the time
+these builds run, `release-bindings.yaml` has already pushed all binding semver tags and committed the `go.mod` pins.
+Disabling the workspace forces the build to resolve dependencies exclusively from those pins — exactly the dependency
+graph external consumers will get via `go get`. This validates that the pins are correct and catches any MVS or
+graph-pruning divergence between workspace and standalone resolution before the RC tag is created.
 
 ```mermaid
 sequenceDiagram
@@ -285,11 +291,11 @@ sequenceDiagram
     participant Ext as external consumer
 
     RB->>RB: pinDeps — go mod edit in bindings (topo order) + cli + controller
-    RB->>RB: git commit -S -s (pin commit) + push binding semver tags
+    RB->>RB: git commit -s (pin commit) + push binding semver tags
     RC->>RC: checkout branch HEAD (= pin commit)
     RC->>RC: create RC tag at pin commit
     Build->>Build: checkout cli/ + bindings/ at RC tag
-    Build->>Build: compile (GOWORK=off, GOPROXY=direct → resolves go.mod pins directly)
+    Build->>Build: compile (GOWORK=off → resolves go.mod pins directly)
 
     Ext->>Proxy: go get cli@v0.5.0
     Proxy->>Proxy: read cli/go.mod at cli/v0.5.0 tag
@@ -299,12 +305,16 @@ sequenceDiagram
 
 ### New binding lifecycle
 
-A binding that has never been tagged is pinned via commit pseudo-version (`v0.0.0-<ts>-<sha>`) by the
-bulk release rather than receiving a semver tag. This is intentional: a binding stays unversioned until
-a developer explicitly tags it (`bindings/go/newbinding/v0.0.1`), which signals it is ready for stable
-versioning. Once a tag exists, `planRelease` takes the normal semver path and `pinDeps` uses
-`go mod edit -require` instead of `go get @commit`. The gate summary lists all modules being pinned by
-commit so reviewers can bootstrap a binding before approving if they choose to.
+A binding that has never been tagged is skipped by `planRelease` — it appears in the gate summary as
+`(no prior tag; skipped)` and receives no semver tag in the bulk release. To enrol a new binding:
+
+1. Merge the binding's implementation to `main`.
+2. Manually trigger `release-go-submodule.yaml` targeting the new binding to create its initial tag
+   (e.g., `bindings/go/newbinding/v0.0.1`).
+3. From the next bulk release onwards, `planRelease` picks it up normally and `pinDeps` manages its consumers.
+
+This makes the promotion of a new binding an explicit, intentional act rather than an automatic side-effect of the
+first bulk release that touches it.
 
 ---
 
@@ -314,7 +324,7 @@ commit so reviewers can bootstrap a binding before approving if they choose to.
 
 `ci.yml` runs a `discover_modules` pre-job on every push and PR:
 
-1. `task go_modules` enumerates all Go modules in the tree.
+1. `discoverModules()` enumerates all Go modules by inspecting `go.work` via `go work edit -json`.
 2. Each binding's Taskfile is probed for a `test/integration` target to build the integration matrix.
 3. Outputs: `modules_json` (all modules, for `golangci_lint`) and `integration_test_modules_json`
    (bindings with an integration test target, for `test-bindings.yaml`).
@@ -326,11 +336,26 @@ are excluded and have dedicated workflows. Adding a new binding under `bindings/
 enrolls it in lint, unit tests, and — if it has a `test/integration` target — the integration matrix,
 with no config change required.
 
+### Dependency graph and topological sort
+
+`buildGraph` in `.github/scripts/release-bindings.js` derives the dependency graph from `go.mod` files:
+
+```js
+// For each binding module:
+internalDeps = go mod edit -json | Require[]
+    .filter(path => path.startsWith("ocm.software/open-component-model/bindings/go/"))
+
+// Topological sort (Kahn's algorithm) — deps precede their dependents
+ordered = topoSort(modules, depsMap)
+```
+
+Using `go mod edit -json` (toolchain-authoritative) rather than regex parsing ensures all `go.mod` syntax
+(replace directives, indirect markers, multi-line blocks) is handled correctly.
+
 ### Consumer trigger
 
-`pipeline.yml` (which calls `cli.yml` and `kubernetes-controller.yml`) includes `bindings/**` in its `paths` filter so
-that `cli` and `kubernetes/controller` are rebuilt and tested whenever any binding changes, catching API breakage in
-consumers.
+`pipeline.yml` includes `bindings/**` in its `paths` filter so that `cli` and `kubernetes/controller` are rebuilt
+and tested whenever any binding changes, catching API breakage in consumers before a release.
 
 ---
 
@@ -357,16 +382,15 @@ exactly what `buildGraph` does — it confirms our approach is correct prior art
 
 The chosen approach directly addresses each identified pain point:
 
-* **PR overhead**: `go.work` (generated in CI and locally via `task init/go.work`) allows developers to make
-  cross-binding changes in a single PR. The workspace ensures all interdependent modules resolve against the current
-  tree, not published versions, so a change spanning `bindings/go/credentials` and `bindings/go/helm` can be reviewed
-  and
-  merged together.
+* **PR overhead**: `go.work` (committed to the repo, regenerated via `task init/go.work` when modules change)
+  allows developers to make cross-binding changes in a single PR. The workspace ensures all interdependent modules
+  resolve against the current tree, not published versions, so a change spanning `bindings/go/credentials` and
+  `bindings/go/helm` can be reviewed and merged together.
 * **CI complexity**: module discovery is two steps with no filtering logic. New bindings enroll automatically. All
   binding tests always run, eliminating the correctness gaps that came with change-based filtering.
-* **Release friction**: the phased bulk release computes dependency order, runs tests, gates on human approval, and pins
-  all consumers atomically. Developers no longer need to know or manually enforce the release sequence.
+* **Release friction**: the phased bulk release computes dependency order, runs tests, gates on human approval, and
+  pins all consumers atomically. Developers no longer need to know or manually enforce the release sequence.
 
-The approach trades a small amount of CI compute (running all binding tests on every PR) for correctness and simplicity.
-The phased bulk release with a human gate provides the ordering and consistency guarantees that manual per-module
-releases cannot, while keeping the escape hatch for isolated hotfixes.
+The approach trades a small amount of CI compute (running all binding tests on every PR) for correctness and
+simplicity. The phased bulk release with a human gate provides the ordering and consistency guarantees that manual
+per-module releases cannot, while keeping the escape hatch for isolated hotfixes and new binding bootstrapping.
