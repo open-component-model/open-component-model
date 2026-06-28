@@ -53,7 +53,7 @@ Four concrete problems had to be solved:
 
 ## Decision Drivers
 
-* CI must catch cross-module regressions, not just intra-module failures.
+* CI must catch cross-module regressions, not just single-module failures.
 * Adding a new binding must not require a CI config change.
 * `cli` and `kubernetes/controller` have dedicated build/release workflows and must not be polluted by binding CI.
 * Binding releases must respect dependency order and leave consumers (`cli`, `kubernetes/controller`) in a consistent
@@ -93,7 +93,7 @@ Four concrete problems had to be solved:
 ## Decision Outcome
 
 Keep Go modules with a committed `go.work`, always test all bindings in CI, and use the automated phased bulk release
-as the canonical path. The manual per-module release is retained for isolated hotfixes and for bootstrapping new
+as the canonical path. The manual per-module release is retained for isolated fixes and for bootstrapping new
 bindings. Lint and unit tests use a full checkout; integration tests use sparse-checkout in a parallel matrix.
 
 **Why keep Go modules over a shared library:** Ditching Go modules would eliminate independent versioning, making it
@@ -110,7 +110,7 @@ also gives a stronger correctness guarantee with no filtering logic to maintain.
 order, runs tests, requires human review of the plan before any tags are pushed, and pins consumer `go.mod` files
 (`cli`, `kubernetes/controller`) atomically in the same release commit. Manual per-module releases cannot guarantee
 dependency ordering and create a consistency window (see *Release Strategy* below). The manual workflow is kept as an
-escape hatch for genuine single-module hotfixes with no consumers to update, and as the mechanism for initially
+escape hatch for genuine single-module fixes with no consumers to update, and as the mechanism for initially
 releasing new bindings.
 
 ---
@@ -177,7 +177,7 @@ releasing new bindings.
 * **Pros:** Dependency order guaranteed; human review gate before any tags pushed; consumers pinned atomically.
 * **Cons:** More complex workflow; requires a plan step that probes the dependency graph.
 
-**Manual per-module release (kept for hotfixes and bootstrapping)**
+**Manual per-module release (kept for isolated fixes and bootstrapping)**
 
 * **Pros:** Simple; developer controls exactly which version and when.
 * **Cons:** No dependency ordering; creates a consistency window between dependent modules (see below).
@@ -258,7 +258,7 @@ version of each internal binding dep:
   current with any upstream releases that happened outside the current run.
 - **New binding with no prior tag** → skipped; see *New binding lifecycle* below.
 
-```
+```text
 resolvePins(ordered, tags, consumers, getDeps, getLatestTag) → Map<module, [{name, version}]>
 
 for dep in module's internal binding deps:
@@ -393,4 +393,4 @@ The chosen approach directly addresses each identified pain point:
 
 The approach trades a small amount of CI compute (running all binding tests on every PR) for correctness and
 simplicity. The phased bulk release with a human gate provides the ordering and consistency guarantees that manual
-per-module releases cannot, while keeping the escape hatch for isolated hotfixes and new binding bootstrapping.
+per-module releases cannot, while keeping the escape hatch for isolated fixes and new binding bootstrapping.
