@@ -16,6 +16,7 @@ repository to another. The transfer re-runs automatically whenever the source
 ## Prerequisites
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) set up
+  - For this example, you don't need Kro or Flux. Just a cluster and ocm-controller running.
 - The OCM CLI installed, to build and push the source component
 - A source and a target OCI registry you can push to, with credentials that have
   write access (for example a
@@ -322,7 +323,7 @@ and the target `Repository`'s configuration.
 ### Watch it run
 
 ```bash
-kubectl get replication replication-example -w
+kubectl get replication replication-example -owide
 ```
 
 The transfer proceeds in two stages:
