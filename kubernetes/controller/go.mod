@@ -4,7 +4,7 @@ go 1.26.3
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
-replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20260423074420-acc66fb5367c
+replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20260624224211-f7325504ae36
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
@@ -26,7 +26,7 @@ require (
 
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
-	github.com/docker/cli v29.5.1+incompatible
+	github.com/docker/cli v29.5.2+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	golang.org/x/time v0.15.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
@@ -163,4 +163,4 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 )
 
-replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.0
+replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.1
