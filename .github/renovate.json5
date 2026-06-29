@@ -30,6 +30,8 @@
   packageRules: [
     {
       matchFileNames: ['kubernetes/controller/chart/**'],
+      groupName: 'Kubernetes Controller chart',
+      groupSlug: 'kubernetes-controller-chart',
       enabled: true,
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
@@ -181,6 +183,31 @@
       matchManagers: ['github-actions'],
       matchDepNames: ['open-component-model/.github'],
       enabled: false,
+    },
+    {
+      // Batch non-major controller bumps; more specific groups above still win.
+      // separateMinorPatch overridden to keep minor+patch in a single PR
+      // (global setting splits them otherwise).
+      matchFileNames: ['kubernetes/controller/**'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'Kubernetes Controller dependencies (non-major)',
+      groupSlug: 'kubernetes-controller-deps',
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
+      // Batch all bumps (incl. majors) for the Hugo CLI-docs generator module.
+      // separateMinorPatch overridden so minor+patch share one branch; majors
+      // still get their own branches via separateMultipleMajor (global).
+      matchFileNames: ['website/hack/generate-cli-docs/**'],
+      groupName: 'Website CLI-docs generator dependencies',
+      groupSlug: 'website-cli-docs-deps',
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
     },
   ],
   customDatasources: {
