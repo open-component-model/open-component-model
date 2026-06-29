@@ -22,8 +22,7 @@ The independent-module setup was creating significant friction across the team:
   review harder and slower.
 * **CI complexity**: the initial CI design used change-based filtering to avoid running all binding tests on every PR.
   This required `dorny/paths-filter`, separate signals for `.env` and CI workflow changes, and special-cased expansion
-  rules to catch cross-module regressions. Each correctness gap discovered required another exception. Adding a new
-  binding also required a CI config change.
+  rules to catch cross-module regressions.
 * **Release friction**: releasing a set of related bindings required manually triggering one workflow per binding in the
   correct dependency order. After each release, every dependent binding needed a follow-up PR to update its `go.mod`
   pin to the new version before the next binding could be released. There was no automated guard against out-of-order
