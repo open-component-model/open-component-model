@@ -45,10 +45,10 @@ below they live in two `Secret`s: the `Component` carries the credentials and
 propagates them down, while the `Replication` declares the transfer settings
 itself and references the `Component` to merge in those propagated credentials.
 
-The configuration influences the way the transfer happens. For example, if `recursive`
-is set to none zero number, it will copy all references of a component. `copyMode`
-determines which resources are copied during a transfer operation. These options are the
-same they are on the CLI side.
+The configuration influences the way the transfer happens: `recursive` controls following references,
+`copyMode` controls which resources are transferred, and `uploadType` controls how they are uploaded.
+These options mirror the flags on the `ocm transfer component-version` CLI command, mapped out in the
+configuration step below.
 
 ## Steps
 
@@ -194,10 +194,9 @@ stringData:
   .ocmconfig: |
     type: generic.config.ocm.software/v1
     configurations:
-      - type: transfer.config.ocm.software
+      - type: transfer.config.ocm.software/v1alpha1
         recursive: -1
         copyMode: localBlob
-        uploadType: ociArtifact
 EOF
 ```
 
@@ -207,13 +206,19 @@ EOF
 kubectl apply -f config.yaml
 ```
 
-The `transfer.config.ocm.software` entry controls the transfer itself:
+The `transfer.config.ocm.software` entry controls the transfer itself. Each key maps
+directly to a flag on the `ocm transfer component-version` CLI command:
 
-- `recursive: -1` follows component references; `0` disables recursion.
-- `copyMode: localBlob` and `uploadType: ociArtifact` copy resource content into
-  the target and re-upload OCI artifacts as artifacts rather than as plain blobs.
-- using `copyMode: allResources` with `uploadType: ociArtifact` will initiate a
-  streaming upload if the resource is an oci type (ociArtifact, for example).
+| Config key   | CLI flag           | Effect                                                                                                                                                                                                                                               |
+|--------------|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `recursive`  | `-r, --recursive`  | `-1` follows component references without limit; `0` disables recursion. The CLI flag is a boolean: set means `-1`, unset means `0`.                                                                                                                 |
+| `copyMode`   | `--copy-resources` | `localBlob` (default) includes only local-blob resources; `allResources` also pulls in remote OCI artifacts and Helm charts. Set the CLI flag for `allResources`, leave it unset for `localBlob`.                                                    |
+| `uploadType` | `-u, --upload-as`  | How resources are stored in the target: `default` lets the transfer decide, `localBlob` embeds them in the descriptor, `ociArtifact` uploads them as separate OCI artifacts (OCI target only). Only relevant for resources that `copyMode` includes. |
+
+The example sets `recursive: -1` and `copyMode: localBlob` because the sample components
+carry blob resources, and omits `uploadType` to let the transfer choose the right storage
+for the OCI target. To use streaming for resources that are themselves OCI artifacts, set
+`copyMode: allResources` with `uploadType: ociArtifact`.
 
 {{< callout context="note" title="Propagating a single config" icon="outline/info-circle" >}}
 Splitting the configuration is optional. If you set `policy: Propagate`, you can
