@@ -23,10 +23,6 @@ The independent-module setup was creating significant friction across the team:
 * **CI complexity**: the initial CI design used change-based filtering to avoid running all binding tests on every PR.
   This required `dorny/paths-filter`, separate signals for `.env` and CI workflow changes, and special-cased expansion
   rules to catch cross-module regressions.
-* **Release friction**: releasing a set of related bindings required manually triggering one workflow per binding in the
-  correct dependency order. After each release, every dependent binding needed a follow-up PR to update its `go.mod`
-  pin to the new version before the next binding could be released. There was no automated guard against out-of-order
-  releases or against a manual release conflicting with an ongoing bulk release.
 
 The friction was in the tooling around the module boundary model, not in the model itself. This ADR documents the
 multiple
@@ -395,8 +391,9 @@ The chosen approach directly addresses each identified pain point:
   can be reviewed and merged together.
 * **CI complexity**: module discovery is two steps with no filtering logic. All
   binding tests always run, eliminating the correctness gaps that came with change-based filtering.
-* **Release friction**: the phased bulk release computes dependency order, runs tests, gates on human approval, and
-  pins all consumers atomically. Developers no longer need to know or manually enforce the release sequence.
+* **Release flow**: the existing release flow (`release.yml`) is extended to invoke `release-bindings.yaml` before
+  tagging the CLI and controller. Binding tags are created automatically in dependency order as part of every
+  release, with no manual steps required.
 
 The approach trades CI compute (running all binding tests on every PR) for correctness and
 simplicity. The phased bulk release with a human gate provides the ordering and consistency guarantees that manual
