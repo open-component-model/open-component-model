@@ -289,15 +289,21 @@ graph-pruning divergence between workspace and standalone resolution before the 
 ### New binding lifecycle
 
 A binding that has never been tagged is skipped by `planRelease` — it appears in the gate summary as
-`(no prior tag; skipped)` and receives no semver tag in the bulk release. To enroll a new binding:
+`(no prior tag; skipped)` and receives no semver tag in the bulk release. During this pre-release period the
+binding is still usable: dependents can reference it via a Go pseudo-version
+(`v0.0.0-<timestamp>-<commit>`) which the Go toolchain derives from the commit SHA. In workspace mode
+(`go.work`) this is transparent to developers — the local tree is used directly regardless of what version
+is declared in `go.mod`.
+
+When the binding is ready for stable versioning:
 
 1. Merge the binding's implementation to `main`.
 2. Manually trigger `release-go-submodule.yaml` targeting the new binding to create its initial tag
    (e.g., `bindings/go/newbinding/v0.0.1`).
 3. From the next bulk release onwards, `planRelease` picks it up normally and `pinDeps` manages its consumers.
 
-This makes the promotion of a new binding an explicit, intentional act rather than an automatic side-effect of the
-first bulk release that touches it.
+This makes the promotion of a new binding to stable versioning an explicit, intentional act rather than an
+automatic side-effect of the first bulk release that touches it.
 
 ---
 
