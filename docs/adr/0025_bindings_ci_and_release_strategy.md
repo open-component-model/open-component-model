@@ -390,11 +390,11 @@ The chosen approach directly addresses each identified pain point:
   to make cross-binding changes in a single PR. The workspace ensures all interdependent modules resolve against
   the current tree, not published versions, so a change spanning `bindings/go/credentials` and `bindings/go/helm`
   can be reviewed and merged together.
-* **CI complexity**: module discovery is two steps with no filtering logic. New bindings enroll automatically. All
+* **CI complexity**: module discovery is two steps with no filtering logic. All
   binding tests always run, eliminating the correctness gaps that came with change-based filtering.
 * **Release friction**: the phased bulk release computes dependency order, runs tests, gates on human approval, and
   pins all consumers atomically. Developers no longer need to know or manually enforce the release sequence.
 
-The approach trades a small amount of CI compute (running all binding tests on every PR) for correctness and
+The approach trades CI compute (running all binding tests on every PR) for correctness and
 simplicity. The phased bulk release with a human gate provides the ordering and consistency guarantees that manual
 per-module releases cannot, while keeping the escape hatch for isolated fixes and new binding bootstrapping.
