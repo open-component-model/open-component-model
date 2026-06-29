@@ -241,6 +241,16 @@ git log <lastTag>..HEAD -- bindings/go/<module>
 tags fetched from upstream). A module with no prior tag at all is never considered for automatic release.
 See *New binding lifecycle* below.
 
+### go.sum correctness requirement
+
+The monorepo must build correctly with or without `go.work` — in feature branches, in sparse checkouts, and
+for contributors who have not yet run `task init/go.work`. This means every binding tag must point to a commit
+where `go.mod` and `go.sum` are both correct and complete for that module's declared dependencies.
+
+This creates a fundamental ordering constraint: to update `blob/go.sum` with a checksum for `runtime@v0.0.9`,
+the Go toolchain needs to fetch `runtime@v0.0.9` from the module proxy. But the proxy only serves it after
+the `runtime/v0.0.9` tag has been pushed. The two operations cannot happen in the same step.
+
 ### Phased bulk release
 
 `release-bindings.yaml` runs four ordered phases:
@@ -251,40 +261,39 @@ See *New binding lifecycle* below.
 2. **Test**: run unit and integration tests for every changed module in parallel.
 3. **Gate**: environment approval — a reviewer sees the full plan (changed modules, next tags, bump kinds,
    changelogs) and test results before any tags are pushed.
-4. **Release**: pin `go.mod` files in topo order, then pin `cli` and `kubernetes/controller`. Commit all pin
-   updates, create unsigned annotated tags, and push.
+4. **Release**: for each changed module in topological order — pin `go.mod`, update `go.sum`, commit, tag,
+   push. Then pin and tidy `cli` and `kubernetes/controller` in a final commit.
 
-This ensures dependency order is respected and consumers are pinned in the same operation, closing the consistency
-window present in manual releases.
+The release phase processes one module at a time. Each tag is pushed before the next dependent module is
+processed, so the proxy has the new version available when that module runs `go mod tidy`.
 
-### Dependency pinning (`pinDeps`)
+### Dependency pinning and go.sum update
 
-After publishing new tags, `pinDeps` updates every binding's and every consumer's `go.mod` to the authoritative
-version of each internal binding dep:
+For each changed binding module in topological order, the release does the following:
 
 ```mermaid
-flowchart TD
-    A([for each dep in\nmodule's binding deps]) --> B{dep in\nordered set?}
-    B -- No\nexternal package --> Z([ignore])
-    B -- Yes\ninternal binding --> C{dep released\nthis run?}
-    C -- Yes\ndep in tags --> D[go mod edit -require\nto new tag]
-    C -- No\nskipped / unchanged --> E{latestTag dep\nnot null?}
-    E -- Yes\nalready released --> F[go mod edit -require\nto latest existing tag]
-    E -- No\nnever tagged --> G([skip\ngo pseudo version])
-    D --> H([next dep])
-    F --> H
-    Z --> H
-    G --> H
+flowchart LR
+    A([start]) --> B[pin go.mod\ngo mod edit -require]
+    B --> C[update go.sum\ngo mod tidy]
+    C --> D[commit\ngo.mod + go.sum]
+    D --> E[tag + push\nproxy indexes it]
+    E --> F([next module])
 ```
 
-- **Released this run**: `go mod edit -require` to the new tag computed by `planRelease`.
-- **Skipped/unchanged with an existing tag**: `go mod edit -require` to `latestTag()`, ensuring consumers stay
-  current with upstream releases that happened outside the current run.
-- **Never tagged**: skipped. See *New binding lifecycle* below.
+By the time a module is processed, all its dependencies have already been tagged and pushed in previous
+iterations, so `go mod tidy` can fetch their checksums from the proxy. Each tag therefore points to a commit
+where `go.sum` is complete and valid.
 
-`pinDeps` applies the result with `go mod edit -require` — a pure file edit with no network access. `go.sum` is not
-updated during the release. It is computed on the first standalone (non-workspace) build after the proxy has indexed
-the new tags.
+The dep version resolution follows the same logic regardless of whether a dep was released this run or
+previously:
+
+- **Released this run**: use the new tag computed by `planRelease`.
+- **Skipped/unchanged with an existing tag**: use the current latest tag, so consumers stay current with
+  upstream releases that happened outside the current run.
+- **Never tagged**: skip. See *New binding lifecycle* below.
+
+After all binding tags are pushed, `cli` and `kubernetes/controller` are pinned and tidied in a single
+final commit. By that point all binding tags exist on the proxy, so their `go.sum` entries are also complete.
 
 ### go.work in the release build
 
@@ -292,10 +301,10 @@ PR and CI builds use `go.work` throughout so that in-flight binding changes reso
 requiring published tags.
 
 Release builds (`cli.yml`, `kubernetes-controller.yml` called from `release.yml`) run with `GOWORK=off`. By the time
-these builds run, `release-bindings.yaml` has already pushed all binding semver tags and committed the `go.mod` pins.
-Disabling the workspace forces the build to resolve dependencies exclusively from those pins — exactly the dependency
-graph external consumers will get via `go get`. This validates that the pins are correct and catches any MVS or
-graph-pruning divergence between workspace and standalone resolution before the RC tag is created.
+these builds run, `release-bindings.yaml` has already pushed all binding semver tags and committed correct `go.mod`
+and `go.sum` files for every module. Disabling the workspace forces the build to resolve dependencies exclusively
+from those pins and checksums — exactly what an external consumer gets via `go get`. This validates that the pins
+and checksums are correct before the RC tag is created.
 
 ### New binding lifecycle
 
