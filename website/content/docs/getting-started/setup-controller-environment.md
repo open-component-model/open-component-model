@@ -31,10 +31,10 @@ scenario.
 
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) installed
 - [Helm](https://helm.sh/docs/intro/install/) installed
-- [Flux CLI](https://fluxcd.io/flux/installation/#install-the-flux-cli) installed
 - [kind](https://kind.sigs.k8s.io/docs/user/quick-start) installed (or access to a remote Kubernetes cluster)
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
+- **Deployer:** [Flux CLI](https://fluxcd.io/flux/installation/#install-the-flux-cli) (if using Flux) or nothing extra (if using Argo CD — installed via `kubectl apply`)
 
 ## Setup Workflow
 
@@ -140,11 +140,13 @@ kro-5644d5759f-82nsx   1/1     Running   0          2m22s
 {{< /step >}}
 {{< step >}}
 
-### Install a Deployer: Flux
+### Install a Deployer
 
-We use [Flux](https://fluxcd.io/) as deployer. In theory, you could use any other deployer
-that is able to apply a deployable resource to a Kubernetes cluster,
-for instance [Argo CD](https://argo-cd.readthedocs.io/en/stable/).
+Both [Flux](https://fluxcd.io/) and [Argo CD](https://argo-cd.readthedocs.io/en/stable/) are supported as deployers.
+Choose the one you're already using or prefer.
+
+{{< tabs "deployer-install" >}}
+{{< tab "Flux" >}}
 
 Install the controllers using the Flux CLI:
 
@@ -219,6 +221,83 @@ source-controller-6ff87cb475-2h2lv           1/1     Running     0              
 ```
 </details>
 
+{{< /tab >}}
+{{< tab "Argo CD" >}}
+
+Install Argo CD into its own namespace:
+
+```shell
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+```
+
+Wait for all pods to become ready:
+
+```shell
+kubectl wait --for=condition=Ready pods --all -n argocd --timeout=120s
+```
+
+<details>
+<summary>You should see this output</summary>
+
+```text
+pod/argocd-application-controller-0 condition met
+pod/argocd-applicationset-controller-68fd97ccb6-nkcbg condition met
+pod/argocd-dex-server-99ff57675-9qk2l condition met
+pod/argocd-notifications-controller-8596549fb6-bldjz condition met
+pod/argocd-redis-6f6867546c-vs6c6 condition met
+pod/argocd-repo-server-59444f4bbb-gbzxn condition met
+pod/argocd-server-765575f778-j8krk condition met
+```
+</details>
+<br>
+
+Verify Argo CD is running:
+
+```shell
+kubectl get pods -n argocd
+```
+
+<details>
+<summary>You should see this output</summary>
+
+```text
+NAME                                                READY   STATUS    RESTARTS   AGE
+argocd-application-controller-0                     1/1     Running   0          42s
+argocd-applicationset-controller-68fd97ccb6-nkcbg   1/1     Running   0          43s
+argocd-dex-server-99ff57675-9qk2l                   1/1     Running   0          43s
+argocd-notifications-controller-8596549fb6-bldjz    1/1     Running   0          43s
+argocd-redis-6f6867546c-vs6c6                       1/1     Running   0          42s
+argocd-repo-server-59444f4bbb-gbzxn                 1/1     Running   0          42s
+argocd-server-765575f778-j8krk                      1/1     Running   0          42s
+```
+</details>
+<br>
+
+Enable OCI Helm support — required for deploying Helm charts from OCI registries:
+
+```shell
+kubectl patch configmap argocd-cmd-params-cm -n argocd \
+  --type merge -p '{"data":{"application.helm.enableOCI":"true"}}'
+kubectl rollout restart deployment argocd-repo-server -n argocd
+kubectl rollout status deployment argocd-repo-server -n argocd --timeout=60s
+```
+
+<details>
+<summary>You should see this output</summary>
+
+```text
+configmap/argocd-cmd-params-cm patched
+deployment.apps/argocd-repo-server restarted
+Waiting for deployment "argocd-repo-server" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "argocd-repo-server" rollout to finish: 1 old replicas are pending termination...
+deployment "argocd-repo-server" successfully rolled out
+```
+</details>
+
+{{< /tab >}}
+{{< /tabs >}}
+
 {{< /step >}}
 {{< step >}}
 
@@ -273,10 +352,10 @@ ocm-k8s-toolkit-controller-manager-79b7975755-vxtqt   1/1     Running   0       
 
 ### Verify Complete Setup
 
-Check all components are running:
+Check all components are running (adapt the namespace filter to the deployer you installed):
 
 ```shell
-kubectl get pods --all-namespaces | grep -E '(kro-system|flux-system|ocm-k8s-toolkit-system)'
+kubectl get pods --all-namespaces | grep -E '(kro-system|flux-system|argocd|ocm-k8s-toolkit-system)'
 ```
 
 <details>

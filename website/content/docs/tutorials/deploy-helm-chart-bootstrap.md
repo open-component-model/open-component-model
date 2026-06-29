@@ -8,6 +8,10 @@ toc: true
 
 ## What You'll Learn
 
+{{< callout context="tip" title="Argo CD users" icon="outline/info-circle" >}}
+This tutorial uses Flux as the deployer. The bootstrap pattern works identically with Argo CD — the `ResourceGraphDefinition` inside the OCM component simply contains an Argo CD `Application` resource instead of Flux's `OCIRepository` + `HelmRelease`. See [Use Argo CD as a Deployer]({{< relref "/docs/how-to/use-argocd-as-deployer.md" >}}) for the Argo CD-specific patterns.
+{{< /callout >}}
+
 In this tutorial, you'll learn how to package deployment instructions (a `ResourceGraphDefinition`) inside an OCM
 component, so operators can deploy your Helm chart without knowing the underlying resource structure. You'll also learn
 **localization**—how to automatically update image references in the
