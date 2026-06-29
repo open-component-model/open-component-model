@@ -259,7 +259,7 @@ flowchart TD
     C -- Yes\ndep in tags --> D[go mod edit -require\nto new tag]
     C -- No\nskipped / unchanged --> E{latestTag dep\nnot null?}
     E -- Yes\nalready released --> F[go mod edit -require\nto latest existing tag]
-    E -- No\nnever tagged --> G([skip\nbootstrap manually first])
+    E -- No\nnever tagged --> G([skip\ngo pseudo version])
     D --> H([next dep])
     F --> H
     Z --> H
@@ -285,27 +285,6 @@ these builds run, `release-bindings.yaml` has already pushed all binding semver 
 Disabling the workspace forces the build to resolve dependencies exclusively from those pins — exactly the dependency
 graph external consumers will get via `go get`. This validates that the pins are correct and catches any MVS or
 graph-pruning divergence between workspace and standalone resolution before the RC tag is created.
-
-```mermaid
-sequenceDiagram
-    participant RB as release-bindings.yaml
-    participant RC as tag_rc
-    participant Build as cli.yml / controller.yml
-    participant Proxy as module proxy
-    participant Ext as external consumer
-
-    RB->>RB: pinDeps — go mod edit in bindings (topo order) + cli + controller
-    RB->>RB: git commit -s (pin commit) + push binding semver tags
-    RC->>RC: checkout branch HEAD (= pin commit)
-    RC->>RC: create RC tag at pin commit
-    Build->>Build: checkout cli/ + bindings/ at RC tag
-    Build->>Build: compile (GOWORK=off → resolves go.mod pins directly)
-
-    Ext->>Proxy: go get cli@v0.5.0
-    Proxy->>Proxy: read cli/go.mod at cli/v0.5.0 tag
-    Proxy->>Proxy: fetch binding deps at pinned semver versions
-    Proxy-->>Ext: consistent dependency graph
-```
 
 ### New binding lifecycle
 
