@@ -230,13 +230,26 @@ but its published `go.mod` references the old API. Any consumer resolving via `g
 build. The `concurrency: group: binding-release` guard prevents concurrent releases from racing but does not close
 this window.
 
+### Change detection
+
+A binding is scheduled for release when there is at least one commit that touched its directory since its
+last semver tag:
+
+```
+git log <lastTag>..HEAD -- bindings/go/<module>
+```
+
+`lastTag` is the highest semver tag matching `bindings/go/<module>/v*` found in the repository (including
+tags fetched from upstream). A module with no prior tag at all is never considered for automatic release —
+see *New binding lifecycle* below.
+
 ### Phased bulk release
 
 `release-bindings.yaml` runs four ordered phases:
 
 1. **Plan**: discover all binding modules; topologically sort by the dependency graph derived from
-   `go mod edit -json`; compute next semver tags for modules with unreleased commits; detect breaking
-   changes from Conventional Commit markers (`feat!:`, `BREAKING CHANGE:`).
+   `go mod edit -json`; for each module run the change detection above; compute next semver tags for
+   changed modules; detect breaking changes from Conventional Commit markers (`feat!:`, `BREAKING CHANGE:`).
 2. **Test**: run unit and integration tests for every changed module in parallel.
 3. **Gate**: environment approval — a reviewer sees the full plan (changed modules, next tags, bump kinds,
    changelogs) and test results before any tags are pushed.
