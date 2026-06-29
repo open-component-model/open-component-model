@@ -29,7 +29,7 @@ The independent-module setup was creating significant friction across the team:
   pin to the new version before the next binding could be released. There was no automated guard against out-of-order
   releases or against a manual release conflicting with an ongoing bulk release.
 
-The friction was in the tooling around the module boundary model, not in the model itself. This ADR documents the three
+The friction was in the tooling around the module boundary model, not in the model itself. This ADR documents the multiple
 candidate directions evaluated and explains how the chosen approach resolves each pain point.
 
 ### Context and Problem Statement
@@ -40,8 +40,8 @@ Four concrete problems had to be solved:
    change each time one is added.
 2. **Cross-module regressions**: a change to `bindings/go/credentials` can silently break `bindings/go/helm` or `cli` if
    only the changed module is tested.
-3. **Workspace management**: the repo-wide `go.work` at the root is always present; it must reflect the checked-out
-   tree so that workspace-aware commands resolve all dependencies locally during development and CI.
+3. **Workspace management**: the repo-wide `go.work` at the root is always present during development or is generated within the CI workflows. 
+   It must reflect the checked-out tree so that workspace-aware commands resolve all dependencies locally during development and CI.
 4. **Coordinated releases**: bindings must be released in dependency order; a manual per-module release can leave
    dependent modules in an inconsistent state.
 
@@ -92,7 +92,7 @@ Four concrete problems had to be solved:
 
 ## Decision Outcome
 
-Keep Go modules with a committed `go.work`, always test all bindings in CI, and use the automated phased bulk release
+Keep Go modules with a gitignored `go.work`, always test all bindings in CI, and use the automated phased bulk release
 as the canonical path. The manual per-module release is retained for isolated fixes and for bootstrapping new
 bindings. Lint and unit tests use a full checkout; integration tests use sparse-checkout in a parallel matrix.
 
@@ -192,7 +192,7 @@ committed `go.work` referencing all 20+ modules while a sparse checkout only has
 on missing paths. By generating `go.work` after checkout, the workspace is automatically scoped to the checked-out
 tree.
 
-`discoverModules()` in `.github/scripts/release-bindings.js` reads the workspace via `go work edit -json` to
+`discoverModules()` in the workflow script reads the workspace via `go work edit -json` to
 enumerate all binding modules without any hardcoded list.
 
 The authoritative Go version is stored in `.go-version` (repo root). All CI jobs that need a workspace use:
@@ -208,13 +208,14 @@ git-ignored it will never be present after a fresh checkout.
 
 ### Where sparse-checkout is used
 
-| Job                           | Sparse checkout                               | Workspace               |
-|-------------------------------|-----------------------------------------------|-------------------------|
-| `golangci_lint`               | full checkout                                 | `task init/go.work`     |
-| `test-bindings` unit          | `bindings/`                                   | `task init/go.work`     |
-| `test-bindings` integration   | `bindings/<module>/integration` (per-matrix)  | `task init/go.work`     |
-| `kubernetes-controller` build | `kubernetes/controller/ + bindings/ + config` | `task init/go.work`     |
-| `e2e`, `conformance`          | module-specific + config                      | none                    |
+| Job                           | Sparse checkout                              | Workspace           |
+|-------------------------------|----------------------------------------------|---------------------|
+| `golangci_lint`               | full checkout                                | `task init/go.work` |
+| `test-bindings` unit          | `bindings/`                                  | `task init/go.work` |
+| `test-bindings` integration   | `bindings/<module>/integration` (per-matrix) | `task init/go.work` |
+| `cli` build                   | `cli/` + `.github/scripts`                   | none (go.mod only)  |
+| `kubernetes-controller` build | `kubernetes/controller/` + `.github/scripts` | none (go.mod only)  |
+| `e2e`, `conformance`          | module-specific + config                     | none                |
 
 ---
 
