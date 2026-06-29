@@ -2,11 +2,8 @@ package constructor
 
 import (
 	"bytes"
-	"context"
-	"fmt"
 	"io"
 	"slices"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,123 +20,8 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-// mockTargetRepository implements TargetRepository for testing
-type mockTargetRepository struct {
-	mu                     sync.Mutex
-	components             map[string]*descriptor.Descriptor
-	addedLocalResources    []*descriptor.Resource
-	addedLocalResourceData map[string]blob.ReadOnlyBlob // resource identity -> blob data
-	addedSources           []*descriptor.Source
-	addedVersions          []*descriptor.Descriptor
-}
-
-func newMockTargetRepository() *mockTargetRepository {
-	return &mockTargetRepository{
-		components:             make(map[string]*descriptor.Descriptor),
-		addedLocalResourceData: make(map[string]blob.ReadOnlyBlob),
-	}
-}
-
-func (m *mockTargetRepository) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	key := name + ":" + version
-	if desc, exists := m.components[key]; exists {
-		return desc, nil
-	}
-	return nil, fmt.Errorf("component version %q not found: %w", name+":"+version, repository.ErrNotFound)
-}
-
-func (m *mockTargetRepository) GetTargetRepository(ctx context.Context, component *constructorv1.Component) (TargetRepository, error) {
-	return m, nil
-}
-
-func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.addedLocalResources = append(m.addedLocalResources, resource)
-	// Store the blob data so we can verify it later
-	m.addedLocalResourceData[resource.ToIdentity().String()] = data
-	return resource, nil
-}
-
-func (m *mockTargetRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.addedSources = append(m.addedSources, source)
-	return source, nil
-}
-
-func (m *mockTargetRepository) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.addedVersions = append(m.addedVersions, desc)
-	key := desc.Component.Name + ":" + desc.Component.Version
-	m.components[key] = desc
-	return nil
-}
-
-// mockTargetRepositoryProvider implements TargetRepositoryProvider for testing
-type mockTargetRepositoryProvider struct {
-	repo TargetRepository
-}
-
-func (m *mockTargetRepositoryProvider) GetTargetRepository(ctx context.Context, component *constructorruntime.Component) (TargetRepository, error) {
-	return m.repo, nil
-}
-
-// componentVersionRepoProvider wraps a ComponentVersionRepository to provide it as TargetRepository
-type componentVersionRepoProvider struct {
-	repo repository.ComponentVersionRepository
-}
-
-func (c *componentVersionRepoProvider) GetTargetRepository(ctx context.Context, component *constructorruntime.Component) (TargetRepository, error) {
-	// Wrap the ComponentVersionRepository to implement TargetRepository
-	return &targetRepoWrapper{repo: c.repo}, nil
-}
-
-// targetRepoWrapper wraps a ComponentVersionRepository to implement TargetRepository
-type targetRepoWrapper struct {
-	repo repository.ComponentVersionRepository
-}
-
-func (t *targetRepoWrapper) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
-	return t.repo.GetComponentVersion(ctx, name, version)
-}
-
-func (t *targetRepoWrapper) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
-	return t.repo.AddComponentVersion(ctx, desc)
-}
-
-func (t *targetRepoWrapper) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	return t.repo.AddLocalResource(ctx, component, version, resource, data)
-}
-
-func (t *targetRepoWrapper) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	return t.repo.AddLocalSource(ctx, component, version, source, data)
-}
-
-// mockBlob implements blob.ReadOnlyBlob for testing
-type mockBlob struct {
-	mediaType string
-	data      []byte
-}
-
-func (m *mockBlob) Get() ([]byte, error) {
-	return m.data, nil
-}
-
-func (m *mockBlob) MediaType() (string, error) {
-	return m.mediaType, nil
-}
-
-func (m *mockBlob) ReadCloser() (io.ReadCloser, error) {
-	return io.NopCloser(bytes.NewReader(m.data)), nil
-}
 
 func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 	t.Parallel()
@@ -866,7 +748,7 @@ components:
 
 	opts := Options{
 		SourceInputMethodProvider: sourceProvider,
-		TargetRepositoryProvider:  &componentVersionRepoProvider{repo: ctfRepo},
+		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: ctfRepo},
 	}
 
 	constructorInstance := NewDefaultConstructor(converted, opts)

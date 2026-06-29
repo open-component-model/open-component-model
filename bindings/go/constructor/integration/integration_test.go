@@ -124,6 +124,15 @@ components:
 // returns a component version repository targeting it over plain HTTP.
 func launchRegistryRepository(t *testing.T) repository.ComponentVersionRepository {
 	t.Helper()
+	repo, _ := launchRegistryRepositoryWithResolver(t)
+	return repo
+}
+
+// launchRegistryRepositoryWithResolver is like [launchRegistryRepository] but
+// also returns the [ocmoci.Resolver] backing the repository, so callers can
+// inspect the underlying OCI store (e.g. to list referrers).
+func launchRegistryRepositoryWithResolver(t *testing.T) (repository.ComponentVersionRepository, ocmoci.Resolver) {
+	t.Helper()
 	ctx := context.Background()
 	r := require.New(t)
 
@@ -150,7 +159,7 @@ func launchRegistryRepository(t *testing.T) repository.ComponentVersionRepositor
 
 	repo, err := ocmoci.NewRepository(ocmoci.WithResolver(resolver), ocmoci.WithTempDir(t.TempDir()))
 	r.NoError(err)
-	return repo
+	return repo, resolver
 }
 
 func referenceByName(t *testing.T, desc *descriptor.Descriptor, name string) descriptor.Reference {

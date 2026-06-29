@@ -91,6 +91,16 @@ const (
 	ExternalRelation ResourceRelation = "external"
 )
 
+// OwnershipPolicy controls whether ownership is attached to a resource during construction.
+type OwnershipPolicy string
+
+const (
+	// OwnershipPolicyNever is the default: no ownership is recorded.
+	OwnershipPolicyNever OwnershipPolicy = "Never"
+	// OwnershipPolicyAlways records ownership for the resource.
+	OwnershipPolicyAlways OwnershipPolicy = "Always"
+)
+
 // A Resource is a delivery artifact, intended for deployment into a runtime environment, or describing additional content,
 // relevant for a deployment mechanism.
 //
@@ -113,8 +123,22 @@ type Resource struct {
 	// Relation describes the relation of the resource to the component.
 	// Can be a local or external resource.
 	Relation ResourceRelation `json:"relation,omitempty"`
+	// Options bundles optional, construction-time directives for the resource
+	// It is omitted entirely when no options are set.
+	Options *ResourceOptions `json:"options,omitempty"`
 
 	AccessOrInput `json:",inline"`
+}
+
+// ResourceOptions bundles optional, construction-time directives for a resource.
+// These options influence how the resource is handled during construction
+// but are not themselves persisted to the component descriptor.
+// +k8s:deepcopy-gen=true
+type ResourceOptions struct {
+	// OwnershipPolicy controls whether ownership information (i.e. component
+	// name and version) are attached to this resource during construction.
+	// Defaults to "Never" when unset.
+	OwnershipPolicy OwnershipPolicy `json:"ownershipPolicy,omitempty"`
 }
 
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.

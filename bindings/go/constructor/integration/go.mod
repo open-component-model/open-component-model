@@ -3,15 +3,21 @@ module ocm.software/open-component-model/bindings/go/constructor/integration
 go 1.26.3
 
 require (
+	github.com/opencontainers/go-digest v1.0.0
+	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.42.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-00010101000000-000000000000
+	ocm.software/open-component-model/bindings/go/constructor v0.0.9
+	ocm.software/open-component-model/bindings/go/ctf v0.4.1
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260625065312-d374c10f9e61
-	ocm.software/open-component-model/bindings/go/oci v0.0.46
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
+	ocm.software/open-component-model/bindings/go/input/file v0.0.5
+	ocm.software/open-component-model/bindings/go/oci v0.0.47
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
+	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -34,6 +40,7 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
@@ -51,8 +58,6 @@ require (
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/nlepage/go-tarfs v1.2.1 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
@@ -75,11 +80,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.15 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14 // indirect
-	ocm.software/open-component-model/bindings/go/ctf v0.4.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260625071532-ea5a17b8a42c // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 // indirect
-	oras.land/oras-go/v2 v2.6.0 // indirect
 )
 
 replace ocm.software/open-component-model/bindings/go/constructor => ../
