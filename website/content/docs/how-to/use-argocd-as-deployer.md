@@ -10,10 +10,15 @@ This guide shows how to use [Argo CD](https://argo-cd.readthedocs.io/en/stable/)
 setup, as an alternative to Flux. Argo CD and Flux are peer options — you express the deployer by including the
 appropriate resource in your `ResourceGraphDefinition`.
 
+## Estimated time
+
+~10 minutes
+
 ## Prerequisites
 
-- [Controller environment]({{< relref "setup-controller-environment.md" >}}) with OCM Controllers and kro installed,
-  and Argo CD chosen as the deployer
+- [Controller environment]({{< relref "setup-controller-environment.md" >}}) set up with OCM Controllers, kro, and
+  Argo CD installed (follow the **Argo CD** tab in the
+  [Install a Deployer]({{< relref "setup-controller-environment.md" >}}#install-a-deployer) section)
 - [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions`
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry
