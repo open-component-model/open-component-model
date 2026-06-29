@@ -15,7 +15,7 @@ import `bindings/go/credentials` or `bindings/go/oci`) and also consumed by top-
 
 The independent-module setup was creating significant friction across the team:
 
-* **PR overhead**: a single logical change (e.g., adding a new credential type that spans multiple bindings) required
+* PR overhead: a single logical change (e.g., adding a new credential type that spans multiple bindings) required
   a strict sequential chain: merge a PR for the base binding, release it, then open the next PR for the dependent
   binding combining the `go.mod` pin update with the functional changes, merge it, release it, and repeat for every
   binding in the dependency chain. Reviewers saw each PR in isolation without the context of the broader change, making
@@ -28,19 +28,22 @@ The independent-module setup was creating significant friction across the team:
   pin to the new version before the next binding could be released. There was no automated guard against out-of-order
   releases or against a manual release conflicting with an ongoing bulk release.
 
-The friction was in the tooling around the module boundary model, not in the model itself. This ADR documents the multiple
+The friction was in the tooling around the module boundary model, not in the model itself. This ADR documents the
+multiple
 candidate directions evaluated and explains how the chosen approach resolves each pain point.
 
 ### Context and Problem Statement
 
 Four concrete problems had to be solved:
 
-1. **Scalable CI enrollment**: the binding set grows over time. CI must cover all bindings without requiring a config
-   change each time one is added.
+1. **Cross-module pull-requests**: changes relating to multiple bindings can now be provided in one PR instead of having
+   a PR per binding change with binding releases in-between.
 2. **Cross-module regressions**: a change to `bindings/go/credentials` can silently break `bindings/go/helm` or `cli` if
    only the changed module is tested.
-3. **Workspace management**: the repo-wide `go.work` at the root is always present during development or is generated within the CI workflows.
-   It must reflect the checked-out tree so that workspace-aware commands resolve all dependencies locally during development and CI.
+3. **Workspace management**: the repo-wide `go.work` at the root is always present during development or is generated
+   within the CI workflows.
+   It must reflect the checked-out tree so that workspace-aware commands resolve all dependencies locally during
+   development and CI.
 4. **Coordinated releases**: bindings must be released in dependency order. A manual per-module release can leave
    dependent modules in an inconsistent state.
 
@@ -53,7 +56,7 @@ Four concrete problems had to be solved:
 ## Decision Drivers
 
 * CI must catch cross-module regressions, not just single-module failures.
-* Adding a new binding must not require a CI config change.
+* Developer UX must allow cross-binding pull-requests without the need to release a binding in-between.
 * `cli` and `kubernetes/controller` have dedicated build/release workflows and must not be polluted by binding CI.
 * Binding releases must respect dependency order and leave consumers (`cli`, `kubernetes/controller`) in a consistent
   pinned state.
@@ -136,8 +139,7 @@ releasing new bindings.
 
 **Always test all bindings (selected)**
 
-* **Pros:** Always catches cross-module regressions. Zero-config enrollment for new bindings — adding a module
-  under `bindings/go/` is sufficient. Unit tests run in a single job via `task bindings/test`
+* **Pros:** Always catches cross-module regressions. Unit tests run in a single job via `task bindings/test`
   (`go test ./bindings/go/...`): one runner, one Go setup, shared build cache.
 * **Cons:** All binding unit tests run on every code-touching PR. Docs-only PRs can be excluded via
   `paths-ignore`. Integration tests run as a parallel matrix because they are I/O-bound (testcontainers,
@@ -335,8 +337,7 @@ Lint (`task lint`) and unit tests (`task bindings/test`) run in single jobs with
 they operate across the full workspace. Integration tests use a matrix since each module is I/O-bound
 and `sigstore/integration` requires a different runner. Non-binding modules (`cli`, `kubernetes/controller`)
 are excluded and have dedicated workflows. Adding a new binding under `bindings/go/` automatically
-enrolls it in lint, unit tests, and — if it has a `test/integration` target — the integration matrix,
-with no config change required.
+enrolls it in lint, unit tests, and — if it has a `test/integration` target — the integration matrix.
 
 ### Dependency graph and topological sort
 
@@ -344,7 +345,9 @@ with no config change required.
 
 ```js
 // For each binding module:
-internalDeps = go mod edit -json | Require[]
+internalDeps = go
+mod
+edit - json | Require[]
     .filter(path => path.startsWith("ocm.software/open-component-model/bindings/go/"))
 
 // Topological sort (Kahn's algorithm) — deps precede their dependents
