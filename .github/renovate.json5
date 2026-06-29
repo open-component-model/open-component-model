@@ -185,10 +185,16 @@
       enabled: false,
     },
     {
-      // Batch non-major controller bumps; more specific groups above still win.
+      // Batch non-major controller bumps. The chart subtree is excluded so the
+      // dedicated 'Kubernetes Controller chart' group above is not overwritten
+      // by this later rule (Renovate merges matching rules in order; last write
+      // wins on conflicting fields like groupName).
       // separateMinorPatch overridden to keep minor+patch in a single PR
       // (global setting splits them otherwise).
-      matchFileNames: ['kubernetes/controller/**'],
+      matchFileNames: [
+        'kubernetes/controller/**',
+        '!kubernetes/controller/chart/**',
+      ],
       matchUpdateTypes: ['minor', 'patch'],
       groupName: 'Kubernetes Controller dependencies (non-major)',
       groupSlug: 'kubernetes-controller-deps',
