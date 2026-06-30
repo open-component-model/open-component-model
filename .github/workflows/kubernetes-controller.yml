@@ -147,10 +147,15 @@ jobs:
         working-directory: ${{ env.LOCATION }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          # PR gates (conformance + e2e) only run on arm64, so build host-arch
+          # only and skip the second cross-compile. Push/release builds stay
+          # multi-arch because the published image must serve amd64 too.
+          PLATFORMS: ${{ github.event_name == 'pull_request' && 'linux/arm64' || 'linux/arm64,linux/amd64' }}
         run: |
           task docker-build/multi-arch \
             CONTROLLER_IMG="${IMAGE_NAME}:${VERSION}" \
-            OCI_OUTPUT=tmp/oci/controller.tar
+            OCI_OUTPUT=tmp/oci/controller.tar \
+            PLATFORMS="${PLATFORMS}"
 
       # Package Helm chart without digest for use in PR conformance testing
       - name: Package Helm chart (without digest)

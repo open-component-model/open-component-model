@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Build the manager binary
 FROM --platform=${BUILDPLATFORM} golang:1.26.3@sha256:2d6c80227255c3112a4d08e67ba98e58efd3846daf15d9d7d4c389565d881b1a AS builder
 ARG TARGETOS
@@ -9,7 +10,8 @@ COPY go.mod go.mod
 COPY go.sum go.sum
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    go mod download
 
 # Copy the go source
 COPY cmd/main.go cmd/main.go
@@ -22,7 +24,15 @@ COPY pkg/ pkg/
 # was called. For example, if we call task docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
+#
+# The build and module caches are mounted with sharing=locked so that a
+# multi-platform build serializes the per-arch `go build` invocations instead of
+# running both at once. That keeps peak memory at roughly a single build and
+# lets the second arch reuse the warmed caches. Dropping `-a` avoids force
+# rebuilding the entire standard library on every build.
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -o manager cmd/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
