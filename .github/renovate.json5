@@ -189,8 +189,6 @@
       // dedicated 'Kubernetes Controller chart' group above is not overwritten
       // by this later rule (Renovate merges matching rules in order; last write
       // wins on conflicting fields like groupName).
-      // separateMinorPatch overridden to keep minor+patch in a single PR
-      // (global setting splits them otherwise).
       matchFileNames: [
         'kubernetes/controller/**',
         '!kubernetes/controller/chart/**',
@@ -198,7 +196,6 @@
       matchUpdateTypes: ['minor', 'patch'],
       groupName: 'Kubernetes Controller dependencies (non-major)',
       groupSlug: 'kubernetes-controller-deps',
-      separateMinorPatch: false,
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ],
