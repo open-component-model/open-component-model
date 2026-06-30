@@ -8,6 +8,8 @@ import (
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	mavendigest "ocm.software/open-component-model/bindings/go/maven/digest"
+	mavenresource "ocm.software/open-component-model/bindings/go/maven/repository/resource"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocicredentialplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/credentials/oci"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/gpg"
@@ -60,6 +62,16 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		helmresource.NewResourceRepository(filesystemConfig, helmresource.WithHTTPConfig(httpConfig)),
 	); err != nil {
 		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
+	}
+	if err := manager.ResourcePluginRegistry.RegisterInternalResourcePlugin(
+		mavenresource.NewResourceRepository(),
+	); err != nil {
+		return fmt.Errorf("could not register maven resource repository plugin: %w", err)
+	}
+	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(
+		mavendigest.NewDigestProcessor(),
+	); err != nil {
+		return fmt.Errorf("could not register maven digest processor plugin: %w", err)
 	}
 	if err := rsa.Register(manager.SigningRegistry, manager.CredentialRepositoryRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register RSA signing plugin: %w", err)
