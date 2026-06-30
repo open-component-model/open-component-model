@@ -14,6 +14,8 @@ The OCM controllers reconcile OCM component versions into a Kubernetes cluster. 
 - **Resource** fetches a specific resource from the component version.
 - **[Deployer]({{< relref "kubernetes-deployer.md" >}})** downloads the resource content and applies it to the cluster.
 
+A fifth resource, **Replication**, sits alongside the chain rather than within it. Instead of delivering content into the cluster, it transfers a resolved component version from one OCM repository to another, mirroring `ocm transfer` as a controller.
+
 ## Architecture
 
 The OCM controllers act as a bridge between an OCM repository and a Kubernetes cluster. Rather than pulling manifests from a Git repository or a plain OCI image, they consume structured OCM component versions — complete with provenance, signatures, and access metadata — and translate them into running workloads.
@@ -77,6 +79,42 @@ See [Kubernetes Deployer]({{< relref "kubernetes-deployer.md" >}}) for a full de
 
 [API reference]({{< relref "/docs/reference/kubernetes-api/deployer.md" >}})
 
+## Replication
+
+A `Replication` references a `Component` for its source and a `Repository` for its target. It watches the source
+`Component`'s status and, whenever the resolved version changes, transfers that version, together with the full
+graph of components it references (if recursion is enabled), into the target repository. It is the controller
+equivalent of `ocm transfer`, and fits delivery pipelines, promotion between environments, and backup or air-gap
+scenarios where a management cluster mirrors content into a downstream registry.
+
+```mermaid
+flowchart LR
+    classDef crd fill:#e8f4fd,stroke:#2c7be5,color:#1a1a2e
+    classDef ext fill:#f5f5f5,stroke:#888,color:#1a1a2e
+
+    Source["Repository\n(source)"]
+    Component["Component"]
+    Target["Repository\n(target)"]
+    Replication["Replication"]
+
+    Source -->|referenced by| Component
+    Component -->|source version| Replication
+    Target -->|target| Replication
+    Replication -->|transfers to| TargetReg[("Target OCM\nrepository")]
+
+    class Source,Component,Target,Replication crd
+    class TargetReg ext
+```
+
+A few more things about replication:
+
+- The transferred version is the one recorded in the source `Component`'s *status*, meaning a version that has already been successfully reconciled (and verified, if verification is configured). It does not re-evaluate the `Component`'s semver constraint itself.
+- A successful transfer records the source digest in `status.lastTransferredDigest`. A reconciliation observing the same digest is a no-op, so re-applying or requeueing does not re-transfer unchanged content.
+- First, it walks the component's reference graph through the [resolution worker pool](#asynchronous-component-resolution), reporting `ResolutionInProgress` until every referenced descriptor is available. Then, it executes the transfer, reporting `TransferInProgress` until completion. Per-transformation failures are recorded in `status.lastFailedTransferEvents` and cleared on the next success.
+- Recursion depth, copy mode, upload type, and the credentials for the target registry are supplied as OCM configuration referenced from `spec.ocmConfig` (a `Secret` or a `ConfigMap` object carrying a `transfer.config.ocm.software` entry). See [Replicate Component Versions with the Controller]({{< relref "docs/how-to/replicate-component-versions-controller.md" >}}) for a concrete example.
+
+[API reference]({{< relref "/docs/reference/kubernetes-api/replication.md" >}})
+
 ## Asynchronous Component Resolution
 
 Component version resolution happens in a background worker pool. When a controller needs a component version, it submits a request and receives a sentinel error (`ErrResolutionInProgress`). The controller returns early without blocking. Once the worker finishes, it broadcasts an event that re-triggers reconciliation for all waiting objects.
@@ -127,3 +165,4 @@ deployer. Please refer to the respective installation guides for these tools:
 - [Concept: Kubernetes Deployer]({{< relref "kubernetes-deployer.md" >}}), how the Deployer applies and manages resources
 - [Getting-Started: Setup Controller Environment]({{< relref "setup-controller-environment.md" >}}), prerequisites for running the controllers
 - [How-To: Configuring Credentials for OCM Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}), setting up access to private OCM repositories
+- [How-To: Replicate Component Versions with the Controller]({{< relref "docs/how-to/replicate-component-versions-controller.md" >}}), transferring component versions between repositories
