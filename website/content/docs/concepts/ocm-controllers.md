@@ -38,8 +38,7 @@ flowchart LR
     Repository["Repository"]
     Component["Component"]
     Resource["Resource"]
-    Deployer["Deployer
-(cluster-scoped)"]
+    Deployer["Deployer\n(cluster-scoped)"]
 
     Repository -->|referenced by| Component
     Component  -->|referenced by| Resource
