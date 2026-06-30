@@ -6,7 +6,7 @@ select which component version to reconcile.&lt;/p&gt;</description></item><item
 It references a &lt;code&gt;Component&lt;/code&gt; object and identifies the desired resource by name and
 identity.&lt;/p&gt;</description></item><item><title>Deployer</title><link>https://ocm.software/main/docs/reference/kubernetes-api/deployer/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/kubernetes-api/deployer/</guid><description>&lt;p&gt;A &lt;strong&gt;Deployer&lt;/strong&gt; is a cluster-scoped resource that deploys OCM resources into the
 cluster. It references a &lt;code&gt;Resource&lt;/code&gt; containing a &lt;code&gt;ResourceGroupDefinition&lt;/code&gt; and
-manages the lifecycle of the deployed Kubernetes objects.&lt;/p&gt;</description></item><item><title>Replication</title><link>https://ocm.software/main/docs/reference/kubernetes-api/replication/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/kubernetes-api/replication/</guid><description>&lt;p&gt;A &lt;strong&gt;Replication&lt;/strong&gt; transfers a specified component version from a source repository to a target repository.&lt;/p&gt;
-&lt;hr&gt;
-&lt;h2 id="api-specification"&gt;API Specification&lt;/h2&gt;
-&lt;div class="sr-root" data-schema-renderer data-schema-url="https://ocm.software/main/schemas/kubernetes/controller/delivery.ocm.software_replications.yaml"&gt;&lt;/div&gt;&lt;script src="https://ocm.software/js/schema/schema-renderer.js"&gt;&lt;/script&gt;</description></item></channel></rss>
+manages the lifecycle of the deployed Kubernetes objects.&lt;/p&gt;</description></item><item><title>Replication</title><link>https://ocm.software/main/docs/reference/kubernetes-api/replication/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/kubernetes-api/replication/</guid><description>&lt;p&gt;A &lt;strong&gt;Replication&lt;/strong&gt; transfers a component version from one OCM repository to
+another, the same behaviour of &lt;code&gt;ocm transfer&lt;/code&gt; as a controller. It references
+a &lt;code&gt;Component&lt;/code&gt; for the source version and a target &lt;code&gt;Repository&lt;/code&gt;, and re-runs the
+transfer whenever the resolved source version changes.&lt;/p&gt;</description></item></channel></rss>
