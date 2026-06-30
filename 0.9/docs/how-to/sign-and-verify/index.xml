@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Sign and Verify on Open Component Model</title><link>https://ocm.software/0.9/docs/how-to/sign-and-verify/</link><description>Recent content in Sign and Verify on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/0.9/docs/how-to/sign-and-verify/index.xml" rel="self" type="application/rss+xml"/><item><title>Generate Signing Keys</title><link>https://ocm.software/0.9/docs/how-to/sign-and-verify/generate-signing-keys/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/0.9/docs/how-to/sign-and-verify/generate-signing-keys/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Generate an RSA key pair that can be used to sign and verify OCM component versions.&lt;/p&gt;
+&lt;h2 id="youll-end-up-with"&gt;You&amp;rsquo;ll end up with&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;A private key file for signing component versions&lt;/li&gt;
+&lt;li&gt;A public key file for sharing with consumers who need to verify signatures&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~2 minutes&lt;/p&gt;</description></item><item><title>Configure Credentials for Signing</title><link>https://ocm.software/0.9/docs/how-to/sign-and-verify/configure-credentials-for-signing/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/0.9/docs/how-to/sign-and-verify/configure-credentials-for-signing/</guid><description>&lt;p&gt;Set up credential configuration so OCM can find your signing keys when signing or verifying component versions.&lt;/p&gt;
+&lt;h2 id="youll-end-up-with"&gt;You&amp;rsquo;ll end up with&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;A configured &lt;code&gt;.ocmconfig&lt;/code&gt; file that OCM uses to locate your signing keys&lt;/li&gt;
+&lt;li&gt;Ability to sign and verify component versions without specifying key paths manually&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~3 minutes&lt;/p&gt;</description></item><item><title>Sign Component Versions</title><link>https://ocm.software/0.9/docs/how-to/sign-and-verify/sign-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/0.9/docs/how-to/sign-and-verify/sign-component-versions/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Sign a component version to certify its authenticity and enable downstream verification. OCM supports multiple signing algorithms.
+Pick the tab that matches the algorithm you want to use — each tab is a self-contained walkthrough.&lt;/p&gt;</description></item><item><title>Verify Component Versions</title><link>https://ocm.software/0.9/docs/how-to/sign-and-verify/verify-component-versions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/0.9/docs/how-to/sign-and-verify/verify-component-versions/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
+&lt;p&gt;Validate a component version signature to ensure it is authentic and has not been tampered with. OCM supports multiple verification algorithms.
+Pick the tab that matches the algorithm the signature was made with — each tab is a self-contained walkthrough.&lt;/p&gt;</description></item></channel></rss>
