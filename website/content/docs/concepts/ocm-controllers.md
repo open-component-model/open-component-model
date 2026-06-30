@@ -38,7 +38,8 @@ flowchart LR
     Repository["Repository"]
     Component["Component"]
     Resource["Resource"]
-    Deployer["Deployer\n(cluster-scoped)"]
+    Deployer["Deployer
+(cluster-scoped)"]
 
     Repository -->|referenced by| Component
     Component  -->|referenced by| Resource
@@ -114,12 +115,13 @@ Results are stored under `status.additional.<fieldName>` and can be consumed by 
 See [Install the OCM Controllers]({{< relref "setup-controller-environment.md#install-the-ocm-controllers" >}}) for a step-by-step guide including prerequisites and verification.
 
 {{<callout context="caution" title="Deployer tools" icon="outline/alert-triangle">}}
-While the OCM controllers technically can be used standalone, it requires kro and a deployer, e.g. Flux, to deploy
+While the OCM controllers technically can be used standalone, it requires kro and a deployer, e.g. Flux or Argo CD, to deploy
 an OCM resource into a Kubernetes cluster. The OCM controllers deployment, however, does not contain kro or any
 deployer. Please refer to the respective installation guides for these tools:
 
 - [kro](https://kro.run/docs/getting-started/Installation/)
 - [Flux](https://fluxcd.io/docs/installation/)
+- [Argo CD](https://argo-cd.readthedocs.io/en/stable/operator-manual/installation/)
   {{</callout>}}
 
 ## Related Documentation
