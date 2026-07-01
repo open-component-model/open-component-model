@@ -173,7 +173,7 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
             });
             return {
                 name, type: normalizeType(displayProp.type), description: displayProp.description || "",
-                constValues: constAliases.constValues, deprecatedConstValues: constAliases.deprecatedConstValues,
+                ...constAliases,
                 required, immutable, properties: null, variants,
             };
         }
@@ -198,7 +198,7 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
                 });
                 return {
                     name, type: `[]${normalizeType(items.type)}`, description: displayProp.description || "",
-                    constValues: constAliases.constValues, deprecatedConstValues: constAliases.deprecatedConstValues,
+                    ...constAliases,
                     required, immutable, properties: null, variants,
                 };
             }
@@ -206,7 +206,7 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
 
         return {
             name, type: `[]${normalizeType(items.type)}`, description: displayProp.description || "",
-            constValues: constAliases.constValues, deprecatedConstValues: constAliases.deprecatedConstValues,
+            ...constAliases,
             required, immutable, variants: null,
             properties: items.properties ? fieldsFrom(items, root, new Set(seen)) : null,
         };
@@ -215,7 +215,7 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
     // Plain object or scalar
     return {
         name, type: normalizeType(displayProp.type), description: displayProp.description || "",
-        constValues: constAliases.constValues, deprecatedConstValues: constAliases.deprecatedConstValues,
+        ...constAliases,
         required, immutable, variants: null,
         properties: displayProp.properties ? fieldsFrom(displayProp, root, new Set(seen)) : null,
     };
