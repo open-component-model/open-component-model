@@ -4,6 +4,9 @@ go 1.26.3
 
 replace ocm.software/open-component-model/cli => ../
 
+// TODO(release): drop this replace once bindings/go/maven is tagged/published.
+replace ocm.software/open-component-model/bindings/go/maven => ../../bindings/go/maven
+
 require (
 	github.com/ProtonMail/go-crypto v1.4.1
 	github.com/opencontainers/go-digest v1.0.0
@@ -169,6 +172,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260630105024-9635c8baf819 // indirect
+	ocm.software/open-component-model/bindings/go/maven v0.0.0-00010101000000-000000000000 // indirect
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17 // indirect
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260630105024-9635c8baf819 // indirect
 	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260630105024-9635c8baf819 // indirect

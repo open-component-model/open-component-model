@@ -32,6 +32,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260630105024-9635c8baf819
+	ocm.software/open-component-model/bindings/go/maven v0.0.0-00010101000000-000000000000
 	ocm.software/open-component-model/bindings/go/oci v0.0.47
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
@@ -138,3 +139,6 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 )
+
+// TODO(release): drop this replace once bindings/go/maven is tagged/published.
+replace ocm.software/open-component-model/bindings/go/maven => ../bindings/go/maven
