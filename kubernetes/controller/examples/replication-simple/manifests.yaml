@@ -1,0 +1,60 @@
+# Credentials for the target protected registry (admin/admin) plus the transfer
+# settings (recursive, localBlob copy), consumed by the target Repository and the
+# Replication when writing the transferred component.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: replication-simple-credentials
+data:
+  .ocmconfig: "dHlwZTogZ2VuZXJpYy5jb25maWcub2NtLnNvZnR3YXJlL3YxCmNvbmZpZ3VyYXRpb25zOgogIC0gdHlwZTogY3JlZGVudGlhbHMuY29uZmlnLm9jbS5zb2Z0d2FyZQogICAgY29uc3VtZXJzOgogICAgICAtIGlkZW50aXR5OgogICAgICAgICAgdHlwZTogT0NJUmVnaXN0cnkKICAgICAgICAgIGhvc3RuYW1lOiBwcm90ZWN0ZWQtcmVnaXN0cnkxLWludGVybmFsLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwKICAgICAgICAgIHNjaGVtZTogaHR0cAogICAgICAgICAgcG9ydDogIjUwMDIiCiAgICAgICAgY3JlZGVudGlhbHM6CiAgICAgICAgICAtIHR5cGU6IENyZWRlbnRpYWxzCiAgICAgICAgICAgIHByb3BlcnRpZXM6CiAgICAgICAgICAgICAgdXNlcm5hbWU6IGFkbWluCiAgICAgICAgICAgICAgcGFzc3dvcmQ6IGFkbWluCiAgICAgIC0gaWRlbnRpdHk6CiAgICAgICAgICB0eXBlOiBPQ0lSZXBvc2l0b3J5CiAgICAgICAgICBob3N0bmFtZTogcHJvdGVjdGVkLXJlZ2lzdHJ5MS1pbnRlcm5hbC5kZWZhdWx0LnN2Yy5jbHVzdGVyLmxvY2FsCiAgICAgICAgICBzY2hlbWU6IGh0dHAKICAgICAgICAgIHBvcnQ6ICI1MDAyIgogICAgICAgIGNyZWRlbnRpYWxzOgogICAgICAgICAgLSB0eXBlOiBDcmVkZW50aWFscwogICAgICAgICAgICBwcm9wZXJ0aWVzOgogICAgICAgICAgICAgIHVzZXJuYW1lOiBhZG1pbgogICAgICAgICAgICAgIHBhc3N3b3JkOiBhZG1pbgogIC0gdHlwZTogdHJhbnNmZXIuY29uZmlnLm9jbS5zb2Z0d2FyZS92MWFscGhhMQogICAgcmVjdXJzaXZlOiAtMQogICAgY29weU1vZGU6IGxvY2FsQmxvYgo="
+---
+# Source repository: the unauthenticated in-cluster registry the component is pushed to.
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: replication-simple-source
+spec:
+  repositorySpec:
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+# Target repository: the password-protected registry the component is replicated into.
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: replication-simple-target
+spec:
+  repositorySpec:
+    baseUrl: http://protected-registry1-internal.default.svc.cluster.local:5002
+    scheme: http
+    port: 5002
+    type: OCIRegistry
+  interval: 10m
+  ocmConfig:
+    - kind: Secret
+      name: replication-simple-credentials
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: replication-simple-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/replication-simple
+  repositoryRef:
+    name: replication-simple-source
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Replication
+metadata:
+  name: replication-simple
+spec:
+  componentRef:
+    name: replication-simple-component
+  targetRepositoryRef:
+    name: replication-simple-target
+  ocmConfig:
+    - kind: Secret
+      name: replication-simple-credentials

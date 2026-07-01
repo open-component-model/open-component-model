@@ -3,7 +3,8 @@
 // What you'll learn:
 //   - Building a transfer graph that describes how to move a component version
 //   - Executing the graph to transfer a component from one CTF repository to another
-//   - Using transfer.WithTransfer, transfer.Component, transfer.FromRepository, and transfer.ToRepositorySpec
+//   - Using transfer.Mapping with transfer.NewRepositoryResolver to describe a source-to-target transfer
+//   - Driving recursive transfer of component references via transferv1alpha1.Config
 //   - Verifying the transferred component version and its resource payload in the target repository
 //   - Applying custom HTTP timeouts to the repository provider used during transfer
 
@@ -33,6 +34,7 @@ import (
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
 // TestExample_TransferCTFtoCTF demonstrates transferring a component version
@@ -90,14 +92,16 @@ func TestExample_TransferCTFtoCTF(t *testing.T) {
 	targetSpec := newCTFSpecAt(t, t.TempDir())
 	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
 
-	// WithTransfer pairs the source component with a target repository and a resolver.
-	// FromRepository wraps the source repo directly — no custom resolver needed.
-	tgd, err := transfer.BuildGraphDefinition(ctx,
-		transfer.WithTransfer(
-			transfer.Component(component, version),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(sourceRepo, sourceSpec),
-		),
+	// transfer.Mapping pairs the source components with a target repository and a resolver.
+	// transfer.NewRepositoryResolver wraps the source repo directly, so no custom resolver is needed.
+	// A nil cfg uses the defaults; see TestExample_Transfer_WithTransferConfig
+	// below for driving transfer settings explicitly.
+	tgd, err := transfer.BuildGraphDefinition(ctx, nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: component, Version: version}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotEmpty(tgd.Transformations)
@@ -136,6 +140,99 @@ func TestExample_TransferCTFtoCTF(t *testing.T) {
 	data, err := io.ReadAll(rc)
 	r.NoError(err)
 	r.Equal(resourceContent, data)
+}
+
+// TestExample_Transfer_WithTransferConfig demonstrates driving a transfer with
+// a [transferv1alpha1.Config]. Here Recursive: RecursiveInfinite causes the
+// parent component's references to be walked and transferred along with it,
+// so both parent and child appear in the target repository.
+func TestExample_Transfer_WithTransferConfig(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	parent := "acme.org/recursive-parent"
+	child := "acme.org/recursive-child"
+	version := "1.0.0"
+
+	// --- Set up source CTF: a child component and a parent that references it ---
+
+	sourceSpec := newCTFSpecAt(t, t.TempDir())
+	sourceRepo := ctfSpecToRepo(t, sourceSpec)
+
+	childDesc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "acme.org"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: child, Version: version},
+			},
+		},
+	}
+	r.NoError(sourceRepo.AddComponentVersion(ctx, childDesc))
+
+	parentDesc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "acme.org"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: parent, Version: version},
+			},
+			References: []descriptor.Reference{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: "child-ref", Version: version},
+					},
+					Component: child,
+				},
+			},
+		},
+	}
+	r.NoError(sourceRepo.AddComponentVersion(ctx, parentDesc))
+
+	// --- Build the transfer graph with the transfer config ---
+
+	targetSpec := newCTFSpecAt(t, t.TempDir())
+	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
+
+	cfg := &transferv1alpha1.Config{
+		Recursive: transferv1alpha1.RecursiveInfinite,
+	}
+	tgd, err := transfer.BuildGraphDefinition(ctx, cfg,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: parent, Version: version}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+		},
+	)
+	r.NoError(err)
+	r.NotEmpty(tgd.Transformations)
+
+	// --- Execute the transfer ---
+
+	repoProvider := provider.NewComponentVersionRepositoryProvider(
+		provider.WithTempDir(t.TempDir()),
+	)
+	resourceRepo := resource.NewResourceRepository(nil)
+
+	builder := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
+	graph, err := builder.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	// --- Verify both parent and child arrived in the target ---
+
+	targetRepo := ctfSpecToRepo(t, targetSpec)
+
+	gotParent, err := targetRepo.GetComponentVersion(ctx, parent, version)
+	r.NoError(err)
+	r.Equal(parent, gotParent.Component.Name)
+	r.Len(gotParent.Component.References, 1)
+	r.Equal(child, gotParent.Component.References[0].Component)
+
+	gotChild, err := targetRepo.GetComponentVersion(ctx, child, version)
+	r.NoError(err)
+	r.Equal(child, gotChild.Component.Name)
+	r.Equal(version, gotChild.Component.Version)
 }
 
 // TestExample_Transfer_WithHTTPConfig demonstrates performing a CTF-to-CTF
@@ -202,12 +299,12 @@ configurations:
 	targetSpec := newCTFSpecAt(t, t.TempDir())
 	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
 
-	tgd, err := transfer.BuildGraphDefinition(ctx,
-		transfer.WithTransfer(
-			transfer.Component(component, version),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(sourceRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(ctx, nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: component, Version: version}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 

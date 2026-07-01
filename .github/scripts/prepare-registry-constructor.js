@@ -1,6 +1,6 @@
 // @ts-check
 import fs from 'fs';
-import yaml from 'js-yaml';
+import { load as yamlLoad, dump as yamlDump } from 'js-yaml';
 import {computeNextVersions} from "./release-versioning.js";
 import {execSync} from "child_process";
 import {dirname} from "path";
@@ -157,7 +157,7 @@ export function prepareRegistryConstructor(core, {
 }) {
     const defaultOverrides = ["0.0.0-main", "v0.0.0-main"];
     const template = fs.readFileSync(constructorPath, 'utf8');
-    const constructor = yaml.load(template);
+    const constructor = yamlLoad(template);
 
     // Initialize or copy component references
     constructor.componentReferences = registryExists
@@ -297,7 +297,7 @@ export default async function prepareRegistryConstructorAction({core}) {
         });
 
         // Write updated constructor
-        const rendered = yaml.dump(constructor, {lineWidth: -1});
+        const rendered = yamlDump(constructor, {lineWidth: -1});
         fs.writeFileSync(constructorPath, rendered, 'utf8');
         core.debug(`Constructor:\n${rendered}`);
 

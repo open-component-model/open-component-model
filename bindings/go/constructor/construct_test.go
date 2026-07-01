@@ -2,11 +2,8 @@ package constructor
 
 import (
 	"bytes"
-	"context"
-	"fmt"
 	"io"
 	"slices"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,123 +20,8 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-// mockTargetRepository implements TargetRepository for testing
-type mockTargetRepository struct {
-	mu                     sync.Mutex
-	components             map[string]*descriptor.Descriptor
-	addedLocalResources    []*descriptor.Resource
-	addedLocalResourceData map[string]blob.ReadOnlyBlob // resource identity -> blob data
-	addedSources           []*descriptor.Source
-	addedVersions          []*descriptor.Descriptor
-}
-
-func newMockTargetRepository() *mockTargetRepository {
-	return &mockTargetRepository{
-		components:             make(map[string]*descriptor.Descriptor),
-		addedLocalResourceData: make(map[string]blob.ReadOnlyBlob),
-	}
-}
-
-func (m *mockTargetRepository) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	key := name + ":" + version
-	if desc, exists := m.components[key]; exists {
-		return desc, nil
-	}
-	return nil, fmt.Errorf("component version %q not found: %w", name+":"+version, repository.ErrNotFound)
-}
-
-func (m *mockTargetRepository) GetTargetRepository(ctx context.Context, component *constructorv1.Component) (TargetRepository, error) {
-	return m, nil
-}
-
-func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.addedLocalResources = append(m.addedLocalResources, resource)
-	// Store the blob data so we can verify it later
-	m.addedLocalResourceData[resource.ToIdentity().String()] = data
-	return resource, nil
-}
-
-func (m *mockTargetRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.addedSources = append(m.addedSources, source)
-	return source, nil
-}
-
-func (m *mockTargetRepository) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.addedVersions = append(m.addedVersions, desc)
-	key := desc.Component.Name + ":" + desc.Component.Version
-	m.components[key] = desc
-	return nil
-}
-
-// mockTargetRepositoryProvider implements TargetRepositoryProvider for testing
-type mockTargetRepositoryProvider struct {
-	repo TargetRepository
-}
-
-func (m *mockTargetRepositoryProvider) GetTargetRepository(ctx context.Context, component *constructorruntime.Component) (TargetRepository, error) {
-	return m.repo, nil
-}
-
-// componentVersionRepoProvider wraps a ComponentVersionRepository to provide it as TargetRepository
-type componentVersionRepoProvider struct {
-	repo repository.ComponentVersionRepository
-}
-
-func (c *componentVersionRepoProvider) GetTargetRepository(ctx context.Context, component *constructorruntime.Component) (TargetRepository, error) {
-	// Wrap the ComponentVersionRepository to implement TargetRepository
-	return &targetRepoWrapper{repo: c.repo}, nil
-}
-
-// targetRepoWrapper wraps a ComponentVersionRepository to implement TargetRepository
-type targetRepoWrapper struct {
-	repo repository.ComponentVersionRepository
-}
-
-func (t *targetRepoWrapper) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
-	return t.repo.GetComponentVersion(ctx, name, version)
-}
-
-func (t *targetRepoWrapper) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
-	return t.repo.AddComponentVersion(ctx, desc)
-}
-
-func (t *targetRepoWrapper) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	return t.repo.AddLocalResource(ctx, component, version, resource, data)
-}
-
-func (t *targetRepoWrapper) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	return t.repo.AddLocalSource(ctx, component, version, source, data)
-}
-
-// mockBlob implements blob.ReadOnlyBlob for testing
-type mockBlob struct {
-	mediaType string
-	data      []byte
-}
-
-func (m *mockBlob) Get() ([]byte, error) {
-	return m.data, nil
-}
-
-func (m *mockBlob) MediaType() (string, error) {
-	return m.mediaType, nil
-}
-
-func (m *mockBlob) ReadCloser() (io.ReadCloser, error) {
-	return io.NopCloser(bytes.NewReader(m.data)), nil
-}
 
 func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 	t.Parallel()
@@ -731,6 +613,95 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 	}
 }
 
+// TestConstructWithSharedReferenceNameAcrossComponents is a regression test for
+// https://github.com/open-component-model/open-component-model/issues/2838.
+// Two components use the SAME local reference name ("leaf") to point at DIFFERENT
+// referenced components. The component digest cache must be keyed by the referenced
+// component identity, not by the local reference name, otherwise the second parent
+// gets the first parent's referenced digest. That, of course, fails later
+// by a recursive transfer with a digest mismatch.
+func TestConstructWithSharedReferenceNameAcrossComponents(t *testing.T) {
+	t.Parallel()
+
+	yamlData := `
+components:
+  - name: ocm.software/repro/leaf-a
+    version: 1.0.0
+    provider:
+      name: ocm.software
+  - name: ocm.software/repro/leaf-b
+    version: 1.0.0
+    provider:
+      name: ocm.software
+  - name: ocm.software/repro/parent-a
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    componentReferences:
+      - name: leaf
+        version: 1.0.0
+        componentName: ocm.software/repro/leaf-a
+  - name: ocm.software/repro/parent-b
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    componentReferences:
+      - name: leaf
+        version: 1.0.0
+        componentName: ocm.software/repro/leaf-b
+`
+
+	var constructor constructorv1.ComponentConstructor
+	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &constructor))
+	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
+
+	mockRepo := newMockTargetRepository()
+	opts := Options{
+		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
+	}
+	constructorInstance := NewDefaultConstructor(converted, opts)
+	graph := constructorInstance.GetGraph()
+
+	require.NoError(t, constructorInstance.Construct(t.Context()))
+
+	descMap := make(map[string]*descriptor.Descriptor)
+	for _, d := range collectDescriptors(t, graph) {
+		descMap[d.Component.Name] = d
+	}
+
+	refDigest := func(componentName, referencedComponentName string) descriptor.Digest {
+		t.Helper()
+		desc := descMap[componentName]
+		require.NotNil(t, desc, "component %q not constructed", componentName)
+		for _, ref := range desc.Component.References {
+			if ref.Component == referencedComponentName {
+				return ref.Digest
+			}
+		}
+		t.Fatalf("component %q has no reference to %q", componentName, referencedComponentName)
+		return descriptor.Digest{}
+	}
+
+	expectedDigest := func(referencedComponentName string) descriptor.Digest {
+		t.Helper()
+		referenced := descMap[referencedComponentName]
+		require.NotNil(t, referenced)
+		digest, err := calculateDigest(referenced)
+		require.NoError(t, err)
+		return *digest
+	}
+
+	digestA := refDigest("ocm.software/repro/parent-a", "ocm.software/repro/leaf-a")
+	digestB := refDigest("ocm.software/repro/parent-b", "ocm.software/repro/leaf-b")
+
+	assert.Equal(t, expectedDigest("ocm.software/repro/leaf-a"), digestA,
+		"parent-a must stamp leaf-a's digest into its reference")
+	assert.Equal(t, expectedDigest("ocm.software/repro/leaf-b"), digestB,
+		"parent-b must stamp leaf-b's digest into its reference")
+	assert.NotEqual(t, digestA.Value, digestB.Value,
+		"references to different components must not share a digest despite the same local reference name")
+}
+
 func TestConstructWithSourceBlobToCTF(t *testing.T) {
 	t.Parallel()
 
@@ -777,7 +748,7 @@ components:
 
 	opts := Options{
 		SourceInputMethodProvider: sourceProvider,
-		TargetRepositoryProvider:  &componentVersionRepoProvider{repo: ctfRepo},
+		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: ctfRepo},
 	}
 
 	constructorInstance := NewDefaultConstructor(converted, opts)

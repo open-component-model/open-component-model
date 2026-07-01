@@ -91,6 +91,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.readinessProbe.periodSeconds | int | `10` | Period between readiness probes |
 | manager.readinessProbe.port | int | `8081` | Port for the readiness probe |
 | manager.replicas | int | `1` | Number of controller manager replicas |
+| manager.resolver.cacheTTL | int | `30` | The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues. |
 | manager.resolver.subscriberBufferSize | int | `100` | Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric. |
 | manager.resolver.workerCount | int | `10` | Number of active resolver workers |
 | manager.resolver.workerQueueLength | int | `1000` | Maximum work items in queue for component version resolution |
@@ -115,7 +116,7 @@ templates:
 task helm/generate
 ```
 
-This runs `controller-gen` to produce raw CRDs into `bin/gen/crd` and a raw
+This runs `controller-gen` to produce raw CRDs into `config/crd/bases` and a raw
 ClusterRole into `bin/gen/rbac`, then invokes two post-processors:
 
 - `hack/helm.generate.sh` reformats the CRDs and injects Helm template wrappers

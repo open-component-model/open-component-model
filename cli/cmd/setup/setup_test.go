@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -47,6 +48,7 @@ func TestOCMConfig(t *testing.T) {
 	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.SetContext(context.Background())
+		Syscalls(cmd)
 		configuration.RegisterConfigFlag(cmd)
 		require.NoError(t, cmd.PersistentFlags().Set(configuration.OCMConfigCommandArgument, "/nonexistent/config.yaml"))
 
@@ -58,6 +60,7 @@ func TestOCMConfig(t *testing.T) {
 	t.Run("no config flag proceeds without error", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.SetContext(context.Background())
+		Syscalls(cmd)
 		configuration.RegisterConfigFlag(cmd)
 
 		err := OCMConfig(cmd)
@@ -534,7 +537,7 @@ func TestFilesystemConfigIntegration(t *testing.T) {
 	tempDir := t.TempDir()
 	workingDir := filepath.Join(tempDir, "working")
 	customTempDir := filepath.Join(tempDir, "custom")
-	err := os.MkdirAll(customTempDir, 0755)
+	err := os.MkdirAll(customTempDir, 0o755)
 	r.NoError(err, "failed to create custom temp dir")
 
 	// Test complete integration from command setup to context retrieval
@@ -576,6 +579,7 @@ func TestPluginManager_ResolveHTTPConfig(t *testing.T) {
 	t.Run("resolves default HTTP config when none configured", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.SetContext(context.Background())
+		Syscalls(cmd)
 		configuration.RegisterConfigFlag(cmd)
 
 		require.NoError(t, OCMConfig(cmd))

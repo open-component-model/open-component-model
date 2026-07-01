@@ -5,7 +5,7 @@ metadata:
 spec:
   repositorySpec:
     # Adjust to your OCM repository
-    baseUrl: http://image-registry:5000
+    baseUrl: http://ocm-e2e-image-registry:5000
     type: OCIRegistry
   interval: 10m
 ---

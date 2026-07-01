@@ -27,11 +27,11 @@ ocm download plugin [flags]
 ### Examples
 
 ```
- # Download a plugin binary with resource name 'helminput' and version 'v0.0.0-main'
-  ocm download plugin ghcr.io/open-component-model/plugins//ocm.software/plugins/helminput:0.0.0-main
+ # Download a plugin binary with resource name '<my-plugin-component>' and version '<version>'
+  ocm download plugin <oci-repository>//<my-plugin-component>:<version>
 
   # Download a platform-specific plugin binary with extra identity parameters with specified output location.
-  ocm download plugin ghcr.io/open-component-model/plugins//ocm.software/plugins/helminput:0.0.0-main --extra-identity os=linux,arch=amd64 --output ./plugins/ocm-plugin-linux-amd64
+  ocm download plugin <oci-repository>//<my-plugin-component>:<version> --extra-identity os=linux,arch=amd64 --output ./plugins/ocm-plugin-linux-amd64
 ```
 
 ### Options

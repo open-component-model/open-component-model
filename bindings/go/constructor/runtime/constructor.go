@@ -56,6 +56,16 @@ const (
 	ExternalRelation ResourceRelation = "external"
 )
 
+// OwnershipPolicy controls whether ownership is attached to a resource during construction.
+type OwnershipPolicy string
+
+const (
+	// OwnershipPolicyNever is the default: no ownership is recorded.
+	OwnershipPolicyNever OwnershipPolicy = "Never"
+	// OwnershipPolicyAlways records ownership for the resource.
+	OwnershipPolicyAlways OwnershipPolicy = "Always"
+)
+
 // A Resource is a delivery artifact, intended for deployment into a runtime environment, or describing additional content,
 // relevant for a deployment mechanism.
 // For example, installation procedures or meta-model descriptions controlling orchestration and/or deployment mechanisms.
@@ -72,36 +82,23 @@ type Resource struct {
 	// Relation describes the relation of the resource to the component.
 	// Can be a local or external resource.
 	Relation ResourceRelation `json:"-"`
+	// Options bundles optional, construction-time directives for the resource.
+	Options ResourceOptions `json:"-"`
 	// AccessOrInput defines the access or input information of the resource.
 	// In a component constructor, there is only one access or input information.
 	AccessOrInput `json:"-"`
-
-	ConstructorAttributes `json:"-"`
 }
 
-// ConstructorAttributes defines additional attributes used during component construction.
+// ResourceOptions bundles optional, construction-time directives for a resource.
+// These options influence how the resource is handled during construction
+// but are not themselves persisted to the component descriptor.
 // +k8s:deepcopy-gen=true
-type ConstructorAttributes struct {
-	CopyPolicy `json:"-"`
+type ResourceOptions struct {
+	// OwnershipPolicy controls whether ownership information (i.e. component
+	// name and version) are attached to this resource during construction.
+	// Defaults to "Never" when unset.
+	OwnershipPolicy OwnershipPolicy `json:"-"`
 }
-
-// CopyPolicy defines how the given object should be added during the component construction.
-// If set to "reference", the object is copied by reference, otherwise it is copied by value.
-// Note that an object that is copied by reference may still have its access type modified.
-// This can happen when the access is pinned at the point of the component construction.
-//
-//   - A typical example of "by value" copying is an image that should be stored in the component version,
-//     and not in the original registry.
-//   - A typical example of "by reference" copying is an image that is already stored in the correct registry
-//     and should be referenced by the component version.
-type CopyPolicy string
-
-const (
-	// CopyPolicyByReference defines that the resource is copied by reference. See CopyPolicy for details.
-	CopyPolicyByReference CopyPolicy = "byReference"
-	// CopyPolicyByValue defines that the resource is copied by value. See CopyPolicy for details.
-	CopyPolicyByValue CopyPolicy = "byValue"
-)
 
 // Source is an artifact which describes the sources that were used to generate one or more of the resources.
 // Source elements do not have specific additional formal attributes.
@@ -113,8 +110,6 @@ type Source struct {
 	// AccessOrInput defines the access or input information of the source.
 	// In a component constructor, there is only one access or input information.
 	AccessOrInput `json:"-"`
-
-	ConstructorAttributes `json:"-"`
 }
 
 // AccessOrInput describes the access or input information of a resource or source.
