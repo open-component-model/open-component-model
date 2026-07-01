@@ -1,4 +1,5 @@
 import {render} from "preact";
+import type {ComponentChildren} from "preact";
 import {useState, useEffect} from "preact/hooks";
 import {jsonSchemaToModel} from "./json-schema-converter.ts";
 import {crdYamlToModels, isYamlUrl} from "./crd-yaml-converter.ts";
@@ -150,7 +151,7 @@ function VariantRows({variants, depth, parentPath = ""}: {variants: FieldVariant
     );
 }
 
-function FieldTable({title, description, fields}: {title: string; description: string; fields: SchemaFieldType[]}) {
+function FieldTable({title, description, fields, footer}: {title: string; description: string; fields: SchemaFieldType[]; footer?: ComponentChildren}) {
     if (!fields?.length) return null;
     return (
         <div className="sr-section">
@@ -170,27 +171,51 @@ function FieldTable({title, description, fields}: {title: string; description: s
                     </tbody>
                 </table>
             </div>
+            {footer}
         </div>
     );
 }
 
+function fieldsHaveDeprecated(fields: SchemaFieldType[] | null): boolean {
+    return !!fields?.some((field) =>
+        field.deprecatedConstValues.length > 0 ||
+        fieldsHaveDeprecated(field.properties) ||
+        !!field.variants?.some((variant) => fieldsHaveDeprecated(variant.properties)),
+    );
+}
+
 function SchemaView({model, schemaUrl}: {model: SchemaModelType; schemaUrl: string}) {
+    const hasDeprecated = model.sections.some((section) => fieldsHaveDeprecated(section.fields));
+    // Render the footer inside the last populated section so it sits directly below
+    // the table, rather than after the section's (shared, large) bottom margin.
+    const lastWithFields = model.sections.reduce(
+        (last, section, i) => (section.fields?.length ? i : last), -1);
+    const footer = (
+        <div className="sr-footer">
+            {hasDeprecated && (
+                <p className="sr-footer__note">
+                    <span className="sr-footer__dashed">Dashed outline</span> marks a
+                    deprecated value — still accepted, but avoid in new configurations.
+                </p>
+            )}
+            <ul>
+                <li>
+                    <a href={schemaUrl} target="_blank" rel="noopener noreferrer">
+                        View raw schema source
+                    </a>
+                </li>
+            </ul>
+        </div>
+    );
     return (
         <>
             <SchemaHeader meta={model.meta}/>
-            {model.sections.map((section) => (
+            {model.sections.map((section, i) => (
                 <FieldTable key={section.title} title={section.title}
-                            description={section.description} fields={section.fields}/>
+                            description={section.description} fields={section.fields}
+                            footer={i === lastWithFields ? footer : undefined}/>
             ))}
-            <div className="sr-footer">
-                <ul>
-                    <li>
-                        <a href={schemaUrl} target="_blank" rel="noopener noreferrer">
-                            View raw schema source
-                        </a>
-                    </li>
-                </ul>
-            </div>
+            {lastWithFields === -1 && footer}
         </>
     );
 }
