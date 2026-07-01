@@ -76,40 +76,35 @@ function constStrings(branches: SchemaNode[]): string[] {
 }
 
 /**
- * Find a oneOf/anyOf union whose branches are all bare `const` aliases and that
- * collapses to at most one active value. Returns null when there is no such
- * union or when multiple active values keep the field genuinely polymorphic.
+ * A oneOf/anyOf union whose branches are all bare `const` aliases enumerates the
+ * allowed literal values of a field (e.g. a `type` discriminator and its
+ * deprecated aliases) rather than describing polymorphic object shapes.
  */
-function collapsibleConstAliasUnion(node: SchemaNode): { kw: "oneOf" | "anyOf"; branches: SchemaNode[] } | null {
+function constAliasUnion(node: SchemaNode): { kw: "oneOf" | "anyOf"; branches: SchemaNode[] } | null {
     for (const kw of ["oneOf", "anyOf"] as const) {
         const branches = node[kw];
-        if (!Array.isArray(branches) || !branches.length || !branches.every(isConstAliasBranch)) continue;
-        if (branches.filter((branch) => !branch.deprecated).length > 1) return null;
-        return {kw, branches};
+        if (Array.isArray(branches) && branches.length && branches.every(isConstAliasBranch)) return {kw, branches};
     }
     return null;
 }
 
-function constAliasesFrom(node: SchemaNode): { constValue: string | null; deprecatedConstValues: string[] } {
-    const union = collapsibleConstAliasUnion(node);
+function constAliasesFrom(node: SchemaNode): { constValues: string[]; deprecatedConstValues: string[] } {
+    const union = constAliasUnion(node);
     if (!union) {
         return {
-            constValue: typeof node.const === "string" ? node.const : null,
+            constValues: typeof node.const === "string" ? [node.const] : [],
             deprecatedConstValues: [],
         };
     }
 
-    const active = constStrings(union.branches.filter((branch) => !branch.deprecated));
-    const deprecated = constStrings(union.branches.filter((branch) => branch.deprecated));
-
     return {
-        constValue: active[0] ?? null,
-        deprecatedConstValues: deprecated,
+        constValues: constStrings(union.branches.filter((branch) => !branch.deprecated)),
+        deprecatedConstValues: constStrings(union.branches.filter((branch) => branch.deprecated)),
     };
 }
 
 function withoutConstAliasUnion(node: SchemaNode): SchemaNode {
-    const union = collapsibleConstAliasUnion(node);
+    const union = constAliasUnion(node);
     if (!union) return node;
 
     const {[union.kw]: _, ...rest} = node;
@@ -155,7 +150,7 @@ function fieldsFrom(node: SchemaNode, root: SchemaNode, seen: Set<string>): Sche
 function convertField(name: string, raw: SchemaNode, requiredList: string[], root: SchemaNode, seen = new Set<string>()): SchemaField {
     const prop = resolve(raw, root, new Set(seen));
     const isTypeField = name === "type";
-    const constAliases = isTypeField ? constAliasesFrom(prop) : {constValue: null, deprecatedConstValues: []};
+    const constAliases = isTypeField ? constAliasesFrom(prop) : {constValues: [], deprecatedConstValues: []};
     const displayProp = isTypeField ? withoutConstAliasUnion(prop) : prop;
     const immutable = prop["x-kubernetes-validations"]?.some((v: {
         rule?: string
@@ -178,7 +173,7 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
             });
             return {
                 name, type: normalizeType(displayProp.type), description: displayProp.description || "",
-                constValue: constAliases.constValue, deprecatedConstValues: constAliases.deprecatedConstValues,
+                constValues: constAliases.constValues, deprecatedConstValues: constAliases.deprecatedConstValues,
                 required, immutable, properties: null, variants,
             };
         }
@@ -203,7 +198,7 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
                 });
                 return {
                     name, type: `[]${normalizeType(items.type)}`, description: displayProp.description || "",
-                    constValue: constAliases.constValue, deprecatedConstValues: constAliases.deprecatedConstValues,
+                    constValues: constAliases.constValues, deprecatedConstValues: constAliases.deprecatedConstValues,
                     required, immutable, properties: null, variants,
                 };
             }
@@ -211,7 +206,7 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
 
         return {
             name, type: `[]${normalizeType(items.type)}`, description: displayProp.description || "",
-            constValue: constAliases.constValue, deprecatedConstValues: constAliases.deprecatedConstValues,
+            constValues: constAliases.constValues, deprecatedConstValues: constAliases.deprecatedConstValues,
             required, immutable, variants: null,
             properties: items.properties ? fieldsFrom(items, root, new Set(seen)) : null,
         };
@@ -220,7 +215,7 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
     // Plain object or scalar
     return {
         name, type: normalizeType(displayProp.type), description: displayProp.description || "",
-        constValue: constAliases.constValue, deprecatedConstValues: constAliases.deprecatedConstValues,
+        constValues: constAliases.constValues, deprecatedConstValues: constAliases.deprecatedConstValues,
         required, immutable, variants: null,
         properties: displayProp.properties ? fieldsFrom(displayProp, root, new Set(seen)) : null,
     };

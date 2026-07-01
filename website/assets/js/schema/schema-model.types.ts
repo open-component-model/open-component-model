@@ -4,7 +4,7 @@ export interface SchemaField {
   name: string;
   type: string;
   description: string;
-  constValue: string | null;
+  constValues: string[];
   deprecatedConstValues: string[];
   required: boolean;
   immutable: boolean;

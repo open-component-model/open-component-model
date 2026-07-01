@@ -22,7 +22,8 @@ function checkFieldShape(field: SchemaField) {
   assert.equal(typeof field.name, "string");
   assert.equal(typeof field.type, "string");
   assert.equal(typeof field.description, "string");
-  assert.ok(field.constValue === null || typeof field.constValue === "string");
+  assert.ok(Array.isArray(field.constValues));
+  field.constValues.forEach((value) => assert.equal(typeof value, "string"));
   assert.ok(Array.isArray(field.deprecatedConstValues));
   field.deprecatedConstValues.forEach((value) => assert.equal(typeof value, "string"));
   assert.equal(typeof field.required, "boolean");
@@ -221,7 +222,7 @@ describe("edge cases", () => {
     assert.equal(label.variants, null);
   });
 
-  it("type const-only oneOf collapses into primary and deprecated values", () => {
+  it("type const-only oneOf collapses into active and deprecated values", () => {
     const model = jsonSchemaToModel({
       type: "object",
       properties: {
@@ -246,7 +247,7 @@ describe("edge cases", () => {
     const type = model.sections[0].fields.find((f) => f.name === "type")!;
     assert.equal(type.type, "string");
     assert.equal(type.description, "Type represents a structured type.");
-    assert.equal(type.constValue, "RSA/v1");
+    assert.deepEqual(type.constValues, ["RSA/v1"]);
     assert.deepEqual(type.deprecatedConstValues, ["RSA/v1alpha1", "RSA"]);
     assert.equal(type.variants, null);
   });
@@ -265,20 +266,21 @@ describe("edge cases", () => {
     });
 
     const mode = model.sections[0].fields.find((f) => f.name === "mode")!;
-    assert.equal(mode.constValue, null);
+    assert.deepEqual(mode.constValues, []);
     assert.deepEqual(mode.deprecatedConstValues, []);
     assert.equal(mode.variants!.length, 2);
   });
 
-  it("type oneOf with multiple active consts stays polymorphic", () => {
+  it("type oneOf with multiple active consts lists all values without variants", () => {
     const model = jsonSchemaToModel({
       type: "object",
       properties: {
         type: {
           oneOf: [
-            { const: "RSA/v1" },
-            { const: "ECDSA/v1" },
-            { deprecated: true, const: "RSA" },
+            { const: "DirectCredentials/v1" },
+            { const: "Credentials/v1" },
+            { deprecated: true, const: "Credentials" },
+            { deprecated: true, const: "DirectCredentials" },
           ],
         },
       },
@@ -286,12 +288,12 @@ describe("edge cases", () => {
     });
 
     const type = model.sections[0].fields.find((f) => f.name === "type")!;
-    assert.equal(type.constValue, null);
-    assert.deepEqual(type.deprecatedConstValues, []);
-    assert.equal(type.variants!.length, 3);
+    assert.deepEqual(type.constValues, ["DirectCredentials/v1", "Credentials/v1"]);
+    assert.deepEqual(type.deprecatedConstValues, ["Credentials", "DirectCredentials"]);
+    assert.equal(type.variants, null);
   });
 
-  it("type oneOf with only deprecated consts has no primary value", () => {
+  it("type oneOf with only deprecated consts has no active value", () => {
     const model = jsonSchemaToModel({
       type: "object",
       properties: {
@@ -306,7 +308,7 @@ describe("edge cases", () => {
     });
 
     const type = model.sections[0].fields.find((f) => f.name === "type")!;
-    assert.equal(type.constValue, null);
+    assert.deepEqual(type.constValues, []);
     assert.deepEqual(type.deprecatedConstValues, ["RSA/v1alpha1", "RSA"]);
     assert.equal(type.variants, null);
   });
