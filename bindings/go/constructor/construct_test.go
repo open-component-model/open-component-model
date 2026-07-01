@@ -778,6 +778,59 @@ components:
 	assert.NotNil(t, retrieved.Component.Sources[0].Access)
 }
 
+func TestConstructComponent_DuplicateResourceIdentity(t *testing.T) {
+	t.Parallel()
+
+	repo := newMockTargetRepository()
+	opts := Options{
+		ComponentVersionConflictPolicy: ComponentVersionConflictReplace,
+		TargetRepositoryProvider:       &mockTargetRepositoryProvider{repo: repo},
+	}
+
+	access := &mockAccess{Type: "mock/v1", Reference: "example.com/test:latest"}
+	comp := &constructorruntime.Component{
+		ComponentMeta: constructorruntime.ComponentMeta{
+			ObjectMeta: constructorruntime.ObjectMeta{
+				Name:    "test-component",
+				Version: "1.0.0",
+			},
+		},
+		Resources: []constructorruntime.Resource{
+			{
+				ElementMeta: constructorruntime.ElementMeta{
+					ObjectMeta: constructorruntime.ObjectMeta{
+						Name:    "payload",
+						Version: "1.0.0",
+					},
+				},
+				Type:         "ociImage",
+				Relation:     constructorruntime.ExternalRelation,
+				AccessOrInput: constructorruntime.AccessOrInput{Access: access},
+			},
+			{
+				ElementMeta: constructorruntime.ElementMeta{
+					ObjectMeta: constructorruntime.ObjectMeta{
+						Name:    "payload",
+						Version: "1.0.0",
+					},
+				},
+				Type:         "ociImage",
+				Relation:     constructorruntime.ExternalRelation,
+				AccessOrInput: constructorruntime.AccessOrInput{Access: access},
+			},
+		},
+	}
+
+	compConstructor := &constructorruntime.ComponentConstructor{
+		Components: []constructorruntime.Component{*comp},
+	}
+
+	constructorInstance := NewDefaultConstructor(compConstructor, opts)
+	err := constructorInstance.Construct(t.Context())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "duplicate resource identities found")
+}
+
 func collectDescriptors(t *testing.T, graph *syncdag.SyncedDirectedAcyclicGraph[string]) []*descriptor.Descriptor {
 	var descs []*descriptor.Descriptor
 	_ = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
