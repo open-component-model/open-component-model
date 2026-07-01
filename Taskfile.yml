@@ -36,6 +36,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/helm/Taskfile.yml
     dir: ./bindings/go/helm
+  bindings/go/maven:
+    optional: true
+    taskfile: ./bindings/go/maven/Taskfile.yml
+    dir: ./bindings/go/maven
   bindings/go/input/utf8:
     optional: true
     taskfile: ./bindings/go/input/utf8/Taskfile.yml

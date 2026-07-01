@@ -1,11 +1,10 @@
 version: '3'
 
 includes:
-  reuse:
-    taskfile: ../../../reuse.Taskfile.yml
-    flatten: true
+  reuse: ../../../reuse.Taskfile.yml
 
 tasks:
+
   test:
     cmds:
       - task: reuse:run-go-test
