@@ -22,6 +22,9 @@ function checkFieldShape(field: SchemaField) {
   assert.equal(typeof field.name, "string");
   assert.equal(typeof field.type, "string");
   assert.equal(typeof field.description, "string");
+  assert.ok(field.constValue === null || typeof field.constValue === "string");
+  assert.ok(Array.isArray(field.deprecatedConstValues));
+  field.deprecatedConstValues.forEach((value) => assert.equal(typeof value, "string"));
   assert.equal(typeof field.required, "boolean");
   assert.equal(typeof field.immutable, "boolean");
   if (field.properties) field.properties.forEach(checkFieldShape);
@@ -216,5 +219,54 @@ describe("edge cases", () => {
     assert.equal(label.type, "string");
     assert.equal(label.description, "a label");
     assert.equal(label.variants, null);
+  });
+
+  it("type const-only oneOf collapses into primary and deprecated values", () => {
+    const model = jsonSchemaToModel({
+      type: "object",
+      properties: {
+        type: {
+          $ref: "#/$defs/runtimeType",
+          oneOf: [
+            { const: "RSA/v1" },
+            { deprecated: true, const: "RSA/v1alpha1" },
+            { deprecated: true, const: "RSA" },
+          ],
+        },
+      },
+      required: ["type"],
+      $defs: {
+        runtimeType: {
+          type: "string",
+          description: "Type represents a structured type.",
+        },
+      },
+    });
+
+    const type = model.sections[0].fields.find((f) => f.name === "type")!;
+    assert.equal(type.type, "string");
+    assert.equal(type.description, "Type represents a structured type.");
+    assert.equal(type.constValue, "RSA/v1");
+    assert.deepEqual(type.deprecatedConstValues, ["RSA/v1alpha1", "RSA"]);
+    assert.equal(type.variants, null);
+  });
+
+  it("non-type const-only oneOf remains polymorphic", () => {
+    const model = jsonSchemaToModel({
+      type: "object",
+      properties: {
+        mode: {
+          oneOf: [
+            { const: "active" },
+            { deprecated: true, const: "legacy" },
+          ],
+        },
+      },
+    });
+
+    const mode = model.sections[0].fields.find((f) => f.name === "mode")!;
+    assert.equal(mode.constValue, null);
+    assert.deepEqual(mode.deprecatedConstValues, []);
+    assert.equal(mode.variants!.length, 2);
   });
 });

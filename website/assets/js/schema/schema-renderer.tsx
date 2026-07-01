@@ -85,6 +85,18 @@ function FieldRow({field, depth = 0, parentPath = ""}: {field: SchemaFieldType; 
                 </td>
                 <td className="sr-field-type">
                     <span className={`sr-type-badge ${typeClass(field.type)}`}>{field.type}</span>
+                    {(field.constValue || field.deprecatedConstValues.length > 0) && (
+                        <div className="sr-const-values" aria-label={`${field.name} allowed values`}>
+                            {field.constValue && (
+                                <code className="sr-const-value">{field.constValue}</code>
+                            )}
+                            {field.deprecatedConstValues.map((value) => (
+                                <code key={value} className="sr-const-value sr-const-value--deprecated">
+                                    {value}
+                                </code>
+                            ))}
+                        </div>
+                    )}
                 </td>
                 <td className="sr-field-desc sr-field-desc--col">
                     {descContent}
