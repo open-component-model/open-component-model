@@ -269,4 +269,45 @@ describe("edge cases", () => {
     assert.deepEqual(mode.deprecatedConstValues, []);
     assert.equal(mode.variants!.length, 2);
   });
+
+  it("type oneOf with multiple active consts stays polymorphic", () => {
+    const model = jsonSchemaToModel({
+      type: "object",
+      properties: {
+        type: {
+          oneOf: [
+            { const: "RSA/v1" },
+            { const: "ECDSA/v1" },
+            { deprecated: true, const: "RSA" },
+          ],
+        },
+      },
+      required: ["type"],
+    });
+
+    const type = model.sections[0].fields.find((f) => f.name === "type")!;
+    assert.equal(type.constValue, null);
+    assert.deepEqual(type.deprecatedConstValues, []);
+    assert.equal(type.variants!.length, 3);
+  });
+
+  it("type oneOf with only deprecated consts has no primary value", () => {
+    const model = jsonSchemaToModel({
+      type: "object",
+      properties: {
+        type: {
+          oneOf: [
+            { deprecated: true, const: "RSA/v1alpha1" },
+            { deprecated: true, const: "RSA" },
+          ],
+        },
+      },
+      required: ["type"],
+    });
+
+    const type = model.sections[0].fields.find((f) => f.name === "type")!;
+    assert.equal(type.constValue, null);
+    assert.deepEqual(type.deprecatedConstValues, ["RSA/v1alpha1", "RSA"]);
+    assert.equal(type.variants, null);
+  });
 });

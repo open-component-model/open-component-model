@@ -92,7 +92,7 @@ function FieldRow({field, depth = 0, parentPath = ""}: {field: SchemaFieldType; 
                             )}
                             {field.deprecatedConstValues.map((value) => (
                                 <code key={value} className="sr-const-value sr-const-value--deprecated">
-                                    {value}
+                                    <span className="visually-hidden">deprecated: </span>{value}
                                 </code>
                             ))}
                         </div>

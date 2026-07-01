@@ -69,42 +69,51 @@ function isConstAliasBranch(node: SchemaNode): boolean {
     return typeof node.const === "string" && !node.properties && !node.items && !node.oneOf && !node.anyOf;
 }
 
-function constAliasesFrom(node: SchemaNode): { constValue: string | null; deprecatedConstValues: string[] } {
+function constStrings(branches: SchemaNode[]): string[] {
+    return branches
+        .map((branch) => branch.const)
+        .filter((value): value is string => typeof value === "string");
+}
+
+/**
+ * Find a oneOf/anyOf union whose branches are all bare `const` aliases and that
+ * collapses to at most one active value. Returns null when there is no such
+ * union or when multiple active values keep the field genuinely polymorphic.
+ */
+function collapsibleConstAliasUnion(node: SchemaNode): { kw: "oneOf" | "anyOf"; branches: SchemaNode[] } | null {
     for (const kw of ["oneOf", "anyOf"] as const) {
-        if (!Array.isArray(node[kw])) continue;
+        const branches = node[kw];
+        if (!Array.isArray(branches) || !branches.length || !branches.every(isConstAliasBranch)) continue;
+        if (branches.filter((branch) => !branch.deprecated).length > 1) return null;
+        return {kw, branches};
+    }
+    return null;
+}
 
-        const branches = node[kw] as SchemaNode[];
-        if (!branches.length || !branches.every(isConstAliasBranch)) continue;
-
-        const active = branches.find((branch) => !branch.deprecated)?.const;
-        const deprecated = branches
-            .filter((branch) => branch.deprecated)
-            .map((branch) => branch.const)
-            .filter((value): value is string => typeof value === "string");
-
+function constAliasesFrom(node: SchemaNode): { constValue: string | null; deprecatedConstValues: string[] } {
+    const union = collapsibleConstAliasUnion(node);
+    if (!union) {
         return {
-            constValue: typeof active === "string" ? active : branches[0].const || null,
-            deprecatedConstValues: deprecated,
+            constValue: typeof node.const === "string" ? node.const : null,
+            deprecatedConstValues: [],
         };
     }
 
+    const active = constStrings(union.branches.filter((branch) => !branch.deprecated));
+    const deprecated = constStrings(union.branches.filter((branch) => branch.deprecated));
+
     return {
-        constValue: typeof node.const === "string" ? node.const : null,
-        deprecatedConstValues: [],
+        constValue: active[0] ?? null,
+        deprecatedConstValues: deprecated,
     };
 }
 
 function withoutConstAliasUnion(node: SchemaNode): SchemaNode {
-    if (!Array.isArray(node.oneOf) && !Array.isArray(node.anyOf)) return node;
+    const union = collapsibleConstAliasUnion(node);
+    if (!union) return node;
 
-    for (const kw of ["oneOf", "anyOf"] as const) {
-        if (Array.isArray(node[kw]) && (node[kw] as SchemaNode[]).every(isConstAliasBranch)) {
-            const {[kw]: _, ...rest} = node;
-            return rest;
-        }
-    }
-
-    return node;
+    const {[union.kw]: _, ...rest} = node;
+    return rest;
 }
 
 /**
