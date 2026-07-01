@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/http/integration
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/Shopify/toxiproxy/v2 v2.12.0
