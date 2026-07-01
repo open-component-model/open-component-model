@@ -70,6 +70,7 @@ func (h *Handler) Sign(
 	if err := cfg.Validate(); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("invalid signing config: %w", err)
 	}
+	algorithm := cfg.GetSignatureAlgorithm()
 
 	if strings.HasPrefix(cfg.Issuer, "http://") {
 		slog.WarnContext(ctx, "Issuer uses HTTP (non-TLS); this is insecure outside of test environments")
@@ -152,7 +153,7 @@ func (h *Handler) Sign(
 	// certificate inside the bundle, and OCM's Issuer field carries RFC2253 DN semantics
 	// (used by RSA/PEM) that don't apply to keyless Sigstore signatures.
 	return descruntime.SignatureInfo{
-		Algorithm: v1alpha1.AlgorithmSigstore,
+		Algorithm: string(algorithm),
 		MediaType: v1alpha1.MediaTypeSigstoreBundle,
 		Value:     base64.StdEncoding.EncodeToString(bundleJSON),
 	}, nil
@@ -172,8 +173,8 @@ func (h *Handler) Verify(
 		return fmt.Errorf("convert config: %w", err)
 	}
 
-	if signed.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
-		return fmt.Errorf("unsupported media type %q for sigstore verification", signed.Signature.MediaType)
+	if err := validateSignatureEnvelope(signed.Signature); err != nil {
+		return fmt.Errorf("verify: %w", err)
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -290,6 +291,7 @@ func (*Handler) GetSigningCredentialConsumerIdentity(
 	}
 	id := credentialIdentity(signerv1.VersionedType)
 	id[signerv1.IdentityAttributeSignature] = name
+	id[signerv1.IdentityAttributeAlgorithm] = string(cfg.GetSignatureAlgorithm())
 	if cfg.Issuer != "" {
 		id[signerv1.IdentityAttributeIssuer] = cfg.Issuer
 	}
@@ -304,12 +306,32 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	signature descruntime.Signature,
 	_ runtime.Typed,
 ) (runtime.Identity, error) {
-	if signature.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
-		return nil, fmt.Errorf("unsupported media type %q for sigstore verification", signature.Signature.MediaType)
+	if err := validateSignatureEnvelope(signature.Signature); err != nil {
+		return nil, fmt.Errorf("verifying credential identity: %w", err)
 	}
 	id := credentialIdentity(verifierv1.VersionedType)
 	id[verifierv1.IdentityAttributeSignature] = signature.Name
+	id[verifierv1.IdentityAttributeAlgorithm] = signature.Signature.Algorithm
 	return id, nil
+}
+
+// validateSignatureEnvelope checks the signature carries a known OCM Sigstore
+// algorithm and an acceptable bundle MediaType. Empty Algorithm is rejected
+// (not defaulted): an OCM signature without a declared algorithm is foreign
+// or malformed.
+func validateSignatureEnvelope(sig descruntime.SignatureInfo) error {
+	if sig.Algorithm == "" {
+		return fmt.Errorf("signature.Algorithm is required for sigstore verification")
+	}
+	switch v1alpha1.SignatureAlgorithm(sig.Algorithm) {
+	case v1alpha1.AlgorithmSigstoreV1Alpha1, v1alpha1.AlgorithmSigstoreLegacy:
+	default:
+		return fmt.Errorf("%w: %q", v1alpha1.ErrUnknownAlgorithm, sig.Algorithm)
+	}
+	if sig.MediaType != v1alpha1.MediaTypeSigstoreBundle {
+		return fmt.Errorf("unsupported media type %q for sigstore verification", sig.MediaType)
+	}
+	return nil
 }
 
 func credentialIdentity(identityType runtime.Type) runtime.Identity {
