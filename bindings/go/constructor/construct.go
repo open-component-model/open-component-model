@@ -222,6 +222,10 @@ func (c *DefaultConstructor) constructComponent(ctx context.Context, component *
 		return nil, err
 	}
 
+	if err := descriptor.Validate(desc); err != nil {
+		return nil, fmt.Errorf("component %q failed validation: %w", component.Name, err)
+	}
+
 	if err := repo.AddComponentVersion(ctx, desc); err != nil {
 		return nil, fmt.Errorf("error adding component version to target: %w", err)
 	}
