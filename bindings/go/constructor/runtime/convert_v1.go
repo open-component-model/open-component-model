@@ -81,6 +81,26 @@ func ConvertToV1ElementMeta(meta ElementMeta) v1.ElementMeta {
 
 // Resource conversion
 
+// ConvertFromV1ResourceOptions maps the optional v1 resource options block to
+// the runtime resource options. An absent options block yields the zero value.
+func ConvertFromV1ResourceOptions(opts *v1.ResourceOptions) ResourceOptions {
+	if opts == nil {
+		return ResourceOptions{}
+	}
+	return ResourceOptions{OwnershipPolicy: OwnershipPolicy(opts.OwnershipPolicy)}
+}
+
+// ConvertToV1ResourceOptions builds the optional v1 resource options block from
+// the runtime resource options. The zero value yields nil so the options block
+// is omitted from the spec rather than emitting an empty object on every
+// resource; any explicitly set policy (including "Never") is preserved.
+func ConvertToV1ResourceOptions(o ResourceOptions) *v1.ResourceOptions {
+	if o == (ResourceOptions{}) {
+		return nil
+	}
+	return &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicy(o.OwnershipPolicy)}
+}
+
 // ConvertFromV1Resource converts a v1 Resource to runtime Resource.
 // Returns an empty Resource if the input is nil.
 func ConvertFromV1Resource(resource *v1.Resource) Resource {
@@ -92,6 +112,7 @@ func ConvertFromV1Resource(resource *v1.Resource) Resource {
 		ElementMeta: ConvertFromV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    ResourceRelation(resource.Relation),
+		Options:     ConvertFromV1ResourceOptions(resource.Options),
 	}
 
 	if resource.SourceRefs != nil {
@@ -125,6 +146,7 @@ func ConvertToV1Resource(resource *Resource) (*v1.Resource, error) {
 		ElementMeta: ConvertToV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    v1.ResourceRelation(resource.Relation),
+		Options:     ConvertToV1ResourceOptions(resource.Options),
 	}
 
 	if resource.SourceRefs != nil {
@@ -293,6 +315,7 @@ func ConvertToRuntimeConstructorResource(resource v1.Resource) Resource {
 		ElementMeta: ConvertFromV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    ResourceRelation(resource.Relation),
+		Options:     ConvertFromV1ResourceOptions(resource.Options),
 	}
 
 	if resource.HasInput() {

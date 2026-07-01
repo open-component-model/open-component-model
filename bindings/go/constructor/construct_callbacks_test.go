@@ -11,54 +11,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// mockInputType implements runtime.Typed for testing
-type mockInputType struct {
-	Type runtime.Type
-}
-
-func (m *mockInputType) GetType() runtime.Type {
-	return m.Type
-}
-
-func (m *mockInputType) SetType(typ runtime.Type) {
-	m.Type = typ
-}
-
-func (m *mockInputType) DeepCopyTyped() runtime.Typed {
-	return &mockInputType{
-		Type: m.Type,
-	}
-}
-
-// mockCallbackTracker helps track which callbacks were called and in what order
-type mockCallbackTracker struct {
-	startComponentCalled bool
-	endComponentCalled   bool
-	startResourceCalled  bool
-	endResourceCalled    bool
-	startSourceCalled    bool
-	endSourceCalled      bool
-	component            *constructorruntime.Component
-	resource             *constructorruntime.Resource
-	source               *constructorruntime.Source
-	descriptor           *descriptor.Descriptor
-	err                  error
-}
-
-func (m *mockCallbackTracker) reset() {
-	m.startComponentCalled = false
-	m.endComponentCalled = false
-	m.startResourceCalled = false
-	m.endResourceCalled = false
-	m.startSourceCalled = false
-	m.endSourceCalled = false
-	m.component = nil
-	m.resource = nil
-	m.source = nil
-	m.descriptor = nil
-	m.err = nil
-}
-
 func TestConstructionCallbacks(t *testing.T) {
 	tracker := &mockCallbackTracker{}
 	mockRepo := newMockTargetRepository()

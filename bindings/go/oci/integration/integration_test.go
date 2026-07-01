@@ -1226,12 +1226,6 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 	r.Equal(fmt.Sprintf("http://%s", to), resultAccess.ImageReference)
 }
 
-// Test_Integration_OCIRepository_Ownership exercises the OCI binding's
-// ownership-referrer surface (ADR 0016) against both a containerised registry
-// and a CTF: AddOwnership creates a single content-addressed referrer per
-// subject (idempotent across re-runs), siblings stay isolated, and a
-// resource-level transfer (UploadResource) carries the referrer along to the
-// target — registry→registry and registry→CTF.
 func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -1348,6 +1342,20 @@ func Test_Integration_OCIRepository_Ownership(t *testing.T) {
 			assertOwnershipReferrerCount(t, ctx, dstResolver, transferred, 1)
 			assertOwnershipReferrerAnnotations(t, ctx, dstResolver, transferred,
 				component, version, "backend-image")
+		})
+
+		t.Run("transfer registry → registry without prior AddOwnership carries no referrer", func(t *testing.T) {
+			srcImageRef := pushOwnershipByReferenceImage(t, ctx, srcRepo,
+				fmt.Sprintf("%s/test-asset/transfer-no-referrer-src:%s", srcReg, version),
+				[]byte("transfer-no-referrer-payload"))
+			assertOwnershipReferrerCount(t, ctx, srcResolver, srcImageRef, 0)
+
+			srcRes := byReferenceResource("backend-image", version, srcImageRef)
+			dstResolver, dstReg, dstRepo := startOwnershipRegistry(t, ctx)
+			dstImageRef := fmt.Sprintf("%s/test-asset/transfer-no-referrer-dst:%s", dstReg, version)
+			transferred := transferByReferenceResource(t, ctx, srcRepo, dstRepo, srcRes, dstImageRef)
+
+			assertOwnershipReferrerCount(t, ctx, dstResolver, transferred, 0)
 		})
 
 		t.Run("transfer registry → CTF carries the referrer", func(t *testing.T) {

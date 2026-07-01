@@ -573,6 +573,7 @@ outputspecification
 overexplain
 overriden
 overwritable
+ownershipPolicy
 packageidentifier
 packagename
 packagespec
