@@ -368,4 +368,11 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
+// github.com/go-ini/ini was retired upstream in favor of gopkg.in/ini.v1.
+// v1.67.0 is the last release served under the old github path; v1.67.1+
+// declare `module gopkg.in/ini.v1` and fail `go get` with a module-path
+// mismatch. Transitive callers (mikefarah/yq/v4, ocm.software/ocm v0.44.0)
+// still reference the old path; remove this replace once they migrate.
+replace github.com/go-ini/ini => gopkg.in/ini.v1 v1.67.0
+
 replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.1
