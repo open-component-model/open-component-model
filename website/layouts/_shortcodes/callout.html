@@ -1,6 +1,8 @@
 {{- /*
 Usage: `callout "type"`, where `type` is one of "note" (default), "info", "danger", or "warning"
-Based on: https://github.com/twbs/bootstrap/blob/283cbd902669732943885e94115a0e29a952baf6/site/layouts/shortcodes/callout.html
+Based on: @thulite/doks-core@1.9.3 (path: layouts/_shortcodes/callout.html)
+Originally adapted from: https://github.com/twbs/bootstrap/blob/283cbd902669732943885e94115a0e29a952baf6/site/layouts/shortcodes/callout.html
+See website/CONTRIBUTING.md "Theme overlays" for the audit/update process.
 */ -}}
 {{- $css_class := "" -}}
 {{- if .IsNamedParams -}}

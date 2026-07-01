@@ -55,6 +55,79 @@ npm run lint:scripts
 npm run lint:scripts:fix
 ```
 
+## Theme overlays
+
+The website builds on the [@thulite/doks-core](https://www.npmjs.com/package/@thulite/doks-core) Hugo theme. Some
+templates and shortcodes from the theme are *shadowed* — a file with the same path under `website/layouts/` overrides
+the theme's version. Hugo's template lookup picks the project file first, so the theme's original is never rendered.
+
+Shadowing is the supported way to customize Doks. The cost is **drift**: when the theme is upgraded, the upstream
+file may change in ways that are not reflected in our shadow, and Hugo gives no warning.
+
+### Tagging a shadow
+
+Every file under `website/layouts/` that is derived from `@thulite/doks-core` must declare its baseline upstream
+version with a Hugo comment near the top of the file:
+
+```html
+{{- /*
+  Based on: @thulite/doks-core@<version> (path: <upstream-relative-path>)
+  See website/CONTRIBUTING.md "Theme overlays" for the audit/update process.
+*/ -}}
+```
+
+For example:
+
+```html
+{{- /*
+  Based on: @thulite/doks-core@1.9.3 (path: layouts/_shortcodes/callout.html)
+  ...
+*/ -}}
+```
+
+Files **without** this tag are treated as project-original (no upstream counterpart) and are not audited. If you add
+a new shadow, you must add the tag — otherwise drift on that file goes unnoticed.
+
+If the upstream file itself credits an even earlier source (e.g. Doks adapted its `callout` shortcode from Bootstrap),
+preserve that attribution as a separate `Originally adapted from: <url>` line below the `Based on:` tag.
+
+### Auditing
+
+The audit script compares each tagged shadow against the upstream file at both the *recorded* version (from the tag)
+and the *installed* version (from `node_modules/@thulite/doks-core/package.json`):
+
+```bash
+cd website
+npm run audit:overlays            # report only files that need attention
+npm run audit:overlays -- -v      # also show files that are clean
+```
+
+For each shadow it reports one of:
+
+| Status      | Meaning                                                                                                    | Action                                                                  |
+|-------------|------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
+| `OK`        | Recorded baseline matches the installed upstream byte-for-byte.                                            | None.                                                                   |
+| `STALE_TAG` | Recorded version differs from installed, but upstream content is unchanged at both versions.               | Bump the version in the tag.                                            |
+| `DRIFT`     | Upstream file changed between the recorded version and the installed version.                              | Review the diff. Port any improvements into the shadow, then bump tag.  |
+| `REMOVED`   | Upstream file no longer exists at the installed version.                                                   | The shadow may be obsolete or moved upstream — investigate and resolve. |
+| `ERROR`     | The tag is malformed, the upstream tarball cannot be fetched, or the recorded path doesn't exist upstream. | Fix the tag.                                                            |
+
+Exit code is non-zero if any shadow is in `DRIFT`, `REMOVED`, or `ERROR`. `OK` and `STALE_TAG` are informational.
+
+### When to run the audit
+
+- **Before bumping `@thulite/doks-core`**: run the audit on the current state to confirm a clean baseline.
+- **After bumping `@thulite/doks-core`**: run again. Any new `DRIFT` reports show what changed upstream that we may
+  need to port. Any `REMOVED` reports show files that disappeared from upstream — decide whether the shadow is still
+  useful.
+- **When adding a new shadow**: tag it with the currently installed version. The audit then tracks it on future
+  bumps.
+
+### Pinning the theme version
+
+`package.json` should pin `@thulite/doks-core` to an exact version (`"1.9.3"`, not `"^1.9.3"`). Floating versions
+turn theme upgrades into surprise drift; pinning makes upgrades deliberate.
+
 ## Content Authoring Guide
 
 The rest of this document covers how to create and place documentation content. All new content should follow the
