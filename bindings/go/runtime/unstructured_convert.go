@@ -22,6 +22,10 @@ var (
 // instead of overflowing the stack.
 const maxUnstructuredDepth = 10000
 
+// toUnstructuredMap is a trimmed port of Kubernetes'
+// runtime.DefaultUnstructuredConverter.ToUnstructured (k8s.io/apimachinery/pkg/runtime/converter.go),
+// kept dependency-free; consult that implementation as the reference when extending this.
+//
 // toUnstructuredMap converts a Typed into a map[string]any, preserving concrete numeric types
 // (int64/float64) rather than coercing everything to float64 as a json.Unmarshal into interface{}
 // would. Its output is JSON-native and marshals identically to encoding/json. json.Marshaler and
