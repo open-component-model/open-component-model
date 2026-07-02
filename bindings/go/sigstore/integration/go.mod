@@ -6,7 +6,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260701145710-db305bd813f4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260701145710-db305bd813f4
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260702054931-c9a42a672d3b
 )
 
 require (

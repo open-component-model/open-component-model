@@ -27,7 +27,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260701145710-db305bd813f4
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260701145710-db305bd813f4
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260701145710-db305bd813f4
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260702054931-c9a42a672d3b
 	ocm.software/open-component-model/bindings/go/http v0.0.0-20260701145710-db305bd813f4
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
@@ -38,8 +38,8 @@ require (
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260701145710-db305bd813f4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260701145710-db305bd813f4
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260701145710-db305bd813f4
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260701145710-db305bd813f4
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260702054931-c9a42a672d3b
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260702054931-c9a42a672d3b
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260701145710-db305bd813f4
 	sigs.k8s.io/yaml v1.6.0
 )
