@@ -166,6 +166,44 @@ func TestIdentityFromOCIRepository(t *testing.T) {
 			want:    nil,
 			wantErr: true,
 		},
+		{
+			name: "SubPath sets path in identity",
+			repository: oci.Repository{
+				BaseUrl: "registry.onstackit.cloud",
+				SubPath: "k7e-components-pre",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "registry.onstackit.cloud",
+				runtime.IdentityAttributePath:     "k7e-components-pre",
+			},
+			wantErr: false,
+		},
+		{
+			name: "explicit SubPath wins over path in BaseUrl",
+			repository: oci.Repository{
+				BaseUrl: "registry.onstackit.cloud/base",
+				SubPath: "k7e",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "registry.onstackit.cloud",
+				runtime.IdentityAttributePath:     "k7e",
+			},
+			wantErr: false,
+		},
+		{
+			name: "auto-extraction: empty SubPath uses path from BaseUrl",
+			repository: oci.Repository{
+				BaseUrl: "ghcr.io/open-component-model/ocm",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributePath:     "open-component-model/ocm",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
