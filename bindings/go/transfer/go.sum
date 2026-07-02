@@ -345,8 +345,8 @@ ocm.software/open-component-model/bindings/go/signing v0.0.0-20260701145710-db30
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20260701145710-db305bd813f4/go.mod h1:PNfCQ4hDSEuF+mZHTRXPdBjbq3KIA39g49q0b9zRUOI=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260701145710-db305bd813f4 h1:7LkM4VQv2+RwyVTa2tMp/qCLoOhF6bqpJxHBzqy1a/c=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260701145710-db305bd813f4/go.mod h1:UauaTGoZm1RA8Tdg5kWMkJtTRfJ2cd9BS3GVgQCwhEg=
-oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
-oras.land/oras-go/v2 v2.6.0/go.mod h1:magiQDfG6H1O9APp+rOsvCPcW1GD2MM7vgnKY0Y+u1o=
+oras.land/oras-go/v2 v2.6.1 h1:bonOEkjLfp8tt6qXWRRWP6p1F+9octchOf2EqnWB4Zs=
+oras.land/oras-go/v2 v2.6.1/go.mod h1:dhtFrFOuZuDtAVeZ9FUnaa5zfzplG3ZnFX9/uH1J/Yk=
 sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 h1:IpInykpT6ceI+QxKBbEflcR5EXP7sU1kvOlxwZh5txg=
 sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730/go.mod h1:mdzfpAEoE6DHQEN0uh9ZbOCuHbLK5wOm7dK4ctXE9Tg=
 sigs.k8s.io/kustomize/api v0.21.1 h1:lzqbzvz2CSvsjIUZUBNFKtIMsEw7hVLJp0JeSIVmuJs=
