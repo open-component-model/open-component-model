@@ -20,7 +20,7 @@ require (
 	ocm.software/open-component-model/bindings/go/http v0.0.0-20260701145710-db305bd813f4
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	oras.land/oras-go/v2 v2.6.0
+	oras.land/oras-go/v2 v2.6.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
