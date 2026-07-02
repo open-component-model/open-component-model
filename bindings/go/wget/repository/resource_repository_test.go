@@ -13,8 +13,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	v1 "ocm.software/open-component-model/bindings/go/wget/access/spec/v1"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
+	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
@@ -355,7 +355,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 
 	identity, err := repo.GetResourceCredentialConsumerIdentity(t.Context(), resource)
 	require.NoError(t, err)
-	assert.Equal(t, "wget", identity["type"])
+	assert.Equal(t, "Wget", identity["type"])
 	assert.Equal(t, "https", identity["scheme"])
 	assert.Equal(t, "example.com", identity["hostname"])
 	assert.Equal(t, "443", identity["port"])

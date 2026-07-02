@@ -6,26 +6,9 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	v1 "ocm.software/open-component-model/bindings/go/wget/access/spec/v1"
+	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
+	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
-
-const (
-	WgetConsumerType = "wget"
-)
-
-var Scheme = runtime.NewScheme()
-
-func init() {
-	MustAddToScheme(Scheme)
-}
-
-func MustAddToScheme(scheme *runtime.Scheme) {
-	wget := &v1.Wget{}
-	scheme.MustRegisterWithAlias(wget,
-		runtime.NewVersionedType(WgetConsumerType, v1.Version),
-		runtime.NewUnversionedType(WgetConsumerType),
-	)
-}
 
 // WgetAccess provides credential consumer identity resolution for wget access specs.
 type WgetAccess struct{}
@@ -46,7 +29,7 @@ func (w *WgetAccess) GetResourceCredentialConsumerIdentity(ctx context.Context, 
 	}
 
 	wget := v1.Wget{}
-	if err := Scheme.Convert(resource.Access, &wget); err != nil {
+	if err := accessspec.Scheme.Convert(resource.Access, &wget); err != nil {
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
 
@@ -59,7 +42,7 @@ func (w *WgetAccess) GetResourceCredentialConsumerIdentity(ctx context.Context, 
 		return nil, fmt.Errorf("error parsing wget URL to identity: %w", err)
 	}
 
-	identity.SetType(runtime.NewUnversionedType(WgetConsumerType))
+	identity.SetType(runtime.NewUnversionedType(accessspec.WgetConsumerType))
 
 	return identity, nil
 }

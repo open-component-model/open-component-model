@@ -17,7 +17,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/access"
-	v1 "ocm.software/open-component-model/bindings/go/wget/access/spec/v1"
+	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
+	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
@@ -55,7 +56,7 @@ func NewResourceRepository(opts ...Option) *ResourceRepository {
 
 // GetResourceRepositoryScheme returns the scheme used by the wget resource repository.
 func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
-	return access.Scheme
+	return accessspec.Scheme
 }
 
 // GetResourceCredentialConsumerIdentity resolves the credential consumer identity for the given resource.
@@ -73,7 +74,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	}
 
 	wget := v1.Wget{}
-	if err := access.Scheme.Convert(resource.Access, &wget); err != nil {
+	if err := accessspec.Scheme.Convert(resource.Access, &wget); err != nil {
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
 

@@ -12,7 +12,7 @@ import (
 // +ocm:jsonschema-gen=true
 type Wget struct {
 	// +ocm:jsonschema-gen:enum=Wget/v1,wget/v1
-	// +ocm:jsonschema-gen:enum:deprecated=wget
+	// +ocm:jsonschema-gen:enum:deprecated=Wget,wget
 	Type runtime.Type `json:"type"`
 
 	// URL is the HTTP endpoint to download the resource from.

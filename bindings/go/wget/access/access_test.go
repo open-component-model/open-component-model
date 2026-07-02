@@ -10,7 +10,8 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/access"
-	v1 "ocm.software/open-component-model/bindings/go/wget/access/spec/v1"
+	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
+	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
 func TestScheme_Convert(t *testing.T) {
@@ -18,24 +19,24 @@ func TestScheme_Convert(t *testing.T) {
 
 	t.Run("converts versioned type", func(t *testing.T) {
 		raw := &runtime.Raw{
-			Type: runtime.NewVersionedType("wget", v1.Version),
+			Type: runtime.NewVersionedType("Wget", v1.Version),
 			Data: []byte(`{"url":"https://example.com/file.tar.gz"}`),
 		}
 
 		wget := v1.Wget{}
-		err := access.Scheme.Convert(raw, &wget)
+		err := accessspec.Scheme.Convert(raw, &wget)
 		require.NoError(t, err)
 		assert.Equal(t, "https://example.com/file.tar.gz", wget.URL)
 	})
 
 	t.Run("converts unversioned type", func(t *testing.T) {
 		raw := &runtime.Raw{
-			Type: runtime.NewUnversionedType("wget"),
+			Type: runtime.NewUnversionedType("Wget"),
 			Data: []byte(`{"url":"https://example.com/file.tar.gz"}`),
 		}
 
 		wget := v1.Wget{}
-		err := access.Scheme.Convert(raw, &wget)
+		err := accessspec.Scheme.Convert(raw, &wget)
 		require.NoError(t, err)
 		assert.Equal(t, "https://example.com/file.tar.gz", wget.URL)
 	})
@@ -47,7 +48,7 @@ func TestScheme_Convert(t *testing.T) {
 		}
 
 		wget := v1.Wget{}
-		err := access.Scheme.Convert(raw, &wget)
+		err := accessspec.Scheme.Convert(raw, &wget)
 		assert.Error(t, err)
 	})
 }
@@ -62,7 +63,7 @@ func wgetAccessResource(t *testing.T, data map[string]any) *descruntime.Resource
 	r.Version = "1.0.0"
 	r.Type = "blob"
 	r.Access = &runtime.Raw{
-		Type: runtime.NewVersionedType("wget", v1.Version),
+		Type: runtime.NewVersionedType("Wget", v1.Version),
 		Data: raw,
 	}
 	return r
@@ -82,7 +83,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, identity)
 
-		assert.Equal(t, "wget", identity["type"])
+		assert.Equal(t, "Wget", identity["type"])
 		assert.Equal(t, "https", identity["scheme"])
 		assert.Equal(t, "example.com", identity["hostname"])
 		assert.Equal(t, "path/to/resource", identity["path"])
@@ -97,7 +98,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, identity)
 
-		assert.Equal(t, "wget", identity["type"])
+		assert.Equal(t, "Wget", identity["type"])
 		assert.Equal(t, "http", identity["scheme"])
 		assert.Equal(t, "example.com", identity["hostname"])
 		assert.Equal(t, "8080", identity["port"])
