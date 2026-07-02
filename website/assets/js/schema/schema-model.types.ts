@@ -4,6 +4,8 @@ export interface SchemaField {
   name: string;
   type: string;
   description: string;
+  constValues: string[];
+  deprecatedConstValues: string[];
   required: boolean;
   immutable: boolean;
   properties: SchemaField[] | null;

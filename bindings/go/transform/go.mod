@@ -1,12 +1,12 @@
 module ocm.software/open-component-model/bindings/go/transform
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/google/cel-go v0.28.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260630105024-9635c8baf819
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260701145710-db305bd813f4
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8

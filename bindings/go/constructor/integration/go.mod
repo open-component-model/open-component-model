@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/constructor/integration
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/opencontainers/go-digest v1.0.0
@@ -11,7 +11,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/constructor v0.0.11
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260630105024-9635c8baf819
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260701145710-db305bd813f4
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
 	ocm.software/open-component-model/bindings/go/oci v0.0.47
@@ -81,7 +81,7 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.15 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260630105024-9635c8baf819 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260701145710-db305bd813f4 // indirect
 )
 
 replace ocm.software/open-component-model/bindings/go/constructor => ../
