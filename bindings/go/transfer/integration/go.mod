@@ -17,7 +17,7 @@ require (
 	ocm.software/open-component-model/bindings/go/oci v0.0.47
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260701145710-db305bd813f4
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260702054931-c9a42a672d3b
 	oras.land/oras-go/v2 v2.6.0
 )
 
@@ -125,7 +125,7 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.15 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260701145710-db305bd813f4 // indirect
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260701145710-db305bd813f4 // indirect
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260702054931-c9a42a672d3b // indirect
 	ocm.software/open-component-model/bindings/go/http v0.0.0-20260701145710-db305bd813f4 // indirect
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260701145710-db305bd813f4 // indirect
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260701145710-db305bd813f4 // indirect
