@@ -1,7 +1,9 @@
 package resource_test
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/md5"
 	"crypto/sha1"
@@ -16,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	credv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -117,7 +120,8 @@ func TestUploadResource(t *testing.T) {
 	// returned resource carries the maven access + media type
 	var got v1.Maven
 	require.NoError(t, mavenaccess.Scheme.Convert(updated.Access, &got))
-	assert.Equal(t, "application/java-archive", got.MediaType)
+	require.NotNil(t, got.MediaType)
+	assert.Equal(t, "application/java-archive", *got.MediaType)
 }
 
 // directCreds builds a *credv1.DirectCredentials with the given properties.
@@ -319,3 +323,119 @@ func TestUploadResourceVerifyUpload(t *testing.T) {
 		require.ErrorContains(t, err, "mismatch")
 	})
 }
+
+func TestDownloadResource_SnapshotMultiFile_Tgz(t *testing.T) {
+	jar := []byte("JARDATA")
+	src := []byte("SRCDATA")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/maven2/com/example/lib/1.0-SNAPSHOT/maven-metadata.xml":
+			_, _ = w.Write([]byte(`<metadata><versioning><snapshotVersions>` +
+				`<snapshotVersion><extension>jar</extension><value>1.0-20240101.120000-3</value></snapshotVersion>` +
+				`<snapshotVersion><classifier>sources</classifier><extension>jar</extension><value>1.0-20240101.120000-3</value></snapshotVersion>` +
+				`</snapshotVersions></versioning></metadata>`))
+		case "/maven2/com/example/lib/1.0-SNAPSHOT/lib-1.0-20240101.120000-3.jar":
+			_, _ = w.Write(jar)
+		case "/maven2/com/example/lib/1.0-SNAPSHOT/lib-1.0-20240101.120000-3-sources.jar":
+			_, _ = w.Write(src)
+		default:
+			http.NotFound(w, req) // .sha1 siblings 404 -> soft pass
+		}
+	}))
+	defer srv.Close()
+
+	repo := resource.NewResourceRepository(resource.WithHTTPClient(srv.Client()))
+	res := &descriptor.Resource{Access: &v1.Maven{
+		Type: runtime.NewVersionedType(v1.Type, v1.Version), RepoURL: srv.URL + "/maven2",
+		GroupID: "com.example", ArtifactID: "lib", Version: "1.0-SNAPSHOT", Extension: ptr("jar"),
+	}}
+	b, err := repo.DownloadResource(context.Background(), res, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// assert the blob is tagged as a flat tgz
+	mt, ok := b.(interface{ MediaType() (string, bool) }).MediaType()
+	require.True(t, ok)
+	assert.Equal(t, "application/x-tgz", mt)
+
+	// assert the archive holds both entries with the expected content
+	entries := readTgzEntries(t, b)
+	require.Len(t, entries, 2)
+	assert.Equal(t, jar, entries["lib-1.0-20240101.120000-3.jar"])
+	assert.Equal(t, src, entries["lib-1.0-20240101.120000-3-sources.jar"])
+}
+
+func TestDownloadResource_SnapshotPatternSingleMatch_PlainBlob(t *testing.T) {
+	jar := []byte("JARDATA")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/maven2/com/example/lib/1.0-SNAPSHOT/maven-metadata.xml":
+			// Only one snapshotVersion entry, and it matches the selector below,
+			// so pattern resolution yields exactly one file.
+			_, _ = w.Write([]byte(`<metadata><versioning><snapshotVersions>` +
+				`<snapshotVersion><classifier>sources</classifier><extension>jar</extension><value>1.0-20240101.120000-3</value></snapshotVersion>` +
+				`</snapshotVersions></versioning></metadata>`))
+		case "/maven2/com/example/lib/1.0-SNAPSHOT/lib-1.0-20240101.120000-3-sources.jar":
+			_, _ = w.Write(jar)
+		default:
+			http.NotFound(w, req) // .sha1 sibling 404 -> soft pass
+		}
+	}))
+	defer srv.Close()
+
+	repo := resource.NewResourceRepository(resource.WithHTTPClient(srv.Client()))
+	res := mavenResource(&v1.Maven{
+		RepoURL: srv.URL + "/maven2", GroupID: "com.example", ArtifactID: "lib", Version: "1.0-SNAPSHOT",
+		Classifier: ptr("sources"),
+	})
+	b, err := repo.DownloadResource(context.Background(), res, nil)
+	require.NoError(t, err)
+
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	defer rc.Close()
+	data, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, jar, data)
+
+	// A single-file pattern match must be returned as a plain blob (not a tgz).
+	mt, ok := b.(interface{ MediaType() (string, bool) }).MediaType()
+	require.True(t, ok)
+	assert.NotEqual(t, "application/x-tgz", mt)
+	assert.Equal(t, "application/java-archive", mt)
+}
+
+// readTgzEntries reads a gzip-compressed tar blob and returns a map of entry
+// name to its raw content.
+func readTgzEntries(t *testing.T, b blob.ReadOnlyBlob) map[string][]byte {
+	t.Helper()
+	rc, err := b.ReadCloser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rc.Close()
+	gz, err := gzip.NewReader(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := tar.NewReader(gz)
+	entries := map[string][]byte{}
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		entries[h.Name] = data
+	}
+	return entries
+}
+
+func ptr[T any](v T) *T { return &v }

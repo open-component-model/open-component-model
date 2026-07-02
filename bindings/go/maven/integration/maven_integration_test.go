@@ -17,7 +17,9 @@
 package integration
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/md5"
 	"crypto/sha1"
@@ -33,6 +35,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	credv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -374,6 +377,135 @@ func Test_Integration_MavenResourceRepository(t *testing.T) {
 	})
 }
 
+// Test_Integration_Maven_SnapshotMultiFileTgz exercises the full snapshot
+// multi-file download path against a REAL `mvn deploy:deploy-file` and a real
+// Reposilite server: deploy a -SNAPSHOT main jar together with sources and
+// javadoc classifier jars in a single Maven invocation (as `mvn deploy` would
+// produce for a project with the source/javadoc plugins bound), then resolve
+// it with a pattern selector (classifier unset, extension "jar") and assert
+// the result is a tgz containing exactly those three jars. The version-level
+// maven-metadata.xml that `mvn deploy:deploy-file` writes on a SNAPSHOT deploy
+// is what drives the pattern resolution (see Client.Resolve).
+func Test_Integration_Maven_SnapshotMultiFileTgz(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping maven integration test in short mode")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	rs := newRepoServer(t, ctx)
+	mc := startMavenContainer(t, ctx, rs.port)
+	repo := resource.NewResourceRepository()
+
+	const (
+		group    = "com.example"
+		artifact = "lib"
+		version  = "1.0-SNAPSHOT"
+	)
+	mainBytes := []byte("main-jar-payload")
+	sourcesBytes := []byte("sources-jar-payload")
+	javadocBytes := []byte("javadoc-jar-payload")
+
+	require.NoError(t, mc.c.CopyToContainer(ctx, mainBytes, "/work/lib.jar", 0o644))
+	require.NoError(t, mc.c.CopyToContainer(ctx, sourcesBytes, "/work/lib-sources.jar", 0o644))
+	require.NoError(t, mc.c.CopyToContainer(ctx, javadocBytes, "/work/lib-javadoc.jar", 0o644))
+
+	// A single deploy-file invocation with -Dsources/-Djavadoc publishes the
+	// main artifact plus the sources and javadoc classifier jars in one go
+	// (deploy-file supports both flags directly), exactly like a real `mvn
+	// deploy` of a project with the source/javadoc plugins bound. Because the
+	// version is a SNAPSHOT, this also writes timestamped filenames and the
+	// version-level maven-metadata.xml that pattern resolution depends on.
+	code, out := mc.mvn(t, ctx, "deploy:deploy-file",
+		"-Dfile=/work/lib.jar",
+		"-Dsources=/work/lib-sources.jar",
+		"-Djavadoc=/work/lib-javadoc.jar",
+		"-DgroupId="+group,
+		"-DartifactId="+artifact,
+		"-Dversion="+version,
+		"-Dpackaging=jar",
+		"-DrepositoryId=it",
+		"-Durl="+rs.containerURL(),
+	)
+	require.Equalf(t, 0, code, "mvn deploy:deploy-file (snapshot + sources + javadoc) failed:\n%s", out)
+
+	// Pattern selector: classifier unset (any), extension "jar" -> resolves via
+	// the version-level maven-metadata.xml maven just wrote, matching the main
+	// jar plus the sources/javadoc classifier jars (all extension "jar"), and
+	// filtering out the non-jar entries (pom, maven-metadata.xml itself).
+	res := mavenResource(rs.hostURL(), group, artifact, version, withExtension("jar"))
+	b, err := repo.DownloadResource(ctx, res, deployCredentials())
+	require.NoError(t, err)
+
+	mtAware, ok := b.(blob.MediaTypeAware)
+	require.True(t, ok, "downloaded blob must implement blob.MediaTypeAware")
+	mt, ok := mtAware.MediaType()
+	require.True(t, ok, "downloaded multi-file blob must report a media type")
+	assert.Equal(t, "application/x-tgz", mt)
+
+	entries := readTgzEntries(t, b)
+	require.Lenf(t, entries, 3, "expected main+sources+javadoc jars, got entries: %v", entryNames(entries))
+
+	var mainName, sourcesName, javadocName string
+	for name := range entries {
+		switch {
+		case strings.HasSuffix(name, "-sources.jar"):
+			sourcesName = name
+		case strings.HasSuffix(name, "-javadoc.jar"):
+			javadocName = name
+		case strings.HasSuffix(name, ".jar"):
+			mainName = name
+		}
+	}
+	require.NotEmptyf(t, mainName, "main jar entry not found in tar: %v", entryNames(entries))
+	require.NotEmptyf(t, sourcesName, "sources jar entry not found in tar: %v", entryNames(entries))
+	require.NotEmptyf(t, javadocName, "javadoc jar entry not found in tar: %v", entryNames(entries))
+
+	assert.Equal(t, mainBytes, entries[mainName], "main jar content mismatch")
+	assert.Equal(t, sourcesBytes, entries[sourcesName], "sources jar content mismatch")
+	assert.Equal(t, javadocBytes, entries[javadocName], "javadoc jar content mismatch")
+
+	// The tar entry names embed the timestamped snapshot version (from
+	// maven-metadata.xml), never the literal "-SNAPSHOT" version.
+	assert.NotContains(t, mainName, "SNAPSHOT", "tar entry name must use the timestamped version, not literal SNAPSHOT")
+	assert.Contains(t, mainName, artifact+"-"+strings.TrimSuffix(version, "-SNAPSHOT"))
+}
+
+// readTgzEntries reads a gzip-compressed tar blob and returns a map of entry
+// name to its raw content.
+func readTgzEntries(t *testing.T, b interface {
+	ReadCloser() (io.ReadCloser, error)
+}) map[string][]byte {
+	t.Helper()
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	defer rc.Close()
+	gz, err := gzip.NewReader(rc)
+	require.NoError(t, err)
+	tr := tar.NewReader(gz)
+	entries := map[string][]byte{}
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		data, err := io.ReadAll(tr)
+		require.NoError(t, err)
+		entries[h.Name] = data
+	}
+	return entries
+}
+
+// entryNames renders the keys of a tar-entries map for diagnostic output.
+func entryNames(entries map[string][]byte) []string {
+	names := make([]string, 0, len(entries))
+	for name := range entries {
+		names = append(names, name)
+	}
+	return names
+}
+
 func mavenResource(repoURL, group, artifact, version string, opts ...func(*mavenv1.Maven)) *descriptor.Resource {
 	m := &mavenv1.Maven{
 		Type:       runtime.NewVersionedType(mavenv1.Type, mavenv1.Version),
@@ -390,12 +522,12 @@ func mavenResource(repoURL, group, artifact, version string, opts ...func(*maven
 
 // withClassifier sets the Maven classifier (e.g. "sources", "dist") on the resource access.
 func withClassifier(c string) func(*mavenv1.Maven) {
-	return func(m *mavenv1.Maven) { m.Classifier = c }
+	return func(m *mavenv1.Maven) { m.Classifier = &c }
 }
 
 // withExtension sets the Maven packaging/extension (e.g. "zip", "pom") on the resource access.
 func withExtension(e string) func(*mavenv1.Maven) {
-	return func(m *mavenv1.Maven) { m.Extension = e }
+	return func(m *mavenv1.Maven) { m.Extension = &e }
 }
 
 func readBlob(t *testing.T, b interface {
