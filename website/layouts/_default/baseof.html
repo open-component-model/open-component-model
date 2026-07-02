@@ -29,45 +29,16 @@
 
 
 {{ if .Store.Get "hasMermaid" }}
-<script type="module">
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
-
-  function getMermaidTheme() {
-    const htmlTheme = document.documentElement.getAttribute('data-bs-theme');
-    if (htmlTheme === 'dark') return 'dark';
-    if (htmlTheme === 'light') return 'default';
-    // Auto mode - check system preference
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
-  }
-
-  // Store original source before rendering
-  document.querySelectorAll('.mermaid').forEach((el) => {
-    el.setAttribute('data-mermaid-source', el.textContent);
-  });
-
-  mermaid.initialize({
-    startOnLoad: true,
-    theme: getMermaidTheme()
-  });
-
-  // Re-render on theme change
-  const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      if (mutation.attributeName === 'data-bs-theme') {
-        document.querySelectorAll('.mermaid').forEach((el) => {
-          const source = el.getAttribute('data-mermaid-source');
-          if (source) {
-            el.removeAttribute('data-processed');
-            el.textContent = source;
-          }
-        });
-        mermaid.initialize({ theme: getMermaidTheme() });
-        mermaid.run();
-      }
-    });
-  });
-  observer.observe(document.documentElement, { attributes: true });
-</script>
+{{- $asset := resources.Get "js/mermaid-init.js" -}}
+{{- if not $asset -}}{{ errorf "baseof: mermaid entry asset 'js/mermaid-init.js' not found" }}{{ end -}}
+{{- $opts := dict
+  "minify" (not hugo.IsDevelopment)
+  "sourceMap" (cond hugo.IsDevelopment "inline" "none")
+  "target" "es2020"
+-}}
+{{- with $asset | js.Build $opts -}}
+<script type="module" src="{{ .RelPermalink }}"></script>
+{{- end -}}
 {{ end }}
 
 {{ if eq site.Params.doks.toTopButton true -}}

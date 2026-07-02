@@ -4,6 +4,7 @@
  */
 
 @import "variables-custom"; // Custom variables (colors, fonts)
+@import "fonts"; // Self-hosted @font-face declarations (Inter, Quicksand)
 @import "base"; // Layout & structure
 @import "header-custom"; // Custom header navigation
 @import "branding"; // Logo & fonts
