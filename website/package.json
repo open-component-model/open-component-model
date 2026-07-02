@@ -36,6 +36,7 @@
     "@thulite/images": "^3.3.4",
     "@thulite/inline-svg": "^1.2.2",
     "@thulite/seo": "^2.4.3",
+    "mermaid": "11.16.0",
     "preact": "^10.29.0",
     "thulite": "^2.6.5"
   },
