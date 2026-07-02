@@ -7,173 +7,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"sigs.k8s.io/yaml"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-// mockInputMethod implements ResourceInputMethod for testing
-type mockInputMethod struct {
-	processedResource *descriptor.Resource
-	processedBlob     blob.ReadOnlyBlob
-	capturedCreds     runtime.Typed
-}
-
-func (m *mockInputMethod) GetInputMethodScheme() *runtime.Scheme {
-	return runtime.NewScheme()
-}
-
-func (m *mockInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
-	id := runtime.Identity{}
-	id.SetType(runtime.NewVersionedType("mock", "v1"))
-	return id, nil
-}
-
-func (m *mockInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, creds runtime.Typed) (*ResourceInputMethodResult, error) {
-	m.capturedCreds = creds
-	if m.processedResource != nil {
-		return &ResourceInputMethodResult{
-			ProcessedResource: m.processedResource,
-		}, nil
-	}
-	if m.processedBlob != nil {
-		return &ResourceInputMethodResult{
-			ProcessedBlobData: m.processedBlob,
-		}, nil
-	}
-	return nil, nil
-}
-
-// mockInputMethodProvider implements ResourceInputMethodProvider for testing
-type mockInputMethodProvider struct {
-	methods map[runtime.Type]ResourceInputMethod
-}
-
-func (m *mockInputMethodProvider) GetResourceInputMethod(ctx context.Context, resource *constructorruntime.Resource) (ResourceInputMethod, error) {
-	if method, ok := m.methods[resource.Input.GetType()]; ok {
-		return method, nil
-	}
-	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", resource.Input.GetType())
-}
-
-// mockResourceRepository implements ResourceRepository for testing
-type mockResourceRepository struct {
-	downloadData blob.ReadOnlyBlob
-	fail         bool
-}
-
-func (m *mockResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
-	identity = runtime.Identity{}
-	identity.SetType(runtime.NewVersionedType("mock", "v1"))
-	return identity, nil
-}
-
-func (m *mockResourceRepository) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
-	identity = runtime.Identity{}
-	identity.SetType(runtime.NewVersionedType("mock", "v1"))
-	return identity, nil
-}
-
-func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	if m.fail {
-		return nil, fmt.Errorf("simulated download failure")
-	}
-	return m.downloadData, nil
-}
-
-// mockResourceRepositoryProvider implements ResourceRepositoryProvider for testing
-type mockResourceRepositoryProvider struct {
-	repo ResourceRepository
-}
-
-func (m *mockResourceRepositoryProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (ResourceRepository, error) {
-	return m.repo, nil
-}
-
-// mockAccess implements runtime.Typed for testing
-type mockAccess struct {
-	Type        string `json:"type"`
-	MediaType   string `json:"mediaType"`
-	Reference   string `json:"reference"`
-	Description string `json:"description"`
-}
-
-func (m *mockAccess) GetType() runtime.Type {
-	return runtime.NewVersionedType("mock", "v1")
-}
-
-func (m *mockAccess) SetType(typ runtime.Type) {
-	// No-op for testing
-}
-
-func (m *mockAccess) DeepCopyTyped() runtime.Typed {
-	return &mockAccess{
-		Type:        m.Type,
-		MediaType:   m.MediaType,
-		Reference:   m.Reference,
-		Description: m.Description,
-	}
-}
-
-// mockDigestProcessor implements ResourceDigestProcessor for testing
-type mockDigestProcessor struct {
-	processedDigest *descriptor.Digest
-}
-
-func (m *mockDigestProcessor) GetResourceRepositoryScheme() *runtime.Scheme {
-	return runtime.NewScheme()
-}
-
-func (m *mockDigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
-	identity = runtime.Identity{}
-	identity.SetType(runtime.NewVersionedType("mock", "v1"))
-	return identity, nil
-}
-
-func (m *mockDigestProcessor) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
-	if m.processedDigest != nil {
-		resource.Digest = m.processedDigest
-	}
-	return resource, nil
-}
-
-// mockDigestProcessorProvider implements ResourceDigestProcessorProvider for testing
-type mockDigestProcessorProvider struct {
-	processor ResourceDigestProcessor
-}
-
-func (m *mockDigestProcessorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (ResourceDigestProcessor, error) {
-	return m.processor, nil
-}
-
-// mockCredentialProvider implements CredentialProvider for testing
-type mockCredentialProvider struct {
-	called      map[string]int
-	credentials map[string]map[string]string
-	fail        bool
-}
-
-func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
-	m.called[identity.GetType().String()]++
-	if m.fail {
-		return nil, fmt.Errorf("simulated credential resolution failure")
-	}
-	creds := m.credentials[identity.GetType().String()]
-	if creds == nil {
-		return nil, nil
-	}
-	return &credconfigv1.DirectCredentials{
-		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
-		Properties: creds,
-	}, nil
-}
 
 // setupTestComponent creates a basic component constructor for testing
 func setupTestComponent(t *testing.T, resourceYAML string) *constructorruntime.ComponentConstructor {
@@ -409,69 +252,82 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 	assert.Equal(t, mockCredProvider.called["mock/v1"], 1)
 }
 
-func TestConstructWithResourceByValue(t *testing.T) {
-	// Create a mock blob with test data
-	mockBlob := &mockBlob{
-		mediaType: "application/octet-stream",
-		data:      []byte("test data"),
+func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
+	const (
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+	)
+	ownershipAwareWithAttachErr := newMockOwnershipAwareTargetRepository()
+	ownershipAwareWithAttachErr.ownershipErr = fmt.Errorf("attach boom")
+
+	tests := []struct {
+		name            string
+		policy          constructorruntime.OwnershipPolicy
+		repo            TargetRepository
+		wantCalls       int
+		wantErr         bool
+		wantErrContains []string
+	}{
+		{
+			name:      "opted in (Always)",
+			policy:    constructorruntime.OwnershipPolicyAlways,
+			repo:      newMockOwnershipAwareTargetRepository(),
+			wantCalls: 1,
+		},
+		{
+			name:      "not opted in (Never)",
+			policy:    constructorruntime.OwnershipPolicyNever,
+			repo:      newMockOwnershipAwareTargetRepository(),
+			wantCalls: 0,
+		},
+		{
+			name:            "opted in but attach fails",
+			policy:          constructorruntime.OwnershipPolicyAlways,
+			repo:            ownershipAwareWithAttachErr,
+			wantCalls:       1,
+			wantErr:         true,
+			wantErrContains: []string{"error attaching ownership", "attach boom"},
+		},
+		{
+			name:            "opted in but repo cannot record ownership",
+			policy:          constructorruntime.OwnershipPolicyAlways,
+			repo:            newMockTargetRepository(),
+			wantCalls:       0,
+			wantErr:         true,
+			wantErrContains: []string{"cannot record", "Always"},
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := &constructorruntime.Resource{
+				ElementMeta: constructorruntime.ElementMeta{ObjectMeta: constructorruntime.ObjectMeta{Name: "backend-image", Version: version}},
+				Type:        "ociArtifact",
+				Relation:    constructorruntime.LocalRelation,
+				Options:     constructorruntime.ResourceOptions{OwnershipPolicy: tt.policy},
+			}
+			data := &mockBlob{mediaType: "application/octet-stream", data: []byte("payload")}
 
-	// Create a mock resource repository
-	mockRepo := &mockResourceRepository{
-		downloadData: mockBlob,
+			out, err := addColocatedResourceLocalBlob(context.Background(), tt.repo, component, version, res, data)
+			if tt.wantErr {
+				require.Error(t, err)
+				for _, s := range tt.wantErrContains {
+					assert.ErrorContains(t, err, s)
+				}
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, out)
+			}
+
+			if attacher, ok := tt.repo.(*mockOwnershipAwareTargetRepository); ok {
+				assert.Equal(t, tt.wantCalls, attacher.ownershipCalls,
+					"by-value add must attach ownership iff the runtime options opt in")
+				if tt.wantCalls > 0 && !tt.wantErr {
+					assert.Same(t, out, attacher.ownershipResource, "the uploaded resource must be forwarded to AddOwnership")
+					assert.Nil(t, attacher.ownershipCreds, "AddOwnership on a component version repository must receive nil credentials")
+				}
+			}
+		})
 	}
-
-	// Create a mock resource repository provider
-	mockRepoProvider := &mockResourceRepositoryProvider{
-		repo: mockRepo,
-	}
-
-	constructor := setupTestComponent(t, `
-      - name: test-resource
-        version: v1.0.0
-        relation: external
-        type: blob
-        copyPolicy: byValue
-        access:
-          type: mock/v1
-          mediaType: application/octet-stream
-          reference: test-ref
-          description: "This is a test resource"
-`)
-
-	// Create a mock target repository
-	mockTargetRepo := newMockTargetRepository()
-
-	// Create the constructor with our mocks
-	opts := Options{
-		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
-		ResourceRepositoryProvider: mockRepoProvider,
-	}
-
-	constructorInstance := NewDefaultConstructor(constructor, opts)
-	graph := constructorInstance.GetGraph()
-
-	// Process the constructor
-	err := constructorInstance.Construct(context.Background())
-	require.NoError(t, err)
-	descs := collectDescriptors(t, graph)
-	require.NoError(t, err)
-	require.Len(t, descs, 1)
-
-	// Verify the results
-	desc := descs[0]
-	verifyBasicComponent(t, desc)
-
-	// Verify the resource was processed correctly
-	resource := desc.Component.Resources[0]
-	assert.Equal(t, "test-resource", resource.Name)
-	assert.Equal(t, "v1.0.0", resource.Version)
-	assert.Equal(t, descriptor.ExternalRelation, resource.Relation)
-	assert.NotNil(t, resource.Access)
-
-	// Verify the repository was called correctly
-	assert.Len(t, mockTargetRepo.addedLocalResources, 1)
-	assert.Len(t, mockTargetRepo.addedVersions, 1)
 }
 
 func TestConstructWithResourceDigest(t *testing.T) {
@@ -674,46 +530,6 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "error resolving credentials for resource input method")
 }
 
-func TestConstructWithResourceByValueFailure(t *testing.T) {
-	// Create a mock resource repository that fails to download
-	mockRepo := &mockResourceRepository{
-		downloadData: nil,
-		fail:         true,
-	}
-
-	// Create a mock resource repository provider
-	mockRepoProvider := &mockResourceRepositoryProvider{
-		repo: mockRepo,
-	}
-
-	constructor := setupTestComponent(t, `
-      - name: test-resource
-        version: v1.0.0
-        relation: external
-        type: blob
-        copyPolicy: byValue
-        access:
-          type: mock/v1
-          mediaType: application/octet-stream
-          reference: test-ref
-`)
-
-	// Create a mock target repository
-	mockTargetRepo := newMockTargetRepository()
-
-	// Create the constructor with our mocks
-	opts := Options{
-		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
-		ResourceRepositoryProvider: mockRepoProvider,
-	}
-	constructorInstance := NewDefaultConstructor(constructor, opts)
-
-	// Process the constructor and expect an error
-	err := constructorInstance.Construct(t.Context())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error downloading resource")
-}
-
 func TestConstructWithMultipleResources(t *testing.T) {
 	// Create mock input methods for different resource types
 	mockInput1 := &mockInputMethod{
@@ -896,4 +712,101 @@ func TestConstructCredentialsPassedAsDirectCredentials(t *testing.T) {
 	require.True(t, ok, "expected *credconfigv1.DirectCredentials, got %T", mockInput.capturedCreds)
 	assert.Equal(t, "testuser", dc.Properties["username"])
 	assert.Equal(t, "testpass", dc.Properties["password"])
+}
+
+func TestDefaultConstructor_OwnershipAttachment(t *testing.T) {
+	const (
+		component = "ocm.software/test-component"
+		version   = "v1.0.0"
+	)
+
+	tests := []struct {
+		name string
+		// policy is the resource's ownershipPolicy ("" => no opt-in).
+		policy string
+		// provider builds opts.ResourceRepositoryProvider; nil means "not configured".
+		provider   func(attacher *mockOwnershipAwareResourceRepository) ResourceRepositoryProvider
+		wantErr    string
+		wantAttach int
+	}{
+		{
+			name:   "no opt-in never resolves the resource repository",
+			policy: "",
+			provider: func(a *mockOwnershipAwareResourceRepository) ResourceRepositoryProvider {
+				return &mockResourceRepositoryProvider{repo: a}
+			},
+			wantAttach: 0,
+		},
+		{
+			name:     "opted in but no provider configured is an error",
+			policy:   "Always",
+			provider: func(*mockOwnershipAwareResourceRepository) ResourceRepositoryProvider { return nil },
+			wantErr:  "no resource repository provider is configured",
+		},
+		{
+			name:   "opted in resolves the repository and attaches",
+			policy: "Always",
+			provider: func(a *mockOwnershipAwareResourceRepository) ResourceRepositoryProvider {
+				return &mockResourceRepositoryProvider{repo: a}
+			},
+			wantAttach: 1,
+		},
+		{
+			name:   "opted in surfaces a provider resolution failure",
+			policy: "Always",
+			provider: func(*mockOwnershipAwareResourceRepository) ResourceRepositoryProvider {
+				return &mockResourceRepositoryProvider{err: fmt.Errorf("boom")}
+			},
+			wantErr: "error getting resource repository for ownership",
+		},
+		{
+			name:   "opted in but repo cannot record ownership",
+			policy: "Always",
+			provider: func(*mockOwnershipAwareResourceRepository) ResourceRepositoryProvider {
+				return &mockResourceRepositoryProvider{repo: &mockResourceRepository{}}
+			},
+			wantErr: "cannot record",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attacher := newMockOwnershipAwareResourceRepository()
+			resource := &constructorruntime.Resource{
+				ElementMeta: constructorruntime.ElementMeta{
+					ObjectMeta: constructorruntime.ObjectMeta{
+						Name:    "backend-image",
+						Version: version,
+					},
+				},
+				Type:     "ociArtifact",
+				Relation: constructorruntime.LocalRelation,
+				AccessOrInput: constructorruntime.AccessOrInput{
+					Access: &runtime.Raw{
+						Type: runtime.NewVersionedType("mock", "v1"),
+						Data: []byte(`{"type":"mock/v1","mediaType":"application/octet-stream","reference":"test-ref"}`),
+					},
+				},
+				Options: constructorruntime.ResourceOptions{OwnershipPolicy: constructorruntime.OwnershipPolicy(tt.policy)},
+			}
+			opts := Options{
+				ResourceRepositoryProvider: tt.provider(attacher),
+			}
+			c := NewDefaultConstructor(&constructorruntime.ComponentConstructor{}, opts).(*DefaultConstructor)
+
+			_, err := c.processResource(context.Background(), newMockTargetRepository(), resource, component, version)
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAttach, attacher.ownershipCalls)
+			if tt.wantAttach > 0 {
+				assert.Equal(t, component, attacher.ownershipComponent)
+				assert.Equal(t, version, attacher.ownershipVersion)
+			}
+		})
+	}
 }

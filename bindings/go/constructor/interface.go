@@ -117,7 +117,8 @@ type ResourceDigestProcessorProvider interface {
 	GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (ResourceDigestProcessor, error)
 }
 
-// TargetRepository defines the interface for a target repository that can store component versions and associated local resources
+// TargetRepository defines the interface for a target repository that can store component versions and associated local resources.
+// May optionally implement repository.OwnershipAwareRepository to enable attaching ownership information to resources.
 type TargetRepository interface {
 	// AddLocalResource adds a local resource to the repository.
 	// The resource must be referenced in the component descriptor.

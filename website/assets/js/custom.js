@@ -1,3 +1,11 @@
+import { Tab } from 'bootstrap';
+// Bootstrap registers its data-api (click handlers for data-bs-toggle=*) when
+// the module is imported. Dropdown and Offcanvas are not used directly but must
+// be imported so the version-switcher and mobile nav work without loading the
+// full bootstrap.js bundle.
+import 'bootstrap/js/src/dropdown.js';
+import 'bootstrap/js/src/offcanvas.js';
+
 // Custom JS for OCM website
 // Necessity: Sidebar section links (<a> inside <summary>) need special click
 // handling. Without this, clicking the link text toggles the <details> element
@@ -43,3 +51,43 @@ document.addEventListener('click', (e) => {
   e.stopImmediatePropagation();
   window.location.href = link.href;
 }, true); // <-- capture phase
+
+// Deep links into tab panes: anchors inside a non-active Bootstrap tab pane
+// are display:none, so the browser cannot scroll to them natively and the
+// link silently loses its target. Resolve the hash by activating every
+// ancestor tab pane of the target, then scroll to it. Works stateless on a
+// first visit: the URL fragment is the only input.
+function revealHashTarget() {
+  let id;
+  try {
+    id = decodeURIComponent(window.location.hash.slice(1));
+  } catch {
+    return;
+  }
+  if (!id) return;
+  const target = document.getElementById(id);
+  if (!target) return;
+
+  let shown = false;
+  // closest() includes the target itself, so linking to a pane id
+  // (e.g. #tabs-mygroup-1) activates that tab as well.
+  for (let pane = target.closest('.tab-pane'); pane; pane = pane.parentElement?.closest('.tab-pane')) {
+    if (pane.classList.contains('active') || !pane.id) continue;
+    const trigger = document.querySelector(`[data-bs-target="#${CSS.escape(pane.id)}"]`);
+    if (trigger) {
+      Tab.getOrCreateInstance(trigger).show();
+      shown = true;
+    }
+  }
+  if (shown) {
+    // Wait a frame so the pane is rendered (display:block) before scrolling.
+    requestAnimationFrame(() => target.scrollIntoView());
+  }
+}
+
+window.addEventListener('hashchange', revealHashTarget);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', revealHashTarget);
+} else {
+  revealHashTarget();
+}

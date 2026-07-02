@@ -1,0 +1,82 @@
+<!--
+  Local override of @thulite/doks-core tabs shortcode
+  (based on https://github.com/alex-shpak/hugo-book/blob/master/layouts/shortcodes/tabs.html).
+
+  Differences to the theme version:
+  - Each pane carries a "tab-pane-label" with the tab name. It is hidden by
+    default and only shown by the <noscript> styles (head/custom-head.html),
+    so that with JavaScript disabled the panes stack as labeled sections.
+  - Heading IDs must be unique across the tabs of a group: each tab is
+    rendered with its own RenderString call, so Goldmark cannot de-duplicate
+    them, and the same heading in two tabs would emit the same ID twice —
+    the anchor would then always resolve to the first occurrence. When a
+    duplicate is found, the later occurrence is qualified with the slugified
+    tab name (RSA "Prerequisites" -> #prerequisites, Sigstore "Prerequisites"
+    -> #prerequisites-sigstore). The first occurrence keeps the plain ID so
+    existing published links stay valid.
+  - After dedup, headings from every tab are registered in Page.Scratch
+    "toc-extra" so the TOC partial can include them regardless of which tab
+    is active (see layouts/_partials/sidebar/docs-toc-*.html).
+-->
+
+{{ if .Inner }}{{ end }}
+{{ $id := .Get 0 | default (printf "group-%d" .Ordinal) }}
+{{ $group := printf "tabs-%s" $id }}
+
+<nav>
+  <div class="nav nav-tabs" id="{{ $group }}-tablist" role="tablist">
+  {{ range $index, $tab := .Scratch.Get $group -}}
+    <button data-toggle-tab="{{ $tab.Name | lower }}" class="nav-link{{ if not $index }} active{{ end }}" id="{{ printf "%s-%d" $group $index }}-tab" data-bs-toggle="tab" data-bs-target="#{{ printf "%s-%d" $group $index }}" type="button" role="tab" aria-controls="{{ printf "%s-%d" $group $index }}" aria-selected="{{ if not $index }}true{{ else }}false{{ end }}">
+      {{ $tab.Name -}}
+    </button>
+  {{ end -}}
+  </div>
+</nav>
+
+<!--
+  Note: the pane markup below is intentionally emitted at column 0. When a
+  tabs group is nested inside another tab, this output is re-rendered by the
+  outer tab's RenderString — Goldmark would turn lines indented by 4+ spaces
+  into an escaped code block.
+-->
+<div class="tab-content" id="{{ $group }}-content">
+{{- $seen := dict -}}
+{{- range $index, $tab := .Scratch.Get $group -}}
+{{- $content := $tab.Content | $.Page.RenderString -}}
+{{- range findRE `<h[1-6][^>]*\sid="[^"]+"` $content -}}
+  {{- $headingID := replaceRE `.*\sid="([^"]+)".*` "$1" . -}}
+  {{- if index $seen $headingID -}}
+    {{- $unique := printf "%s-%s" $headingID (anchorize $tab.Name) -}}
+    {{- range seq 1 99 -}}
+      {{- if index $seen $unique -}}
+        {{- $unique = printf "%s-%s-%d" $headingID (anchorize $tab.Name) . -}}
+      {{- else -}}
+        {{- break -}}
+      {{- end -}}
+    {{- end -}}
+    {{- warnf "%q: heading id %q exists in tabs %q and %q of group %q — rendered as %q in tab %q to keep deep links unique" $.Page.Path $headingID (index $seen $headingID) $tab.Name $id $unique $tab.Name -}}
+    {{- $content = replace $content (printf "id=%q" $headingID) (printf "id=%q" $unique) -}}
+    {{- $seen = merge $seen (dict $unique $tab.Name) -}}
+  {{- else -}}
+    {{- $seen = merge $seen (dict $headingID $tab.Name) -}}
+  {{- end -}}
+{{- end }}
+{{- /* Collect headings from this tab into toc-extra, after dedup has finalised all IDs. */ -}}
+{{- $.Page.Scratch.Add "toc-extra" (slice (dict "type" "group" "name" $tab.Name)) -}}
+{{- range findRE `<h[2-6][^>]*id="[^"]+"` $content -}}
+  {{- $level := replaceRE `<h([2-6]).*` "$1" . | int -}}
+  {{- $id := replaceRE `.*\bid="([^"]+)".*` "$1" . -}}
+  {{- $textMatches := findRE (printf `<h[2-6][^>]*id="%s"[^>]*>[^<]+` $id) $content -}}
+  {{- with index $textMatches 0 -}}
+    {{- $text := replaceRE `<h[2-6][^>]*>` "" . | strings.TrimSpace -}}
+    {{- if $text -}}
+      {{- $.Page.Scratch.Add "toc-extra" (slice (dict "type" "heading" "level" $level "id" $id "text" $text)) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+<div data-pane="{{ $tab.Name | lower }}" class="tab-pane fade{{ if not $index }} show active{{ end }}" id="{{ printf "%s-%d" $group $index }}" role="tabpanel" aria-labelledby="{{ printf "%s-%d" $group $index }}-tab" tabindex="0">
+<p class="tab-pane-label" aria-hidden="true">{{ $tab.Name }}</p>
+{{ $content | safeHTML -}}
+</div>
+{{- end }}
+</div>

@@ -65,7 +65,7 @@ type Resolver interface {
 	Ping(ctx context.Context) error
 }
 
-// AliasComponentVersionRepository defines the interface for adding aliases to existing component versions.
+// AliasComponentVersionRepository defines the interface for adding and removing aliases on existing component versions.
 type AliasComponentVersionRepository interface {
 	// AddComponentVersionAlias adds an alias to an existing component version.
 	// The alias can be used as an alternative reference to access the same component version.
@@ -76,4 +76,10 @@ type AliasComponentVersionRepository interface {
 	// Like OCI tags, aliases are mutable - reusing the same alias for a different component version will move it.
 	// The target must be a valid OCM component version - aliasing arbitrary OCI artifacts will fail.
 	AddComponentVersionAlias(ctx context.Context, component, versionOrAlias, alias string) error
+	// RemoveComponentVersionAlias removes an alias (floating tag) from the given component.
+	// The alias must NOT be a semantic version — only non-semver aliases may be removed.
+	// Only the tag pointer is removed; the underlying component version and its
+	// content remain untouched and stay accessible through their version tag.
+	// Returns repository.ErrNotFound if the alias does not exist.
+	RemoveComponentVersionAlias(ctx context.Context, component, alias string) error
 }

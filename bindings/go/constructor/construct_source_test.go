@@ -1,7 +1,6 @@
 package constructor
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -9,55 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-// mockSourceInputMethod implements SourceInputMethod for testing
-type mockSourceInputMethod struct {
-	processedSource *descriptor.Source
-	processedBlob   blob.ReadOnlyBlob
-}
-
-func (m *mockSourceInputMethod) GetInputMethodScheme() *runtime.Scheme {
-	return runtime.NewScheme()
-}
-
-func (m *mockSourceInputMethod) GetSourceCredentialConsumerIdentity(ctx context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
-	id := runtime.Identity{}
-	id.SetType(runtime.NewVersionedType("mock", "v1"))
-	return id, nil
-}
-
-func (m *mockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorruntime.Source, creds runtime.Typed) (*SourceInputMethodResult, error) {
-	if m.processedSource != nil {
-		return &SourceInputMethodResult{
-			ProcessedSource: m.processedSource,
-		}, nil
-	}
-	if m.processedBlob != nil {
-		return &SourceInputMethodResult{
-			ProcessedBlobData: m.processedBlob,
-		}, nil
-	}
-	return nil, nil
-}
-
-// mockSourceInputMethodProvider implements SourceInputMethodProvider for testing
-type mockSourceInputMethodProvider struct {
-	methods map[runtime.Type]SourceInputMethod
-}
-
-func (m *mockSourceInputMethodProvider) GetSourceInputMethod(ctx context.Context, source *constructorruntime.Source) (SourceInputMethod, error) {
-	if method, ok := m.methods[source.Input.GetType()]; ok {
-		return method, nil
-	}
-	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", source.Input.GetType())
-}
 
 // setupTestComponentWithSource creates a basic component constructor with a source for testing
 func setupTestComponentWithSource(t *testing.T, sourceYAML string) *constructorruntime.ComponentConstructor {
