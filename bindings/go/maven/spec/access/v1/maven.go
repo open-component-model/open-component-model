@@ -21,9 +21,12 @@ const (
 // Credentials (username/password or an access token) are supplied through the
 // credential resolver and keyed by the "MavenRepository" consumer identity.
 //
-// Note: this version resolves a single release artifact. SNAPSHOT version
-// resolution (via maven-metadata.xml) and whole-GAV enumeration are not yet
-// supported. See ocm-project follow-ups.
+// Selection: with both classifier and extension set, exactly one file is
+// addressed. For a SNAPSHOT version, leaving either unset selects all matching
+// files from maven-metadata.xml; they are packaged as a tgz when more than one
+// file matches, and a single match is returned as-is. For a release, a bare
+// GAV resolves to the main artifact; setting exactly one of
+// classifier/extension is an error (releases cannot be enumerated).
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -40,14 +43,18 @@ type Maven struct {
 	GroupID string `json:"groupId"`
 	// ArtifactID is the Maven artifact id (e.g. lib).
 	ArtifactID string `json:"artifactId"`
-	// Version is the artifact version (e.g. 1.2.3). SNAPSHOT versions are not yet resolved.
+	// Version is the artifact version (e.g. 1.2.3). SNAPSHOT versions (e.g.
+	// 1.2.3-SNAPSHOT) are resolved via maven-metadata.xml.
 	Version string `json:"version"`
 	// Classifier is an optional Maven classifier (e.g. sources, javadoc).
-	Classifier string `json:"classifier,omitempty"`
-	// Extension is the artifact packaging/extension. Defaults to "jar" when empty.
-	Extension string `json:"extension,omitempty"`
-	// MediaType is the media type carried on the downloaded/uploaded blob.
-	MediaType string `json:"mediaType,omitempty"`
+	// Absent means unspecified; an explicitly empty string selects the main
+	// artifact (no classifier). This distinction drives multi-file selection.
+	Classifier *string `json:"classifier,omitempty"`
+	// Extension is the artifact packaging/extension. nil defaults to "jar".
+	Extension *string `json:"extension,omitempty"`
+	// MediaType overrides the blob media type for a single downloaded/uploaded
+	// file. Ignored for tgz output.
+	MediaType *string `json:"mediaType,omitempty"`
 }
 
 // Validate verifies that the required coordinates are present and that RepoURL parses.

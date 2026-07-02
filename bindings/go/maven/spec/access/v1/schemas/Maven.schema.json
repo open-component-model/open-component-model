@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/maven/spec/access/v1/schemas/Maven.schema.json",
   "title": "Maven",
   "type": "object",
-  "description": "Maven describes the access for an artifact hosted in a Maven repository,\naddressed by its GAV coordinates. It is aligned with ocm v1\nhttps://github.com/open-component-model/ocm/blob/main/api/ocm/extensions/accessmethods/maven/method.go\n\nCredentials (username/password or an access token) are supplied through the\ncredential resolver and keyed by the \"MavenRepository\" consumer identity.\n\nNote: this version resolves a single release artifact. SNAPSHOT version\nresolution (via maven-metadata.xml) and whole-GAV enumeration are not yet\nsupported. See ocm-project follow-ups.",
+  "description": "Maven describes the access for an artifact hosted in a Maven repository,\naddressed by its GAV coordinates. It is aligned with ocm v1\nhttps://github.com/open-component-model/ocm/blob/main/api/ocm/extensions/accessmethods/maven/method.go\n\nCredentials (username/password or an access token) are supplied through the\ncredential resolver and keyed by the \"MavenRepository\" consumer identity.\n\nSelection: with both classifier and extension set, exactly one file is\naddressed. For a SNAPSHOT version, leaving either unset selects all matching\nfiles from maven-metadata.xml; they are packaged as a tgz when more than one\nfile matches, and a single match is returned as-is. For a release, a bare\nGAV resolves to the main artifact; setting exactly one of\nclassifier/extension is an error (releases cannot be enumerated).",
   "properties": {
     "artifactId": {
       "type": "string",
@@ -12,11 +12,11 @@
     },
     "classifier": {
       "type": "string",
-      "description": "Classifier is an optional Maven classifier (e.g. sources, javadoc)."
+      "description": "Classifier is an optional Maven classifier (e.g. sources, javadoc).\nAbsent means unspecified; an explicitly empty string selects the main\nartifact (no classifier). This distinction drives multi-file selection."
     },
     "extension": {
       "type": "string",
-      "description": "Extension is the artifact packaging/extension. Defaults to \"jar\" when empty."
+      "description": "Extension is the artifact packaging/extension. nil defaults to \"jar\"."
     },
     "groupId": {
       "type": "string",
@@ -24,7 +24,7 @@
     },
     "mediaType": {
       "type": "string",
-      "description": "MediaType is the media type carried on the downloaded/uploaded blob."
+      "description": "MediaType overrides the blob media type for a single downloaded/uploaded\nfile. Ignored for tgz output."
     },
     "repoUrl": {
       "type": "string",
@@ -51,7 +51,7 @@
     },
     "version": {
       "type": "string",
-      "description": "Version is the artifact version (e.g. 1.2.3). SNAPSHOT versions are not yet resolved."
+      "description": "Version is the artifact version (e.g. 1.2.3). SNAPSHOT versions (e.g.\n1.2.3-SNAPSHOT) are resolved via maven-metadata.xml."
     }
   },
   "required": [

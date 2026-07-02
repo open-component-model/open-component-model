@@ -13,6 +13,21 @@ import (
 func (in *Maven) DeepCopyInto(out *Maven) {
 	*out = *in
 	out.Type = in.Type
+	if in.Classifier != nil {
+		in, out := &in.Classifier, &out.Classifier
+		*out = new(string)
+		**out = **in
+	}
+	if in.Extension != nil {
+		in, out := &in.Extension, &out.Extension
+		*out = new(string)
+		**out = **in
+	}
+	if in.MediaType != nil {
+		in, out := &in.MediaType, &out.MediaType
+		*out = new(string)
+		**out = **in
+	}
 	return
 }
 
