@@ -204,6 +204,19 @@ func TestIdentityFromOCIRepository(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "SubPath with leading slash is normalized",
+			repository: oci.Repository{
+				BaseUrl: "registry.onstackit.cloud",
+				SubPath: "/k7e-components-pre",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "registry.onstackit.cloud",
+				runtime.IdentityAttributePath:     "k7e-components-pre",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
