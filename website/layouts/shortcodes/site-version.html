@@ -1,1 +1,12 @@
-{{- .Site.Version.Name -}}
+{{- $format := .Get 0 | default "" -}}
+{{- $version := .Site.Version.Name -}}
+{{- if eq $format "branch" -}}
+  {{- if ne $version "main" -}}
+git checkout releases/v{{ $version }}
+{{ end -}}
+{{- else if eq $format "env" -}}
+  {{- if ne $version "main" -}}
+OCM_VERSION={{ $version }} {{ end -}}
+{{- else -}}
+  {{- $version -}}
+{{- end -}}
