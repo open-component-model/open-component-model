@@ -15,13 +15,21 @@
     enabled: true,
   },
   // config:recommended transitively pulls in :ignoreModulesAndTests, which
-  // sets ignorePaths to include **/examples/**. That causes Renovate to skip
-  // bindings/go/examples/go.mod entirely, so its dependencies drift out of
-  // sync with the rest of the Go modules. ignorePaths is not mergeable, so
-  // we scope the override to the gomod manager and empty the list: every
-  // go.mod in this repo is a real, maintained module and should be scanned.
+  // adds **/examples/** to ignorePaths and hides bindings/go/examples/go.mod.
+  // Re-list that preset minus **/examples/** so Renovate scans it again.
+  // ignorePaths is append-only via presets and has no working list-level
+  // negation, so we override for gomod only. Keep in sync if
+  // :ignoreModulesAndTests gains new patterns upstream.
   gomod: {
-    ignorePaths: [],
+    ignorePaths: [
+      '**/node_modules/**',
+      '**/bower_components/**',
+      '**/vendor/**',
+      '**/__tests__/**',
+      '**/test/**',
+      '**/tests/**',
+      '**/__fixtures__/**',
+    ],
   },
   'updateNotScheduled': true, // Update branches that have already been created
   'minimumReleaseAge': '28 days',
