@@ -35,7 +35,7 @@ Each service gets its own component. Create a single `component-constructor.yaml
 
 ```shell
 cat > component-constructor.yaml << 'EOF'
-# yaml-language-server: $schema=https://ocm.software/__VERSION__/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< schema-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 
 # -- Backend service
@@ -182,7 +182,7 @@ Say the backend team releases a patch (`3.1.0` → `3.2.0`). Replace the constru
 
 ```shell
 cat > component-constructor.yaml << 'EOF'
-# yaml-language-server: $schema=https://ocm.software/__VERSION__/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< schema-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 
 # -- Backend service (bumped)

@@ -94,7 +94,7 @@ touch component-constructor.yaml
 Create and save this content to `component-constructor.yaml`:
 
 ```yaml
-# yaml-language-server: $schema=https://ocm.software/__VERSION__/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< schema-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 - name: github.com/acme.org/helloworld
   version: 1.0.0

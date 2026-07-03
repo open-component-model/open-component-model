@@ -71,7 +71,7 @@ echo "My first local Resource for an OCM component" > my-local-resource.txt
 Create a `component-constructor.yaml` file that describes your component and its resources:
 
 ```yaml
-# yaml-language-server: $schema=https://ocm.software/__VERSION__/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< schema-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 - name: github.com/acme.org/helloworld # Must at least be a DNS domain as per RFC 1123.
   version: 1.0.0 # Version conforming to SemVer 2.0.
