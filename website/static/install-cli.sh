@@ -21,7 +21,7 @@ Arguments:
   BIN_DIR    Installation directory (default: ~/.local/bin)
 
 Environment variables:
-  OCM_VERSION       Install a specific version (e.g., OCM_VERSION=1.0.0)
+  OCM_VERSION       Install a specific version (e.g., OCM_VERSION=1.0.0) or the latest version of a major.minor series (e.g., OCM_VERSION=0.9)
   OCM_SKIP_VERIFY   Skip attestation verification (set to "true")
 
 Examples:
