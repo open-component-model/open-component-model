@@ -88,7 +88,7 @@ components:
       version: 1.0.0
       access: # Reference externally
         type: OCIImage/v1
-        imageReference: ghcr.io/stefanprodan/podinfo:6.9.1
+        imageReference: ghcr.io/stefanprodan/podinfo:6.12.0
 ```
 
 ### Referencing Artifacts
@@ -204,7 +204,7 @@ Output:
 This creates a `transport-archive` directory containing your component version.
 
 {{< details "What's inside the CTF archive?" >}}
-The CTF archive is a Content Addressable Storage (CAS) archive that maps descriptors and resources to digests:
+The CTF archive is a [Content Addressable Storage (CAS)](https://en.wikipedia.org/wiki/Content-addressable_storage) archive — each blob's filename is the SHA-256 digest of its content, so lookups happen by digest rather than by path. The `artifact-index.json` maps component coordinates (repository + tag) to the digest of the corresponding blob:
 
 ```text
 transport-archive/
