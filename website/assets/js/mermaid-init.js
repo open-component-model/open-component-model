@@ -3,7 +3,8 @@
 // Replaces both @thulite/doks-core's mermaid-init.js (which imports from
 // cdn.jsdelivr.net) and the inline CDN <script type="module"> that used to
 // live in layouts/_default/baseof.html. Bundled through Hugo's js.Build
-// pipeline so the `import` resolves against ./node_modules at build time.
+// pipeline (loaded as <script async>) so the `import` resolves against
+// ./node_modules at build time.
 //
 // Listens for both the doks-core 'themeChanged' event and direct mutations
 // of the data-bs-theme attribute so theme switches propagate regardless of
@@ -11,8 +12,14 @@
 
 import mermaid from 'mermaid';
 
-const elements = Array.from(document.querySelectorAll('.mermaid'));
-if (elements.length) {
+// The doks-core esbuild partial emits <script async>, which may execute either
+// before or after DOMContentLoaded. `startOnLoad` registers a load listener
+// once - if the script lands after the event has already fired, nothing ever
+// renders. Gate on document.readyState and drive mermaid.run() ourselves.
+const start = () => {
+  const elements = Array.from(document.querySelectorAll('.mermaid'));
+  if (!elements.length) return;
+
   // Cache the original mermaid source so subsequent re-renders can restore it.
   elements.forEach((el) => {
     el.setAttribute('data-mermaid-source', el.textContent);
@@ -37,7 +44,8 @@ if (elements.length) {
     mermaid.run();
   };
 
-  mermaid.initialize({ startOnLoad: true, theme: getTheme() });
+  mermaid.initialize({ startOnLoad: false, theme: getTheme() });
+  mermaid.run();
 
   document.addEventListener('themeChanged', rerender);
 
@@ -50,4 +58,10 @@ if (elements.length) {
     }
   });
   observer.observe(document.documentElement, { attributes: true });
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', start, { once: true });
+} else {
+  start();
 }
