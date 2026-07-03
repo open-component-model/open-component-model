@@ -120,7 +120,7 @@ Create a `component-constructor.yaml` that embeds the OCI image layout directory
 
 ```yaml
 cat > component-constructor.yaml << 'EOF'
-# yaml-language-server: $schema=https://ocm.software/latest/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/main/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 - name: github.com/acme.org/native-oci-demo
   version: 1.0.0
@@ -292,7 +292,7 @@ Create a component that references an existing OCI image by reference (not by va
 
 ```yaml
 cat > component-constructor.yaml << 'EOF'
-# yaml-language-server: $schema=https://ocm.software/latest/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/main/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 - name: github.com/acme.org/transfer-demo
   version: 1.0.0
