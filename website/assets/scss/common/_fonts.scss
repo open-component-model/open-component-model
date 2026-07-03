@@ -8,13 +8,10 @@
  * @thulite/doks-core ships its Jost font (see node_modules/@thulite/doks-core/
  * static/fonts/vendor/jost/).
  *
- * When Renovate bumps @fontsource-variable/* in package.json, re-run:
- *   cp node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2 \
- *      node_modules/@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2 \
- *      static/fonts/vendor/inter/
- *   cp node_modules/@fontsource-variable/quicksand/files/quicksand-latin-wght-normal.woff2 \
- *      node_modules/@fontsource-variable/quicksand/files/quicksand-latin-ext-wght-normal.woff2 \
- *      static/fonts/vendor/quicksand/
+ * The woff2 files under static/fonts/vendor/ are regenerated automatically
+ * from the postinstall lifecycle script (see website/scripts/sync-fonts.js),
+ * so bumping @fontsource-variable/* refreshes them on the next `npm install`
+ * - commit the diff.
  *
  * Latin subsets only to keep payload lean; matches the doks-core neighbour.
  */
