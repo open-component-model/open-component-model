@@ -38,7 +38,7 @@ All work is tracked on the
 | [Roadmap](https://github.com/orgs/open-component-model/projects/10/views/5) | Timeline view of planned work |
 | [Epics](https://github.com/orgs/open-component-model/projects/10/views/16) | High-level feature tracks |
 
-## How Issues Enter the Sprint
+### How Issues Enter the Sprint
 
 Anyone can propose work for an upcoming sprint. The process is:
 
@@ -51,6 +51,23 @@ Anyone can propose work for an upcoming sprint. The process is:
 4. **Refinement discussion** - during the weekly refinement meeting the team discusses the issue. If everyone
    understands it, it is story-pointed and its priority is evaluated.
 5. **Ready for sprint** - once refined, the issue moves to the "Next-Up" column and is available for sprint planning.
+
+### Handling Sprint Spillover
+
+Items that don't finish in their sprint are not carried over. We close the original
+issue and, if the remaining work is still worth doing, track it as a new sub-issue
+that goes through refinement.
+
+**At sprint end**, for any issue that is not "Done":
+
+1. Add a closing comment: what shipped, what didn't, what was learned.
+2. Close the issue.
+3. If the remaining work is still worth doing, open a
+   [sub-issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues)
+   under the closed one, scoped to what is left.
+4. The sub-issue enters `Needs Refinement` and gets its own story-point vote based on
+   the remaining scope, not the original estimate.
+5. It is prioritized at Planning against every other candidate.
 
 ## Meetings
 
