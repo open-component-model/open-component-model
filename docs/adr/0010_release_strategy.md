@@ -31,7 +31,6 @@ The team already operates GitHub‑based release workflows for OCM v1. We consid
 
 ### Out of scope (for this ADR)
 
-* **Root ocm component** Not implemented in this ADR; later, it will share **X.Y** and **patch in tandem** when any sub‑component patches are created.
 * **Emergency patches:** Any special treatment/definition of emergency patches; we define the process only for "normal" patches.
 * **Support policy details beyond y‑2:** We set **y‑2** support (≈3 months) now; exact branch retirement/EOL steps will be defined later.
 * **Testing strategy expansion:** Beyond current component‑specific tests; additional integration/system/conformance testing is excluded from this ADR.
@@ -178,6 +177,27 @@ git tag -v <tag>
 * Tags are immutable. Never delete or overwrite a published annotated tag.
 * If a final release has a defect, ship a corrective patch (vX.Y.Z+1) and mark the previous final as superseded in the notes.
 * RC defects found after promotion follow the same corrective-patch route.
+
+### OCM components produced
+
+Every release publishes three OCM component-versions to `ghcr.io/<owner>/component-descriptors/`, alongside the raw artifacts the GitHub release ships. This is the implementation of the originally out-of-scope "Root ocm component" item from this ADR.
+
+* **`ocm.software/cli`** — six executable resources (linux/darwin/windows × amd64/arm64) embedded as local blobs plus the multi-arch CLI OCI image referenced by digest.
+* **`ocm.software/controller`** — controller image and Helm chart, both referenced by digest.
+* **`ocm.software/ocm`** — product wrapper; pure `componentReferences` to the two above. This is the canonical "what was released" handle.
+
+All three carry the same bare semver as the GitHub release (`0.X.Y` final, `0.X.Y-rc.N` RC; no leading `v` — matches the OCI tags that `pipeline.yml` pushes for the underlying image and chart). They are published on **both** RC and final phases of the release workflow so that consumers can validate the component shape against an RC before a final lands.
+
+**Conflict policy:** Both RC and final publications use `--component-version-conflict-policy replace`. This keeps reruns after a transient failure idempotent (mid-run flakes leave part of the three component-versions written; the rerun completes the rest without operator intervention). The release workflow's `concurrency` group and `create-tag.js`'s tag-existence checks prevent concurrent or diverging runs for the same version, so `replace` cannot silently overwrite a different commit's artifact.
+
+**Resource form:**
+
+* OCI artefacts (CLI image, controller image, Helm chart) are referenced **by digest** via `access.ociArtifact`. The image and chart are pushed earlier in the same release run; the component-version pins their digests, not their tags. Storage is not duplicated.
+* CLI binaries are embedded **by value** via `input.type: file`. There is no per-platform OCI store for the six binaries, so digest-pinning is not available. This duplicates ~180 MB per release between the GitHub release assets and the component-version local blobs — an acceptable cost for offline transportability of the component-version.
+
+**Constructor evolution:** within a single MAJOR, resources may be **added** to a component-version without breaking consumers (additive change). Removing a resource, renaming a `name`, or changing `extraIdentity` is a breaking change and requires a MAJOR bump. This invariant ties constructor evolution to the existing semver contract.
+
+See [RELEASE_PROCESS.md § OCM components produced](../../RELEASE_PROCESS.md#ocm-components-produced) for consumer-facing pull commands.
 
 ### Roles and Responsibilities
 
