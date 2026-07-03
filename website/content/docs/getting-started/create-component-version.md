@@ -97,11 +97,11 @@ OCM supports various ways to include resource artifacts in your components via `
 
 Use **`input`** to embed content directly, or **`access`** to reference external artifacts.
 
-|              | `resource.input` (by value)               | `resource.access` (by reference)             |
-|--------------|-------------------------------------------|----------------------------------------------|
-| **Storage**  | Content embedded in Component Version     | Only reference is stored                     |
-| **Use case** | Local files, directories, co-located data | Remote images, charts, resolution at runtime |
-| **Transfer** | Content travels with component            | Must be accessible at destination            |
+|              | `resource.input` (by value)               | `resource.access` (by reference)                                          |
+|--------------|-------------------------------------------|---------------------------------------------------------------------------|
+| **Storage**  | Content embedded in Component Version     | Only reference is stored                                                  |
+| **Use case** | Local files, directories, co-located data | Remote images, charts, resolution at runtime                              |
+| **Transfer** | Content travels with component            | Content fetched from source at use time (unless embedded during transfer) |
 
 For a complete list of supported types, see [Input and Access Types]({{< relref "/docs/reference/input-and-access-types.md" >}}).
 
