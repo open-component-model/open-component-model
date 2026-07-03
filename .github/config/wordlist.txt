@@ -34,7 +34,6 @@ archlinux
 argocd
 argocds
 artifactid
-Artifactory
 artifactset
 async
 attr
@@ -296,7 +295,6 @@ gib
 gitcommit
 gitea
 github
-GitLab
 gitignore
 gitops
 gitrepository
@@ -671,7 +669,6 @@ resourcepipelinespec
 resourcepipelinestatus
 resourceref
 resourcereference
-ResourceRepository
 resourcespec
 resourcestatus
 resubmission
@@ -703,7 +700,6 @@ scheidemann
 schema
 schemas
 sdk
-SDKs
 secretref
 semver
 sequent
@@ -825,7 +821,6 @@ unmarshalled
 unmarshaller
 unmarshalling
 unmodifiable
-unversioned
 unregisters
 unrepresentable
 untrusted
