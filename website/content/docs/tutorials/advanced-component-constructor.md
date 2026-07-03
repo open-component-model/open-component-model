@@ -88,7 +88,7 @@ Create `component-constructor.yaml`:
 
 ```shell
 cat > component-constructor.yaml << 'EOF'
-# yaml-language-server: $schema=https://ocm.software/{{< schema-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 
 # ── Frontend ────────────────────────────────────────────────────
@@ -259,7 +259,7 @@ With all five components defined in a single constructor file, you can now creat
   <summary>Complete <code>component-constructor.yaml</code></summary>
 
 ```yaml
-# yaml-language-server: $schema=https://ocm.software/{{< schema-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 
 # ── Frontend ────────────────────────────────────────────────────
@@ -470,7 +470,7 @@ In practice you rarely hard-code version numbers — they are typically provided
 
 ```shell
 cat > component-constructor.yaml << 'EOF'
-# yaml-language-server: $schema=https://ocm.software/{{< schema-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 
 - name: ocm.software/tutorials/frontend
