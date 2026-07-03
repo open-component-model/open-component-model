@@ -14,6 +14,15 @@
   'git-submodules': {
     enabled: true,
   },
+  // config:recommended transitively pulls in :ignoreModulesAndTests, which
+  // sets ignorePaths to include **/examples/**. That causes Renovate to skip
+  // bindings/go/examples/go.mod entirely, so its dependencies drift out of
+  // sync with the rest of the Go modules. ignorePaths is not mergeable, so
+  // we scope the override to the gomod manager and empty the list: every
+  // go.mod in this repo is a real, maintained module and should be scanned.
+  gomod: {
+    ignorePaths: [],
+  },
   'updateNotScheduled': true, // Update branches that have already been created
   'minimumReleaseAge': '28 days',
   'branchPrefix': 'renovate/',
