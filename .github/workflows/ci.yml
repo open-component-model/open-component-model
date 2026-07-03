@@ -40,14 +40,14 @@ jobs:
         with:
           persist-credentials: false
       # Detect .env changes so lint runs on all modules when the golangci-lint version changes
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         id: env_changes
         with:
           filters: |
             env:
               - '.env'
       # Detect CI workflow changes to rebuild/test all modules
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         id: ci_changes
         with:
           filters: |
@@ -88,7 +88,7 @@ jobs:
             // Log for debugging
             console.log('📦 Detected modules:', modules);
             console.log('🎯 Generated filters:', filters);
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         id: changes
         with:
           filters: ${{ steps.discover.outputs.filters }}
