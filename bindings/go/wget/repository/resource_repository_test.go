@@ -143,7 +143,7 @@ func TestDownloadResource(t *testing.T) {
 				http.Redirect(w, r, "/redirected", http.StatusFound)
 				return
 			}
-			w.Write([]byte("redirected-content"))
+			_, _ = w.Write([]byte("redirected-content"))
 		}))
 		defer server.Close()
 
@@ -158,13 +158,18 @@ func TestDownloadResource(t *testing.T) {
 		assert.Contains(t, err.Error(), "status 302")
 	})
 
-	t.Run("follows redirects by default", func(t *testing.T) {
+	t.Run("follows a multi-hop redirect chain by default", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/resource" {
-				http.Redirect(w, r, "/redirected", http.StatusFound)
-				return
+			switch r.URL.Path {
+			case "/resource":
+				http.Redirect(w, r, "/hop1", http.StatusFound) // 302
+			case "/hop1":
+				http.Redirect(w, r, "/hop2", http.StatusMovedPermanently) // 301
+			case "/hop2":
+				http.Redirect(w, r, "/final", http.StatusTemporaryRedirect) // 307
+			default:
+				_, _ = w.Write([]byte("final-content"))
 			}
-			w.Write([]byte("redirected-content"))
 		}))
 		defer server.Close()
 
@@ -175,7 +180,7 @@ func TestDownloadResource(t *testing.T) {
 
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		require.NoError(t, err)
-		assert.Equal(t, []byte("redirected-content"), readBlob(t, b))
+		assert.Equal(t, []byte("final-content"), readBlob(t, b))
 	})
 
 	t.Run("uses mediaType from spec over Content-Type header", func(t *testing.T) {
@@ -207,7 +212,7 @@ func TestDownloadResource(t *testing.T) {
 			// clear it first to simulate no content type.
 			w.Header().Del("Content-Type")
 			w.Header().Set("Content-Type", "")
-			w.Write([]byte("data"))
+			_, _ = w.Write([]byte("data"))
 		}))
 		defer server.Close()
 
@@ -376,7 +381,9 @@ func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	t.Helper()
 	rc, err := b.ReadCloser()
 	require.NoError(t, err)
-	defer rc.Close()
+	defer func(rc io.ReadCloser) {
+		_ = rc.Close()
+	}(rc)
 	data, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	return data
