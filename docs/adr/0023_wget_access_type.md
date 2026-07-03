@@ -61,7 +61,7 @@ A new, self-contained Go module at `bindings/go/wget/` that implements:
 #### Access Spec v1 Contract
 
 ```go
-// bindings/go/wget/access/spec/v1
+// bindings/go/wget/spec/access/v1
 type Wget struct {
     URL        string              `json:"url"`
     MediaType  string              `json:"mediaType,omitempty"`
