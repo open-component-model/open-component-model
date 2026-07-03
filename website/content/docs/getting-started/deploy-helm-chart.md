@@ -141,9 +141,7 @@ kubectl create secret docker-registry ghcr-secret \
   --docker-server=ghcr.io
 ```
 
-Then update the resources to use credentials:
-
-1. **OCM Controller resources**: Add `ocmConfig` to the Repository resource in your RGD. The credentials propagate automatically to Component, Resource, and Deployer objects that reference this Repository:
+Keep this secret in mind — you will reference it later when you define the `ResourceGraphDefinition` in the [next section](#create-resourcegraphdefinition). Specifically, add `ocmConfig` to the Repository resource in your RGD as shown below. The credentials propagate automatically to Component, Resource, and Deployer objects that reference this Repository:
 
   ```yaml
       - id: repository
