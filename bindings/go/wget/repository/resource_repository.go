@@ -123,7 +123,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		client = cloneClientWithNoRedirect(client)
 	}
 
-	if err := applyCredentials(req, &client, credentials); err != nil {
+	if err := applyCredentials(ctx, req, &client, credentials); err != nil {
 		return nil, fmt.Errorf("error applying credentials: %w", err)
 	}
 
@@ -185,7 +185,7 @@ func (r *ResourceRepository) UploadResource(ctx context.Context, res *descriptor
 //   - certificate + privateKey (+ optional certificateAuthority): mTLS client certificate
 //
 // Both WgetCredentials/v1 and legacy DirectCredentials/v1 are accepted.
-func applyCredentials(req *http.Request, client **http.Client, credentials runtime.Typed) error {
+func applyCredentials(ctx context.Context, req *http.Request, client **http.Client, credentials runtime.Typed) error {
 	if credentials == nil {
 		return nil
 	}
@@ -206,6 +206,11 @@ func applyCredentials(req *http.Request, client **http.Client, credentials runti
 	}
 
 	if creds.Certificate != "" {
+		// Warn when using a cert on non-https urls
+		if req.URL.Scheme != "https" {
+			slog.WarnContext(ctx, "client certificate credentials provided for a non-HTTPS URL", "scheme", req.URL.Scheme)
+		}
+
 		cert, err := tls.X509KeyPair([]byte(creds.Certificate), []byte(creds.PrivateKey))
 		if err != nil {
 			return fmt.Errorf("invalid certificate/privateKey for mTLS: %w", err)
