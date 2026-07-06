@@ -35,7 +35,7 @@ This means Argo CD is not a plugin — it is a Kubernetes operator whose CRDs yo
 
 ## Flux vs Argo CD at a Glance
 
-| | Flux | Argo CD |
+| Feature | Flux | Argo CD |
 | --- | --- | --- |
 | Helm source type | `OCIRepository` + `HelmRelease` | `Application` with inline OCI source |
 | Helm digest pinning | `spec.ref.digest` | `spec.source.targetRevision: sha256:<digest>` (since v3.1) |
@@ -117,6 +117,7 @@ spec:
             registry: resource.access.toOCI().registry
             repository: resource.access.toOCI().repository
             tag: resource.access.toOCI().tag
+            digest: resource.access.toOCI().digest
 
     # Argo CD Application — replaces Flux OCIRepository + HelmRelease
     - id: argocdApplication
@@ -157,7 +158,7 @@ To pin the Helm chart to an immutable digest instead of a tag, replace `targetRe
 targetRevision: sha256:<digest-from-resourceChart.status.additional.digest>
 ```
 
-This is supported since Argo CD v3.1. Expose the digest in `additionalStatusFields` the same way as `tag`.
+This is supported since Argo CD v3.1. The `digest` field is already exposed via `additionalStatusFields` above.
 {{< /callout >}}
 
 ### Apply and Verify
@@ -234,7 +235,7 @@ to the overlay directory. The Git commit SHA comes from the OCM Resource's statu
             path: "kustomize"
             kustomize:
               patches:
-                # JSON array form required when the patch contains a CEL expression (kro constraint)
+                # Use JSON array form for patches — required when any patch value contains a CEL expression
                 - patch: |
                     - op: replace
                       path: /metadata/name
@@ -275,6 +276,6 @@ scalars containing `${…}` references. This applies to both Argo CD and Flux.
 
 ## Related
 
-- [Tutorial: Deploy a Helm Chart]({{< relref "deploy-helm-chart.md" >}}) — Flux-based walkthrough of the same scenario
+- [Tutorial: Deploy a Helm Chart]({{< relref "../getting-started/deploy-helm-chart.md" >}}) — Flux-based walkthrough of the same scenario
 - [Tutorial: Deploy a Helm Chart (Bootstrap)]({{< relref "docs/tutorials/deploy-helm-chart-bootstrap.md" >}}) — Packaging the RGD inside the OCM component
 - [Concept: OCM Controllers]({{< relref "ocm-controllers.md" >}})
