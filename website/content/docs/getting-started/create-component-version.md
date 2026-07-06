@@ -204,7 +204,7 @@ Output:
 This creates a `transport-archive` directory containing your component version.
 
 {{< details "What's inside the CTF archive?" >}}
-The CTF archive is a [Content Addressable Storage (CAS)](https://en.wikipedia.org/wiki/Content-addressable_storage) archive — each blob's filename is the SHA-256 digest of its content, so lookups happen by digest rather than by path. The `artifact-index.json` maps component coordinates (repository + tag) to the digest of the corresponding blob:
+The CTF archive is a [Content Addressable Storage (CAS)](https://en.wikipedia.org/wiki/Content-addressable_storage) archive — each blob's filename is derived from the SHA-256 digest of its content (e.g., `sha256.<digest>`), so lookups happen by digest rather than by path. The `artifact-index.json` maps component coordinates (repository + tag) to the digest of the corresponding blob:
 
 ```text
 transport-archive/
