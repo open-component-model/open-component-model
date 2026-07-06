@@ -5,7 +5,10 @@ weight: 5
 toc: false
 ---
 
-A **Replication** transfers a specified component version from a source repository to a target repository.
+A **Replication** transfers a component version from one OCM repository to
+another, the same behaviour of `ocm transfer` as a controller. It references
+a `Component` for the source version and a target `Repository`, and re-runs the
+transfer whenever the resolved source version changes.
 
 ---
 
