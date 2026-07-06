@@ -15,8 +15,8 @@ const HOME_DIR = process.env.HOME || process.env.USERPROFILE;
  */
 function validateEnvVars(vars) {
     const missing = Object.entries(vars)
-        .filter(([_, value]) => !value)
-        .map(([key, _]) => key);
+        .filter(([, value]) => !value)
+        .map(([key]) => key);
 
     if (missing.length > 0) {
         throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
@@ -80,7 +80,7 @@ function runOcmCommand(core, args, {volumes = {}, workdir, throwOnError = true} 
         if (stdout) core.error(`stdout: ${stdout}`);
 
         if (throwOnError) {
-            throw new Error(`OCM command failed: ${error.message}`);
+            throw new Error(`OCM command failed: ${error.message}`, {cause: error});
         }
         return "";
     }
