@@ -27,7 +27,7 @@
     "postinfo": "./node_modules/.bin/hugo version",
     "preinfo": "npm version",
     "preview": "http-server --gzip --brotli --ext=html --cors",
-    "postinstall": "node scripts/link-dart-sass.js && node scripts/sync-fonts.js",
+    "postinstall": "node scripts/link-dart-sass.js && node scripts/sync-fonts.js && node scripts/bundle-mermaid.js",
     "test": "node --test scripts/register-docs-version.test.js"
   },
   "dependencies": {
@@ -45,6 +45,7 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "25.9.4",
+    "esbuild": "^0.24.0",
     "eslint": "10.6.0",
     "globals": "17.7.0",
     "hugo-extended": "0.163.3",
