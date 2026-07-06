@@ -26,8 +26,8 @@ appropriate resource in your `ResourceGraphDefinition`.
 ## How Deployers Work in kro
 
 In the OCM controller stack, deployment happens through a `ResourceGraphDefinition` (RGD) managed by
-[kro](https://kro.run). The RGD describes a graph of Kubernetes resources. You include the deployer's
-own CRD — Flux's `HelmRelease` / `OCIRepository`, or Argo CD's `Application` — as a resource in that
+[kro](https://kro.run). The RGD describes a graph of Kubernetes resources. You include the deployer
+CRDs — Flux's `HelmRelease` / `OCIRepository`, or Argo CD's `Application` — as resources in that
 graph. The OCM `Resource` controller resolves the artifact location and publishes it in its `.status`;
 the deployer resource then picks that up via kro's CEL expressions.
 
@@ -36,7 +36,7 @@ This means Argo CD is not a plugin — it is a Kubernetes operator whose CRDs yo
 ## Flux vs Argo CD at a Glance
 
 | | Flux | Argo CD |
-|---|---|---|
+| --- | --- | --- |
 | Helm source type | `OCIRepository` + `HelmRelease` | `Application` with inline OCI source |
 | Helm digest pinning | `spec.ref.digest` | `spec.source.targetRevision: sha256:<digest>` (since v3.1) |
 | Helm value injection | `HelmRelease.spec.values` (string) | `Application.spec.source.helm.valuesObject` (structured YAML) |
