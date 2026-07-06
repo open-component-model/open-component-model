@@ -28,6 +28,19 @@
 {{ partial "footer/script-footer" . }}
 
 
+{{ if .Store.Get "hasMermaid" }}
+{{- $asset := resources.Get "js/mermaid-init.js" -}}
+{{- if not $asset -}}{{ errorf "baseof: mermaid entry asset 'js/mermaid-init.js' not found" }}{{ end -}}
+{{- $opts := dict
+  "minify" (not hugo.IsDevelopment)
+  "sourceMap" (cond hugo.IsDevelopment "inline" "none")
+  "target" "es2020"
+-}}
+{{- with $asset | js.Build $opts -}}
+<script type="module" src="{{ .RelPermalink }}"></script>
+{{- end -}}
+{{ end }}
+
 {{ if eq site.Params.doks.toTopButton true -}}
 {{ partial "footer/to-top" . }}
 {{ end }}
