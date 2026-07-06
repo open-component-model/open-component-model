@@ -417,8 +417,8 @@ ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260615060942-874
 ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260615060942-874118842472/go.mod h1:gVtxqdM9XrCf2+MNiAozJTDixDuHWcCacKV5GJ8kJ2k=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260612063051-2d68fb4f15bc h1:jBAwpO40VBVYvwJfjYWDz58dfcGvN2SScV5vr2bhlXI=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260612063051-2d68fb4f15bc/go.mod h1:QHaWhZtJaFADDWsdpnbLN49lWb2ELBMoLZ0gEoLAH5c=
-oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
-oras.land/oras-go/v2 v2.6.0/go.mod h1:magiQDfG6H1O9APp+rOsvCPcW1GD2MM7vgnKY0Y+u1o=
+oras.land/oras-go/v2 v2.6.1 h1:bonOEkjLfp8tt6qXWRRWP6p1F+9octchOf2EqnWB4Zs=
+oras.land/oras-go/v2 v2.6.1/go.mod h1:dhtFrFOuZuDtAVeZ9FUnaa5zfzplG3ZnFX9/uH1J/Yk=
 pgregory.net/rapid v1.2.0 h1:keKAYRcjm+e1F0oAuU5F5+YPAWcyxNNRK2wud503Gnk=
 pgregory.net/rapid v1.2.0/go.mod h1:PY5XlDGj0+V1FCq0o192FdRhpKHGTRIWBgqjDBTrq04=
 sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 h1:IpInykpT6ceI+QxKBbEflcR5EXP7sU1kvOlxwZh5txg=

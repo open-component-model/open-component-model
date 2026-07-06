@@ -49,8 +49,8 @@ type SigstoreSignerIdentity struct {
 	// +ocm:jsonschema-gen:enum:deprecated=SigstoreSigner
 	Type runtime.Type `json:"type"`
 	// Algorithm restricts this identity to a specific signing algorithm.
-	// For Sigstore keyless signing the value is "sigstore" (v1alpha1.AlgorithmSigstore).
-	// Omit to match all algorithms.
+	// Populated from SignConfig.GetSignatureAlgorithm(); the canonical value is
+	// "Sigstore/v1alpha1" (v1alpha1.AlgorithmSigstoreV1Alpha1). Omit to match all algorithms.
 	Algorithm string `json:"algorithm,omitempty"`
 	// Signature restricts this identity to a specific named signature within a component version.
 	// The value must match the signature name passed to GetSigningCredentialConsumerIdentity.
