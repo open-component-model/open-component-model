@@ -7,13 +7,9 @@
   "description": "Wget describes the access for an HTTP-downloadable resource.",
   "properties": {
     "body": {
-      "type": "array",
+      "type": "string",
       "description": "Body is the HTTP body to send with the request.",
-      "items": {
-        "type": "integer",
-        "minimum": 0,
-        "maximum": 255
-      }
+      "contentEncoding": "base64"
     },
     "header": {
       "type": "object",
