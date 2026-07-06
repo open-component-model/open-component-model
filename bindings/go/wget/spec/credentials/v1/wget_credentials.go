@@ -14,12 +14,13 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 
 // WgetCredentials represents typed credentials for wget access type authentication.
 //
-// When multiple credential fields are set, they are applied in priority order:
-//  1. Username + Password (HTTP Basic Auth) — highest priority
-//  2. IdentityToken (Bearer token)
-//  3. Certificate + PrivateKey (mTLS) — lowest priority
+// The mTLS client certificate (Certificate + PrivateKey) is a transport-layer
+// credential and is applied independently, so it can be combined with either of
+// the header-based authentication methods.
 //
-// Only the highest-priority non-empty credential is applied; lower-priority fields are ignored.
+// Username/Password (HTTP Basic Auth) and IdentityToken (Bearer token) both set
+// the Authorization header and are therefore mutually exclusive; IdentityToken
+// takes precedence when both are set.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -29,19 +30,19 @@ type WgetCredentials struct {
 	// +ocm:jsonschema-gen:enum:deprecated=WgetCredentials
 	Type runtime.Type `json:"type"`
 	// Username is the username for HTTP Basic Authentication. Used together with Password.
-	// Takes priority over IdentityToken and Certificate when set.
+	// Ignored if IdentityToken is set.
 	Username string `json:"username,omitempty"`
 	// Password is the password for HTTP Basic Authentication. Used together with Username.
 	Password string `json:"password,omitempty"`
 	// IdentityToken is a bearer token sent as "Authorization: Bearer <token>".
-	// Takes priority over Certificate when set. Ignored if Username is set.
+	// Takes precedence over Username/Password when set.
 	IdentityToken string `json:"identityToken,omitempty"`
 	// Certificate is a PEM-encoded client certificate for mTLS authentication.
-	// Requires PrivateKey. Ignored if Username or IdentityToken is set.
+	// Requires PrivateKey. Applied independently of Basic/Bearer authentication.
 	Certificate string `json:"certificate,omitempty"`
 	// PrivateKey is a PEM-encoded private key paired with Certificate for mTLS.
 	PrivateKey string `json:"privateKey,omitempty"`
 	// CertificateAuthority is an optional PEM-encoded CA certificate used to verify
-	// the server's TLS certificate during mTLS. Only used when Certificate is set.
+	// the server's TLS certificate. Only used when Certificate is set.
 	CertificateAuthority string `json:"certificateAuthority,omitempty"`
 }

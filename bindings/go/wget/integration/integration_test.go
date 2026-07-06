@@ -2,17 +2,27 @@ package integration_test
 
 import (
 	"compress/gzip"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -572,4 +582,192 @@ func Test_Integration_WgetPluginRegistration(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "scheme should contain wget type")
+}
+
+// Test_Integration_WgetAuthExclusiveness verifies that the bearer token and
+// basic auth are mutually exclusive.
+func Test_Integration_WgetAuthExclusiveness(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(r.Header.Get("Authorization")))
+	}))
+	t.Cleanup(srv.Close)
+
+	repo := repository.NewResourceRepository(repository.WithHTTPClient(srv.Client()))
+
+	tests := []struct {
+		name     string
+		creds    *credv1.WgetCredentials
+		wantAuth string
+	}{
+		{
+			name: "bearer token only",
+			creds: &credv1.WgetCredentials{
+				Type:          runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+				IdentityToken: "my-token",
+			},
+			wantAuth: "Bearer my-token",
+		},
+		{
+			name: "basic auth only",
+			creds: &credv1.WgetCredentials{
+				Type:     runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+				Username: "user",
+				Password: "pass",
+			},
+			wantAuth: "Basic " + base64.StdEncoding.EncodeToString([]byte("user:pass")),
+		},
+		{
+			name: "both set: bearer token wins",
+			creds: &credv1.WgetCredentials{
+				Type:          runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+				Username:      "user",
+				Password:      "pass",
+				IdentityToken: "my-token",
+			},
+			wantAuth: "Bearer my-token",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			resource := wgetResource(t, map[string]any{"url": srv.URL + "/resource"})
+			b, err := repo.DownloadResource(t.Context(), resource, tt.creds)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAuth, string(readBlob(t, b)))
+		})
+	}
+}
+
+// newCA generates a self-signed CA certificate and its private key.
+func newCA(t *testing.T) (*x509.Certificate, *ecdsa.PrivateKey) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "wget-test-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	cert, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	return cert, key
+}
+
+// issueClientCert issues a client-auth leaf certificate signed by the given CA.
+func issueClientCert(t *testing.T, ca *x509.Certificate, caKey *ecdsa.PrivateKey) (certPEM, keyPEM []byte) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "wget-test-client"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca, &key.PublicKey, caKey)
+	require.NoError(t, err)
+
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	return certPEM, keyPEM
+}
+
+func Test_Integration_WgetMTLS(t *testing.T) {
+	t.Parallel()
+
+	ca, caKey := newCA(t)
+	clientCertPEM, clientKeyPEM := issueClientCert(t, ca, caKey)
+
+	clientCAPool := x509.NewCertPool()
+	clientCAPool.AddCert(ca)
+
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.TLS.PeerCertificates) == 0 {
+			http.Error(w, "no client certificate", http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte("mtls-ok:" + r.Header.Get("Authorization")))
+	}))
+	srv.TLS = &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		ClientAuth: tls.RequireAndVerifyClientCert,
+		ClientCAs:  clientCAPool,
+	}
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+
+	// The client must trust the server's (self-signed) certificate.
+	serverCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+
+	t.Run("client certificate authenticates the request", func(t *testing.T) {
+		t.Parallel()
+		repo := repository.NewResourceRepository()
+		resource := wgetResource(t, map[string]any{"url": srv.URL + "/resource"})
+		creds := &credv1.WgetCredentials{
+			Type:                 runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+			Certificate:          string(clientCertPEM),
+			PrivateKey:           string(clientKeyPEM),
+			CertificateAuthority: string(serverCertPEM),
+		}
+
+		b, err := repo.DownloadResource(t.Context(), resource, creds)
+		require.NoError(t, err)
+		assert.Equal(t, "mtls-ok:", string(readBlob(t, b)))
+	})
+
+	t.Run("client certificate composes with a bearer token", func(t *testing.T) {
+		t.Parallel()
+		repo := repository.NewResourceRepository()
+		resource := wgetResource(t, map[string]any{"url": srv.URL + "/resource"})
+		creds := &credv1.WgetCredentials{
+			Type:                 runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+			IdentityToken:        "my-token",
+			Certificate:          string(clientCertPEM),
+			PrivateKey:           string(clientKeyPEM),
+			CertificateAuthority: string(serverCertPEM),
+		}
+
+		b, err := repo.DownloadResource(t.Context(), resource, creds)
+		require.NoError(t, err)
+		assert.Equal(t, "mtls-ok:Bearer my-token", string(readBlob(t, b)))
+	})
+
+	t.Run("request without a client certificate is rejected", func(t *testing.T) {
+		t.Parallel()
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(srv.Client()))
+		resource := wgetResource(t, map[string]any{"url": srv.URL + "/resource"})
+
+		_, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.Error(t, err)
+	})
+
+	t.Run("credentials without a client certificate are rejected", func(t *testing.T) {
+		t.Parallel()
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(srv.Client()))
+		resource := wgetResource(t, map[string]any{"url": srv.URL + "/resource"})
+		creds := &credv1.WgetCredentials{
+			Type:          runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+			IdentityToken: "my-token",
+		}
+
+		_, err := repo.DownloadResource(t.Context(), resource, creds)
+		require.Error(t, err)
+	})
 }
