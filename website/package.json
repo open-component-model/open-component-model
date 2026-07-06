@@ -50,10 +50,10 @@
     "globals": "17.7.0",
     "hugo-extended": "0.163.3",
     "jiti": "2.7.0",
-    "js-yaml": "5.2.0",
+    "js-yaml": "5.2.1",
     "sass-embedded": "1.100.0",
     "shx": "0.4.0",
-    "typescript-eslint": "8.62.0"
+    "typescript-eslint": "8.62.1"
   },
   "overrides": {
     "semver": "^7.5.4",
@@ -67,5 +67,5 @@
     "node": ">=25.8.0",
     "npm": ">=11.11.0"
   },
-  "packageManager": "npm@11.17.0"
+  "packageManager": "npm@11.18.0"
 }

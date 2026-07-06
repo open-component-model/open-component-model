@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/kubernetes/controller
 
-go 1.26.3
+go 1.26.4
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
@@ -33,18 +33,18 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.15
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260630065557-4203eeea0c8d
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260630065557-4203eeea0c8d
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260703060508-0b3dd949136d
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260703060508-0b3dd949136d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260630065557-4203eeea0c8d
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260703060508-0b3dd949136d
 	ocm.software/open-component-model/bindings/go/oci v0.0.47
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260630065557-4203eeea0c8d
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260703060508-0b3dd949136d
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260630065557-4203eeea0c8d
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260630065557-4203eeea0c8d
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260630065557-4203eeea0c8d
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260703060508-0b3dd949136d
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260703063144-1a226bf2b295
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260703060508-0b3dd949136d
 	sigs.k8s.io/release-utils v0.12.4
 )
 
@@ -93,7 +93,7 @@ require (
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
+	github.com/google/pprof v0.0.0-20260604005048-7023385849c0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20260505044615-1ff4bf46051f // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -113,7 +113,7 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.68.0 // indirect
+	github.com/prometheus/common v0.68.1 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
@@ -151,10 +151,10 @@ require (
 	k8s.io/cli-runtime v0.36.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260603220949-865597e52e25 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260630065557-4203eeea0c8d // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260703060508-0b3dd949136d // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.11 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260630065557-4203eeea0c8d // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260703060508-0b3dd949136d // indirect
 	oras.land/oras-go/v2 v2.6.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
@@ -162,5 +162,3 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 )
-
-replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.1

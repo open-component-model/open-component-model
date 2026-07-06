@@ -56,7 +56,7 @@ jobs:
         run: echo "IMAGE_NAME=${REGISTRY}/${OWNER,,}/kubernetes/controller" >> "$GITHUB_ENV"
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.REF }}
@@ -80,7 +80,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up docker
-        uses: docker/setup-docker-action@0234bb73ccb40f0c430b795634f9247e2b5c2d23 # v5
+        uses: docker/setup-docker-action@6d7cfa65f60a9dda7b46e5513fa982536f3c9877 # v5
 
       - name: Setup ocm
         run: bash website/static/install.sh

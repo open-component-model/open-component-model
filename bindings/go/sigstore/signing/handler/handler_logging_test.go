@@ -126,7 +126,7 @@ func TestVerify_LogsConfiguredConstraints(t *testing.T) {
 		Name:   "test-sig",
 		Digest: testDigest(),
 		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmSigstore,
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			MediaType: v1alpha1.MediaTypeSigstoreBundle,
 			Value:     base64.StdEncoding.EncodeToString(bundleJSON),
 		},
@@ -159,7 +159,7 @@ func TestVerify_DoesNotLogBundleAcceptedOnFailure(t *testing.T) {
 		Name:   "test-sig",
 		Digest: testDigest(),
 		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmSigstore,
+			Algorithm: string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			MediaType: v1alpha1.MediaTypeSigstoreBundle,
 			Value:     base64.StdEncoding.EncodeToString(bundleJSON),
 		},

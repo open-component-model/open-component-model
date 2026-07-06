@@ -41,6 +41,10 @@ func init() {
 // Trust material (trusted root) is resolved from credentials, not from this
 // config. See the handler package for resolution order.
 //
+// SignatureAlgorithm selects the OCM Sigstore algorithm version. Leave empty
+// to use AlgorithmSigstoreDefault, which is the recommended default for new
+// signatures.
+//
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
@@ -69,6 +73,11 @@ type SignConfig struct {
 	// the credential consumer identity so .ocmconfig entries can route to an
 	// enterprise OIDC credential plugin. Leave empty for the default Sigstore client.
 	ClientID string `json:"clientID,omitempty"`
+
+	// SignatureAlgorithm selects the OCM Sigstore algorithm version (e.g.
+	// "Sigstore/v1alpha1"). Optional — if empty, AlgorithmSigstoreDefault
+	// is used. Use GetSignatureAlgorithm to read the effective value.
+	SignatureAlgorithm SignatureAlgorithm `json:"signatureAlgorithm,omitempty"`
 }
 
 // VerifyConfig defines configuration for Sigstore-based keyless verification via the cosign CLI.
@@ -133,7 +142,23 @@ func (c *SignConfig) Validate() error {
 			return err
 		}
 	}
+	switch c.SignatureAlgorithm {
+	case "", AlgorithmSigstoreV1Alpha1, AlgorithmSigstoreLegacy:
+	default:
+		return fmt.Errorf("SignatureAlgorithm: %w: %q", ErrUnknownAlgorithm, c.SignatureAlgorithm)
+	}
 	return nil
+}
+
+// GetSignatureAlgorithm returns the canonical signing algorithm. Empty and
+// AlgorithmSigstoreLegacy both resolve to AlgorithmSigstoreDefault, so newly
+// produced signatures never carry the legacy bare value. Validate must have
+// been called and returned nil before this method is read.
+func (c *SignConfig) GetSignatureAlgorithm() SignatureAlgorithm {
+	if c.SignatureAlgorithm == "" || c.SignatureAlgorithm == AlgorithmSigstoreLegacy {
+		return AlgorithmSigstoreDefault
+	}
+	return c.SignatureAlgorithm
 }
 
 // Validate checks that VerifyConfig fields are well-formed.
