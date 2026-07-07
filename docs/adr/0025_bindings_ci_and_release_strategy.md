@@ -236,6 +236,7 @@ With a generated `go.work` file we could run all tests on a schedule for main. T
 This would only make sense if we react to a failure of the scheduled build though, so it would be something additional for the entire team to pay attention to.
 
 #### Selective `go.work`-based builds in PRs
+
 Similar to the idea above, a complete test-suite run like this could also be executed on PRs e.g. for anything layer 2 or lower.
 
 #### Incremental migration to `go.work`
@@ -290,6 +291,7 @@ Cons:
 * Questionable scaling for newly added modules
 
 ### Option 4: Partial solutions
+
 // TODO
 Pros:
 
