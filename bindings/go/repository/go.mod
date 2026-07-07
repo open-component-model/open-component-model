@@ -8,11 +8,11 @@ require (
 	github.com/gobwas/glob v0.2.3
 	github.com/stretchr/testify v1.11.1
 	github.com/veqryn/slog-context v0.9.0
-	golang.org/x/sync v0.20.0
+	golang.org/x/sync v0.21.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/configuration v0.0.15
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260703060508-0b3dd949136d
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260707065838-9f4cb4e7c225
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 )
 

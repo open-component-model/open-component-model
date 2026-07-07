@@ -364,7 +364,11 @@ components:
 ```
 </details>
 
-> **Note:** We don't need to pass `--constructor component-constructor.yaml` because the CLI looks for a file named `component-constructor.yaml` in the current directory by default.
+{{< callout title="Note" icon="outline/info-circle" >}}
+We don't need to pass `--constructor component-constructor.yaml` because the CLI looks for a file named `component-constructor.yaml` in the current directory by default.
+
+We pass `--repository my-product` to override the default archive name (`transport-archive`). Later commands reference the archive by name (e.g., `my-product//...`).
+{{< /callout >}}
 
 ```shell
 ocm add cv --repository my-product
