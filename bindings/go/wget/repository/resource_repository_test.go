@@ -360,7 +360,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 
 	identity, err := repo.GetResourceCredentialConsumerIdentity(t.Context(), resource)
 	require.NoError(t, err)
-	assert.Equal(t, "Wget", identity["type"])
+	assert.Equal(t, "Wget/v1", identity["type"])
 	assert.Equal(t, "https", identity["scheme"])
 	assert.Equal(t, "example.com", identity["hostname"])
 	assert.Equal(t, "443", identity["port"])

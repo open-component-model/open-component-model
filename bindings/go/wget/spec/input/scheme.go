@@ -1,10 +1,10 @@
-package access
+package input
 
 import (
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
+	v1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
 )
 
 const (
