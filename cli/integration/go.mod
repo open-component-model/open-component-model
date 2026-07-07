@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/cli/integration
 
-go 1.26.3
+go 1.26.4
 
 replace ocm.software/open-component-model/cli => ../
 
@@ -18,15 +18,15 @@ require (
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260630065557-4203eeea0c8d
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260630065557-4203eeea0c8d
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260703060508-0b3dd949136d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260630065557-4203eeea0c8d
-	ocm.software/open-component-model/bindings/go/oci v0.0.47
+	ocm.software/open-component-model/bindings/go/oci v0.0.48
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260630065557-4203eeea0c8d
 	ocm.software/open-component-model/cli v0.9.1
-	oras.land/oras-go/v2 v2.6.0
+	oras.land/oras-go/v2 v2.6.1
 )
 
 require (
@@ -165,7 +165,7 @@ require (
 	ocm.software/open-component-model/bindings/go/constructor v0.0.11 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260630065557-4203eeea0c8d // indirect
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260630065557-4203eeea0c8d // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260703060508-0b3dd949136d // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260630065557-4203eeea0c8d // indirect
