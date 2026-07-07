@@ -419,10 +419,17 @@ func buildGraphDefinitionFromArgs(
 			LatestOnly:       latestOnly,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("listing component versions failed: %w", err)
+			return nil, fmt.Errorf("listing and filtering component versions failed: %w", err)
 		}
 		if len(versions) == 0 {
-			return nil, fmt.Errorf("no versions found for component %q matching constraint %q", fromSpec.Component, constraint)
+			msg := fmt.Sprintf("no versions found for component %q", fromSpec.Component)
+			if constraint != "" {
+				msg += fmt.Sprintf(" matching constraint %q", constraint)
+			}
+			if latestOnly {
+				msg += " (latest only)"
+			}
+			return nil, errors.New(msg)
 		}
 		componentIDs = make([]transfer.ComponentID, len(versions))
 		for i, v := range versions {
