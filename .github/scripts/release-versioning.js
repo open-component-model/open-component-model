@@ -284,7 +284,7 @@ export async function determineLatestRelease({ core, github, context }) {
         return;
     }
 
-    let releases = [];
+    let releases;
     try {
         releases = (await github.rest.repos.listReleases({
             owner: context.repo.owner, repo: context.repo.repo, per_page: 100
