@@ -222,30 +222,33 @@ There were reasons behind most of the decisions that led to the current reposito
 * Separation of concerns: One or multiple of the modules could be taken over by other teams and developed independently. While speculative and long-term, coupling the modules closer together would likely eliminate that possibility.
 * Learnings from v1: OCM v1 was not designed in a modular way which contributed to the overall state of being unmaintainable. Maybe the v2 design overshot the modularity goal, but the driving decisions behind it were the right ones for long-term success of the product.
 * Partial automation via Renovate: For non-breaking changes, the layer-by-layer version bumping can be automated through Renovate's dependency update PRs, already reducing the manual overhead without requiring custom tooling.
+* `go.work` can be used (and already is) for local development of features that cross module boundaries. Getting the changes merged still requires individual PRs, but local development is already friction-less in this regard.
+* Over time the expectation is that especially lower layers stabilize and that inter-module implementation efforts are the exception, not the norm.
 
 ### Option 4: Partial solutions
 
 None of the above options are optimal, each has its own undesirable tradeoffs. It's still an open question whether we can find a compromise that brings us some of the benefits of one of the options without all the associated costs.
 
-#### Scheduled `go.work` based builds on main
+#### Scheduled `go.work`-based builds on main
 
 With a generated `go.work` file we could run all tests on a schedule for main. This would make inter-module regressions more discoverable (though only after a PR is already merged) without affecting the release process or requiring extensive tooling. Via the schedule we would also have direct control over how much additional CI overhead we generate.
 
 This would only make sense if we react to a failure of the scheduled build though, so it would be something additional for the entire team to pay attention to.
 
+#### Selective `go.work`-based builds in PRs
+Similar to the idea above, a complete test-suite run like this could also be executed on PRs e.g. for anything layer 2 or lower.
+
+#### Incremental migration to `go.work`
+
+One way to make option 1 more feasible could be to gradually migrate to it over time. E.g. by going top-down through the layers a first iteration could include only `transfer` and `helm` in a committed `go.work` file. The CI and release process could then be built up iteratively over time and the initial impact on the release process would be minimal.
+
+The downsides of option 1 still all apply, but the investment would not have to be made in a big-bang and the risk would be more manageable. It would also be easier to revert a single step of this migration individually.
+
+#### Automated PR impact analysis
+
+We have the dependency tree logic in the PoC, we could use it to automatically comment the PR with its impact on higher layers, nudging developers to double check their changes. Or prompt one of the review AI agents with that specific information.
+
 //TODO other ideas
-
-#### Description
-
-<Explain why this option was chosen and its benefits.>
-
-#### High-level Architecture
-
-<Provide a diagram or sequence flow if applicable.>
-
-#### Contract
-
-<Define the interfaces, protocols, and agreements needed for this decision.>
 
 ## Pros and Cons of the Options
 
@@ -287,7 +290,7 @@ Cons:
 * Questionable scaling for newly added modules
 
 ### Option 4: Partial solutions
-
+// TODO
 Pros:
 
 * <Pro 1>
@@ -297,10 +300,6 @@ Cons:
 
 * <Con 1>
 * <Con 2>
-
-## Discovery and Distribution
-
-<Explain how the decision will be implemented, distributed, and maintained.>
 
 ## Conclusion
 
