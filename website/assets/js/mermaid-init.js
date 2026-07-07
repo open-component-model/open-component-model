@@ -50,11 +50,14 @@ const start = () => {
       }
     });
     mermaid.initialize({ theme: getTheme() });
-    mermaid.run();
+    // mermaid.run() rejects on invalid diagram syntax; swallow the rejection
+    // to a console.error so a single bad diagram doesn't surface as an
+    // unhandled promise rejection on the page.
+    mermaid.run().catch((err) => console.error('mermaid re-render failed:', err));
   };
 
   mermaid.initialize({ startOnLoad: false, theme: getTheme() });
-  mermaid.run();
+  mermaid.run().catch((err) => console.error('mermaid render failed:', err));
 
   // doks-core's setTheme() writes data-bs-theme AND dispatches 'themeChanged'
   // for every toggle, so a naive listener + observer pair re-renders twice
