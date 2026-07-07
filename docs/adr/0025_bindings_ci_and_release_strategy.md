@@ -155,7 +155,7 @@ This was the initially preferred solution. An [ADR](https://github.com/open-comp
 This proved that several of the development hindrances could be solved with this approach:
 * Multi-module changes in a single PR: The core friction of inter-module development can be alleviated this way.
 * Guarding against regressions: All libraries run with all the newest version for their sibling libraries. Many - maybe most - inter-module regressions could be caught this way.
-* Dependency-graph-aware CI execution and release PoC: The potential impact of code changes as well as the release process depend on tool-support that is aware of the dependency chain. While the feasibility of the concept was proved, the net gain came into question.
+* Dependency-graph-aware CI execution and release PoC: The potential impact of code changes as well as the release process depend on tool-support that is aware of the dependency chain.
 
 But while working on it, it also became clear that there were several unexpected complications and side effects of this approach, that made the trade-off unfavorable.
 
@@ -211,6 +211,7 @@ There were reasons behind most of the decisions that led to the current reposito
 * Forced intentionality: It's a lot of work to introduce an inter-module change, this should force a mindful approach when working on such an issue. Potentially hot-take: The process is a feature, not a bug.
 * Separation of concerns: One or multiple of the modules could be taken over by other teams and developed independently. While speculative and long-term, coupling the modules closer together would likely eliminate that possibility.
 * Learnings from v1: OCM v1 was not designed in a modular way which contributed to the overall state of being unmaintainable. Maybe the v2 design overshot the modularity goal, but the driving decisions behind it were the right ones for long-term success of the product.
+* Partial automation via Renovate: For non-breaking changes, the layer-by-layer version bumping can be automated through Renovate's dependency update PRs, already reducing the manual overhead without requiring custom tooling.
 
 ### Option 4: Partial solutions
 None of the above options are optimal, each has its own undesirable tradeoffs. It's still an open question whether we can find a compromise that brings us some of the benefits of one of the options without all the associated costs.
