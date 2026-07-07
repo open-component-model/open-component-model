@@ -76,6 +76,10 @@ components:
 ```
 
 This component references the `podinfo` Helm chart, a simple web application that displays pod information.
+
+{{< callout title="Note" icon="outline/info-circle" >}}
+A self-contained component would also list the OCI image that the Helm chart pulls at runtime as a separate resource — that way the component carries everything needed to deploy it, and the image can be transferred and signed alongside the chart. We omit that here to keep the focus on referencing a Helm chart. The [Multi-Component Product tutorial]({{< relref "/docs/tutorials/advanced-component-constructor.md" >}}) shows how to combine charts and images in one component.
+{{< /callout >}}
 {{< /step >}}
 
 {{< step >}}
@@ -141,9 +145,7 @@ kubectl create secret docker-registry ghcr-secret \
   --docker-server=ghcr.io
 ```
 
-Then update the resources to use credentials:
-
-1. **OCM Controller resources**: Add `ocmConfig` to the Repository resource in your RGD. The credentials propagate automatically to Component, Resource, and Deployer objects that reference this Repository:
+Keep this secret in mind — you will reference it later when you define the `ResourceGraphDefinition` in the [next section](#create-resourcegraphdefinition). Specifically, add `ocmConfig` to the Repository resource in your RGD as shown below. The credentials propagate automatically to Component, Resource, and Deployer objects that reference this Repository:
 
   ```yaml
       - id: repository
