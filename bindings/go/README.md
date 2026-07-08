@@ -26,6 +26,7 @@ Go bindings for the Open Component Model.
 | **helm**                     | Helm chart resource handling                             |
 | **input**                    | Input sources (file, directory, utf8)                    |
 | **generator**                | Code generation tools                                    |
+| **wget**                     | Wget resource handling                                   |
 
 ## Usage
 
@@ -50,7 +51,8 @@ The [`examples/`](examples/) directory contains runnable, tested examples for th
 - **OCI Registry** — full round-trip against a real OCI registry using testcontainers (skipped with `-short`)
 - **Transfer** — transferring component versions between CTF repositories using the transfer graph API
 
-All examples are self-contained and run as part of CI, except **OCI Registry** which requires a real OCI registry via testcontainers and is skipped with `-short`:
+All examples are self-contained and run as part of CI, except **OCI Registry** which requires a real OCI registry via
+testcontainers and is skipped with `-short`:
 
 ```bash
 task bindings/go/examples:test

@@ -22,8 +22,8 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.15 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260706165340-de72c3516d84 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260706165340-de72c3516d84 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260708085606-63035986ed27 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260708084504-ed0345cddf98 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.10 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
