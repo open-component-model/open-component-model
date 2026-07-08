@@ -84,8 +84,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		download.WithClient(client),
 		download.WithCredentials(credentials),
 	}
-	// A zero MaxDownloadSize leaves the download package default in place; a negative
-	// value disables the limit, and any positive value caps the download.
+
 	if i.MaxDownloadSize != 0 {
 		opts = append(opts, download.WithMaxDownloadSize(i.MaxDownloadSize))
 	}
@@ -107,9 +106,6 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}, nil
 }
 
-// createRemoteResourceAccess creates a resource with a wget access specification pointing at
-// the input URL, mirroring the download request fields, so the content is fetched lazily
-// instead of embedded as a local blob. The resource type set in the constructor is preserved.
 func (i *InputMethod) createRemoteResourceAccess(resource *constructorruntime.Resource, wget v1.Wget) (*constructorruntime.Resource, error) {
 	wgetAccess := &accessv1.Wget{
 		URL:        wget.URL,
