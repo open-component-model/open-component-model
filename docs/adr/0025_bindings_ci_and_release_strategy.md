@@ -255,7 +255,7 @@ The tradeoff would be that PRs and main test different things. A PR could pass a
 
 We have the dependency tree logic in the PoC and could use it to automatically comment the PR with its impact on higher layers, nudging developers to double-check their changes. Or prompt one of the review AI agents with that specific information.
 
-//TODO other ideas
+//TODO: add more ideas
 
 ## Pros and Cons of the Options
 
@@ -298,7 +298,7 @@ Cons:
 
 ### Option 4: Partial solutions
 
-// TODO
+// TODO: Pros/cons depend on what other solutions we think of and which of the approaches we'd like to try. In principle each suboption has its own pro/con list
 Pros:
 
 * <Pro 1>
@@ -311,4 +311,4 @@ Cons:
 
 ## Conclusion
 
-// TODO: The ADR is meant as a base for additional discussion, the conclusion is still open in my mind.
+// TODO: The ADR is meant as a base for additional discussion, the conclusion is still open until a decision is made by the team
