@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	godigest "github.com/opencontainers/go-digest"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -12,6 +14,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
+)
+
+const (
+	// hashAlgorithmSHA256 is the hash algorithm used for wget resource digests.
+	hashAlgorithmSHA256 = "SHA-256"
+	// genericBlobDigestV1 is the normalisation algorithm for a plain downloaded blob.
+	genericBlobDigestV1 = "genericBlobDigest/v1"
 )
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
@@ -108,4 +117,50 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 // UploadResource is not supported for wget access types.
 func (r *ResourceRepository) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("upload is not supported for wget access type")
+}
+
+// GetResourceDigestProcessorCredentialConsumerIdentity resolves the credential consumer
+// identity used when downloading the resource to compute its digest. It is the same identity
+// used for a regular download, so credentials configured for the host apply to both.
+func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
+	return r.GetResourceCredentialConsumerIdentity(ctx, resource)
+}
+
+// ProcessResourceDigest computes the digest of a wget resource by downloading the referenced
+// content and hashing it. Because the content is only referenced (not stored as a local blob),
+// there is nothing to reuse: the digest is streamed off the same download path used by
+// [ResourceRepository.DownloadResource], so it costs a single fetch and stores no bytes. When
+// the resource already carries a digest, the computed value is verified against it.
+func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
+	data, err := r.DownloadResource(ctx, resource, credentials)
+	if err != nil {
+		return nil, fmt.Errorf("error downloading resource for digest processing: %w", err)
+	}
+
+	rc, err := data.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("error opening downloaded resource: %w", err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	dig, err := godigest.FromReader(rc)
+	if err != nil {
+		return nil, fmt.Errorf("error computing resource digest: %w", err)
+	}
+
+	resource = resource.DeepCopy()
+	if resource.Digest == nil {
+		resource.Digest = &descriptor.Digest{
+			HashAlgorithm:          hashAlgorithmSHA256,
+			NormalisationAlgorithm: genericBlobDigestV1,
+			Value:                  dig.Encoded(),
+		}
+		return resource, nil
+	}
+
+	if resource.Digest.Value != dig.Encoded() {
+		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", resource.Digest.Value, dig.Encoded())
+	}
+
+	return resource, nil
 }

@@ -15,7 +15,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/input"
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
-	accessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 	v1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
 )
@@ -74,43 +73,6 @@ func TestProcessResource(t *testing.T) {
 		mt, known := ma.MediaType()
 		assert.True(t, known)
 		assert.Equal(t, "text/plain", mt)
-	})
-
-	t.Run("stores wget access without downloading when Reference set", func(t *testing.T) {
-		var hits int
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			hits++
-			_, _ = w.Write([]byte("should not be fetched"))
-		}))
-		defer server.Close()
-
-		method := &input.InputMethod{}
-		resource := wgetInputResource(t, map[string]any{
-			"url":       server.URL + "/artifact.tar.gz",
-			"mediaType": "application/gzip",
-			"reference": true,
-		})
-
-		result, err := method.ProcessResource(t.Context(), resource, nil)
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		// Access mode returns a processed resource, not a local blob, and does not download.
-		assert.Nil(t, result.ProcessedBlobData)
-		require.NotNil(t, result.ProcessedResource)
-		assert.Zero(t, hits, "reference mode must not download the resource")
-
-		// The user-declared resource type is preserved.
-		assert.Equal(t, "blob", result.ProcessedResource.Type)
-
-		require.NotNil(t, result.ProcessedResource.Access, "access should be set")
-		assert.Equal(t, "Wget/v1", result.ProcessedResource.Access.GetType().String(),
-			"access should be a defaulted wget access spec")
-
-		// The access is encoded as a runtime.Raw; decode it to verify the fields carried over.
-		acc := &accessv1.Wget{}
-		require.NoError(t, accessspec.Scheme.Convert(result.ProcessedResource.Access, acc))
-		assert.Equal(t, server.URL+"/artifact.tar.gz", acc.URL)
-		assert.Equal(t, "application/gzip", acc.MediaType)
 	})
 
 	t.Run("mediaType from spec overrides Content-Type", func(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -182,4 +183,68 @@ func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	data, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	return data
+}
+
+func TestProcessResourceDigest(t *testing.T) {
+	t.Parallel()
+
+	t.Run("computes digest by downloading the content once", func(t *testing.T) {
+		content := []byte("hello digest world")
+		var hits int
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits++
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
+
+		processed, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
+		require.NoError(t, err)
+		require.NotNil(t, processed.Digest)
+		assert.Equal(t, "SHA-256", processed.Digest.HashAlgorithm)
+		assert.Equal(t, "genericBlobDigest/v1", processed.Digest.NormalisationAlgorithm)
+		assert.Equal(t, godigest.FromBytes(content).Encoded(), processed.Digest.Value)
+		assert.Equal(t, 1, hits, "digest processing should download the content exactly once")
+		assert.Nil(t, resource.Digest, "the input resource must not be mutated")
+	})
+
+	t.Run("verifies a matching pre-existing digest", func(t *testing.T) {
+		content := []byte("verify me")
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.FromBytes(content).Encoded(),
+		}
+
+		_, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("fails on digest mismatch", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("actual content"))
+		}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.FromBytes([]byte("different content")).Encoded(),
+		}
+
+		_, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "digest mismatch")
+	})
 }

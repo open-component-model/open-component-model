@@ -11,9 +11,7 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
-	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
-	accessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
-	input "ocm.software/open-component-model/bindings/go/wget/spec/input"
+	"ocm.software/open-component-model/bindings/go/wget/spec/input"
 	v1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
 )
 
@@ -58,11 +56,8 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	return identity, nil
 }
 
-// ProcessResource turns a wget input specification into a resource input method result.
-//
-// In the default local-blob mode it downloads the resource and returns it as local blob data.
-// When the input sets Reference, it instead returns a processed resource
-// carrying a wget access specification pointing at the URL, without downloading anything.
+// ProcessResource downloads the resource described by the wget input specification and
+// returns it as local blob data to be stored in the component version.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	wget := v1.Wget{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &wget); err != nil {
@@ -71,18 +66,6 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 
 	if wget.URL == "" {
 		return nil, fmt.Errorf("url is required in wget input spec")
-	}
-
-	// Access-spec mode: do not download. Store the resource with a wget access specification
-	// pointing at the URL so the content is resolved lazily when the resource is accessed.
-	if wget.Reference {
-		remoteResource, err := i.createRemoteResourceAccess(resource, wget)
-		if err != nil {
-			return nil, fmt.Errorf("error creating remote resource access: %w", err)
-		}
-		return &constructor.ResourceInputMethodResult{
-			ProcessedResource: constructorruntime.ConvertToDescriptorResource(remoteResource),
-		}, nil
 	}
 
 	var client *nethttp.Client
@@ -114,22 +97,4 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	return &constructor.ResourceInputMethodResult{
 		ProcessedBlobData: data,
 	}, nil
-}
-
-func (i *InputMethod) createRemoteResourceAccess(resource *constructorruntime.Resource, wget v1.Wget) (*constructorruntime.Resource, error) {
-	wgetAccess := &accessv1.Wget{
-		URL:        wget.URL,
-		MediaType:  wget.MediaType,
-		Header:     wget.Header,
-		Verb:       wget.Verb,
-		Body:       wget.Body,
-		NoRedirect: wget.NoRedirect,
-	}
-
-	if _, err := accessspec.Scheme.DefaultType(wgetAccess); err != nil {
-		return nil, fmt.Errorf("error setting default type for wget access: %w", err)
-	}
-	resource.Access = wgetAccess
-
-	return resource, nil
 }
