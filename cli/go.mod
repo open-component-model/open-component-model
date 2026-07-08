@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/cli
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
@@ -24,15 +24,15 @@ require (
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260630065557-4203eeea0c8d
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260630065557-4203eeea0c8d
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260703060508-0b3dd949136d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260630065557-4203eeea0c8d
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260630065557-4203eeea0c8d
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260630065557-4203eeea0c8d
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260703060508-0b3dd949136d
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260630065557-4203eeea0c8d
-	ocm.software/open-component-model/bindings/go/oci v0.0.47
+	ocm.software/open-component-model/bindings/go/oci v0.0.48
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260630065557-4203eeea0c8d
@@ -131,7 +131,7 @@ require (
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
-	oras.land/oras-go/v2 v2.6.0 // indirect
+	oras.land/oras-go/v2 v2.6.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
