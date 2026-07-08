@@ -5,6 +5,8 @@ import (
 	"log/slog"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	githubdigest "ocm.software/open-component-model/bindings/go/github/digest"
+	githubresource "ocm.software/open-component-model/bindings/go/github/repository/resource"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -60,6 +62,16 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		helmresource.NewResourceRepository(filesystemConfig, helmresource.WithHTTPConfig(httpConfig)),
 	); err != nil {
 		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
+	}
+	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(
+		githubdigest.NewDigestProcessor(filesystemConfig),
+	); err != nil {
+		return fmt.Errorf("could not register github digest processor plugin: %w", err)
+	}
+	if err := manager.ResourcePluginRegistry.RegisterInternalResourcePlugin(
+		githubresource.NewResourceRepository(filesystemConfig),
+	); err != nil {
+		return fmt.Errorf("could not register github resource repository plugin: %w", err)
 	}
 	if err := rsa.Register(manager.SigningRegistry, manager.CredentialRepositoryRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register RSA signing plugin: %w", err)

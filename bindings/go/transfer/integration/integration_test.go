@@ -29,6 +29,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	githubresource "ocm.software/open-component-model/bindings/go/github/repository/resource"
+	githubaccess "ocm.software/open-component-model/bindings/go/github/spec/access"
+	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -121,14 +124,17 @@ func newCredResolver(t *testing.T, registries ...registryCreds) *credentials.Sta
 	return credentials.NewStaticCredentialsResolver(credMap)
 }
 
-// createCTFRepository creates a CTF-backed OCI repository at the given path.
-func createCTFRepository(t *testing.T, path string) repository.ComponentVersionRepository {
+// createCTFRepository creates a CTF-backed OCI repository at the given path. Additional
+// options (e.g. oci.WithScheme to register extra access types such as github/v1) can be
+// passed through opts.
+func createCTFRepository(t *testing.T, path string, opts ...oci.RepositoryOption) repository.ComponentVersionRepository {
 	t.Helper()
 	fs, err := filesystem.NewFS(path, os.O_RDWR|os.O_CREATE)
 	require.NoError(t, err)
 	archive := ctf.NewFileSystemCTF(fs)
 	store := ocictf.NewFromCTF(archive)
-	repo, err := oci.NewRepository(oci.WithResolver(store), oci.WithTempDir(t.TempDir()))
+	allOpts := append([]oci.RepositoryOption{oci.WithResolver(store), oci.WithTempDir(t.TempDir())}, opts...)
+	repo, err := oci.NewRepository(allOpts...)
 	require.NoError(t, err)
 	return repo
 }
@@ -1301,4 +1307,134 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	r.NoError(json.Unmarshal(rawAccess, &typedOCIAccess))
 	r.Contains(typedOCIAccess.ImageReference, targetAddr,
 		"OCIImage access should reference the target registry after transfer")
+}
+
+// The canonical octocat/Hello-World repository at its long-frozen master tip.
+const (
+	helloWorldRepo   = "https://github.com/octocat/Hello-World"
+	helloWorldCommit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+)
+
+// Test_Integration_TransferGitHub_CTFToOCI verifies that a gitHub resource pinned to a
+// specific commit is transferred end-to-end from a source CTF to an OCI registry, and
+// that the resource lands in the target as a localBlob (the github repository archive
+// downloaded from github.com and repackaged).
+func Test_Integration_TransferGitHub_CTFToOCI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	t.Parallel()
+	r := require.New(t)
+
+	// 1. Start target OCI registry.
+	registryAddr, user, password := startRegistry(t)
+
+	// 2. Create a source CTF whose component has a gitHub resource pinned to a commit.
+	//    The default CTF/OCI repository scheme only knows about OCI and localBlob access
+	//    types, so it must be extended with the github access scheme to encode/decode the
+	//    gitHub access on write and read.
+	componentName := "ocm.software/github-integration-test"
+	componentVersion := "1.0.0"
+	sourceCTFPath := t.TempDir()
+	sourceScheme := runtime.NewScheme()
+	sourceScheme.MustRegisterScheme(oci.DefaultRepositoryScheme)
+	// The source scheme must know github/v1 because this test hand-builds a typed
+	// *githubv1.GitHub access; the CLI constructor converts external accesses to runtime.Raw
+	// before writing, so the real authoring path does not need github in DefaultRepositoryScheme.
+	githubaccess.MustAddToScheme(sourceScheme)
+	ctfRepo := createCTFRepository(t, sourceCTFPath, oci.WithScheme(sourceScheme))
+
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion},
+			},
+			Provider: descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: "repo-source", Version: "1.0.0"},
+					},
+					Type:     "gitHub",
+					Relation: descriptor.ExternalRelation,
+					Access: &githubv1.GitHub{
+						Type:    runtime.NewVersionedType(githubv1.LegacyType, githubv1.Version),
+						RepoURL: helloWorldRepo,
+						Commit:  helloWorldCommit,
+					},
+				},
+			},
+		},
+	}
+	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
+
+	// 3. Build the transfer graph (CopyModeAllResources copies non-localBlob resources).
+	sourceSpec := &ctfrepospec.Repository{
+		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath: sourceCTFPath,
+	}
+	targetSpec := &ocirepospec.Repository{
+		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
+	}
+
+	// NOTE: the transfer config is the SECOND positional argument (a *Config), not a
+	// Mapping field. CopyModeAllResources is required — the default
+	// CopyModeLocalBlobResources skips non-localBlob (external) resources like github.
+	tgd, err := transfer.BuildGraphDefinition(t.Context(),
+		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsDefault},
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
+	)
+	r.NoError(err)
+	r.NotEmpty(tgd.Transformations)
+
+	// 4. Build and execute the graph with the github resource repository.
+	ctx := t.Context()
+	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	resourceRepo := githubresource.NewResourceRepository(nil)
+
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	graph, err := b.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	// 5. Verify the resource landed in the target as a localBlob.
+	client := createAuthClient(registryAddr, user, password)
+	urlRes, err := urlresolver.New(
+		urlresolver.WithBaseURL(registryAddr),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+	targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	gotDesc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(gotDesc.Component.Resources, 1)
+	r.Equal("repo-source", gotDesc.Component.Resources[0].Name)
+	r.Equal(descriptorv2.LocalBlobAccessType,
+		gotDesc.Component.Resources[0].Access.GetType().Name,
+		"transferred github resource must be stored as a localBlob in the target")
+
+	// Verify the blob is actually present, readable, and non-empty in the target repository.
+	// The github repository archive is served as application/x-tgz (a gzip'd tar), so also
+	// sanity-check the gzip magic bytes on the stored content.
+	resourceIdentity := gotDesc.Component.Resources[0].ToIdentity()
+	localBlob, _, err := targetRepo.GetLocalResource(ctx, componentName, componentVersion, resourceIdentity)
+	r.NoError(err, "local blob should be retrievable from target repository")
+	reader, err := localBlob.ReadCloser()
+	r.NoError(err, "local blob should be readable")
+	defer func() { r.NoError(reader.Close()) }()
+	content, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.NotEmpty(content, "local blob content should not be empty")
+	r.GreaterOrEqual(len(content), 2, "local blob content should contain at least the gzip header")
+	r.Equal([]byte{0x1f, 0x8b}, content[:2], "github archive blob should be gzip-compressed (application/x-tgz)")
 }

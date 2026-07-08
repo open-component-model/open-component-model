@@ -9,8 +9,9 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.15
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260707065838-9f4cb4e7c225
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260707093459-cb422b7bc021
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
+	ocm.software/open-component-model/bindings/go/github v0.0.0-00010101000000-000000000000
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260707065838-9f4cb4e7c225
 	ocm.software/open-component-model/bindings/go/oci v0.0.48
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
@@ -91,3 +92,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace ocm.software/open-component-model/bindings/go/github => ../github

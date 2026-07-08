@@ -62,7 +62,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 
 	// Create AddLocalResource transformation
 	var addResourceTransform transformv1alpha1.GenericTransformation
-	if addResourceTransform, err = ociUploadAsLocalResource(toSpec, component, version, addResourceID, getResourceID, staticReferenceName(referenceName)); err != nil {
+	if addResourceTransform, err = ociUploadAsLocalResource(toSpec, component, version, addResourceID, getResourceID, staticReferenceName(referenceName), "file"); err != nil {
 		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
 	}
 
@@ -76,7 +76,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 
 // ociUploadAsLocalResource creates an AddLocalResource transformation that uploads the OCI artifact as a local resource to the target repository.
 // It uses the output of the GetOCIArtifact transformation to populate the fields of the AddLocalResource transformation, ensuring that the same resource is referenced and uploaded.
-func ociUploadAsLocalResource(toSpec runtime.Typed, component, version, addResourceID, getResourceID string, referenceName referenceNameOption) (transformv1alpha1.GenericTransformation, error) {
+func ociUploadAsLocalResource(toSpec runtime.Typed, component, version, addResourceID, getResourceID string, referenceName referenceNameOption, outputFileField string) (transformv1alpha1.GenericTransformation, error) {
 	addLocalResourceType, err := chooseAddLocalResourceType(toSpec)
 	if err != nil {
 		return transformv1alpha1.GenericTransformation{}, fmt.Errorf("choosing add local resource type for target repository: %w", err)
@@ -110,7 +110,7 @@ func ociUploadAsLocalResource(toSpec runtime.Typed, component, version, addResou
 				"extraIdentity": fmt.Sprintf("${has(%s.output.resource.extraIdentity) ? %s.output.resource.extraIdentity  : {}}", getResourceID, getResourceID),
 				"srcRefs":       fmt.Sprintf("${has(%s.output.resource.srcRefs) ? %s.output.resource.srcRefs  : []}", getResourceID, getResourceID),
 			},
-			"file": fmt.Sprintf("${%s.output.file}", getResourceID),
+			"file": fmt.Sprintf("${%s.output.%s}", getResourceID, outputFileField),
 		}},
 	}
 	return addResourceTransform, nil

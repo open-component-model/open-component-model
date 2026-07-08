@@ -3,6 +3,8 @@ package internal
 import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	githubtransformer "ocm.software/open-component-model/bindings/go/github/transformation"
+	githubv1alpha1 "ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
 	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -26,6 +28,7 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(ociaccess.Scheme)
 	transformerScheme.MustRegisterScheme(helmv1alpha1.Scheme)
+	transformerScheme.MustRegisterScheme(githubv1alpha1.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
 		Scheme:             transformerScheme,
@@ -92,6 +95,13 @@ func NewDefaultBuilder(
 		Scheme: transformerScheme,
 	}
 
+	// GitHub transformers
+	getGitHubCommit := &githubtransformer.GetGitHubCommit{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
 	// File cleanup transformer
 	transformerScheme.MustRegisterWithAlias(&FileCleanupTransformation{}, FileCleanupVersionedType)
 	fileCleanup := &FileCleanup{
@@ -112,5 +122,6 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.TransferOCIArtifact{}, ociTransferOCIArtifact).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
+		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }

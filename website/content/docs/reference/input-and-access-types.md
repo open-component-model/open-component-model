@@ -244,6 +244,36 @@ access type instead. The [Helm resource repository]({{< relref "resource-reposit
 only supports HTTP/HTTPS-based chart repositories.
 {{< /callout >}}
 
+### `GitHub/v1`
+
+References a commit of a GitHub repository, downloaded as a source archive via the GitHub
+REST API. Legacy aliases: `github`, `github/v1`, `GitHub`, `gitHub`.
+
+| Field         | Type   | Required | Description                                                                                     |
+|---------------|--------|----------|---------------------------------------------------------------------------------------------------|
+| `repoUrl`     | string | yes      | Full repository URL, e.g. `https://github.com/open-component-model/ocm`.                         |
+| `apiHostname` | string | no       | Overrides the GitHub REST API hostname for GitHub Enterprise.                                    |
+| `commit`      | string | no*      | 40-character hex commit SHA. When set it is authoritative.                                       |
+| `ref`         | string | no*      | Git reference (e.g. `refs/heads/main`) resolved to a commit and pinned by the digest processor. |
+
+\* At least one of `commit` or `ref` must be set. A resource may be authored with only a
+`ref`; its `commit` is pinned later during digest processing, after which `ref` is
+informational.
+
+```yaml
+resources:
+  - name: my-source
+    type: gitHub
+    access:
+      type: GitHub/v1
+      repoUrl: https://github.com/open-component-model/ocm
+      commit: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+```
+
+On transfer to an OCI or CTF target, the pinned commit's source archive is downloaded and
+stored as a `localBlob` in the target repository. Credentials use the `GitHubRepository`
+consumer type (a `token` property holding a GitHub or GitHub Enterprise access token).
+
 ### `File/v1alpha1`
 
 References a file by URI ([RFC 8089](https://datatracker.ietf.org/doc/html/rfc8089)). Legacy alias: `file`.

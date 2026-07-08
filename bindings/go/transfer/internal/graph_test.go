@@ -9,6 +9,8 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	githubv1alpha1 "ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -142,6 +144,21 @@ func helmResource(name, version, helmRepo, chart string) descriptor.Resource {
 	}
 }
 
+func githubResource(name, version, repoURL, commit string) descriptor.Resource {
+	return descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: name, Version: version},
+		},
+		Type:     "gitHub",
+		Relation: descriptor.ExternalRelation,
+		Access: &githubv1.GitHub{
+			Type:    runtime.NewVersionedType(githubv1.LegacyType, githubv1.Version),
+			RepoURL: repoURL,
+			Commit:  commit,
+		},
+	}
+}
+
 // --- BuildGraphDefinition tests ---
 
 func TestBuildGraphDefinition_NoResources(t *testing.T) {
@@ -240,6 +257,29 @@ func TestBuildGraphDefinition_HelmResource(t *testing.T) {
 	assert.Len(t, tgd.Transformations, 5)
 	assert.Equal(t, helmv1alpha1.GetHelmChartV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, helmv1alpha1.ConvertHelmToOCIV1alpha1, tgd.Transformations[1].Type)
+}
+
+func TestBuildGraphDefinition_GitHubResource(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{githubResource("my-source", "1.0.0",
+			"https://github.com/octocat/Hello-World",
+			"7fd1a60b01f91b314f59955a4e4d4e80d8edf11d")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
+		CopyMode:   transferv1alpha1.CopyModeAllResources,
+		UploadType: transferv1alpha1.UploadAsDefault,
+	})
+	require.NoError(t, err)
+
+	// get -> add, plus the component Upload node and the FileCleanup node.
+	assert.Len(t, tgd.Transformations, 4)
+	assert.Equal(t, githubv1alpha1.GetGitHubCommitV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
+	assert.Equal(t, FileCleanupVersionedType, tgd.Transformations[3].Type)
 }
 
 func TestBuildGraphDefinition_CTFTarget(t *testing.T) {

@@ -128,6 +128,62 @@ resolves the OCI manifest digest via the registry API.
 
 ---
 
+## GitHub Resource Repository
+
+Handles source archives of a pinned commit in a GitHub (or GitHub Enterprise) repository.
+
+### Supported Access Types
+
+| Access Type                                                         |
+|-----------------------------------------------------------------------|
+| [`GitHub/v1`]({{< relref "input-and-access-types.md" >}}#githubv1) |
+
+### Capabilities
+
+| Operation         | Supported |
+|-------------------|-----------|
+| Download          | Yes       |
+| Upload            | No        |
+| Digest Processing | Yes       |
+
+{{< callout type="info" >}}
+Upload is not supported: the `GitHub/v1` access type is a read-only source reference. Content is pushed to GitHub
+through git, not through OCM.
+{{< /callout >}}
+
+### Credential Resolution
+
+The credential consumer identity is derived from the `repoUrl` field in the access specification. The identity type is
+`GitHubRepository`.
+
+**Example:** For a resource with `repoUrl: https://github.com/open-component-model/ocm`:
+
+| Attribute  | Value                       |
+|------------|-----------------------------|
+| `type`     | `GitHubRepository`          |
+| `hostname` | `github.com`                |
+| `scheme`   | `https`                     |
+| `path`     | `open-component-model/ocm`  |
+
+This identity works the same way for GitHub Enterprise hosts. The resolved credentials must supply a `token` property
+(a GitHub or GitHub Enterprise access token) used to authenticate against the GitHub REST API.
+
+### Download Behavior
+
+Downloads the source archive of the commit pinned in the resource's access (`commit`, or the commit resolved from `ref`
+by digest processing) via the GitHub REST API. The archive is returned as an in-memory gzipped tar blob.
+
+On transfer to an OCI or CTF target, this downloaded archive is stored as a `localBlob` in the target repository.
+
+### Digest Processing
+
+The GitHub digest processor resolves a by-reference access (one carrying only a `ref`) to a concrete `commit`, pinning
+it onto the resource — mirroring OCI tag-to-digest pinning. It then downloads the archive at that commit and computes a
+generic blob digest over it, so a by-reference GitHub resource carries the same digest it would have as an embedded
+local blob. If `commit` is already set, the resolved commit is verified against it instead.
+
+---
+
 ## External Resource Repositories (Plugins)
 
 External plugins declare supported access types in their capability specification and implement the same three

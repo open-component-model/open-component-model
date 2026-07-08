@@ -10,6 +10,7 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -321,8 +322,13 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 			fmt.Sprintf("${%s.spec.?provFile}", convertResourceID),
 			fmt.Sprintf("${%s.spec.file}", addResourceID),
 		}, nil
+	case *githubv1.GitHub:
+		if err := processGitHub(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+			return nil, fmt.Errorf("cannot process GitHub resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	default:
-		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, and Helm chart resources are supported for transformation.",
+		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, Helm chart, and GitHub resources are supported for transformation.",
 			"component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version,
 			"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 	}
