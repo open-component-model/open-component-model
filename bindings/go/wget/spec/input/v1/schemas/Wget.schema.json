@@ -4,12 +4,8 @@
   "$id": "ocm.software/open-component-model/bindings/go/wget/spec/input/v1/schemas/Wget.schema.json",
   "title": "Wget",
   "type": "object",
-  "description": "Wget describes an input sourced from an HTTP/S URL during component construction.\n\nIt supports two output modes:\n- local blob (default): the content is downloaded during construction and stored as a\nlocal blob in the component version, making it self-contained.\n- access spec (AsAccess): the content is not downloaded; the resource is stored with a\nwget access specification pointing at URL, so the content is fetched lazily when the\nresource is later accessed.",
+  "description": "Wget describes an input sourced from an HTTP/S URL during component construction.\n\nIt supports two output modes:\n- local blob (default): the content is downloaded during construction and stored as a\nlocal blob in the component version, making it self-contained.\n- access spec (Reference): the content is not downloaded; the resource is stored with a\nwget access specification pointing at URL, so the content is fetched lazily when the\nresource is later accessed.",
   "properties": {
-    "asAccess": {
-      "type": "boolean",
-      "description": "AsAccess, when true, stores the resource with a wget access specification pointing at\nURL instead of downloading the content during construction. The content is then fetched\nlazily when the resource is accessed. When false (the default), the content is\ndownloaded and stored as a local blob."
-    },
     "body": {
       "type": "string",
       "description": "Body is the HTTP body to send with the request.",
@@ -32,6 +28,10 @@
     "noRedirect": {
       "type": "boolean",
       "description": "NoRedirect disables following HTTP redirects when set to true."
+    },
+    "reference": {
+      "type": "boolean",
+      "description": "Reference, when true, stores the resource with a wget access specification pointing at\nURL instead of downloading the content during construction. The content is then fetched\nlazily when the resource is accessed. When false (the default), the content is\ndownloaded and stored as a local blob."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

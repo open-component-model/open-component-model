@@ -14,7 +14,7 @@ const (
 // It supports two output modes:
 //   - local blob (default): the content is downloaded during construction and stored as a
 //     local blob in the component version, making it self-contained.
-//   - access spec (AsAccess): the content is not downloaded; the resource is stored with a
+//   - access spec (Reference): the content is not downloaded; the resource is stored with a
 //     wget access specification pointing at URL, so the content is fetched lazily when the
 //     resource is later accessed.
 //
@@ -45,11 +45,11 @@ type Wget struct {
 	// NoRedirect disables following HTTP redirects when set to true.
 	NoRedirect bool `json:"noRedirect,omitempty"`
 
-	// AsAccess, when true, stores the resource with a wget access specification pointing at
+	// Reference, when true, stores the resource with a wget access specification pointing at
 	// URL instead of downloading the content during construction. The content is then fetched
 	// lazily when the resource is accessed. When false (the default), the content is
 	// downloaded and stored as a local blob.
-	AsAccess bool `json:"asAccess,omitempty"`
+	Reference bool `json:"reference,omitempty"`
 }
 
 func (t *Wget) String() string {

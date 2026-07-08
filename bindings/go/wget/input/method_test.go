@@ -76,7 +76,7 @@ func TestProcessResource(t *testing.T) {
 		assert.Equal(t, "text/plain", mt)
 	})
 
-	t.Run("stores wget access without downloading when AsAccess set", func(t *testing.T) {
+	t.Run("stores wget access without downloading when Reference set", func(t *testing.T) {
 		var hits int
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			hits++
@@ -88,7 +88,7 @@ func TestProcessResource(t *testing.T) {
 		resource := wgetInputResource(t, map[string]any{
 			"url":       server.URL + "/artifact.tar.gz",
 			"mediaType": "application/gzip",
-			"asAccess":  true,
+			"reference": true,
 		})
 
 		result, err := method.ProcessResource(t.Context(), resource, nil)
@@ -97,7 +97,7 @@ func TestProcessResource(t *testing.T) {
 		// Access mode returns a processed resource, not a local blob, and does not download.
 		assert.Nil(t, result.ProcessedBlobData)
 		require.NotNil(t, result.ProcessedResource)
-		assert.Zero(t, hits, "AsAccess must not download the resource")
+		assert.Zero(t, hits, "reference mode must not download the resource")
 
 		// The user-declared resource type is preserved.
 		assert.Equal(t, "blob", result.ProcessedResource.Type)
