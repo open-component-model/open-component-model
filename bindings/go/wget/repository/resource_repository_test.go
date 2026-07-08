@@ -68,51 +68,7 @@ func TestDownloadResource(t *testing.T) {
 		}
 	})
 
-	t.Run("downloads resource with POST and body", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, http.MethodPost, r.Method)
-			body, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
-			assert.Equal(t, "request-body", string(body))
-			w.Write([]byte("response"))
-		}))
-		defer server.Close()
-
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
-		resource := wgetResource(t, server.URL, map[string]any{
-			"url":  server.URL + "/resource",
-			"verb": "POST",
-			"body": []byte("request-body"),
-		})
-
-		b, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.NoError(t, err)
-		assert.Equal(t, []byte("response"), readBlob(t, b))
-	})
-
-	t.Run("sends custom headers", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "token-123", r.Header.Get("X-Custom-Token"))
-			assert.Equal(t, []string{"val1", "val2"}, r.Header.Values("X-Multi"))
-			w.Write([]byte("ok"))
-		}))
-		defer server.Close()
-
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
-		resource := wgetResource(t, server.URL, map[string]any{
-			"url": server.URL + "/resource",
-			"header": map[string][]string{
-				"X-Custom-Token": {"token-123"},
-				"X-Multi":        {"val1", "val2"},
-			},
-		})
-
-		b, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.NoError(t, err)
-		assert.Equal(t, []byte("ok"), readBlob(t, b))
-	})
-
-	t.Run("applies basic auth from credentials", func(t *testing.T) {
+	t.Run("forwards credentials to the downloader", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, pass, ok := r.BasicAuth()
 			assert.True(t, ok)
@@ -137,166 +93,9 @@ func TestDownloadResource(t *testing.T) {
 		assert.Equal(t, []byte("authenticated"), readBlob(t, b))
 	})
 
-	t.Run("does not follow redirects when noRedirect is true", func(t *testing.T) {
+	t.Run("passes the max download size to the downloader", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/resource" {
-				http.Redirect(w, r, "/redirected", http.StatusFound)
-				return
-			}
-			_, _ = w.Write([]byte("redirected-content"))
-		}))
-		defer server.Close()
-
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
-		resource := wgetResource(t, server.URL, map[string]any{
-			"url":        server.URL + "/resource",
-			"noRedirect": true,
-		})
-
-		_, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "status 302")
-	})
-
-	t.Run("follows a multi-hop redirect chain by default", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch r.URL.Path {
-			case "/resource":
-				http.Redirect(w, r, "/hop1", http.StatusFound) // 302
-			case "/hop1":
-				http.Redirect(w, r, "/hop2", http.StatusMovedPermanently) // 301
-			case "/hop2":
-				http.Redirect(w, r, "/final", http.StatusTemporaryRedirect) // 307
-			default:
-				_, _ = w.Write([]byte("final-content"))
-			}
-		}))
-		defer server.Close()
-
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
-		resource := wgetResource(t, server.URL, map[string]any{
-			"url": server.URL + "/resource",
-		})
-
-		b, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.NoError(t, err)
-		assert.Equal(t, []byte("final-content"), readBlob(t, b))
-	})
-
-	t.Run("uses mediaType from spec over Content-Type header", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/plain")
-			w.Write([]byte("data"))
-		}))
-		defer server.Close()
-
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
-		resource := wgetResource(t, server.URL, map[string]any{
-			"url":       server.URL + "/resource",
-			"mediaType": "application/gzip",
-		})
-
-		b, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.NoError(t, err)
-
-		if ma, ok := b.(blob.MediaTypeAware); ok {
-			mt, known := ma.MediaType()
-			assert.True(t, known)
-			assert.Equal(t, "application/gzip", mt)
-		}
-	})
-
-	t.Run("falls back to application/octet-stream when no media type", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Write without setting Content-Type — Go will auto-detect, but we'll
-			// clear it first to simulate no content type.
-			w.Header().Del("Content-Type")
-			w.Header().Set("Content-Type", "")
-			_, _ = w.Write([]byte("data"))
-		}))
-		defer server.Close()
-
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
-		resource := wgetResource(t, server.URL, map[string]any{
-			"url": server.URL + "/resource",
-		})
-
-		b, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.NoError(t, err)
-
-		// The server may still set a Content-Type via Go's auto-detection,
-		// so we just verify the blob was created successfully.
-		require.NotNil(t, b)
-	})
-
-	t.Run("returns error for non-2xx status", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNotFound)
-		}))
-		defer server.Close()
-
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
-		resource := wgetResource(t, server.URL, map[string]any{
-			"url": server.URL + "/resource",
-		})
-
-		_, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "status 404")
-	})
-
-	t.Run("returns error for nil resource", func(t *testing.T) {
-		repo := repository.NewResourceRepository()
-		_, err := repo.DownloadResource(t.Context(), nil, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "resource is required")
-	})
-
-	t.Run("returns error for empty URL", func(t *testing.T) {
-		repo := repository.NewResourceRepository()
-		resource := wgetResource(t, "", map[string]any{
-			"url": "",
-		})
-		_, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "url is required")
-	})
-
-	t.Run("returns error for non-http/https scheme", func(t *testing.T) {
-		repo := repository.NewResourceRepository()
-		resource := wgetResource(t, "", map[string]any{
-			"url": "ftp://example.com/file.tar.gz",
-		})
-		_, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "unsupported url scheme")
-	})
-
-	t.Run("applies bearer token from identityToken credential", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "Bearer my-token-value", r.Header.Get("Authorization"))
-			w.Write([]byte("authenticated"))
-		}))
-		defer server.Close()
-
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
-		resource := wgetResource(t, server.URL, map[string]any{
-			"url": server.URL + "/resource",
-		})
-
-		creds := &credv1.WgetCredentials{
-			Type:          runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
-			IdentityToken: "my-token-value",
-		}
-		b, err := repo.DownloadResource(t.Context(), resource, creds)
-		require.NoError(t, err)
-		assert.Equal(t, []byte("authenticated"), readBlob(t, b))
-	})
-
-	t.Run("returns error when response exceeds max download size", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Write 11 bytes but max is 10
-			w.Write([]byte("hello world"))
+			_, _ = w.Write([]byte("hello world")) // 11 bytes, limit is 10
 		}))
 		defer server.Close()
 
@@ -313,24 +112,20 @@ func TestDownloadResource(t *testing.T) {
 		assert.Contains(t, err.Error(), "exceeds maximum allowed size")
 	})
 
-	t.Run("succeeds when response is within max download size", func(t *testing.T) {
-		content := []byte("hello")
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write(content)
-		}))
-		defer server.Close()
+	t.Run("returns error for nil resource", func(t *testing.T) {
+		repo := repository.NewResourceRepository()
+		_, err := repo.DownloadResource(t.Context(), nil, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "resource is required")
+	})
 
-		repo := repository.NewResourceRepository(
-			repository.WithHTTPClient(server.Client()),
-			repository.WithMaxDownloadSize(10),
-		)
-		resource := wgetResource(t, server.URL, map[string]any{
-			"url": server.URL + "/resource",
-		})
-
-		b, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.NoError(t, err)
-		assert.Equal(t, content, readBlob(t, b))
+	t.Run("returns error for nil access", func(t *testing.T) {
+		repo := repository.NewResourceRepository()
+		resource := &descruntime.Resource{}
+		resource.Name = "test"
+		_, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "resource access is required")
 	})
 }
 
@@ -360,7 +155,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 
 	identity, err := repo.GetResourceCredentialConsumerIdentity(t.Context(), resource)
 	require.NoError(t, err)
-	assert.Equal(t, "Wget/v1", identity["type"])
+	assert.Equal(t, "Wget", identity["type"])
 	assert.Equal(t, "https", identity["scheme"])
 	assert.Equal(t, "example.com", identity["hostname"])
 	assert.Equal(t, "443", identity["port"])

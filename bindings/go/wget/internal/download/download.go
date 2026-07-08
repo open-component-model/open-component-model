@@ -40,13 +40,20 @@ type Request struct {
 	NoRedirect bool
 }
 
-// Download performs the HTTP request described by req using client, applying the
-// given credentials, and returns the response body as an in-memory blob. When
-// maxDownloadSize is greater than zero, responses exceeding it are rejected.
-func Download(ctx context.Context, client *http.Client, req Request, maxDownloadSize int64, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+// Download performs the HTTP request described by req and returns the response
+// body as an in-memory blob. The HTTP client, credentials and maximum download
+// size are supplied via options; see [WithClient], [WithCredentials] and
+// [WithMaxDownloadSize].
+func Download(ctx context.Context, req Request, opts ...Option) (blob.ReadOnlyBlob, error) {
+	o := &option{}
+	for _, opt := range opts {
+		opt(o)
+	}
+
 	if req.URL == "" {
 		return nil, fmt.Errorf("url is required")
 	}
+	client := o.Client
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -91,7 +98,7 @@ func Download(ctx context.Context, client *http.Client, req Request, maxDownload
 		client = cloneClientWithNoRedirect(client)
 	}
 
-	if err := applyCredentials(httpReq, &client, credentials); err != nil {
+	if err := applyCredentials(ctx, httpReq, &client, o.Credentials); err != nil {
 		return nil, fmt.Errorf("error applying credentials: %w", err)
 	}
 
@@ -110,14 +117,14 @@ func Download(ctx context.Context, client *http.Client, req Request, maxDownload
 	}
 
 	var data []byte
-	if maxDownloadSize > 0 {
-		limitedReader := io.LimitReader(resp.Body, maxDownloadSize+1)
+	if o.MaxDownloadSize > 0 {
+		limitedReader := io.LimitReader(resp.Body, o.MaxDownloadSize+1)
 		data, err = io.ReadAll(limitedReader)
 		if err != nil {
 			return nil, fmt.Errorf("error reading HTTP response body from %s: %w", safeURL.String(), err)
 		}
-		if int64(len(data)) > maxDownloadSize {
-			return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), maxDownloadSize)
+		if int64(len(data)) > o.MaxDownloadSize {
+			return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), o.MaxDownloadSize)
 		}
 	} else {
 		data, err = io.ReadAll(resp.Body)
@@ -143,13 +150,18 @@ func Download(ctx context.Context, client *http.Client, req Request, maxDownload
 }
 
 // applyCredentials applies OCM credentials to the HTTP request or client.
-// Supported credential types (in priority order):
-//   - username + password: HTTP Basic Authentication
+// Supported credential types:
+//   - certificate + privateKey (+ optional certificateAuthority): mTLS client
+//     certificate, applied to the transport independently of the header auth below
 //   - identityToken: Bearer token in the Authorization header
-//   - certificate + privateKey (+ optional certificateAuthority): mTLS client certificate
+//   - username + password: HTTP Basic Authentication
+//
+// The mTLS client certificate composes with the header-based auth. Bearer and
+// Basic both use the Authorization header and are mutually exclusive; the bearer
+// token takes precedence when both are set.
 //
 // Both WgetCredentials/v1 and legacy DirectCredentials/v1 are accepted.
-func applyCredentials(req *http.Request, client **http.Client, credentials runtime.Typed) error {
+func applyCredentials(ctx context.Context, req *http.Request, client **http.Client, credentials runtime.Typed) error {
 	if credentials == nil {
 		return nil
 	}
@@ -159,17 +171,16 @@ func applyCredentials(req *http.Request, client **http.Client, credentials runti
 		return fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	if creds.Username != "" {
-		req.SetBasicAuth(creds.Username, creds.Password)
-		return nil
-	}
-
-	if creds.IdentityToken != "" {
-		req.Header.Set("Authorization", "Bearer "+creds.IdentityToken)
-		return nil
-	}
-
+	// The mTLS client certificate is a transport-layer credential and is applied
+	// independently of the header-based authentication below, so it can be
+	// combined with a bearer token or basic auth.
 	if creds.Certificate != "" {
+		// A client certificate only takes effect during a TLS handshake. Over
+		// plain HTTP it is silently unused, so warn the user it has no effect.
+		if req.URL.Scheme != "https" {
+			slog.WarnContext(ctx, "client certificate credentials provided for a non-HTTPS URL", "scheme", req.URL.Scheme)
+		}
+
 		cert, err := tls.X509KeyPair([]byte(creds.Certificate), []byte(creds.PrivateKey))
 		if err != nil {
 			return fmt.Errorf("invalid certificate/privateKey for mTLS: %w", err)
@@ -205,7 +216,19 @@ func applyCredentials(req *http.Request, client **http.Client, credentials runti
 			Transport:     baseTransport,
 		}
 		*client = cloned
-		return nil
+	}
+
+	// IdentityToken (Bearer) and Username/Password (Basic) both set the
+	// Authorization header, so at most one applies. IdentityToken takes
+	// precedence when both are set.
+	if creds.IdentityToken != "" && creds.Username != "" {
+		slog.WarnContext(ctx, "both bearer token and basic auth credentials provided; using the bearer token and ignoring basic auth")
+	}
+	switch {
+	case creds.IdentityToken != "":
+		req.Header.Set("Authorization", "Bearer "+creds.IdentityToken)
+	case creds.Username != "":
+		req.SetBasicAuth(creds.Username, creds.Password)
 	}
 
 	return nil

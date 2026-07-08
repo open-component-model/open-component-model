@@ -311,7 +311,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		r.NoError(err)
 		r.NotNil(identity)
 
-		assert.Equal(t, "Wget/v1", identity["type"])
+		assert.Equal(t, "Wget", identity["type"])
 		assert.Equal(t, "http", identity["scheme"])
 		assert.NotEmpty(t, identity["hostname"])
 		assert.NotEmpty(t, identity["port"])

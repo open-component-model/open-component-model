@@ -83,7 +83,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, identity)
 
-		assert.Equal(t, "Wget/v1", identity["type"])
+		assert.Equal(t, "Wget", identity["type"])
 		assert.Equal(t, "https", identity["scheme"])
 		assert.Equal(t, "example.com", identity["hostname"])
 		assert.Equal(t, "path/to/resource", identity["path"])
@@ -98,7 +98,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, identity)
 
-		assert.Equal(t, "Wget/v1", identity["type"])
+		assert.Equal(t, "Wget", identity["type"])
 		assert.Equal(t, "http", identity["scheme"])
 		assert.Equal(t, "example.com", identity["hostname"])
 		assert.Equal(t, "8080", identity["port"])

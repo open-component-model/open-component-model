@@ -89,14 +89,18 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		maxDownloadSize = 0
 	}
 
-	data, err := download.Download(ctx, client, download.Request{
+	data, err := download.Download(ctx, download.Request{
 		URL:        wget.URL,
 		MediaType:  wget.MediaType,
 		Header:     wget.Header,
 		Verb:       wget.Verb,
 		Body:       wget.Body,
 		NoRedirect: wget.NoRedirect,
-	}, maxDownloadSize, credentials)
+	},
+		download.WithClient(client),
+		download.WithMaxDownloadSize(maxDownloadSize),
+		download.WithCredentials(credentials),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading wget input from %q: %w", wget.URL, err)
 	}
