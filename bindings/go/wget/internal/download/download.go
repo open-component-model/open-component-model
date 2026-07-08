@@ -1,8 +1,6 @@
-// Package download contains the shared HTTP download logic used by both the wget
-// access type (repository) and the wget input method. Neither the access spec nor
-// the input spec is used here directly: each caller converts its own specification
-// into a [Request] and invokes [Download], so the transport, credential handling and
-// size limiting live in exactly one place.
+// Package download contains the shared HTTP download logic for the wget bindings.
+// Callers convert their own specification into a [Request] and invoke [Download],
+// so the transport, credential handling and size limiting live in exactly one place.
 package download
 
 import (
@@ -22,8 +20,8 @@ import (
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
-// Request describes a single HTTP download. It carries the primitive parameters
-// shared by the wget access spec and the wget input spec.
+// Request describes a single HTTP download and carries the primitive parameters
+// of the request.
 type Request struct {
 	// URL is the http/https endpoint to download from.
 	URL string
@@ -116,15 +114,21 @@ func Download(ctx context.Context, req Request, opts ...Option) (blob.ReadOnlyBl
 		return nil, fmt.Errorf("HTTP request to %s returned status %d", safeURL.String(), resp.StatusCode)
 	}
 
+	// A nil option means "use the default"; a zero or negative value disables the limit.
+	maxDownloadSize := DefaultMaxDownloadSize
+	if o.MaxDownloadSize != nil {
+		maxDownloadSize = *o.MaxDownloadSize
+	}
+
 	var data []byte
-	if o.MaxDownloadSize > 0 {
-		limitedReader := io.LimitReader(resp.Body, o.MaxDownloadSize+1)
+	if maxDownloadSize > 0 {
+		limitedReader := io.LimitReader(resp.Body, maxDownloadSize+1)
 		data, err = io.ReadAll(limitedReader)
 		if err != nil {
 			return nil, fmt.Errorf("error reading HTTP response body from %s: %w", safeURL.String(), err)
 		}
-		if int64(len(data)) > o.MaxDownloadSize {
-			return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), o.MaxDownloadSize)
+		if int64(len(data)) > maxDownloadSize {
+			return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), maxDownloadSize)
 		}
 	} else {
 		data, err = io.ReadAll(resp.Body)

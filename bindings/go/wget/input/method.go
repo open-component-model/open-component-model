@@ -12,7 +12,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 	"ocm.software/open-component-model/bindings/go/wget/internal/identity"
-	"ocm.software/open-component-model/bindings/go/wget/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	input "ocm.software/open-component-model/bindings/go/wget/spec/input"
@@ -29,7 +28,7 @@ type InputMethod struct {
 	// downloads. When nil, a default client is used.
 	HTTPConfig *httpv1alpha1.Config
 	// MaxDownloadSize limits the number of bytes read from a response body. When zero,
-	// DefaultMaxDownloadSize is used. A negative value disables the limit.
+	// the download package default is used. A negative value disables the limit.
 	MaxDownloadSize int64
 }
 
@@ -81,12 +80,14 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		client = httpclient.New(httpclient.WithConfig(i.HTTPConfig))
 	}
 
-	maxDownloadSize := i.MaxDownloadSize
-	switch {
-	case maxDownloadSize == 0:
-		maxDownloadSize = repository.DefaultMaxDownloadSize
-	case maxDownloadSize < 0:
-		maxDownloadSize = 0
+	opts := []download.Option{
+		download.WithClient(client),
+		download.WithCredentials(credentials),
+	}
+	// A zero MaxDownloadSize leaves the download package default in place; a negative
+	// value disables the limit, and any positive value caps the download.
+	if i.MaxDownloadSize != 0 {
+		opts = append(opts, download.WithMaxDownloadSize(i.MaxDownloadSize))
 	}
 
 	data, err := download.Download(ctx, download.Request{
@@ -96,11 +97,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		Verb:       wget.Verb,
 		Body:       wget.Body,
 		NoRedirect: wget.NoRedirect,
-	},
-		download.WithClient(client),
-		download.WithMaxDownloadSize(maxDownloadSize),
-		download.WithCredentials(credentials),
-	)
+	}, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading wget input from %q: %w", wget.URL, err)
 	}
