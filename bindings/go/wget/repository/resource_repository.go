@@ -9,13 +9,11 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/wget/access"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
+	"ocm.software/open-component-model/bindings/go/wget/internal/identity"
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
-
-var wgetAccess = access.NewWgetAccess()
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
@@ -54,7 +52,19 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 
 // GetResourceCredentialConsumerIdentity resolves the credential consumer identity for the given resource.
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
-	return wgetAccess.GetResourceCredentialConsumerIdentity(ctx, resource)
+	if resource == nil {
+		return nil, fmt.Errorf("resource is required")
+	}
+	if resource.Access == nil {
+		return nil, fmt.Errorf("resource access is required")
+	}
+
+	wget := v1.Wget{}
+	if err := r.GetResourceRepositoryScheme().Convert(resource.Access, &wget); err != nil {
+		return nil, fmt.Errorf("error converting resource access spec: %w", err)
+	}
+
+	return identity.CredentialConsumerIdentity(wget.URL)
 }
 
 // DownloadResource downloads a resource from the URL specified in the wget access spec.
