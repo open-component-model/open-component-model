@@ -10,7 +10,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
-	"ocm.software/open-component-model/bindings/go/wget/internal/identity"
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
@@ -64,7 +63,18 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
 
-	return identity.CredentialConsumerIdentity(wget.URL)
+	if wget.URL == "" {
+		return nil, fmt.Errorf("url is required")
+	}
+
+	identity, err := runtime.ParseURLToIdentity(wget.URL)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing wget URL to identity: %w", err)
+	}
+
+	identity.SetType(runtime.NewUnversionedType(accessspec.WgetConsumerType))
+
+	return identity, nil
 }
 
 // DownloadResource downloads a resource from the URL specified in the wget access spec.

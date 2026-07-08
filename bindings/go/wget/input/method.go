@@ -11,7 +11,6 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
-	"ocm.software/open-component-model/bindings/go/wget/internal/identity"
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	input "ocm.software/open-component-model/bindings/go/wget/spec/input"
@@ -45,7 +44,18 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	return identity.CredentialConsumerIdentity(wget.URL)
+	if wget.URL == "" {
+		return nil, fmt.Errorf("url is required")
+	}
+
+	identity, err := runtime.ParseURLToIdentity(wget.URL)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing wget URL to identity: %w", err)
+	}
+
+	identity.SetType(runtime.NewUnversionedType(input.WgetConsumerType))
+
+	return identity, nil
 }
 
 // ProcessResource turns a wget input specification into a resource input method result.
