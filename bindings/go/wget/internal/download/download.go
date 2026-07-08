@@ -235,12 +235,9 @@ func applyCredentials(ctx context.Context, req *http.Request, client **http.Clie
 }
 
 func cloneClientWithNoRedirect(original *http.Client) *http.Client {
-	return &http.Client{
-		Transport: original.Transport,
-		Timeout:   original.Timeout,
-		Jar:       original.Jar,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	c := *original
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
+	return &c
 }
