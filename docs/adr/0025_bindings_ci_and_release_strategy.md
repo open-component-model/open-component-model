@@ -183,7 +183,7 @@ But this is only true for features that actually span multiple modules. For any 
 
 > One relevant caveat about visible test scope: When thinking about a feature implementation end-to-end running all the tests once can actually be fewer test runs than the alternative - because either way all bumped libraries would have to be tested as well, it would just happen in individual PRs.
 
-To optimize this the CI would have to consider the dependency tree of the modules and (as for the layered release process above) would have to use it to determine which tests to run. While this is feasible to implement, it would likely again be tooling that we have to implement and maintain ourselves. 
+To optimize this the CI would have to consider the dependency tree of the modules and (as for the layered release process above) would have to use it to determine what to run in what order. While this is feasible to implement, it would likely again be tooling that we have to implement and maintain ourselves. 
 
 #### Modularity & Dependency Tree Stability
 
@@ -244,6 +244,12 @@ Similar to the idea above, a complete test-suite run like this could also be exe
 One way to make option 1 more feasible could be to gradually migrate to it over time. E.g. by going top-down through the layers a first iteration could include only `transfer` and `helm` in a committed `go.work` file. The CI and release process could then be built up iteratively over time and the initial impact on the release process would be minimal.
 
 The downsides of option 1 still all apply, but the investment would not have to be made in a big-bang and the risk would be more manageable. It would also be easier to revert a single step of this migration individually.
+
+#### PR scoped implementation of option 1
+
+We could ignore `go.work` files on main and only leverage them for PR builds. This way we could solve inter-module development friction as well as inter-module regressions - all while not affecting the release process at all.
+
+The tradeoff would be that PRs and main test different things. A PR could pass all its tests (against bleeding-edge sibling versions) while the same code on main fails (against pinned released versions) — because the PR tests a future state that hasn't been released yet. Similar to the scheduled build option above, this would only make sense if the team proactively reacts to the state of main. Main would remain in a broken state until all pending releases have happened and the pinned modules are up-to-date with the bleeding edge state that was tested inside the PR.
 
 #### Automated PR impact analysis
 
