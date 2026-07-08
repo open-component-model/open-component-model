@@ -28,7 +28,7 @@ type InputMethod struct {
 	// downloads. When nil, a default client is used.
 	HTTPConfig *httpv1alpha1.Config
 	// MaxDownloadSize limits the number of bytes read from a response body. When zero,
-	// the download package default is used. A negative value disables the limit.
+	// the download package default [download.DefaultMaxDownloadSize] is used. A negative value disables the limit.
 	MaxDownloadSize int64
 }
 
