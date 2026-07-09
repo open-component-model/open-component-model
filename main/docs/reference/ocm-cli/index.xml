@@ -48,10 +48,10 @@ Component Repositories, and Component Versions.&lt;/p&gt;</description></item><i
  - $HOME/.ocm/config
  - $HOME/.ocmconfig
  3. The current working directory:
- - $PWD/ocm/config
+ - $PWD/.ocm/config
  - $PWD/.ocmconfig
  4. The directory of the current executable:
- - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
@@ -149,10 +149,10 @@ to enable it. You can execute the following once:&lt;/p&gt;</description></item>
  - $HOME/.ocm/config
  - $HOME/.ocmconfig
  3. The current working directory:
- - $PWD/ocm/config
+ - $PWD/.ocm/config
  - $PWD/.ocmconfig
  4. The directory of the current executable:
- - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
@@ -232,10 +232,10 @@ use OCM commands or configure OCM resources, you specify types from these subsys
  - $HOME/.ocm/config
  - $HOME/.ocmconfig
  3. The current working directory:
- - $PWD/ocm/config
+ - $PWD/.ocm/config
  - $PWD/.ocmconfig
  4. The directory of the current executable:
- - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
@@ -322,10 +322,10 @@ and usage of using your command. For example:&lt;/p&gt;</description></item><ite
  - $HOME/.ocm/config
  - $HOME/.ocmconfig
  3. The current working directory:
- - $PWD/ocm/config
+ - $PWD/.ocm/config
  - $PWD/.ocmconfig
  4. The directory of the current executable:
- - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
@@ -416,10 +416,10 @@ use OCM commands or configure OCM resources, you specify types from these subsys
  - $HOME/.ocm/config
  - $HOME/.ocmconfig
  3. The current working directory:
- - $PWD/ocm/config
+ - $PWD/.ocm/config
  - $PWD/.ocmconfig
  4. The directory of the current executable:
- - $EXE_DIR/ocm/config
+ - $EXE_DIR/.ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
