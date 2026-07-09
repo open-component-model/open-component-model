@@ -217,7 +217,7 @@ For this approach to be feasible, it is paramount that we don't break the consum
 * Go might not optimize away the unused libraries due to reflection or cascading imports. Consumers would then receive all our (transitive) dependencies into their BOM.
 * Security scans would then trigger on anything inside our entire dependency tree. This was and is a big pain-point in OCM v1. A consumer that e.g. only needs `descriptor/v2` could also receive the entire helm SDK and thus be impacted by any security vulnerabilities discovered within.
 
-At present, this would not be the case for a monolithic release of v2, see [investigation](https://github.com/jneisener/open-component-model/tree/worktree-monolithic-merge-test) for details.
+At present, this would not be the case for a monolithic release of v2, see the [appendix](#appendix) for details.
 
 The risk exists that this isolation could be broken in the future by introducing cascading imports (as OCM v1 did with `compdesc/init.go` → `signing/handlers` → `sigstore`) or something similar. The multi-module structure currently guards against this structurally: it's not possible to import across module boundaries without an explicit `require`. In a monolithic library, this guard would be replaced by something else.
 
