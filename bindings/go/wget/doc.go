@@ -28,9 +28,9 @@
 // with header-based authentication. Basic auth and a bearer token both use the
 // Authorization header and are mutually exclusive; the bearer token takes
 // precedence when both are set.
-// [ocm.software/open-component-model/bindings/go/wget/access.WgetAccess] derives
-// the credential consumer identity from a resource's URL, so a credential
-// resolver can look up matching credentials before the download.
+// The repository derives the credential consumer identity from a resource's URL
+// via GetResourceCredentialConsumerIdentity, so a credential resolver can look up
+// matching credentials before the download.
 //
 // It also implements the "Wget" constructor input method in
 // [ocm.software/open-component-model/bindings/go/wget/input.InputMethod], which

@@ -187,9 +187,17 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("errors on invalid url", func(t *testing.T) {
+	t.Run("errors on malformed url", func(t *testing.T) {
+		method := &input.InputMethod{}
+		resource := wgetInputResource(t, map[string]any{"url": "ht!tp://invalid-url"})
+
+		_, err := method.GetResourceCredentialConsumerIdentity(t.Context(), resource)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not a valid url")
+	})
+
+	t.Run("errors on non-http scheme", func(t *testing.T) {
 		urls := []string{
-			"ht!tp://invalid-url",
 			"ftp://example.com/file",
 			"//missing-scheme.com",
 		}
@@ -200,8 +208,17 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 				resource := wgetInputResource(t, map[string]any{"url": u})
 				_, err := method.GetResourceCredentialConsumerIdentity(t.Context(), resource)
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), "not a valid url")
+				assert.Contains(t, err.Error(), "must use http or https scheme")
 			})
 		}
+	})
+
+	t.Run("accepts url with query string", func(t *testing.T) {
+		method := &input.InputMethod{}
+		resource := wgetInputResource(t, map[string]any{"url": "https://example.com/file?v=1&token=abc"})
+
+		identity, err := method.GetResourceCredentialConsumerIdentity(t.Context(), resource)
+		require.NoError(t, err)
+		assert.Equal(t, "example.com", identity[runtime.IdentityAttributeHostname])
 	})
 }
