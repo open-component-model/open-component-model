@@ -127,7 +127,7 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 }
 
 // ProcessResourceDigest computes the digest of a wget resource by downloading the referenced
-// content and hashing it. Because  When the resource already carries a digest, the computed value is verified against it.
+// content and hashing it. When the resource already carries a digest, the computed value is verified against it.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	data, err := r.DownloadResource(ctx, resource, credentials)
 	if err != nil {
@@ -155,6 +155,12 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		return resource, nil
 	}
 
+	if resource.Digest.HashAlgorithm != hashAlgorithmSHA256 {
+		return nil, fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, resource.Digest.HashAlgorithm)
+	}
+	if resource.Digest.NormalisationAlgorithm != genericBlobDigestV1 {
+		return nil, fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, resource.Digest.NormalisationAlgorithm)
+	}
 	if resource.Digest.Value != dig.Encoded() {
 		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", resource.Digest.Value, dig.Encoded())
 	}

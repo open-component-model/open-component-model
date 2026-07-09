@@ -247,4 +247,44 @@ func TestProcessResourceDigest(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "digest mismatch")
 	})
+
+	t.Run("fails on unsupported hash algorithm", func(t *testing.T) {
+		content := []byte("verify me")
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-512",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.FromBytes(content).Encoded(),
+		}
+
+		_, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported hash algorithm")
+	})
+
+	t.Run("fails on unsupported normalisation algorithm", func(t *testing.T) {
+		content := []byte("verify me")
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "jsonNormalisation/v1",
+			Value:                  godigest.FromBytes(content).Encoded(),
+		}
+
+		_, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported normalisation algorithm")
+	})
 }
