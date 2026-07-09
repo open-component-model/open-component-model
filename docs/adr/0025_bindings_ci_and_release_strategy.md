@@ -1,7 +1,7 @@
 # ADR: Bindings CI and Release Strategy
 
-* **Status**: draft
-* **Deciders**: OCM Technical Steering Committee
+* **Status**: proposed
+* **Deciders**: SIG Runtime
 * **Date**: 2026-07-06
 
 ## Context and Problem Statement
@@ -99,7 +99,7 @@ On a central module like `runtime`, this would entail releasing step by step in 
 
 | Layer | Module | Direct internal dependencies |
 |-------|--------|------------------------------|
-| 0 | `cel`, `dag`, `runtime` | — |
+| 0 | `cel`, `dag`, `runtime` | - |
 | 1 | `blob`, `configuration`, `descriptor/v2`, `generator` | `runtime` |
 | 2 | `credentials` | `configuration`, `dag`, `runtime` |
 | 2 | `ctf` | `blob` |
@@ -141,13 +141,14 @@ This ADR is concerned with the possible ways the developer experience could be o
 
 ## Decision Outcome
 
-Chosen [Option 3](#option-3-accept-status-quo): "Accept status quo", 
-> maybe option 4 if we can find something worth cherry-picking
+Chosen [Option 2](#option-2-monolithic-binding-libraryies): "Monolithic binding library(ies)"
 
 Justification:
 
-* The cost of option 1 and 2 are unacceptably high at the moment. 
-* It is unclear if the newly introduced problems in Option 1 or 2 would outweigh the reduced friction in development.
+* The cost of option 1 is unacceptably high at the moment. 
+* Implementation of option 2 is expected to be relatively low effort
+* Primary technical blocker was disproved by experiment
+* If we guard the modularity through the CI, we improve the developer experience significantly while losing nothing
 
 ### Option 1: `go.work`
 
@@ -197,13 +198,15 @@ Resolution via MVS can also be inconsistent with the consumer experience, as res
 
 ### Option 2: Monolithic binding library(ies)
 
-Instead of managing each module as an independent library, we could merge some or even all bindings into a singular library. This approach would not rely on `go.work` and thus would sidestep some of the associated downsides. Instead, we would remove the individual `go.mod` files and with one `go.mod` at `./bindings/go/`. The module path would be `ocm.software/open-component-model/bindings/go`, making all existing import paths sub-packages of that module.
+Instead of managing each module as an independent library, we could merge some or even all bindings into a singular library. This approach would not rely on `go.work` and thus would sidestep some of the associated downsides. Instead, we would remove the individual `go.mod` files with one `go.mod` at `./bindings/go/`. The module path would be `ocm.software/open-component-model/bindings/go`, making all existing import paths sub-packages of that module and thereby a non-breaking change for consumers (only the `require` target would have to change).
 
 The release process and CI setup would also be simple: one version, one tag - but irreversible. Once consumers depend on the monolithic module path, splitting it back out is a breaking change everywhere. The other presented options are reversible experiments; this one isn't.
 
+Consumers would no longer be able to consume mixed versions of different libraries, since they all share one version. Though it seems unlikely that this use case needs to be preserved.
+
 Modularity could still be enforced, but it would have to be done through additional tooling, similar to the `go.work` approach (e.g., depguard, import path restrictions in golangci-lint).
 
-Most tests would run on every commit, a shared downside with the `go.work` approach, though harder to optimize since there's no module-level dependency graph to derive an affected set from.
+Most tests would run on every commit, a shared downside with the `go.work` approach.
 
 Consumers could still choose to consume only individual modules of the bundled library, and in principle Go would optimize the unused parts away. 
 
@@ -218,7 +221,51 @@ At present, this would not be the case for a monolithic release of v2, see [inve
 
 The risk exists that this isolation could be broken in the future by introducing cascading imports (as OCM v1 did with `compdesc/init.go` → `signing/handlers` → `sigstore`) or something similar. The multi-module structure currently guards against this structurally: it's not possible to import across module boundaries without an explicit `require`. In a monolithic library, this guard would be replaced by something else.
 
-> E.g. an integration test based on a small app that only uses `ocm.software/open-component-model/bindings/go/descriptor/v2`, linked to the monorepo via `replace` and running `go mod tidy` in the CI and asserting the number of libraries in the result.
+#### Guard existing modularity 
+
+We don't want to fundamentally change the structure of the modules, just ease the development and release process. To ensure the design does not get diluted over time, we need additional tool-support to take the place of what the independent versioning and sparse-checkout currently achieve.
+
+##### `depguard` (`golangci-lint`)
+
+[`depguard`](https://golangci-lint.run/docs/linters/configuration/#depguard) is currently [disabled](https://github.com/open-component-model/open-component-model/blob/62bd8025ecaa10fb6b0675821e7a3d77432ea0b7/golangci.yml), but already supported by our existing tools.
+With `depguard` we could define rules per-package about what they're allowed to import. We could e.g. have an allow-list per binding layer:
+
+```yaml
+linters:
+  settings:
+    depguard:
+      rules:
+        # Lower-layer bindings must not import higher layers
+        descriptor-v2:
+          files:
+            - "**/bindings/go/descriptor/v2/**"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/helm"
+              desc: "descriptor/v2 must not import helm"
+            - pkg: "ocm.software/open-component-model/bindings/go/oci"
+              desc: "descriptor/v2 must not import oci"
+            - pkg: "ocm.software/open-component-model/bindings/go/transfer"
+              desc: "descriptor/v2 must not import transfer"
+            # ... etc for all higher layers
+        # Runtime (layer 0) must not import any other binding
+        runtime:
+          files:
+            - "**/bindings/go/runtime/**"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "runtime must not import other bindings"
+          allow:
+            - pkg: "ocm.software/open-component-model/bindings/go/runtime"
+```
+
+Downside: Verbose. We'd need a rule per layer, and the deny lists grow as bindings are added. Lists need to be maintained.
+
+As we expect the dependency graph to stay pretty stable over time this might be good enough already. Either way, it should underline the feasibility of the approach.
+
+##### Direct file references
+
+The sparse checkout currently prevents e.g. `testdata, _ := os.ReadFile("../../../oci/testdata/fixture.tar")`, but since this sidesteps `import` they would not be caught by `depguard`.
+If we see a risk that this does not get caught in reviews, we could probably guard against it in CI by searching for occurrences of `..` that leave the module boundary.
 
 ### Option 3: Accept status quo
 
@@ -255,13 +302,11 @@ The downsides of option 1 still all apply, but the investment would not have to 
 
 We could ignore `go.work` files on main and only leverage them for PR builds. This way we could solve inter-module development friction as well as inter-module regressions - all while not affecting the release process at all.
 
-The tradeoff would be that PRs and main test different things. A PR could pass all its tests (against bleeding-edge sibling versions) while the same code on main fails (against pinned released versions) — because the PR tests a future state that hasn't been released yet. Similar to the scheduled build option above, this would only make sense if the team proactively reacts to the state of main. Main would remain in a broken state until all pending releases have happened and the pinned modules are up-to-date with the bleeding edge state that was tested inside the PR.
+The tradeoff would be that PRs and main test different things. A PR could pass all its tests (against bleeding-edge sibling versions) while the same code on main fails (against pinned released versions) - because the PR tests a future state that hasn't been released yet. Similar to the scheduled build option above, this would only make sense if the team proactively reacts to the state of main. Main would remain in a broken state until all pending releases have happened and the pinned modules are up-to-date with the bleeding edge state that was tested inside the PR.
 
 #### Automated PR impact analysis
 
 We have the dependency tree logic in the PoC and could use it to automatically comment the PR with its impact on higher layers, nudging developers to double-check their changes. Or prompt one of the review AI agents with that specific information.
-
-//TODO: add more ideas
 
 ## Pros and Cons of the Options
 
@@ -284,11 +329,15 @@ Pros:
 
 * Solves inter-module development friction & inter-module regressions
 * Simple to implement, simple release process
+* Simple migration - no consumer import path changes required
 
 Cons:
 
-* Danger of breaking the consumer experience
+* Danger of breaking the consumer experience 
+  * *Though we should be able to guard against in the CI*
 * Danger of diluting the design and creating new forms of tech debt (e.g. by re-introducing the coupling problems that made OCM v1 unmaintainable)
+  * *Though we should be able to guard against in the CI*
+* Higher CI load because more tests run on every commit
 
 ### Option 3: Accept status quo
 
@@ -304,17 +353,105 @@ Cons:
 
 ### Option 4: Partial solutions
 
-// TODO: Pros/cons depend on what other solutions we think of and which of the approaches we'd like to try. In principle each suboption has its own pro/con list
-Pros:
-
-* <Pro 1>
-* <Pro 2>
-
-Cons:
-
-* <Con 1>
-* <Con 2>
+Different pro/contra depending on the different sub-options, see discussion in the section.
 
 ## Conclusion
 
-// TODO: The ADR is meant as a base for additional discussion, the conclusion is still open until a decision is made by the team
+We remain cautious of hidden complexity and unexpected landmines. But we believe that with a monolithic release of a **still highly modular** library we can get the best of both worlds: frictionless inter-module development, continuous inter-module regression testing, a simple release process, manageable CI complexity, while maintaining consumer ease of use.
+
+The primary risk we accept is that modularity is no longer strictly enforced through the `go.mod` boundaries, but we should be able to minimize that risk by enforcing modularity in the CI e.g. via `depguard`.
+
+## Appendix
+
+### Impact of monolithic restructuring on consumer `go.sum` files
+This describes the experiments and outcome persisted in https://github.com/jneisener/open-component-model/commit/a58aa4816fc7b42d56a82009f72d6070c99869ae.
+
+#### Question
+
+If we merge all bindings into a single Go module, does a consumer that only imports `descriptor/v2` get polluted with `helm`/`oci`/`k8s` dependencies in their `go.sum`?
+
+#### Method
+
+1. Create a consumer that imports only `descriptor/v2` and `runtime`
+2. Record its `go.mod`/`go.sum` against the current multi-module structure (baseline)
+3. Merge all bindings into a single `ocm.software/open-component-model/bindings/go` module
+4. Re-tidy the consumer (same imports, same source code)
+5. Compare `go.mod`/`go.sum`
+
+#### Results
+
+##### Baseline (multi-module, separate go.mod per binding)
+
+- **go.sum**: 24 lines
+- **Indirect deps**: 5 (`json-canonicalization`, `jsonschema/v6`, `yaml/v2`, `x/text`, `sigs.k8s.io/yaml`)
+- No `helm`, `oci`, `k8s`, or other heavy deps present
+
+##### After monolithic merge (single go.mod for all bindings)
+
+- **go.sum**: 26 lines
+- **Indirect deps**: 5 (same set, minor version differences)
+- **Still no `helm`, `oci`, `k8s`, or other heavy deps present**
+
+##### Comparison
+
+| Metric | Multi-module | Monolithic | Delta |
+|--------|-------------|------------|-------|
+| go.sum lines | 24 | 26 | +2 |
+| Indirect deps | 5 | 5 | 0 |
+| helm SDK present | No | No | - |
+| k8s client-go present | No | No | - |
+| oras present | No | No | - |
+| Binary builds | ✓ | ✓ | - |
+
+The +2 lines in `go.sum` are due to minor version resolution differences (e.g., `go.yaml.in/yaml/v2 v2.4.4` vs `v2.4.3`), not new dependencies.
+
+#### Conclusion
+
+**Go's dead code elimination works correctly even with a monolithic module.**
+
+A consumer importing only `descriptor/v2` from the monolithic library gets the same minimal dependency footprint as with the multi-module structure. The 135 dependencies of the full monolithic library (including `helm` SDK, `k8s` client-go, `oras`, `testcontainers`, etc.) are NOT pulled into the consumer's `go.sum`.
+
+This is because:
+1. Go resolves dependencies at the **package** level, not the module level
+2. `go mod tidy` only includes packages reachable from the consumer's imports
+3. The `init()` + `reflect.TypeOf()` pattern in `runtime/registry.go` does NOT cause cross-contamination because each binding registers into its own local scheme - there is no global scheme that imports all bindings
+
+##### Caveat
+
+This result holds as long as the monolithic library **does not** have a root-level package that imports all sub-packages. If such a package existed (e.g., for a convenience "import all" pattern), and the consumer imported it, all transitive dependencies would be pulled in.
+
+---
+
+#### Why did it happen in OCM v1?
+
+Create a consumer that imports only `ocm.software/ocm/api/ocm/compdesc` (component descriptors - the v1 equivalent of `descriptor/v2`) and examine what gets pulled in.
+
+##### Findings
+
+Importing just `compdesc` pulls in **205 OCM packages**, including:
+- 27 `sigstore`/`cosign`/`rekor` packages
+- 21 `docker`/`oci`/`helm`/`vault`/`k8s` packages
+- The entire credentials system, vault integration, docker config, etc.
+
+##### Import Chain
+
+```
+compdesc/init.go
+  └─ _ "ocm.software/ocm/api/tech/signing/handlers"    (blank import)
+       └─ handlers/init.go
+            └─ _ "ocm.software/ocm/api/tech/signing/handlers/sigstore"
+            └─ _ "github.com/sigstore/cosign/v3/pkg/providers/all"
+```
+
+The `compdesc` package has its own `init.go` that blank-imports `signing/handlers`, which in turn blank-imports ALL signing handler implementations including sigstore.
+
+Additionally:
+```
+compdesc -> credentials -> config -> datacontext -> ...
+          -> signing/handlers -> sigstore (+ cosign + rekor + fulcio)
+          -> credentials/extensions/repositories -> vault + dockerconfig + gardener
+```
+
+##### Conclusion
+
+The difference is **not** monolithic vs multi-module alone - and not reflection on its own. It's the `init.go` cascade(s).
