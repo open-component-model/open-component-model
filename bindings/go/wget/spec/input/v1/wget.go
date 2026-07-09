@@ -5,8 +5,7 @@ import (
 )
 
 const (
-	Type       = "Wget"
-	LegacyType = "wget"
+	Type = "Wget"
 )
 
 // Wget describes an input sourced by downloading a resource from an HTTP/S URL

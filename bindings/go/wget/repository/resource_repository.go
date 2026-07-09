@@ -127,10 +127,7 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 }
 
 // ProcessResourceDigest computes the digest of a wget resource by downloading the referenced
-// content and hashing it. Because the content is only referenced (not stored as a local blob),
-// there is nothing to reuse: the digest is streamed off the same download path used by
-// [ResourceRepository.DownloadResource], so it costs a single fetch and stores no bytes. When
-// the resource already carries a digest, the computed value is verified against it.
+// content and hashing it. Because  When the resource already carries a digest, the computed value is verified against it.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	data, err := r.DownloadResource(ctx, resource, credentials)
 	if err != nil {
