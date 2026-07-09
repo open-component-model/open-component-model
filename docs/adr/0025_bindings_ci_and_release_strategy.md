@@ -364,7 +364,8 @@ The primary risk we accept is that modularity is no longer strictly enforced thr
 ## Appendix
 
 ### Impact of monolithic restructuring on consumer `go.sum` files
-This describes the experiments and outcome persisted in https://github.com/jneisener/open-component-model/commit/a58aa4816fc7b42d56a82009f72d6070c99869ae.
+
+This describes the [experiments and outcome persisted here](https://github.com/jneisener/open-component-model/commit/a58aa4816fc7b42d56a82009f72d6070c99869ae).
 
 #### Question
 
@@ -412,6 +413,7 @@ The +2 lines in `go.sum` are due to minor version resolution differences (e.g., 
 A consumer importing only `descriptor/v2` from the monolithic library gets the same minimal dependency footprint as with the multi-module structure. The 135 dependencies of the full monolithic library (including `helm` SDK, `k8s` client-go, `oras`, `testcontainers`, etc.) are NOT pulled into the consumer's `go.sum`.
 
 This is because:
+
 1. Go resolves dependencies at the **package** level, not the module level
 2. `go mod tidy` only includes packages reachable from the consumer's imports
 3. The `init()` + `reflect.TypeOf()` pattern in `runtime/registry.go` does NOT cause cross-contamination because each binding registers into its own local scheme - there is no global scheme that imports all bindings
@@ -429,13 +431,14 @@ Create a consumer that imports only `ocm.software/ocm/api/ocm/compdesc` (compone
 ##### Findings
 
 Importing just `compdesc` pulls in **205 OCM packages**, including:
+
 - 27 `sigstore`/`cosign`/`rekor` packages
 - 21 `docker`/`oci`/`helm`/`vault`/`k8s` packages
 - The entire credentials system, vault integration, docker config, etc.
 
 ##### Import Chain
 
-```
+```text
 compdesc/init.go
   └─ _ "ocm.software/ocm/api/tech/signing/handlers"    (blank import)
        └─ handlers/init.go
@@ -446,7 +449,7 @@ compdesc/init.go
 The `compdesc` package has its own `init.go` that blank-imports `signing/handlers`, which in turn blank-imports ALL signing handler implementations including sigstore.
 
 Additionally:
-```
+```text
 compdesc -> credentials -> config -> datacontext -> ...
           -> signing/handlers -> sigstore (+ cosign + rekor + fulcio)
           -> credentials/extensions/repositories -> vault + dockerconfig + gardener
