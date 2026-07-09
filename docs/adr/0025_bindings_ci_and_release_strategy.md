@@ -146,7 +146,7 @@ Chosen [Option 3](#option-3-accept-status-quo): "Accept status quo",
 
 Justification:
 
-* The cost of option 1 and 2 are unacceptably high at the moment.
+* The cost of option 1 and 2 are unacceptably high at the moment. 
 * It is unclear if the newly introduced problems in Option 1 or 2 would outweigh the reduced friction in development.
 
 ### Option 1: `go.work`
@@ -197,11 +197,11 @@ Resolution via MVS can also be inconsistent with the consumer experience, as res
 
 ### Option 2: Monolithic binding library(ies)
 
-Instead of managing each module as an independent library, we could merge some or even all bindings into a singular library. This approach would not rely on `go.work` and thus would sidestep some of the associated downsides. 
+Instead of managing each module as an independent library, we could merge some or even all bindings into a singular library. This approach would not rely on `go.work` and thus would sidestep some of the associated downsides. Instead, we would remove the individual `go.mod` files and with one `go.mod` at `./bindings/go/`. The module path would be `ocm.software/open-component-model/bindings/go`, making all existing import paths sub-packages of that module.
 
-The release process and CI setup would also be simple, but irreversible. Once consumers depend on the monolithic module path, splitting it back out is a breaking change everywhere. The other presented options are reversible experiments; this one isn't.
+The release process and CI setup would also be simple: one version, one tag - but irreversible. Once consumers depend on the monolithic module path, splitting it back out is a breaking change everywhere. The other presented options are reversible experiments; this one isn't.
 
-Modularity could still be enforced, but it would have to be done through additional tooling, similar to the `go.work` approach.
+Modularity could still be enforced, but it would have to be done through additional tooling, similar to the `go.work` approach (e.g., depguard, import path restrictions in golangci-lint).
 
 Most tests would run on every commit, a shared downside with the `go.work` approach, though harder to optimize since there's no module-level dependency graph to derive an affected set from.
 
@@ -209,10 +209,16 @@ Consumers could still choose to consume only individual modules of the bundled l
 
 #### Security scans and reflection
 
-This approach could be feasible, except that it breaks the consumer experience in two key ways:
+For this approach to be feasible, it is paramount that we don't break the consumer experience in two key ways:
 
-* Due to our internally used reflection, Go cannot optimize away the unused libraries. Consumers would receive all our (transitive) dependencies into their BOM.
-* Security scans will trigger on anything inside our entire dependency tree. This was and is a big pain-point in OCM v1. With this approach a consumer that e.g. only needs `descriptor/v2` would now also receive the entire helm SDK and thus be impacted by any security vulnerabilities discovered within.
+* Go might not optimize away the unused libraries due to reflection or cascading imports. Consumers would then receive all our (transitive) dependencies into their BOM.
+* Security scans would then trigger on anything inside our entire dependency tree. This was and is a big pain-point in OCM v1. A consumer that e.g. only needs `descriptor/v2` could also receive the entire helm SDK and thus be impacted by any security vulnerabilities discovered within.
+
+At present, this would not be the case for a monolithic release of v2, see [investigation](https://github.com/jneisener/open-component-model/tree/worktree-monolithic-merge-test) for details.
+
+The risk exists that this isolation could be broken in the future by introducing cascading imports (as OCM v1 did with `compdesc/init.go` → `signing/handlers` → `sigstore`) or something similar. The multi-module structure currently guards against this structurally: it's not possible to import across module boundaries without an explicit `require`. In a monolithic library, this guard would be replaced by something else.
+
+> E.g. an integration test based on a small app that only uses `ocm.software/open-component-model/bindings/go/descriptor/v2`, linked to the monorepo via `replace` and running `go mod tidy` in the CI and asserting the number of libraries in the result.
 
 ### Option 3: Accept status quo
 
@@ -281,7 +287,7 @@ Pros:
 
 Cons:
 
-* Breaks consumer experience
+* Danger of breaking the consumer experience
 * Danger of diluting the design and creating new forms of tech debt (e.g. by re-introducing the coupling problems that made OCM v1 unmaintainable)
 
 ### Option 3: Accept status quo
