@@ -204,7 +204,7 @@ The release process and CI setup would also be simple: one version, one tag - bu
 
 Consumers would no longer be able to consume mixed versions of different libraries, since they all share one version. Though it seems unlikely that this use case needs to be preserved.
 
-Modularity could still be enforced, but it would have to be done through additional tooling, similar to the `go.work` approach (e.g., depguard, import path restrictions in golangci-lint).
+Modularity could still be enforced, but it would have to be done through additional tooling, similar to the `go.work` approach.
 
 Most tests would run on every commit, a shared downside with the `go.work` approach.
 
