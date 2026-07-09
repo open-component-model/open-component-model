@@ -4,6 +4,8 @@ name: Publish OCM components
 # The CLI binary used to invoke `ocm add component-version` is the one this
 # release just built — downloaded from `cli_artifact_name`. Image and chart
 # artefacts referenced by the constructors are pinned by digest, not fetched.
+# All three components are defined in a single constructor file and pushed in
+# one call; the OCM CLI resolves dependency order automatically.
 
 on:
   workflow_call:
@@ -25,7 +27,7 @@ on:
         required: true
         type: string
       cli_artifact_name:
-        description: "Artifact name containing tmp/bin/ocm-<os>-<arch> for all platforms."
+        description: "Artifact name containing bin/ocm-<os>-<arch> for all platforms."
         required: true
         type: string
       conflict_policy:
@@ -48,10 +50,15 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Checkout component constructor
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          sparse-checkout: .github/components
+          persist-credentials: 'false'
+
       - name: Compute image refs and CLI binary path
         env:
           OWNER: ${{ github.repository_owner }}
-          CLI_ASSETS: ${{ runner.temp }}/cli-assets
           VERSION: ${{ inputs.version }}
           CLI_IMAGE_DIGEST: ${{ inputs.cli_image_digest }}
           CONTROLLER_IMAGE_DIGEST: ${{ inputs.controller_image_digest }}
@@ -65,7 +72,8 @@ jobs:
             echo "CLI_IMAGE_REF=$REGISTRY/$OWNER/cli:${VERSION}@${CLI_IMAGE_DIGEST}"
             echo "CONTROLLER_IMAGE_REF=$REGISTRY/$OWNER/kubernetes/controller:${VERSION}@${CONTROLLER_IMAGE_DIGEST}"
             echo "CONTROLLER_CHART_REF=$REGISTRY/$OWNER/kubernetes/controller/chart:${VERSION}@${CONTROLLER_CHART_DIGEST}"
-            echo "CLI_BIN=$CLI_ASSETS/bin/ocm-linux-$arch"
+            echo "CLI_BIN=${{ runner.temp }}/cli-assets/bin/ocm-linux-$arch"
+            echo "CLI_ASSETS=${{ runner.temp }}/cli-assets"
           } >> "$GITHUB_ENV"
 
       - name: Download CLI artifact
@@ -75,160 +83,10 @@ jobs:
           path: ${{ runner.temp }}/cli-assets
 
       - name: Make CLI binaries executable
-        env:
-          CLI_ASSETS: ${{ runner.temp }}/cli-assets
         run: |
           set -euo pipefail
-          chmod +x "$CLI_ASSETS"/bin/ocm-*
+          chmod +x "${{ runner.temp }}/cli-assets"/bin/ocm-*
           test -x "$CLI_BIN"
-
-      - name: Generate CLI component-constructor
-        env:
-          VERSION: ${{ inputs.version }}
-          CLI_ASSETS: ${{ runner.temp }}/cli-assets
-          OUT: ${{ runner.temp }}/cli-component-constructor.yaml
-        run: |
-          set -euo pipefail
-          cat > "$OUT" <<EOF
-          name: ocm.software/cli
-          version: ${VERSION}
-          provider:
-            name: ocm.software
-          resources:
-            - name: cli
-              type: executable
-              version: ${VERSION}
-              labels:
-                - name: downloadName
-                  value: ocm
-              extraIdentity:
-                os: linux
-                architecture: amd64
-              relation: local
-              input:
-                type: file
-                path: ${CLI_ASSETS}/bin/ocm-linux-amd64
-            - name: cli
-              type: executable
-              version: ${VERSION}
-              labels:
-                - name: downloadName
-                  value: ocm
-              extraIdentity:
-                os: linux
-                architecture: arm64
-              relation: local
-              input:
-                type: file
-                path: ${CLI_ASSETS}/bin/ocm-linux-arm64
-            - name: cli
-              type: executable
-              version: ${VERSION}
-              labels:
-                - name: downloadName
-                  value: ocm
-              extraIdentity:
-                os: darwin
-                architecture: amd64
-              relation: local
-              input:
-                type: file
-                path: ${CLI_ASSETS}/bin/ocm-darwin-amd64
-            - name: cli
-              type: executable
-              version: ${VERSION}
-              labels:
-                - name: downloadName
-                  value: ocm
-              extraIdentity:
-                os: darwin
-                architecture: arm64
-              relation: local
-              input:
-                type: file
-                path: ${CLI_ASSETS}/bin/ocm-darwin-arm64
-            - name: cli
-              type: executable
-              version: ${VERSION}
-              labels:
-                - name: downloadName
-                  value: ocm
-              extraIdentity:
-                os: windows
-                architecture: amd64
-              relation: local
-              input:
-                type: file
-                path: ${CLI_ASSETS}/bin/ocm-windows-amd64
-            - name: cli
-              type: executable
-              version: ${VERSION}
-              labels:
-                - name: downloadName
-                  value: ocm
-              extraIdentity:
-                os: windows
-                architecture: arm64
-              relation: local
-              input:
-                type: file
-                path: ${CLI_ASSETS}/bin/ocm-windows-arm64
-            - name: image
-              type: ociImage
-              version: ${VERSION}
-              relation: local
-              access:
-                type: ociArtifact
-                imageReference: ${CLI_IMAGE_REF}
-          EOF
-
-      - name: Generate controller component-constructor
-        env:
-          VERSION: ${{ inputs.version }}
-          OUT: ${{ runner.temp }}/controller-component-constructor.yaml
-        run: |
-          set -euo pipefail
-          cat > "$OUT" <<EOF
-          name: ocm.software/controller
-          version: ${VERSION}
-          provider:
-            name: ocm.software
-          resources:
-            - name: image
-              type: ociImage
-              version: ${VERSION}
-              relation: local
-              access:
-                type: ociArtifact
-                imageReference: ${CONTROLLER_IMAGE_REF}
-            - name: chart
-              type: helmChart
-              version: ${VERSION}
-              relation: local
-              access:
-                type: ociArtifact
-                imageReference: ${CONTROLLER_CHART_REF}
-          EOF
-
-      - name: Generate product component-constructor
-        env:
-          VERSION: ${{ inputs.version }}
-          OUT: ${{ runner.temp }}/product-component-constructor.yaml
-        run: |
-          set -euo pipefail
-          cat > "$OUT" <<EOF
-          name: ocm.software/ocm
-          version: ${VERSION}
-          provider:
-            name: ocm.software
-          componentReferences:
-            - name: cli
-              componentName: ocm.software/cli
-              version: ${VERSION}
-            - name: controller
-              componentName: ocm.software/controller
-              version: ${VERSION}
-          EOF
 
       - name: Log in to GHCR
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -253,22 +111,14 @@ jobs:
 
       - name: Publish component-versions
         env:
+          VERSION: ${{ inputs.version }}
           CONFLICT_POLICY: ${{ inputs.conflict_policy }}
-          TMP: ${{ runner.temp }}
+          CONSTRUCTOR: ${{ github.workspace }}/.github/components/ocm-release/component-constructor.yaml
         run: |
           set -euo pipefail
           "$CLI_BIN" add component-version \
             --config "$HOME/.ocmconfig" \
             --repository "$REPO_ROOT" \
-            --constructor "$TMP/cli-component-constructor.yaml" \
+            --constructor "$CONSTRUCTOR" \
             --component-version-conflict-policy "$CONFLICT_POLICY"
-          "$CLI_BIN" add component-version \
-            --config "$HOME/.ocmconfig" \
-            --repository "$REPO_ROOT" \
-            --constructor "$TMP/controller-component-constructor.yaml" \
-            --component-version-conflict-policy "$CONFLICT_POLICY"
-          "$CLI_BIN" add component-version \
-            --config "$HOME/.ocmconfig" \
-            --repository "$REPO_ROOT" \
-            --constructor "$TMP/product-component-constructor.yaml" \
-            --component-version-conflict-policy "$CONFLICT_POLICY"
+

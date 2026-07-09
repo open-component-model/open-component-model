@@ -44,6 +44,12 @@ jobs:
   # PHASE 1: RELEASE CANDIDATE
   # ===========================================================================
 
+  # === Copied from release-candidate-version.yml ===
+  # Changes vs the original:
+  #   removed the `component_path` input since it's not per component anymore.
+  #   cliff config path change: `${component_path}/cliff.toml` → `cliff.toml` (root).
+  #   canonical tag added: v* alongside the existing per-component tags.
+  #   Outputs added: `cli_module_*_tag` and `controller_module_*_tag` (RC + promotion).
   prepare:
     name: Prepare Release Metadata
     runs-on: ubuntu-24.04-arm
@@ -138,7 +144,13 @@ jobs:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
             await script.determineLatestRelease({ core, github, context });
+  # === release-candidate-version.yml ===
 
+  # === Copied from controller-release.yml::tag_rc ===
+  # Changes vs the original:
+  #   calls `createRcTags` (plural) instead of `createRcTag`
+  #   passes both CANONICAL_TAG and a comma-separated ADDITIONAL_TAGS list
+  #   so cli/v* and kubernetes/controller/v* are emitted on the same commit
   tag_rc:
     name: Create and Push RC Tags
     runs-on: ubuntu-24.04-arm
@@ -198,9 +210,12 @@ jobs:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
             await script.createRcTags({ core });
+  # === controller-release.yml::tag_rc ===
 
-  # Orchestrates build + conformance + e2e + publish for CLI and controller.
-  # Reused by daily CI on main; here it runs on the RC commit.
+  # === This is completely new. It starts the orchestration process for building and testing the components. ===
+  # It uses the new workflow helper called `pipeline.yaml`.
+  # This will execute conformance tests, e2e tests, validations and builds for the respective components.
+  # This pipeline here is a daily pipeline as well.
   build_and_test:
     name: Build and Test
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
@@ -217,6 +232,9 @@ jobs:
       ref: ${{ needs.prepare.outputs.new_tag }}
       build_version: ${{ needs.prepare.outputs.base_version }}
 
+  # === Copied from cli-release.yml::release_rc + controller-release.yml::release_rc ===
+  # Combines into one pre-release containing both CLI assets (binaries + OCI tarballs)
+  # and the controller chart. Summary will have digests for both.
   release_rc:
     name: Create RC Pre-Release
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
@@ -295,6 +313,7 @@ jobs:
               .addEOL()
               .addLink('View Release', release.data.html_url)
               .write();
+  # === cli-release.yml::release_rc + controller-release.yml::release_rc ===
 
   # Publishes ocm.software/{cli,controller,ocm} for the RC, referencing the
   # just-pushed CLI image, controller image and chart by digest.
@@ -319,6 +338,12 @@ jobs:
   # PHASE 2: FINAL RELEASE (after environment gate)
   # ===========================================================================
 
+  # === Copied from cli-release.yml::verify_attestations + controller-release.yml::verify_attestations and merged ===
+  # All four attestation verifications:
+  #   CLI binaries (cli-release.yml)
+  #   CLI OCI image (cli-release.yml)
+  #   Controller image (controller-release.yml)
+  #   Controller chart (controller-release.yml)
   verify_attestations:
     name: Verify RC Attestations
     needs: [prepare, build_and_test, release_rc]
@@ -379,7 +404,11 @@ jobs:
           CHART_DIGEST: ${{ needs.build_and_test.outputs.controller_chart_digest }}
         run: |
           gh attestation verify "oci://$CONTROLLER_CHART@${CHART_DIGEST}" --repo "$GH_REPO"
+  # === cli-release.yml::verify_attestations + controller-release.yml::verify_attestations ===
 
+  # === Copied from controller-release.yml::promote_and_release_final + cli-release.yml::promote_final + cli-release.yml::release_final and merged ===
+  # These are literally copied verbatim from the original files from the above sentence.
+  # All I changed was applying some of the zizmor stuff.
   promote_and_release_final:
     name: Promote and Release Final
     needs: [prepare, build_and_test, verify_attestations]
@@ -619,6 +648,7 @@ jobs:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/publish-final-release.js');
             await script.default({ github, context, core });
+  # === controller-release.yml::promote_and_release_final + cli-release.yml::promote_final + cli-release.yml::release_final ===
 
   verify_install_script:
     name: Verify install script for ${{ needs.prepare.outputs.base_version }}
@@ -648,10 +678,11 @@ jobs:
       cli_artifact_name: ${{ needs.build_and_test.outputs.cli_artifact_name }}
       conflict_policy: replace
 
-  # Runs after the final promotion succeeded, when the website/v0.X.Y tag
-  # exists. Opens a PR to main pinning Hugo module imports to the just-created
-  # website tag, with binding versions resolved from the released CLI module's
-  # go.mod.
+  # === Website version release ===
+  # Replaces the old standalone website-version-release.yml. Runs after the
+  # final promotion succeeded, when the website/v0.X.Y tag exists. Opens a PR
+  # to main pinning Hugo module imports to the just-created website tag, with
+  # binding versions resolved from the released CLI module's go.mod.
   create_website_update_pr:
     name: Open website update PR
     needs: [prepare, promote_and_release_final]
@@ -752,3 +783,4 @@ jobs:
             ````
             ${{ steps.register.outputs.log }}
             ````
+  # === Website version release ===
