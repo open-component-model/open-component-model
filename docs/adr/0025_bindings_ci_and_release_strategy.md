@@ -146,9 +146,9 @@ Chosen [Option 2](#option-2-monolithic-binding-libraryies): "Monolithic binding 
 Justification:
 
 * The cost of option 1 is unacceptably high at the moment. 
-* Implementation of option 2 is expected to be relatively low effort
-* Primary technical blocker was disproved by experiment
-* If we guard the modularity through the CI, we improve the developer experience significantly while losing nothing
+* Implementation of option 2 is expected to be relatively low effort.
+* Primary technical blocker was disproved by experiment.
+* If we guard the modularity through the CI, we improve the developer experience significantly while losing nothing.
 
 ### Option 1: `go.work`
 
@@ -198,7 +198,7 @@ Resolution via MVS can also be inconsistent with the consumer experience, as res
 
 ### Option 2: Monolithic binding library(ies)
 
-Instead of managing each module as an independent library, we could merge some or even all bindings into a singular library. This approach would not rely on `go.work` and thus would sidestep some of the associated downsides. Instead, we would remove the individual `go.mod` files with one `go.mod` at `./bindings/go/`. The module path would be `ocm.software/open-component-model/bindings/go`, making all existing import paths sub-packages of that module and thereby a non-breaking change for consumers (only the `require` target would have to change).
+Instead of managing each module as an independent library, we could merge some or even all bindings into a singular library. This approach would not rely on `go.work` and thus would sidestep some of the associated downsides. Instead, we would replace the individual `go.mod` files with one `go.mod` at `./bindings/go/`. The module path would be `ocm.software/open-component-model/bindings/go`, making all existing import paths sub-packages of that module and thereby a non-breaking change for consumers (only the `require` target would have to change).
 
 The release process and CI setup would also be simple: one version, one tag - but irreversible. Once consumers depend on the monolithic module path, splitting it back out is a breaking change everywhere. The other presented options are reversible experiments; this one isn't.
 
@@ -258,7 +258,7 @@ linters:
             - pkg: "ocm.software/open-component-model/bindings/go/runtime"
 ```
 
-Downside: Verbose. We'd need a rule per layer, and the deny lists grow as bindings are added. Lists need to be maintained.
+Downside: Verbose. We'd need a rule per layer, and the deny lists grow as bindings are added. These lists for every binding will need to be maintained.
 
 As we expect the dependency graph to stay pretty stable over time this might be good enough already. We might find a better solution, the important part is that it's feasible to enforce this in the CI without custom tooling.
 
@@ -334,9 +334,9 @@ Pros:
 Cons:
 
 * Danger of breaking the consumer experience 
-  * *Though we should be able to guard against in the CI*
+  * *Though we should be able to guard against this in the CI*
 * Danger of diluting the design and creating new forms of tech debt (e.g. by re-introducing the coupling problems that made OCM v1 unmaintainable)
-  * *Though we should be able to guard against in the CI*
+  * *Though we should be able to guard against this in the CI*
 * Higher CI load because more tests run on every commit
 
 ### Option 3: Accept status quo
