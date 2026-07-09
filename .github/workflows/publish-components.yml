@@ -106,7 +106,6 @@ jobs:
                 - repository:
                     type: DockerConfig/v1
                     dockerConfigFile: $HOME/.docker/config.json
-                    propagateConsumerIdentity: true
           EOF
 
       - name: Publish component-versions
