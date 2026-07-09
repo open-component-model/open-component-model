@@ -23,5 +23,7 @@ func MustAddToScheme(scheme *runtime.Scheme) {
 		runtime.NewUnversionedType(v1.Type),
 		runtime.NewVersionedType(v1.LegacyType, v1.Version),
 		runtime.NewUnversionedType(v1.LegacyType),
+		runtime.NewVersionedType(v1.CamelLegacyType, v1.Version),
+		runtime.NewUnversionedType(v1.CamelLegacyType),
 	)
 }

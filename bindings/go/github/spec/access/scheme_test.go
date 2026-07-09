@@ -14,10 +14,12 @@ import (
 
 func TestScheme_TypeAliases(t *testing.T) {
 	types := []runtime.Type{
-		runtime.NewVersionedType(v1.Type, v1.Version),       // GitHub/v1
-		runtime.NewUnversionedType(v1.Type),                 // GitHub
-		runtime.NewVersionedType(v1.LegacyType, v1.Version), // github/v1
-		runtime.NewUnversionedType(v1.LegacyType),           // github
+		runtime.NewVersionedType(v1.Type, v1.Version),            // GitHub/v1
+		runtime.NewUnversionedType(v1.Type),                      // GitHub
+		runtime.NewVersionedType(v1.LegacyType, v1.Version),      // github/v1
+		runtime.NewUnversionedType(v1.LegacyType),                // github
+		runtime.NewVersionedType(v1.CamelLegacyType, v1.Version), // gitHub/v1
+		runtime.NewUnversionedType(v1.CamelLegacyType),           // gitHub
 	}
 	for _, typ := range types {
 		t.Run(typ.String(), func(t *testing.T) {
