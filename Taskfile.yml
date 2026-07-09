@@ -32,6 +32,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/input/file/Taskfile.yml
     dir: ./bindings/go/input/file
+  bindings/go/github:
+    optional: true
+    taskfile: ./bindings/go/github/Taskfile.yml
+    dir: ./bindings/go/github
+  bindings/go/github/integration:
+    optional: true
+    taskfile: ./bindings/go/github/integration/Taskfile.yml
+    dir: ./bindings/go/github/integration
   bindings/go/helm:
     optional: true
     taskfile: ./bindings/go/helm/Taskfile.yml
