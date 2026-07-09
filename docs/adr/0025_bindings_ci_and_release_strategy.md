@@ -219,7 +219,7 @@ For this approach to be feasible, it is paramount that we don't break the consum
 
 At present, this would not be the case for a monolithic release of v2, see the [appendix](#appendix) for details.
 
-The risk exists that this isolation could be broken in the future by introducing cascading imports (as OCM v1 did with `compdesc/init.go` → `signing/handlers` → `sigstore`) or something similar. The multi-module structure currently guards against this structurally: it's not possible to import across module boundaries without an explicit `require`. In a monolithic library, this guard would be replaced by something else.
+The risk exists that this isolation could be broken in the future by introducing cascading imports (as OCM v1 did with `compdesc/init.go` → `signing/handlers` → `sigstore`) or something similar. The multi-module structure currently guards against this structurally: it's not possible to import across module boundaries without an explicit `require`. In a monolithic library, this guard would need to be replaced by something else.
 
 #### Guard existing modularity 
 
@@ -260,12 +260,12 @@ linters:
 
 Downside: Verbose. We'd need a rule per layer, and the deny lists grow as bindings are added. Lists need to be maintained.
 
-As we expect the dependency graph to stay pretty stable over time this might be good enough already. Either way, it should underline the feasibility of the approach.
+As we expect the dependency graph to stay pretty stable over time this might be good enough already. We might find a better solution, the important part is that it's feasible to enforce this in the CI without custom tooling.
 
 ##### Direct file references
 
 The sparse checkout currently prevents e.g. `testdata, _ := os.ReadFile("../../../oci/testdata/fixture.tar")`, but since this sidesteps `import` they would not be caught by `depguard`.
-If we see a risk that this does not get caught in reviews, we could probably guard against it in CI by searching for occurrences of `..` that leave the module boundary.
+If we see a risk that this does not get caught in reviews, we could probably guard against it in the CI by searching for occurrences of `..` that leave the module boundary.
 
 ### Option 3: Accept status quo
 
