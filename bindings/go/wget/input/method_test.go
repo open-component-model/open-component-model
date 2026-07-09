@@ -186,4 +186,22 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 		_, err := method.GetResourceCredentialConsumerIdentity(t.Context(), resource)
 		require.Error(t, err)
 	})
+
+	t.Run("errors on invalid url", func(t *testing.T) {
+		urls := []string{
+			"ht!tp://invalid-url",
+			"ftp://example.com/file",
+			"//missing-scheme.com",
+		}
+
+		for _, u := range urls {
+			t.Run(u, func(t *testing.T) {
+				method := &input.InputMethod{}
+				resource := wgetInputResource(t, map[string]any{"url": u})
+				_, err := method.GetResourceCredentialConsumerIdentity(t.Context(), resource)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "not a valid url")
+			})
+		}
+	})
 }
