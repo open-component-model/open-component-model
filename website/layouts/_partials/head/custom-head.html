@@ -38,6 +38,12 @@
   per-module static file under static/open-component-model/bindings/go/.
 */ -}}
 {{- if eq .Kind "404" }}
-  <meta name="go-import" content="ocm.software/open-component-model git https://github.com/open-component-model/open-component-model">
-  <meta name="go-source" content="ocm.software/open-component-model https://github.com/open-component-model/open-component-model https://github.com/open-component-model/open-component-model/tree/main{/dir} https://github.com/open-component-model/open-component-model/blob/main{/dir}/{file}#L{line}">
+<meta name="go-import"
+      content="ocm.software/ocm-core
+                 git https://github.com/open-component-model/ocm-core">
+<meta name="go-source"
+      content="ocm.software/ocm-core
+                 https://github.com/open-component-model/ocm-core
+                 https://github.com/open-component-model/ocm-core/tree/master{/dir}
+                 https://github.com/mopen-component-model/ocm-core/blob/master{/dir}/{file}#L{line}">
 {{- end }}
