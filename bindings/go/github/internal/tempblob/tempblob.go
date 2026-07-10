@@ -15,8 +15,10 @@
 package tempblob
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"runtime"
 	"sync/atomic"
@@ -30,6 +32,9 @@ type Blob struct {
 	size      int64
 	mediaType string
 	closed    atomic.Bool
+	// cleanup is the safety net registered in New, cancelled by Close. It holds
+	// no pointer to the Blob, so storing it here does not keep the Blob alive.
+	cleanup runtime.Cleanup
 }
 
 var (
@@ -76,7 +81,7 @@ func New(dir, pattern string, r io.Reader, mediaType string) (_ *Blob, err error
 
 	// Safety net for callers that never call Close. The cleanup must not
 	// capture b, or b would never become unreachable.
-	runtime.AddCleanup(b, func(path string) { _ = os.Remove(path) }, path)
+	b.cleanup = runtime.AddCleanup(b, func(path string) { _ = os.Remove(path) }, path)
 
 	return b, nil
 }
@@ -104,12 +109,22 @@ func (b *Blob) MediaType() (string, bool) { return b.mediaType, b.mediaType != "
 // Close removes the buffered file. It is idempotent, and safe to call while
 // readers handed out by ReadCloser are still open: on POSIX systems those
 // readers keep working until they are closed themselves.
+//
+// A Close that cannot remove the file reports the error and leaves the blob
+// open: ReadCloser keeps working, and Close may be retried. The blob counts as
+// closed only once its file is gone.
 func (b *Blob) Close() error {
-	if b.closed.Swap(true) {
+	if b.closed.Load() {
 		return nil
 	}
-	if err := os.Remove(b.path); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(b.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		// Leave the cleanup armed: the file is still there, and reclaiming it
+		// once the Blob is unreachable is better than leaking it outright.
 		return fmt.Errorf("error removing buffered blob %q: %w", b.path, err)
 	}
+	b.closed.Store(true)
+	// The file is gone, so cancel the safety net rather than let it fire later
+	// against a name os.CreateTemp may by then have handed to another blob.
+	b.cleanup.Stop()
 	return nil
 }

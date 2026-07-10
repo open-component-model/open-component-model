@@ -86,6 +86,61 @@ func TestClose_RemovesTheFileAndIsIdempotent(t *testing.T) {
 	require.NoError(t, b.Close(), "Close must be idempotent")
 }
 
+// A Close that cannot remove the file must report the error and leave the blob
+// open: the file is still there, so ReadCloser must keep working and a later
+// Close must be able to retry. Marking the blob closed regardless would strand
+// a readable file behind a blob that refuses to hand out readers.
+func TestClose_FailureLeavesBlobOpen(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses directory permissions, so os.Remove cannot be made to fail this way")
+	}
+	root := t.TempDir()
+	dir := filepath.Join(root, "sub")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	b, err := New(dir, "blob-*", strings.NewReader("hello world"), mediaType)
+	require.NoError(t, err)
+
+	// Make the parent directory unwritable so os.Remove(b.path) fails.
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	require.Error(t, b.Close(), "Close must report that it could not remove the file")
+
+	assert.Equal(t, "hello world", readAll(t, b), "ReadCloser must keep working after a failed Close")
+
+	// Once removal is possible again, Close succeeds and the file is gone.
+	require.NoError(t, os.Chmod(dir, 0o700))
+	require.NoError(t, b.Close(), "a retried Close must succeed once removal is possible")
+	assert.Empty(t, filesIn(t, dir))
+}
+
+// Close removes the file and cancels the cleanup. Were the cleanup left armed,
+// it would fire once the blob became unreachable and remove whatever file then
+// occupied the name — os.CreateTemp is free to hand the same name out again.
+func TestClose_CancelsTheCleanup(t *testing.T) {
+	dir := t.TempDir()
+
+	path := func() string {
+		b, err := New(dir, "blob-*", strings.NewReader("hello world"), mediaType)
+		require.NoError(t, err)
+		require.NoError(t, b.Close())
+		return b.path // b is unreachable past this point, arming any live cleanup
+	}()
+
+	// Stand in for a later blob that happens to reuse the name.
+	require.NoError(t, os.WriteFile(path, []byte("someone else's bytes"), 0o600))
+
+	for range 10 {
+		runtime.GC()
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err, "a closed blob's cleanup must not remove a file that later reuses its name")
+	assert.Equal(t, "someone else's bytes", string(data))
+}
+
 func TestReadCloser_FailsAfterClose(t *testing.T) {
 	b, err := New(t.TempDir(), "blob-*", strings.NewReader("hello world"), mediaType)
 	require.NoError(t, err)
