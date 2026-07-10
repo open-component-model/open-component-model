@@ -9,11 +9,22 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v66/github"
+
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 )
 
 // MediaTypeTGZ is the media type of the GitHub source archive. It matches the
 // MIME_TGZ old OCM assigned to the github access blob.
 const MediaTypeTGZ = "application/x-tgz"
+
+// defaultHTTPClient is the client used for both the GitHub REST calls and the
+// archive download when the caller supplies none. It comes from the OCM http
+// binding rather than http.DefaultClient so that retries and transport
+// timeouts apply. Per-host timeout and TLS configuration is not plumbed
+// through yet; a nil config yields the binding's defaults.
+func defaultHTTPClient() *http.Client {
+	return ocmhttp.New()
+}
 
 // archiveMaxRedirects bounds redirect following when resolving the archive
 // link. GitHub answers with a 302 that GetArchiveLink returns as a Location
@@ -44,6 +55,9 @@ func newGitHubClient(repoURL, apiHostname, token string, httpClient *http.Client
 		return nil, err
 	}
 
+	if httpClient == nil {
+		httpClient = defaultHTTPClient()
+	}
 	client := github.NewClient(httpClient)
 	if token != "" {
 		client = client.WithAuthToken(token)
@@ -84,8 +98,8 @@ func clientFor(repoURL, apiHostname, token string) (gh *github.Client, owner, re
 // the response body. The caller must close it. The body is streamed rather
 // than read into memory so the archive can be buffered to the filesystem.
 //
-// httpClient, when nil, defaults to http.DefaultClient for the archive
-// download (the link is a short-lived, pre-signed URL that needs no auth).
+// httpClient, when nil, defaults to defaultHTTPClient for the archive download
+// (the link is a short-lived, pre-signed URL that needs no auth).
 func fetchCommitArchive(ctx context.Context, gh *github.Client, httpClient *http.Client, owner, repo, commit string) (io.ReadCloser, error) {
 	link, _, err := gh.Repositories.GetArchiveLink(ctx, owner, repo, github.Tarball,
 		&github.RepositoryContentGetOptions{Ref: commit}, archiveMaxRedirects)
@@ -94,7 +108,7 @@ func fetchCommitArchive(ctx context.Context, gh *github.Client, httpClient *http
 	}
 
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = defaultHTTPClient()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link.String(), nil)
 	if err != nil {
