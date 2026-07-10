@@ -1,4 +1,5 @@
-// Package wget provides HTTP(S) download access for OCM resources.
+// Package wget provides HTTP(S) access to OCM resources, both as an access type
+// and as a component-constructor input method.
 //
 // It implements the "Wget" access type: a resource whose bytes are fetched
 // from an HTTP or HTTPS endpoint described by a
@@ -27,9 +28,20 @@
 // with header-based authentication. Basic auth and a bearer token both use the
 // Authorization header and are mutually exclusive; the bearer token takes
 // precedence when both are set.
-// [ocm.software/open-component-model/bindings/go/wget/access.WgetAccess] derives
-// the credential consumer identity from a resource's URL, so a credential
-// resolver can look up matching credentials before the download.
+// The repository derives the credential consumer identity from a resource's URL
+// via GetResourceCredentialConsumerIdentity, so a credential resolver can look up
+// matching credentials before the download.
+//
+// It also implements the "Wget" constructor input method in
+// [ocm.software/open-component-model/bindings/go/wget/input.InputMethod], which
+// downloads an HTTP/S URL declared on a resource in a component-constructor.yaml
+// through a
+// [ocm.software/open-component-model/bindings/go/wget/spec/input/v1.Wget] input
+// spec and stores the content as a local blob in the component version. The input
+// spec carries the same request details as the access spec, and the input method
+// shares the download transport, credential handling and size limiting used by the
+// access type, so both behave identically for a given URL and credentials, and
+// both derive the credential consumer identity from the url.
 //
 // The wire types are each registered in their package scheme for typed
 // conversion. Both the versioned (wget/v1) and unversioned (wget) type names are

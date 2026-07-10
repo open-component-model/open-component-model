@@ -1,10 +1,14 @@
 package repository
 
-import "net/http"
+import (
+	"net/http"
+
+	"ocm.software/open-component-model/bindings/go/wget/internal/download"
+)
 
 const (
 	// DefaultMaxDownloadSize is the default maximum download size (100 MiB).
-	DefaultMaxDownloadSize int64 = 100 * 1024 * 1024
+	DefaultMaxDownloadSize int64 = download.DefaultMaxDownloadSize
 )
 
 // Options holds configuration options for the wget resource repository.
