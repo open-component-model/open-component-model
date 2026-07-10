@@ -15,6 +15,10 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 )
 
+// MediaTypeTGZ is the media type of the GitHub source archive. It matches the
+// MIME_TGZ old OCM assigned to the github access blob.
+const MediaTypeTGZ = "application/x-tgz"
+
 // CommitArchive validates the GitHub access and fetches the source archive of
 // its pinned commit, returning it as a gzipped tar blob (media type
 // application/x-tgz). An access without a resolved commit is rejected: a bare
@@ -36,9 +40,9 @@ func CommitArchive(ctx context.Context, gitHub *v1.GitHub, token, tempFolder str
 
 	slog.DebugContext(ctx, "Downloading GitHub commit archive", "repoUrl", gitHub.RepoURL, "commit", gitHub.Commit)
 
-	stream, err := fetch(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Commit, token, httpClient)
+	stream, err := fetch(ctx, gitHub, token, httpClient)
 	if err != nil {
-		return nil, fmt.Errorf("error downloading GitHub commit archive: %w", err)
+		return nil, err
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {

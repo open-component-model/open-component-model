@@ -66,7 +66,7 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 // points at, using this repository's HTTP client. The digest processor uses it
 // to pin a ref-only access before downloading.
 func (r *ResourceRepository) ResolveCommit(ctx context.Context, gitHub *v1.GitHub, token string) (string, error) {
-	return download.ResolveCommit(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Ref, token, r.httpClient)
+	return download.ResolveCommit(ctx, gitHub, token, r.httpClient)
 }
 
 // tempFolder returns the directory archives are buffered under. An empty

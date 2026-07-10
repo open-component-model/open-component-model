@@ -12,24 +12,35 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 )
 
-func TestParseOwnerRepo(t *testing.T) {
+func TestOwnerRepo(t *testing.T) {
+	// ownerRepo takes an already-parsed URL, so parse through parseRepoURL to
+	// exercise the same path clientFor takes.
+	split := func(t *testing.T, repoURL string) (string, string, error) {
+		t.Helper()
+		u, err := parseRepoURL(repoURL)
+		require.NoError(t, err)
+		return ownerRepo(u)
+	}
+
 	t.Run("parses host/owner/repo", func(t *testing.T) {
-		owner, repo, err := parseOwnerRepo("https://github.com/octocat/Hello-World")
+		owner, repo, err := split(t, "https://github.com/octocat/Hello-World")
 		require.NoError(t, err)
 		assert.Equal(t, "octocat", owner)
 		assert.Equal(t, "Hello-World", repo)
 	})
 
 	t.Run("trims a .git suffix", func(t *testing.T) {
-		_, repo, err := parseOwnerRepo("https://github.com/octocat/Hello-World.git")
+		_, repo, err := split(t, "https://github.com/octocat/Hello-World.git")
 		require.NoError(t, err)
 		assert.Equal(t, "Hello-World", repo)
 	})
 
 	t.Run("rejects a URL without owner/repo", func(t *testing.T) {
-		_, _, err := parseOwnerRepo("https://github.com/octocat")
+		_, _, err := split(t, "https://github.com/octocat")
 		assert.Error(t, err)
 	})
 }
@@ -63,12 +74,12 @@ func TestResolveCommit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	got, err := ResolveCommit(t.Context(), server.URL+"/octocat/Hello-World", "", ref, "", nil)
+	got, err := ResolveCommit(t.Context(), &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Ref: ref}, "", server.Client())
 	require.NoError(t, err)
 	assert.Equal(t, wantSHA, got)
 }
 
-func TestFetchCommitArchive(t *testing.T) {
+func TestFetch(t *testing.T) {
 	const commit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
 	payload := gzippedTar(t, "Hello-World-"+commit+"/README", "hello")
 
@@ -86,12 +97,10 @@ func TestFetchCommitArchive(t *testing.T) {
 	}))
 	defer server.Close()
 
-	gh, err := newGitHubClient(server.URL+"/octocat/Hello-World", "", "ghp_secret", server.Client())
-	require.NoError(t, err)
-
-	// fetchCommitArchive streams the archive so it can be buffered to the
-	// filesystem rather than read wholly into memory.
-	rc, err := fetchCommitArchive(t.Context(), gh, server.Client(), "octocat", "Hello-World", commit)
+	// fetch streams the archive so it can be buffered to the filesystem rather
+	// than read wholly into memory.
+	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
+	rc, err := fetch(t.Context(), access, "ghp_secret", server.Client())
 	require.NoError(t, err)
 	defer func() { require.NoError(t, rc.Close()) }()
 

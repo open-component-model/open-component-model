@@ -10,12 +10,9 @@ import (
 
 	"github.com/google/go-github/v66/github"
 
+	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 )
-
-// MediaTypeTGZ is the media type of the GitHub source archive. It matches the
-// MIME_TGZ old OCM assigned to the github access blob.
-const MediaTypeTGZ = "application/x-tgz"
 
 // defaultHTTPClient is the client used for both the GitHub REST calls and the
 // archive download when the caller supplies none. It comes from the OCM http
@@ -31,86 +28,95 @@ func defaultHTTPClient() *http.Client {
 // without following; this only guards against a 301 chain.
 const archiveMaxRedirects = 1
 
-// parseOwnerRepo extracts the owner and repository from a GitHub repository URL
-// of the form <host>/<owner>/<repo> (with or without a scheme or .git suffix).
-func parseOwnerRepo(repoURL string) (owner, repo string, err error) {
-	u, err := parseRepoURL(repoURL)
-	if err != nil {
-		return "", "", err
-	}
+// ownerRepo extracts the owner and repository from a parsed GitHub repository
+// URL, whose path must have the form <owner>/<repo> (with or without a .git
+// suffix).
+func ownerRepo(u *url.URL) (owner, repo string, err error) {
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("repository url %q must have the form <host>/<owner>/<repo>", repoURL)
+		return "", "", fmt.Errorf("repository url %q must have the form <host>/<owner>/<repo>", u)
 	}
 	return parts[0], strings.TrimSuffix(parts[1], ".git"), nil
 }
 
-// newGitHubClient builds a GitHub REST client for repoURL, authenticated with
-// token when non-empty. For github.com the public API is used; for any other
-// host, or when apiHostname is set, the client targets that GitHub Enterprise
-// API host.
-func newGitHubClient(repoURL, apiHostname, token string, httpClient *http.Client) (*github.Client, error) {
-	u, err := parseRepoURL(repoURL)
+// clientFor splits the access's repository URL into owner and repository and
+// builds a GitHub REST client for it, authenticated with token when non-empty.
+// For github.com the public API is used; for any other host, or when the
+// access sets APIHostname, the client targets that GitHub Enterprise API host.
+// httpClient, when nil, falls back to defaultHTTPClient.
+func clientFor(gitHub *v1.GitHub, token string, httpClient *http.Client) (gh *github.Client, owner, repo string, err error) {
+	u, err := parseRepoURL(gitHub.RepoURL)
 	if err != nil {
-		return nil, err
+		return nil, "", "", err
+	}
+	if owner, repo, err = ownerRepo(u); err != nil {
+		return nil, "", "", err
 	}
 
 	if httpClient == nil {
 		httpClient = defaultHTTPClient()
 	}
-	client := github.NewClient(httpClient)
+	gh = github.NewClient(httpClient)
 	if token != "" {
-		client = client.WithAuthToken(token)
+		gh = gh.WithAuthToken(token)
 	}
 
-	if apiHostname == "" && u.Hostname() == "github.com" {
-		return client, nil
+	if gitHub.APIHostname == "" && u.Hostname() == "github.com" {
+		return gh, owner, repo, nil
 	}
 
-	enterpriseHost := apiHostname
+	enterpriseHost := gitHub.APIHostname
 	if enterpriseHost == "" {
 		enterpriseHost = u.Host
 	}
 	base := (&url.URL{Scheme: u.Scheme, Host: enterpriseHost}).String()
-	client, err = client.WithEnterpriseURLs(base, base)
-	if err != nil {
-		return nil, fmt.Errorf("error configuring github enterprise client for %q: %w", enterpriseHost, err)
-	}
-	return client, nil
-}
-
-// clientFor parses repoURL into owner and repository and builds a GitHub REST
-// client for it, authenticated with token when non-empty. httpClient, when
-// nil, falls back to defaultHTTPClient.
-func clientFor(repoURL, apiHostname, token string, httpClient *http.Client) (gh *github.Client, owner, repo string, err error) {
-	owner, repo, err = parseOwnerRepo(repoURL)
-	if err != nil {
-		return nil, "", "", err
-	}
-	gh, err = newGitHubClient(repoURL, apiHostname, token, httpClient)
-	if err != nil {
-		return nil, "", "", err
+	if gh, err = gh.WithEnterpriseURLs(base, base); err != nil {
+		return nil, "", "", fmt.Errorf("error configuring github enterprise client for %q: %w", enterpriseHost, err)
 	}
 	return gh, owner, repo, nil
 }
 
-// fetchCommitArchive resolves the archive link for the given commit via the
-// GitHub REST API and starts downloading the gzipped tar archive, returning
-// the response body. The caller must close it. The body is streamed rather
-// than read into memory so the archive can be buffered to the filesystem.
+// ResolveCommit resolves the access's git reference (a branch, tag, or fully
+// qualified ref like refs/heads/main) to its full commit SHA via the GitHub
+// REST API, authenticated with token when non-empty. httpClient, when nil,
+// falls back to defaultHTTPClient.
+func ResolveCommit(ctx context.Context, gitHub *v1.GitHub, token string, httpClient *http.Client) (string, error) {
+	gh, owner, repo, err := clientFor(gitHub, token, httpClient)
+	if err != nil {
+		return "", err
+	}
+	sha, _, err := gh.Repositories.GetCommitSHA1(ctx, owner, repo, gitHub.Ref, "")
+	if err != nil {
+		return "", fmt.Errorf("error resolving github ref %q for %s/%s: %w", gitHub.Ref, owner, repo, err)
+	}
+	return sha, nil
+}
+
+// fetch resolves the archive link for the access's pinned commit via the
+// GitHub REST API, authenticated with token when non-empty, and starts
+// downloading the gzipped tar archive, returning the response body. The caller
+// must close it. The body is streamed rather than read into memory so the
+// archive can be buffered to the filesystem.
 //
-// httpClient, when nil, defaults to defaultHTTPClient for the archive download
-// (the link is a short-lived, pre-signed URL that needs no auth).
-func fetchCommitArchive(ctx context.Context, gh *github.Client, httpClient *http.Client, owner, repo, commit string) (io.ReadCloser, error) {
+// httpClient, when nil, falls back to defaultHTTPClient. The same client serves
+// the API call and the archive download; the link is a short-lived, pre-signed
+// URL that needs no auth.
+func fetch(ctx context.Context, gitHub *v1.GitHub, token string, httpClient *http.Client) (io.ReadCloser, error) {
+	if httpClient == nil {
+		httpClient = defaultHTTPClient()
+	}
+	gh, owner, repo, err := clientFor(gitHub, token, httpClient)
+	if err != nil {
+		return nil, err
+	}
+
+	commit := gitHub.Commit
 	link, _, err := gh.Repositories.GetArchiveLink(ctx, owner, repo, github.Tarball,
 		&github.RepositoryContentGetOptions{Ref: commit}, archiveMaxRedirects)
 	if err != nil {
 		return nil, fmt.Errorf("error resolving github archive link for %s/%s@%s: %w", owner, repo, commit, err)
 	}
 
-	if httpClient == nil {
-		httpClient = defaultHTTPClient()
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating github archive download request: %w", err)
@@ -125,33 +131,6 @@ func fetchCommitArchive(ctx context.Context, gh *github.Client, httpClient *http
 	}
 
 	return resp.Body, nil
-}
-
-// ResolveCommit resolves a git reference (a branch, tag, or fully qualified
-// ref like refs/heads/main) to its full commit SHA via the GitHub REST API,
-// authenticated with token when non-empty. httpClient, when nil, falls back to
-// defaultHTTPClient.
-func ResolveCommit(ctx context.Context, repoURL, apiHostname, ref, token string, httpClient *http.Client) (string, error) {
-	gh, owner, repo, err := clientFor(repoURL, apiHostname, token, httpClient)
-	if err != nil {
-		return "", err
-	}
-	sha, _, err := gh.Repositories.GetCommitSHA1(ctx, owner, repo, ref, "")
-	if err != nil {
-		return "", fmt.Errorf("error resolving github ref %q for %s/%s: %w", ref, owner, repo, err)
-	}
-	return sha, nil
-}
-
-// fetch composes client construction and archive download for repoURL at
-// commit, authenticated with token when non-empty. The caller must close the
-// returned stream. httpClient, when nil, falls back to defaultHTTPClient.
-func fetch(ctx context.Context, repoURL, apiHostname, commit, token string, httpClient *http.Client) (io.ReadCloser, error) {
-	gh, owner, repo, err := clientFor(repoURL, apiHostname, token, httpClient)
-	if err != nil {
-		return nil, err
-	}
-	return fetchCommitArchive(ctx, gh, httpClient, owner, repo, commit)
 }
 
 // parseRepoURL parses repoURL, defaulting the scheme to https when absent.
