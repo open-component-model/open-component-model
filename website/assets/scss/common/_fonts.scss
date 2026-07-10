@@ -2,16 +2,13 @@
  * Self-hosted webfonts. No outbound calls to fonts.googleapis.com or
  * fonts.gstatic.com.
  *
- * The variable-font woff2 files are copied from the @fontsource-variable npm
- * packages into static/fonts/vendor/{inter,quicksand}/ so Hugo serves them at
- * stable URLs without going through the asset pipeline. This matches how
- * @thulite/doks-core ships its Jost font (see node_modules/@thulite/doks-core/
- * static/fonts/vendor/jost/).
- *
- * The woff2 files under static/fonts/vendor/ are regenerated automatically
- * from the postinstall lifecycle script (see website/scripts/sync-fonts.js),
- * so bumping @fontsource-variable/* refreshes them on the next `npm install`
- * - commit the diff.
+ * The variable-font woff2 files are mounted from the @fontsource-variable npm
+ * packages onto static/fonts/vendor/{inter,quicksand}/ by a Hugo module mount
+ * (see config/_default/module.yaml), so Hugo serves them at stable URLs
+ * without going through the asset pipeline. Bumping @fontsource-variable/* and
+ * re-running the build picks up the new files automatically. The /fonts/vendor
+ * URL convention matches how @thulite/doks-core ships its Jost font (see
+ * node_modules/@thulite/doks-core/static/fonts/vendor/jost/).
  *
  * Latin subsets only to keep payload lean; matches the doks-core neighbour.
  */
