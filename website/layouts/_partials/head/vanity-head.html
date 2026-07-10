@@ -1,0 +1,17 @@
+{{- /*
+  Go module vanity meta. baseof.html injects this as the FIRST thing inside <head>
+  on the 404 page.
+
+  It must come before any other head markup: the go command parses the page with a
+  lenient XML decoder (cmd/go/internal/vcs/discovery.go parseMetaGoImports) that
+  aborts on the first malformed token — e.g. a valueless boolean attribute like the
+  `crossorigin` on the theme's font preloads — and only tolerates such errors once it
+  has already found a go-import. GitHub Pages serves this 404 page (status 404,
+  Content-Type text/html) for every unknown path, and the go command reads the meta
+  even from a 404 response (cmd/go/internal/web/http.go: "accepting a non-200 OK here,
+  so people can serve a meta import in their http 404 page"). So the repository-root
+  prefix here resolves every module under ocm.software/open-component-model/... with
+  no per-module static file.
+*/ -}}
+<meta name="go-import" content="ocm.software/open-component-model git https://github.com/open-component-model/open-component-model">
+<meta name="go-source" content="ocm.software/open-component-model https://github.com/open-component-model/open-component-model https://github.com/open-component-model/open-component-model/tree/main{/dir} https://github.com/open-component-model/open-component-model/blob/main{/dir}/{file}#L{line}">

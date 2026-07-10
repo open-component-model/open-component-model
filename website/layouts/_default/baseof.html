@@ -1,6 +1,13 @@
 <!doctype html>
 <html lang="{{ .Site.Language.Locale | default "en" }}" data-bs-theme="{{ site.Params.doks.colorMode | default "auto" }}">
-{{ partial "head/head" . }}
+{{- /* Render the theme head, then (on the 404 page) inject the go-import vanity meta
+       as the FIRST element inside <head> so go's meta parser reads it before any
+       markup that could abort the parse. See head/vanity-head.html. */ -}}
+{{- $head := partial "head/head" . | string -}}
+{{- if eq .Kind "404" -}}
+  {{- $head = replace $head "<head>" (print "<head>" (partial "head/vanity-head" . | string)) 1 -}}
+{{- end -}}
+{{ $head | safeHTML }}
 {{ partial "head/body-class" . }}
 
 <body class='{{ delimit (.Scratch.Get " class" | default (slice)) " " }}'{{ if eq site.Params.doks.scrollSpy true }} data-bs-spy="scroll" data-bs-target="#toc" data-bs-root-margin="0px 0px -60%" data-bs-smooth-scroll="true" tabindex="0" {{ end }}>
