@@ -23,7 +23,7 @@ func TestOwnerRepo(t *testing.T) {
 		t.Helper()
 		u, err := parseRepoURL(repoURL)
 		require.NoError(t, err)
-		return ownerRepo(u)
+		return ownerRepo(u, repoURL)
 	}
 
 	t.Run("parses host/owner/repo", func(t *testing.T) {
@@ -42,6 +42,12 @@ func TestOwnerRepo(t *testing.T) {
 	t.Run("rejects a URL without owner/repo", func(t *testing.T) {
 		_, _, err := split(t, "https://github.com/octocat")
 		assert.Error(t, err)
+	})
+
+	t.Run("quotes the url as supplied, not the scheme-normalized form", func(t *testing.T) {
+		_, _, err := split(t, "github.com/octocat")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `"github.com/octocat"`, "the error must quote the caller's input")
 	})
 }
 

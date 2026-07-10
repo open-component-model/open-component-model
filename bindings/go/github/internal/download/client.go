@@ -30,11 +30,12 @@ const archiveMaxRedirects = 1
 
 // ownerRepo extracts the owner and repository from a parsed GitHub repository
 // URL, whose path must have the form <owner>/<repo> (with or without a .git
-// suffix).
-func ownerRepo(u *url.URL) (owner, repo string, err error) {
+// suffix). repoURL is the caller's original, un-normalized URL, used only so a
+// rejection quotes the string the caller actually supplied.
+func ownerRepo(u *url.URL, repoURL string) (owner, repo string, err error) {
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("repository url %q must have the form <host>/<owner>/<repo>", u)
+		return "", "", fmt.Errorf("repository url %q must have the form <host>/<owner>/<repo>", repoURL)
 	}
 	return parts[0], strings.TrimSuffix(parts[1], ".git"), nil
 }
@@ -49,7 +50,7 @@ func clientFor(gitHub *v1.GitHub, token string, httpClient *http.Client) (gh *gi
 	if err != nil {
 		return nil, "", "", err
 	}
-	if owner, repo, err = ownerRepo(u); err != nil {
+	if owner, repo, err = ownerRepo(u, gitHub.RepoURL); err != nil {
 		return nil, "", "", err
 	}
 
