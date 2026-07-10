@@ -51,7 +51,7 @@ func (r *SourceRepository) tempFolder() string {
 // entirely (never resolved); a ref-only source is rejected, since without a
 // pinned commit there is nothing immutable to materialize.
 //
-// See download.Archive for the buffering and cleanup semantics
+// See download.CommitArchive for the buffering and cleanup semantics
 // of the returned blob.
 func (r *SourceRepository) DownloadSource(ctx context.Context, source *descriptor.Source) (blob.ReadOnlyBlob, error) {
 	gitHub, err := githubinternal.AccessFrom(source.Access)
@@ -59,7 +59,7 @@ func (r *SourceRepository) DownloadSource(ctx context.Context, source *descripto
 		return nil, fmt.Errorf("error resolving GitHub access for download: %w", err)
 	}
 
-	return download.Archive(ctx, gitHub, "", r.tempFolder())
+	return download.CommitArchive(ctx, gitHub, "", r.tempFolder())
 }
 
 // UploadSource is not supported for GitHub repositories and always returns an

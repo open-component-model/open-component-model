@@ -107,7 +107,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		}
 	}
 
-	return download.Archive(ctx, gitHub, token, r.tempFolder())
+	return download.CommitArchive(ctx, gitHub, token, r.tempFolder())
 }
 
 // UploadResource is not supported for GitHub repositories and always returns

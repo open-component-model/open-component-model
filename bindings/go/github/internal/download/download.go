@@ -14,7 +14,8 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 )
 
-// Archive validates the GitHub access and fetches the source archive of its
+// CommitArchive validates the GitHub access and fetches the source archive of
+// its
 // pinned commit, returning it as a gzipped tar blob (media type
 // application/x-tgz). An access without a resolved commit is rejected: a bare
 // ref is mutable and cannot be materialized reproducibly.
@@ -23,7 +24,7 @@ import (
 // held in memory, since a repository archive can be large. The returned blob
 // is an io.Closer: closing it reclaims that file immediately, and a blob that
 // is never closed reclaims it once unreachable.
-func Archive(ctx context.Context, gitHub *v1.GitHub, token, tempFolder string) (blob.ReadOnlyBlob, error) {
+func CommitArchive(ctx context.Context, gitHub *v1.GitHub, token, tempFolder string) (blob.ReadOnlyBlob, error) {
 	if err := gitHub.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid GitHub access: %w", err)
 	}
