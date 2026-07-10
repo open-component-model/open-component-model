@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/github/digest"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
@@ -182,6 +184,31 @@ func Test_Integration_GitHub(t *testing.T) {
 				require.NoError(t, err)
 				assertHelloWorldArchive(t, downloaded)
 			})
+		})
+
+		// #1069 requires the download to buffer the archive to the filesystem,
+		// not hold it in memory. Point the repository at a known temp folder and
+		// assert the archive lands there as a file while the blob is still open;
+		// a regression to an in-memory blob leaves the folder empty.
+		t.Run("archive is buffered to a file under the configured temp folder", func(t *testing.T) {
+			tempFolder := t.TempDir()
+			repo := resource.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
+
+			downloaded, err := repo.DownloadResource(t.Context(), helloWorldResource("", helloWorldCommit), nil)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				if closer, ok := downloaded.(io.Closer); ok {
+					_ = closer.Close()
+				}
+			})
+
+			entries, err := os.ReadDir(tempFolder)
+			require.NoError(t, err)
+			require.Len(t, entries, 1, "the archive must be buffered as a file under the configured temp folder")
+			assert.True(t, strings.HasSuffix(entries[0].Name(), ".tgz"),
+				"buffered archive should keep the .tgz suffix, got %q", entries[0].Name())
+
+			assertHelloWorldArchive(t, downloaded)
 		})
 	})
 
