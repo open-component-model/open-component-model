@@ -25,3 +25,19 @@
     }
   </style>
 </noscript>
+{{- /*
+  Go module vanity resolution.
+
+  GitHub Pages serves the 404 page (with a 404 status, Content-Type text/html) for
+  every unknown path, and the go command deliberately reads go-import/go-source meta
+  tags even from a 404 response (see cmd/go/internal/web/http.go: "accepting a
+  non-200 OK here, so people can serve a meta import in their http 404 page").
+
+  Emitting the repository-root prefix on the 404 page therefore resolves every module
+  under ocm.software/open-component-model/... — including new bindings — without a
+  per-module static file under static/open-component-model/bindings/go/.
+*/ -}}
+{{- if eq .Kind "404" }}
+  <meta name="go-import" content="ocm.software/open-component-model git https://github.com/open-component-model/open-component-model">
+  <meta name="go-source" content="ocm.software/open-component-model https://github.com/open-component-model/open-component-model https://github.com/open-component-model/open-component-model/tree/main{/dir} https://github.com/open-component-model/open-component-model/blob/main{/dir}/{file}#L{line}">
+{{- end }}
