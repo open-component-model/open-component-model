@@ -54,7 +54,7 @@ func (r *SourceRepository) tempFolder() string {
 // See download.Archive for the buffering and cleanup semantics
 // of the returned blob.
 func (r *SourceRepository) DownloadSource(ctx context.Context, source *descriptor.Source) (blob.ReadOnlyBlob, error) {
-	gitHub, err := githubinternal.AccessFromSource(source)
+	gitHub, err := githubinternal.AccessFrom(source.Access)
 	if err != nil {
 		return nil, fmt.Errorf("error resolving GitHub access for download: %w", err)
 	}

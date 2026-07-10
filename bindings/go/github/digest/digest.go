@@ -64,7 +64,7 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 func (p *DigestProcessor) ProcessResourceDigest(
 	ctx context.Context, res *descriptor.Resource, credentials runtime.Typed,
 ) (*descriptor.Resource, error) {
-	gitHub, err := githubinternal.AccessFromResource(res)
+	gitHub, err := githubinternal.AccessFrom(res.Access)
 	if err != nil {
 		return nil, err
 	}

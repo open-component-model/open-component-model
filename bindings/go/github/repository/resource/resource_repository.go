@@ -52,7 +52,7 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 // GetResourceCredentialConsumerIdentity resolves the credential consumer
 // identity (type GitHubRepository) for the given GitHub resource.
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
-	gitHub, err := githubinternal.AccessFromResource(resource)
+	gitHub, err := githubinternal.AccessFrom(resource.Access)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 // large. The returned blob is an io.Closer: closing it reclaims that file
 // immediately, and a blob that is never closed reclaims it once unreachable.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	gitHub, err := githubinternal.AccessFromResource(resource)
+	gitHub, err := githubinternal.AccessFrom(resource.Access)
 	if err != nil {
 		return nil, fmt.Errorf("error resolving GitHub access for download: %w", err)
 	}
