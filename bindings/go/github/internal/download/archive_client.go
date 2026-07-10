@@ -1,8 +1,4 @@
-// Package archive fetches the source archive of a GitHub repository at a
-// pinned commit via the GitHub REST API. The returned bytes are the exact
-// gzipped tar archive GitHub serves, so that the resource content and its
-// generic blob digest match what old OCM stored for a GitHub access.
-package archive
+package download
 
 import (
 	"context"
@@ -131,10 +127,10 @@ func ResolveCommit(ctx context.Context, repoURL, apiHostname, ref, token string)
 	return sha, nil
 }
 
-// Fetch composes client construction and archive download for repoURL at
+// fetch composes client construction and archive download for repoURL at
 // commit, authenticated with token when non-empty. The caller must close the
 // returned stream.
-func Fetch(ctx context.Context, repoURL, apiHostname, commit, token string) (io.ReadCloser, error) {
+func fetch(ctx context.Context, repoURL, apiHostname, commit, token string) (io.ReadCloser, error) {
 	gh, owner, repo, err := clientFor(repoURL, apiHostname, token)
 	if err != nil {
 		return nil, err

@@ -8,6 +8,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
+	"ocm.software/open-component-model/bindings/go/github/internal/download"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -50,7 +51,7 @@ func (r *SourceRepository) tempFolder() string {
 // entirely (never resolved); a ref-only source is rejected, since without a
 // pinned commit there is nothing immutable to materialize.
 //
-// See githubinternal.DownloadArchive for the buffering and cleanup semantics
+// See download.Archive for the buffering and cleanup semantics
 // of the returned blob.
 func (r *SourceRepository) DownloadSource(ctx context.Context, source *descriptor.Source) (blob.ReadOnlyBlob, error) {
 	gitHub, err := githubinternal.AccessFromSource(source)
@@ -58,7 +59,7 @@ func (r *SourceRepository) DownloadSource(ctx context.Context, source *descripto
 		return nil, fmt.Errorf("error resolving GitHub access for download: %w", err)
 	}
 
-	return githubinternal.DownloadArchive(ctx, gitHub, "", r.tempFolder())
+	return download.Archive(ctx, gitHub, "", r.tempFolder())
 }
 
 // UploadSource is not supported for GitHub repositories and always returns an

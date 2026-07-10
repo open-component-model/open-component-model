@@ -1,4 +1,8 @@
-package internal
+// Package download fetches the source archive of a GitHub repository at a
+// pinned commit via the GitHub REST API and buffers it as a blob. The archive
+// bytes are the exact gzipped tar GitHub serves, so that the resource content
+// and its generic blob digest match what old OCM stored for a GitHub access.
+package download
 
 import (
 	"context"
@@ -6,13 +10,12 @@ import (
 	"log/slog"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/github/internal/archive"
 	"ocm.software/open-component-model/bindings/go/github/internal/tempblob"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 )
 
-// DownloadArchive validates the GitHub access and fetches the source archive
-// of its pinned commit, returning it as a gzipped tar blob (media type
+// Archive validates the GitHub access and fetches the source archive of its
+// pinned commit, returning it as a gzipped tar blob (media type
 // application/x-tgz). An access without a resolved commit is rejected: a bare
 // ref is mutable and cannot be materialized reproducibly.
 //
@@ -20,7 +23,7 @@ import (
 // held in memory, since a repository archive can be large. The returned blob
 // is an io.Closer: closing it reclaims that file immediately, and a blob that
 // is never closed reclaims it once unreachable.
-func DownloadArchive(ctx context.Context, gitHub *v1.GitHub, token, tempFolder string) (blob.ReadOnlyBlob, error) {
+func Archive(ctx context.Context, gitHub *v1.GitHub, token, tempFolder string) (blob.ReadOnlyBlob, error) {
 	if err := gitHub.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid GitHub access: %w", err)
 	}
@@ -30,7 +33,7 @@ func DownloadArchive(ctx context.Context, gitHub *v1.GitHub, token, tempFolder s
 
 	slog.DebugContext(ctx, "Downloading GitHub commit archive", "repoUrl", gitHub.RepoURL, "commit", gitHub.Commit)
 
-	stream, err := archive.Fetch(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Commit, token)
+	stream, err := fetch(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Commit, token)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading GitHub commit archive: %w", err)
 	}
@@ -40,7 +43,7 @@ func DownloadArchive(ctx context.Context, gitHub *v1.GitHub, token, tempFolder s
 		}
 	}()
 
-	buffered, err := tempblob.New(tempFolder, "github-archive-*.tgz", stream, archive.MediaTypeTGZ)
+	buffered, err := tempblob.New(tempFolder, "github-archive-*.tgz", stream, MediaTypeTGZ)
 	if err != nil {
 		return nil, fmt.Errorf("error buffering GitHub commit archive: %w", err)
 	}

@@ -16,7 +16,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
-	"ocm.software/open-component-model/bindings/go/github/internal/archive"
+	"ocm.software/open-component-model/bindings/go/github/internal/download"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
 	"ocm.software/open-component-model/bindings/go/github/spec/access"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -83,7 +83,7 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		if err != nil {
 			return nil, fmt.Errorf("error resolving github credentials: %w", err)
 		}
-		resolved, err := archive.ResolveCommit(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Ref, token)
+		resolved, err := download.ResolveCommit(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Ref, token)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving github ref to commit: %w", err)
 		}

@@ -9,7 +9,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
-	"ocm.software/open-component-model/bindings/go/github/internal/archive"
+	"ocm.software/open-component-model/bindings/go/github/internal/download"
 	githubaccess "ocm.software/open-component-model/bindings/go/github/spec/access"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -93,13 +93,13 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		if err := gitHub.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid GitHub access: %w", err)
 		}
-		resolved, err := archive.ResolveCommit(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Ref, token)
+		resolved, err := download.ResolveCommit(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Ref, token)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving GitHub ref to commit: %w", err)
 		}
 		gitHub.Commit = resolved
 	case gitHub.Ref != "":
-		if resolved, err := archive.ResolveCommit(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Ref, token); err != nil {
+		if resolved, err := download.ResolveCommit(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Ref, token); err != nil {
 			slog.DebugContext(ctx, "could not resolve GitHub ref to check the pinned commit", "ref", gitHub.Ref, "error", err)
 		} else if resolved != gitHub.Commit {
 			slog.WarnContext(ctx, "GitHub ref no longer points at the pinned commit; downloading the pinned commit",
@@ -107,7 +107,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		}
 	}
 
-	return githubinternal.DownloadArchive(ctx, gitHub, token, r.tempFolder())
+	return download.Archive(ctx, gitHub, token, r.tempFolder())
 }
 
 // UploadResource is not supported for GitHub repositories and always returns
