@@ -27,7 +27,7 @@
     "postinfo": "./node_modules/.bin/hugo version",
     "preinfo": "npm version",
     "preview": "http-server --gzip --brotli --ext=html --cors",
-    "postinstall": "node scripts/link-dart-sass.js && node scripts/sync-fonts.js",
+    "postinstall": "node scripts/link-dart-sass.js",
     "test": "node --test scripts/register-docs-version.test.js"
   },
   "dependencies": {
