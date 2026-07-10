@@ -3,12 +3,15 @@ package source
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	"ocm.software/open-component-model/bindings/go/github/internal/download"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -23,6 +26,22 @@ import (
 // downloads are anonymous until that is resolved.
 type SourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
+	httpConfig       *httpv1alpha1.Config
+	httpClient       *http.Client
+}
+
+// Option configures a SourceRepository.
+type Option func(*SourceRepository)
+
+// WithHTTPConfig sets the HTTP client configuration used for the GitHub REST
+// calls and the archive download. When nil, the http binding's defaults apply
+// (retries on 408, 429 and 5xx, plus transport timeouts). Accepts the
+// serialisable config type so that external plugins can round-trip it over the
+// wire and reconstruct an equivalent client.
+func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+	return func(r *SourceRepository) {
+		r.httpConfig = cfg
+	}
 }
 
 var _ repository.SourceRepository = (*SourceRepository)(nil)
@@ -30,10 +49,18 @@ var _ repository.SourceRepository = (*SourceRepository)(nil)
 // NewSourceRepository creates a SourceRepository. The TempFolder of
 // filesystemConfig is where downloaded archives are buffered; when it is nil
 // or empty the operating system's temporary directory is used.
-func NewSourceRepository(filesystemConfig *filesystemv1alpha1.Config) *SourceRepository {
-	return &SourceRepository{
+//
+// The HTTP client is built once here rather than per request, so that its
+// connection pool is reused across downloads.
+func NewSourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *SourceRepository {
+	r := &SourceRepository{
 		filesystemConfig: filesystemConfig,
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	r.httpClient = ocmhttp.New(ocmhttp.WithConfig(r.httpConfig))
+	return r
 }
 
 // tempFolder returns the directory archives are buffered under. An empty
@@ -59,7 +86,7 @@ func (r *SourceRepository) DownloadSource(ctx context.Context, source *descripto
 		return nil, fmt.Errorf("error resolving GitHub access for download: %w", err)
 	}
 
-	return download.CommitArchive(ctx, gitHub, "", r.tempFolder())
+	return download.CommitArchive(ctx, gitHub, "", r.tempFolder(), r.httpClient)
 }
 
 // UploadSource is not supported for GitHub repositories and always returns an

@@ -80,13 +80,14 @@ func newGitHubClient(repoURL, apiHostname, token string, httpClient *http.Client
 }
 
 // clientFor parses repoURL into owner and repository and builds a GitHub REST
-// client for it, authenticated with token when non-empty.
-func clientFor(repoURL, apiHostname, token string) (gh *github.Client, owner, repo string, err error) {
+// client for it, authenticated with token when non-empty. httpClient, when
+// nil, falls back to defaultHTTPClient.
+func clientFor(repoURL, apiHostname, token string, httpClient *http.Client) (gh *github.Client, owner, repo string, err error) {
 	owner, repo, err = parseOwnerRepo(repoURL)
 	if err != nil {
 		return nil, "", "", err
 	}
-	gh, err = newGitHubClient(repoURL, apiHostname, token, nil)
+	gh, err = newGitHubClient(repoURL, apiHostname, token, httpClient)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -128,9 +129,10 @@ func fetchCommitArchive(ctx context.Context, gh *github.Client, httpClient *http
 
 // ResolveCommit resolves a git reference (a branch, tag, or fully qualified
 // ref like refs/heads/main) to its full commit SHA via the GitHub REST API,
-// authenticated with token when non-empty.
-func ResolveCommit(ctx context.Context, repoURL, apiHostname, ref, token string) (string, error) {
-	gh, owner, repo, err := clientFor(repoURL, apiHostname, token)
+// authenticated with token when non-empty. httpClient, when nil, falls back to
+// defaultHTTPClient.
+func ResolveCommit(ctx context.Context, repoURL, apiHostname, ref, token string, httpClient *http.Client) (string, error) {
+	gh, owner, repo, err := clientFor(repoURL, apiHostname, token, httpClient)
 	if err != nil {
 		return "", err
 	}
@@ -143,13 +145,13 @@ func ResolveCommit(ctx context.Context, repoURL, apiHostname, ref, token string)
 
 // fetch composes client construction and archive download for repoURL at
 // commit, authenticated with token when non-empty. The caller must close the
-// returned stream.
-func fetch(ctx context.Context, repoURL, apiHostname, commit, token string) (io.ReadCloser, error) {
-	gh, owner, repo, err := clientFor(repoURL, apiHostname, token)
+// returned stream. httpClient, when nil, falls back to defaultHTTPClient.
+func fetch(ctx context.Context, repoURL, apiHostname, commit, token string, httpClient *http.Client) (io.ReadCloser, error) {
+	gh, owner, repo, err := clientFor(repoURL, apiHostname, token, httpClient)
 	if err != nil {
 		return nil, err
 	}
-	return fetchCommitArchive(ctx, gh, nil, owner, repo, commit)
+	return fetchCommitArchive(ctx, gh, httpClient, owner, repo, commit)
 }
 
 // parseRepoURL parses repoURL, defaulting the scheme to https when absent.

@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -203,6 +205,47 @@ func TestResourceRepository_DownloadResource_BuffersToConfiguredTempFolder(t *te
 	entries, err = os.ReadDir(tempFolder)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "closing the blob must remove the buffered file")
+}
+
+// A GitHub 5xx is retryable, so the number of requests the server sees is a
+// direct readout of the retry policy the repository's HTTP client was built
+// with. Driving two different WithHTTPConfig values to two different request
+// counts fails if the option is dropped on the floor.
+func TestResourceRepository_WithHTTPConfig_IsAppliedToRequests(t *testing.T) {
+	maxRetries := func(n int) *httpv1alpha1.Config {
+		return &httpv1alpha1.Config{
+			Retry: &httpv1alpha1.RetryConfig{
+				MaxRetries: &n,
+				MinWait:    httpv1alpha1.NewTimeout(time.Millisecond),
+				MaxWait:    httpv1alpha1.NewTimeout(2 * time.Millisecond),
+			},
+		}
+	}
+
+	for _, tc := range []struct {
+		name     string
+		config   *httpv1alpha1.Config
+		attempts int
+	}{
+		{name: "retry disabled", config: maxRetries(-1), attempts: 1},
+		{name: "two retries", config: maxRetries(2), attempts: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests int
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests++
+				http.Error(w, "boom", http.StatusInternalServerError)
+			}))
+			t.Cleanup(server.Close)
+
+			repo := NewResourceRepository(nil, WithHTTPConfig(tc.config))
+			_, err := repo.DownloadResource(t.Context(),
+				githubResource(server.URL+"/octocat/Hello-World", testCommit), nil)
+
+			require.Error(t, err, "a 500 from the archive link endpoint must fail the download")
+			assert.Equal(t, tc.attempts, requests, "the configured retry policy must govern the request count")
+		})
+	}
 }
 
 func TestResourceRepository_GetResourceCredentialConsumerIdentity(t *testing.T) {

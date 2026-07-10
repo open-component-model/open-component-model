@@ -63,7 +63,7 @@ func TestResolveCommit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	got, err := ResolveCommit(t.Context(), server.URL+"/octocat/Hello-World", "", ref, "")
+	got, err := ResolveCommit(t.Context(), server.URL+"/octocat/Hello-World", "", ref, "", nil)
 	require.NoError(t, err)
 	assert.Equal(t, wantSHA, got)
 }

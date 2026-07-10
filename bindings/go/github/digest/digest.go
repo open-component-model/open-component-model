@@ -16,7 +16,6 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
-	"ocm.software/open-component-model/bindings/go/github/internal/download"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
 	"ocm.software/open-component-model/bindings/go/github/spec/access"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -36,12 +35,13 @@ type DigestProcessor struct {
 	resourceRepository *resource.ResourceRepository
 }
 
-// NewDigestProcessor creates a new GitHub digest processor. filesystemConfig is
-// forwarded to the underlying resource repository, whose TempFolder is where
-// the archive is buffered while its digest is computed.
-func NewDigestProcessor(filesystemConfig *filesystemv1alpha1.Config) *DigestProcessor {
+// NewDigestProcessor creates a new GitHub digest processor. filesystemConfig
+// and opts are forwarded to the underlying resource repository, whose
+// TempFolder is where the archive is buffered while its digest is computed and
+// whose HTTP client performs both the ref resolution and the download.
+func NewDigestProcessor(filesystemConfig *filesystemv1alpha1.Config, opts ...resource.Option) *DigestProcessor {
 	return &DigestProcessor{
-		resourceRepository: resource.NewResourceRepository(filesystemConfig),
+		resourceRepository: resource.NewResourceRepository(filesystemConfig, opts...),
 	}
 }
 
@@ -83,7 +83,7 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		if err != nil {
 			return nil, fmt.Errorf("error resolving github credentials: %w", err)
 		}
-		resolved, err := download.ResolveCommit(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Ref, token)
+		resolved, err := p.resourceRepository.ResolveCommit(ctx, gitHub, token)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving github ref to commit: %w", err)
 		}

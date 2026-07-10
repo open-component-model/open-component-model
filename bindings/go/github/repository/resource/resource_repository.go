@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -11,6 +12,9 @@ import (
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	"ocm.software/open-component-model/bindings/go/github/internal/download"
 	githubaccess "ocm.software/open-component-model/bindings/go/github/spec/access"
+	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -21,6 +25,22 @@ import (
 // credential consumer identities for authentication.
 type ResourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
+	httpConfig       *httpv1alpha1.Config
+	httpClient       *http.Client
+}
+
+// Option configures a ResourceRepository.
+type Option func(*ResourceRepository)
+
+// WithHTTPConfig sets the HTTP client configuration used for the GitHub REST
+// calls and the archive download. When nil, the http binding's defaults apply
+// (retries on 408, 429 and 5xx, plus transport timeouts). Accepts the
+// serialisable config type so that external plugins can round-trip it over the
+// wire and reconstruct an equivalent client.
+func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+	return func(r *ResourceRepository) {
+		r.httpConfig = cfg
+	}
 }
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
@@ -28,10 +48,25 @@ var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 // NewResourceRepository creates a ResourceRepository. The TempFolder of
 // filesystemConfig is where downloaded archives are buffered; when it is nil
 // or empty the operating system's temporary directory is used.
-func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config) *ResourceRepository {
-	return &ResourceRepository{
+//
+// The HTTP client is built once here rather than per request, so that its
+// connection pool is reused across downloads.
+func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
+	r := &ResourceRepository{
 		filesystemConfig: filesystemConfig,
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	r.httpClient = ocmhttp.New(ocmhttp.WithConfig(r.httpConfig))
+	return r
+}
+
+// ResolveCommit resolves the access's ref to the commit SHA it currently
+// points at, using this repository's HTTP client. The digest processor uses it
+// to pin a ref-only access before downloading.
+func (r *ResourceRepository) ResolveCommit(ctx context.Context, gitHub *v1.GitHub, token string) (string, error) {
+	return download.ResolveCommit(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Ref, token, r.httpClient)
 }
 
 // tempFolder returns the directory archives are buffered under. An empty
@@ -93,13 +128,13 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		if err := gitHub.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid GitHub access: %w", err)
 		}
-		resolved, err := download.ResolveCommit(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Ref, token)
+		resolved, err := r.ResolveCommit(ctx, gitHub, token)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving GitHub ref to commit: %w", err)
 		}
 		gitHub.Commit = resolved
 	case gitHub.Ref != "":
-		if resolved, err := download.ResolveCommit(ctx, gitHub.RepoURL, gitHub.APIHostname, gitHub.Ref, token); err != nil {
+		if resolved, err := r.ResolveCommit(ctx, gitHub, token); err != nil {
 			slog.DebugContext(ctx, "could not resolve GitHub ref to check the pinned commit", "ref", gitHub.Ref, "error", err)
 		} else if resolved != gitHub.Commit {
 			slog.WarnContext(ctx, "GitHub ref no longer points at the pinned commit; downloading the pinned commit",
@@ -107,7 +142,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		}
 	}
 
-	return download.CommitArchive(ctx, gitHub, token, r.tempFolder())
+	return download.CommitArchive(ctx, gitHub, token, r.tempFolder(), r.httpClient)
 }
 
 // UploadResource is not supported for GitHub repositories and always returns
