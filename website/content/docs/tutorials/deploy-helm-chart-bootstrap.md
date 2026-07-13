@@ -494,7 +494,7 @@ ocm add cv
 Transfer to your registry with `--copy-resources` to enable localization (this copies the Helm chart and image to your registry):
 
 ```bash
-ocm transfer cv --copy-resources transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
+ocm transfer cv --copy-resources --upload-as ociArtifact transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
 ```
 {{< /step >}}
 
