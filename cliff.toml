@@ -55,6 +55,26 @@ helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/contr
 
 See the [controller setup guide](https://ocm.software/docs/getting-started/set-up-controller-environments/) for more details.
 
+#### OCM components
+
+This release is also published as OCM component-versions to `ghcr.io/open-component-model`, all carrying this release's version:
+
+- `ocm.software/ocm` — product wrapper referencing the CLI and controller components below
+- `ocm.software/cli` — CLI binaries and OCI image
+- `ocm.software/kubernetes/controller` — controller image and Helm chart
+
+Inspect the released product descriptor:
+
+```bash
+ocm get component-version ghcr.io/open-component-model//ocm.software/ocm:{{ version | trim_start_matches(pat="v") }} -o yaml
+```
+
+Download the CLI binary for your platform (set `os` and `architecture` accordingly):
+
+```bash
+ocm download resource ghcr.io/open-component-model//ocm.software/cli:{{ version | trim_start_matches(pat="v") }} --identity os=linux,architecture=amd64
+```
+
 {% if github.contributors | length > 0 %}
 ### Community & Contributors
 

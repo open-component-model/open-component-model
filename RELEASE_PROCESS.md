@@ -113,12 +113,12 @@ There is no `website/v0.X.Y-rc.N` tag. The website has no RC artifacts to valida
 
 ## OCM components produced
 
-Every release publishes three OCM component-versions to `ghcr.io/<owner>/component-descriptors/`, all carrying the same version as the GitHub release. Both RC and final publications use the `replace` conflict policy so that reruns after a transient failure are idempotent. The release workflow's `concurrency` group prevents parallel runs for the same version.
+Every release publishes three OCM component-versions to `ghcr.io/<owner>`, all carrying the same version as the GitHub release. Both RC and final publications use the `replace` conflict policy so that reruns after a transient failure are idempotent. The release workflow's `concurrency` group prevents parallel runs for the same version.
 
 | Component | Reference |
 |---|---|
-| `ocm.software/cli` | multi-arch binaries (linux/darwin/windows × amd64/arm64) + the CLI OCI image referenced by digest |
-| `ocm.software/controller` | controller OCI image + Helm chart, both referenced by digest |
+| `ocm.software/cli` | multi-arch binaries (linux/darwin/windows × amd64/arm64) referenced by GitHub release download URL + the CLI OCI image referenced by digest |
+| `ocm.software/kubernetes/controller` | controller OCI image + Helm chart, both referenced by digest |
 | `ocm.software/ocm` | product wrapper referencing the two components above via `componentReferences` |
 
 Consume:

@@ -1,17 +1,25 @@
 name: Publish OCM components
 
-# Publishes ocm.software/{cli,controller,ocm} component-versions to GHCR.
-# The CLI binary used to invoke `ocm add component-version` is the one this
-# release just built — downloaded from `cli_artifact_name`. Image and chart
-# artefacts referenced by the constructors are pinned by digest, not fetched.
-# All three components are defined in a single constructor file and pushed in
-# one call; the OCM CLI resolves dependency order automatically.
+# Publishes ocm.software/{cli,kubernetes/controller,ocm} component-versions to
+# GHCR. The `ocm` CLI is run from the multi-arch CLI OCI image this release just
+# built. Its ENTRYPOINT is `/ocm`, so `docker run <image>
+# add component-version ...` invokes the CLI directly. Running from the image
+# avoids deriving a binary name from the runner architecture.
+#
+# The CLI binaries referenced by the constructor are pulled by the CLI on demand
+# from their GitHub release download URLs (using wget access type); the image and chart are
+# pinned by digest. All three components are defined in a single constructor file
+# and pushed in one call; the OCM CLI resolves dependency order automatically.
 
 on:
   workflow_call:
     inputs:
       version:
         description: "Bare semver, no leading 'v' (0.7.0 or 0.7.0-rc.1). Matches the OCI tags pipeline.yml pushes for the CLI/controller image and chart."
+        required: true
+        type: string
+      release_tag:
+        description: "GitHub release tag whose assets host the CLI binaries (e.g. v0.7.0 or v0.7.0-rc.1). The release must already exist."
         required: true
         type: string
       cli_image_digest:
@@ -24,10 +32,6 @@ on:
         type: string
       controller_chart_digest:
         description: "Digest of the Helm chart already pushed to ghcr.io/<owner>/kubernetes/controller/chart."
-        required: true
-        type: string
-      cli_artifact_name:
-        description: "Artifact name containing bin/ocm-<os>-<arch> for all platforms."
         required: true
         type: string
       conflict_policy:
@@ -56,37 +60,24 @@ jobs:
           sparse-checkout: .github/components
           persist-credentials: 'false'
 
-      - name: Compute image refs and CLI binary path
+      - name: Compute image refs
         env:
           OWNER: ${{ github.repository_owner }}
           VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
           CLI_IMAGE_DIGEST: ${{ inputs.cli_image_digest }}
           CONTROLLER_IMAGE_DIGEST: ${{ inputs.controller_image_digest }}
           CONTROLLER_CHART_DIGEST: ${{ inputs.controller_chart_digest }}
         run: |
           set -euo pipefail
           OWNER="${OWNER,,}"
-          arch=$(dpkg --print-architecture)
           {
             echo "REPO_ROOT=$REGISTRY/$OWNER"
             echo "CLI_IMAGE_REF=$REGISTRY/$OWNER/cli:${VERSION}@${CLI_IMAGE_DIGEST}"
             echo "CONTROLLER_IMAGE_REF=$REGISTRY/$OWNER/kubernetes/controller:${VERSION}@${CONTROLLER_IMAGE_DIGEST}"
             echo "CONTROLLER_CHART_REF=$REGISTRY/$OWNER/kubernetes/controller/chart:${VERSION}@${CONTROLLER_CHART_DIGEST}"
-            echo "CLI_BIN=${{ runner.temp }}/cli-assets/bin/ocm-linux-$arch"
-            echo "CLI_ASSETS=${{ runner.temp }}/cli-assets"
+            echo "CLI_DOWNLOAD_URL=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
           } >> "$GITHUB_ENV"
-
-      - name: Download CLI artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: ${{ inputs.cli_artifact_name }}
-          path: ${{ runner.temp }}/cli-assets
-
-      - name: Make CLI binaries executable
-        run: |
-          set -euo pipefail
-          chmod +x "${{ runner.temp }}/cli-assets"/bin/ocm-*
-          test -x "$CLI_BIN"
 
       - name: Log in to GHCR
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -98,26 +89,43 @@ jobs:
       - name: Write OCM config
         run: |
           set -euo pipefail
-          cat > "$HOME/.ocmconfig" <<EOF
+          # Path is the in-container mount target, not the runner path.
+          cat > "$HOME/.ocmconfig" <<'EOF'
           type: generic.config.ocm.software/v1
           configurations:
             - type: credentials.config.ocm.software
               repositories:
                 - repository:
                     type: DockerConfig/v1
-                    dockerConfigFile: $HOME/.docker/config.json
+                    dockerConfigFile: /.docker/config.json
+                    propagateConsumerIdentity: true
           EOF
 
+      # The CLI image ENTRYPOINT is `/ocm`, so the args after the image name are
+      # passed straight to the CLI. The constructor's ${VAR} placeholders are
+      # expanded by the CLI (os.Expand) from the -e vars passed into the container.
       - name: Publish component-versions
         env:
           VERSION: ${{ inputs.version }}
           CONFLICT_POLICY: ${{ inputs.conflict_policy }}
+          WORKSPACE: ${{ github.workspace }}
           CONSTRUCTOR: ${{ github.workspace }}/.github/components/ocm-release/component-constructor.yaml
         run: |
           set -euo pipefail
-          "$CLI_BIN" add component-version \
-            --config "$HOME/.ocmconfig" \
-            --repository "$REPO_ROOT" \
-            --constructor "$CONSTRUCTOR" \
-            --component-version-conflict-policy "$CONFLICT_POLICY"
-
+          docker run --rm \
+            -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
+            -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
+            -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
+            -v "${WORKSPACE}:${WORKSPACE}" \
+            -w "${WORKSPACE}" \
+            -e VERSION \
+            -e CLI_DOWNLOAD_URL \
+            -e CLI_IMAGE_REF \
+            -e CONTROLLER_IMAGE_REF \
+            -e CONTROLLER_CHART_REF \
+            "$CLI_IMAGE_REF" \
+              add component-version \
+              --config "/.ocmconfig" \
+              --repository "$REPO_ROOT" \
+              --constructor "$CONSTRUCTOR" \
+              --component-version-conflict-policy "$CONFLICT_POLICY"

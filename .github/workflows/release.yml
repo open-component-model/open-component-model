@@ -297,6 +297,14 @@ jobs:
             });
             const assetsCount = release.data.assets?.length || 0;
 
+            // OCM component-versions the publish_components_rc job pushes for this RC,
+            // so the release manager can verify the expected coordinates are in place.
+            // The // separates the OCM repository from the component name (the CLI
+            // maps it to the component-descriptors path internally).
+            const owner = context.repo.owner.toLowerCase();
+            const repo = `ghcr.io/${owner}/`;
+            const ver = process.env.RC_VERSION;
+
             await core.summary
               .addHeading('RC Release Published')
               .addTable([
@@ -309,18 +317,23 @@ jobs:
                 ['Controller Image Digest', (process.env.IMAGE_DIGEST || 'N/A').substring(0, 19) + '...'],
                 ['Chart Digest', (process.env.CHART_DIGEST || 'N/A').substring(0, 19) + '...'],
                 ['Uploaded Assets', String(assetsCount)],
+                ['OCM Product Component', `${repo}/ocm.software/ocm:${ver}`],
+                ['OCM CLI Component', `${repo}/ocm.software/cli:${ver}`],
+                ['OCM Controller Component', `${repo}/ocm.software/kubernetes/controller:${ver}`],
               ])
               .addEOL()
               .addLink('View Release', release.data.html_url)
               .write();
   # === cli-release.yml::release_rc + controller-release.yml::release_rc ===
 
-  # Publishes ocm.software/{cli,controller,ocm} for the RC, referencing the
-  # just-pushed CLI image, controller image and chart by digest.
+  # Publishes ocm.software/{cli,kubernetes/controller,ocm} for the RC, referencing
+  # the just-pushed CLI image, controller image and chart by digest and the CLI
+  # binaries by their release download URL. Depends on release_rc because the wget
+  # access resolves the binaries from the GitHub release, which must exist first.
   publish_components_rc:
     name: Publish OCM Components (RC)
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
-    needs: [prepare, tag_rc, build_and_test]
+    needs: [prepare, tag_rc, build_and_test, release_rc]
     permissions:
       contents: read
       packages: write
@@ -328,10 +341,10 @@ jobs:
     uses: ./.github/workflows/publish-components.yml
     with:
       version: ${{ needs.prepare.outputs.new_version }}
+      release_tag: ${{ needs.prepare.outputs.new_tag }}
       cli_image_digest: ${{ needs.build_and_test.outputs.cli_image_digest }}
       controller_image_digest: ${{ needs.build_and_test.outputs.controller_image_digest }}
       controller_chart_digest: ${{ needs.build_and_test.outputs.controller_chart_digest }}
-      cli_artifact_name: ${{ needs.build_and_test.outputs.cli_artifact_name }}
       conflict_policy: replace
 
   # ===========================================================================
@@ -672,10 +685,10 @@ jobs:
     uses: ./.github/workflows/publish-components.yml
     with:
       version: ${{ needs.prepare.outputs.base_version }}
+      release_tag: ${{ needs.prepare.outputs.promotion_tag }}
       cli_image_digest: ${{ needs.build_and_test.outputs.cli_image_digest }}
       controller_image_digest: ${{ needs.build_and_test.outputs.controller_image_digest }}
       controller_chart_digest: ${{ needs.promote_and_release_final.outputs.final_chart_digest }}
-      cli_artifact_name: ${{ needs.build_and_test.outputs.cli_artifact_name }}
       conflict_policy: replace
 
   # === Website version release ===
