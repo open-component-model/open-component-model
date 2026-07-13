@@ -142,7 +142,8 @@ kro-5644d5759f-82nsx   1/1     Running   0          2m22s
 
 ### Install a Deployer
 
-Both [Flux](https://fluxcd.io/) and [Argo CD](https://argo-cd.readthedocs.io/en/stable/) are supported as deployers.
+The following examples of [Flux](https://fluxcd.io/) and [Argo CD](https://argo-cd.readthedocs.io/en/stable/) are demonstrating how they can be used as deployers.  In theory, you could use any other deployer that is able to apply a deployable resource to a Kubernetes cluster.
+
 Choose the one you're already using or prefer.
 
 {{< tabs "deployer-install" >}}
