@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -86,6 +87,49 @@ func TestResolveCommit(t *testing.T) {
 	assert.Equal(t, wantSHA, got)
 }
 
+func TestResolveCommit_APIHostnameOverridesTheRepoHost(t *testing.T) {
+	const ref = "main"
+	const wantSHA = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+
+	var pathSeen string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/commits/"+ref) {
+			pathSeen = r.URL.Path
+			_, _ = w.Write([]byte(wantSHA))
+			return
+		}
+		http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
+	}))
+	defer api.Close()
+
+	// The repository host is unreachable, so resolution can only succeed when
+	// the apiHostname override is what the client actually talks to.
+	apiURL, err := url.Parse(api.URL)
+	require.NoError(t, err)
+	access := &v1.GitHub{
+		RepoURL:     "http://github.invalid/octocat/Hello-World",
+		APIHostname: apiURL.Host,
+		Ref:         ref,
+	}
+
+	got, err := ResolveCommit(t.Context(), access, nil, api.Client())
+	require.NoError(t, err)
+	assert.Equal(t, wantSHA, got)
+	assert.True(t, strings.HasPrefix(pathSeen, "/api/v3/"),
+		"the override host must be addressed as GitHub Enterprise, got %q", pathSeen)
+}
+
+func TestResolveCommit_UnresolvableRef(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "no such ref", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	_, err := ResolveCommit(t.Context(), &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Ref: "gone"}, nil, server.Client())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `error resolving github ref "gone" for octocat/Hello-World`)
+}
+
 func TestFetch(t *testing.T) {
 	const commit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
 	payload := gzippedTar(t, "Hello-World-"+commit+"/README", "hello")
@@ -149,6 +193,29 @@ func TestFetch(t *testing.T) {
 			assert.Equal(t, tc.wantAuth, authSeen, "the API request must carry exactly the expected Authorization header")
 		})
 	}
+}
+
+// The pre-signed archive endpoint can fail independently of the API call that
+// resolved it, for example when the link has expired.
+func TestFetch_ArchiveEndpointStatusError(t *testing.T) {
+	const commit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+commit):
+			http.Redirect(w, r, "http://"+r.Host+"/codeload/octocat/Hello-World/"+commit, http.StatusFound)
+		case strings.HasPrefix(r.URL.Path, "/codeload/"):
+			http.Error(w, "gone", http.StatusGone)
+		default:
+			http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
+	_, err := fetch(t.Context(), access, nil, server.Client())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "unexpected status downloading github archive octocat/Hello-World@"+commit+": 410 Gone")
 }
 
 // For a private repository GitHub signs the archive link with a short-lived

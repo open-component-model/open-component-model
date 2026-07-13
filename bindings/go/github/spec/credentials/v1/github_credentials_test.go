@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,24 @@ func TestMustRegisterCredentialType(t *testing.T) {
 		require.NoError(t, err)
 		assert.IsType(t, &GitHubCredentials{}, obj)
 	})
+}
+
+// The type must round-trip through JSON unchanged, so a credential config
+// written by one process is read back identically by another.
+func TestGitHubCredentials_JSONRoundTrip(t *testing.T) {
+	creds := &GitHubCredentials{Type: GitHubCredentialsVersionedType, Token: "ghp_secret"}
+
+	data, err := json.Marshal(creds)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type":"GitHubCredentials/v1","token":"ghp_secret"}`, string(data))
+
+	var decoded GitHubCredentials
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.Equal(t, creds, &decoded)
+
+	again, err := json.Marshal(&decoded)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(data), string(again))
 }
 
 func TestGitHubCredentials_GetSetType(t *testing.T) {
