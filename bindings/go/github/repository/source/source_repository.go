@@ -82,15 +82,16 @@ func (r *SourceRepository) tempFolder() string {
 // anonymous rate limit, which is shared per client IP. A run pulling many
 // sources at once, such as a CI job, can exhaust it.
 //
-// See download.CommitArchive for the buffering and cleanup semantics
-// of the returned blob.
+// The archive is streamed into a temporary file under the configured
+// TempFolder rather than held in memory, since a repository archive can be
+// large; see download.Download for the lifetime of that file.
 func (r *SourceRepository) DownloadSource(ctx context.Context, source *descriptor.Source) (blob.ReadOnlyBlob, error) {
 	gitHub, err := githubinternal.AccessFrom(source.Access)
 	if err != nil {
 		return nil, fmt.Errorf("error resolving GitHub access for download: %w", err)
 	}
 
-	return download.CommitArchive(ctx, gitHub, nil, r.tempFolder(), r.httpClient)
+	return download.Download(ctx, gitHub, nil, r.tempFolder(), r.httpClient)
 }
 
 // UploadSource is not supported for GitHub repositories and always returns an

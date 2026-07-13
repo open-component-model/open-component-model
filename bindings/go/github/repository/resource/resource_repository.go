@@ -111,8 +111,7 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 //
 // The archive is streamed into a temporary file under the configured
 // TempFolder rather than held in memory, since a repository archive can be
-// large. The returned blob is an io.Closer: closing it reclaims that file
-// immediately, and a blob that is never closed reclaims it once unreachable.
+// large; see download.Download for the lifetime of that file.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	gitHub, err := githubinternal.AccessFrom(resource.Access)
 	if err != nil {
@@ -143,7 +142,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		}
 	}
 
-	return download.CommitArchive(ctx, gitHub, gitHubCredentials, r.tempFolder(), r.httpClient)
+	return download.Download(ctx, gitHub, gitHubCredentials, r.tempFolder(), r.httpClient)
 }
 
 // UploadResource is not supported for GitHub repositories and always returns

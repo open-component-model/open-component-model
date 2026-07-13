@@ -7,11 +7,13 @@ package download
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/github/internal/tempblob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 )
@@ -20,18 +22,19 @@ import (
 // MIME_TGZ old OCM assigned to the github access blob.
 const MediaTypeTGZ = "application/x-tgz"
 
-// CommitArchive validates the GitHub access and fetches the source archive of
+// Download validates the GitHub access and fetches the source archive of
 // its pinned commit, returning it as a gzipped tar blob (media type
 // application/x-tgz). An access without a resolved commit is rejected: a bare
 // ref is mutable and cannot be materialized reproducibly.
 //
 // The archive is streamed into a temporary file under tempFolder rather than
-// held in memory, since a repository archive can be large. The returned blob
-// is an io.Closer: closing it reclaims that file immediately, and a blob that
-// is never closed reclaims it once unreachable.
+// held in memory, since a repository archive can be large. The file is not
+// removed when the blob is done with; like the helm binding's buffering, it
+// lives until tempFolder is cleaned up externally (the operating system's
+// temporary directory when tempFolder is empty).
 //
 // credentials and httpClient may be nil; see clientFor.
-func CommitArchive(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, tempFolder string, httpClient *http.Client) (blob.ReadOnlyBlob, error) {
+func Download(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, tempFolder string, httpClient *http.Client) (blob.ReadOnlyBlob, error) {
 	if err := gitHub.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid GitHub access: %w", err)
 	}
@@ -51,10 +54,29 @@ func CommitArchive(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.
 		}
 	}()
 
-	buffered, err := tempblob.New(tempFolder, "github-archive-*.tgz", stream, MediaTypeTGZ)
+	if tempFolder != "" {
+		if err := os.MkdirAll(tempFolder, 0o700); err != nil {
+			return nil, fmt.Errorf("error creating temporary directory %q: %w", tempFolder, err)
+		}
+	}
+	tmpFile, err := os.CreateTemp(tempFolder, "github-archive-*.tgz")
 	if err != nil {
+		return nil, fmt.Errorf("error creating temporary file for GitHub commit archive: %w", err)
+	}
+	defer func() {
+		if err := tmpFile.Close(); err != nil {
+			slog.WarnContext(ctx, "error closing buffered GitHub archive file", "error", err)
+		}
+	}()
+	if _, err := io.Copy(tmpFile, stream); err != nil {
 		return nil, fmt.Errorf("error buffering GitHub commit archive: %w", err)
 	}
+
+	buffered, err := filesystem.GetBlobFromOSPath(tmpFile.Name())
+	if err != nil {
+		return nil, fmt.Errorf("error creating blob from buffered GitHub commit archive: %w", err)
+	}
+	buffered.SetMediaType(MediaTypeTGZ)
 
 	slog.DebugContext(ctx, "Downloaded GitHub commit archive", "repoUrl", gitHub.RepoURL, "commit", gitHub.Commit, "bytes", buffered.Size())
 

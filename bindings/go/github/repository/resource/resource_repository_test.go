@@ -197,14 +197,6 @@ func TestResourceRepository_DownloadResource_BuffersToConfiguredTempFolder(t *te
 	require.Len(t, entries, 1, "the archive must be buffered under the configured temp folder")
 
 	assert.Equal(t, payload, readBlob(t, downloaded), "the buffered blob must read back the exact archive")
-
-	closer, ok := downloaded.(io.Closer)
-	require.True(t, ok, "the returned blob must be closeable so its file can be reclaimed")
-	require.NoError(t, closer.Close())
-
-	entries, err = os.ReadDir(tempFolder)
-	require.NoError(t, err)
-	assert.Empty(t, entries, "closing the blob must remove the buffered file")
 }
 
 // A GitHub 5xx is retryable, so the number of requests the server sees is a

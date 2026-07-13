@@ -8,7 +8,6 @@ package digest
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 
 	godigest "github.com/opencontainers/go-digest"
@@ -37,7 +36,8 @@ type DigestProcessor struct {
 
 // NewDigestProcessor creates a new GitHub digest processor. filesystemConfig
 // and opts are forwarded to the underlying resource repository, whose
-// TempFolder is where the archive is buffered while its digest is computed and
+// TempFolder is where the archive is buffered while its digest is computed
+// (the buffered file stays there afterwards; see download.Download) and
 // whose HTTP client performs both the ref resolution and the download.
 func NewDigestProcessor(filesystemConfig *filesystemv1alpha1.Config, opts ...resource.Option) *DigestProcessor {
 	return &DigestProcessor{
@@ -107,16 +107,6 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	if err != nil {
 		return nil, fmt.Errorf("error downloading github resource for digest processing: %w", err)
 	}
-	// The archive is buffered on disk and only needed for the digest, so
-	// reclaim it here rather than leaving it to the unreachability cleanup.
-	if closer, ok := downloaded.(io.Closer); ok {
-		defer func() {
-			if err := closer.Close(); err != nil {
-				slog.WarnContext(ctx, "error closing buffered github archive", "error", err)
-			}
-		}()
-	}
-
 	reader, err := downloaded.ReadCloser()
 	if err != nil {
 		return nil, fmt.Errorf("error reading downloaded github archive: %w", err)

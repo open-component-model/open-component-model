@@ -74,9 +74,6 @@ const helloWorldArchiveRoot = "octocat-Hello-World-"
 func assertHelloWorldArchive(t *testing.T, downloaded blob.ReadOnlyBlob) {
 	t.Helper()
 
-	if closer, ok := downloaded.(io.Closer); ok {
-		defer func() { require.NoError(t, closer.Close()) }()
-	}
 	reader, err := downloaded.ReadCloser()
 	require.NoError(t, err)
 	defer func() { require.NoError(t, reader.Close()) }()
@@ -163,9 +160,6 @@ func Test_Integration_GitHub(t *testing.T) {
 			t.Run("the pinned digest matches the bytes of a fresh archive download", func(t *testing.T) {
 				downloaded, err := resource.NewResourceRepository(nil).DownloadResource(t.Context(), processed, nil)
 				require.NoError(t, err)
-				if closer, ok := downloaded.(io.Closer); ok {
-					defer func() { require.NoError(t, closer.Close()) }()
-				}
 				reader, err := downloaded.ReadCloser()
 				require.NoError(t, err)
 				defer func() { require.NoError(t, reader.Close()) }()
@@ -224,12 +218,6 @@ func Test_Integration_GitHub(t *testing.T) {
 
 			downloaded, err := repo.DownloadResource(t.Context(), helloWorldResource("", helloWorldCommit), nil)
 			require.NoError(t, err)
-			t.Cleanup(func() {
-				if closer, ok := downloaded.(io.Closer); ok {
-					_ = closer.Close()
-				}
-			})
-
 			entries, err := os.ReadDir(tempFolder)
 			require.NoError(t, err)
 			require.Len(t, entries, 1, "the archive must be buffered as a file under the configured temp folder")
