@@ -2,6 +2,7 @@ package download
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -118,11 +119,15 @@ func fetch(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCr
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("error creating github archive download request: %w", err)
+		return nil, fmt.Errorf("error creating github archive download request for %s/%s@%s: %w", owner, repo, commit, err)
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error downloading github archive: %w", err)
+		// For a private repository GitHub signs the link with a short-lived token
+		// in its query, and the *url.Error net/http returns renders the full
+		// request URL. Report the cause against the commit coordinates instead,
+		// so the token cannot reach a log.
+		return nil, fmt.Errorf("error downloading github archive %s/%s@%s: %w", owner, repo, commit, errors.Unwrap(err))
 	}
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()

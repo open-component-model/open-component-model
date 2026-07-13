@@ -150,3 +150,38 @@ func TestFetch(t *testing.T) {
 		})
 	}
 }
+
+// For a private repository GitHub signs the archive link with a short-lived
+// token in its query string. net/http records the full request URL in the
+// *url.Error it returns, so wrapping a download failure verbatim would print
+// that token into the error and from there into the caller's logs.
+func TestFetch_DownloadErrorDoesNotLeakTheSignedArchiveLink(t *testing.T) {
+	const commit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+	const signedToken = "supersecretarchivetoken"
+
+	// A server that is started and immediately closed yields an address nothing
+	// listens on, so the archive download fails at dial time — which is what
+	// makes net/http wrap the signed link into a *url.Error.
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+commit) {
+			http.Redirect(w, r, deadURL+"/codeload/octocat/Hello-World/"+commit+"?token="+signedToken, http.StatusFound)
+			return
+		}
+		http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
+	_, err := fetch(t.Context(), access, &credsv1.GitHubCredentials{Token: "ghp_secret"}, server.Client())
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), signedToken, "the signed archive link's token must not reach the error")
+	assert.NotContains(t, err.Error(), "ghp_secret", "the caller's github token must not reach the error")
+	assert.Contains(t, err.Error(), "octocat/Hello-World@"+commit,
+		"the commit coordinates must survive so the failure stays diagnosable")
+	assert.ErrorContains(t, err, "connection refused", "the underlying cause must survive")
+}
