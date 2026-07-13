@@ -210,7 +210,11 @@ jobs:
         id: digest
         env:
           VERSION: ${{ needs.build_cli.outputs.version }}
-        run: echo "digest=$(oras resolve ${TARGET_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          digest="$(oras resolve "${TARGET_REPO}:${VERSION}")"
+          [[ "$digest" == sha256:* ]] || { echo "::error::oras resolve returned unexpected digest for ${TARGET_REPO}:${VERSION}: '$digest'"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest OCI image
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
@@ -309,7 +313,11 @@ jobs:
         id: image-digest
         env:
           VERSION: ${{ needs.build_controller.outputs.version }}
-        run: echo "digest=$(oras resolve ${IMAGE_NAME}:${VERSION})" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          digest="$(oras resolve "${IMAGE_NAME}:${VERSION}")"
+          [[ "$digest" == sha256:* ]] || { echo "::error::oras resolve returned unexpected digest for ${IMAGE_NAME}:${VERSION}: '$digest'"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest image
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
@@ -338,7 +346,11 @@ jobs:
         id: chart-digest
         env:
           VERSION: ${{ needs.build_controller.outputs.version }}
-        run: echo "digest=$(oras resolve ${CHART_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          digest="$(oras resolve "${CHART_REPO}:${VERSION}")"
+          [[ "$digest" == sha256:* ]] || { echo "::error::oras resolve returned unexpected digest for ${CHART_REPO}:${VERSION}: '$digest'"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest chart
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
