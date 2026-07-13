@@ -145,7 +145,7 @@ require (
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/term v0.43.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348 // indirect
@@ -165,7 +165,7 @@ require (
 	ocm.software/open-component-model/bindings/go/constructor v0.0.11 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260710062229-b9ee680ba1f1 // indirect
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260710062229-b9ee680ba1f1 // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260710064937-40f79857a2ac // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260709145016-70f5bf354987 // indirect
@@ -174,6 +174,7 @@ require (
 	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260710062229-b9ee680ba1f1 // indirect
 	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260710062229-b9ee680ba1f1 // indirect
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260709145016-70f5bf354987 // indirect
+	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260710124822-d818a3dd7cde // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
