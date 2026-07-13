@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 )
 
 func TestOwnerRepo(t *testing.T) {
@@ -80,7 +81,7 @@ func TestResolveCommit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	got, err := ResolveCommit(t.Context(), &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Ref: ref}, "", server.Client())
+	got, err := ResolveCommit(t.Context(), &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Ref: ref}, nil, server.Client())
 	require.NoError(t, err)
 	assert.Equal(t, wantSHA, got)
 }
@@ -89,35 +90,9 @@ func TestFetch(t *testing.T) {
 	const commit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
 	payload := gzippedTar(t, "Hello-World-"+commit+"/README", "hello")
 
-	var authSeen string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+commit):
-			authSeen = r.Header.Get("Authorization")
-			http.Redirect(w, r, "http://"+r.Host+"/codeload/octocat/Hello-World/"+commit, http.StatusFound)
-		case strings.HasPrefix(r.URL.Path, "/codeload/"):
-			_, _ = w.Write(payload)
-		default:
-			http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	// fetch streams the archive so it can be buffered to the filesystem rather
-	// than read wholly into memory.
-	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
-	rc, err := fetch(t.Context(), access, "ghp_secret", server.Client())
-	require.NoError(t, err)
-	defer func() { require.NoError(t, rc.Close()) }()
-
-	data, err := io.ReadAll(rc)
-	require.NoError(t, err)
-
-	assert.Equal(t, payload, data, "downloaded archive must be the exact bytes GitHub served")
-	assert.Equal(t, "Bearer ghp_secret", authSeen, "the API request must carry the bearer token")
-
-	// sanity: the payload is a valid gzipped tar with the README entry
-	gz, err := gzip.NewReader(bytes.NewReader(data))
+	// sanity: the fixture is a real gzipped tar, so comparing the fetched bytes
+	// against it below is a meaningful assertion.
+	gz, err := gzip.NewReader(bytes.NewReader(payload))
 	require.NoError(t, err)
 	tr := tar.NewReader(gz)
 	h, err := tr.Next()
@@ -126,4 +101,52 @@ func TestFetch(t *testing.T) {
 	body, err := io.ReadAll(tr)
 	require.NoError(t, err)
 	assert.Equal(t, "hello", string(body))
+
+	// Absent credentials must send no Authorization header at all, not an empty
+	// bearer token, which GitHub rejects outright.
+	for _, tc := range []struct {
+		name        string
+		credentials *credsv1.GitHubCredentials
+		wantAuth    []string // nil means the header must be absent entirely
+	}{
+		{
+			name:        "a token authenticates the request",
+			credentials: &credsv1.GitHubCredentials{Token: "ghp_secret"},
+			wantAuth:    []string{"Bearer ghp_secret"},
+		},
+		{
+			name:        "no credentials leave the request anonymous",
+			credentials: nil,
+			wantAuth:    nil,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var authSeen []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+commit):
+					authSeen = r.Header.Values("Authorization")
+					http.Redirect(w, r, "http://"+r.Host+"/codeload/octocat/Hello-World/"+commit, http.StatusFound)
+				case strings.HasPrefix(r.URL.Path, "/codeload/"):
+					_, _ = w.Write(payload)
+				default:
+					http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+
+			// fetch streams the archive so it can be buffered to the filesystem
+			// rather than read wholly into memory.
+			access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
+			rc, err := fetch(t.Context(), access, tc.credentials, server.Client())
+			require.NoError(t, err)
+			defer func() { require.NoError(t, rc.Close()) }()
+
+			data, err := io.ReadAll(rc)
+			require.NoError(t, err)
+
+			assert.Equal(t, payload, data, "downloaded archive must be the exact bytes GitHub served")
+			assert.Equal(t, tc.wantAuth, authSeen, "the API request must carry exactly the expected Authorization header")
+		})
+	}
 }

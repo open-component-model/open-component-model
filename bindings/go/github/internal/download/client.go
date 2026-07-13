@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-github/v66/github"
 
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 )
 
@@ -41,11 +42,11 @@ func ownerRepo(u *url.URL, repoURL string) (owner, repo string, err error) {
 }
 
 // clientFor splits the access's repository URL into owner and repository and
-// builds a GitHub REST client for it, authenticated with token when non-empty.
-// For github.com the public API is used; for any other host, or when the
-// access sets APIHostname, the client targets that GitHub Enterprise API host.
-// httpClient, when nil, falls back to defaultHTTPClient.
-func clientFor(gitHub *v1.GitHub, token string, httpClient *http.Client) (gh *github.Client, owner, repo string, err error) {
+// builds a GitHub REST client for it; nil credentials leave it anonymous. For
+// github.com the public API is used; for any other host, or when the access sets
+// APIHostname, the client targets that GitHub Enterprise API host. httpClient,
+// when nil, falls back to defaultHTTPClient.
+func clientFor(gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (gh *github.Client, owner, repo string, err error) {
 	u, err := parseRepoURL(gitHub.RepoURL)
 	if err != nil {
 		return nil, "", "", err
@@ -58,8 +59,8 @@ func clientFor(gitHub *v1.GitHub, token string, httpClient *http.Client) (gh *gi
 		httpClient = defaultHTTPClient()
 	}
 	gh = github.NewClient(httpClient)
-	if token != "" {
-		gh = gh.WithAuthToken(token)
+	if credentials != nil && credentials.Token != "" {
+		gh = gh.WithAuthToken(credentials.Token)
 	}
 
 	if gitHub.APIHostname == "" && u.Hostname() == "github.com" {
@@ -79,10 +80,9 @@ func clientFor(gitHub *v1.GitHub, token string, httpClient *http.Client) (gh *gi
 
 // ResolveCommit resolves the access's git reference (a branch, tag, or fully
 // qualified ref like refs/heads/main) to its full commit SHA via the GitHub
-// REST API, authenticated with token when non-empty. httpClient, when nil,
-// falls back to defaultHTTPClient.
-func ResolveCommit(ctx context.Context, gitHub *v1.GitHub, token string, httpClient *http.Client) (string, error) {
-	gh, owner, repo, err := clientFor(gitHub, token, httpClient)
+// REST API. credentials and httpClient may be nil; see clientFor.
+func ResolveCommit(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (string, error) {
+	gh, owner, repo, err := clientFor(gitHub, credentials, httpClient)
 	if err != nil {
 		return "", err
 	}
@@ -93,20 +93,18 @@ func ResolveCommit(ctx context.Context, gitHub *v1.GitHub, token string, httpCli
 	return sha, nil
 }
 
-// fetch resolves the archive link for the access's pinned commit via the
-// GitHub REST API, authenticated with token when non-empty, and starts
-// downloading the gzipped tar archive, returning the response body. The caller
-// must close it. The body is streamed rather than read into memory so the
-// archive can be buffered to the filesystem.
+// fetch resolves the archive link for the access's pinned commit via the GitHub
+// REST API and starts downloading the gzipped tar archive, returning the
+// response body for the caller to close. The body is streamed rather than read
+// into memory so the archive can be buffered to the filesystem.
 //
-// httpClient, when nil, falls back to defaultHTTPClient. The same client serves
-// the API call and the archive download; the link is a short-lived, pre-signed
-// URL that needs no auth.
-func fetch(ctx context.Context, gitHub *v1.GitHub, token string, httpClient *http.Client) (io.ReadCloser, error) {
+// The same client serves the API call and the archive download; the link is a
+// short-lived, pre-signed URL that needs no auth.
+func fetch(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (io.ReadCloser, error) {
 	if httpClient == nil {
 		httpClient = defaultHTTPClient()
 	}
-	gh, owner, repo, err := clientFor(gitHub, token, httpClient)
+	gh, owner, repo, err := clientFor(gitHub, credentials, httpClient)
 	if err != nil {
 		return nil, err
 	}

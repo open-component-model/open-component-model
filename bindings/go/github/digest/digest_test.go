@@ -202,6 +202,35 @@ func TestDigestProcessor_ProcessResourceDigest(t *testing.T) {
 	})
 }
 
+// Digesting a ref-only resource must resolve the ref exactly once. The
+// processor pins the commit, then downloads it directly; it must not let the
+// download re-resolve the ref only to check for drift against the commit it
+// just pinned.
+func TestDigestProcessor_ProcessResourceDigest_ResolvesRefOnce(t *testing.T) {
+	payload := gzippedTar(t, "octocat-Hello-World-"+testCommit+"/README", "hello world")
+	var resolveCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/commits/main"):
+			resolveCalls++
+			_, _ = w.Write([]byte(testCommit))
+		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+testCommit):
+			http.Redirect(w, r, "http://"+r.Host+"/codeload", http.StatusFound)
+		case r.URL.Path == "/codeload":
+			_, _ = w.Write(payload)
+		default:
+			http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	res := githubResourceRef(server.URL+"/octocat/Hello-World", "main", "")
+	_, err := NewDigestProcessor(nil).ProcessResourceDigest(t.Context(), res, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, resolveCalls, "the ref must be resolved once to pin the commit, not again for the download")
+}
+
 func TestDigestProcessor_ConsumerIdentity(t *testing.T) {
 	identity, err := NewDigestProcessor(nil).GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(),
 		githubResource("https://github.com/open-component-model/ocm", testCommit))

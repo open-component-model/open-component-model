@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	credv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -40,27 +41,39 @@ func directCredentials(props map[string]string) *credv1.DirectCredentials {
 	}
 }
 
-func TestTokenFromCredentials(t *testing.T) {
+func TestCredentialsFrom(t *testing.T) {
 	t.Run("nil credentials mean anonymous access", func(t *testing.T) {
-		token, err := TokenFromCredentials(nil)
+		credentials, err := CredentialsFrom(nil)
 		require.NoError(t, err)
-		assert.Empty(t, token)
+		assert.Nil(t, credentials, "anonymous access is signalled by nil credentials, not an empty token")
 	})
 
 	t.Run("token property is used", func(t *testing.T) {
-		token, err := TokenFromCredentials(directCredentials(map[string]string{"token": "ghp_secret"}))
+		credentials, err := CredentialsFrom(directCredentials(map[string]string{"token": "ghp_secret"}))
 		require.NoError(t, err)
-		assert.Equal(t, "ghp_secret", token)
+		require.NotNil(t, credentials)
+		assert.Equal(t, "ghp_secret", credentials.Token)
 	})
 
 	t.Run("accessToken is accepted as an alias", func(t *testing.T) {
-		token, err := TokenFromCredentials(directCredentials(map[string]string{"accessToken": "ghp_secret"}))
+		credentials, err := CredentialsFrom(directCredentials(map[string]string{"accessToken": "ghp_secret"}))
 		require.NoError(t, err)
-		assert.Equal(t, "ghp_secret", token)
+		require.NotNil(t, credentials)
+		assert.Equal(t, "ghp_secret", credentials.Token)
+	})
+
+	t.Run("a typed github credential passes through", func(t *testing.T) {
+		credentials, err := CredentialsFrom(&credsv1.GitHubCredentials{
+			Type:  credsv1.GitHubCredentialsVersionedType,
+			Token: "ghp_secret",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, credentials)
+		assert.Equal(t, "ghp_secret", credentials.Token)
 	})
 
 	t.Run("present but unusable credentials are rejected", func(t *testing.T) {
-		_, err := TokenFromCredentials(directCredentials(map[string]string{"username": "octocat"}))
+		_, err := CredentialsFrom(directCredentials(map[string]string{"username": "octocat"}))
 		assert.ErrorContains(t, err, "token")
 	})
 }

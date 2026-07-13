@@ -79,11 +79,11 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	// commit (or is deleted after a merge) would break verification of a
 	// component version that has not changed.
 	if gitHub.Commit == "" {
-		token, err := githubinternal.TokenFromCredentials(credentials)
+		gitHubCredentials, err := githubinternal.CredentialsFrom(credentials)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving github credentials: %w", err)
 		}
-		resolved, err := p.resourceRepository.ResolveCommit(ctx, gitHub, token)
+		resolved, err := p.resourceRepository.ResolveCommit(ctx, gitHub, gitHubCredentials)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving github ref to commit: %w", err)
 		}
@@ -93,7 +93,17 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	res = res.DeepCopy()
 	res.Access = gitHub
 
-	downloaded, err := p.resourceRepository.DownloadResource(ctx, res, credentials)
+	// Download the pinned commit directly. The commit is authoritative now — we
+	// just resolved the ref, or the caller pinned it — so carrying the ref into
+	// the download would only make DownloadResource re-resolve it to check for
+	// drift, a redundant API call on the digest path. The returned resource
+	// keeps the ref informationally; the download copy drops it.
+	dlAccess := gitHub.DeepCopy()
+	dlAccess.Ref = ""
+	dlResource := res.DeepCopy()
+	dlResource.Access = dlAccess
+
+	downloaded, err := p.resourceRepository.DownloadResource(ctx, dlResource, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading github resource for digest processing: %w", err)
 	}

@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/github/internal/download"
 	githubaccess "ocm.software/open-component-model/bindings/go/github/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -62,11 +63,11 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 	return r
 }
 
-// ResolveCommit resolves the access's ref to the commit SHA it currently
-// points at, using this repository's HTTP client. The digest processor uses it
-// to pin a ref-only access before downloading.
-func (r *ResourceRepository) ResolveCommit(ctx context.Context, gitHub *v1.GitHub, token string) (string, error) {
-	return download.ResolveCommit(ctx, gitHub, token, r.httpClient)
+// ResolveCommit resolves the access's ref to the commit SHA it currently points
+// at, using this repository's HTTP client. The digest processor uses it to pin a
+// ref-only access before downloading. Nil credentials resolve anonymously.
+func (r *ResourceRepository) ResolveCommit(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials) (string, error) {
+	return download.ResolveCommit(ctx, gitHub, credentials, r.httpClient)
 }
 
 // tempFolder returns the directory archives are buffered under. An empty
@@ -118,7 +119,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("error resolving GitHub access for download: %w", err)
 	}
 
-	token, err := githubinternal.TokenFromCredentials(credentials)
+	gitHubCredentials, err := githubinternal.CredentialsFrom(credentials)
 	if err != nil {
 		return nil, fmt.Errorf("error resolving GitHub credentials: %w", err)
 	}
@@ -128,13 +129,13 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		if err := gitHub.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid GitHub access: %w", err)
 		}
-		resolved, err := r.ResolveCommit(ctx, gitHub, token)
+		resolved, err := r.ResolveCommit(ctx, gitHub, gitHubCredentials)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving GitHub ref to commit: %w", err)
 		}
 		gitHub.Commit = resolved
 	case gitHub.Ref != "":
-		if resolved, err := r.ResolveCommit(ctx, gitHub, token); err != nil {
+		if resolved, err := r.ResolveCommit(ctx, gitHub, gitHubCredentials); err != nil {
 			slog.DebugContext(ctx, "could not resolve GitHub ref to check the pinned commit", "ref", gitHub.Ref, "error", err)
 		} else if resolved != gitHub.Commit {
 			slog.WarnContext(ctx, "GitHub ref no longer points at the pinned commit; downloading the pinned commit",
@@ -142,7 +143,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		}
 	}
 
-	return download.CommitArchive(ctx, gitHub, token, r.tempFolder(), r.httpClient)
+	return download.CommitArchive(ctx, gitHub, gitHubCredentials, r.tempFolder(), r.httpClient)
 }
 
 // UploadResource is not supported for GitHub repositories and always returns

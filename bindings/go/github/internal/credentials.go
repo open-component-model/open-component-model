@@ -3,21 +3,10 @@ package internal
 import (
 	"fmt"
 
-	credv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/github/spec/access"
+	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-const (
-	credentialKeyToken       = "token"
-	credentialKeyAccessToken = "accessToken"
-)
-
-var credentialScheme = runtime.NewScheme()
-
-func init() {
-	credv1.MustRegister(credentialScheme)
-}
 
 // CredentialConsumerIdentity resolves the credential consumer identity for the
 // given GitHub repository URL. The identity type is GitHubRepository and works
@@ -36,32 +25,25 @@ func CredentialConsumerIdentity(repoURL string) (runtime.Identity, error) {
 	return identity, nil
 }
 
-// TokenFromCredentials extracts a GitHub access token from OCM credentials.
-// A nil input or an empty type means anonymous access (empty token, no error).
-// Credentials that are present but carry no usable token are rejected rather
-// than silently downgraded to an unauthenticated request.
-func TokenFromCredentials(credentials runtime.Typed) (string, error) {
-	if credentials == nil || credentials.GetType().String() == "" {
-		return "", nil
-	}
-
-	typed, err := credentialScheme.NewObject(credentials.GetType())
+// CredentialsFrom converts OCM credentials into the typed GitHub credentials
+// the download path authenticates with. Absent credentials mean anonymous
+// access and yield nil without an error.
+//
+// Credentials that are present but carry no token are rejected rather than
+// downgraded to an anonymous request: GitHub answers an unauthenticated read of
+// a private repository with 404 rather than 403, so a misconfigured secret would
+// otherwise surface as "repository does not exist".
+func CredentialsFrom(credentials runtime.Typed) (*credsv1.GitHubCredentials, error) {
+	gitHubCredentials, err := credsv1.ConvertToGitHubCredentials(credentials)
 	if err != nil {
-		return "", fmt.Errorf("error converting credential type: %w", err)
+		return nil, err
 	}
-	if err := credentialScheme.Convert(credentials, typed); err != nil {
-		return "", fmt.Errorf("error converting credential type: %w", err)
+	if gitHubCredentials == nil {
+		return nil, nil
 	}
-	direct, ok := typed.(*credv1.DirectCredentials)
-	if !ok {
-		return "", fmt.Errorf("unsupported credential type for github access: %v", credentials.GetType())
+	if gitHubCredentials.Token == "" {
+		return nil, fmt.Errorf("credentials were provided but contain no github token; refusing to fall back to anonymous access")
 	}
 
-	if token := direct.Properties[credentialKeyToken]; token != "" {
-		return token, nil
-	}
-	if token := direct.Properties[credentialKeyAccessToken]; token != "" {
-		return token, nil
-	}
-	return "", fmt.Errorf("credentials were provided but contain no github token; refusing to fall back to anonymous access")
+	return gitHubCredentials, nil
 }

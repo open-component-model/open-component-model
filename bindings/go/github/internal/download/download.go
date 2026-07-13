@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/github/internal/tempblob"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 )
 
 // MediaTypeTGZ is the media type of the GitHub source archive. It matches the
@@ -29,8 +30,8 @@ const MediaTypeTGZ = "application/x-tgz"
 // is an io.Closer: closing it reclaims that file immediately, and a blob that
 // is never closed reclaims it once unreachable.
 //
-// httpClient, when nil, falls back to defaultHTTPClient.
-func CommitArchive(ctx context.Context, gitHub *v1.GitHub, token, tempFolder string, httpClient *http.Client) (blob.ReadOnlyBlob, error) {
+// credentials and httpClient may be nil; see clientFor.
+func CommitArchive(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, tempFolder string, httpClient *http.Client) (blob.ReadOnlyBlob, error) {
 	if err := gitHub.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid GitHub access: %w", err)
 	}
@@ -40,7 +41,7 @@ func CommitArchive(ctx context.Context, gitHub *v1.GitHub, token, tempFolder str
 
 	slog.DebugContext(ctx, "Downloading GitHub commit archive", "repoUrl", gitHub.RepoURL, "commit", gitHub.Commit)
 
-	stream, err := fetch(ctx, gitHub, token, httpClient)
+	stream, err := fetch(ctx, gitHub, credentials, httpClient)
 	if err != nil {
 		return nil, err
 	}

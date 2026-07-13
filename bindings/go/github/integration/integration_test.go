@@ -60,9 +60,17 @@ func helloWorldSource(ref, commit string) *descriptor.Source {
 	}
 }
 
+// Beside the pax global header, the REST tarball endpoint roots every archive
+// entry at a single directory named "<owner>-<repo>-<abbreviated-commit>/".
+const helloWorldArchiveRoot = "octocat-Hello-World-"
+
 // assertHelloWorldArchive verifies the blob is GitHub's gzipped tar source
-// archive of the Hello-World repository: matching old OCM, its entries are
-// prefixed with "<repo>-<commit>/" and include the README.
+// archive of the Hello-World repository at helloWorldCommit.
+//
+// It asserts the commit, not just the presence of a README: every revision of
+// this repository has a README, so a download that ignored the pinned commit
+// would satisfy a README-only check. Two parts of the payload name the commit —
+// the pax global header records it in full, the root directory abbreviated.
 func assertHelloWorldArchive(t *testing.T, downloaded blob.ReadOnlyBlob) {
 	t.Helper()
 
@@ -76,7 +84,7 @@ func assertHelloWorldArchive(t *testing.T, downloaded blob.ReadOnlyBlob) {
 	gz, err := gzip.NewReader(reader)
 	require.NoError(t, err)
 
-	var readmeFound bool
+	var commitFound, readmeFound bool
 	tr := tar.NewReader(gz)
 	for {
 		header, err := tr.Next()
@@ -84,12 +92,32 @@ func assertHelloWorldArchive(t *testing.T, downloaded blob.ReadOnlyBlob) {
 			break
 		}
 		require.NoError(t, err)
+
+		// git names the commit an archive was cut from in the "comment" record
+		// of the pax global header, as the full sha.
+		if header.Typeflag == tar.TypeXGlobalHeader {
+			assert.Equal(t, helloWorldCommit, header.PAXRecords["comment"],
+				"the archive must be cut from the commit the download was asked for")
+			commitFound = true
+			continue
+		}
+
+		root, _, ok := strings.Cut(header.Name, "/")
+		require.True(t, ok, "archive entry %q must live under the root directory", header.Name)
+		abbrev, ok := strings.CutPrefix(root, helloWorldArchiveRoot)
+		require.True(t, ok, "archive entry %q must be rooted at %q<commit>", header.Name, helloWorldArchiveRoot)
+		// git abbreviates the sha only as far as it must to stay unambiguous,
+		// so match a prefix of the commit instead of a fixed width.
+		assert.True(t, abbrev != "" && strings.HasPrefix(helloWorldCommit, abbrev),
+			"archive is rooted at commit %q, but the download was asked for %q", abbrev, helloWorldCommit)
+
 		if strings.HasSuffix(header.Name, "/README") {
 			readmeFound = true
 		}
 	}
 
-	assert.True(t, readmeFound, "the Hello-World archive must contain its README under the commit-prefixed directory")
+	assert.True(t, commitFound, "the archive must carry the pax global header naming its commit")
+	assert.True(t, readmeFound, "the Hello-World archive must contain its README under the commit-prefixed root")
 }
 
 func Test_Integration_GitHub(t *testing.T) {
