@@ -40,14 +40,14 @@ jobs:
         with:
           persist-credentials: false
       # Detect .env changes so lint runs on all modules when the golangci-lint version changes
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         id: env_changes
         with:
           filters: |
             env:
               - '.env'
       # Detect CI workflow changes to rebuild/test all modules
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         id: ci_changes
         with:
           filters: |
@@ -88,7 +88,7 @@ jobs:
             // Log for debugging
             console.log('📦 Detected modules:', modules);
             console.log('🎯 Generated filters:', filters);
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         id: changes
         with:
           filters: ${{ steps.discover.outputs.filters }}
@@ -274,7 +274,7 @@ jobs:
             .env
           persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -284,7 +284,7 @@ jobs:
           source .env
           echo "golangci_lint=${GOLANGCI_LINT_VERSION}" >> $GITHUB_OUTPUT
       - name: golangci-lint ${{ matrix.modules }}
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           verify: 'false' # we verify in a separate command ONCE instead of every run on every module
           version: ${{ steps.versions.outputs.golangci_lint }}
@@ -314,7 +314,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -348,7 +348,7 @@ jobs:
             reuse.Taskfile.yml
           persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -370,7 +370,7 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Go (required by some generators)
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: ${{ github.workspace }}/bindings/go/generator/go.mod
           cache-dependency-path: |

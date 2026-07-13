@@ -46,6 +46,26 @@ Example:
             type: ociArtifact
             imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
 
+Ownership:
+
+Ownership attaches ownership information (i.e. the component name and version) 
+to a resource. This enables a consumer who encounters the resource in a storage
+system to trace it back to the component that owns it. A resource opts in by 
+setting "options.ownershipPolicy" to "Always" (the default is "Never"):
+
+  resources:
+    - name: my-image
+      type: ociImage
+      version: ${COMPONENT_VERSION}
+      options:
+        ownershipPolicy: Always
+      access:
+        type: ociArtifact
+        imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
+
+The policy is a construction-time directive and is not persisted to the 
+component descriptor.
+
 Repository Reference Format:
 	[type::]{repository}
 
@@ -125,10 +145,10 @@ add component-version --repository ./archive --constructor component-constructor
                                            - $HOME/.ocm/config
                                            - $HOME/.ocmconfig
                                            3. The current working directory:
-                                           - $PWD/ocm/config
+                                           - $PWD/.ocm/config
                                            - $PWD/.ocmconfig
                                            4. The directory of the current executable:
-                                           - $EXE_DIR/ocm/config
+                                           - $EXE_DIR/.ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.

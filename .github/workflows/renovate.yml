@@ -36,7 +36,7 @@ jobs:
       deployment: false
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           sparse-checkout:
             ${{ env.RENOVATE_CONFIG_FILE }}
@@ -70,13 +70,26 @@ jobs:
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Post per-PR check results.
+          permission-checks: write
+          # Push Renovate branches.
+          permission-contents: write
+          # Maintain the dependency dashboard issue.
+          permission-issues: write
+          # Open and update dependency-update PRs.
+          permission-pull-requests: write
+          # Post commit statuses on Renovate PRs.
+          permission-statuses: write
+          # Bump action SHAs in .github/workflows/*.
+          permission-workflows: write
 
       - name: Ensure Dry-Run on Pull Requests
         if: ${{ github.event_name == 'pull_request' }}
         run: echo "RENOVATE_DRY_RUN=extract" >> $GITHUB_ENV
 
       - name: Run
-        uses: renovatebot/github-action@693b9ef15eec82123529a37c782242f091365961 # v46.1.14
+        uses: renovatebot/github-action@8217b3fc286df088d7c27f3255fe8414463bc0fd # v46.1.15
         with:
           env-regex: |
             ^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$

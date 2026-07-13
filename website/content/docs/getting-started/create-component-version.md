@@ -71,7 +71,7 @@ echo "My first local Resource for an OCM component" > my-local-resource.txt
 Create a `component-constructor.yaml` file that describes your component and its resources:
 
 ```yaml
-# yaml-language-server: $schema=https://ocm.software/latest/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 - name: github.com/acme.org/helloworld # Must at least be a DNS domain as per RFC 1123.
   version: 1.0.0 # Version conforming to SemVer 2.0.
@@ -97,11 +97,11 @@ OCM supports various ways to include resource artifacts in your components via `
 
 Use **`input`** to embed content directly, or **`access`** to reference external artifacts.
 
-|              | `resource.input` (by value)               | `resource.access` (by reference)             |
-|--------------|-------------------------------------------|----------------------------------------------|
-| **Storage**  | Content embedded in Component Version     | Only reference is stored                     |
-| **Use case** | Local files, directories, co-located data | Remote images, charts, resolution at runtime |
-| **Transfer** | Content travels with component            | Must be accessible at destination            |
+|              | `resource.input` (by value)               | `resource.access` (by reference)                                          |
+|--------------|-------------------------------------------|---------------------------------------------------------------------------|
+| **Storage**  | Content embedded in Component Version     | Only reference is stored                                                  |
+| **Use case** | Local files, directories, co-located data | Remote images, charts, resolution at runtime                              |
+| **Transfer** | Content travels with component            | Content fetched from source at use time (unless embedded during transfer) |
 
 For a complete list of supported types, see [Input and Access Types]({{< relref "/docs/reference/input-and-access-types.md" >}}).
 
@@ -204,7 +204,7 @@ Output:
 This creates a `transport-archive` directory containing your component version.
 
 {{< details "What's inside the CTF archive?" >}}
-The CTF archive is a Content Addressable Storage (CAS) archive that maps descriptors and resources to digests:
+The CTF archive is a [Content Addressable Storage (CAS)](https://en.wikipedia.org/wiki/Content-addressable_storage) archive — each blob's filename is derived from the SHA-256 digest of its content (e.g., `sha256.<digest>`), so lookups happen by digest rather than by path. The `artifact-index.json` maps component coordinates (repository + tag) to the digest of the corresponding blob:
 
 ```text
 transport-archive/
