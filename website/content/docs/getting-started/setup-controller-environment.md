@@ -224,11 +224,16 @@ source-controller-6ff87cb475-2h2lv           1/1     Running     0              
 {{< /tab >}}
 {{< tab "Argo CD" >}}
 
-Install Argo CD into its own namespace:
+[Install](https://argo-cd.readthedocs.io/en/stable/operator-manual/installation/#helm) Argo CD via [Helm Chart](https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd#installing-the-chart):
 
 ```shell
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+helm repo add argo https://argoproj.github.io/argo-helm
+# ... "argo" has been added to your repositories
+
+helm install my-release argo/argo-cd
+# NAME: my-release
+# ...
+
 ```
 
 Wait for all pods to become ready:
