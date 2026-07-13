@@ -1,9 +1,11 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -329,6 +332,84 @@ components:
 				r.NoError(err, "should be able to retrieve the component version added with HTTPS URL")
 				r.Equal(componentName, desc.Component.Name)
 				r.Equal(componentVersion, desc.Component.Version)
+			})
+
+			t.Run("add and get component-version with wget input", func(t *testing.T) {
+				r := require.New(t)
+
+				content := []byte("hello from wget input")
+				fileSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Content-Type", "application/octet-stream")
+					_, _ = w.Write(content)
+				}))
+				t.Cleanup(fileSrv.Close)
+
+				wgetComponentName := "ocm.software/wget-input-component"
+				wgetComponentVersion := "v1.0.0"
+
+				constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: remote-blob
+    version: v1.0.0
+    type: blob
+    input:
+      type: wget
+      url: %s/artifact.bin
+      mediaType: application/octet-stream
+`, wgetComponentName, wgetComponentVersion, fileSrv.URL)
+
+				constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+				r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+				// add: the wget input downloads the resource and stores it as a local blob.
+				addCMD := cmd.New()
+				addCMD.SetArgs([]string{
+					"add",
+					"component-version",
+					"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+					"--constructor", constructorPath,
+					"--config", cfgPath,
+				})
+				r.NoError(addCMD.ExecuteContext(t.Context()), "add component-version should succeed with wget input")
+
+				// Verify the downloaded bytes were stored locally.
+				desc, err := repo.GetComponentVersion(t.Context(), wgetComponentName, wgetComponentVersion)
+				r.NoError(err)
+				r.Len(desc.Component.Resources, 1)
+				res := desc.Component.Resources[0]
+				r.Equal("remote-blob", res.Name)
+
+				blobData, _, err := repo.GetLocalResource(t.Context(), wgetComponentName, wgetComponentVersion, res.ToIdentity())
+				r.NoError(err)
+				rc, err := blobData.ReadCloser()
+				r.NoError(err)
+				defer func() { r.NoError(rc.Close()) }()
+				got, err := io.ReadAll(rc)
+				r.NoError(err)
+				r.Equal(content, got)
+
+				// get: read the wget-sourced component version back through the CLI.
+				output := new(bytes.Buffer)
+				getCMD := cmd.New()
+				getCMD.SetOut(output)
+				getCMD.SetArgs([]string{
+					"get",
+					"component-version",
+					fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, wgetComponentName, wgetComponentVersion),
+					"--config", cfgPath,
+					"--output", "json",
+				})
+				r.NoError(getCMD.ExecuteContext(t.Context()), "get component-version should succeed for wget-sourced component")
+
+				out := output.String()
+				r.Contains(out, wgetComponentName, "output should contain the component name")
+				r.Contains(out, wgetComponentVersion, "output should contain the component version")
+				r.Contains(out, "remote-blob", "output should contain the wget-sourced resource")
 			})
 		})
 	}
@@ -720,4 +801,133 @@ configurations:
 	r.Equal("0.1.0", desc.Component.Resources[0].Version)
 	r.Equal("helmChart", desc.Component.Resources[0].Type)
 	r.Equal("helm/v1", desc.Component.Resources[0].Access.GetType().String())
+}
+
+// Test_Integration_AddComponentVersion_WgetAccess verifies that a resource declaring a wget
+// access directly in the constructor (no input method) can be added to an OCI registry and
+// that the access is then resolved and downloaded via the wget resource repository plugin.
+func Test_Integration_AddComponentVersion_WgetAccess(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	content := []byte("hello from wget access")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(content)
+	}))
+	t.Cleanup(srv.Close)
+
+	registry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: %[1]q
+      port: %[2]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+`, registry.Host, registry.Port, registry.User, registry.Password)
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
+	const componentName = "ocm.software/wget-access-component"
+	const componentVersion = "v1.0.0"
+
+	// The resource declares a wget access directly, not an input method.
+	constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: remote-blob
+    version: v1.0.0
+    type: blob
+    access:
+      type: wget/v1
+      url: %s/artifact.bin
+      mediaType: application/octet-stream
+`, componentName, componentVersion, srv.URL)
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+		"--constructor", constructorPath,
+		"--config", cfgPath,
+	})
+	addCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	r.NoError(addCMD.ExecuteContext(addCtx), "add cv with wget access should succeed")
+
+	// The access is recorded as-is; the resource keeps its wget access spec.
+	repo := registry.Connect(t)
+	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(desc.Component.Resources, 1)
+	res := desc.Component.Resources[0]
+	r.Equal("remote-blob", res.Name)
+	r.NotNil(res.Access, "resource should carry a wget access spec")
+	r.Equal("wget/v1", res.Access.GetType().String())
+
+	// The wget digest processor fetched the content once at add time and set the digest.
+	r.NotNil(res.Digest, "wget digest processor should have set a digest")
+	r.Equal("SHA-256", res.Digest.HashAlgorithm)
+	r.Equal("genericBlobDigest/v1", res.Digest.NormalisationAlgorithm)
+	r.Equal(godigest.FromBytes(content).Encoded(), res.Digest.Value,
+		"digest value must be the SHA-256 of the served content")
+
+	// download resource resolves the wget access via the registered wget resource repository.
+	output := filepath.Join(t.TempDir(), "downloaded")
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"resource",
+		fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, componentName, componentVersion),
+		"--identity", "name=remote-blob,version=v1.0.0",
+		"--output", output,
+		"--config", cfgPath,
+	})
+	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource should resolve the wget access")
+
+	outputBlob, err := filesystem.GetBlobFromOSPath(output)
+	r.NoError(err)
+	dataStream, err := outputBlob.ReadCloser()
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(dataStream.Close()) })
+	data, err := io.ReadAll(dataStream)
+	r.NoError(err)
+	r.Equal(content, data, "downloaded content should match what the wget access points at")
+
+	// get component-version reads the wget-access component back through the CLI.
+	getOutput := new(bytes.Buffer)
+	getCMD := cmd.New()
+	getCMD.SetOut(getOutput)
+	getCMD.SetArgs([]string{
+		"get",
+		"component-version",
+		fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, componentName, componentVersion),
+		"--config", cfgPath,
+		"--output", "json",
+	})
+	r.NoError(getCMD.ExecuteContext(ctx), "get component-version should succeed for the wget-access component")
+
+	out := getOutput.String()
+	r.Contains(out, componentName, "output should contain the component name")
+	r.Contains(out, "remote-blob", "output should contain the resource")
+	r.Contains(out, "wget/v1", "output should contain the wget access type")
 }
