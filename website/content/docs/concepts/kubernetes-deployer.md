@@ -100,7 +100,7 @@ The [Deploy a Helm Chart (with Bootstrap)]({{< relref "deploy-helm-chart-bootstr
 Another typical pattern is packaging a `ResourceGraphDefinition` ([RGD](https://kro.run/docs/concepts/rgd/overview)) inside an OCM component and using the Deployer to apply it to the cluster. This allows developers to ship deployment instructions alongside the software itself. Once the Deployer applies the RGD, [Kro](https://kro.run/) reconciles it into a CRD that operators can instantiate. The RGD includes the deployer-specific CRDs — `HelmRelease` and `OCIRepository` for Flux, or `Application` for Argo CD.
 
 <!-- TODO: Add tutorial link once the "Deploy with Kro and Flux" tutorial is written -->
-For a full walkthrough, stay tuned for the upcoming "Deploy with Controllers" tutorial.
+For a full walkthrough, see [Deploy Helm Charts]({{< relref "/docs/getting-started/deploy-helm-chart.md" >}}) tutorial.
 
 ## Related Documentation
 
