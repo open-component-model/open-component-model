@@ -384,6 +384,9 @@ spec:
     # Argo CD Application deploys the Helm chart directly from the OCI registry.
     # Values are injected via valuesObject (structured YAML, avoids escaping issues).
     - id: argocdApplication
+      readyWhen:
+        - ${argocdApplication.status.health.status == "Healthy"}
+        - ${argocdApplication.status.sync.status == "Synced"}
       template:
         apiVersion: argoproj.io/v1alpha1
         kind: Application

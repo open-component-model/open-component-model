@@ -121,6 +121,9 @@ spec:
 
     # Argo CD Application — replaces Flux OCIRepository + HelmRelease
     - id: argocdApplication
+      readyWhen:
+        - ${argocdApplication.status.health.status == "Healthy"}
+        - ${argocdApplication.status.sync.status == "Synced"}
       template:
         apiVersion: argoproj.io/v1alpha1
         kind: Application
@@ -219,6 +222,9 @@ to the overlay directory. The Git commit SHA comes from the OCM Resource's statu
 
 ```yaml
     - id: argocdApplication
+      readyWhen:
+        - ${argocdApplication.status.health.status == "Healthy"}
+        - ${argocdApplication.status.sync.status == "Synced"}
       template:
         apiVersion: argoproj.io/v1alpha1
         kind: Application
