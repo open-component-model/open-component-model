@@ -32,7 +32,7 @@ func TestConvertToGitHubCredentials(t *testing.T) {
 
 	t.Run("typed github credentials pass through", func(t *testing.T) {
 		converted, err := ConvertToGitHubCredentials(&GitHubCredentials{
-			Type:  GitHubCredentialsVersionedType,
+			Type:  runtime.NewVersionedType(GitHubCredentialsType, Version),
 			Token: "ghp_secret",
 		})
 		require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestConvertToGitHubCredentials(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, converted)
 		assert.Equal(t, "ghp_secret", converted.Token)
-		assert.Equal(t, GitHubCredentialsVersionedType, converted.Type)
+		assert.Equal(t, runtime.NewVersionedType(GitHubCredentialsType, Version), converted.Type)
 	})
 
 	t.Run("direct credentials map the accessToken property", func(t *testing.T) {

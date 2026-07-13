@@ -69,11 +69,13 @@ func Download(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHu
 		}
 	}()
 	if _, err := io.Copy(tmpFile, stream); err != nil {
+		_ = os.Remove(tmpFile.Name())
 		return nil, fmt.Errorf("error buffering GitHub commit archive: %w", err)
 	}
 
 	buffered, err := filesystem.GetBlobFromOSPath(tmpFile.Name())
 	if err != nil {
+		_ = os.Remove(tmpFile.Name())
 		return nil, fmt.Errorf("error creating blob from buffered GitHub commit archive: %w", err)
 	}
 	buffered.SetMediaType(MediaTypeTGZ)

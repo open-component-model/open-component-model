@@ -15,7 +15,7 @@ func TestMustRegisterCredentialType(t *testing.T) {
 	MustRegisterCredentialType(scheme)
 
 	t.Run("the versioned type resolves", func(t *testing.T) {
-		obj, err := scheme.NewObject(GitHubCredentialsVersionedType)
+		obj, err := scheme.NewObject(runtime.NewVersionedType(GitHubCredentialsType, Version))
 		require.NoError(t, err)
 		assert.IsType(t, &GitHubCredentials{}, obj)
 	})
@@ -32,7 +32,7 @@ func TestMustRegisterCredentialType(t *testing.T) {
 // The type must round-trip through JSON unchanged, so a credential config
 // written by one process is read back identically by another.
 func TestGitHubCredentials_JSONRoundTrip(t *testing.T) {
-	creds := &GitHubCredentials{Type: GitHubCredentialsVersionedType, Token: "ghp_secret"}
+	creds := &GitHubCredentials{Type: runtime.NewVersionedType(GitHubCredentialsType, Version), Token: "ghp_secret"}
 
 	data, err := json.Marshal(creds)
 	require.NoError(t, err)
@@ -49,12 +49,12 @@ func TestGitHubCredentials_JSONRoundTrip(t *testing.T) {
 
 func TestGitHubCredentials_GetSetType(t *testing.T) {
 	creds := &GitHubCredentials{Token: "ghp_secret"}
-	creds.SetType(GitHubCredentialsVersionedType)
-	assert.Equal(t, GitHubCredentialsVersionedType, creds.GetType())
+	creds.SetType(runtime.NewVersionedType(GitHubCredentialsType, Version))
+	assert.Equal(t, runtime.NewVersionedType(GitHubCredentialsType, Version), creds.GetType())
 }
 
 func TestGitHubCredentials_DeepCopy(t *testing.T) {
-	creds := &GitHubCredentials{Type: GitHubCredentialsVersionedType, Token: "ghp_secret"}
+	creds := &GitHubCredentials{Type: runtime.NewVersionedType(GitHubCredentialsType, Version), Token: "ghp_secret"}
 
 	clone, ok := creds.DeepCopyTyped().(*GitHubCredentials)
 	require.True(t, ok)

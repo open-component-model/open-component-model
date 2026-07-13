@@ -64,7 +64,7 @@ func TestCredentialsFrom(t *testing.T) {
 
 	t.Run("a typed github credential passes through", func(t *testing.T) {
 		credentials, err := CredentialsFrom(&credsv1.GitHubCredentials{
-			Type:  credsv1.GitHubCredentialsVersionedType,
+			Type:  runtime.NewVersionedType(credsv1.GitHubCredentialsType, credsv1.Version),
 			Token: "ghp_secret",
 		})
 		require.NoError(t, err)

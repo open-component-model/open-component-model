@@ -2,17 +2,6 @@ package v1
 
 import "ocm.software/open-component-model/bindings/go/runtime"
 
-var GitHubCredentialsVersionedType = runtime.NewVersionedType(GitHubCredentialsType, Version)
-
-// MustRegisterCredentialType registers GitHubCredentials/v1 (and its
-// unversioned alias) in the given scheme.
-func MustRegisterCredentialType(scheme *runtime.Scheme) {
-	scheme.MustRegisterWithAlias(&GitHubCredentials{},
-		GitHubCredentialsVersionedType,
-		runtime.NewUnversionedType(GitHubCredentialsType),
-	)
-}
-
 // GitHubCredentials represents typed credentials for authenticating against
 // GitHub, on github.com as well as on GitHub Enterprise hosts.
 //
@@ -32,4 +21,13 @@ type GitHubCredentials struct {
 	// repositories (GitHub answers 404, not 403) and is rate-limited far
 	// more aggressively.
 	Token string `json:"token,omitempty"`
+}
+
+// MustRegisterCredentialType registers GitHubCredentials/v1 (and its
+// unversioned alias) in the given scheme.
+func MustRegisterCredentialType(scheme *runtime.Scheme) {
+	scheme.MustRegisterWithAlias(&GitHubCredentials{},
+		runtime.NewVersionedType(GitHubCredentialsType, Version),
+		runtime.NewUnversionedType(GitHubCredentialsType),
+	)
 }

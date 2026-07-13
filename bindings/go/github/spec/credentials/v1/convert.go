@@ -15,9 +15,14 @@ const (
 var convertScheme = runtime.NewScheme()
 
 func init() {
-	// Register through the same helper as the public Scheme, so the two cannot
-	// disagree about which spellings resolve.
-	MustRegisterCredentialType(convertScheme)
+	// Register the same spellings as the public Scheme, so the two cannot
+	// disagree about which types resolve.
+	convertScheme.MustRegisterWithAlias(&GitHubCredentials{},
+		runtime.NewVersionedType(GitHubCredentialsType, Version),
+		runtime.NewUnversionedType(GitHubCredentialsType),
+	)
+	// The credential graph resolves .ocmconfig entries into DirectCredentials
+	// property bags, so the converter must be able to decode that type too.
 	directcredsv1.MustRegister(convertScheme)
 }
 
@@ -30,7 +35,7 @@ func fromDirectCredentials(properties map[string]string) *GitHubCredentials {
 		token = properties[credentialKeyAccessToken]
 	}
 	return &GitHubCredentials{
-		Type:  GitHubCredentialsVersionedType,
+		Type:  runtime.NewVersionedType(GitHubCredentialsType, Version),
 		Token: token,
 	}
 }
