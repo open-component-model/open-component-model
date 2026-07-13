@@ -12,6 +12,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
+	wgettransformer "ocm.software/open-component-model/bindings/go/wget/transformation"
+	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
 
 // NewDefaultBuilder creates a builder.Builder pre-configured with all standard OCI, CTF, and Helm transformers.
@@ -26,6 +28,7 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(ociaccess.Scheme)
 	transformerScheme.MustRegisterScheme(helmv1alpha1.Scheme)
+	transformerScheme.MustRegisterScheme(wgetv1alpha1.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
 		Scheme:             transformerScheme,
@@ -92,6 +95,13 @@ func NewDefaultBuilder(
 		Scheme: transformerScheme,
 	}
 
+	// Wget transformer
+	getWget := &wgettransformer.GetWget{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
 	// File cleanup transformer
 	transformerScheme.MustRegisterWithAlias(&FileCleanupTransformation{}, FileCleanupVersionedType)
 	fileCleanup := &FileCleanup{
@@ -112,5 +122,6 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.TransferOCIArtifact{}, ociTransferOCIArtifact).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
+		WithTransformer(&wgetv1alpha1.GetWget{}, getWget).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }
