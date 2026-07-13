@@ -206,6 +206,9 @@ following content:
 The `resourceChart` and `resourceImage` resources are identical for both deployers.
 Choose your deployer tab for the deployer-specific resources:
 
+{{< tabs "bootstrap-rgd-deployer" >}}
+{{< tab "Flux" >}}
+
 ```yaml
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
@@ -265,12 +268,6 @@ spec:
             oci: resource.access.toOCI()
           # ocmConfig is required, if the OCM repository requires credentials to access it.
           # ocmConfig:
-```
-
-{{< tabs "bootstrap-rgd-deployer" >}}
-{{< tab "Flux" >}}
-
-```yaml
     # OCIRepository watches and downloads the resource from the location provided by the Resource status.
     # The Helm chart location (url) refers to the status of the resource helm-resource.
     - id: ocirepository
@@ -326,6 +323,64 @@ spec:
 {{< tab "Argo CD" >}}
 
 ```yaml
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: bootstrap
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: Bootstrap
+  resources:
+    # In this guide, we will not create a "Repository" and "Component" resource in this ResourceGraphDefinition. Those
+    # resources will be created to bootstrap the ResourceGraphDefinition itself and will be present in the Kubernetes
+    # cluster to be referenced by the following resources (see the bootstrap resource in one of the following sections).
+
+    # This resource refers to the resource "helm-resource" defined in the OCM component version. It will be downloaded,
+    # verified, and its location is made available in the status of the resource.
+    - id: resourceChart
+      readyWhen:
+        - ${resourceChart.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: bootstrap-helm-resource
+        spec:
+          # This component will be part of the bootstrap resources that will be created later.
+          componentRef:
+            name: bootstrap-component
+          resource:
+            byReference:
+              resource:
+                name: helm-resource
+          additionalStatusFields:
+            # toOCI() converts the resource access to an OCI reference object containing registry, repository, tag, and digest
+            oci: resource.access.toOCI()
+          # ocmConfig is required, if the OCM repository requires credentials to access it.
+          # ocmConfig:
+    # This resource refers to the resource "image-resource" defined in the OCM component version. It will be downloaded,
+    # verified, and its location is made available in the status of the resource.
+    - id: resourceImage
+      readyWhen:
+        - ${resourceImage.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: bootstrap-image-resource
+        spec:
+          # This component will be part of the bootstrap resources that will be created later.
+          componentRef:
+            name: bootstrap-component
+          resource:
+            byReference:
+              resource:
+                name: image-resource
+          additionalStatusFields:
+            oci: resource.access.toOCI()
+          # ocmConfig is required, if the OCM repository requires credentials to access it.
+          # ocmConfig:
     # Argo CD Application deploys the Helm chart directly from the OCI registry.
     # Values are injected via valuesObject (structured YAML, avoids escaping issues).
     - id: argocdApplication
