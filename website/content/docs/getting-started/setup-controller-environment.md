@@ -359,7 +359,7 @@ deployment "argocd-repo-server" successfully rolled out
 
 ### Verify Complete Setup
 
-Check all components are running (adapt the namespace filter to the deployer you installed):
+Check all components are running:
 
 ```shell
 kubectl get pods --all-namespaces | grep -E '(kro-system|flux-system|argocd|ocm-k8s-toolkit-system)'
