@@ -60,7 +60,7 @@ OCM's [transfer model]({{< relref "transfer-concept.md" >}}) handles all of this
 The three basic patterns:
 
 - **Registry → Registry** — direct copy between OCI registries.
-- **Registry → CTF archive** — export to a portable file for air-gapped or offline transfer.
+- **Registry → CTF archive** — export to a portable file in [Common Transport Format (CTF)]({{< relref "docs/concepts/transfer-concept.md#common-transport-format-ctf" >}}) for air-gapped or offline transfer.
 - **CTF archive → Registry** — import into the target environment.
 
 At every step, signatures and metadata travel with the content. Nothing is lost, nothing needs to be re-signed.
