@@ -92,6 +92,55 @@ To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'
 {{< /step >}}
 {{< step >}}
 
+### Install the OCM Controllers
+
+Use Helm to install the OCM controllers:
+
+```bash
+helm install ocm-k8s-toolkit "oci://ghcr.io/open-component-model/kubernetes/controller/chart" \
+  --namespace ocm-k8s-toolkit-system \
+  --create-namespace
+```
+
+{{<callout context="note" title="Resource names follow the release name" icon="outline/info-circle">}}
+The release name `ocm-k8s-toolkit` used above gives the controller's resources predictable names, such as the service account `ocm-k8s-toolkit-controller-manager`. If you install under a different release name — or via a GitOps tool such as Flux that alters the effective release name — add `--set fullnameOverride=ocm-k8s-toolkit` to keep these names stable. This matters when you [configure custom RBAC]({{< relref "/docs/how-to/custom-rbac.md" >}}), which binds to the service account by name.
+{{</callout>}}
+
+<details>
+<summary>You should see this output</summary>
+
+```text
+Pulled: ghcr.io/open-component-model/kubernetes/controller/chart:0.4.0
+Digest: sha256:eac0dc587a1d288f36ef1961bb69f0ffb2791e0153f86d1fdbe54ae2f36f1194
+NAME: ocm-k8s-toolkit
+LAST DEPLOYED: Tue Apr 28 17:42:51 2026
+NAMESPACE: ocm-k8s-toolkit-system
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+TEST SUITE: None
+```
+</details>
+<br>
+
+Verify the OCM controller is running:
+
+```shell
+kubectl get pods -n ocm-k8s-toolkit-system
+```
+
+<details>
+<summary>You should see this output</summary>
+
+```text
+NAME                                                  READY   STATUS    RESTARTS   AGE
+ocm-k8s-toolkit-controller-manager-79b7975755-vxtqt   1/1     Running   0          59s
+```
+</details>
+
+{{< /step >}}
+{{< step >}}
+
 ## Install kro
 
 Install [kro](https://kro.run) following the [official installation guide](https://kro.run/docs/getting-started/Installation). The easiest way is via Helm:
@@ -305,55 +354,7 @@ deployment "argocd-repo-server" successfully rolled out
 {{< /tabs >}}
 
 {{< /step >}}
-{{< step >}}
 
-### Install the OCM Controllers
-
-Use Helm to install the OCM controllers:
-
-```bash
-helm install ocm-k8s-toolkit "oci://ghcr.io/open-component-model/kubernetes/controller/chart" \
-  --namespace ocm-k8s-toolkit-system \
-  --create-namespace
-```
-
-{{<callout context="note" title="Resource names follow the release name" icon="outline/info-circle">}}
-The release name `ocm-k8s-toolkit` used above gives the controller's resources predictable names, such as the service account `ocm-k8s-toolkit-controller-manager`. If you install under a different release name — or via a GitOps tool such as Flux that alters the effective release name — add `--set fullnameOverride=ocm-k8s-toolkit` to keep these names stable. This matters when you [configure custom RBAC]({{< relref "/docs/how-to/custom-rbac.md" >}}), which binds to the service account by name.
-{{</callout>}}
-
-<details>
-<summary>You should see this output</summary>
-
-```text
-Pulled: ghcr.io/open-component-model/kubernetes/controller/chart:0.4.0
-Digest: sha256:eac0dc587a1d288f36ef1961bb69f0ffb2791e0153f86d1fdbe54ae2f36f1194
-NAME: ocm-k8s-toolkit
-LAST DEPLOYED: Tue Apr 28 17:42:51 2026
-NAMESPACE: ocm-k8s-toolkit-system
-STATUS: deployed
-REVISION: 1
-DESCRIPTION: Install complete
-TEST SUITE: None
-```
-</details>
-<br>
-
-Verify the OCM controller is running:
-
-```shell
-kubectl get pods -n ocm-k8s-toolkit-system
-```
-
-<details>
-<summary>You should see this output</summary>
-
-```text
-NAME                                                  READY   STATUS    RESTARTS   AGE
-ocm-k8s-toolkit-controller-manager-79b7975755-vxtqt   1/1     Running   0          59s
-```
-</details>
-
-{{< /step >}}
 {{< step >}}
 
 ### Verify Complete Setup
