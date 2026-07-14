@@ -263,7 +263,7 @@ jobs:
           path: ${{ runner.temp }}/chart-assets
 
       - name: Create RC pre-release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           name: OCM ${{ needs.prepare.outputs.new_version }}
           tag_name: ${{ needs.prepare.outputs.new_tag }}
@@ -463,7 +463,7 @@ jobs:
             await script.createNewReleaseTags({ core });
 
       - name: Setup ORAS
-        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
 
       - name: Log in to GHCR
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -674,9 +674,9 @@ jobs:
           git show "cli/v${VERSION}:cli/go.mod" > "${{ runner.temp }}/cli-go.mod"
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: '24'
+          node-version-file: website/package.json
 
       - name: Install dependencies
         working-directory: website
