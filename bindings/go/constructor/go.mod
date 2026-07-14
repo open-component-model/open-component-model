@@ -6,7 +6,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/sync v0.21.0
+	golang.org/x/sync v0.22.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
@@ -33,5 +33,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.15 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1 // indirect
-	oras.land/oras-go/v2 v2.6.1 // indirect
+	oras.land/oras-go/v2 v2.6.2 // indirect
 )
