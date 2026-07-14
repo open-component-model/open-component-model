@@ -365,7 +365,7 @@ components:
 	r.Len(desc.Component.Resources, 1)
 	res := desc.Component.Resources[0]
 	r.Equal("remote-blob", res.Name)
-	r.Contains(res.Access.GetType().String(), "ocalBlob", "the wget resource must be localized to a local blob")
+	r.True(v2.IsLocalBlob(res.Access), "the wget resource must be localized to a local blob, got %T", res.Access)
 
 	blobData, _, err := targetRepo.GetLocalResource(ctx, componentName, componentVersion, res.ToIdentity())
 	r.NoError(err)
@@ -375,4 +375,118 @@ components:
 	got, err := io.ReadAll(rc)
 	r.NoError(err)
 	r.Equal(content, string(got), "localized content must match the served bytes")
+}
+
+// Test_Integration_TransferComponentVersion_WgetByValue_ToOCI verifies the wget by-value transfer
+// against a real OCI registry target (not just a CTF): `transfer component-version --copy-resources`
+// downloads the wget URL content and embeds it into the registry as a local blob via the
+// OCIAddLocalResource transformer. The resulting resource access is LocalBlob/v1 and its content is
+// stored in (and readable back from) the registry.
+func Test_Integration_TransferComponentVersion_WgetByValue_ToOCI(t *testing.T) {
+	r := require.New(t)
+	t.Parallel()
+
+	// Target OCI registry.
+	registry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err, "should be able to start registry container")
+
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: %[1]q
+      port: %[2]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+`, registry.Host, registry.Port, registry.User, registry.Password)
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
+	const content = "hello wget cli transfer to oci"
+
+	// Serve the resource content over HTTP; kept up for both add and transfer.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write([]byte(content))
+	}))
+	t.Cleanup(srv.Close)
+
+	componentName := "ocm.software/wget-transfer-cli-oci"
+	componentVersion := "v1.0.0"
+
+	// Source CTF holds a resource with a wget access (an external reference, not embedded content).
+	constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: remote-blob
+    version: v1.0.0
+    type: blob
+    access:
+      type: Wget/v1
+      url: %s/artifact.bin
+      mediaType: application/octet-stream
+`, componentName, componentVersion, srv.URL)
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	sourceCTF := filepath.Join(t.TempDir(), "source-ctf")
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add", "component-version",
+		"--repository", fmt.Sprintf("ctf::%s", sourceCTF),
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(t.Context()), "creating source CTF with a wget access should succeed")
+
+	// transfer CTF -> OCI registry with --copy-resources: the wget resource is downloaded and
+	// embedded into the registry as a local blob (OCIAddLocalResource path).
+	transferCMD := cmd.New()
+	transferCMD.SetArgs([]string{
+		"transfer", "component-version",
+		fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion),
+		fmt.Sprintf("http://%s", registry.RegistryAddress),
+		"--copy-resources",
+		"--config", cfgPath,
+	})
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	r.NoError(transferCMD.ExecuteContext(ctx), "wget by-value transfer to OCI registry should succeed")
+
+	// Open the registry and verify the resource landed as a local blob with the served content.
+	client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
+	resolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(registry.RegistryAddress),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+	targetRepo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(desc.Component.Resources, 1)
+	res := desc.Component.Resources[0]
+	r.Equal("remote-blob", res.Name)
+	r.True(v2.IsLocalBlob(res.Access), "the wget resource must be localized to a local blob in the registry, got %T", res.Access)
+
+	blobData, _, err := targetRepo.GetLocalResource(ctx, componentName, componentVersion, res.ToIdentity())
+	r.NoError(err)
+	rc, err := blobData.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(rc.Close()) }()
+	got, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.Equal(content, string(got), "content stored in the registry must match the served bytes")
 }
