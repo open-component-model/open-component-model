@@ -25,7 +25,7 @@ func newTestScheme() *runtime.Scheme {
 	v2.MustAddToScheme(scheme)
 	filesystemaccess.MustAddToScheme(scheme)
 	wgetaccess.MustAddToScheme(scheme)
-	scheme.MustRegisterWithAlias(&v1alpha1.GetWget{}, v1alpha1.GetWgetV1alpha1)
+	scheme.MustRegisterWithAlias(&v1alpha1.DownloadWgetResource{}, v1alpha1.DownloadWgetResourceV1alpha1)
 	return scheme
 }
 
@@ -49,7 +49,7 @@ func wgetResource(t *testing.T, url string) *v2.Resource {
 	}
 }
 
-func TestGetWget_Transform(t *testing.T) {
+func TestDownloadWgetResource_Transform(t *testing.T) {
 	t.Parallel()
 
 	scheme := newTestScheme()
@@ -64,15 +64,15 @@ func TestGetWget_Transform(t *testing.T) {
 		r := require.New(t)
 		ctx := t.Context()
 
-		transform := &transformation.GetWget{
+		transform := &transformation.DownloadWgetResource{
 			Scheme:             scheme,
 			ResourceRepository: repository.NewResourceRepository(),
 		}
 
-		spec := &v1alpha1.GetWget{
-			Type: v1alpha1.GetWgetV1alpha1,
+		spec := &v1alpha1.DownloadWgetResource{
+			Type: v1alpha1.DownloadWgetResourceV1alpha1,
 			ID:   "test-get-wget",
-			Spec: &v1alpha1.GetWgetSpec{
+			Spec: &v1alpha1.DownloadWgetResourceSpec{
 				Resource: wgetResource(t, srv.URL+"/myfile"),
 			},
 		}
@@ -81,7 +81,7 @@ func TestGetWget_Transform(t *testing.T) {
 		r.NoError(err)
 		r.NotNil(result)
 
-		out, ok := result.(*v1alpha1.GetWget)
+		out, ok := result.(*v1alpha1.DownloadWgetResource)
 		r.True(ok)
 		r.NotNil(out.Output)
 		r.NotNil(out.Output.Resource)
@@ -103,15 +103,15 @@ func TestGetWget_Transform(t *testing.T) {
 		ctx := t.Context()
 		outputDir := t.TempDir()
 
-		transform := &transformation.GetWget{
+		transform := &transformation.DownloadWgetResource{
 			Scheme:             scheme,
 			ResourceRepository: repository.NewResourceRepository(),
 		}
 
-		spec := &v1alpha1.GetWget{
-			Type: v1alpha1.GetWgetV1alpha1,
+		spec := &v1alpha1.DownloadWgetResource{
+			Type: v1alpha1.DownloadWgetResourceV1alpha1,
 			ID:   "test-get-wget-output-path",
-			Spec: &v1alpha1.GetWgetSpec{
+			Spec: &v1alpha1.DownloadWgetResourceSpec{
 				Resource:   wgetResource(t, srv.URL+"/myfile"),
 				OutputPath: outputDir,
 			},
@@ -120,7 +120,7 @@ func TestGetWget_Transform(t *testing.T) {
 		result, err := transform.Transform(ctx, spec)
 		r.NoError(err)
 
-		out, ok := result.(*v1alpha1.GetWget)
+		out, ok := result.(*v1alpha1.DownloadWgetResource)
 		r.True(ok)
 		r.NotNil(out.Output)
 
@@ -133,13 +133,13 @@ func TestGetWget_Transform(t *testing.T) {
 		r := require.New(t)
 		ctx := t.Context()
 
-		transform := &transformation.GetWget{
+		transform := &transformation.DownloadWgetResource{
 			Scheme:             scheme,
 			ResourceRepository: repository.NewResourceRepository(),
 		}
 
-		spec := &v1alpha1.GetWget{
-			Type: v1alpha1.GetWgetV1alpha1,
+		spec := &v1alpha1.DownloadWgetResource{
+			Type: v1alpha1.DownloadWgetResourceV1alpha1,
 			ID:   "test-nil-spec",
 			Spec: nil,
 		}
@@ -154,15 +154,15 @@ func TestGetWget_Transform(t *testing.T) {
 		r := require.New(t)
 		ctx := t.Context()
 
-		transform := &transformation.GetWget{
+		transform := &transformation.DownloadWgetResource{
 			Scheme:             scheme,
 			ResourceRepository: repository.NewResourceRepository(),
 		}
 
-		spec := &v1alpha1.GetWget{
-			Type: v1alpha1.GetWgetV1alpha1,
+		spec := &v1alpha1.DownloadWgetResource{
+			Type: v1alpha1.DownloadWgetResourceV1alpha1,
 			ID:   "test-nil-resource",
-			Spec: &v1alpha1.GetWgetSpec{
+			Spec: &v1alpha1.DownloadWgetResourceSpec{
 				Resource: nil,
 			},
 		}

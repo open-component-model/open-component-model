@@ -14,30 +14,30 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
 
-// GetWget is a transformer that downloads wget resources from their URL and buffers them to a file.
+// DownloadWgetResource is a transformer that downloads wget resources from their URL and buffers them to a file.
 // The downloaded content is a plain blob; a subsequent AddLocalResource transformation is expected to
 // embed it as a local blob in the target repository.
-type GetWget struct {
+type DownloadWgetResource struct {
 	Scheme *runtime.Scheme
 	// ResourceRepository is used to download wget resources and resolve credential consumer identities.
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
 }
 
-func (t *GetWget) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
-	var transformation v1alpha1.GetWget
+func (t *DownloadWgetResource) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+	var transformation v1alpha1.DownloadWgetResource
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
-		return nil, fmt.Errorf("failed converting generic transformation to GetWget transformation: %w", err)
+		return nil, fmt.Errorf("failed converting generic transformation to DownloadWgetResource transformation: %w", err)
 	}
 	if transformation.Spec == nil {
-		return nil, fmt.Errorf("spec is required for GetWget transformation")
+		return nil, fmt.Errorf("spec is required for DownloadWgetResource transformation")
 	}
 	if transformation.Spec.Resource == nil {
-		return nil, fmt.Errorf("resource is required in spec for GetWget transformation")
+		return nil, fmt.Errorf("resource is required in spec for DownloadWgetResource transformation")
 	}
 
 	if transformation.Output == nil {
-		transformation.Output = &v1alpha1.GetWgetOutput{}
+		transformation.Output = &v1alpha1.DownloadWgetResourceOutput{}
 	}
 
 	outputPath, err := determineOutputPath(transformation.Spec.OutputPath, "wget")
@@ -80,7 +80,7 @@ func (t *GetWget) Transform(ctx context.Context, step runtime.Typed) (runtime.Ty
 // resolveCredentials returns credentials for downloading targetResource, or nil if
 // no credential provider is configured or the resource has no consumer identity.
 // An ErrNotFound from the resolver is treated as "no credentials" rather than an error.
-func (t *GetWget) resolveCredentials(ctx context.Context, targetResource *descriptor.Resource) (runtime.Typed, error) {
+func (t *DownloadWgetResource) resolveCredentials(ctx context.Context, targetResource *descriptor.Resource) (runtime.Typed, error) {
 	if t.CredentialProvider == nil {
 		return nil, nil
 	}

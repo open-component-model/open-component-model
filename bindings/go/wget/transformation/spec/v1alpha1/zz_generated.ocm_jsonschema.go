@@ -9,26 +9,26 @@ import (
 	_ "embed"
 )
 
-//go:embed schemas/GetWget.schema.json
-var schemaGetWget []byte
+//go:embed schemas/DownloadWgetResource.schema.json
+var schemaDownloadWgetResource []byte
 
-//go:embed schemas/GetWgetOutput.schema.json
-var schemaGetWgetOutput []byte
+//go:embed schemas/DownloadWgetResourceOutput.schema.json
+var schemaDownloadWgetResourceOutput []byte
 
-//go:embed schemas/GetWgetSpec.schema.json
-var schemaGetWgetSpec []byte
+//go:embed schemas/DownloadWgetResourceSpec.schema.json
+var schemaDownloadWgetResourceSpec []byte
 
-// JSONSchema returns the JSON Schema for GetWget.
-func (GetWget) JSONSchema() []byte {
-	return schemaGetWget
+// JSONSchema returns the JSON Schema for DownloadWgetResource.
+func (DownloadWgetResource) JSONSchema() []byte {
+	return schemaDownloadWgetResource
 }
 
-// JSONSchema returns the JSON Schema for GetWgetOutput.
-func (GetWgetOutput) JSONSchema() []byte {
-	return schemaGetWgetOutput
+// JSONSchema returns the JSON Schema for DownloadWgetResourceOutput.
+func (DownloadWgetResourceOutput) JSONSchema() []byte {
+	return schemaDownloadWgetResourceOutput
 }
 
-// JSONSchema returns the JSON Schema for GetWgetSpec.
-func (GetWgetSpec) JSONSchema() []byte {
-	return schemaGetWgetSpec
+// JSONSchema returns the JSON Schema for DownloadWgetResourceSpec.
+func (DownloadWgetResourceSpec) JSONSchema() []byte {
+	return schemaDownloadWgetResourceSpec
 }

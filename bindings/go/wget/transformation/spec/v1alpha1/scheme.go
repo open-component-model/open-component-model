@@ -6,8 +6,8 @@ import (
 
 var Scheme = runtime.NewScheme()
 
-var GetWgetV1alpha1 = runtime.NewVersionedType(GetWgetType, Version)
+var DownloadWgetResourceV1alpha1 = runtime.NewVersionedType(DownloadWgetResourceType, Version)
 
 func init() {
-	Scheme.MustRegisterWithAlias(&GetWget{}, GetWgetV1alpha1)
+	Scheme.MustRegisterWithAlias(&DownloadWgetResource{}, DownloadWgetResourceV1alpha1)
 }
