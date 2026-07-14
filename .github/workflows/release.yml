@@ -276,6 +276,7 @@ jobs:
       contents: read
       packages: write
       actions: read
+      id-token: write # forwarded to publish-components.yml for keyless Sigstore signing
     uses: ./.github/workflows/publish-components.yml
     with:
       version: ${{ needs.prepare.outputs.new_version }}
@@ -671,6 +672,7 @@ jobs:
       contents: read
       packages: write
       actions: read
+      id-token: write # forwarded to publish-components.yml for keyless Sigstore signing
     uses: ./.github/workflows/publish-components.yml
     with:
       version: ${{ needs.prepare.outputs.base_version }}

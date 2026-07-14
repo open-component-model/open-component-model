@@ -10,6 +10,16 @@ name: Publish OCM components
 # from their GitHub release download URLs (using wget access type); the image and chart are
 # pinned by digest. All three components are defined in a single constructor file
 # and pushed in one call; the OCM CLI resolves dependency order automatically.
+#
+# After publishing, each of the three component-versions is signed keyless with
+# Sigstore (see ADR 0017). OCM shells out to the `cosign` binary, which the
+# `FROM scratch` CLI image deliberately does not contain, so cosign is installed
+# on the runner (pinned) and bind-mounted onto the container's PATH. The runner's
+# GitHub Actions OIDC token (ACTIONS_ID_TOKEN_REQUEST_{TOKEN,URL}) is the signing
+# identity — auto-detected by OCM, so no browser and no signing credential in
+# .ocmconfig. Because the scratch image has no writable /tmp or $HOME, a tmpfs is
+# mounted at /tmp (cosign's TUF cache and OCM's temp signing blobs) and HOME points
+# there. The signed descriptors are re-pushed to GHCR with the signature embedded.
 
 on:
   workflow_call:
@@ -53,6 +63,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # mint the GitHub Actions OIDC token used as the Sigstore signing identity
     steps:
       - name: Checkout component constructor
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -77,6 +88,12 @@ jobs:
             echo "CONTROLLER_IMAGE_REF=$REGISTRY/$OWNER/kubernetes/controller:${VERSION}@${CONTROLLER_IMAGE_DIGEST}"
             echo "CONTROLLER_CHART_REF=$REGISTRY/$OWNER/kubernetes/controller/chart:${VERSION}@${CONTROLLER_CHART_DIGEST}"
             echo "CLI_DOWNLOAD_URL=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
+            # Component-version references for signing. The empty prefix (`//`) makes
+            # the CLI resolve repository=$REGISTRY/$OWNER + the component name to the
+            # same component-descriptors/... location `add component-version` pushes to.
+            echo "OCM_COMPONENT_REF=$REGISTRY/$OWNER//ocm.software/ocm:${VERSION}"
+            echo "CLI_COMPONENT_REF=$REGISTRY/$OWNER//ocm.software/cli:${VERSION}"
+            echo "CONTROLLER_COMPONENT_REF=$REGISTRY/$OWNER//ocm.software/kubernetes/controller:${VERSION}"
           } >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
@@ -129,3 +146,54 @@ jobs:
               --repository "$REPO_ROOT" \
               --constructor "$CONSTRUCTOR" \
               --component-version-conflict-policy "$CONFLICT_POLICY"
+
+      # cosign is installed on the runner (not baked into the scratch CLI image)
+      # and bind-mounted into the container in the next step. Keep cosign-release
+      # in sync with the version OCM is tested against
+      # (bindings/go/sigstore/signing/handler/internal/.env, minimum v3.0.4).
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.1
+
+      # Sign each published component-version keyless with Sigstore. OCM shells out
+      # to cosign, so the runner's cosign binary is mounted onto the container PATH.
+      # The scratch image has no writable /tmp or $HOME, so a tmpfs is mounted at
+      # /tmp (OCM's temp signing blobs + cosign's TUF cache) with HOME/TMPDIR pointing
+      # there. ACTIONS_ID_TOKEN_REQUEST_{TOKEN,URL} are the ambient GitHub Actions OIDC
+      # credentials; OCM auto-detects them and forwards them to cosign, so no browser
+      # flow and no signing credential in .ocmconfig are needed. --force keeps reruns
+      # idempotent by overwriting the "default" signature if it already exists.
+      - name: Sign component-versions (keyless Sigstore)
+        env:
+          WORKSPACE: ${{ github.workspace }}
+          SIGNER_SPEC: ${{ github.workspace }}/.github/components/ocm-release/sigstore-sign.yaml
+        run: |
+          set -euo pipefail
+          # Resolve to the real binary: cosign-installer may expose cosign via a
+          # symlink, and docker bind-mount sources must be concrete paths.
+          COSIGN_BIN="$(readlink -f "$(command -v cosign)")"
+
+          for ref in "$OCM_COMPONENT_REF" "$CLI_COMPONENT_REF" "$CONTROLLER_COMPONENT_REF"; do
+            echo "::group::Signing ${ref}"
+            docker run --rm \
+              --tmpfs /tmp:rw,exec \
+              -e HOME=/tmp \
+              -e TMPDIR=/tmp \
+              -e PATH=/usr/local/bin:/usr/bin:/bin \
+              -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+              -e ACTIONS_ID_TOKEN_REQUEST_URL \
+              -v "${COSIGN_BIN}:/usr/local/bin/cosign:ro" \
+              -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
+              -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
+              -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
+              -v "${WORKSPACE}:${WORKSPACE}" \
+              -w "${WORKSPACE}" \
+              "$CLI_IMAGE_REF" \
+                sign component-version \
+                --config "/.ocmconfig" \
+                --signer-spec "$SIGNER_SPEC" \
+                --force \
+                "$ref"
+            echo "::endgroup::"
+          done
