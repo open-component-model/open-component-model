@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
+	"path"
+	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
 
@@ -52,10 +54,11 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 }
 
 // GetResourceCredentialConsumerIdentity resolves the credential consumer identity for the given resource.
-// The identity is keyed on the endpoint host (or the AWS default host), so different endpoints can
-// carry different credentials. It intentionally does not include the bucket or region: the default
-// identity matcher requires non-URL attributes to be equal, and extra attributes would force every
-// credential config to also specify them.
+// The identity is keyed on the endpoint host (or the AWS default host) and the object path
+// (bucket/objectKey), so credentials can be scoped per endpoint and, optionally, per bucket or key
+// prefix. The bucket/objectKey is encoded as the path attribute, which the default identity matcher
+// glob-matches and treats as optional: a credential config that omits the path still matches every
+// bucket, while one that sets it (e.g. my-bucket or my-bucket/*) scopes the credentials down.
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
@@ -73,23 +76,27 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 		return nil, fmt.Errorf("bucketName is required")
 	}
 
-	var identity runtime.Identity
-	if spec.Endpoint != "" {
-		id, err := runtime.ParseURLToIdentity(spec.Endpoint)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing s3 endpoint to identity: %w", err)
-		}
-		identity = id
-	} else {
-		identity = runtime.Identity{
-			runtime.IdentityAttributeScheme:   "https",
-			runtime.IdentityAttributeHostname: awsDefaultHost,
-		}
+	identity, err := runtime.ParseURLToIdentity(s3BaseURL(&spec))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing s3 location to identity: %w", err)
 	}
 
-	identity.SetType(runtime.NewUnversionedType(accessspec.S3ConsumerType))
+	identity.SetType(runtime.NewUnversionedType(accessspec.S3BucketConsumerType))
 
 	return identity, nil
+}
+
+// s3BaseURL builds the URL that identifies the object for credential resolution:
+// the endpoint (or the AWS default host) followed by bucket/objectKey. Parsing it
+// with [runtime.ParseURLToIdentity] yields the scheme, host, port and a path of
+// bucket/objectKey.
+func s3BaseURL(spec *v1.S3) string {
+	base := "https://" + awsDefaultHost
+	if spec.Endpoint != "" {
+		base = strings.TrimSuffix(spec.Endpoint, "/")
+	}
+	loc := path.Join(spec.BucketName, spec.ObjectKey)
+	return base + "/" + loc
 }
 
 // DownloadResource downloads a resource from the bucket/key described by the S3 access spec.
