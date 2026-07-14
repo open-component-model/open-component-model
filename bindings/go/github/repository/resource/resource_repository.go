@@ -21,9 +21,8 @@ import (
 )
 
 // ResourceRepository implements a resource repository for GitHub repositories.
-// It downloads the source archive of a pinned commit via the GitHub REST API
-// (matching old OCM, so the content and its digest are identical) and resolves
-// credential consumer identities for authentication.
+// It downloads the source archive of a pinned commit via the GitHub REST API,
+// serving the exact tarball GitHub does, so content and digest match old OCM.
 type ResourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
 	httpConfig       *httpv1alpha1.Config
@@ -35,9 +34,7 @@ type Option func(*ResourceRepository)
 
 // WithHTTPConfig sets the HTTP client configuration used for the GitHub REST
 // calls and the archive download. When nil, the http binding's defaults apply
-// (retries on 408, 429 and 5xx, plus transport timeouts). Accepts the
-// serialisable config type so that external plugins can round-trip it over the
-// wire and reconstruct an equivalent client.
+// (retries on 408, 429 and 5xx, plus transport timeouts).
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 	return func(r *ResourceRepository) {
 		r.httpConfig = cfg
@@ -46,12 +43,10 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
-// NewResourceRepository creates a ResourceRepository. The TempFolder of
-// filesystemConfig is where downloaded archives are buffered; when it is nil
-// or empty the operating system's temporary directory is used.
-//
-// The HTTP client is built once here rather than per request, so that its
-// connection pool is reused across downloads.
+// NewResourceRepository creates a ResourceRepository. Archives are buffered under
+// the TempFolder of filesystemConfig, or the OS temporary directory when unset.
+// The HTTP client is built once, so its connection pool is reused across
+// downloads.
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	r := &ResourceRepository{
 		filesystemConfig: filesystemConfig,
@@ -96,22 +91,12 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 	return githubinternal.CredentialConsumerIdentity(gitHub.RepoURL)
 }
 
-// DownloadResource fetches the source archive of the commit pinned in the
-// resource's GitHub access and returns it as a gzipped tar blob
-// (media type application/x-tgz).
-//
-// A ref-only access (no commit) is resolved to the commit the ref currently
-// points at, so the download is a snapshot of "now". Reproducible,
-// digest-verifiable content comes from the digest processor, which pins the
-// resolved commit into the descriptor at construction time.
-//
-// When both are set the commit takes precedence; the ref is only re-resolved
-// to warn when it no longer points at the pinned commit, and drift never
+// DownloadResource fetches the archive of the commit pinned in the resource's
+// GitHub access as a gzipped tar blob (application/x-tgz). A ref-only access is
+// resolved to the commit the ref points at now, so the download is a snapshot;
+// the digest processor is what pins it for reproducibility. When both are set the
+// commit wins, and the ref is re-resolved only to warn about drift — drift never
 // fails the download.
-//
-// The archive is streamed into a temporary file under the configured
-// TempFolder rather than held in memory, since a repository archive can be
-// large; see download.Download for the lifetime of that file.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	gitHub, err := githubinternal.AccessFrom(resource.Access)
 	if err != nil {
@@ -145,9 +130,8 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return download.Download(ctx, gitHub, gitHubCredentials, r.tempFolder(), r.httpClient)
 }
 
-// UploadResource is not supported for GitHub repositories and always returns
-// an error: the GitHub access type is a read-only source reference; content
-// is pushed to GitHub through git, not through OCM.
+// UploadResource is not supported: the GitHub access type is a read-only
+// reference; content reaches GitHub through git, not through OCM.
 func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ runtime.Typed) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("github repositories do not support upload operations")
 }
