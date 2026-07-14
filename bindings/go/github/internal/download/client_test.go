@@ -163,6 +163,14 @@ func TestFetch(t *testing.T) {
 			credentials: nil,
 			wantAuth:    nil,
 		},
+		{
+			// A credential that resolved but carries no token reaches this point
+			// as an empty-token struct, not as nil. It must fall back to an
+			// anonymous request rather than send an empty bearer token.
+			name:        "a token-less credential falls back to anonymous",
+			credentials: &credsv1.GitHubCredentials{},
+			wantAuth:    nil,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var authSeen []string

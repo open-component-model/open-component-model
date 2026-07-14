@@ -17,6 +17,7 @@ import (
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
 	"ocm.software/open-component-model/bindings/go/github/spec/access"
+	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -79,7 +80,7 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	// commit (or is deleted after a merge) would break verification of a
 	// component version that has not changed.
 	if gitHub.Commit == "" {
-		gitHubCredentials, err := githubinternal.CredentialsFrom(credentials)
+		gitHubCredentials, err := credsv1.ConvertToGitHubCredentials(credentials)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving github credentials: %w", err)
 		}

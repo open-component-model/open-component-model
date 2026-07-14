@@ -118,7 +118,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("error resolving GitHub access for download: %w", err)
 	}
 
-	gitHubCredentials, err := githubinternal.CredentialsFrom(credentials)
+	gitHubCredentials, err := credsv1.ConvertToGitHubCredentials(credentials)
 	if err != nil {
 		return nil, fmt.Errorf("error resolving GitHub credentials: %w", err)
 	}

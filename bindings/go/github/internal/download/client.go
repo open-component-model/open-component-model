@@ -42,13 +42,19 @@ func ownerRepo(u *url.URL, repoURL string) (owner, repo string, err error) {
 	return parts[0], strings.TrimSuffix(parts[1], ".git"), nil
 }
 
-// clientFor builds a GitHub REST client for the repository at u; nil credentials
-// leave it anonymous. For github.com the public API is used; for any other host,
-// or when the access sets APIHostname, the client targets that GitHub Enterprise
-// API host. httpClient, when nil, falls back to defaultHTTPClient.
+// clientFor builds a GitHub REST client for the repository at u. For github.com
+// the public API is used; for any other host, or when the access sets
+// APIHostname, the client targets that GitHub Enterprise API host. httpClient,
+// when nil, falls back to defaultHTTPClient.
 //
 // The owner and repository coordinates the API calls need come from ownerRepo,
 // which the caller applies to the same parsed URL.
+//
+// Credentials that are nil, or that carry no token, leave the client anonymous
+// rather than failing: like the helm and OCI bindings, a token-less credential
+// falls back to an unauthenticated request. The fallback is silent, so a token
+// that never reached the client makes a private repository answer 404 rather
+// than an auth error.
 func clientFor(gitHub *v1.GitHub, u *url.URL, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (*github.Client, error) {
 	if httpClient == nil {
 		httpClient = defaultHTTPClient()
