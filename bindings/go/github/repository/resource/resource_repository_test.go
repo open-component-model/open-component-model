@@ -221,6 +221,30 @@ func TestResourceRepository_WithHTTPConfig_IsAppliedToRequests(t *testing.T) {
 	}
 }
 
+// countingTransport counts the requests it carries; a positive count after a
+// download proves the injected client, not a config-built one, did the work.
+type countingTransport struct {
+	requests int
+}
+
+func (c *countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	c.requests++
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func TestResourceRepository_WithHTTPClient_IsUsedForRequests(t *testing.T) {
+	baseURL, payload := mockGitHub(t)
+	transport := &countingTransport{}
+
+	repo := NewResourceRepository(WithHTTPClient(&http.Client{Transport: transport}))
+	downloaded, err := repo.DownloadResource(t.Context(),
+		githubResource(baseURL+"/octocat/Hello-World", testCommit), nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, payload, readBlob(t, downloaded), "the download must work through the injected client")
+	assert.Positive(t, transport.requests, "the injected client must carry the requests")
+}
+
 func TestResourceRepository_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	identity, err := NewResourceRepository().GetResourceCredentialConsumerIdentity(t.Context(),
 		githubResource("https://github.com/open-component-model/ocm", testCommit))

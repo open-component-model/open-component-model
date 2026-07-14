@@ -147,6 +147,30 @@ func TestSourceRepository_WithHTTPConfig_IsAppliedToRequests(t *testing.T) {
 	}
 }
 
+// countingTransport counts the requests it carries; a positive count after a
+// download proves the injected client, not a config-built one, did the work.
+type countingTransport struct {
+	requests int
+}
+
+func (c *countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	c.requests++
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func TestSourceRepository_WithHTTPClient_IsUsedForRequests(t *testing.T) {
+	baseURL, payload := mockGitHub(t)
+	transport := &countingTransport{}
+
+	repo := NewSourceRepository(WithHTTPClient(&http.Client{Transport: transport}))
+	downloaded, err := repo.DownloadSource(t.Context(),
+		githubSource(baseURL+"/octocat/Hello-World", "", testCommit))
+	require.NoError(t, err)
+
+	assert.Equal(t, payload, readBlob(t, downloaded), "the download must work through the injected client")
+	assert.Positive(t, transport.requests, "the injected client must carry the requests")
+}
+
 func TestSourceRepository_UploadSource(t *testing.T) {
 	_, err := NewSourceRepository().UploadSource(t.Context(), nil, nil, nil)
 	assert.ErrorContains(t, err, "not support")

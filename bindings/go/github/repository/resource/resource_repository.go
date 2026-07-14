@@ -39,6 +39,16 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 	}
 }
 
+// WithHTTPClient sets the HTTP client used for the GitHub REST calls and the
+// archive download, taking precedence over WithHTTPConfig. A client supplied
+// here is used as-is, so it does not get the http binding's retry and timeout
+// defaults unless it was built with them.
+func WithHTTPClient(client *http.Client) Option {
+	return func(r *ResourceRepository) {
+		r.httpClient = client
+	}
+}
+
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
 // NewResourceRepository creates a ResourceRepository. Downloaded archives are
@@ -49,7 +59,9 @@ func NewResourceRepository(opts ...Option) *ResourceRepository {
 	for _, opt := range opts {
 		opt(r)
 	}
-	r.httpClient = ocmhttp.New(ocmhttp.WithConfig(r.httpConfig))
+	if r.httpClient == nil {
+		r.httpClient = ocmhttp.New(ocmhttp.WithConfig(r.httpConfig))
+	}
 	return r
 }
 
