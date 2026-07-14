@@ -18,8 +18,8 @@ const DownloadWgetResourceType = "DownloadWgetResource"
 // +ocm:jsonschema-gen=true
 type DownloadWgetResource struct {
 	// +ocm:jsonschema-gen:enum=DownloadWgetResource/v1alpha1
-	Type   runtime.Type   `json:"type"`
-	ID     string         `json:"id"`
+	Type   runtime.Type                `json:"type"`
+	ID     string                      `json:"id"`
 	Spec   *DownloadWgetResourceSpec   `json:"spec"`
 	Output *DownloadWgetResourceOutput `json:"output,omitempty"`
 }
