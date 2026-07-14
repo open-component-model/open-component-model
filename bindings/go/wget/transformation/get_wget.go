@@ -32,6 +32,9 @@ func (t *GetWget) Transform(ctx context.Context, step runtime.Typed) (runtime.Ty
 	if transformation.Spec == nil {
 		return nil, fmt.Errorf("spec is required for get wget transformation")
 	}
+	if transformation.Spec.Resource == nil {
+		return nil, fmt.Errorf("resource is required in spec for get wget transformation")
+	}
 
 	if transformation.Output == nil {
 		transformation.Output = &v1alpha1.GetWgetOutput{}

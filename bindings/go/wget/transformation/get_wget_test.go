@@ -149,4 +149,27 @@ func TestGetWget_Transform(t *testing.T) {
 		r.Nil(result)
 		assert.Contains(t, err.Error(), "spec is required")
 	})
+
+	t.Run("fails when resource is nil", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+
+		transform := &transformation.GetWget{
+			Scheme:             scheme,
+			ResourceRepository: repository.NewResourceRepository(),
+		}
+
+		spec := &v1alpha1.GetWget{
+			Type: v1alpha1.GetWgetV1alpha1,
+			ID:   "test-nil-resource",
+			Spec: &v1alpha1.GetWgetSpec{
+				Resource: nil,
+			},
+		}
+
+		result, err := transform.Transform(ctx, spec)
+		r.Error(err)
+		r.Nil(result)
+		assert.Contains(t, err.Error(), "resource is required")
+	})
 }
