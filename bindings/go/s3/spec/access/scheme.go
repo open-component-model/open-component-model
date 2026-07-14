@@ -8,11 +8,17 @@ import (
 )
 
 const (
-	// S3ConsumerType is the OCM type name for the S3 access type.
-	S3ConsumerType = "S3"
+	// AccessType is the OCM type name for the S3 access type.
+	AccessType = "S3"
+
+	// S3BucketConsumerType is the credential consumer identity type for an S3
+	// bucket. It is distinct from the access type name (see the HelmChartRepository
+	// consumer type for the equivalent pattern) so OCM credential providers can
+	// resolve access-key/secret (or session-token) authentication for a download.
+	S3BucketConsumerType = "S3Bucket"
 )
 
-var V1VersionedType = runtime.NewVersionedType(S3ConsumerType, v1.Version)
+var V1VersionedType = runtime.NewVersionedType(AccessType, v1.Version)
 
 var Scheme = runtime.NewScheme()
 
@@ -23,11 +29,11 @@ func init() {
 func MustAddToScheme(scheme *runtime.Scheme) {
 	spec := &v1.S3{}
 
-	lowerCaseConsumerType := strings.ToLower(S3ConsumerType)
+	lowerCaseAccessType := strings.ToLower(AccessType)
 	scheme.MustRegisterWithAlias(spec,
 		V1VersionedType,
-		runtime.NewUnversionedType(S3ConsumerType),
-		runtime.NewVersionedType(lowerCaseConsumerType, v1.Version),
-		runtime.NewUnversionedType(lowerCaseConsumerType),
+		runtime.NewUnversionedType(AccessType),
+		runtime.NewVersionedType(lowerCaseAccessType, v1.Version),
+		runtime.NewUnversionedType(lowerCaseAccessType),
 	)
 }

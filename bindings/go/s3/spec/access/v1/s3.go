@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"fmt"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,6 +45,17 @@ type S3 struct {
 
 	// InsecureSkipTLSVerify disables TLS certificate verification for the endpoint.
 	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
+}
+
+// Validate verifies that the required fields of the S3 access are set.
+func (t *S3) Validate() error {
+	if t.BucketName == "" {
+		return fmt.Errorf("bucketName is required")
+	}
+	if t.ObjectKey == "" {
+		return fmt.Errorf("objectKey is required")
+	}
+	return nil
 }
 
 func (t *S3) String() string {
