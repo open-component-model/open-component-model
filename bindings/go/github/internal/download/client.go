@@ -42,30 +42,24 @@ func ownerRepo(u *url.URL, repoURL string) (owner, repo string, err error) {
 	return parts[0], strings.TrimSuffix(parts[1], ".git"), nil
 }
 
-// clientFor splits the access's repository URL into owner and repository and
-// builds a GitHub REST client for it; nil credentials leave it anonymous. For
-// github.com the public API is used; for any other host, or when the access sets
-// APIHostname, the client targets that GitHub Enterprise API host. httpClient,
-// when nil, falls back to defaultHTTPClient.
-func clientFor(gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (gh *github.Client, owner, repo string, err error) {
-	u, err := parseRepoURL(gitHub.RepoURL)
-	if err != nil {
-		return nil, "", "", err
-	}
-	if owner, repo, err = ownerRepo(u, gitHub.RepoURL); err != nil {
-		return nil, "", "", err
-	}
-
+// clientFor builds a GitHub REST client for the repository at u; nil credentials
+// leave it anonymous. For github.com the public API is used; for any other host,
+// or when the access sets APIHostname, the client targets that GitHub Enterprise
+// API host. httpClient, when nil, falls back to defaultHTTPClient.
+//
+// The owner and repository coordinates the API calls need come from ownerRepo,
+// which the caller applies to the same parsed URL.
+func clientFor(gitHub *v1.GitHub, u *url.URL, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (*github.Client, error) {
 	if httpClient == nil {
 		httpClient = defaultHTTPClient()
 	}
-	gh = github.NewClient(httpClient)
+	gh := github.NewClient(httpClient)
 	if credentials != nil && credentials.Token != "" {
 		gh = gh.WithAuthToken(credentials.Token)
 	}
 
 	if gitHub.APIHostname == "" && u.Hostname() == "github.com" {
-		return gh, owner, repo, nil
+		return gh, nil
 	}
 
 	enterpriseHost := gitHub.APIHostname
@@ -73,17 +67,26 @@ func clientFor(gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpCl
 		enterpriseHost = u.Host
 	}
 	base := (&url.URL{Scheme: u.Scheme, Host: enterpriseHost}).String()
-	if gh, err = gh.WithEnterpriseURLs(base, base); err != nil {
-		return nil, "", "", fmt.Errorf("error configuring github enterprise client for %q: %w", enterpriseHost, err)
+	gh, err := gh.WithEnterpriseURLs(base, base)
+	if err != nil {
+		return nil, fmt.Errorf("error configuring github enterprise client for %q: %w", enterpriseHost, err)
 	}
-	return gh, owner, repo, nil
+	return gh, nil
 }
 
 // ResolveCommit resolves the access's git reference (a branch, tag, or fully
 // qualified ref like refs/heads/main) to its full commit SHA via the GitHub
 // REST API. credentials and httpClient may be nil; see clientFor.
 func ResolveCommit(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (string, error) {
-	gh, owner, repo, err := clientFor(gitHub, credentials, httpClient)
+	u, err := parseRepoURL(gitHub.RepoURL)
+	if err != nil {
+		return "", err
+	}
+	owner, repo, err := ownerRepo(u, gitHub.RepoURL)
+	if err != nil {
+		return "", err
+	}
+	gh, err := clientFor(gitHub, u, credentials, httpClient)
 	if err != nil {
 		return "", err
 	}
@@ -105,7 +108,15 @@ func fetch(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCr
 	if httpClient == nil {
 		httpClient = defaultHTTPClient()
 	}
-	gh, owner, repo, err := clientFor(gitHub, credentials, httpClient)
+	u, err := parseRepoURL(gitHub.RepoURL)
+	if err != nil {
+		return nil, err
+	}
+	owner, repo, err := ownerRepo(u, gitHub.RepoURL)
+	if err != nil {
+		return nil, err
+	}
+	gh, err := clientFor(gitHub, u, credentials, httpClient)
 	if err != nil {
 		return nil, err
 	}
