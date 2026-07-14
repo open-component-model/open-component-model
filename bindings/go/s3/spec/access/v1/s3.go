@@ -2,6 +2,7 @@ package v1
 
 import (
 	"fmt"
+	"strings"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -61,7 +62,7 @@ func (t *S3) Validate() error {
 func (t *S3) String() string {
 	loc := t.BucketName + "/" + t.ObjectKey
 	if t.Endpoint != "" {
-		return t.Endpoint + "/" + loc
+		return strings.TrimSuffix(t.Endpoint, "/") + "/" + loc
 	}
 	return "s3://" + loc
 }
