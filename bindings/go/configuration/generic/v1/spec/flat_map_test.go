@@ -35,7 +35,7 @@ func TestFlatMap(t *testing.T) {
 		require.Len(t, cfg.Configurations, 2)
 
 		assert.Equal(t, `{"key":"valuea","type":"custom-config-1"}`, string(cfg.Configurations[0].Data),
-			"deeply nested entry declared first should appear first")
+			"deeply nested entry from first input should appear first")
 		assert.Equal(t, `{"key":"valueb","type":"custom-config-2"}`, string(cfg.Configurations[1].Data),
 			"flat entry from second input should appear second")
 	})
@@ -66,7 +66,7 @@ func TestFlatMap(t *testing.T) {
 			"second file's entry should be at index 2")
 	})
 
-	t.Run("nested generic entries appear in-place", func(t *testing.T) {
+	t.Run("nested generic entries appear after direct siblings", func(t *testing.T) {
 		nestedJSON := fmt.Sprintf(
 			`{"type":"%s","configurations":[{"type":"inner","v":"nested"}]}`,
 			ConfigType+"/"+ConfigTypeV1)
@@ -84,10 +84,10 @@ func TestFlatMap(t *testing.T) {
 		require.Len(t, cfg.Configurations, 3)
 
 		assert.Equal(t, `{"type":"before","v":"1"}`, string(cfg.Configurations[0].Data),
-			"entry before nested generic keeps its position")
-		assert.Equal(t, `{"type":"inner","v":"nested"}`, string(cfg.Configurations[1].Data),
-			"nested entry is flattened in-place")
-		assert.Equal(t, `{"type":"after","v":"3"}`, string(cfg.Configurations[2].Data),
-			"entry after nested generic keeps its position")
+			"direct entry before nested generic keeps its position")
+		assert.Equal(t, `{"type":"after","v":"3"}`, string(cfg.Configurations[1].Data),
+			"direct entry after nested generic comes before nested children")
+		assert.Equal(t, `{"type":"inner","v":"nested"}`, string(cfg.Configurations[2].Data),
+			"nested entry appears after all direct siblings (last wins)")
 	})
 }
