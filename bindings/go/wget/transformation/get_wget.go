@@ -37,7 +37,7 @@ func (t *GetWget) Transform(ctx context.Context, step runtime.Typed) (runtime.Ty
 		transformation.Output = &v1alpha1.GetWgetOutput{}
 	}
 
-	outputPath, err := DetermineOutputPath(transformation.Spec.OutputPath, "wget")
+	outputPath, err := determineOutputPath(transformation.Spec.OutputPath, "wget")
 	if err != nil {
 		return nil, fmt.Errorf("error getting output path: %w", err)
 	}
