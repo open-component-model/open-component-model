@@ -129,6 +129,39 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 		assert.True(t, strings.HasPrefix(filePath, outputDir))
 	})
 
+	t.Run("removes the output file when the download fails", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		outputDir := t.TempDir()
+
+		failSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "boom", http.StatusInternalServerError)
+		}))
+		t.Cleanup(failSrv.Close)
+
+		transform := &transformation.DownloadWgetResource{
+			Scheme:             scheme,
+			ResourceRepository: repository.NewResourceRepository(),
+		}
+
+		spec := &v1alpha1.DownloadWgetResource{
+			Type: v1alpha1.DownloadWgetResourceV1alpha1,
+			ID:   "test-cleanup-on-failure",
+			Spec: &v1alpha1.DownloadWgetResourceSpec{
+				Resource:   wgetResource(t, failSrv.URL+"/myfile"),
+				OutputPath: outputDir,
+			},
+		}
+
+		result, err := transform.Transform(ctx, spec)
+		r.Error(err)
+		r.Nil(result)
+
+		entries, err := os.ReadDir(outputDir)
+		r.NoError(err)
+		assert.Empty(t, entries, "temporary output file should be removed after a failed download")
+	})
+
 	t.Run("fails when spec is nil", func(t *testing.T) {
 		r := require.New(t)
 		ctx := t.Context()

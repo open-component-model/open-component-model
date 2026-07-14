@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -24,7 +25,7 @@ type DownloadWgetResource struct {
 	CredentialProvider credentials.Resolver
 }
 
-func (t *DownloadWgetResource) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *DownloadWgetResource) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
 	var transformation v1alpha1.DownloadWgetResource
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to DownloadWgetResource transformation: %w", err)
@@ -44,6 +45,14 @@ func (t *DownloadWgetResource) Transform(ctx context.Context, step runtime.Typed
 	if err != nil {
 		return nil, fmt.Errorf("error getting output path: %w", err)
 	}
+	// determineOutputPath creates the file; retain it on success for Output.File, remove it on failure.
+	defer func() {
+		if err != nil {
+			if removeErr := os.Remove(outputPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				slog.WarnContext(ctx, "failed to clean up wget output file after error", "path", outputPath, "err", removeErr)
+			}
+		}
+	}()
 	slog.DebugContext(ctx, "Going to use wget output path", "path", outputPath)
 
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
