@@ -123,6 +123,17 @@ func Download(ctx context.Context, req Request, opts ...Option) (blob.ReadOnlyBl
 	), nil
 }
 
+// awsStaticCredentials returns a static AWS credentials provider for the given S3
+// credentials, wiring the session token when set. It returns nil when there is no
+// access key id, in which case the AWS default credential chain is used: a bare
+// session token is not a usable credential on its own.
+func awsStaticCredentials(s3creds *credv1.S3Credentials) aws.CredentialsProvider {
+	if s3creds == nil || s3creds.AccessKeyID == "" {
+		return nil
+	}
+	return credentials.NewStaticCredentialsProvider(s3creds.AccessKeyID, s3creds.SecretAccessKey, s3creds.SessionToken)
+}
+
 // newClient builds an S3 client from the request and OCM credentials. When no
 // static credentials are supplied, the AWS default credential chain is used.
 func newClient(ctx context.Context, req Request, creds runtime.Typed) (*s3.Client, error) {
@@ -138,10 +149,8 @@ func newClient(ctx context.Context, req Request, creds runtime.Typed) (*s3.Clien
 		if err != nil {
 			return nil, fmt.Errorf("error converting s3 credentials: %w", err)
 		}
-		if s3creds.AccessKeyID != "" {
-			loadOpts = append(loadOpts, config.WithCredentialsProvider(
-				credentials.NewStaticCredentialsProvider(s3creds.AccessKeyID, s3creds.SecretAccessKey, s3creds.SessionToken),
-			))
+		if provider := awsStaticCredentials(s3creds); provider != nil {
+			loadOpts = append(loadOpts, config.WithCredentialsProvider(provider))
 		}
 	}
 

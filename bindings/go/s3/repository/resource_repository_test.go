@@ -49,7 +49,7 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 		s3Resource(&v1.S3{BucketName: "my-bucket", ObjectKey: "path/to/blob", Region: "eu-central-1"}))
 	require.NoError(t, err)
 	require.Equal(t, "https", id[runtime.IdentityAttributeScheme])
-	require.Equal(t, awsDefaultHost, id[runtime.IdentityAttributeHostname])
+	require.Equal(t, "s3.amazonaws.com", id[runtime.IdentityAttributeHostname])
 	require.Equal(t, "my-bucket/path/to/blob", id[runtime.IdentityAttributePath])
 	require.Equal(t, accessspec.S3BucketConsumerType, id[runtime.IdentityAttributeType])
 

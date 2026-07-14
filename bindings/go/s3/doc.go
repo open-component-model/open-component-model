@@ -25,6 +25,14 @@
 // not the S3 ETag, which is not a reliable whole-object hash for multipart
 // objects. Upload is not yet supported (download-first, matching ocmv1).
 //
+// The package also provides an input method
+// ([ocm.software/open-component-model/bindings/go/s3/input.InputMethod]) that, during
+// component construction, downloads the object described by an
+// [ocm.software/open-component-model/bindings/go/s3/spec/input/v1.S3] input spec
+// (the same coordinates as the access type) and stores it as a local blob. It shares
+// the download path and the S3Bucket consumer identity with the resource repository,
+// so credentials configured for a bucket resolve for both.
+//
 // Credentials are optional. When supplied as
 // [ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1.S3Credentials]
 // (access key ID, secret access key, and an optional session token) they are used

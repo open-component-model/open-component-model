@@ -3,8 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"path"
-	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
 
@@ -13,6 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
+	"ocm.software/open-component-model/bindings/go/s3/internal/identity"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
 )
@@ -22,10 +21,6 @@ const (
 	hashAlgorithmSHA256 = "SHA-256"
 	// genericBlobDigestV1 is the normalisation algorithm for a plain downloaded blob.
 	genericBlobDigestV1 = "genericBlobDigest/v1"
-
-	// awsDefaultHost is used as the consumer identity host when no custom endpoint
-	// is configured (AWS S3).
-	awsDefaultHost = "s3.amazonaws.com"
 )
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
@@ -76,27 +71,12 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 		return nil, fmt.Errorf("bucketName is required")
 	}
 
-	identity, err := runtime.ParseURLToIdentity(s3BaseURL(&spec))
+	id, err := identity.Consumer(spec.Endpoint, spec.BucketName, spec.ObjectKey)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing s3 location to identity: %w", err)
+		return nil, fmt.Errorf("error building s3 consumer identity: %w", err)
 	}
 
-	identity.SetType(runtime.NewUnversionedType(accessspec.S3BucketConsumerType))
-
-	return identity, nil
-}
-
-// s3BaseURL builds the URL that identifies the object for credential resolution:
-// the endpoint (or the AWS default host) followed by bucket/objectKey. Parsing it
-// with [runtime.ParseURLToIdentity] yields the scheme, host, port and a path of
-// bucket/objectKey.
-func s3BaseURL(spec *v1.S3) string {
-	base := "https://" + awsDefaultHost
-	if spec.Endpoint != "" {
-		base = strings.TrimSuffix(spec.Endpoint, "/")
-	}
-	loc := path.Join(spec.BucketName, spec.ObjectKey)
-	return base + "/" + loc
+	return id, nil
 }
 
 // DownloadResource downloads a resource from the bucket/key described by the S3 access spec.
