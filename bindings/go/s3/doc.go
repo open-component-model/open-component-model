@@ -36,29 +36,39 @@
 // # Credential consumer identity
 //
 // GetResourceCredentialConsumerIdentity resolves the identity a credential resolver
-// matches against. It always has the type S3Bucket and is derived from the object's
-// location, so a resolver can look up matching credentials before the download:
+// matches against. It always has the type S3Bucket and the object path, and carries a
+// host only for a custom endpoint:
 //
-//	type:     S3Bucket
-//	scheme:   https                 // or the endpoint scheme (e.g. http for MinIO)
-//	hostname: s3.amazonaws.com      // or the endpoint host
-//	port:     9000                  // only when the endpoint sets one
-//	path:     <bucketName>/<objectKey>
+//	AWS S3 (no endpoint):
+//		type: S3Bucket
+//		path: <bucketName>/<objectKey>
 //
-// The scheme/hostname/port are matched as a URL (an empty attribute in the credential
-// config is a wildcard, and default ports are applied per scheme). The path is
-// glob-matched and optional, so credentials can be scoped from broad to narrow. For a
-// download of my-bucket/a/b.txt on AWS, all of these configured consumer identities
-// match, most specific winning:
+//	custom endpoint (MinIO, Ceph, R2):
+//		type:     S3Bucket
+//		scheme:   https            // the endpoint scheme (http for a plaintext MinIO)
+//		hostname: minio.internal   // the endpoint host
+//		port:     9000             // when the endpoint sets one
+//		path:     <bucketName>/<objectKey>
 //
-//	{type: S3Bucket, hostname: s3.amazonaws.com}                          // every bucket on the host
-//	{type: S3Bucket, hostname: s3.amazonaws.com, path: my-bucket/*}       // one bucket
-//	{type: S3Bucket, hostname: s3.amazonaws.com, path: my-bucket/a/*}     // a key prefix
-//	{type: S3Bucket, hostname: s3.amazonaws.com, path: my-bucket/a/b.txt} // one object
+// For AWS there is deliberately no hostname: AWS is the default target, so a credential
+// config resolves host-agnostically and need not name the AWS host (the matcher requires
+// equal hostnames, so a config that set one would not match). For a custom endpoint the
+// hostname — and port, when non-default — identifies where the credentials apply and
+// must be given in the config.
 //
-// A config with a different type, host, explicit scheme, or a non-matching path glob
-// does not resolve. region, mediaType, version and the TLS/path-style switches do not
-// take part in credential matching.
+// The path is matched with path.Match, whose "*" does not cross "/", so in practice a
+// config either omits the path (matching every object) or gives the exact
+// bucketName/objectKey. For a download of my-bucket/a/b.txt on AWS both of these match:
+//
+//	{type: S3Bucket}                          // any AWS S3 object
+//	{type: S3Bucket, path: my-bucket/a/b.txt} // that one object
+//
+// region, mediaType, version and the TLS/path-style switches do not take part in
+// credential matching.
+//
+// The legacy ocmv1 consumer identity (type S3, pathprefix key) is not resolved: the
+// flow returns a single identity, and multi-identity resolution is tracked by
+// https://github.com/open-component-model/ocm-project/issues/847
 //
 // The wire types are each registered in their package scheme for typed
 // conversion. Both the versioned (s3/v1) and unversioned (s3) type names are
