@@ -29,10 +29,36 @@
 // [ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1.S3Credentials]
 // (access key ID, secret access key, and an optional session token) they are used
 // as static credentials; otherwise the AWS default credential chain applies
-// (environment, shared config, and IAM instance/task roles). The repository
-// derives the credential consumer identity from the endpoint host (or the AWS
-// default host) via GetResourceCredentialConsumerIdentity, so a resolver can look
-// up matching credentials before the download.
+// (environment, shared config, and IAM instance/task roles). Legacy ocmv1 property
+// names are also accepted: awsAccessKeyID, awsSecretAccessKey, and token (mapped to
+// the session token).
+//
+// # Credential consumer identity
+//
+// GetResourceCredentialConsumerIdentity resolves the identity a credential resolver
+// matches against. It always has the type S3Bucket and is derived from the object's
+// location, so a resolver can look up matching credentials before the download:
+//
+//	type:     S3Bucket
+//	scheme:   https                 // or the endpoint scheme (e.g. http for MinIO)
+//	hostname: s3.amazonaws.com      // or the endpoint host
+//	port:     9000                  // only when the endpoint sets one
+//	path:     <bucketName>/<objectKey>
+//
+// The scheme/hostname/port are matched as a URL (an empty attribute in the credential
+// config is a wildcard, and default ports are applied per scheme). The path is
+// glob-matched and optional, so credentials can be scoped from broad to narrow. For a
+// download of my-bucket/a/b.txt on AWS, all of these configured consumer identities
+// match, most specific winning:
+//
+//	{type: S3Bucket, hostname: s3.amazonaws.com}                          // every bucket on the host
+//	{type: S3Bucket, hostname: s3.amazonaws.com, path: my-bucket/*}       // one bucket
+//	{type: S3Bucket, hostname: s3.amazonaws.com, path: my-bucket/a/*}     // a key prefix
+//	{type: S3Bucket, hostname: s3.amazonaws.com, path: my-bucket/a/b.txt} // one object
+//
+// A config with a different type, host, explicit scheme, or a non-matching path glob
+// does not resolve. region, mediaType, version and the TLS/path-style switches do not
+// take part in credential matching.
 //
 // The wire types are each registered in their package scheme for typed
 // conversion. Both the versioned (s3/v1) and unversioned (s3) type names are

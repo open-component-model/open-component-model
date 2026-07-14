@@ -15,6 +15,10 @@ const (
 	// legacy ocmv1 credential property names, accepted as aliases.
 	legacyKeyAccessKeyID     = "awsAccessKeyID"
 	legacyKeySecretAccessKey = "awsSecretAccessKey"
+	// legacyKeyToken is ocmv1's "token" property, documented there as an AWS access
+	// token supplied as an alternative to the secret access key. It maps to the AWS
+	// session token.
+	legacyKeyToken = "token"
 )
 
 var convertScheme = runtime.NewScheme()
@@ -38,11 +42,15 @@ func fromDirectCredentials(properties map[string]string) *S3Credentials {
 	if secretAccessKey == "" {
 		secretAccessKey = properties[legacyKeySecretAccessKey]
 	}
+	sessionToken := properties[credentialKeySessionToken]
+	if sessionToken == "" {
+		sessionToken = properties[legacyKeyToken]
+	}
 	return &S3Credentials{
 		Type:            runtime.NewVersionedType(S3CredentialsType, Version),
 		AccessKeyID:     accessKeyID,
 		SecretAccessKey: secretAccessKey,
-		SessionToken:    properties[credentialKeySessionToken],
+		SessionToken:    sessionToken,
 	}
 }
 

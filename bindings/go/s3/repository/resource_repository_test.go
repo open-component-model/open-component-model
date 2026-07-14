@@ -44,18 +44,28 @@ func s3Resource(spec *v1.S3) *descriptor.Resource {
 func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	repo := NewResourceRepository()
 
-	// AWS (no endpoint): host defaults to the AWS S3 host.
+	// AWS (no endpoint): host defaults to the AWS S3 host and the path carries bucket/objectKey.
 	id, err := repo.GetResourceCredentialConsumerIdentity(context.Background(),
-		s3Resource(&v1.S3{BucketName: "my-bucket", Region: "eu-central-1"}))
+		s3Resource(&v1.S3{BucketName: "my-bucket", ObjectKey: "path/to/blob", Region: "eu-central-1"}))
 	require.NoError(t, err)
+	require.Equal(t, "https", id[runtime.IdentityAttributeScheme])
 	require.Equal(t, awsDefaultHost, id[runtime.IdentityAttributeHostname])
-	require.Equal(t, accessspec.S3ConsumerType, id[runtime.IdentityAttributeType])
+	require.Equal(t, "my-bucket/path/to/blob", id[runtime.IdentityAttributePath])
+	require.Equal(t, accessspec.S3BucketConsumerType, id[runtime.IdentityAttributeType])
 
-	// Custom endpoint: host comes from the endpoint.
+	// No object key: the path is just the bucket.
 	id, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
-		s3Resource(&v1.S3{BucketName: "b", Endpoint: "https://minio.internal:9000"}))
+		s3Resource(&v1.S3{BucketName: "my-bucket"}))
+	require.NoError(t, err)
+	require.Equal(t, "my-bucket", id[runtime.IdentityAttributePath])
+
+	// Custom endpoint: host, port and path come from the endpoint plus bucket/objectKey.
+	id, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
+		s3Resource(&v1.S3{BucketName: "b", ObjectKey: "obj", Endpoint: "https://minio.internal:9000"}))
 	require.NoError(t, err)
 	require.Equal(t, "minio.internal", id[runtime.IdentityAttributeHostname])
+	require.Equal(t, "9000", id[runtime.IdentityAttributePort])
+	require.Equal(t, "b/obj", id[runtime.IdentityAttributePath])
 
 	// Missing bucket and nil resource are rejected.
 	_, err = repo.GetResourceCredentialConsumerIdentity(context.Background(), s3Resource(&v1.S3{}))
