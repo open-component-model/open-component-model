@@ -44,12 +44,12 @@ func s3Resource(spec *v1.S3) *descriptor.Resource {
 func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	repo := NewResourceRepository()
 
-	// AWS (no endpoint): host defaults to the AWS S3 host and the path carries bucket/objectKey.
+	// AWS (no endpoint): no hostname or scheme is set (host-agnostic); the path carries bucket/objectKey.
 	id, err := repo.GetResourceCredentialConsumerIdentity(context.Background(),
 		s3Resource(&v1.S3{BucketName: "my-bucket", ObjectKey: "path/to/blob", Region: "eu-central-1"}))
 	require.NoError(t, err)
-	require.Equal(t, "https", id[runtime.IdentityAttributeScheme])
-	require.Equal(t, awsDefaultHost, id[runtime.IdentityAttributeHostname])
+	require.Empty(t, id[runtime.IdentityAttributeHostname])
+	require.Empty(t, id[runtime.IdentityAttributeScheme])
 	require.Equal(t, "my-bucket/path/to/blob", id[runtime.IdentityAttributePath])
 	require.Equal(t, accessspec.S3BucketConsumerType, id[runtime.IdentityAttributeType])
 
@@ -57,6 +57,7 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	id, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
 		s3Resource(&v1.S3{BucketName: "my-bucket"}))
 	require.NoError(t, err)
+	require.Empty(t, id[runtime.IdentityAttributeHostname])
 	require.Equal(t, "my-bucket", id[runtime.IdentityAttributePath])
 
 	// Custom endpoint: host, port and path come from the endpoint plus bucket/objectKey.
