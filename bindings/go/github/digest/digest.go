@@ -12,7 +12,6 @@ import (
 
 	godigest "github.com/opencontainers/go-digest"
 
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
@@ -35,14 +34,13 @@ type DigestProcessor struct {
 	resourceRepository *resource.ResourceRepository
 }
 
-// NewDigestProcessor creates a new GitHub digest processor. filesystemConfig
-// and opts are forwarded to the underlying resource repository, whose
-// TempFolder is where the archive is buffered while its digest is computed
-// (the buffered file stays there afterwards; see download.Download) and
-// whose HTTP client performs both the ref resolution and the download.
-func NewDigestProcessor(filesystemConfig *filesystemv1alpha1.Config, opts ...resource.Option) *DigestProcessor {
+// NewDigestProcessor creates a new GitHub digest processor. opts are forwarded
+// to the underlying resource repository, whose HTTP client performs both the
+// ref resolution and the archive download; the archive is hashed straight
+// from memory (see download.Download).
+func NewDigestProcessor(opts ...resource.Option) *DigestProcessor {
 	return &DigestProcessor{
-		resourceRepository: resource.NewResourceRepository(filesystemConfig, opts...),
+		resourceRepository: resource.NewResourceRepository(opts...),
 	}
 }
 

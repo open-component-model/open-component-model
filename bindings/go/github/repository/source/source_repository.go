@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	"ocm.software/open-component-model/bindings/go/github/internal/download"
@@ -20,9 +19,8 @@ import (
 // serves the same commit archive as the resource repository, but anonymously:
 // [repository.SourceRepository] carries no credentials.
 type SourceRepository struct {
-	filesystemConfig *filesystemv1alpha1.Config
-	httpConfig       *httpv1alpha1.Config
-	httpClient       *http.Client
+	httpConfig *httpv1alpha1.Config
+	httpClient *http.Client
 }
 
 // Option configures a SourceRepository.
@@ -39,28 +37,16 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 
 var _ repository.SourceRepository = (*SourceRepository)(nil)
 
-// NewSourceRepository creates a SourceRepository. Archives are buffered under
-// the TempFolder of filesystemConfig, or the OS temporary directory when unset.
-// The HTTP client is built once, so its connection pool is reused across
-// downloads.
-func NewSourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *SourceRepository {
-	r := &SourceRepository{
-		filesystemConfig: filesystemConfig,
-	}
+// NewSourceRepository creates a SourceRepository. Downloaded archives are
+// held in memory (see download.Download). The HTTP client is built once, so
+// its connection pool is reused across downloads.
+func NewSourceRepository(opts ...Option) *SourceRepository {
+	r := &SourceRepository{}
 	for _, opt := range opts {
 		opt(r)
 	}
 	r.httpClient = ocmhttp.New(ocmhttp.WithConfig(r.httpConfig))
 	return r
-}
-
-// tempFolder returns the directory archives are buffered under. An empty
-// string lets os.CreateTemp fall back to the OS temporary directory.
-func (r *SourceRepository) tempFolder() string {
-	if r.filesystemConfig == nil {
-		return ""
-	}
-	return r.filesystemConfig.TempFolder
 }
 
 // DownloadSource fetches the archive of the commit pinned in the source's GitHub
@@ -74,7 +60,7 @@ func (r *SourceRepository) DownloadSource(ctx context.Context, source *descripto
 		return nil, fmt.Errorf("error resolving GitHub access for download: %w", err)
 	}
 
-	return download.Download(ctx, gitHub, nil, r.tempFolder(), r.httpClient)
+	return download.Download(ctx, gitHub, nil, r.httpClient)
 }
 
 // UploadSource is not supported: the GitHub access type is a read-only

@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -16,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	blobpkg "ocm.software/open-component-model/bindings/go/blob"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -85,7 +83,7 @@ func readBlob(t *testing.T, b blobpkg.ReadOnlyBlob) []byte {
 func TestSourceRepository_DownloadSource(t *testing.T) {
 	t.Run("downloads the commit archive verbatim as a tgz blob", func(t *testing.T) {
 		baseURL, payload := mockGitHub(t)
-		downloaded, err := NewSourceRepository(nil).DownloadSource(
+		downloaded, err := NewSourceRepository().DownloadSource(
 			t.Context(), githubSource(baseURL+"/octocat/Hello-World", "refs/heads/master", testCommit))
 		require.NoError(t, err)
 
@@ -97,33 +95,15 @@ func TestSourceRepository_DownloadSource(t *testing.T) {
 	})
 
 	t.Run("rejects a source without access", func(t *testing.T) {
-		_, err := NewSourceRepository(nil).DownloadSource(t.Context(), &descriptor.Source{})
+		_, err := NewSourceRepository().DownloadSource(t.Context(), &descriptor.Source{})
 		assert.ErrorContains(t, err, "access")
 	})
 
 	t.Run("rejects a ref-only source with no pinned commit", func(t *testing.T) {
-		_, err := NewSourceRepository(nil).DownloadSource(t.Context(),
+		_, err := NewSourceRepository().DownloadSource(t.Context(),
 			githubSource("https://github.com/octocat/Hello-World", "refs/heads/master", ""))
 		assert.ErrorContains(t, err, "requires a pinned commit")
 	})
-}
-
-// A repository archive can be large, so it is buffered on disk under the
-// configured TempFolder rather than held in memory.
-func TestSourceRepository_DownloadSource_BuffersToConfiguredTempFolder(t *testing.T) {
-	baseURL, payload := mockGitHub(t)
-	tempFolder := t.TempDir()
-
-	repo := NewSourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
-	downloaded, err := repo.DownloadSource(t.Context(),
-		githubSource(baseURL+"/octocat/Hello-World", "", testCommit))
-	require.NoError(t, err)
-
-	entries, err := os.ReadDir(tempFolder)
-	require.NoError(t, err)
-	require.Len(t, entries, 1, "the archive must be buffered under the configured temp folder")
-
-	assert.Equal(t, payload, readBlob(t, downloaded), "the buffered blob must read back the exact archive")
 }
 
 // A GitHub 5xx is retryable, so the number of requests the server sees is a
@@ -157,7 +137,7 @@ func TestSourceRepository_WithHTTPConfig_IsAppliedToRequests(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 
-			repo := NewSourceRepository(nil, WithHTTPConfig(tc.config))
+			repo := NewSourceRepository(WithHTTPConfig(tc.config))
 			_, err := repo.DownloadSource(t.Context(),
 				githubSource(server.URL+"/octocat/Hello-World", "", testCommit))
 
@@ -168,6 +148,6 @@ func TestSourceRepository_WithHTTPConfig_IsAppliedToRequests(t *testing.T) {
 }
 
 func TestSourceRepository_UploadSource(t *testing.T) {
-	_, err := NewSourceRepository(nil).UploadSource(t.Context(), nil, nil, nil)
+	_, err := NewSourceRepository().UploadSource(t.Context(), nil, nil, nil)
 	assert.ErrorContains(t, err, "not support")
 }

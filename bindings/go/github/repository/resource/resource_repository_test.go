@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -17,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	blobpkg "ocm.software/open-component-model/bindings/go/blob"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -89,7 +87,7 @@ func readBlob(t *testing.T, b blobpkg.ReadOnlyBlob) []byte {
 func TestResourceRepository_DownloadResource(t *testing.T) {
 	t.Run("downloads the commit archive verbatim as a tgz blob", func(t *testing.T) {
 		baseURL, payload := mockGitHub(t)
-		downloaded, err := NewResourceRepository(nil).DownloadResource(
+		downloaded, err := NewResourceRepository().DownloadResource(
 			t.Context(), githubResource(baseURL+"/octocat/Hello-World", testCommit), nil)
 		require.NoError(t, err)
 
@@ -101,13 +99,13 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 	})
 
 	t.Run("rejects a resource with an invalid access spec", func(t *testing.T) {
-		_, err := NewResourceRepository(nil).DownloadResource(
+		_, err := NewResourceRepository().DownloadResource(
 			t.Context(), githubResource("https://github.com/octocat/Hello-World", "not-a-sha"), nil)
 		assert.ErrorContains(t, err, "commit")
 	})
 
 	t.Run("rejects a resource without access", func(t *testing.T) {
-		_, err := NewResourceRepository(nil).DownloadResource(t.Context(), &descriptor.Resource{}, nil)
+		_, err := NewResourceRepository().DownloadResource(t.Context(), &descriptor.Resource{}, nil)
 		assert.ErrorContains(t, err, "access")
 	})
 
@@ -123,7 +121,7 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 				Ref:     "main",
 			},
 		}
-		downloaded, err := NewResourceRepository(nil).DownloadResource(t.Context(), res, nil)
+		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err)
 		assert.Equal(t, payload, readBlob(t, downloaded), "the archive of the resolved commit must be served")
 	})
@@ -161,7 +159,7 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 				Commit:  testCommit,
 			},
 		}
-		downloaded, err := NewResourceRepository(nil).DownloadResource(t.Context(), res, nil)
+		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err, "ref drift must never fail the download")
 		assert.Equal(t, payload, readBlob(t, downloaded), "the pinned commit's archive must be served, not the ref's")
 		assert.Contains(t, logBuf.String(), "no longer points at the pinned commit", "the drift must be logged as a warning")
@@ -177,26 +175,9 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 				RepoURL: "https://github.com/octocat/Hello-World",
 			},
 		}
-		_, err := NewResourceRepository(nil).DownloadResource(t.Context(), res, nil)
+		_, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		assert.ErrorContains(t, err, "either commit or ref")
 	})
-}
-
-// A repository archive can be large, so it is buffered on disk under the
-// configured TempFolder rather than held in memory.
-func TestResourceRepository_DownloadResource_BuffersToConfiguredTempFolder(t *testing.T) {
-	baseURL, payload := mockGitHub(t)
-	tempFolder := t.TempDir()
-
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
-	downloaded, err := repo.DownloadResource(t.Context(), githubResource(baseURL+"/octocat/Hello-World", testCommit), nil)
-	require.NoError(t, err)
-
-	entries, err := os.ReadDir(tempFolder)
-	require.NoError(t, err)
-	require.Len(t, entries, 1, "the archive must be buffered under the configured temp folder")
-
-	assert.Equal(t, payload, readBlob(t, downloaded), "the buffered blob must read back the exact archive")
 }
 
 // A GitHub 5xx is retryable, so the number of requests the server sees is a
@@ -230,7 +211,7 @@ func TestResourceRepository_WithHTTPConfig_IsAppliedToRequests(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 
-			repo := NewResourceRepository(nil, WithHTTPConfig(tc.config))
+			repo := NewResourceRepository(WithHTTPConfig(tc.config))
 			_, err := repo.DownloadResource(t.Context(),
 				githubResource(server.URL+"/octocat/Hello-World", testCommit), nil)
 
@@ -241,7 +222,7 @@ func TestResourceRepository_WithHTTPConfig_IsAppliedToRequests(t *testing.T) {
 }
 
 func TestResourceRepository_GetResourceCredentialConsumerIdentity(t *testing.T) {
-	identity, err := NewResourceRepository(nil).GetResourceCredentialConsumerIdentity(t.Context(),
+	identity, err := NewResourceRepository().GetResourceCredentialConsumerIdentity(t.Context(),
 		githubResource("https://github.com/open-component-model/ocm", testCommit))
 	require.NoError(t, err)
 
@@ -250,12 +231,12 @@ func TestResourceRepository_GetResourceCredentialConsumerIdentity(t *testing.T) 
 }
 
 func TestResourceRepository_UploadResource(t *testing.T) {
-	_, err := NewResourceRepository(nil).UploadResource(t.Context(), nil, nil, nil)
+	_, err := NewResourceRepository().UploadResource(t.Context(), nil, nil, nil)
 	assert.ErrorContains(t, err, "not support")
 }
 
 func TestResourceRepository_GetResourceRepositoryScheme(t *testing.T) {
-	scheme := NewResourceRepository(nil).GetResourceRepositoryScheme()
+	scheme := NewResourceRepository().GetResourceRepositoryScheme()
 	require.NotNil(t, scheme)
 	assert.True(t, scheme.IsRegistered(runtime.NewVersionedType(v1.LegacyType, v1.Version)))
 }

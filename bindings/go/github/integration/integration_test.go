@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"io"
-	"os"
 	"strings"
 	"testing"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/github/digest"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
@@ -123,7 +121,7 @@ func Test_Integration_GitHub(t *testing.T) {
 	}
 
 	t.Run("resource", func(t *testing.T) {
-		processor := digest.NewDigestProcessor(nil)
+		processor := digest.NewDigestProcessor()
 
 		t.Run("commit and ref set", func(t *testing.T) {
 			t.Run("digest processing keeps the commit authoritative and the ref informational", func(t *testing.T) {
@@ -138,7 +136,7 @@ func Test_Integration_GitHub(t *testing.T) {
 			})
 
 			t.Run("download serves the commit source archive", func(t *testing.T) {
-				downloaded, err := resource.NewResourceRepository(nil).DownloadResource(
+				downloaded, err := resource.NewResourceRepository().DownloadResource(
 					t.Context(), helloWorldResource(helloWorldRef, helloWorldCommit), nil)
 				require.NoError(t, err)
 				assertHelloWorldArchive(t, downloaded)
@@ -158,7 +156,7 @@ func Test_Integration_GitHub(t *testing.T) {
 			})
 
 			t.Run("the pinned digest matches the bytes of a fresh archive download", func(t *testing.T) {
-				downloaded, err := resource.NewResourceRepository(nil).DownloadResource(t.Context(), processed, nil)
+				downloaded, err := resource.NewResourceRepository().DownloadResource(t.Context(), processed, nil)
 				require.NoError(t, err)
 				reader, err := downloaded.ReadCloser()
 				require.NoError(t, err)
@@ -201,35 +199,16 @@ func Test_Integration_GitHub(t *testing.T) {
 			})
 
 			t.Run("download resolves the ref and serves the archive of the commit it points at", func(t *testing.T) {
-				downloaded, err := resource.NewResourceRepository(nil).DownloadResource(
+				downloaded, err := resource.NewResourceRepository().DownloadResource(
 					t.Context(), helloWorldResource(helloWorldRef, ""), nil)
 				require.NoError(t, err)
 				assertHelloWorldArchive(t, downloaded)
 			})
 		})
-
-		// #1069 requires the download to buffer the archive to the filesystem,
-		// not hold it in memory. Point the repository at a known temp folder and
-		// assert the archive lands there as a file while the blob is still open;
-		// a regression to an in-memory blob leaves the folder empty.
-		t.Run("archive is buffered to a file under the configured temp folder", func(t *testing.T) {
-			tempFolder := t.TempDir()
-			repo := resource.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
-
-			downloaded, err := repo.DownloadResource(t.Context(), helloWorldResource("", helloWorldCommit), nil)
-			require.NoError(t, err)
-			entries, err := os.ReadDir(tempFolder)
-			require.NoError(t, err)
-			require.Len(t, entries, 1, "the archive must be buffered as a file under the configured temp folder")
-			assert.True(t, strings.HasSuffix(entries[0].Name(), ".tgz"),
-				"buffered archive should keep the .tgz suffix, got %q", entries[0].Name())
-
-			assertHelloWorldArchive(t, downloaded)
-		})
 	})
 
 	t.Run("source", func(t *testing.T) {
-		repo := source.NewSourceRepository(nil)
+		repo := source.NewSourceRepository()
 
 		t.Run("commit and ref set", func(t *testing.T) {
 			t.Run("download serves the commit source archive and ignores the ref", func(t *testing.T) {

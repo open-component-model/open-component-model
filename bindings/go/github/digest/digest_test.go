@@ -88,7 +88,7 @@ func TestDigestProcessor_ProcessResourceDigest(t *testing.T) {
 	// archive bytes GitHub serves.
 	expected := godigest.FromBytes(payload)
 	repoURL := baseURL + "/octocat/Hello-World"
-	processor := NewDigestProcessor(nil)
+	processor := NewDigestProcessor()
 
 	t.Run("applies the generic blob digest of the downloaded archive", func(t *testing.T) {
 		res := githubResource(repoURL, testCommit)
@@ -225,14 +225,14 @@ func TestDigestProcessor_ProcessResourceDigest_ResolvesRefOnce(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	res := githubResourceRef(server.URL+"/octocat/Hello-World", "main", "")
-	_, err := NewDigestProcessor(nil).ProcessResourceDigest(t.Context(), res, nil)
+	_, err := NewDigestProcessor().ProcessResourceDigest(t.Context(), res, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, resolveCalls, "the ref must be resolved once to pin the commit, not again for the download")
 }
 
 func TestDigestProcessor_ConsumerIdentity(t *testing.T) {
-	identity, err := NewDigestProcessor(nil).GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(),
+	identity, err := NewDigestProcessor().GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(),
 		githubResource("https://github.com/open-component-model/ocm", testCommit))
 	require.NoError(t, err)
 	assert.Equal(t, "GitHubRepository", identity[runtime.IdentityAttributeType])
@@ -241,5 +241,5 @@ func TestDigestProcessor_ConsumerIdentity(t *testing.T) {
 // The scheme's contents are the access package's contract; all this processor
 // owes is a non-nil scheme so the plugin registry can dispatch to it.
 func TestDigestProcessor_Scheme(t *testing.T) {
-	require.NotNil(t, NewDigestProcessor(nil).GetResourceRepositoryScheme())
+	require.NotNil(t, NewDigestProcessor().GetResourceRepositoryScheme())
 }

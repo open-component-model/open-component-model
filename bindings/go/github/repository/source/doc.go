@@ -7,7 +7,7 @@
 //
 // # Usage
 //
-//	repo := source.NewSourceRepository(filesystemConfig)
+//	repo := source.NewSourceRepository()
 //
 //	src := &descriptor.Source{
 //		Access: &v1.GitHub{

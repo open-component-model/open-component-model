@@ -9,7 +9,7 @@
 //
 // # Usage
 //
-//	repo := resource.NewResourceRepository(filesystemConfig)
+//	repo := resource.NewResourceRepository()
 //
 //	res := &descriptor.Resource{
 //		Access: &v1.GitHub{
