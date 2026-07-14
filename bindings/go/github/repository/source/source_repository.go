@@ -21,9 +21,8 @@ import (
 // a component source; downloading it serves the same commit archive as the
 // resource repository.
 //
-// The repository.SourceRepository interface carries no credentials (see
-// https://github.com/open-component-model/ocm-project/issues/857), so source
-// downloads are anonymous until that is resolved.
+// The repository.SourceRepository interface carries no credentials, so source
+// downloads are anonymous.
 type SourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
 	httpConfig       *httpv1alpha1.Config
