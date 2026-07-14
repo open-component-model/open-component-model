@@ -4,15 +4,21 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -20,6 +26,18 @@ import (
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
+
+// createCTFRepository creates a CTF-backed OCI repository at the given path.
+func createCTFRepository(t *testing.T, path string) repository.ComponentVersionRepository {
+	t.Helper()
+	fs, err := filesystem.NewFS(path, os.O_RDWR|os.O_CREATE)
+	require.NoError(t, err)
+	archive := ctf.NewFileSystemCTF(fs)
+	store := ocictf.NewFromCTF(archive)
+	repo, err := oci.NewRepository(oci.WithResolver(store), oci.WithTempDir(t.TempDir()))
+	require.NoError(t, err)
+	return repo
+}
 
 // Test_Integration_TransferWget_CTFToCTF verifies that a component with a wget-access resource is
 // transferred by value: under CopyModeAllResources the URL content is downloaded and embedded as a
