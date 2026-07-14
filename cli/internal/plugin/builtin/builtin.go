@@ -18,6 +18,7 @@ import (
 	ociplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/oci"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/oidc"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/rsa"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin/wget"
 )
 
 func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, logger *slog.Logger) error {
@@ -49,6 +50,14 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	}
 	if err := helm.Register(manager.InputRegistry, manager.CredentialRepositoryRegistry, filesystemConfig, httpConfig); err != nil {
 		return fmt.Errorf("could not register helm input plugin: %w", err)
+	}
+
+	if err := wget.Register(manager.InputRegistry,
+		manager.ResourcePluginRegistry,
+		manager.DigestProcessorRegistry,
+		manager.CredentialRepositoryRegistry,
+		httpConfig); err != nil {
+		return fmt.Errorf("could not register wget inbuilt plugin: %w", err)
 	}
 
 	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(

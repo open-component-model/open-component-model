@@ -148,6 +148,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/wget/Taskfile.yml
     dir: ./bindings/go/wget
+  bindings/go/wget/integration:
+    optional: true
+    taskfile: ./bindings/go/wget/integration/Taskfile.yml
+    dir: ./bindings/go/wget/integration
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml
