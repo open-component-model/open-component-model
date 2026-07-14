@@ -18,6 +18,7 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
+	wgetv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
 // TransferRoot pairs a DAG root key with its target repositories and source resolver.
@@ -321,6 +322,13 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 			fmt.Sprintf("${%s.spec.?provFile}", convertResourceID),
 			fmt.Sprintf("${%s.spec.file}", addResourceID),
 		}, nil
+	case *wgetv1.Wget:
+		// A wget resource is a plain blob: download it and embed it as a local blob in the
+		// target. There is no OCI-artifact representation, so uploadAsArtifact is not honored here.
+		if err := processWget(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+			return nil, fmt.Errorf("cannot process wget resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	default:
 		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, Helm chart, and wget resources are supported for transformation.",
 			"component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version,

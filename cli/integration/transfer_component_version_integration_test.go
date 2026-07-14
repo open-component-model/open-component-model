@@ -5,7 +5,10 @@ import (
 	"context"
 	"crypto"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -289,4 +292,87 @@ configurations:
 	// Verify resource was also transferred
 	r.Len(targetDesc.Component.Resources, 1)
 	r.Equal("test-blob", targetDesc.Component.Resources[0].Name)
+}
+
+// Test_Integration_TransferComponentVersion_WgetByValue verifies that a component whose resource
+// has a wget access is transferred by value through the CLI: `transfer component-version
+// --copy-resources` downloads the URL content and embeds it as a local blob in the target CTF,
+// making the target self-contained. This exercises the wget transfer transformer wired into the
+// default transfer builder.
+func Test_Integration_TransferComponentVersion_WgetByValue(t *testing.T) {
+	r := require.New(t)
+	t.Parallel()
+	ctx := t.Context()
+
+	const content = "hello wget cli transfer"
+
+	// Serve the resource content over HTTP; kept up for both add and transfer.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write([]byte(content))
+	}))
+	t.Cleanup(srv.Close)
+
+	componentName := "ocm.software/wget-transfer-cli"
+	componentVersion := "v1.0.0"
+
+	// Source CTF holds a resource with a wget access (an external reference, not embedded content).
+	constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: remote-blob
+    version: v1.0.0
+    type: blob
+    access:
+      type: Wget/v1
+      url: %s/artifact.bin
+      mediaType: application/octet-stream
+`, componentName, componentVersion, srv.URL)
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	sourceCTF := filepath.Join(t.TempDir(), "source-ctf")
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add", "component-version",
+		"--repository", fmt.Sprintf("ctf::%s", sourceCTF),
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "creating source CTF with a wget access should succeed")
+
+	// transfer CTF -> CTF with --copy-resources: the wget resource is downloaded and embedded.
+	targetCTF := filepath.Join(t.TempDir(), "target-ctf")
+	transferCMD := cmd.New()
+	transferCMD.SetArgs([]string{
+		"transfer", "component-version",
+		fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion),
+		fmt.Sprintf("ctf::%s", targetCTF),
+		"--copy-resources",
+	})
+	r.NoError(transferCMD.ExecuteContext(ctx), "wget by-value transfer should succeed")
+
+	// The target resource is now a self-contained local blob with the served content.
+	fs, err := filesystem.NewFS(targetCTF, os.O_RDONLY)
+	r.NoError(err)
+	targetRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))))
+	r.NoError(err)
+	desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(desc.Component.Resources, 1)
+	res := desc.Component.Resources[0]
+	r.Equal("remote-blob", res.Name)
+	r.Contains(res.Access.GetType().String(), "ocalBlob", "the wget resource must be localized to a local blob")
+
+	blobData, _, err := targetRepo.GetLocalResource(ctx, componentName, componentVersion, res.ToIdentity())
+	r.NoError(err)
+	rc, err := blobData.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(rc.Close()) }()
+	got, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.Equal(content, string(got), "localized content must match the served bytes")
 }
