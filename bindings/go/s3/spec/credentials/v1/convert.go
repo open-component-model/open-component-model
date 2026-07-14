@@ -24,10 +24,7 @@ const (
 var convertScheme = runtime.NewScheme()
 
 func init() {
-	convertScheme.MustRegisterWithAlias(&S3Credentials{},
-		S3CredentialsVersionedType,
-		runtime.NewUnversionedType(S3CredentialsType),
-	)
+	MustRegisterCredentialType(convertScheme)
 	directcredsv1.MustRegister(convertScheme)
 }
 
@@ -57,6 +54,9 @@ func fromDirectCredentials(properties map[string]string) *S3Credentials {
 // ConvertToS3Credentials converts runtime.Typed into S3Credentials.
 // Direct conversion as well as converting from DirectCredentials/v1 is supported.
 func ConvertToS3Credentials(creds runtime.Typed) (*S3Credentials, error) {
+	if creds == nil {
+		return nil, nil
+	}
 	typed, err := convertScheme.NewObject(creds.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("error converting credential type: %w", err)
