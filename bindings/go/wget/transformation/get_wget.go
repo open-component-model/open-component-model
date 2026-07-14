@@ -27,13 +27,13 @@ type GetWget struct {
 func (t *GetWget) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
 	var transformation v1alpha1.GetWget
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
-		return nil, fmt.Errorf("failed converting generic transformation to get wget transformation: %w", err)
+		return nil, fmt.Errorf("failed converting generic transformation to GetWget transformation: %w", err)
 	}
 	if transformation.Spec == nil {
-		return nil, fmt.Errorf("spec is required for get wget transformation")
+		return nil, fmt.Errorf("spec is required for GetWget transformation")
 	}
 	if transformation.Spec.Resource == nil {
-		return nil, fmt.Errorf("resource is required in spec for get wget transformation")
+		return nil, fmt.Errorf("resource is required in spec for GetWget transformation")
 	}
 
 	if transformation.Output == nil {
