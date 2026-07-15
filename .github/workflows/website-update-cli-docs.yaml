@@ -70,8 +70,7 @@ jobs:
             website/content_versioned/version-legacy/
             website/hack/generate-cli-docs/go.mod
             website/hack/generate-cli-docs/go.sum
-          branch: update-cli-docs/auto
-          branch-suffix: timestamp
+          branch: update-cli-docs/ocm-v1-e72ff582-a2c7-5517-9c87-12f3f4db2306
           delete-branch: true
           sign-commits: true
           body: |
