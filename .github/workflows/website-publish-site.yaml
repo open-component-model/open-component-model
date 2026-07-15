@@ -69,12 +69,9 @@ jobs:
           hugo-version: '0.160.0'
           extended: true
 
-      # Persist only the remote-resource cache (fetched GitHub avatars, see
-      # website/layouts/shortcodes/person-card.html) across runs so the publish
-      # build does not re-hit github.com on every push. Keyed on the governance
-      # page: the set of fetched URLs changes only when its members change, so
-      # ordinary website edits stay cache hits. restore-keys falls back to the
-      # newest prior cache so a key change refetches only the delta.
+      # Persist fetched GitHub avatars (see person-card.html) across runs so the
+      # build doesn't re-hit github.com every push. Keyed on the governance page
+      # since its member list is the only thing that changes the fetched URLs.
       - name: Restore Hugo remote-resource cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -87,6 +84,9 @@ jobs:
         working-directory: website
         env:
           HUGO_CACHES_GETRESOURCE_DIR: ${{ github.workspace }}/website/.hugo-getresource-cache
+          # Cap Hugo's cache (default -1 = never expires) so changed avatars
+          # refresh weekly instead of never.
+          HUGO_CACHES_GETRESOURCE_MAXAGE: 168h
         run: |
           npm ci
           npm run build
