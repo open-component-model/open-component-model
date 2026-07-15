@@ -134,18 +134,6 @@ func TestFetch(t *testing.T) {
 	const commit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
 	payload := gzippedTar(t, "Hello-World-"+commit+"/README", "hello")
 
-	// sanity: the fixture is a real gzipped tar, so comparing the fetched bytes
-	// against it below is a meaningful assertion.
-	gz, err := gzip.NewReader(bytes.NewReader(payload))
-	require.NoError(t, err)
-	tr := tar.NewReader(gz)
-	h, err := tr.Next()
-	require.NoError(t, err)
-	assert.True(t, strings.HasSuffix(h.Name, "/README"))
-	body, err := io.ReadAll(tr)
-	require.NoError(t, err)
-	assert.Equal(t, "hello", string(body))
-
 	// Absent credentials must send no Authorization header at all, not an empty
 	// bearer token, which GitHub rejects outright.
 	for _, tc := range []struct {

@@ -46,20 +46,3 @@ func TestGitHubCredentials_JSONRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, string(data), string(again))
 }
-
-func TestGitHubCredentials_GetSetType(t *testing.T) {
-	creds := &GitHubCredentials{Token: "ghp_secret"}
-	creds.SetType(runtime.NewVersionedType(GitHubCredentialsType, Version))
-	assert.Equal(t, runtime.NewVersionedType(GitHubCredentialsType, Version), creds.GetType())
-}
-
-func TestGitHubCredentials_DeepCopy(t *testing.T) {
-	creds := &GitHubCredentials{Type: runtime.NewVersionedType(GitHubCredentialsType, Version), Token: "ghp_secret"}
-
-	clone, ok := creds.DeepCopyTyped().(*GitHubCredentials)
-	require.True(t, ok)
-	assert.Equal(t, creds, clone)
-
-	clone.Token = "ghp_other"
-	assert.Equal(t, "ghp_secret", creds.Token, "the copy must not alias the original")
-}

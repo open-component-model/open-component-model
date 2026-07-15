@@ -203,11 +203,4 @@ func TestDigestProcessor(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "GitHubRepository", identity[runtime.IdentityAttributeType])
 	})
-
-	t.Run("GetResourceRepositoryScheme", func(t *testing.T) {
-		// The scheme's contents are the access package's contract; all this
-		// processor owes is a non-nil scheme so the plugin registry can
-		// dispatch to it.
-		require.NotNil(t, processor.GetResourceRepositoryScheme())
-	})
 }

@@ -22,13 +22,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// The canonical "Hello World" repository of the octocat user. Both the
-// repository and this commit (its long-frozen master tip) have been stable
-// for over a decade and are used widely as GitHub API test fixtures.
+// This repository, pinned at a published release tag. The ref-only cases below
+// assert that resolving the ref yields exactly ocmCommit, so the ref must never
+// move: a release tag of a published version is the strongest such guarantee a
+// live repository offers (branches advance, release tags do not).
 const (
-	helloWorldRepo   = "https://github.com/octocat/Hello-World"
-	helloWorldRef    = "refs/heads/master"
-	helloWorldCommit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+	ocmRepo   = "https://github.com/open-component-model/open-component-model"
+	ocmRef    = "refs/tags/v0.8.0"
+	ocmCommit = "b4bb4e880aa5c159366db7cc2ae800e1ee14dbda"
 )
 
 // testCredentials authenticates the run when GITHUB_TOKEN is set and stays
@@ -46,47 +47,48 @@ func testCredentials() runtime.Typed {
 	}
 }
 
-// helloWorldAccess builds a github access; ref or commit may be empty to
-// exercise the different access shapes.
-func helloWorldAccess(ref, commit string) *v1.GitHub {
+// ocmAccess builds a github access; ref or commit may be empty to exercise the
+// different access shapes.
+func ocmAccess(ref, commit string) *v1.GitHub {
 	return &v1.GitHub{
 		Type:    runtime.NewVersionedType(v1.LegacyType, v1.Version),
-		RepoURL: helloWorldRepo,
+		RepoURL: ocmRepo,
 		Ref:     ref,
 		Commit:  commit,
 	}
 }
 
-func helloWorldResource(ref, commit string) *descriptor.Resource {
+func ocmResource(ref, commit string) *descriptor.Resource {
 	return &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{Name: "hello-world", Version: "1.0.0"},
+			ObjectMeta: descriptor.ObjectMeta{Name: "open-component-model", Version: "1.0.0"},
 		},
-		Access: helloWorldAccess(ref, commit),
+		Access: ocmAccess(ref, commit),
 	}
 }
 
-func helloWorldSource(ref, commit string) *descriptor.Source {
+func ocmSource(ref, commit string) *descriptor.Source {
 	return &descriptor.Source{
 		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{Name: "hello-world", Version: "1.0.0"},
+			ObjectMeta: descriptor.ObjectMeta{Name: "open-component-model", Version: "1.0.0"},
 		},
-		Access: helloWorldAccess(ref, commit),
+		Access: ocmAccess(ref, commit),
 	}
 }
 
 // Beside the pax global header, the REST tarball endpoint roots every archive
 // entry at a single directory named "<owner>-<repo>-<abbreviated-commit>/".
-const helloWorldArchiveRoot = "octocat-Hello-World-"
+const ocmArchiveRoot = "open-component-model-open-component-model-"
 
-// assertHelloWorldArchive verifies the blob is GitHub's gzipped tar source
-// archive of the Hello-World repository at helloWorldCommit.
+// assertOCMArchive verifies the blob is GitHub's gzipped tar source archive of
+// this repository at ocmCommit.
 //
-// It asserts the commit, not just the presence of a README: every revision of
-// this repository has a README, so a download that ignored the pinned commit
-// would satisfy a README-only check. Two parts of the payload name the commit —
-// the pax global header records it in full, the root directory abbreviated.
-func assertHelloWorldArchive(t *testing.T, downloaded blob.ReadOnlyBlob) {
+// It asserts the commit, not just the presence of a README.md: every revision
+// of this repository has a README.md, so a download that ignored the pinned
+// commit would satisfy a README-only check. Two parts of the payload name the
+// commit — the pax global header records it in full, the root directory
+// abbreviated.
+func assertOCMArchive(t *testing.T, downloaded blob.ReadOnlyBlob) {
 	t.Helper()
 
 	reader, err := downloaded.ReadCloser()
@@ -108,7 +110,7 @@ func assertHelloWorldArchive(t *testing.T, downloaded blob.ReadOnlyBlob) {
 		// git names the commit an archive was cut from in the "comment" record
 		// of the pax global header, as the full sha.
 		if header.Typeflag == tar.TypeXGlobalHeader {
-			assert.Equal(t, helloWorldCommit, header.PAXRecords["comment"],
+			assert.Equal(t, ocmCommit, header.PAXRecords["comment"],
 				"the archive must be cut from the commit the download was asked for")
 			commitFound = true
 			continue
@@ -116,20 +118,20 @@ func assertHelloWorldArchive(t *testing.T, downloaded blob.ReadOnlyBlob) {
 
 		root, _, ok := strings.Cut(header.Name, "/")
 		require.True(t, ok, "archive entry %q must live under the root directory", header.Name)
-		abbrev, ok := strings.CutPrefix(root, helloWorldArchiveRoot)
-		require.True(t, ok, "archive entry %q must be rooted at %q<commit>", header.Name, helloWorldArchiveRoot)
+		abbrev, ok := strings.CutPrefix(root, ocmArchiveRoot)
+		require.True(t, ok, "archive entry %q must be rooted at %q<commit>", header.Name, ocmArchiveRoot)
 		// git abbreviates the sha only as far as it must to stay unambiguous,
 		// so match a prefix of the commit instead of a fixed width.
-		assert.True(t, abbrev != "" && strings.HasPrefix(helloWorldCommit, abbrev),
-			"archive is rooted at commit %q, but the download was asked for %q", abbrev, helloWorldCommit)
+		assert.True(t, abbrev != "" && strings.HasPrefix(ocmCommit, abbrev),
+			"archive is rooted at commit %q, but the download was asked for %q", abbrev, ocmCommit)
 
-		if strings.HasSuffix(header.Name, "/README") {
+		if root+"/README.md" == header.Name {
 			readmeFound = true
 		}
 	}
 
 	assert.True(t, commitFound, "the archive must carry the pax global header naming its commit")
-	assert.True(t, readmeFound, "the Hello-World archive must contain its README under the commit-prefixed root")
+	assert.True(t, readmeFound, "the archive must contain the repository's README.md under the commit-prefixed root")
 }
 
 func Test_Integration_GitHub(t *testing.T) {
@@ -142,26 +144,26 @@ func Test_Integration_GitHub(t *testing.T) {
 
 		t.Run("commit and ref set", func(t *testing.T) {
 			t.Run("digest processing keeps the commit authoritative and the ref informational", func(t *testing.T) {
-				processed, err := processor.ProcessResourceDigest(t.Context(), helloWorldResource(helloWorldRef, helloWorldCommit), testCredentials())
+				processed, err := processor.ProcessResourceDigest(t.Context(), ocmResource(ocmRef, ocmCommit), testCredentials())
 				require.NoError(t, err)
 
 				pinned, ok := processed.Access.(*v1.GitHub)
 				require.True(t, ok, "processed access must be typed *v1.GitHub")
-				assert.Equal(t, helloWorldCommit, pinned.Commit, "the set commit must not be re-resolved from the ref")
-				assert.Equal(t, helloWorldRef, pinned.Ref, "the ref stays informational next to the pinned commit")
+				assert.Equal(t, ocmCommit, pinned.Commit, "the set commit must not be re-resolved from the ref")
+				assert.Equal(t, ocmRef, pinned.Ref, "the ref stays informational next to the pinned commit")
 				require.NotNil(t, processed.Digest)
 			})
 
 			t.Run("download serves the commit source archive", func(t *testing.T) {
 				downloaded, err := resource.NewResourceRepository().DownloadResource(
-					t.Context(), helloWorldResource(helloWorldRef, helloWorldCommit), testCredentials())
+					t.Context(), ocmResource(ocmRef, ocmCommit), testCredentials())
 				require.NoError(t, err)
-				assertHelloWorldArchive(t, downloaded)
+				assertOCMArchive(t, downloaded)
 			})
 		})
 
 		t.Run("commit only", func(t *testing.T) {
-			res := helloWorldResource("", helloWorldCommit)
+			res := ocmResource("", ocmCommit)
 			processed, err := processor.ProcessResourceDigest(t.Context(), res, testCredentials())
 			require.NoError(t, err)
 
@@ -198,16 +200,16 @@ func Test_Integration_GitHub(t *testing.T) {
 
 		t.Run("ref only", func(t *testing.T) {
 			t.Run("digest processing resolves the ref and pins the commit it points at", func(t *testing.T) {
-				res := helloWorldResource(helloWorldRef, "")
+				res := ocmResource(ocmRef, "")
 				processed, err := processor.ProcessResourceDigest(t.Context(), res, testCredentials())
 				require.NoError(t, err)
 
 				pinned, ok := processed.Access.(*v1.GitHub)
 				require.True(t, ok, "processed access must be typed *v1.GitHub")
-				// master has been frozen on this commit for over a decade, so
-				// the resolved sha is a stable assertion target.
-				assert.Equal(t, helloWorldCommit, pinned.Commit, "the ref must be resolved and pinned as a commit")
-				assert.Equal(t, helloWorldRef, pinned.Ref, "the ref stays informational next to the pinned commit")
+				// The ref is a published release tag, so the sha it resolves to
+				// is a stable assertion target.
+				assert.Equal(t, ocmCommit, pinned.Commit, "the ref must be resolved and pinned as a commit")
+				assert.Equal(t, ocmRef, pinned.Ref, "the ref stays informational next to the pinned commit")
 				require.NotNil(t, processed.Digest)
 
 				orig, ok := res.Access.(*v1.GitHub)
@@ -217,9 +219,9 @@ func Test_Integration_GitHub(t *testing.T) {
 
 			t.Run("download resolves the ref and serves the archive of the commit it points at", func(t *testing.T) {
 				downloaded, err := resource.NewResourceRepository().DownloadResource(
-					t.Context(), helloWorldResource(helloWorldRef, ""), testCredentials())
+					t.Context(), ocmResource(ocmRef, ""), testCredentials())
 				require.NoError(t, err)
-				assertHelloWorldArchive(t, downloaded)
+				assertOCMArchive(t, downloaded)
 			})
 		})
 	})
@@ -229,17 +231,17 @@ func Test_Integration_GitHub(t *testing.T) {
 
 		t.Run("commit and ref set", func(t *testing.T) {
 			t.Run("download serves the commit source archive and ignores the ref", func(t *testing.T) {
-				downloaded, err := repo.DownloadSource(t.Context(), helloWorldSource(helloWorldRef, helloWorldCommit))
+				downloaded, err := repo.DownloadSource(t.Context(), ocmSource(ocmRef, ocmCommit))
 				require.NoError(t, err)
-				assertHelloWorldArchive(t, downloaded)
+				assertOCMArchive(t, downloaded)
 			})
 		})
 
 		t.Run("commit only", func(t *testing.T) {
 			t.Run("download serves the commit source archive", func(t *testing.T) {
-				downloaded, err := repo.DownloadSource(t.Context(), helloWorldSource("", helloWorldCommit))
+				downloaded, err := repo.DownloadSource(t.Context(), ocmSource("", ocmCommit))
 				require.NoError(t, err)
-				assertHelloWorldArchive(t, downloaded)
+				assertOCMArchive(t, downloaded)
 			})
 		})
 
@@ -247,7 +249,7 @@ func Test_Integration_GitHub(t *testing.T) {
 			// Sources have no digest processor to pin a commit, so a ref-only
 			// source cannot be materialized reproducibly and is rejected.
 			t.Run("download is rejected without a pinned commit", func(t *testing.T) {
-				_, err := repo.DownloadSource(t.Context(), helloWorldSource(helloWorldRef, ""))
+				_, err := repo.DownloadSource(t.Context(), ocmSource(ocmRef, ""))
 				assert.ErrorContains(t, err, "requires a pinned commit")
 			})
 		})
