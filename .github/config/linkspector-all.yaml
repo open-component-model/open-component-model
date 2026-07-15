@@ -1,0 +1,14 @@
+# Repo-wide pass: check relative/internal links in ALL markdown files.
+# External (http/https) links are ignored here — they are verified only for
+# changed files by the companion config linkspector-changed.yaml, since
+# repo-wide external checks are slow and prone to flaky failures.
+dirs:
+  - ./
+excludedDirs:
+  - website
+modifiedFilesOnly: false
+ignorePatterns:
+  - pattern: "^https?://"
+replacementPatterns:
+  - pattern: "^/"
+    replacement: "{{BASEURL}}/"

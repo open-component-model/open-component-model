@@ -1,0 +1,13 @@
+# Changed-files pass: check ALL links (relative and external) but only in
+# files modified by the pull request. This is where external http/https links
+# get verified — limiting them to changed files keeps CI fast and avoids
+# flaky failures from unrelated third-party URLs going down.
+# Relative links in unchanged files are covered by linkspector-all.yaml.
+dirs:
+  - ./
+excludedDirs:
+  - website
+modifiedFilesOnly: true
+replacementPatterns:
+  - pattern: "^/"
+    replacement: "{{BASEURL}}/"

@@ -8,6 +8,8 @@ on:
     paths:
       - '**/*.md'
       - '.github/workflows/markdown.yml'
+      - '.github/config/linkspector-all.yaml'
+      - '.github/config/linkspector-changed.yaml'
 
 permissions:
   contents: read
@@ -56,13 +58,24 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
-      - name: Run linkspector
+      # Two passes: relative links are checked across the whole repo, while
+      # external (http/https) links are only checked for changed files —
+      # repo-wide external checks are slow and prone to flaky failures.
+      - name: Verify relative links (repo-wide)
         uses: umbrelladocs/action-linkspector@6c637d70424624231467a4ca918be54fa3b792d0 # v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
           fail_level: any
-          config_file: .github/config/linkspector.yaml
+          config_file: .github/config/linkspector-all.yaml
+          show_stats: true
+      - name: Verify external links (changed files)
+        uses: umbrelladocs/action-linkspector@6c637d70424624231467a4ca918be54fa3b792d0 # v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          reporter: github-pr-check
+          fail_level: any
+          config_file: .github/config/linkspector-changed.yaml
           show_stats: true
 
   verify-links-website:
