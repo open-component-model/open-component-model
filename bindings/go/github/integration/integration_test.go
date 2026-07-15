@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
 	"ocm.software/open-component-model/bindings/go/github/repository/source"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -28,6 +30,21 @@ const (
 	helloWorldRef    = "refs/heads/master"
 	helloWorldCommit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
 )
+
+// testCredentials authenticates the run when GITHUB_TOKEN is set and stays
+// anonymous otherwise. Unauthenticated GitHub allows only 60 requests per hour
+// per IP, and this test makes ~10 — on shared CI egress the token is what
+// keeps the run from flaking on rate limits.
+func testCredentials() runtime.Typed {
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		return nil
+	}
+	return &credsv1.GitHubCredentials{
+		Type:  runtime.NewVersionedType(credsv1.GitHubCredentialsType, credsv1.Version),
+		Token: token,
+	}
+}
 
 // helloWorldAccess builds a github access; ref or commit may be empty to
 // exercise the different access shapes.
@@ -125,7 +142,7 @@ func Test_Integration_GitHub(t *testing.T) {
 
 		t.Run("commit and ref set", func(t *testing.T) {
 			t.Run("digest processing keeps the commit authoritative and the ref informational", func(t *testing.T) {
-				processed, err := processor.ProcessResourceDigest(t.Context(), helloWorldResource(helloWorldRef, helloWorldCommit), nil)
+				processed, err := processor.ProcessResourceDigest(t.Context(), helloWorldResource(helloWorldRef, helloWorldCommit), testCredentials())
 				require.NoError(t, err)
 
 				pinned, ok := processed.Access.(*v1.GitHub)
@@ -137,7 +154,7 @@ func Test_Integration_GitHub(t *testing.T) {
 
 			t.Run("download serves the commit source archive", func(t *testing.T) {
 				downloaded, err := resource.NewResourceRepository().DownloadResource(
-					t.Context(), helloWorldResource(helloWorldRef, helloWorldCommit), nil)
+					t.Context(), helloWorldResource(helloWorldRef, helloWorldCommit), testCredentials())
 				require.NoError(t, err)
 				assertHelloWorldArchive(t, downloaded)
 			})
@@ -145,7 +162,7 @@ func Test_Integration_GitHub(t *testing.T) {
 
 		t.Run("commit only", func(t *testing.T) {
 			res := helloWorldResource("", helloWorldCommit)
-			processed, err := processor.ProcessResourceDigest(t.Context(), res, nil)
+			processed, err := processor.ProcessResourceDigest(t.Context(), res, testCredentials())
 			require.NoError(t, err)
 
 			t.Run("digest processing pins a SHA-256 generic blob digest without mutating the input", func(t *testing.T) {
@@ -156,7 +173,7 @@ func Test_Integration_GitHub(t *testing.T) {
 			})
 
 			t.Run("the pinned digest matches the bytes of a fresh archive download", func(t *testing.T) {
-				downloaded, err := resource.NewResourceRepository().DownloadResource(t.Context(), processed, nil)
+				downloaded, err := resource.NewResourceRepository().DownloadResource(t.Context(), processed, testCredentials())
 				require.NoError(t, err)
 				reader, err := downloaded.ReadCloser()
 				require.NoError(t, err)
@@ -173,7 +190,7 @@ func Test_Integration_GitHub(t *testing.T) {
 			// passes if GitHub serves byte-identical archive bytes for the same
 			// commit — the reproducibility assumption the digest design relies on.
 			t.Run("re-processing a digested resource verifies it against a reproducible archive", func(t *testing.T) {
-				verified, err := processor.ProcessResourceDigest(t.Context(), processed, nil)
+				verified, err := processor.ProcessResourceDigest(t.Context(), processed, testCredentials())
 				require.NoError(t, err)
 				assert.Equal(t, processed.Digest.Value, verified.Digest.Value)
 			})
@@ -182,7 +199,7 @@ func Test_Integration_GitHub(t *testing.T) {
 		t.Run("ref only", func(t *testing.T) {
 			t.Run("digest processing resolves the ref and pins the commit it points at", func(t *testing.T) {
 				res := helloWorldResource(helloWorldRef, "")
-				processed, err := processor.ProcessResourceDigest(t.Context(), res, nil)
+				processed, err := processor.ProcessResourceDigest(t.Context(), res, testCredentials())
 				require.NoError(t, err)
 
 				pinned, ok := processed.Access.(*v1.GitHub)
@@ -200,7 +217,7 @@ func Test_Integration_GitHub(t *testing.T) {
 
 			t.Run("download resolves the ref and serves the archive of the commit it points at", func(t *testing.T) {
 				downloaded, err := resource.NewResourceRepository().DownloadResource(
-					t.Context(), helloWorldResource(helloWorldRef, ""), nil)
+					t.Context(), helloWorldResource(helloWorldRef, ""), testCredentials())
 				require.NoError(t, err)
 				assertHelloWorldArchive(t, downloaded)
 			})

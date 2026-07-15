@@ -96,7 +96,7 @@ func TestSourceRepository_DownloadSource(t *testing.T) {
 
 	t.Run("rejects a source without access", func(t *testing.T) {
 		_, err := NewSourceRepository().DownloadSource(t.Context(), &descriptor.Source{})
-		assert.ErrorContains(t, err, "access")
+		assert.ErrorContains(t, err, "error resolving GitHub access for download")
 	})
 
 	t.Run("rejects a ref-only source with no pinned commit", func(t *testing.T) {

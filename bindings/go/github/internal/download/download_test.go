@@ -35,7 +35,7 @@ func archiveServer(t *testing.T, payload []byte) *httptest.Server {
 }
 
 func TestDownload(t *testing.T) {
-	t.Run("returns the archive as an in-memory application/x-tgz blob", func(t *testing.T) {
+	t.Run("returns the archive as a file-backed application/x-tgz blob", func(t *testing.T) {
 		payload := gzippedTar(t, "octocat-Hello-World-"+downloadTestCommit+"/README", "hello world")
 		server := archiveServer(t, payload)
 
@@ -78,6 +78,6 @@ func TestDownload(t *testing.T) {
 			Commit:  downloadTestCommit,
 		}, nil, nil)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "archive link")
+		assert.Contains(t, err.Error(), "error resolving github archive link")
 	})
 }

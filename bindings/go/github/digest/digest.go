@@ -36,8 +36,8 @@ type DigestProcessor struct {
 
 // NewDigestProcessor creates a new GitHub digest processor. opts are forwarded
 // to the underlying resource repository, whose HTTP client performs both the
-// ref resolution and the archive download; the archive is hashed straight
-// from memory (see download.Download).
+// ref resolution and the archive download; the archive is hashed from its
+// temp-file buffer (see download.Download).
 func NewDigestProcessor(opts ...resource.Option) *DigestProcessor {
 	return &DigestProcessor{
 		resourceRepository: resource.NewResourceRepository(opts...),

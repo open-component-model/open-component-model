@@ -187,8 +187,6 @@ func TestFetch(t *testing.T) {
 			}))
 			defer server.Close()
 
-			// fetch streams the archive so it can be buffered to the filesystem
-			// rather than read wholly into memory.
 			access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
 			rc, err := fetch(t.Context(), access, tc.credentials, server.Client())
 			require.NoError(t, err)

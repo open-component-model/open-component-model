@@ -1,20 +1,21 @@
 // Package download fetches the source archive of a GitHub repository at a
-// pinned commit via the GitHub REST API and returns it as an in-memory blob.
-// The archive bytes are the exact gzipped tar GitHub serves, so that the
-// resource content and its generic blob digest match what old OCM stored for
-// a GitHub access.
+// pinned commit via the GitHub REST API and returns it as a file-backed blob
+// buffered in the OS temp directory. The archive bytes are the exact gzipped
+// tar GitHub serves, so that the resource content and its generic blob digest
+// match what old OCM stored for a GitHub access.
 package download
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 )
@@ -25,9 +26,14 @@ const MediaTypeTGZ = "application/x-tgz"
 
 // Download validates the GitHub access and fetches the source archive of its
 // pinned commit, returning it as a gzipped tar blob (media type
-// application/x-tgz) held in memory, like the wget binding's download. An
-// access without a resolved commit is rejected: a bare ref is mutable and
-// cannot be materialized reproducibly.
+// application/x-tgz) buffered to a file in the OS temp directory, like the
+// helm binding's download. An access without a resolved commit is rejected: a
+// bare ref is mutable and cannot be materialized reproducibly.
+//
+// The temp file is not removed here: the returned blob reads from it on
+// demand, so it must outlive this call, and the blob contract has no signal
+// for when the consumer is done. Its lifetime is owned by the OS temp
+// directory cleanup.
 //
 // credentials and httpClient may be nil; see clientFor.
 func Download(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (blob.ReadOnlyBlob, error) {
@@ -50,15 +56,24 @@ func Download(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHu
 		}
 	}()
 
-	data, err := io.ReadAll(stream)
+	tmpFile, err := os.CreateTemp("", "github-archive-*.tgz")
 	if err != nil {
-		return nil, fmt.Errorf("error reading GitHub commit archive: %w", err)
+		return nil, fmt.Errorf("error creating temporary file for GitHub commit archive: %w", err)
+	}
+	written, copyErr := io.Copy(tmpFile, stream)
+	if err := errors.Join(copyErr, tmpFile.Close()); err != nil {
+		_ = os.Remove(tmpFile.Name())
+		return nil, fmt.Errorf("error buffering GitHub commit archive: %w", err)
 	}
 
-	slog.DebugContext(ctx, "Downloaded GitHub commit archive", "repoUrl", gitHub.RepoURL, "commit", gitHub.Commit, "bytes", len(data))
+	slog.DebugContext(ctx, "Downloaded GitHub commit archive", "repoUrl", gitHub.RepoURL, "commit", gitHub.Commit, "bytes", written)
 
-	return inmemory.New(bytes.NewReader(data),
-		inmemory.WithMediaType(MediaTypeTGZ),
-		inmemory.WithSize(int64(len(data))),
-	), nil
+	buffered, err := filesystem.GetBlobFromOSPath(tmpFile.Name())
+	if err != nil {
+		_ = os.Remove(tmpFile.Name())
+		return nil, fmt.Errorf("error creating blob from buffered GitHub commit archive: %w", err)
+	}
+	buffered.SetMediaType(MediaTypeTGZ)
+
+	return buffered, nil
 }

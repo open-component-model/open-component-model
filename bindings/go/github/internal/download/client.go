@@ -20,7 +20,7 @@ import (
 // archive download when the caller supplies none. It comes from the OCM http
 // binding rather than http.DefaultClient so that retries and transport
 // timeouts apply. Per-host timeout and TLS configuration is not plumbed
-// through yet; a nil config yields the binding's defaults.
+// through yet, so the binding's defaults apply.
 func defaultHTTPClient() *http.Client {
 	return ocmhttp.New()
 }
@@ -105,8 +105,8 @@ func ResolveCommit(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.
 
 // fetch resolves the archive link for the access's pinned commit via the GitHub
 // REST API and starts downloading the gzipped tar archive, returning the
-// response body for the caller to close. The body is streamed rather than read
-// into memory so the archive can be buffered to the filesystem.
+// response body for the caller to close. fetch does not buffer the body; how
+// it is consumed is the caller's decision, not part of this contract.
 //
 // The same client serves the API call and the archive download; the link is a
 // short-lived, pre-signed URL that needs no auth.

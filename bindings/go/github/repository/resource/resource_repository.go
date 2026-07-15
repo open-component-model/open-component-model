@@ -52,8 +52,8 @@ func WithHTTPClient(client *http.Client) Option {
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
 // NewResourceRepository creates a ResourceRepository. Downloaded archives are
-// held in memory (see download.Download). The HTTP client is built once, so
-// its connection pool is reused across downloads.
+// buffered to the OS temp directory (see download.Download). The HTTP client
+// is built once, so its connection pool is reused across downloads.
 func NewResourceRepository(opts ...Option) *ResourceRepository {
 	r := &ResourceRepository{}
 	for _, opt := range opts {
