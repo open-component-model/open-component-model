@@ -15,15 +15,16 @@ func Test_determineOutputPath_EmptyPath(t *testing.T) {
 	outputPath, err := determineOutputPath("", prefix)
 
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(outputPath) })
+
 	assert.NotEmpty(t, outputPath)
 	assert.Contains(t, filepath.Base(outputPath), prefix)
 	assert.True(t, filepath.IsAbs(outputPath), "expected an absolute path, got %q", outputPath)
 
-	// Verify file exists and clean up.
+	// Verify file exists.
 	info, err := os.Stat(outputPath)
 	require.NoError(t, err)
 	assert.False(t, info.IsDir())
-	_ = os.Remove(outputPath)
 }
 
 func Test_determineOutputPath_DirectoryPath(t *testing.T) {
@@ -33,6 +34,8 @@ func Test_determineOutputPath_DirectoryPath(t *testing.T) {
 	outputPath, err := determineOutputPath(tempDir, prefix)
 
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(outputPath) })
+
 	assert.Contains(t, filepath.Base(outputPath), prefix)
 	assert.True(t, strings.HasPrefix(outputPath, tempDir))
 	assert.True(t, filepath.IsAbs(outputPath), "expected an absolute path, got %q", outputPath)
@@ -53,6 +56,8 @@ func Test_determineOutputPath_RelativeDirectoryPath(t *testing.T) {
 	outputPath, err := determineOutputPath("out", "test-prefix")
 
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(outputPath) })
+
 	assert.True(t, filepath.IsAbs(outputPath), "expected an absolute path, got %q", outputPath)
 	assert.Contains(t, filepath.Base(outputPath), "test-prefix")
 	info, err := os.Stat(outputPath)
