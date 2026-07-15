@@ -36,9 +36,9 @@
   "sourceMap" (cond hugo.IsDevelopment "inline" "none")
   "target" "es2020"
 -}}
-{{- with $asset | js.Build $opts -}}
-<script type="module" src="{{ .RelPermalink }}"></script>
-{{- end -}}
+{{- $built := $asset | js.Build $opts -}}
+{{- if not $built -}}{{ errorf "baseof: js.Build produced no output for 'js/mermaid-init.js'" }}{{ end -}}
+<script type="module" src="{{ $built.RelPermalink }}"></script>
 {{ end }}
 
 {{ if eq site.Params.doks.toTopButton true -}}

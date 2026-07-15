@@ -12,6 +12,22 @@
 
 import mermaid from 'mermaid';
 
+// Distinguish per-diagram syntax errors (expected, per-element) from systemic
+// failures (unexpected: bad config, DOM exception, esbuild corruption). Both
+// land in console.error so a single broken diagram doesn't break the page, but
+// the message differs so systemic failures are not mistaken for one bad diagram.
+const logMermaidError = (prefix) => (err) => {
+  const isSyntax =
+    err?.name === 'UnknownDiagramError' ||
+    err?.message?.includes('No diagram type detected') ||
+    err?.message?.includes('Parse error');
+  if (isSyntax) {
+    console.error(`${prefix} (diagram syntax):`, err);
+  } else {
+    console.error(`${prefix} (unexpected — check initialization):`, err);
+  }
+};
+
 // Why not `startOnLoad: true`:
 //   startOnLoad wires a single load / DOMContentLoaded listener at the
 //   moment initialize() is called. `type="module"` scripts are deferred,
@@ -53,11 +69,11 @@ const start = () => {
     // mermaid.run() rejects on invalid diagram syntax; swallow the rejection
     // to a console.error so a single bad diagram doesn't surface as an
     // unhandled promise rejection on the page.
-    mermaid.run().catch((err) => console.error('mermaid re-render failed:', err));
+    mermaid.run().catch(logMermaidError('mermaid re-render failed'));
   };
 
   mermaid.initialize({ startOnLoad: false, theme: getTheme() });
-  mermaid.run().catch((err) => console.error('mermaid render failed:', err));
+  mermaid.run().catch(logMermaidError('mermaid render failed'));
 
   // doks-core's setTheme() writes data-bs-theme AND dispatches 'themeChanged'
   // for every toggle, so a naive listener + observer pair re-renders twice

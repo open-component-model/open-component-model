@@ -21,8 +21,6 @@
   {{- else -}}
     {{- errorf "person-card shortcode: avatar not found for github=%q at %s (%s)" $github $pos $avatarSrc -}}
   {{- end -}}
-{{- else -}}
-  {{- errorf "person-card shortcode: could not resolve avatar for github=%q at %s (%s)" $github $pos $avatarSrc -}}
 {{- end -}}
 <a href="{{ $profileUrl }}" target="_blank" rel="noopener noreferrer" class="ocm-card person-card text-decoration-none">
   <div class="person-card-inner d-flex flex-column align-items-center text-center p-3 gap-2">
