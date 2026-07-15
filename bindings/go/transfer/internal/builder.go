@@ -96,7 +96,7 @@ func NewDefaultBuilder(
 	}
 
 	// Wget transformer
-	getWget := &wgettransformer.DownloadWgetResource{
+	downloadWget := &wgettransformer.DownloadWgetResource{
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
@@ -122,6 +122,6 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.TransferOCIArtifact{}, ociTransferOCIArtifact).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
-		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, getWget).
+		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }

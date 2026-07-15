@@ -39,7 +39,7 @@ func processWget(resource v2.Resource, id string, val *discoveryValue, tgd *tran
 	tgd.Transformations = append(tgd.Transformations, getTransform)
 
 	// Embed the downloaded blob as a local resource in the target.
-	addResourceTransform, err := ociUploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, staticReferenceName(resource.Name))
+	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, staticReferenceName(resource.Name))
 	if err != nil {
 		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
 	}
