@@ -9,17 +9,17 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.42.0
-	golang.org/x/crypto v0.52.0
+	golang.org/x/crypto v0.53.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/configuration v0.0.15
+	ocm.software/open-component-model/bindings/go/configuration v0.0.16
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260710062229-b9ee680ba1f1
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260715064559-5812c6a7c34a
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.48
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	oras.land/oras-go/v2 v2.6.1
+	oras.land/oras-go/v2 v2.6.2
 )
 
 // Replace include to make sure we are always testing the current code instead of a version.
@@ -44,7 +44,7 @@ require (
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.10.1 // indirect
-	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
@@ -76,11 +76,11 @@ require (
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260710062229-b9ee680ba1f1 // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260715064559-5812c6a7c34a // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
