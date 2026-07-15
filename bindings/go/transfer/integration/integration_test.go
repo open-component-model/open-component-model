@@ -1309,10 +1309,11 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 		"OCIImage access should reference the target registry after transfer")
 }
 
-// Test_Integration_TransferWgetResource_CTFToOCI verifies that a wget resource (content behind an
-// HTTP URL) is transferred by value: the content is downloaded and embedded as a localBlob in the
-// target registry. wget resources are external, so they are only copied under CopyModeAllResources.
-func Test_Integration_TransferWgetResource_CTFToOCI(t *testing.T) {
+// Test_Integration_TransferWgetResource_CopyModeAllResources verifies that a wget resource (content
+// behind an HTTP URL, not stored in the source CTF) is transferred by value: the content is
+// downloaded from the URL and embedded as a localBlob in the target OCI registry. wget resources are
+// external, so they are only copied under CopyModeAllResources.
+func Test_Integration_TransferWgetResource_CopyModeAllResources(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
@@ -1433,6 +1434,19 @@ func Test_Integration_TransferWgetResource_CTFToOCI(t *testing.T) {
 	r.NotNil(gotAccess, "resource access should not be nil")
 	r.Equal(descriptorv2.LocalBlobAccessType, gotAccess.GetType().Name,
 		"wget resource should be stored as localBlob in target after transfer")
+
+	// Verify GlobalAccess is not set — transfer should produce a pure local blob without global access.
+	accessScheme := runtime.NewScheme(runtime.WithAllowUnknown())
+	descriptorv2.MustAddToScheme(accessScheme)
+	var typedLocalBlob descriptorv2.LocalBlob
+	r.NoError(accessScheme.Convert(gotAccess, &typedLocalBlob), "should convert access to LocalBlob")
+	r.Nil(typedLocalBlob.GlobalAccess, "localBlob should not have globalAccess after transfer")
+	r.Equal("text/plain", typedLocalBlob.MediaType, "localBlob should preserve the wget media type")
+
+	// The stored resource must be fully described: a digest over the downloaded content.
+	r.NotNil(gotDesc.Component.Resources[0].Digest, "transferred resource should carry a digest")
+	r.Equal(digestOf(resourceData).Encoded(), gotDesc.Component.Resources[0].Digest.Value,
+		"resource digest should be the sha256 of the served content")
 
 	// 7. Verify the blob is present and its content matches what the HTTP server served.
 	resourceIdentity := gotDesc.Component.Resources[0].ToIdentity()
