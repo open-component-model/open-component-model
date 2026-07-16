@@ -280,8 +280,13 @@ source-controller-6ff87cb475-2h2lv           1/1     Running     0              
 helm repo add argo https://argoproj.github.io/argo-helm
 # ... "argo" has been added to your repositories
 
-helm install my-release argo/argo-cd
-# NAME: my-release
+helm repo update argo
+
+helm upgrade --install argocd argo/argo-cd \
+  --namespace argocd \
+  --create-namespace \
+  --wait \
+  --timeout 5m
 # ...
 
 ```
@@ -289,7 +294,7 @@ helm install my-release argo/argo-cd
 Wait for all pods to become ready:
 
 ```shell
-kubectl wait --for=condition=Ready pods --all --timeout=120s
+kubectl wait --for=condition=Ready pods --all -n argocd --timeout=120s
 ```
 
 {{<callout context="note" title="Resource names follow the release name" icon="outline/info-circle">}}
@@ -372,8 +377,17 @@ kubectl get pods --all-namespaces | grep -E '(kro-system|flux-system|argocd|ocm-
 <details>
 <summary>You should see this output</summary>
 
+Depending on what deployer you installed the output could differ:
+
 ```text
 NAMESPACE                NAME                                                 READY    STATUS             RESTARTS        AGE
+argocd-application-controller-0                                                1/1     Running            0               24m
+argocd-applicationset-controller-85f58f44f4-g85xv                              1/1     Running            0               24m
+argocd-dex-server-69884b6f8b-vf5s9                                             1/1     Running            0               24m
+argocd-notifications-controller-8669567fb-47fcj                                1/1     Running            0               24m
+argocd-redis-5d9668fdff-v2pbp                                                  1/1     Running            0               24m
+argocd-repo-server-95465d997-mbmcp                                             1/1     Running            0               24m
+argocd-server-767b9d54cf-q7bbz                                                 1/1     Running            0               24m
 flux-system              helm-controller-b6767d66-zbwws                        1/1     Running            0               3h39m
 flux-system              kustomize-controller-57c7ff5596-v6fvr                 1/1     Running            0               3h39m
 flux-system              notification-controller-58ffd586f7-pr65t              1/1     Running            0               3h39m
