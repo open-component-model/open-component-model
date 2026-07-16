@@ -1,6 +1,6 @@
 components:
   # The six CLI executables are referenced by their GitHub release download URL
-  # via the wget access type, so the GitHub release carrying ${RELEASE_TAG} must
+  # via the Wget access type, so the GitHub release carrying ${RELEASE_TAG} must
   # already exist when this constructor is published.
   - name: ocm.software/cli
     version: "${VERSION}"
@@ -18,7 +18,7 @@ components:
           os: linux
           architecture: amd64
         access:
-          type: wget/v1
+          type: Wget/v1
           url: "${CLI_DOWNLOAD_URL}/ocm-linux-amd64"
           mediaType: application/octet-stream
       - name: cli
@@ -32,7 +32,7 @@ components:
           os: linux
           architecture: arm64
         access:
-          type: wget/v1
+          type: Wget/v1
           url: "${CLI_DOWNLOAD_URL}/ocm-linux-arm64"
           mediaType: application/octet-stream
       - name: cli
@@ -46,7 +46,7 @@ components:
           os: darwin
           architecture: amd64
         access:
-          type: wget/v1
+          type: Wget/v1
           url: "${CLI_DOWNLOAD_URL}/ocm-darwin-amd64"
           mediaType: application/octet-stream
       - name: cli
@@ -60,7 +60,7 @@ components:
           os: darwin
           architecture: arm64
         access:
-          type: wget/v1
+          type: Wget/v1
           url: "${CLI_DOWNLOAD_URL}/ocm-darwin-arm64"
           mediaType: application/octet-stream
       - name: cli
@@ -74,7 +74,7 @@ components:
           os: windows
           architecture: amd64
         access:
-          type: wget/v1
+          type: Wget/v1
           url: "${CLI_DOWNLOAD_URL}/ocm-windows-amd64"
           mediaType: application/octet-stream
       - name: cli
@@ -88,7 +88,7 @@ components:
           os: windows
           architecture: arm64
         access:
-          type: wget/v1
+          type: Wget/v1
           url: "${CLI_DOWNLOAD_URL}/ocm-windows-arm64"
           mediaType: application/octet-stream
       - name: image

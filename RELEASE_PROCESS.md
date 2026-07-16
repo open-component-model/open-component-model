@@ -77,7 +77,7 @@ flowchart TD
     end
 
     Pipeline --> ReleaseRC[release_rc<br/>GitHub pre-release<br/>binaries + OCI tarballs + chart + changelog]
-    Pipeline --> PubCompRC[publish_components_rc<br/>ocm.software/cli, /controller, /ocm<br/>conflict: replace]
+    ReleaseRC --> PubCompRC[publish_components_rc<br/>ocm.software/cli, /controller, /ocm<br/>conflict: replace]
     ReleaseRC --> Gate{{release environment<br/>manual approval}}
     Gate --> Verify[verify_attestations<br/>CLI binaries, CLI OCI,<br/>controller image, chart]
     Verify --> Promote[promote_and_release_final<br/>tag v0.X.Y + cli/v0.X.Y + kubernetes/controller/v0.X.Y + website/v0.X.Y<br/>oras retag images, set :latest if applicable<br/>repackage chart, diff vs RC, push + attest<br/>publish final GitHub release]
