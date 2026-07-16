@@ -7,7 +7,8 @@
 //
 // # Usage
 //
-//	repo := source.NewSourceRepository()
+//	// A nil filesystem config buffers archives in the OS temp directory.
+//	repo := source.NewSourceRepository(nil)
 //
 //	src := &descriptor.Source{
 //		Access: &v1.GitHub{

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	"ocm.software/open-component-model/bindings/go/github/internal/download"
@@ -19,8 +20,9 @@ import (
 // serves the same commit archive as the resource repository, but anonymously:
 // [repository.SourceRepository] carries no credentials.
 type SourceRepository struct {
-	httpConfig *httpv1alpha1.Config
-	httpClient *http.Client
+	filesystemConfig *filesystemv1alpha1.Config
+	httpConfig       *httpv1alpha1.Config
+	httpClient       *http.Client
 }
 
 // Option configures a SourceRepository.
@@ -47,11 +49,17 @@ func WithHTTPClient(client *http.Client) Option {
 
 var _ repository.SourceRepository = (*SourceRepository)(nil)
 
-// NewSourceRepository creates a SourceRepository. Downloaded archives are
-// held in memory (see download.Download). The HTTP client is built once, so
-// its connection pool is reused across downloads.
-func NewSourceRepository(opts ...Option) *SourceRepository {
-	r := &SourceRepository{}
+// NewSourceRepository creates a SourceRepository. If filesystemConfig is
+// non-nil, downloaded archives are buffered to its TempFolder; otherwise
+// os.TempDir is used (see download.Download). The HTTP client is built once,
+// so its connection pool is reused across downloads.
+func NewSourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *SourceRepository {
+	if filesystemConfig == nil {
+		filesystemConfig = &filesystemv1alpha1.Config{}
+	}
+	r := &SourceRepository{
+		filesystemConfig: filesystemConfig,
+	}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -72,7 +80,12 @@ func (r *SourceRepository) DownloadSource(ctx context.Context, source *descripto
 		return nil, fmt.Errorf("error resolving GitHub access for download: %w", err)
 	}
 
-	return download.Download(ctx, gitHub, nil, r.httpClient)
+	tempDir := ""
+	if r.filesystemConfig != nil {
+		tempDir = r.filesystemConfig.TempFolder
+	}
+
+	return download.Download(ctx, gitHub, nil, r.httpClient, tempDir)
 }
 
 // UploadSource is not supported: the GitHub access type is a read-only
