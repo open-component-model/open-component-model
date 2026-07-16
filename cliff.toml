@@ -27,10 +27,10 @@ body = """
 
 #### CLI
 
-Install the latest version of the OCM CLI:
+Install this release ({{ version | trim_start_matches(pat="v") }}) of the OCM CLI:
 
 ```bash
-curl -sfL https://ocm.software/install-cli.sh | bash
+curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION={{ version | trim_start_matches(pat="v") }} bash
 ```
 
 (For more installation options, see the [installation guide](https://ocm.software/docs/getting-started/install-the-ocm-cli/).)
@@ -38,17 +38,18 @@ curl -sfL https://ocm.software/install-cli.sh | bash
 You can also run the OCM CLI in a container without installing it:
 
 ```bash
-docker run --rm -t ghcr.io/open-component-model/cli:latest --help
+docker run --rm -t ghcr.io/open-component-model/cli:{{ version | trim_start_matches(pat="v") }} --help
 ```
 
 See the [container image guide](https://ocm.software/docs/how-to/how-to-use-the-ocm-cli-container-image/) for more details.
 
 #### Controller
 
-Install the latest version of the OCM Controllers into a Kubernetes cluster via Helm:
+Install this release ({{ version | trim_start_matches(pat="v") }}) of the OCM Controllers into a Kubernetes cluster via Helm:
 
 ```bash
 helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart \\
+  --version {{ version | trim_start_matches(pat="v") }} \\
   --namespace ocm-k8s-toolkit-system \\
   --create-namespace
 ```

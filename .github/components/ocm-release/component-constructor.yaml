@@ -1,24 +1,19 @@
-# Shared defaults for the six CLI executable resources. Each platform entry merges
-# this anchor and overrides only os, architecture and the download URL. The
-# binaries are referenced by their GitHub release download URL via the `wget`
-# access type. This requires the GitHub release carrying ${RELEASE_TAG}
-# to already exist when this constructor is published.
-_cli_executable_defaults: &cli_executable_defaults
-  name: cli
-  type: executable
-  version: "${VERSION}"
-  labels:
-    - name: downloadName
-      value: ocm
-  relation: external
-
 components:
+  # The six CLI executables are referenced by their GitHub release download URL
+  # via the wget access type, so the GitHub release carrying ${RELEASE_TAG} must
+  # already exist when this constructor is published.
   - name: ocm.software/cli
     version: "${VERSION}"
     provider:
       name: ocm.software
     resources:
-      - <<: *cli_executable_defaults
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
         extraIdentity:
           os: linux
           architecture: amd64
@@ -26,7 +21,13 @@ components:
           type: wget/v1
           url: "${CLI_DOWNLOAD_URL}/ocm-linux-amd64"
           mediaType: application/octet-stream
-      - <<: *cli_executable_defaults
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
         extraIdentity:
           os: linux
           architecture: arm64
@@ -34,7 +35,13 @@ components:
           type: wget/v1
           url: "${CLI_DOWNLOAD_URL}/ocm-linux-arm64"
           mediaType: application/octet-stream
-      - <<: *cli_executable_defaults
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
         extraIdentity:
           os: darwin
           architecture: amd64
@@ -42,7 +49,13 @@ components:
           type: wget/v1
           url: "${CLI_DOWNLOAD_URL}/ocm-darwin-amd64"
           mediaType: application/octet-stream
-      - <<: *cli_executable_defaults
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
         extraIdentity:
           os: darwin
           architecture: arm64
@@ -50,7 +63,13 @@ components:
           type: wget/v1
           url: "${CLI_DOWNLOAD_URL}/ocm-darwin-arm64"
           mediaType: application/octet-stream
-      - <<: *cli_executable_defaults
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
         extraIdentity:
           os: windows
           architecture: amd64
@@ -58,7 +77,13 @@ components:
           type: wget/v1
           url: "${CLI_DOWNLOAD_URL}/ocm-windows-amd64"
           mediaType: application/octet-stream
-      - <<: *cli_executable_defaults
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
         extraIdentity:
           os: windows
           architecture: arm64

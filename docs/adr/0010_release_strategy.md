@@ -180,7 +180,7 @@ git tag -v <tag>
 
 ### OCM components produced
 
-Every release publishes three OCM component-versions to `ghcr.io/<owner>`, implementing the originally out-of-scope "Root ocm component" item from this ADR.
+Every release publishes three OCM component-versions to `ghcr.io/open-component-model`:
 
 * **`ocm.software/cli`** — six executables (linux/darwin/windows × amd64/arm64) referenced by GitHub release download URL via `wget` access, plus the multi-arch CLI image by digest.
 * **`ocm.software/kubernetes/controller`** — controller image and Helm chart, both by digest.
@@ -190,11 +190,9 @@ All three carry the same bare semver as the GitHub release, and are published on
 
 **Conflict policy:** both phases use `--component-version-conflict-policy replace`, so reruns after a transient failure are idempotent. The `concurrency` group and `create-tag.js` tag-existence checks prevent diverging runs for the same version, so `replace` cannot overwrite a different commit's artifact.
 
-**Resource form:** OCI artefacts (images, chart) are pinned by digest via `access.ociArtifact`. CLI binaries use `wget` access (`relation: external`) pointing at the release download URLs — no bytes are duplicated, but publishing depends on the GitHub release existing first (see the RC/final job wiring in `release.yml`).
+**Resource form:** OCI artefacts (images, chart) are pinned by digest via `access.ociArtifact`. CLI binaries use `wget` access (`relation: external`) pointing at the release download URLs.
 
-**Constructor evolution:** adding resources within a MAJOR is additive; removing/renaming a resource or changing `extraIdentity` is breaking and needs a MAJOR bump.
-
-See [RELEASE_PROCESS.md § OCM components produced](../../RELEASE_PROCESS.md#ocm-components-produced) for consumer-facing pull commands.
+See also [RELEASE_PROCESS.md § OCM components produced](../../RELEASE_PROCESS.md#ocm-components-produced).
 
 ### Roles and Responsibilities
 

@@ -113,24 +113,15 @@ There is no `website/v0.X.Y-rc.N` tag. The website has no RC artifacts to valida
 
 ## OCM components produced
 
-Every release publishes three OCM component-versions to `ghcr.io/<owner>`, all carrying the same version as the GitHub release. Both RC and final publications use the `replace` conflict policy so that reruns after a transient failure are idempotent. The release workflow's `concurrency` group prevents parallel runs for the same version.
+Every release publishes three OCM component-versions to `ghcr.io/<owner>`, all carrying the same version as the GitHub release.
+Both RC and final publications use the `replace` conflict policy so that reruns after a transient failure are idempotent.
+The release workflow's `concurrency` group prevents parallel runs for the same version.
 
 | Component | Reference |
 |---|---|
 | `ocm.software/cli` | multi-arch binaries (linux/darwin/windows × amd64/arm64) referenced by GitHub release download URL + the CLI OCI image referenced by digest |
 | `ocm.software/kubernetes/controller` | controller OCI image + Helm chart, both referenced by digest |
 | `ocm.software/ocm` | product wrapper referencing the two components above via `componentReferences` |
-
-Consume:
-
-```bash
-# The whole product (CLI + controller) for a given release
-ocm get component-version ghcr.io/open-component-model//ocm.software/ocm:0.7.0
-
-# Pull a CLI binary for your platform
-ocm download resource ghcr.io/open-component-model//ocm.software/cli:0.7.0 \
-  --identity name=cli,os=linux,architecture=amd64
-```
 
 The `ocm.software/ocm` product version is the recommended entry point — it pins the exact CLI and controller versions that were released together.
 
