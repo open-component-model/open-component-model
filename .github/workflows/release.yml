@@ -334,9 +334,9 @@ jobs:
                 ['Controller Image Digest', (process.env.IMAGE_DIGEST || 'N/A').substring(0, 19) + '...'],
                 ['Chart Digest', (process.env.CHART_DIGEST || 'N/A').substring(0, 19) + '...'],
                 ['Uploaded Assets', String(assetsCount)],
-                ['OCM Product Component', `${repo}/ocm.software/ocm:${ver}`],
-                ['OCM CLI Component', `${repo}/ocm.software/cli:${ver}`],
-                ['OCM Controller Component', `${repo}/ocm.software/kubernetes/controller:${ver}`],
+                ['OCM Product Component', `${repo}//ocm.software/ocm:${ver}`],
+                ['OCM CLI Component', `${repo}//ocm.software/cli:${ver}`],
+                ['OCM Controller Component', `${repo}//ocm.software/kubernetes/controller:${ver}`],
               ])
               .addEOL()
               .addLink('View Release', release.data.html_url)
