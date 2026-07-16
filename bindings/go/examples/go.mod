@@ -12,16 +12,16 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260715080551-5aa97236eacf
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260715064559-5812c6a7c34a
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260716120024-a437b4740573
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260716120024-a437b4740573
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260715064559-5812c6a7c34a
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260716120024-a437b4740573
 	ocm.software/open-component-model/bindings/go/oci v0.0.48
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260715080551-5aa97236eacf
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260716120024-a437b4740573
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260715064559-5812c6a7c34a
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260715064559-5812c6a7c34a
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260716120024-a437b4740573
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260716120024-a437b4740573
 	oras.land/oras-go/v2 v2.6.2
 )
 
@@ -126,10 +126,11 @@ require (
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260715064559-5812c6a7c34a // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260716120024-a437b4740573 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260715064559-5812c6a7c34a // indirect
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260715064559-5812c6a7c34a // indirect
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260716120024-a437b4740573 // indirect
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260716120024-a437b4740573 // indirect
+	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260715093323-ae9bef6ee9de // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
