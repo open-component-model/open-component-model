@@ -178,6 +178,26 @@
       ]
     },
     {
+      // github.com/go-ini/ini renamed its module path to gopkg.in/ini.v1 at
+      // v1.67.1 (the same commit is tagged on both paths). We still carry a
+      // legacy `require github.com/go-ini/ini v1.67.0`, pulled in transitively
+      // by yq/v4 and ocm.software/ocm (OCM v1). Any bump on the OLD path is
+      // structurally impossible: v1.67.1+ declare `module gopkg.in/ini.v1`, so
+      // `go get github.com/go-ini/ini@v1.67.3` fails with "module declares its
+      // path as gopkg.in/ini.v1 but was required as github.com/go-ini/ini".
+      // That failure breaks the go.sum artifact step for the whole PR (#3098).
+      // Freeze it here; the canonical gopkg.in/ini.v1 path keeps updating.
+      // Do NOT remove without confirming both transitive importers have dropped
+      // the legacy path.
+      matchManagers: [
+        'gomod',
+      ],
+      matchDepNames: [
+        'github.com/go-ini/ini',
+      ],
+      enabled: false,
+    },
+    {
       matchManagers: [
         'gomod',
       ],

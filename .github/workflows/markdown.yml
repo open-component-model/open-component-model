@@ -8,6 +8,8 @@ on:
     paths:
       - '**/*.md'
       - '.github/workflows/markdown.yml'
+      - '.github/config/linkspector-all.yaml'
+      - '.github/config/linkspector-changed.yaml'
 
 permissions:
   contents: read
@@ -17,7 +19,7 @@ jobs:
     name: Lint Markdown (website)
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd # v23
@@ -34,7 +36,7 @@ jobs:
     # which is an amd64-only image with no ARM64 manifest.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - name: Spellcheck
@@ -52,17 +54,28 @@ jobs:
       checks: write
       contents: read
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 2
           persist-credentials: false
-      - name: Run linkspector
+      # Two passes: relative links are checked across the whole repo, while
+      # external (http/https) links are only checked for changed files —
+      # repo-wide external checks are slow and prone to flaky failures.
+      - name: Verify relative links (repo-wide)
         uses: umbrelladocs/action-linkspector@6c637d70424624231467a4ca918be54fa3b792d0 # v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
           fail_level: any
-          config_file: .github/config/linkspector.yaml
+          config_file: .github/config/linkspector-all.yaml
+          show_stats: true
+      - name: Verify external links (changed files)
+        uses: umbrelladocs/action-linkspector@6c637d70424624231467a4ca918be54fa3b792d0 # v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          reporter: github-pr-check
+          fail_level: any
+          config_file: .github/config/linkspector-changed.yaml
           show_stats: true
 
   verify-links-website:
@@ -74,7 +87,7 @@ jobs:
       checks: write
       contents: read
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 2
           persist-credentials: false
@@ -179,10 +192,10 @@ jobs:
     name: Lint
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
       - name: Read tool versions
         id: versions
         run: |
