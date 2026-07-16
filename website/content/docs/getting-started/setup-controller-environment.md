@@ -34,7 +34,7 @@ scenario.
 - [kind](https://kind.sigs.k8s.io/docs/user/quick-start) installed (or access to a remote Kubernetes cluster)
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
-- **Deployer:** [Flux CLI](https://fluxcd.io/flux/installation/#install-the-flux-cli) (if using Flux) or nothing extra (if using Argo CD — installed via `kubectl apply`)
+- **Deployer:** [Flux CLI](https://fluxcd.io/flux/installation/#install-the-flux-cli) (if using Flux) or [ArgoCD](https://argo-cd.readthedocs.io/en/stable/getting_started/#1-install-argo-cd) (if using Argo CD)
 
 ## Setup Workflow
 
