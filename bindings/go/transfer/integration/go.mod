@@ -18,6 +18,7 @@ require (
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260715064559-5812c6a7c34a
+	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260715093323-ae9bef6ee9de
 	oras.land/oras-go/v2 v2.6.2
 )
 
