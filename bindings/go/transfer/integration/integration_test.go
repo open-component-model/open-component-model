@@ -1391,14 +1391,14 @@ func Test_Integration_TransferWgetResource_CopyModeAllResources(t *testing.T) {
 	r.NotNil(tgd)
 
 	// A wget resource should generate a DownloadWgetResource transformation.
-	hasGetWget := false
+	hasDownloadWget := false
 	for _, tr := range tgd.Transformations {
 		if tr.Type.Name == wgetv1alpha1.DownloadWgetResourceType {
-			hasGetWget = true
+			hasDownloadWget = true
 			break
 		}
 	}
-	r.True(hasGetWget, "wget resource should generate a DownloadWgetResource transformation")
+	r.True(hasDownloadWget, "wget resource should generate a DownloadWgetResource transformation")
 
 	// 5. Build and execute the graph.
 	ctx := t.Context()

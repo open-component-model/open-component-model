@@ -12,7 +12,7 @@ import (
 
 // processWget emits the transformation nodes for a wget resource. A wget resource references
 // content behind an HTTP/S URL; it is always transferred by value: the content is downloaded to a
-// file (GetWget) and then embedded as a local blob in the target repository (AddLocalResource).
+// file (DownloadWget) and then embedded as a local blob in the target repository (AddLocalResource).
 // Unlike helm charts, there is no conversion step and no OCI-artifact representation, so the
 // upload always goes through the local-resource path regardless of the requested upload type.
 func processWget(resource v2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
@@ -25,7 +25,7 @@ func processWget(resource v2.Resource, id string, val *discoveryValue, tgd *tran
 		"resource": resource,
 	})
 	if err != nil {
-		return fmt.Errorf("cannot create unstructured spec for GetWget transformation: %w", err)
+		return fmt.Errorf("cannot create unstructured spec for DownloadWget transformation: %w", err)
 	}
 
 	// Download the wget content to a file.
