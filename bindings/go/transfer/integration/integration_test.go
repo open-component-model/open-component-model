@@ -446,7 +446,7 @@ func Test_Integration_TransferCTFToCTF(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	// 1. Create source CTF with one component and one ociresource.
+	// 1. Create source CTF with one component and one resource.
 	componentName := "ocm.software/ctf-to-ctf"
 	componentVersion := "1.0.0"
 	sourceCTFPath := t.TempDir()
@@ -583,7 +583,7 @@ func Test_Integration_TransferWithFromRepository(t *testing.T) {
 	// 1. Start target OCI registry.
 	registryAddr, user, password := startRegistry(t)
 
-	// 2. Create source CTF with a component and ociresource.
+	// 2. Create source CTF with a component and resource.
 	componentName := "ocm.software/from-repository"
 	componentVersion := "1.0.0"
 	sourceCTFPath := t.TempDir()
@@ -910,7 +910,7 @@ func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
 
-	// 6. Verify the component arrived in the target registry with the ociresource.
+	// 6. Verify the component arrived in the target registry with the resource.
 	client := createAuthClient(targetAddr, targetUser, targetPwd)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(targetAddr),
