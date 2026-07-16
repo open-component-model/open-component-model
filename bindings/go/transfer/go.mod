@@ -17,6 +17,7 @@ require (
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260715064559-5812c6a7c34a
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260715064559-5812c6a7c34a
+	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260715093323-ae9bef6ee9de
 )
 
 require (
