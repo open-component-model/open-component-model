@@ -289,7 +289,7 @@ helm install my-release argo/argo-cd
 Wait for all pods to become ready:
 
 ```shell
-kubectl wait --for=condition=Ready pods --all -n argocd --timeout=120s
+kubectl wait --for=condition=Ready pods --all --timeout=120s
 ```
 
 {{<callout context="note" title="Resource names follow the release name" icon="outline/info-circle">}}
