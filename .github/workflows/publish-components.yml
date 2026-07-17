@@ -146,6 +146,7 @@ jobs:
           WORKSPACE: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          # Write a minimal SigstoreSigningConfiguration to a file for the CLI to read.
           echo 'type: SigstoreSigningConfiguration/v1alpha1' > "${WORKSPACE}/sigstore-sign.yaml"
           # readlink -f required: cosign-installer may expose a symlink; bind-mount needs a real path.
           COSIGN_BIN="$(readlink -f "$(command -v cosign)")"
