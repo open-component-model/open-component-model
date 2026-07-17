@@ -56,7 +56,7 @@ jobs:
       build_version: ${{ steps.build_version.outputs.build_version }}
     steps:
       - name: Checkout scripts
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
@@ -157,7 +157,7 @@ jobs:
       attestations: write     # Allows storing build attestations
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
