@@ -144,9 +144,9 @@ jobs:
       - name: Sign component-versions (keyless Sigstore)
         env:
           WORKSPACE: ${{ github.workspace }}
-          SIGNER_SPEC: ${{ github.workspace }}/.github/components/ocm-release/sigstore-sign.yaml
         run: |
           set -euo pipefail
+          echo 'type: SigstoreSigningConfiguration/v1alpha1' > "${WORKSPACE}/sigstore-sign.yaml"
           # readlink -f required: cosign-installer may expose a symlink; bind-mount needs a real path.
           COSIGN_BIN="$(readlink -f "$(command -v cosign)")"
 
@@ -168,7 +168,7 @@ jobs:
               "$CLI_IMAGE_REF" \
                 sign component-version \
                 --config "/.ocmconfig" \
-                --signer-spec "$SIGNER_SPEC" \
+                --signer-spec "${WORKSPACE}/sigstore-sign.yaml" \
                 --force \
                 "$ref"
             echo "::endgroup::"

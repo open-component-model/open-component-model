@@ -1,6 +1,0 @@
-# Signer spec for keyless Sigstore signing of the released component-versions.
-# With no further fields the handler uses public-good Fulcio/Rekor and discovers
-# trust roots via TUF. The OIDC identity comes from the GitHub Actions ambient
-# token (ACTIONS_ID_TOKEN_REQUEST_TOKEN), which OCM auto-detects — no browser,
-# no .ocmconfig credential entry needed.
-type: SigstoreSigningConfiguration/v1alpha1
