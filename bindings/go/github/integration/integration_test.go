@@ -130,7 +130,7 @@ func Test_Integration_GitHub(t *testing.T) {
 	}
 
 	t.Run("resource", func(t *testing.T) {
-		processor := digest.NewDigestProcessor(nil)
+		processor := digest.NewDigestProcessor()
 
 		t.Run("commit and ref set", func(t *testing.T) {
 			t.Run("digest processing keeps the commit authoritative and the ref informational", func(t *testing.T) {
@@ -145,7 +145,7 @@ func Test_Integration_GitHub(t *testing.T) {
 			})
 
 			t.Run("download serves the commit source archive", func(t *testing.T) {
-				downloaded, err := resource.NewResourceRepository(nil).DownloadResource(
+				downloaded, err := resource.NewResourceRepository().DownloadResource(
 					t.Context(), ocmResource(ocmRef, ocmCommit), testCredentials())
 				require.NoError(t, err)
 				assertOCMArchive(t, downloaded)
@@ -165,7 +165,7 @@ func Test_Integration_GitHub(t *testing.T) {
 			})
 
 			t.Run("the pinned digest matches the bytes of a fresh archive download", func(t *testing.T) {
-				downloaded, err := resource.NewResourceRepository(nil).DownloadResource(t.Context(), processed, testCredentials())
+				downloaded, err := resource.NewResourceRepository().DownloadResource(t.Context(), processed, testCredentials())
 				require.NoError(t, err)
 				reader, err := downloaded.ReadCloser()
 				require.NoError(t, err)
@@ -208,7 +208,7 @@ func Test_Integration_GitHub(t *testing.T) {
 			})
 
 			t.Run("download resolves the ref and serves the archive of the commit it points at", func(t *testing.T) {
-				downloaded, err := resource.NewResourceRepository(nil).DownloadResource(
+				downloaded, err := resource.NewResourceRepository().DownloadResource(
 					t.Context(), ocmResource(ocmRef, ""), testCredentials())
 				require.NoError(t, err)
 				assertOCMArchive(t, downloaded)

@@ -69,7 +69,7 @@ func githubResourceRef(repoURL, ref, commit string) *descriptor.Resource {
 }
 
 func TestDigestProcessor(t *testing.T) {
-	processor := NewDigestProcessor(nil)
+	processor := NewDigestProcessor()
 
 	t.Run("ProcessResourceDigest", func(t *testing.T) {
 		repoURL := mockGitHub(t, testCommit, nil)

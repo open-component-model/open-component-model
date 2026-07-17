@@ -35,14 +35,14 @@ func archiveServer(t *testing.T, payload []byte) *httptest.Server {
 }
 
 func TestDownload(t *testing.T) {
-	t.Run("returns the archive as a file-backed application/x-tgz blob", func(t *testing.T) {
+	t.Run("returns the archive as an application/x-tgz blob", func(t *testing.T) {
 		payload := gzippedTar(t, "octocat-Hello-World-"+downloadTestCommit+"/README", "hello world")
 		server := archiveServer(t, payload)
 
 		downloaded, err := Download(t.Context(), &v1.GitHub{
 			RepoURL: server.URL + "/octocat/Hello-World",
 			Commit:  downloadTestCommit,
-		}, nil, nil, "")
+		}, nil, nil)
 		require.NoError(t, err)
 
 		reader, err := downloaded.ReadCloser()
@@ -64,7 +64,7 @@ func TestDownload(t *testing.T) {
 		_, err := Download(t.Context(), &v1.GitHub{
 			RepoURL: "https://github.com/octocat/Hello-World",
 			Ref:     "main",
-		}, nil, nil, "")
+		}, nil, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "pinned commit")
 	})
@@ -76,7 +76,7 @@ func TestDownload(t *testing.T) {
 		_, err := Download(t.Context(), &v1.GitHub{
 			RepoURL: server.URL + "/octocat/No-Such-Repo",
 			Commit:  downloadTestCommit,
-		}, nil, nil, "")
+		}, nil, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "error resolving github archive link")
 	})

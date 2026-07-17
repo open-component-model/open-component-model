@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	"ocm.software/open-component-model/bindings/go/github/internal/download"
@@ -24,9 +23,8 @@ import (
 // It downloads the source archive of a pinned commit via the GitHub REST API,
 // serving the exact tarball GitHub does, so content and digest match old OCM.
 type ResourceRepository struct {
-	filesystemConfig *filesystemv1alpha1.Config
-	httpConfig       *httpv1alpha1.Config
-	httpClient       *http.Client
+	httpConfig *httpv1alpha1.Config
+	httpClient *http.Client
 }
 
 // Option configures a ResourceRepository.
@@ -53,17 +51,12 @@ func WithHTTPClient(client *http.Client) Option {
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
-// NewResourceRepository creates a ResourceRepository. If filesystemConfig is
-// non-nil, downloaded archives are buffered to its TempFolder; otherwise
-// os.TempDir is used (see download.Download). The HTTP client is built once,
-// so its connection pool is reused across downloads.
-func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
-	if filesystemConfig == nil {
-		filesystemConfig = &filesystemv1alpha1.Config{}
-	}
-	r := &ResourceRepository{
-		filesystemConfig: filesystemConfig,
-	}
+// NewResourceRepository creates a ResourceRepository. Downloaded archives are
+// buffered in memory (see download.Download), so no filesystem configuration
+// is needed. The HTTP client is built once, so its connection pool is reused
+// across downloads.
+func NewResourceRepository(opts ...Option) *ResourceRepository {
+	r := &ResourceRepository{}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -103,6 +96,9 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 // the digest processor is what pins it for reproducibility. When both are set the
 // commit wins, and the ref is re-resolved only to warn about drift — drift never
 // fails the download.
+//
+// The blob is buffered eagerly in memory and can be read any number of times;
+// it needs no cleanup and holds the whole archive until released.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	gitHub, err := githubinternal.AccessFrom(resource.Access)
 	if err != nil {
@@ -134,12 +130,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		}
 	}
 
-	tempDir := ""
-	if r.filesystemConfig != nil {
-		tempDir = r.filesystemConfig.TempFolder
-	}
-
-	return download.Download(ctx, gitHub, gitHubCredentials, r.httpClient, tempDir)
+	return download.Download(ctx, gitHub, gitHubCredentials, r.httpClient)
 }
 
 // UploadResource is not supported: the GitHub access type is a read-only
