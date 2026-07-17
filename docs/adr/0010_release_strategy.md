@@ -31,7 +31,6 @@ The team already operates GitHub‑based release workflows for OCM v1. We consid
 
 ### Out of scope (for this ADR)
 
-* **Root ocm component** Not implemented in this ADR; later, it will share **X.Y** and **patch in tandem** when any sub‑component patches are created.
 * **Emergency patches:** Any special treatment/definition of emergency patches; we define the process only for "normal" patches.
 * **Support policy details beyond y‑2:** We set **y‑2** support (≈3 months) now; exact branch retirement/EOL steps will be defined later.
 * **Testing strategy expansion:** Beyond current component‑specific tests; additional integration/system/conformance testing is excluded from this ADR.
@@ -178,6 +177,22 @@ git tag -v <tag>
 * Tags are immutable. Never delete or overwrite a published annotated tag.
 * If a final release has a defect, ship a corrective patch (vX.Y.Z+1) and mark the previous final as superseded in the notes.
 * RC defects found after promotion follow the same corrective-patch route.
+
+### OCM components produced
+
+Every release publishes three OCM component-versions to `ghcr.io/open-component-model`:
+
+* **`ocm.software/cli`** — six executables (linux/darwin/windows × amd64/arm64) referenced by GitHub release download URL via `wget` access, plus the multi-arch CLI image by digest.
+* **`ocm.software/kubernetes/controller`** — controller image and Helm chart, both by digest.
+* **`ocm.software/ocm`** — product wrapper; pure `componentReferences` to the two above.
+
+All three carry the same bare semver as the GitHub release, and are published on both RC and final phases so consumers can validate the shape against an RC first.
+
+**Conflict policy:** both phases use `--component-version-conflict-policy replace`, so reruns after a transient failure are idempotent. The `concurrency` group and `create-tag.js` tag-existence checks prevent diverging runs for the same version, so `replace` cannot overwrite a different commit's artifact.
+
+**Resource form:** OCI artefacts (images, chart) are pinned by digest via `access.ociArtifact`. CLI binaries use `wget` access (`relation: external`) pointing at the release download URLs.
+
+See also [RELEASE_PROCESS.md § OCM components produced](../../RELEASE_PROCESS.md#ocm-components-produced).
 
 ### Roles and Responsibilities
 

@@ -50,6 +50,7 @@ By default (without specifying custom locations with this flag), the file will b
 - $EXE_DIR/.ocm/config
 - $EXE_DIR/.ocmconfig
 If multiple configuration files are found, they will be merged in the order they are discovered.
+Later entries have higher priority.
 Using the option, the specified configuration file(s) will be used instead of the lookup above.`)
 }
 
