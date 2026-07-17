@@ -167,6 +167,30 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 		assert.Contains(t, logBuf.String(), "no longer points at the pinned commit", "the drift must be logged as a warning")
 	})
 
+	t.Run("rejects an invalid access with both ref and commit set before hitting the server", func(t *testing.T) {
+		var requests int
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			requests++
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
+		}))
+		t.Cleanup(server.Close)
+
+		res := &descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: "source", Version: "1.0.0"},
+			},
+			Access: &v1.GitHub{
+				Type:    runtime.NewVersionedType(v1.LegacyType, v1.Version),
+				RepoURL: server.URL + "/octocat/Hello-World",
+				Ref:     "main",
+				Commit:  "not-a-sha",
+			},
+		}
+		_, err := NewResourceRepository(nil).DownloadResource(t.Context(), res, nil)
+		assert.ErrorContains(t, err, "invalid GitHub access")
+		assert.Zero(t, requests, "an invalid access must be rejected before any request reaches the server")
+	})
+
 	t.Run("rejects a resource with neither commit nor ref", func(t *testing.T) {
 		res := &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{

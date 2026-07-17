@@ -114,11 +114,12 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("error resolving GitHub credentials: %w", err)
 	}
 
+	if err := gitHub.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid GitHub access: %w", err)
+	}
+
 	switch {
 	case gitHub.Commit == "":
-		if err := gitHub.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid GitHub access: %w", err)
-		}
 		resolved, err := r.ResolveCommit(ctx, gitHub, gitHubCredentials)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving GitHub ref to commit: %w", err)
