@@ -123,7 +123,7 @@ jobs:
       # No checkout needed: actions/labeler@v6 reads the configuration from the
       # base repository via the GitHub API when the file is not present on disk.
       # The config lives at the action's default path (.github/labeler.yml).
-      - uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213 # v6
+      - uses: actions/labeler@b8dd2d9be0f68b860e7dae5dae7d772984eacd6d # v6
         with:
           configuration-path: .github/config/labeler.yml
 

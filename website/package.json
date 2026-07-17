@@ -31,26 +31,28 @@
     "test": "node --test scripts/register-docs-version.test.js"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/quicksand": "^5.2.10",
     "@tabler/icons": "^3.41.0",
     "@thulite/doks-core": "^1.9.3",
     "@thulite/images": "^3.3.4",
     "@thulite/inline-svg": "^1.2.2",
     "@thulite/seo": "^2.4.3",
+    "mermaid": "^11.16.0",
     "preact": "^10.29.0",
     "thulite": "^2.6.5"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@types/js-yaml": "4.0.9",
-    "@types/node": "25.9.4",
-    "eslint": "10.5.0",
-    "globals": "17.6.0",
-    "hugo-extended": "0.163.2",
+    "@types/node": "25.9.5",
+    "eslint": "10.7.0",
+    "globals": "17.7.0",
+    "hugo-extended": "0.164.0",
     "jiti": "2.7.0",
-    "js-yaml": "4.2.0",
+    "js-yaml": "5.2.1",
     "sass-embedded": "1.100.0",
     "shx": "0.4.0",
-    "typescript-eslint": "8.61.1"
+    "typescript-eslint": "8.64.0"
   },
   "overrides": {
     "semver": "^7.5.4",
@@ -61,8 +63,8 @@
     }
   },
   "engines": {
-    "node": ">=25.8.0",
-    "npm": ">=11.11.0"
+    "node": "^26.0.0",
+    "npm": ">=12.0.0"
   },
-  "packageManager": "npm@11.17.0"
+  "packageManager": "npm@12.0.1"
 }

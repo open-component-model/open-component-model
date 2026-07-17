@@ -14,6 +14,23 @@
   'git-submodules': {
     enabled: true,
   },
+  // config:recommended transitively pulls in :ignoreModulesAndTests, which
+  // adds **/examples/** to ignorePaths and hides bindings/go/examples/go.mod.
+  // Re-list that preset minus **/examples/** so Renovate scans it again.
+  // ignorePaths is append-only via presets and has no working list-level
+  // negation, so we override for gomod only. Keep in sync if
+  // :ignoreModulesAndTests gains new patterns upstream.
+  gomod: {
+    ignorePaths: [
+      '**/node_modules/**',
+      '**/bower_components/**',
+      '**/vendor/**',
+      '**/__tests__/**',
+      '**/test/**',
+      '**/tests/**',
+      '**/__fixtures__/**',
+    ],
+  },
   'updateNotScheduled': true, // Update branches that have already been created
   'minimumReleaseAge': '28 days',
   'branchPrefix': 'renovate/',
@@ -30,6 +47,8 @@
   packageRules: [
     {
       matchFileNames: ['kubernetes/controller/chart/**'],
+      groupName: 'Kubernetes Controller chart',
+      groupSlug: 'kubernetes-controller-chart',
       enabled: true,
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
@@ -159,6 +178,26 @@
       ]
     },
     {
+      // github.com/go-ini/ini renamed its module path to gopkg.in/ini.v1 at
+      // v1.67.1 (the same commit is tagged on both paths). We still carry a
+      // legacy `require github.com/go-ini/ini v1.67.0`, pulled in transitively
+      // by yq/v4 and ocm.software/ocm (OCM v1). Any bump on the OLD path is
+      // structurally impossible: v1.67.1+ declare `module gopkg.in/ini.v1`, so
+      // `go get github.com/go-ini/ini@v1.67.3` fails with "module declares its
+      // path as gopkg.in/ini.v1 but was required as github.com/go-ini/ini".
+      // That failure breaks the go.sum artifact step for the whole PR (#3098).
+      // Freeze it here; the canonical gopkg.in/ini.v1 path keeps updating.
+      // Do NOT remove without confirming both transitive importers have dropped
+      // the legacy path.
+      matchManagers: [
+        'gomod',
+      ],
+      matchDepNames: [
+        'github.com/go-ini/ini',
+      ],
+      enabled: false,
+    },
+    {
       matchManagers: [
         'gomod',
       ],
@@ -181,6 +220,34 @@
       matchManagers: ['github-actions'],
       matchDepNames: ['open-component-model/.github'],
       enabled: false,
+    },
+    {
+      // Batch non-major controller bumps. The chart subtree is excluded so the
+      // dedicated 'Kubernetes Controller chart' group above is not overwritten
+      // by this later rule (Renovate merges matching rules in order; last write
+      // wins on conflicting fields like groupName).
+      matchFileNames: [
+        'kubernetes/controller/**',
+        '!kubernetes/controller/chart/**',
+      ],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'Kubernetes Controller dependencies (non-major)',
+      groupSlug: 'kubernetes-controller-deps',
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
+      // Batch all bumps (incl. majors) for the Hugo CLI-docs generator module.
+      // separateMinorPatch overridden so minor+patch share one branch; majors
+      // still get their own branches via separateMultipleMajor (global).
+      matchFileNames: ['website/hack/generate-cli-docs/**'],
+      groupName: 'Website CLI-docs generator dependencies',
+      groupSlug: 'website-cli-docs-deps',
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
     },
   ],
   customDatasources: {

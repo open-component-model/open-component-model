@@ -9,7 +9,7 @@ import (
 )
 
 func Register(registry *credentialrepository.RepositoryRegistry) error {
-	registry.Register(ocicredentialsspec.Scheme)
+	registry.Register(ocicredentialsspec.CredentialTypeScheme)
 
 	return registry.RegisterInternalCredentialRepositoryPlugin(
 		&ocicredentials.OCICredentialRepository{},

@@ -1,16 +1,27 @@
 {
   "type": "module",
+  "engines": {
+    "node": "^26.0.0"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "eslint --cache ."
+  },
   "dependencies": {
-    "js-yaml": "^4.1.1",
+    "js-yaml": "^5.0.0",
     "undici": "^8.3.0"
   },
   "devDependencies": {
     "@actions/github-script": "github:actions/github-script",
-    "@octokit/graphql": "9.0.3"
+    "@eslint/js": "10.0.1",
+    "@octokit/graphql": "9.0.3",
+    "@types/node": "26.1.1",
+    "eslint": "10.7.0",
+    "globals": "17.7.0"
   },
   "overrides": {
     "@actions/http-client": {
-      "undici": "^6.27.0"
+      "undici": "^8.6.0"
     }
   }
 }

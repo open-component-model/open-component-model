@@ -37,6 +37,7 @@ var _ = Describe("controller", func() {
 			}
 
 			utils.DumpLogs("kro", "rgd")
+			utils.DumpLogs("argocd", "applications.argoproj.io")
 		})
 
 		for _, example := range examples {
@@ -104,6 +105,27 @@ var _ = Describe("controller", func() {
 						"condition=Ready=true",
 						timeout,
 					)).To(Succeed())
+
+					By("checking for ArgoCD Applications on the cluster")
+					name = "applications.argoproj.io/" + example.Name()
+					Expect(utils.WaitForResource(ctx, "create", timeout, name, "-n", "argocd")).To(Succeed())
+
+					By("validating ArgoCD Applications are Synced and Healthy")
+					Expect(utils.WaitForResource(ctx, "jsonpath={.status.sync.status}=Synced", timeout, name, "-n", "argocd")).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "jsonpath={.status.health.status}=Healthy", timeout, name, "-n", "argocd")).To(Succeed())
+
+					name = "deployment.apps/" + example.Name() + "-podinfo"
+
+					By("validating the ArgoCD-managed deployment in default-argocd")
+
+					Expect(utils.WaitForResource(ctx, "create", timeout, name, "-n", "default-argocd")).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name, "-n", "default-argocd")).To(Succeed())
+					Expect(utils.WaitForResource(
+						ctx, "condition=Ready=true",
+						timeout,
+						"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo", "-n", "default-argocd",
+					)).To(Succeed())
+
 				}
 
 				By("validating the example")
@@ -118,15 +140,30 @@ var _ = Describe("controller", func() {
 
 				// Check for configuration and localization
 				if strings.HasSuffix(example.Name(), "-configuration-localization") {
-					By("validating the localization")
+					By("validating the fluxcd localization")
 					Expect(utils.CompareResourceField(ctx,
 						"pod -l app.kubernetes.io/name="+example.Name()+"-podinfo",
 						"'{.items[0].spec.containers[0].image}'",
 						strings.TrimLeft(imageRegistry, "http://")+"/stefanprodan/podinfo:6.9.1",
 					)).To(Succeed())
-					By("validating the configuration")
+
+					By("validating the FluxCD configuration (ui.message)")
 					Expect(utils.CompareResourceField(ctx,
 						"pod -l app.kubernetes.io/name="+example.Name()+"-podinfo",
+						"'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'",
+						example.Name(),
+					)).To(Succeed())
+
+					By("validating the ArgoCD localization")
+					Expect(utils.CompareResourceField(ctx,
+						"pod -l app.kubernetes.io/name="+example.Name()+"-podinfo -n default-argocd",
+						"'{.items[0].spec.containers[0].image}'",
+						strings.TrimLeft(imageRegistry, "http://")+"/stefanprodan/podinfo:6.9.1",
+					)).To(Succeed())
+
+					By("validating the ArgoCD configuration (ui.message)")
+					Expect(utils.CompareResourceField(ctx,
+						"pod -l app.kubernetes.io/name="+example.Name()+"-podinfo -n default-argocd",
 						"'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'",
 						example.Name(),
 					)).To(Succeed())

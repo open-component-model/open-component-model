@@ -1,7 +1,7 @@
 ---
 title: Component
 description: "API reference for the Component custom resource (delivery.ocm.software/v1alpha1)"
-weight: 1
+weight: 2
 toc: false
 ---
 

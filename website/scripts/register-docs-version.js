@@ -249,6 +249,13 @@ function buildModuleBlocks(version, fullVersion, deps) {
         {
             path: `${MODULE_PREFIX}/website`,
             version: `v${fullVersion}`,
+            // Self-import: treat the snapshot as a content-only tarball.
+            // ignoreImports drops its transitive version pins (which override
+            // ours via Hugo's first-wins resolution); ignoreConfig also drops
+            // its mounts/params/hugo.yaml so the parent project is the sole
+            // source of truth for theme, params, and module graph.
+            ignoreImports: true,
+            ignoreConfig: true,
             mounts: [{
                 files: ['**', '!blog/**'],
                 source: 'content/',
@@ -497,15 +504,23 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
     const hasAllImports = hasAllImportsForVersion(parsed, version, deps);
     const hasAnyImport = hasAnyImportForVersion(parsed, version);
 
-    if (hasAllImports) {
+    if (hasAllImports || hasAnyImport) {
+        if (!hasAllImports) {
+            // Partial block: a previous release did not cover every module in
+            // CLI_DERIVED_MODULES. updateImportTags only bumps tags on imports
+            // that already exist, so the gaps stay gaps - warn the reviewer to
+            // fix them by hand before merging.
+            console.warn(
+                `[WARN] module.yaml: incomplete block for ${version}. ` +
+                `Updating tags on existing entries only - fix the missing imports manually before merging.`
+            );
+        }
         const changed = updateImportTags(parsed, version, fullVersion, deps);
         if (changed) {
             console.log(`module.yaml: updated import tags for version ${version} to ${fullVersion}.`);
         } else {
             console.log(`module.yaml: version ${version} already up to date.`);
         }
-    } else if (hasAnyImport) {
-        fail(`module.yaml: incomplete block for ${version}. Fix manually.`);
     } else {
         const { imports } = buildModuleBlocks(version, fullVersion, deps);
         parsed.imports = parsed.imports || [];
