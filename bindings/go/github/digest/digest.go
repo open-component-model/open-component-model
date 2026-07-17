@@ -117,7 +117,7 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		}
 	}()
 
-	resolvedDigest, err := godigest.FromReader(reader)
+	resolvedDigest, err := godigest.SHA256.FromReader(reader)
 	if err != nil {
 		return nil, fmt.Errorf("error digesting downloaded github archive: %w", err)
 	}
