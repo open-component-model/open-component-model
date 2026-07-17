@@ -187,7 +187,7 @@ jobs:
               -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
               -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
               -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
-              -v "${WORKSPACE}:${WORKSPACE}" \
+              -v "${WORKSPACE}:${WORKSPACE}:ro" \
               -w "${WORKSPACE}" \
               "$CLI_IMAGE_REF" \
                 sign component-version \
