@@ -1,47 +1,24 @@
-name: Test — Sign OCM components (fork E2E)
-
-# Temporary test workflow — delete before merging to upstream.
-#
-# Directly invokes publish-components.yml against the fork's existing
-# v0.7.0-rc.1 artifacts so the keyless Sigstore signing step can be
-# exercised end-to-end without running the full release pipeline.
-# All inputs default to the fork's rc.1 artifacts; just hit "Run workflow".
+# TEMPORARY — end-to-end test harness for publish-components.yml on the fork.
+# Triggers on push to this branch whenever the relevant files change, so it
+# does not need to be on the default branch. DELETE before merging to upstream.
+name: TEST sign-components e2e
 
 on:
+  push:
+    branches:
+      - feat/sign-ocm-components-cosign
+    paths:
+      - .github/workflows/test-sign-components.yml
+      - .github/workflows/publish-components.yml
+      - .github/components/ocm-release/**
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Bare semver (no leading v)"
-        required: false
-        default: "0.7.0-rc.1"
-        type: string
-      release_tag:
-        description: "GitHub release tag"
-        required: false
-        default: "v0.7.0-rc.1"
-        type: string
-      cli_image_digest:
-        description: "CLI image digest"
-        required: false
-        default: "sha256:17b2ae8a9e3c467a3da452d480df5480d9dd285957007cf8c8dee0c8af0f606e"
-        type: string
-      controller_image_digest:
-        description: "Controller image digest"
-        required: false
-        default: "sha256:504b1e9bf51aa79bc6531f292e52bfb6287d7daa80931dd10c3650e838e3d55c"
-        type: string
-      controller_chart_digest:
-        description: "Controller chart digest"
-        required: false
-        default: "sha256:1fae163350ab16eb48cea81cd208d72708b3c9df1351bf5da6202c8a3f059ae1"
-        type: string
 
 permissions:
   contents: read
 
 jobs:
   test_sign:
-    name: Publish + sign ${{ inputs.version }}
+    name: Publish + sign 0.7.0-rc.1
     permissions:
       contents: read
       packages: write
@@ -49,9 +26,9 @@ jobs:
       id-token: write # forwarded to publish-components.yml for keyless Sigstore signing
     uses: ./.github/workflows/publish-components.yml
     with:
-      version: ${{ inputs.version }}
-      release_tag: ${{ inputs.release_tag }}
-      cli_image_digest: ${{ inputs.cli_image_digest }}
-      controller_image_digest: ${{ inputs.controller_image_digest }}
-      controller_chart_digest: ${{ inputs.controller_chart_digest }}
+      version: "0.7.0-rc.1"
+      release_tag: "v0.7.0-rc.1"
+      cli_image_digest: "sha256:17b2ae8a9e3c467a3da452d480df5480d9dd285957007cf8c8dee0c8af0f606e"
+      controller_image_digest: "sha256:504b1e9bf51aa79bc6531f292e52bfb6287d7daa80931dd10c3650e838e3d55c"
+      controller_chart_digest: "sha256:1fae163350ab16eb48cea81cd208d72708b3c9df1351bf5da6202c8a3f059ae1"
       conflict_policy: replace
