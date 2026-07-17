@@ -11,6 +11,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/minio v0.43.0
+	ocm.software/open-component-model/bindings/go/configuration v0.0.15
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260713064101-461dadb4ac86
 	ocm.software/open-component-model/bindings/go/s3 v0.0.0-00010101000000-000000000000
 )
@@ -87,6 +88,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.13 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260714110434-d825a98471fb // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.10 // indirect
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect

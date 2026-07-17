@@ -40,6 +40,8 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	ocm.software/open-component-model/bindings/go/configuration v0.0.15
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260714110434-d825a98471fb
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
