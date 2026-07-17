@@ -129,7 +129,7 @@ jobs:
 
       # cosign is not in the scratch CLI image; install on runner and bind-mount in.
       # Version is the single source of truth from bindings/go/sigstore/signing/handler/internal/.env,
-      # tracked by Renovate — no separate pin needed here.
+      # tracked by Renovate.
       - name: Read cosign version from .env
         run: |
           set -euo pipefail
