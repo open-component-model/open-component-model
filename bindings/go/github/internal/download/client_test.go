@@ -189,6 +189,44 @@ func TestFetch(t *testing.T) {
 	}
 }
 
+// One pooled http.Client is reused across downloads with per-resource
+// credentials, and go-github injects the token by wrapping the client's
+// Transport. The wrapper must stay local to one call: a token used for one
+// fetch must not leak into a later anonymous fetch through the shared client.
+func TestFetch_SharedClientDoesNotLeakToken(t *testing.T) {
+	const commit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+	payload := gzippedTar(t, "Hello-World-"+commit+"/README", "hello")
+
+	var authSeen [][]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+commit):
+			authSeen = append(authSeen, r.Header.Values("Authorization"))
+			http.Redirect(w, r, "http://"+r.Host+"/codeload/octocat/Hello-World/"+commit, http.StatusFound)
+		case strings.HasPrefix(r.URL.Path, "/codeload/"):
+			_, _ = w.Write(payload)
+		default:
+			http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
+	shared := server.Client()
+
+	rc, err := fetch(t.Context(), access, &credsv1.GitHubCredentials{Token: "ghp_secret"}, shared)
+	require.NoError(t, err)
+	require.NoError(t, rc.Close())
+
+	rc, err = fetch(t.Context(), access, nil, shared)
+	require.NoError(t, err)
+	require.NoError(t, rc.Close())
+
+	require.Len(t, authSeen, 2)
+	assert.Equal(t, []string{"Bearer ghp_secret"}, authSeen[0], "the authenticated fetch must carry its token")
+	assert.Nil(t, authSeen[1], "the shared client must not replay the previous fetch's token on an anonymous fetch")
+}
+
 // The pre-signed archive endpoint can fail independently of the API call that
 // resolved it, for example when the link has expired.
 func TestFetch_ArchiveEndpointStatusError(t *testing.T) {

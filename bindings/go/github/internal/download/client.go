@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/google/go-github/v66/github"
+	"github.com/google/go-github/v89/github"
 
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
@@ -59,23 +59,27 @@ func clientFor(gitHub *v1.GitHub, u *url.URL, credentials *credsv1.GitHubCredent
 	if httpClient == nil {
 		httpClient = defaultHTTPClient()
 	}
-	gh := github.NewClient(httpClient)
+	// WithHTTPClient copies the supplied client before NewClient wraps its
+	// Transport for auth, so the shared, pooled client stays untouched and a
+	// token cannot leak across downloads (TestFetch_SharedClientDoesNotLeakToken
+	// pins this against future go-github bumps).
+	opts := []github.ClientOptionsFunc{github.WithHTTPClient(httpClient)}
 	if credentials != nil && credentials.Token != "" {
-		gh = gh.WithAuthToken(credentials.Token)
+		opts = append(opts, github.WithAuthToken(credentials.Token))
 	}
 
-	if gitHub.APIHostname == "" && u.Hostname() == "github.com" {
-		return gh, nil
+	if gitHub.APIHostname != "" || u.Hostname() != "github.com" {
+		enterpriseHost := gitHub.APIHostname
+		if enterpriseHost == "" {
+			enterpriseHost = u.Host
+		}
+		base := (&url.URL{Scheme: u.Scheme, Host: enterpriseHost}).String()
+		opts = append(opts, github.WithEnterpriseURLs(base, base))
 	}
 
-	enterpriseHost := gitHub.APIHostname
-	if enterpriseHost == "" {
-		enterpriseHost = u.Host
-	}
-	base := (&url.URL{Scheme: u.Scheme, Host: enterpriseHost}).String()
-	gh, err := gh.WithEnterpriseURLs(base, base)
+	gh, err := github.NewClient(opts...)
 	if err != nil {
-		return nil, fmt.Errorf("error configuring github enterprise client for %q: %w", enterpriseHost, err)
+		return nil, fmt.Errorf("error building github client for %q: %w", gitHub.RepoURL, err)
 	}
 	return gh, nil
 }
