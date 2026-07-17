@@ -89,7 +89,7 @@ jobs:
   # Build each GOOS/GOARCH target on its own runner so the six cross-compiles run
   # in parallel instead of fighting for cores on a single machine.
   build:
-    name: Build CLI (${{ matrix.goos }}/${{ matrix.goarch }})
+    name: ${{ matrix.goos }}/${{ matrix.goarch }}
     needs: version
     runs-on: ubuntu-24.04-arm
     permissions:
