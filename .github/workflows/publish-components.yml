@@ -51,7 +51,9 @@ jobs:
       - name: Checkout component constructor
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          sparse-checkout: .github/components
+          sparse-checkout: |
+            .github/components
+            bindings/go/sigstore/signing/handler/internal/.env
           persist-credentials: 'false'
 
       - name: Compute image refs
@@ -126,11 +128,18 @@ jobs:
               --component-version-conflict-policy "$CONFLICT_POLICY"
 
       # cosign is not in the scratch CLI image; install on runner and bind-mount in.
-      # Keep pinned in sync with bindings/go/sigstore/signing/handler/internal/.env.
+      # Version is the single source of truth from bindings/go/sigstore/signing/handler/internal/.env,
+      # tracked by Renovate — no separate pin needed here.
+      - name: Read cosign version from .env
+        run: |
+          set -euo pipefail
+          . bindings/go/sigstore/signing/handler/internal/.env
+          echo "COSIGN_VERSION=${COSIGN_VERSION}" >> "$GITHUB_ENV"
+
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
-          cosign-release: v3.1.1
+          cosign-release: ${{ env.COSIGN_VERSION }}
 
       # scratch image has no /tmp or $HOME: mount tmpfs and forward GHA OIDC vars explicitly.
       - name: Sign component-versions (keyless Sigstore)
