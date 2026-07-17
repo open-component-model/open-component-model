@@ -31,7 +31,7 @@ body = """
 curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION={{ version | trim_start_matches(pat="v") }} bash
 ```
 
-For alternative installation options (Homebrew, asdf, container image), see the [installation guide](https://ocm.software/docs/getting-started/install-the-ocm-cli/).
+For alternative installation options, see the [installation guide](https://ocm.software/docs/getting-started/install-the-ocm-cli/).
 
 You can also run the OCM CLI in a container without installing it:
 
@@ -56,15 +56,15 @@ See the [controller setup guide](https://ocm.software/docs/getting-started/set-u
 
 ### OCM Component Distribution *(for existing OCM users)*
 
-Every OCM release is published as OCM component-versions to `ghcr.io/open-component-model` — the same distribution mechanism OCM enables for your own software. Components in this release:
+Every OCM release is published as OCM component versions to `ghcr.io/open-component-model` - the same distribution mechanism OCM enables for your own software. Components in this release:
 
 | Component | Contents |
 |---|---|
-| `ocm.software/ocm` | Product wrapper referencing CLI + controller |
-| `ocm.software/cli` | CLI binaries and OCI image |
-| `ocm.software/kubernetes/controller` | Controller image and Helm chart |
+| `ocm.software/ocm:{{ version | trim_start_matches(pat="v") }}` | Product wrapper referencing CLI + controller |
+| `ocm.software/cli:{{ version | trim_start_matches(pat="v") }}` | CLI binaries and OCI image |
+| `ocm.software/kubernetes/controller:{{ version | trim_start_matches(pat="v") }}` | Controller image and Helm chart |
 
-Inspect the full product component-version:
+Inspect the full product component:
 
 ```bash
 ocm get component-version ghcr.io/open-component-model//ocm.software/ocm:{{ version | trim_start_matches(pat="v") }} -o yaml
