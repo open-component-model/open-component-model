@@ -374,7 +374,7 @@ components:
 	defer func() { r.NoError(rc.Close()) }()
 	got, err := io.ReadAll(rc)
 	r.NoError(err)
-	r.Equal(content, string(got), "localized content must match the served bytes")
+	r.Equal(content, string(got), "content must match the served bytes")
 }
 
 // Test_Integration_TransferComponentVersion_WgetByValue_ToOCI verifies the wget by-value transfer
