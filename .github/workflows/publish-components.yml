@@ -73,7 +73,6 @@ jobs:
             echo "CONTROLLER_IMAGE_REF=$REGISTRY/$OWNER/kubernetes/controller:${VERSION}@${CONTROLLER_IMAGE_DIGEST}"
             echo "CONTROLLER_CHART_REF=$REGISTRY/$OWNER/kubernetes/controller/chart:${VERSION}@${CONTROLLER_CHART_DIGEST}"
             echo "CLI_DOWNLOAD_URL=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
-            # // prefix: repo root + component name resolves to the same location as `add component-version`.
             echo "OCM_COMPONENT_REF=$REGISTRY/$OWNER//ocm.software/ocm:${VERSION}"
             echo "CLI_COMPONENT_REF=$REGISTRY/$OWNER//ocm.software/cli:${VERSION}"
             echo "CONTROLLER_COMPONENT_REF=$REGISTRY/$OWNER//ocm.software/kubernetes/controller:${VERSION}"
