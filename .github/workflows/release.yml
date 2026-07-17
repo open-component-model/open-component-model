@@ -1,7 +1,6 @@
 name: Release
 
-# Unified release flow. Creates a single v0.X.Y version covering both CLI and
-# controller. I replaced cli-release.yml and controller-release.yml with this trigger.
+# Unified release flow. Creates a single v0.X.Y version covering both CLI and controller.
 #
 # Tag scheme on each release:
 #   v0.X.Y                              This is the main release version that will get released.
@@ -10,7 +9,7 @@ name: Release
 #   website/v0.X.Y                      Website tag, used by Hugo module imports for versioned docs.
 #                                       Final-only — no RC counterpart, since the docs site has no RC artifacts to validate.
 #
-# Flow remains the same. Release manager selects a release branch, hits release, then gates will take
+# Flow: Release manager selects a release branch, hits release, then gates will take
 # care of the rest.
 
 run-name: Release ${{ github.ref_name }}${{ github.event.inputs.dry_run == 'true' && ' (dry-run)' || '' }}
@@ -44,12 +43,6 @@ jobs:
   # PHASE 1: RELEASE CANDIDATE
   # ===========================================================================
 
-  # === Copied from release-candidate-version.yml ===
-  # Changes vs the original:
-  #   removed the `component_path` input since it's not per component anymore.
-  #   cliff config path change: `${component_path}/cliff.toml` → `cliff.toml` (root).
-  #   canonical tag added: v* alongside the existing per-component tags.
-  #   Outputs added: `cli_module_*_tag` and `controller_module_*_tag` (RC + promotion).
   prepare:
     name: Prepare Release Metadata
     runs-on: ubuntu-24.04-arm
@@ -69,7 +62,7 @@ jobs:
       highest_previous_release_version: ${{ steps.latest.outputs.highest_previous_release_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
@@ -144,13 +137,9 @@ jobs:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
             await script.determineLatestRelease({ core, github, context });
-  # === release-candidate-version.yml ===
 
-  # === Copied from controller-release.yml::tag_rc ===
-  # Changes vs the original:
-  #   calls `createRcTags` (plural) instead of `createRcTag`
-  #   passes both CANONICAL_TAG and a comma-separated ADDITIONAL_TAGS list
-  #   so cli/v* and kubernetes/controller/v* are emitted on the same commit
+  # passes both CANONICAL_TAG and a comma-separated ADDITIONAL_TAGS list
+  # so cli/v* and kubernetes/controller/v* are emitted on the same commit
   tag_rc:
     name: Create and Push RC Tags
     runs-on: ubuntu-24.04-arm
@@ -175,12 +164,12 @@ jobs:
           permission-contents: write
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
           fetch-tags: true
-          # persist-credentials kept (intentionally) — create-tag.js does
+          # persist-credentials kept intentionally — create-tag.js does
           # `git push origin refs/tags/...` which needs the app token persisted
           # in .git/config to authenticate. Zizmor flags this; accepted.
 
@@ -210,10 +199,9 @@ jobs:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
             await script.createRcTags({ core });
-  # === controller-release.yml::tag_rc ===
 
-  # === This is completely new. It starts the orchestration process for building and testing the components. ===
-  # It uses the new workflow helper called `pipeline.yaml`.
+  # Orchestration process for building and testing the components.
+  # Uses new workflow helper called `pipeline.yaml`.
   # This will execute conformance tests, e2e tests, validations and builds for the respective components.
   # This pipeline here is a daily pipeline as well.
   build_and_test:
@@ -232,7 +220,6 @@ jobs:
       ref: ${{ needs.prepare.outputs.new_tag }}
       build_version: ${{ needs.prepare.outputs.base_version }}
 
-  # === Copied from cli-release.yml::release_rc + controller-release.yml::release_rc ===
   # Combines into one pre-release containing both CLI assets (binaries + OCI tarballs)
   # and the controller chart. Summary will have digests for both.
   release_rc:
@@ -277,6 +264,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Publishes ocm.software/{cli,kubernetes/controller,ocm} for the RC, referencing
+  # the just-pushed CLI image, controller image and chart by digest and the CLI
+  # binaries by their release download URL. Depends on release_rc because the wget
+  # access resolves the binaries from the GitHub release, which must exist first.
+  publish_components_rc:
+    name: Publish OCM Components (RC)
+    if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
+    needs: [prepare, tag_rc, build_and_test, release_rc]
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    uses: ./.github/workflows/publish-components.yml
+    with:
+      version: ${{ needs.prepare.outputs.new_version }}
+      release_tag: ${{ needs.prepare.outputs.new_tag }}
+      cli_image_digest: ${{ needs.build_and_test.outputs.cli_image_digest }}
+      controller_image_digest: ${{ needs.build_and_test.outputs.controller_image_digest }}
+      controller_chart_digest: ${{ needs.build_and_test.outputs.controller_chart_digest }}
+      conflict_policy: replace
+
+  # Summarizes the RC only after the components are published, so the release
+  # manager sees the summary with the OCM component coordinates
+
+  summarize_rc:
+    name: Summarize RC Release
+    if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
+    needs: [prepare, tag_rc, build_and_test, release_rc, publish_components_rc]
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    steps:
       - name: Summarize RC release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
@@ -297,6 +316,12 @@ jobs:
             });
             const assetsCount = release.data.assets?.length || 0;
 
+            // OCM component versions the publish_components_rc job pushed for this RC,
+            // so the release manager can verify the expected coordinates are in place.
+            const owner = context.repo.owner.toLowerCase();
+            const repo = `ghcr.io/${owner}`;
+            const ver = process.env.RC_VERSION;
+
             await core.summary
               .addHeading('RC Release Published')
               .addTable([
@@ -309,18 +334,19 @@ jobs:
                 ['Controller Image Digest', (process.env.IMAGE_DIGEST || 'N/A').substring(0, 19) + '...'],
                 ['Chart Digest', (process.env.CHART_DIGEST || 'N/A').substring(0, 19) + '...'],
                 ['Uploaded Assets', String(assetsCount)],
+                ['OCM Product Component', `${repo}//ocm.software/ocm:${ver}`],
+                ['OCM CLI Component', `${repo}//ocm.software/cli:${ver}`],
+                ['OCM Controller Component', `${repo}//ocm.software/kubernetes/controller:${ver}`],
               ])
               .addEOL()
               .addLink('View Release', release.data.html_url)
               .write();
-  # === cli-release.yml::release_rc + controller-release.yml::release_rc ===
 
   # ===========================================================================
   # PHASE 2: FINAL RELEASE (after environment gate)
   # ===========================================================================
 
-  # === Copied from cli-release.yml::verify_attestations + controller-release.yml::verify_attestations and merged ===
-  # All four attestation verifications:
+  # Attestation verifications:
   #   CLI binaries (cli-release.yml)
   #   CLI OCI image (cli-release.yml)
   #   Controller image (controller-release.yml)
@@ -385,11 +411,7 @@ jobs:
           CHART_DIGEST: ${{ needs.build_and_test.outputs.controller_chart_digest }}
         run: |
           gh attestation verify "oci://$CONTROLLER_CHART@${CHART_DIGEST}" --repo "$GH_REPO"
-  # === cli-release.yml::verify_attestations + controller-release.yml::verify_attestations ===
 
-  # === Copied from controller-release.yml::promote_and_release_final + cli-release.yml::promote_final + cli-release.yml::release_final and merged ===
-  # These are literally copied verbatim from the original files from the above sentence.
-  # All I changed was applying some of the zizmor stuff.
   promote_and_release_final:
     name: Promote and Release Final
     needs: [prepare, build_and_test, verify_attestations]
@@ -402,6 +424,11 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+    outputs:
+      # Exposed for publish_components_final, which references the chart by
+      # digest. The chart is re-packaged at promotion (final version stripped
+      # of `-rc.N`) so the digest differs from the RC chart digest.
+      final_chart_digest: ${{ steps.chart-digest.outputs.digest }}
     steps:
       - name: Compute image refs (lowercase owner)
         env:
@@ -425,13 +452,13 @@ jobs:
           permission-contents: write
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
           fetch-tags: true
-          # persist-credentials kept (intentionally) — create-tag.js does
+          # persist-credentials kept intentionally — create-tag.js does
           # `git push origin refs/tags/...` which needs the app token persisted
           # in .git/config to authenticate. Zizmor flags this; accepted.
 
@@ -505,7 +532,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
-          version: v4.2.1
+          version: v4.2.2
 
       - name: Re-package final chart
         working-directory: ${{ env.CONTROLLER_PATH }}
@@ -567,7 +594,9 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.base_version }}
         run: |
           set -euo pipefail
-          echo "digest=$(oras resolve $CONTROLLER_CHART:${VERSION})" >> "$GITHUB_OUTPUT"
+          digest=$(oras resolve "$CONTROLLER_CHART:${VERSION}")
+          [[ "$digest" == sha256:* ]] || { echo "::error::oras resolve returned unexpected digest: $digest"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest final chart
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
@@ -622,7 +651,6 @@ jobs:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/publish-final-release.js');
             await script.default({ github, context, core });
-  # === controller-release.yml::promote_and_release_final + cli-release.yml::promote_final + cli-release.yml::release_final ===
 
   verify_install_script:
     name: Verify install script for ${{ needs.prepare.outputs.base_version }}
@@ -633,6 +661,24 @@ jobs:
       version: ${{ needs.prepare.outputs.base_version }}
     permissions:
       contents: read
+
+  # Counterpart of publish_components_rc for the final release.
+  publish_components_final:
+    name: Publish OCM Components (Final)
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    needs: [prepare, build_and_test, promote_and_release_final]
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    uses: ./.github/workflows/publish-components.yml
+    with:
+      version: ${{ needs.prepare.outputs.base_version }}
+      release_tag: ${{ needs.prepare.outputs.promotion_tag }}
+      cli_image_digest: ${{ needs.build_and_test.outputs.cli_image_digest }}
+      controller_image_digest: ${{ needs.build_and_test.outputs.controller_image_digest }}
+      controller_chart_digest: ${{ needs.promote_and_release_final.outputs.final_chart_digest }}
+      conflict_policy: replace
 
   # === Website version release ===
   # Replaces the old standalone website-version-release.yml. Runs after the
@@ -653,7 +699,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout main
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           # Docs PR targets main, so we check out main rather than the release branch.
           ref: main
@@ -739,4 +785,3 @@ jobs:
             ````
             ${{ steps.register.outputs.log }}
             ````
-  # === Website version release ===
