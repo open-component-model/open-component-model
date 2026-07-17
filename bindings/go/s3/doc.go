@@ -15,11 +15,17 @@
 // aws-sdk-go-v2 client, performs a GetObject, and returns the object body as a
 // blob:
 //
-//	repo := repository.NewResourceRepository()
+//	repo := repository.NewResourceRepository(filesystemConfig)
 //	b, err := repo.DownloadResource(ctx, resource, credentials)
 //	if err != nil {
 //	    return err
 //	}
+//
+// Objects are streamed into a file under the TempFolder of the supplied
+// filesystem config (a nil config selects the OS temporary directory) rather
+// than buffered in memory, so memory use does not scale with object size. The
+// blob returned by DownloadResource reads from that file, which outlives the
+// call: nothing removes it afterwards, so the caller owns it.
 //
 // Integrity uses OCM's own SHA-256 over the content (see ProcessResourceDigest),
 // not the S3 ETag, which is not a reliable whole-object hash for multipart

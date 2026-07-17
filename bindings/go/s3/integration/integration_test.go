@@ -16,6 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/minio"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
@@ -47,7 +48,9 @@ func Test_Integration_S3(t *testing.T) {
 		AccessKeyID:     container.Username,
 		SecretAccessKey: container.Password,
 	}
-	repo := repository.NewResourceRepository()
+	// Downloaded objects are streamed into TempFolder and outlive DownloadResource,
+	// so point it at a directory the test framework cleans up.
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
 
 	access := func(bucket, key, version string) *accessv1.S3 {
 		return &accessv1.S3{
