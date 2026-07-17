@@ -8,14 +8,14 @@ require (
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.21.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/configuration v0.0.15
+	ocm.software/open-component-model/bindings/go/configuration v0.0.16
 	ocm.software/open-component-model/bindings/go/constructor v0.0.11
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260714105235-15d2acd38dd6
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260716120024-a437b4740573
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260714103712-5056930a2a45
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260716120024-a437b4740573
 )
 
 require (
@@ -31,6 +31,6 @@ require (
 	golang.org/x/text v0.38.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260714103712-5056930a2a45 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260716120024-a437b4740573 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
