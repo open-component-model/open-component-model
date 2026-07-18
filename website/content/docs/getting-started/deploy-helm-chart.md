@@ -199,7 +199,7 @@ ocm get cv $OCM_REPO//ocm.software/ocm-k8s-toolkit/simple:1.0.0
 
 ### Create ResourceGraphDefinition
 
-The ResourceGraphDefinition tells kro how to orchestrate the OCM and Flux and ArgoCD resources.
+The ResourceGraphDefinition tells kro how to orchestrate the OCM and Flux or ArgoCD resources.
 Create `rgd.yaml` with the following content:
 
 {{< tabs "helm-rgd-deployer" >}}
