@@ -338,26 +338,28 @@ argocd-server-765575f778-j8krk                      1/1     Running   0         
 </details>
 <br>
 
-Enable OCI Helm support — required for deploying Helm charts from OCI registries:
+{{< callout context="note" title="OCI registry credentials" icon="outline/info-circle" >}}
+To deploy Helm charts from a [private OCI registry](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#helm) (e.g. `ghcr.io`), create an Argo CD repository Secret with `enableOCI: "true"`:
 
-```shell
-kubectl patch configmap argocd-cmd-params-cm -n argocd \
-  --type merge -p '{"data":{"application.helm.enableOCI":"true"}}'
-kubectl rollout restart deployment argocd-repo-server -n argocd
-kubectl rollout status deployment argocd-repo-server -n argocd --timeout=60s
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ghcr-helm
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  name: ghcr-helm
+  url: ghcr.io
+  type: helm
+  enableOCI: "true"
+  username: <your-username>
+  password: <your-token>
 ```
 
-<details>
-<summary>You should see this output</summary>
-
-```text
-configmap/argocd-cmd-params-cm patched
-deployment.apps/argocd-repo-server restarted
-Waiting for deployment "argocd-repo-server" rollout to finish: 1 old replicas are pending termination...
-Waiting for deployment "argocd-repo-server" rollout to finish: 1 old replicas are pending termination...
-deployment "argocd-repo-server" successfully rolled out
-```
-</details>
+Public OCI registries require no configuration. *Read more about ArgoCD OCI Support [here](https://argo-cd.readthedocs.io/en/stable/user-guide/oci/)*.
+{{< /callout >}}
 
 {{< /tab >}}
 {{< /tabs >}}
