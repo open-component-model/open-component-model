@@ -7,10 +7,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const (
-	credentialKeyToken       = "token"
-	credentialKeyAccessToken = "accessToken"
-)
+const credentialKeyToken = "token"
 
 var convertScheme = runtime.NewScheme()
 
@@ -24,20 +21,6 @@ func init() {
 	// The credential graph resolves .ocmconfig entries into DirectCredentials
 	// property bags, so the converter must be able to decode that type too.
 	directcredsv1.MustRegister(convertScheme)
-}
-
-// fromDirectCredentials maps a property bag, as legacy .ocmconfig files carry,
-// onto typed credentials. "token" is old OCM's spelling and "accessToken" the
-// one shared with the HTTP and OCI access types; "token" wins when both are set.
-func fromDirectCredentials(properties map[string]string) *GitHubCredentials {
-	token := properties[credentialKeyToken]
-	if token == "" {
-		token = properties[credentialKeyAccessToken]
-	}
-	return &GitHubCredentials{
-		Type:  runtime.NewVersionedType(GitHubCredentialsType, Version),
-		Token: token,
-	}
 }
 
 // ConvertToGitHubCredentials converts runtime.Typed credentials into
@@ -62,7 +45,12 @@ func ConvertToGitHubCredentials(creds runtime.Typed) (*GitHubCredentials, error)
 
 	switch t := typed.(type) {
 	case *directcredsv1.DirectCredentials:
-		return fromDirectCredentials(t.Properties), nil
+		// A property bag, as legacy .ocmconfig files carry. "token" is old
+		// OCM's spelling and the only credential key the github access reads.
+		return &GitHubCredentials{
+			Type:  runtime.NewVersionedType(GitHubCredentialsType, Version),
+			Token: t.Properties[credentialKeyToken],
+		}, nil
 	case *GitHubCredentials:
 		return t, nil
 	}

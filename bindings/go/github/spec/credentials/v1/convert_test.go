@@ -48,23 +48,6 @@ func TestConvertToGitHubCredentials(t *testing.T) {
 		assert.Equal(t, runtime.NewVersionedType(GitHubCredentialsType, Version), converted.Type)
 	})
 
-	t.Run("direct credentials map the accessToken property", func(t *testing.T) {
-		converted, err := ConvertToGitHubCredentials(directCredentials(map[string]string{"accessToken": "ghp_secret"}))
-		require.NoError(t, err)
-		require.NotNil(t, converted)
-		assert.Equal(t, "ghp_secret", converted.Token)
-	})
-
-	t.Run("token wins over accessToken when both are set", func(t *testing.T) {
-		converted, err := ConvertToGitHubCredentials(directCredentials(map[string]string{
-			"token":       "ghp_token",
-			"accessToken": "ghp_access",
-		}))
-		require.NoError(t, err)
-		require.NotNil(t, converted)
-		assert.Equal(t, "ghp_token", converted.Token)
-	})
-
 	// Rejecting an unusable credential is the consumer's call, not the converter's.
 	t.Run("direct credentials without a token convert to an empty token", func(t *testing.T) {
 		converted, err := ConvertToGitHubCredentials(directCredentials(map[string]string{"username": "octocat"}))
