@@ -55,6 +55,7 @@
     "typescript-eslint": "8.64.0"
   },
   "overrides": {
+    "adm-zip": "0.6.0",
     "semver": "^7.5.4",
     "eslint-config-developit": {
       "eslint-plugin-compat": {
