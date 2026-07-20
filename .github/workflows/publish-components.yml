@@ -46,11 +46,12 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write # mint the GitHub Actions OIDC token used as the Sigstore signing identity
+      id-token: write # we use the GitHub Actions OIDC token as the Sigstore signing identity
     steps:
       - name: Checkout component constructor
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
+          # use same .env file as in bindings to determine cosign version
           sparse-checkout: |
             .github/components
             bindings/go/sigstore/signing/handler/internal/.env
@@ -170,7 +171,6 @@ jobs:
                 sign component-version \
                 --config "/.ocmconfig" \
                 --signer-spec "${WORKSPACE}/sigstore-sign.yaml" \
-                --force \
                 "$ref"
             echo "::endgroup::"
           done
