@@ -27,7 +27,7 @@ Go bindings for the Open Component Model.
 | **input**                    | Input sources (file, directory, utf8)                    |
 | **generator**                | Code generation tools                                    |
 | **wget**                     | Wget resource handling                                   |
-| **github**                   | GitHub commit archive resource and source handling       |
+| **github**                   | GitHub commit archive resource handling                  |
 
 ## Usage
 
