@@ -1,8 +1,8 @@
 // Package github provides access to GitHub repositories as OCM resources and
 // sources.
 //
-// It implements the "GitHub" access type: a resource or source whose bytes are
-// a repository's source archive at a pinned commit, described by a
+// It implements the "GitHub" access type: a resource whose bytes are a
+// repository's source archive at a pinned commit, described by a
 // [ocm.software/open-component-model/bindings/go/github/spec/access/v1.GitHub]
 // access spec. Besides the repository URL, the spec carries a Commit, a Ref,
 // and an optional APIHostname for GitHub Enterprise. A set Commit is
@@ -37,9 +37,9 @@
 // GetResourceCredentialConsumerIdentity, so a credential resolver can look up
 // matching credentials before the download.
 //
-// [ocm.software/open-component-model/bindings/go/github/repository/source.SourceRepository]
-// serves the same commit archive for sources, always anonymously, because the
-// source repository contract carries no credentials.
+// Sources may carry the same access spec, but only as provenance metadata:
+// component construction records it verbatim without digesting or fetching
+// anything, so this module implements no source download.
 // [ocm.software/open-component-model/bindings/go/github/digest.DigestProcessor]
 // pins a ref-only access to the commit its ref resolves to and computes the
 // genericBlobDigest/v1 over the downloaded archive, so by-reference resources

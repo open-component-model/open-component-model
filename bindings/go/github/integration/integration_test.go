@@ -16,7 +16,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/github/digest"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
-	"ocm.software/open-component-model/bindings/go/github/repository/source"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -60,15 +59,6 @@ func ocmAccess(ref, commit string) *v1.GitHub {
 
 func ocmResource(ref, commit string) *descriptor.Resource {
 	return &descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{Name: "open-component-model", Version: "1.0.0"},
-		},
-		Access: ocmAccess(ref, commit),
-	}
-}
-
-func ocmSource(ref, commit string) *descriptor.Source {
-	return &descriptor.Source{
 		ElementMeta: descriptor.ElementMeta{
 			ObjectMeta: descriptor.ObjectMeta{Name: "open-component-model", Version: "1.0.0"},
 		},
@@ -226,32 +216,4 @@ func Test_Integration_GitHub(t *testing.T) {
 		})
 	})
 
-	t.Run("source", func(t *testing.T) {
-		repo := source.NewSourceRepository(nil)
-
-		t.Run("commit and ref set", func(t *testing.T) {
-			t.Run("download serves the commit source archive and ignores the ref", func(t *testing.T) {
-				downloaded, err := repo.DownloadSource(t.Context(), ocmSource(ocmRef, ocmCommit))
-				require.NoError(t, err)
-				assertOCMArchive(t, downloaded)
-			})
-		})
-
-		t.Run("commit only", func(t *testing.T) {
-			t.Run("download serves the commit source archive", func(t *testing.T) {
-				downloaded, err := repo.DownloadSource(t.Context(), ocmSource("", ocmCommit))
-				require.NoError(t, err)
-				assertOCMArchive(t, downloaded)
-			})
-		})
-
-		t.Run("ref only", func(t *testing.T) {
-			// Sources have no digest processor to pin a commit, so a ref-only
-			// source cannot be materialized reproducibly and is rejected.
-			t.Run("download is rejected without a pinned commit", func(t *testing.T) {
-				_, err := repo.DownloadSource(t.Context(), ocmSource(ocmRef, ""))
-				assert.ErrorContains(t, err, "requires a pinned commit")
-			})
-		})
-	})
 }
