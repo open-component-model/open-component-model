@@ -102,6 +102,12 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	dlResource := res.DeepCopy()
 	dlResource.Access = dlAccess
 
+	// The full archive is fetched only to be hashed and thrown away. That cost
+	// is easy to miss from the outside, so it is called out loudly rather than
+	// hidden in debug logs.
+	slog.WarnContext(ctx, "computing the digest of a github resource downloads the full commit archive and discards it after hashing",
+		"repoUrl", gitHub.RepoURL, "commit", gitHub.Commit)
+
 	downloaded, err := p.resourceRepository.DownloadResource(ctx, dlResource, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading github resource for digest processing: %w", err)
