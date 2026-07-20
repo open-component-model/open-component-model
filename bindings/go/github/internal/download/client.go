@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/google/go-github/v89/github"
+	godigest "github.com/opencontainers/go-digest"
 
+	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/github/internal/verify"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
@@ -108,13 +110,15 @@ func ResolveCommit(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.
 }
 
 // fetch resolves the archive link for the access's pinned commit via the GitHub
-// REST API and starts downloading the gzipped tar archive, returning the
-// response body for the caller to close. fetch does not buffer the body; how
-// it is consumed is the caller's decision, not part of this contract.
+// REST API and starts downloading the gzipped tar archive, returning it as a
+// streaming [verify.VerifiedStreamBlob] (media type application/x-tgz). The
+// response body is not buffered: the blob digests the bytes as the consumer
+// reads, and closing its reader verifies expected — empty means the digest is
+// only computed.
 //
 // The same client serves the API call and the archive download; the link is a
 // short-lived, pre-signed URL that needs no auth.
-func fetch(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (io.ReadCloser, error) {
+func fetch(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client, expected godigest.Digest) (blob.ReadOnlyBlob, error) {
 	if httpClient == nil {
 		httpClient = defaultHTTPClient()
 	}
@@ -155,7 +159,13 @@ func fetch(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCr
 		return nil, fmt.Errorf("unexpected status downloading github archive %s/%s@%s: %s", owner, repo, commit, resp.Status)
 	}
 
-	return resp.Body, nil
+	archive, err := verify.NewVerifiedStreamBlob(resp.Body, expected)
+	if err != nil {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("invalid expected digest for github archive %s/%s@%s: %w", owner, repo, commit, err)
+	}
+	archive.SetMediaType(MediaTypeTGZ)
+	return archive, nil
 }
 
 // parseRepoURL parses repoURL, defaulting the scheme to https when absent.

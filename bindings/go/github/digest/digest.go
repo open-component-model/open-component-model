@@ -1,20 +1,24 @@
 // Package digest provides the digest processor for the GitHub access type.
-// It downloads the repository tree at the pinned commit (via the github
-// resource repository) and computes a generic blob digest over the resulting
-// tar archive, so that by-reference github resources carry the same digest
-// they would have as an embedded local blob.
+// It streams the repository tree at the pinned commit (via the github
+// resource repository) and computes a generic blob digest over the tar
+// archive on the fly, so that by-reference github resources carry the same
+// digest they would have as an embedded local blob.
 package digest
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
+	"ocm.software/open-component-model/bindings/go/github/internal/download"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
 	"ocm.software/open-component-model/bindings/go/github/spec/access"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
@@ -22,23 +26,18 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const (
-	hashAlgorithmSHA256              = "SHA-256"
-	normalisationGenericBlobDigestV1 = "genericBlobDigest/v1"
-)
-
 var _ digestprocessor.BuiltinDigestProcessorPlugin = (*DigestProcessor)(nil)
 
-// DigestProcessor resolves digests for GitHub access types by downloading the
-// pinned commit's tar archive and hashing it.
+// DigestProcessor resolves digests for GitHub access types by streaming the
+// pinned commit's tar archive and hashing it as it passes through.
 type DigestProcessor struct {
 	resourceRepository *resource.ResourceRepository
 }
 
 // NewDigestProcessor creates a new GitHub digest processor. opts are forwarded
 // to the underlying resource repository, whose HTTP client performs both the
-// ref resolution and the archive download; the archive is hashed from its
-// in-memory buffer.
+// ref resolution and the archive download. The archive is never buffered: its
+// digest is computed on the fly while the stream is drained.
 func NewDigestProcessor(opts ...resource.Option) *DigestProcessor {
 	return &DigestProcessor{
 		resourceRepository: resource.NewResourceRepository(opts...),
@@ -58,7 +57,7 @@ func (p *DigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(
 }
 
 // ProcessResourceDigest pins a ref-only github access to the commit the ref
-// currently resolves to, then downloads the archive at the pinned commit and
+// currently resolves to, then streams the archive at the pinned commit and
 // applies or verifies its generic blob digest. The returned resource carries
 // both the pinned access and the digest; the input resource is never mutated.
 func (p *DigestProcessor) ProcessResourceDigest(
@@ -70,6 +69,24 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	}
 	if err := gitHub.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid github access: %w", err)
+	}
+
+	// A pre-set digest under another algorithm can never verify against the
+	// archive bytes, so reject it before spending a download on it. A
+	// hand-written resource.Digest in a component constructor cannot know the
+	// normalisation algorithm — the blob is never normalised — and need not
+	// restate the hash. An unset field means "fill it in with what we
+	// compute"; only a field pinned to a *different* algorithm is a genuine
+	// conflict. Spelling is not a conflict either: comparisons ignore case,
+	// so "sha-256" or an uppercase hex value verifies instead of failing
+	// while an absent field would have been accepted.
+	if res.Digest != nil {
+		if res.Digest.HashAlgorithm != "" && !strings.EqualFold(res.Digest.HashAlgorithm, download.HashAlgorithmSHA256) {
+			return nil, fmt.Errorf("hash algorithm mismatch: expected %s, got %s", download.HashAlgorithmSHA256, res.Digest.HashAlgorithm)
+		}
+		if res.Digest.NormalisationAlgorithm != "" && !strings.EqualFold(res.Digest.NormalisationAlgorithm, download.NormalisationGenericBlobDigestV1) {
+			return nil, fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", download.NormalisationGenericBlobDigestV1, res.Digest.NormalisationAlgorithm)
+		}
 	}
 
 	// A set Commit is authoritative and Ref is informational, so only an
@@ -92,6 +109,16 @@ func (p *DigestProcessor) ProcessResourceDigest(
 
 	res = res.DeepCopy()
 	res.Access = gitHub
+
+	// Canonicalize the accepted spellings so descriptors do not vary by
+	// author, and so the download below verifies the canonical value: the
+	// resource repository only checks a digest it recognizes as a generic
+	// blob SHA-256, which the accepted variants now are.
+	if res.Digest != nil {
+		res.Digest.HashAlgorithm = download.HashAlgorithmSHA256
+		res.Digest.NormalisationAlgorithm = download.NormalisationGenericBlobDigestV1
+		res.Digest.Value = strings.ToLower(res.Digest.Value)
+	}
 
 	// Download the pinned commit directly. The commit is authoritative now — we
 	// just resolved the ref, or the caller pinned it — so carrying the ref into
@@ -117,47 +144,37 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	if err != nil {
 		return nil, fmt.Errorf("error reading downloaded github archive: %w", err)
 	}
-	defer func() {
-		if err := reader.Close(); err != nil {
-			slog.WarnContext(ctx, "error closing downloaded github archive", "error", err)
-		}
-	}()
 
-	resolvedDigest, err := godigest.SHA256.FromReader(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error digesting downloaded github archive: %w", err)
+	// Drain the stream: the blob's verify reader computes the digest as the
+	// bytes pass through, and its Close verifies a pre-set digest — a mismatch
+	// surfaces here, not as a warning.
+	_, copyErr := io.Copy(io.Discard, reader)
+	if err := errors.Join(copyErr, reader.Close()); err != nil {
+		return nil, fmt.Errorf("error digesting github archive: %w", err)
 	}
 
-	if res.Digest == nil {
-		res.Digest = &descriptor.Digest{
-			HashAlgorithm:          hashAlgorithmSHA256,
-			NormalisationAlgorithm: normalisationGenericBlobDigestV1,
-			Value:                  resolvedDigest.Encoded(),
-		}
+	if res.Digest != nil {
+		// The pre-set digest was verified byte-for-byte by the reader's Close.
 		return res, nil
 	}
 
-	// A hand-written resource.Digest in a component constructor cannot know the
-	// normalisation algorithm — the blob is never normalised — and need not
-	// restate the hash. An unset field means "fill it in with what we compute";
-	// only a field pinned to a *different* algorithm is a genuine conflict.
-	// Spelling is not a conflict either: comparisons ignore case, so "sha-256"
-	// or an uppercase hex value verifies instead of failing while an absent
-	// field would have been accepted.
-	if res.Digest.HashAlgorithm != "" && !strings.EqualFold(res.Digest.HashAlgorithm, hashAlgorithmSHA256) {
-		return nil, fmt.Errorf("hash algorithm mismatch: expected %s, got %s", hashAlgorithmSHA256, res.Digest.HashAlgorithm)
+	digestAware, ok := downloaded.(blob.DigestAware)
+	if !ok {
+		return nil, fmt.Errorf("downloaded github archive blob does not expose a digest")
 	}
-	if res.Digest.NormalisationAlgorithm != "" && !strings.EqualFold(res.Digest.NormalisationAlgorithm, normalisationGenericBlobDigestV1) {
-		return nil, fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisationGenericBlobDigestV1, res.Digest.NormalisationAlgorithm)
+	computed, known := digestAware.Digest()
+	if !known {
+		return nil, fmt.Errorf("downloaded github archive digest is unknown after reading the archive")
 	}
-	if !strings.EqualFold(res.Digest.Value, resolvedDigest.Encoded()) {
-		return nil, fmt.Errorf("digest value mismatch: expected %s, got %s", res.Digest.Value, resolvedDigest.Encoded())
+	parsed, err := godigest.Parse(computed)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing computed github archive digest: %w", err)
 	}
 
-	// Canonicalize the accepted spellings so descriptors do not vary by author.
-	res.Digest.HashAlgorithm = hashAlgorithmSHA256
-	res.Digest.NormalisationAlgorithm = normalisationGenericBlobDigestV1
-	res.Digest.Value = resolvedDigest.Encoded()
-
+	res.Digest = &descriptor.Digest{
+		HashAlgorithm:          download.HashAlgorithmSHA256,
+		NormalisationAlgorithm: download.NormalisationGenericBlobDigestV1,
+		Value:                  parsed.Encoded(),
+	}
 	return res, nil
 }

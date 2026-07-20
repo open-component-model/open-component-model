@@ -14,7 +14,9 @@
 // [ocm.software/open-component-model/bindings/go/github/repository/resource.ResourceRepository]
 // is the entry point. It resolves a ref-only access to the commit the ref
 // currently points at and downloads the commit archive via the GitHub REST API
-// as a gzipped tar blob (application/x-tgz), buffered in memory:
+// as a gzipped tar blob (application/x-tgz) that streams directly from GitHub,
+// computing its digest on the fly and verifying a resource-supplied digest as
+// the stream is consumed:
 //
 //	repo := resource.NewResourceRepository()
 //	archive, err := repo.DownloadResource(ctx, res, creds)

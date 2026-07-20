@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	godigest "github.com/opencontainers/go-digest"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
@@ -20,7 +22,7 @@ import (
 )
 
 // ResourceRepository implements a resource repository for GitHub repositories.
-// It downloads the source archive of a pinned commit via the GitHub REST API,
+// It streams the source archive of a pinned commit via the GitHub REST API,
 // serving the exact tarball GitHub does, so content and digest match old OCM.
 type ResourceRepository struct {
 	httpConfig *httpv1alpha1.Config
@@ -51,9 +53,9 @@ func WithHTTPClient(client *http.Client) Option {
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
-// NewResourceRepository creates a ResourceRepository. Downloaded archives are
-// buffered in memory (see download.Download), so no filesystem configuration
-// is needed. The HTTP client is built once, so its connection pool is reused
+// NewResourceRepository creates a ResourceRepository. Downloads stream
+// straight from GitHub without buffering, so no filesystem configuration is
+// needed. The HTTP client is built once, so its connection pool is reused
 // across downloads.
 func NewResourceRepository(opts ...Option) *ResourceRepository {
 	r := &ResourceRepository{}
@@ -91,14 +93,20 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 }
 
 // DownloadResource fetches the archive of the commit pinned in the resource's
-// GitHub access as a gzipped tar blob (application/x-tgz). A ref-only access is
-// resolved to the commit the ref points at now, so the download is a snapshot;
-// the digest processor is what pins it for reproducibility. When both are set the
-// commit wins, and the ref is re-resolved only to warn about drift — drift never
-// fails the download.
+// GitHub access as a gzipped tar blob (application/x-tgz) streamed directly
+// from GitHub. When the resource carries a generic blob digest, the stream is
+// verified against it as it is read: the digest is computed on the fly and
+// checked when the consumer closes the reader. A digest under another
+// algorithm cannot be checked against the archive bytes and is ignored.
 //
-// The blob is buffered eagerly in memory and can be read any number of times;
-// it needs no cleanup and holds the whole archive until released.
+// Nothing is buffered, so the returned blob serves its reader exactly once —
+// a second ReadCloser call fails — and the consumer must read the stream
+// fully and close it.
+//
+// A ref-only access is resolved to the commit the ref points at now, so the
+// download is a snapshot; the digest processor is what pins it for
+// reproducibility. When both are set the commit wins, and the ref is
+// re-resolved only to warn about drift — drift never fails the download.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	gitHub, err := githubinternal.AccessFrom(resource.Access)
 	if err != nil {
@@ -130,7 +138,23 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		}
 	}
 
-	return download.Download(ctx, gitHub, gitHubCredentials, r.httpClient)
+	// Only a generic blob digest is a statement about the archive bytes; a
+	// digest under another hash or normalisation algorithm (e.g. an old-OCM
+	// ociArtifactDigest) cannot be checked against the stream, only ignored.
+	// The value is not validated here: Download rejects a malformed digest, so
+	// a corrupt descriptor fails loudly instead of skipping the verification
+	// it asked for.
+	var expected godigest.Digest
+	switch d := resource.Digest; {
+	case d == nil:
+	case d.HashAlgorithm == download.HashAlgorithmSHA256 && d.NormalisationAlgorithm == download.NormalisationGenericBlobDigestV1:
+		expected = godigest.NewDigestFromEncoded(godigest.SHA256, d.Value)
+	default:
+		slog.DebugContext(ctx, "GitHub resource digest cannot be verified against the archive stream",
+			"hashAlgorithm", d.HashAlgorithm, "normalisationAlgorithm", d.NormalisationAlgorithm)
+	}
+
+	return download.Download(ctx, gitHub, gitHubCredentials, r.httpClient, expected)
 }
 
 // UploadResource is not supported: the GitHub access type is a read-only

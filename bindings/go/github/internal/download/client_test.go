@@ -176,7 +176,9 @@ func TestFetch(t *testing.T) {
 			defer server.Close()
 
 			access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
-			rc, err := fetch(t.Context(), access, tc.credentials, server.Client())
+			fetched, err := fetch(t.Context(), access, tc.credentials, server.Client(), "")
+			require.NoError(t, err)
+			rc, err := fetched.ReadCloser()
 			require.NoError(t, err)
 			defer func() { require.NoError(t, rc.Close()) }()
 
@@ -214,11 +216,15 @@ func TestFetch_SharedClientDoesNotLeakToken(t *testing.T) {
 	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
 	shared := server.Client()
 
-	rc, err := fetch(t.Context(), access, &credsv1.GitHubCredentials{Token: "ghp_secret"}, shared)
+	fetched, err := fetch(t.Context(), access, &credsv1.GitHubCredentials{Token: "ghp_secret"}, shared, "")
+	require.NoError(t, err)
+	rc, err := fetched.ReadCloser()
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
 
-	rc, err = fetch(t.Context(), access, nil, shared)
+	fetched, err = fetch(t.Context(), access, nil, shared, "")
+	require.NoError(t, err)
+	rc, err = fetched.ReadCloser()
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
 
@@ -245,7 +251,7 @@ func TestFetch_ArchiveEndpointStatusError(t *testing.T) {
 	defer server.Close()
 
 	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
-	_, err := fetch(t.Context(), access, nil, server.Client())
+	_, err := fetch(t.Context(), access, nil, server.Client(), "")
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "unexpected status downloading github archive octocat/Hello-World@"+commit+": 410 Gone")
 }
@@ -275,7 +281,7 @@ func TestFetch_DownloadErrorDoesNotLeakTheSignedArchiveLink(t *testing.T) {
 	defer server.Close()
 
 	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
-	_, err := fetch(t.Context(), access, &credsv1.GitHubCredentials{Token: "ghp_secret"}, server.Client())
+	_, err := fetch(t.Context(), access, &credsv1.GitHubCredentials{Token: "ghp_secret"}, server.Client(), "")
 
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), signedToken, "the signed archive link's token must not reach the error")

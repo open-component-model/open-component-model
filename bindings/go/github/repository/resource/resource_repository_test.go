@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -78,9 +79,9 @@ func readBlob(t *testing.T, b blobpkg.ReadOnlyBlob) []byte {
 	t.Helper()
 	reader, err := b.ReadCloser()
 	require.NoError(t, err)
-	defer func() { require.NoError(t, reader.Close()) }()
 	data, err := io.ReadAll(reader)
 	require.NoError(t, err)
+	require.NoError(t, reader.Close())
 	return data
 }
 
@@ -96,6 +97,57 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 		mt, ok := downloaded.(blobpkg.MediaTypeAware).MediaType()
 		require.True(t, ok)
 		assert.Equal(t, "application/x-tgz", mt)
+	})
+
+	t.Run("verifies a matching resource digest while streaming", func(t *testing.T) {
+		baseURL, payload := mockGitHub(t)
+		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
+		res.Digest = &descriptor.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.FromBytes(payload).Encoded(),
+		}
+
+		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
+		require.NoError(t, err)
+		assert.Equal(t, payload, readBlob(t, downloaded), "a matching digest must verify on close")
+	})
+
+	t.Run("rejects a mismatched resource digest when the stream is closed", func(t *testing.T) {
+		baseURL, _ := mockGitHub(t)
+		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
+		res.Digest = &descriptor.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  strings.Repeat("0", 64),
+		}
+
+		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
+		require.NoError(t, err, "the mismatch can only be detected after the stream is read")
+
+		reader, err := downloaded.ReadCloser()
+		require.NoError(t, err)
+		_, err = io.Copy(io.Discard, reader)
+		require.NoError(t, err)
+		err = reader.Close()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "digest mismatch")
+	})
+
+	t.Run("ignores a digest under a foreign normalisation algorithm", func(t *testing.T) {
+		// An old-OCM descriptor may carry a digest this binding cannot check
+		// against the archive bytes; it must not fail the download.
+		baseURL, payload := mockGitHub(t)
+		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
+		res.Digest = &descriptor.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "ociArtifactDigest/v1",
+			Value:                  strings.Repeat("0", 64),
+		}
+
+		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
+		require.NoError(t, err)
+		assert.Equal(t, payload, readBlob(t, downloaded), "an unverifiable digest must be ignored, not enforced")
 	})
 
 	t.Run("rejects a resource with an invalid access spec", func(t *testing.T) {

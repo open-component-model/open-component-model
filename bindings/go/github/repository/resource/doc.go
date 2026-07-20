@@ -3,14 +3,15 @@
 //
 // The [ResourceRepository] downloads a GitHub repository's source archive at a
 // pinned commit via the GitHub REST API and returns it as a gzipped tar blob
-// (application/x-tgz). A resource may be pinned to a commit or carry only a ref,
-// which [ResourceRepository.ResolveCommit] resolves to the commit it currently
-// points at; when both are set the commit wins.
+// (application/x-tgz) that streams directly from GitHub, computing its digest
+// on the fly; when the resource carries a generic blob digest, the stream is
+// verified against it as it is consumed. A resource may be pinned to a commit
+// or carry only a ref, which [ResourceRepository.ResolveCommit] resolves to the
+// commit it currently points at; when both are set the commit wins.
 //
 // # Usage
 //
-//	// A nil filesystem config buffers archives in the OS temp directory.
-//	repo := resource.NewResourceRepository(nil)
+//	repo := resource.NewResourceRepository()
 //
 //	res := &descriptor.Resource{
 //		Access: &v1.GitHub{
@@ -24,6 +25,8 @@
 //	identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, res)
 //	creds, err := credentialProvider.Resolve(ctx, identity)
 //
-//	// Download the commit archive as an application/x-tgz blob.
+//	// Download the commit archive as an application/x-tgz blob. The blob
+//	// streams from GitHub and serves its reader once; closing the reader
+//	// verifies the resource digest, if one was set.
 //	archive, err := repo.DownloadResource(ctx, res, creds)
 package resource

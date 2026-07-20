@@ -74,7 +74,7 @@ func TestDigestProcessor(t *testing.T) {
 	t.Run("ProcessResourceDigest", func(t *testing.T) {
 		repoURL := mockGitHub(t, testCommit, nil)
 
-		t.Run("applies the generic blob digest of the downloaded archive", func(t *testing.T) {
+		t.Run("applies the generic blob digest of the streamed archive", func(t *testing.T) {
 			res := githubResource(repoURL, testCommit)
 			processed, err := processor.ProcessResourceDigest(t.Context(), res, nil)
 			require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestDigestProcessor(t *testing.T) {
 				{
 					name:   "value",
 					digest: descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: strings.Repeat("0", 64)},
-					expect: "digest value mismatch",
+					expect: "digest mismatch",
 				},
 			} {
 				t.Run(tc.name, func(t *testing.T) {

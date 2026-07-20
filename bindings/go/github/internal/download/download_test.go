@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -34,37 +35,155 @@ func archiveServer(t *testing.T, payload []byte) *httptest.Server {
 	return server
 }
 
+func testAccess(serverURL string) *v1.GitHub {
+	return &v1.GitHub{
+		RepoURL: serverURL + "/octocat/Hello-World",
+		Commit:  downloadTestCommit,
+	}
+}
+
 func TestDownload(t *testing.T) {
-	t.Run("returns the archive as an application/x-tgz blob", func(t *testing.T) {
+	t.Run("streams the archive as an application/x-tgz blob", func(t *testing.T) {
 		payload := gzippedTar(t, "octocat-Hello-World-"+downloadTestCommit+"/README", "hello world")
 		server := archiveServer(t, payload)
 
-		downloaded, err := Download(t.Context(), &v1.GitHub{
-			RepoURL: server.URL + "/octocat/Hello-World",
-			Commit:  downloadTestCommit,
-		}, nil, nil)
+		downloaded, err := Download(t.Context(), testAccess(server.URL), nil, nil, "")
 		require.NoError(t, err)
 
 		reader, err := downloaded.ReadCloser()
 		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, reader.Close()) })
 		data, err := io.ReadAll(reader)
 		require.NoError(t, err)
+		require.NoError(t, reader.Close())
 		assert.Equal(t, payload, data, "blob must be the exact archive GitHub served")
 
 		mt, ok := downloaded.(blob.MediaTypeAware).MediaType()
 		require.True(t, ok)
 		assert.Equal(t, MediaTypeTGZ, mt)
 
-		size := downloaded.(blob.SizeAware).Size()
-		assert.Equal(t, int64(len(payload)), size, "blob must report the archive size")
+		assert.Equal(t, blob.SizeUnknown, downloaded.(blob.SizeAware).Size(), "a stream has no known size")
+	})
+
+	t.Run("computes the digest on the fly while streaming", func(t *testing.T) {
+		payload := gzippedTar(t, "octocat-Hello-World-"+downloadTestCommit+"/README", "hello world")
+		server := archiveServer(t, payload)
+
+		downloaded, err := Download(t.Context(), testAccess(server.URL), nil, nil, "")
+		require.NoError(t, err)
+
+		_, known := downloaded.(blob.DigestAware).Digest()
+		assert.False(t, known, "the digest cannot be known before the stream is read")
+
+		reader, err := downloaded.ReadCloser()
+		require.NoError(t, err)
+		_, err = io.Copy(io.Discard, reader)
+		require.NoError(t, err)
+		require.NoError(t, reader.Close())
+
+		computed, known := downloaded.(blob.DigestAware).Digest()
+		require.True(t, known, "the digest must be known once the stream is fully read")
+		assert.Equal(t, godigest.FromBytes(payload).String(), computed)
+	})
+
+	t.Run("serves the stream exactly once", func(t *testing.T) {
+		payload := gzippedTar(t, "octocat-Hello-World-"+downloadTestCommit+"/README", "hello world")
+		server := archiveServer(t, payload)
+
+		downloaded, err := Download(t.Context(), testAccess(server.URL), nil, nil, "")
+		require.NoError(t, err)
+
+		reader, err := downloaded.ReadCloser()
+		require.NoError(t, err)
+		_, err = io.Copy(io.Discard, reader)
+		require.NoError(t, err)
+		require.NoError(t, reader.Close())
+
+		_, err = downloaded.ReadCloser()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "already consumed")
+	})
+
+	t.Run("verifies a matching expected digest on close", func(t *testing.T) {
+		payload := gzippedTar(t, "octocat-Hello-World-"+downloadTestCommit+"/README", "hello world")
+		server := archiveServer(t, payload)
+
+		downloaded, err := Download(t.Context(), testAccess(server.URL), nil, nil, godigest.FromBytes(payload))
+		require.NoError(t, err)
+
+		reader, err := downloaded.ReadCloser()
+		require.NoError(t, err)
+		data, err := io.ReadAll(reader)
+		require.NoError(t, err)
+		assert.Equal(t, payload, data)
+		require.NoError(t, reader.Close(), "a matching digest must verify on close")
+	})
+
+	t.Run("rejects a mismatched expected digest on close", func(t *testing.T) {
+		payload := gzippedTar(t, "octocat-Hello-World-"+downloadTestCommit+"/README", "hello world")
+		server := archiveServer(t, payload)
+
+		downloaded, err := Download(t.Context(), testAccess(server.URL), nil, nil, godigest.FromString("something else"))
+		require.NoError(t, err)
+
+		reader, err := downloaded.ReadCloser()
+		require.NoError(t, err)
+		_, err = io.Copy(io.Discard, reader)
+		require.NoError(t, err)
+		err = reader.Close()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "digest mismatch")
+	})
+
+	t.Run("rejects closing a partially read stream when a digest is expected", func(t *testing.T) {
+		payload := gzippedTar(t, "octocat-Hello-World-"+downloadTestCommit+"/README", "hello world")
+		server := archiveServer(t, payload)
+
+		downloaded, err := Download(t.Context(), testAccess(server.URL), nil, nil, godigest.FromBytes(payload))
+		require.NoError(t, err)
+
+		reader, err := downloaded.ReadCloser()
+		require.NoError(t, err)
+		// Read a single byte, then close: a digest of a prefix proves nothing.
+		_, err = reader.Read(make([]byte, 1))
+		require.NoError(t, err)
+		err = reader.Close()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "before being fully read")
+	})
+
+	t.Run("allows abandoning a partially read stream when no digest is expected", func(t *testing.T) {
+		// A calculate-only stream holds no expectation; a consumer that stops
+		// reading must be able to close without a false alarm.
+		payload := gzippedTar(t, "octocat-Hello-World-"+downloadTestCommit+"/README", "hello world")
+		server := archiveServer(t, payload)
+
+		downloaded, err := Download(t.Context(), testAccess(server.URL), nil, nil, "")
+		require.NoError(t, err)
+
+		reader, err := downloaded.ReadCloser()
+		require.NoError(t, err)
+		_, err = reader.Read(make([]byte, 1))
+		require.NoError(t, err)
+		require.NoError(t, reader.Close(), "closing an abandoned calculate-only stream must not fail")
+
+		_, known := downloaded.(blob.DigestAware).Digest()
+		assert.False(t, known, "an abandoned stream has no digest to report")
+	})
+
+	t.Run("rejects a malformed expected digest before downloading", func(t *testing.T) {
+		_, err := Download(t.Context(), &v1.GitHub{
+			RepoURL: "https://github.com/octocat/Hello-World",
+			Commit:  downloadTestCommit,
+		}, nil, nil, godigest.Digest("sha256:not-a-digest"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid expected digest")
 	})
 
 	t.Run("rejects an access without a pinned commit", func(t *testing.T) {
 		_, err := Download(t.Context(), &v1.GitHub{
 			RepoURL: "https://github.com/octocat/Hello-World",
 			Ref:     "main",
-		}, nil, nil)
+		}, nil, nil, "")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "pinned commit")
 	})
@@ -76,7 +195,7 @@ func TestDownload(t *testing.T) {
 		_, err := Download(t.Context(), &v1.GitHub{
 			RepoURL: server.URL + "/octocat/No-Such-Repo",
 			Commit:  downloadTestCommit,
-		}, nil, nil)
+		}, nil, nil, "")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "error resolving github archive link")
 	})
