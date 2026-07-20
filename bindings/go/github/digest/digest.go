@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
 
@@ -136,15 +137,27 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		return res, nil
 	}
 
-	if res.Digest.HashAlgorithm != hashAlgorithmSHA256 {
+	// A hand-written resource.Digest in a component constructor cannot know the
+	// normalisation algorithm — the blob is never normalised — and need not
+	// restate the hash. An unset field means "fill it in with what we compute";
+	// only a field pinned to a *different* algorithm is a genuine conflict.
+	// Spelling is not a conflict either: comparisons ignore case, so "sha-256"
+	// or an uppercase hex value verifies instead of failing while an absent
+	// field would have been accepted.
+	if res.Digest.HashAlgorithm != "" && !strings.EqualFold(res.Digest.HashAlgorithm, hashAlgorithmSHA256) {
 		return nil, fmt.Errorf("hash algorithm mismatch: expected %s, got %s", hashAlgorithmSHA256, res.Digest.HashAlgorithm)
 	}
-	if res.Digest.NormalisationAlgorithm != normalisationGenericBlobDigestV1 {
+	if res.Digest.NormalisationAlgorithm != "" && !strings.EqualFold(res.Digest.NormalisationAlgorithm, normalisationGenericBlobDigestV1) {
 		return nil, fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisationGenericBlobDigestV1, res.Digest.NormalisationAlgorithm)
 	}
-	if res.Digest.Value != resolvedDigest.Encoded() {
+	if !strings.EqualFold(res.Digest.Value, resolvedDigest.Encoded()) {
 		return nil, fmt.Errorf("digest value mismatch: expected %s, got %s", res.Digest.Value, resolvedDigest.Encoded())
 	}
+
+	// Canonicalize the accepted spellings so descriptors do not vary by author.
+	res.Digest.HashAlgorithm = hashAlgorithmSHA256
+	res.Digest.NormalisationAlgorithm = normalisationGenericBlobDigestV1
+	res.Digest.Value = resolvedDigest.Encoded()
 
 	return res, nil
 }
