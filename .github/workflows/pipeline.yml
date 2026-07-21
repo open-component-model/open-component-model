@@ -28,6 +28,7 @@ on:
       - '.github/workflows/cli.yml'
       - '.github/workflows/kubernetes-controller.yml'
       - '.github/workflows/conformance.yml'
+      - '.github/workflows/e2e.yml'
       - '.github/workflows/pipeline.yml'
       - '.env'
   workflow_call:

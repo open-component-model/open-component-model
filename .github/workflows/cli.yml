@@ -21,13 +21,13 @@ on:
     outputs:
       artifact_name:
         description: "The artifact name that was built."
-        value: ${{ jobs.build.outputs.artifact_name }}
+        value: ${{ jobs.assemble.outputs.artifact_name }}
       artifact_id:
         description: "The artifact id that was built."
-        value: ${{ jobs.build.outputs.artifact_id }}
+        value: ${{ jobs.assemble.outputs.artifact_id }}
       version:
         description: "Version computed for this build."
-        value: ${{ jobs.build.outputs.version }}
+        value: ${{ jobs.version.outputs.version }}
 
 permissions:
   contents: read
@@ -46,27 +46,67 @@ env:
   CHECKOUT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
 jobs:
-  build:
-    name: Build CLI
+  # Compute the version once and share it with every build-matrix shard and the
+  # assemble job, so all six binaries and the CTF carry an identical version.
+  version:
+    name: Compute Version
     runs-on: ubuntu-24.04-arm
     outputs:
-      artifact_name: ${{ env.ARTIFACT_NAME }}
-      artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
       version: ${{ steps.version.outputs.version }}
-    permissions:
-      contents: read
-      id-token: write         # Needed for provenance attestations
-      attestations: write     # Allows storing build attestations
+      build_version: ${{ steps.build_version.outputs.build_version }}
     steps:
-      # Checkout only the CLI
-      - name: Checkout
+      - name: Checkout scripts
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
             .github/scripts
+          persist-credentials: 'false'
+          ref: ${{ env.REF }}
+
+      # Compute VERSION from env.REF
+      - name: Compute VERSION
+        id: version
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          TAG_PREFIX: "v"
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');
+            await script.default({ core });
+
+      # BUILD_VERSION feeds ldflags only; honor the optional override and strip a leading 'v'
+      - name: Compute BUILD_VERSION
+        id: build_version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_VERSION_OVERRIDE: ${{ inputs.build_version }}
+        run: |
+          BUILD_VERSION="${BUILD_VERSION_OVERRIDE:-$VERSION}"
+          BUILD_VERSION="${BUILD_VERSION#v}"
+          echo "build_version=${BUILD_VERSION}" >> "$GITHUB_OUTPUT"
+
+  # Build each GOOS/GOARCH target on its own runner so the six cross-compiles run
+  # in parallel instead of fighting for cores on a single machine.
+  build:
+    name: ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: version
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        goos: [ linux, darwin, windows ]
+        goarch: [ amd64, arm64 ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          sparse-checkout: |
             ${{ env.LOCATION }}
-          persist-credentials: 'false'  # Disable automatic token persistence
+          persist-credentials: 'false'
           ref: ${{ env.REF }}
 
       - name: Setup Go
@@ -81,32 +121,78 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           version: 3.x
 
-      # Setup Docker Buildx for multi-arch and advanced image building
+      - name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD_VERSION: ${{ needs.version.outputs.build_version }}
+        run: |
+          task cli:build/single \
+            GOOS=${{ matrix.goos }} \
+            GOARCH=${{ matrix.goarch }} \
+            VERSION="${VERSION}" \
+            BUILD_VERSION="${BUILD_VERSION}"
+
+      - name: Upload target artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          if-no-files-found: 'error'
+          retention-days: 1
+          name: cli-target-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            ${{ env.LOCATION }}/tmp/bin/ocm-${{ matrix.goos }}-${{ matrix.goarch }}
+            ${{ env.LOCATION }}/tmp/resources/ocm-${{ matrix.goos }}-${{ matrix.goarch }}.yaml
+
+  # Join job: gather every prebuilt binary, package the image and CTF without
+  # recompiling, then attest and publish the artifacts the pipeline consumes.
+  assemble:
+    name: Assemble CTF
+    needs: [ version, build ]
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      artifact_name: ${{ env.ARTIFACT_NAME }}
+      artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
+    permissions:
+      contents: read
+      id-token: write         # Needed for provenance attestations
+      attestations: write     # Allows storing build attestations
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          sparse-checkout: |
+            ${{ env.LOCATION }}
+          persist-credentials: 'false'
+          ref: ${{ env.REF }}
+
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 3.x
+
+      # Buildx packages the OCI image from the prebuilt linux binaries (no recompile)
       - name: Setup docker/buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      # Compute VERSION from env.REF
-      - name: Compute VERSION
-        id: version
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        env:
-          TAG_PREFIX: "v"
+      # Restore every target's binary and resource manifest under cli/tmp
+      - name: Download target binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          script: |
-            const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');
-            await script.default({ core });
+          path: ${{ env.LOCATION }}/tmp
+          pattern: cli-target-*
+          merge-multiple: true
 
-      # Generate and verify the Component Transport Format (CTF) resulting in all artifacts
-      # use a version that includes the branch name to ensure uniqueness
-      # make sure that the version doesn't contain invalid semver characters
-      - name: Generate & Verify CTF
-        run: |
-          BUILD_VERSION="${BUILD_VERSION_OVERRIDE:-$VERSION}"
-          BUILD_VERSION="${BUILD_VERSION#v}"
-          task cli:generate/ctf VERSION="${VERSION}" BUILD_VERSION="${BUILD_VERSION}"
-          task cli:verify/ctf
+      # Artifact upload/download drops the executable bit; restore it before packaging
+      - name: Make binaries executable
+        run: chmod +x ${{ env.LOCATION }}/tmp/bin/ocm-*
+
+      - name: Assemble & Verify CTF
         env:
-          BUILD_VERSION_OVERRIDE: ${{ inputs.build_version }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          task cli:assemble/ctf VERSION="${VERSION}"
+          task cli:verify/ctf VERSION="${VERSION}"
 
       # Attest built binaries with provenance metadata, but only if we're not on a PR
       - name: Attest binaries
@@ -127,5 +213,5 @@ jobs:
           # Compiled CLI binaries
           # OCI layout files
           path: |
-            ${{ env.LOCATION }}/tmp/bin/ocm-*    
+            ${{ env.LOCATION }}/tmp/bin/ocm-*
             ${{ env.LOCATION }}/tmp/oci/*
