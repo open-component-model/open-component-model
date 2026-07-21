@@ -5,9 +5,9 @@ go 1.26.4
 require (
 	github.com/Shopify/toxiproxy/v2 v2.12.0
 	github.com/stretchr/testify v1.11.1
-	github.com/testcontainers/testcontainers-go v0.42.0
-	github.com/testcontainers/testcontainers-go/modules/registry v0.42.0
-	github.com/testcontainers/testcontainers-go/modules/toxiproxy v0.42.0
+	github.com/testcontainers/testcontainers-go v0.43.0
+	github.com/testcontainers/testcontainers-go/modules/registry v0.43.0
+	github.com/testcontainers/testcontainers-go/modules/toxiproxy v0.43.0
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16
 	ocm.software/open-component-model/bindings/go/http v0.0.0-00010101000000-000000000000
 )
