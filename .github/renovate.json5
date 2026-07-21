@@ -59,6 +59,24 @@
       automerge: true,
     },
     {
+      // Collapse digest-only re-pins (same tag, new SHA) for Actions and
+      // Docker base images into one weekly PR. gomod is excluded so Go
+      // module digests keep their own per-module PRs (no cross-module PR,
+      // go.sum post-upgrade step intact). Placed before the golang digest
+      // rules so their 'Golang versions' groupName wins (last write wins).
+      matchManagers: [
+        'github-actions',
+        'dockerfile',
+        'docker-compose',
+      ],
+      matchUpdateTypes: ['digest', 'pinDigest'],
+      groupName: 'Digest pins',
+      groupSlug: 'digest-pins',
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
       matchDatasources: ["golang-version"],
       rangeStrategy: "bump",
       groupName: "Golang versions",

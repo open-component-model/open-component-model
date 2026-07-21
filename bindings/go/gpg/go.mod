@@ -6,12 +6,12 @@ require (
 	github.com/ProtonMail/go-crypto v1.4.1
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260715064559-5812c6a7c34a
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260717060357-df059e15a4cb
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 )
 
 require (
-	github.com/cloudflare/circl v1.6.3 // indirect
+	github.com/cloudflare/circl v1.6.4 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect

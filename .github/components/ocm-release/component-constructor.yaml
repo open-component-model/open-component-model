@@ -1,0 +1,132 @@
+components:
+  # The six CLI executables are referenced by their GitHub release download URL
+  # via the Wget access type, so the GitHub release carrying ${RELEASE_TAG} must
+  # already exist when this constructor is published.
+  - name: ocm.software/cli
+    version: "${VERSION}"
+    provider:
+      name: ocm.software
+    resources:
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
+        extraIdentity:
+          os: linux
+          architecture: amd64
+        access:
+          type: Wget/v1
+          url: "${CLI_DOWNLOAD_URL}/ocm-linux-amd64"
+          mediaType: application/octet-stream
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
+        extraIdentity:
+          os: linux
+          architecture: arm64
+        access:
+          type: Wget/v1
+          url: "${CLI_DOWNLOAD_URL}/ocm-linux-arm64"
+          mediaType: application/octet-stream
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
+        extraIdentity:
+          os: darwin
+          architecture: amd64
+        access:
+          type: Wget/v1
+          url: "${CLI_DOWNLOAD_URL}/ocm-darwin-amd64"
+          mediaType: application/octet-stream
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
+        extraIdentity:
+          os: darwin
+          architecture: arm64
+        access:
+          type: Wget/v1
+          url: "${CLI_DOWNLOAD_URL}/ocm-darwin-arm64"
+          mediaType: application/octet-stream
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
+        extraIdentity:
+          os: windows
+          architecture: amd64
+        access:
+          type: Wget/v1
+          url: "${CLI_DOWNLOAD_URL}/ocm-windows-amd64"
+          mediaType: application/octet-stream
+      - name: cli
+        type: executable
+        version: "${VERSION}"
+        labels:
+          - name: downloadName
+            value: ocm
+        relation: external
+        extraIdentity:
+          os: windows
+          architecture: arm64
+        access:
+          type: Wget/v1
+          url: "${CLI_DOWNLOAD_URL}/ocm-windows-arm64"
+          mediaType: application/octet-stream
+      - name: image
+        type: ociImage
+        version: "${VERSION}"
+        relation: local
+        access:
+          type: ociArtifact
+          imageReference: "${CLI_IMAGE_REF}"
+
+  - name: ocm.software/kubernetes/controller
+    version: "${VERSION}"
+    provider:
+      name: ocm.software
+    resources:
+      - name: image
+        type: ociImage
+        version: "${VERSION}"
+        relation: local
+        access:
+          type: ociArtifact
+          imageReference: "${CONTROLLER_IMAGE_REF}"
+      - name: chart
+        type: helmChart
+        version: "${VERSION}"
+        relation: local
+        access:
+          type: ociArtifact
+          imageReference: "${CONTROLLER_CHART_REF}"
+
+  - name: ocm.software/ocm
+    version: "${VERSION}"
+    provider:
+      name: ocm.software
+    componentReferences:
+      - name: cli
+        componentName: ocm.software/cli
+        version: "${VERSION}"
+      - name: controller
+        componentName: ocm.software/kubernetes/controller
+        version: "${VERSION}"

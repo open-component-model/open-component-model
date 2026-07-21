@@ -17,31 +17,31 @@ require (
 	golang.org/x/term v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260715064559-5812c6a7c34a
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260717061304-6dc39921399b
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16
 	ocm.software/open-component-model/bindings/go/constructor v0.0.11
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260715080551-5aa97236eacf
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260715064559-5812c6a7c34a
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260716142305-3b46fe9f481f
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260717060357-df059e15a4cb
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260715064559-5812c6a7c34a
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260715064559-5812c6a7c34a
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260715064559-5812c6a7c34a
+	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260716142305-3b46fe9f481f
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260716142305-3b46fe9f481f
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260717062635-65d9c9c7d7b9
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260715064559-5812c6a7c34a
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260717062635-65d9c9c7d7b9
 	ocm.software/open-component-model/bindings/go/oci v0.0.48
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260715080551-5aa97236eacf
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260717060357-df059e15a4cb
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260715064559-5812c6a7c34a
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260715064559-5812c6a7c34a
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260715064559-5812c6a7c34a
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260715064559-5812c6a7c34a
-	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260715064559-5812c6a7c34a
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260716142305-3b46fe9f481f
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260716142305-3b46fe9f481f
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260716142305-3b46fe9f481f
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260716142305-3b46fe9f481f
+	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260717062635-65d9c9c7d7b9
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -54,10 +54,10 @@ require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/buger/jsonparser v1.2.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
-	github.com/cloudflare/circl v1.6.3 // indirect
+	github.com/cloudflare/circl v1.6.4 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
-	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
+	github.com/cyphar/filepath-securejoin v0.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dylibso/observe-sdk/go v0.0.0-20240828172851-9145d8ad07e1 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
@@ -112,7 +112,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	go.yaml.in/yaml/v4 v4.0.0-rc.5 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
 	golang.org/x/net v0.56.0 // indirect
@@ -123,7 +123,7 @@ require (
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	helm.sh/helm/v4 v4.2.1 // indirect
+	helm.sh/helm/v4 v4.2.2 // indirect
 	k8s.io/api v0.36.2 // indirect
 	k8s.io/apiextensions-apiserver v0.36.2 // indirect
 	k8s.io/apimachinery v0.36.2 // indirect

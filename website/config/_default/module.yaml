@@ -46,6 +46,18 @@ mounts:
     target: static
   - source: static
     target: static
+  # Self-hosted webfonts, so no visitor-facing call to Google Fonts (GDPR).
+  # files: is deliberate - the package ships dozens of subsets we don't want.
+  - source: node_modules/@fontsource-variable/inter/files
+    target: static/fonts/vendor/inter
+    files:
+      - inter-latin-wght-normal.woff2
+      - inter-latin-ext-wght-normal.woff2
+  - source: node_modules/@fontsource-variable/quicksand/files
+    target: static/fonts/vendor/quicksand
+    files:
+      - quicksand-latin-wght-normal.woff2
+      - quicksand-latin-ext-wght-normal.woff2
   - source: content/blog
     target: content/blog
   - files:
