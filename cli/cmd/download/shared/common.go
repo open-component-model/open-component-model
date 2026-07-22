@@ -98,13 +98,6 @@ func IsLocal(access runtime.Typed) bool {
 	return true
 }
 
-// ImageSBOMDownloader is the optional capability of a resource plugin that can
-// fetch the SBOM(s) attached to an OCI image resource (as a buildx attestation
-// or via the OCI Referrers API). The builtin OCI resource plugin implements it.
-type ImageSBOMDownloader interface {
-	DownloadImageSBOMs(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) ([]oci.SBOM, error)
-}
-
 // DownloadImageSBOMs resolves the resource plugin for the given resource and, if
 // that plugin supports on-image SBOM discovery, returns any SBOM(s) attached to
 // the resource's OCI image. If the resource is not backed by a plugin that
@@ -123,7 +116,7 @@ func DownloadImageSBOMs(ctx context.Context, pluginManager *manager.PluginManage
 		return nil, nil
 	}
 
-	downloader, ok := plugin.(ImageSBOMDownloader)
+	downloader, ok := plugin.(oci.ImageSBOMDownloader)
 	if !ok {
 		return nil, nil
 	}

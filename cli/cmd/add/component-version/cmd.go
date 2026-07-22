@@ -316,6 +316,12 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
+	// Resolve SBoM/v1 inputs: embed each referenced resource's access into the
+	// input spec before construction, where all sibling resources are visible.
+	if err := resolveSBOMInputs(constructorSpec); err != nil {
+		return fmt.Errorf("resolving sbom inputs failed: %w", err)
+	}
+
 	output, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)

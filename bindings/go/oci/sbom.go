@@ -15,9 +15,11 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // SBOM-related media types and annotation keys used to discover Software Bill of
@@ -86,6 +88,21 @@ type SBOM struct {
 	// Subjects lists the in-toto statement subjects (name + digests) the SBOM
 	// attests to, when discovered via an attestation. Nil for Referrers-API SBOMs.
 	Subjects []*intoto.ResourceDescriptor
+	// Platform is the image platform this SBOM describes, when discovered via a
+	// buildx attestation manifest (resolved from the attestation's
+	// vnd.docker.reference.digest back to the index's image manifest). Nil for
+	// single-platform images and Referrers-API SBOMs.
+	Platform *ociImageSpecV1.Platform
+}
+
+// ImageSBOMDownloader is the optional capability of a resource plugin that can
+// fetch the SBOM(s) attached to an OCI image resource (as a buildx attestation
+// or via the OCI Referrers API). The builtin OCI resource plugin implements it.
+// It is defined here so that both the CLI (which discovers plugins at runtime)
+// and input methods (which reach the OCI plugin at construction time) can share
+// a single downloader contract without duplicating it.
+type ImageSBOMDownloader interface {
+	DownloadImageSBOMs(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) ([]SBOM, error)
 }
 
 // FetchImageSBOMs discovers and fetches the SBOM(s) attached to the given OCI
@@ -142,11 +159,26 @@ func fetchAttestationSBOMs(ctx context.Context, store spec.Store, rootDesc ociIm
 		return nil, err
 	}
 
+	// Map image-manifest digest -> platform, so an attestation manifest (which
+	// points at the image it describes via vnd.docker.reference.digest) can be
+	// labelled with that image's platform.
+	platformByDigest := make(map[string]*ociImageSpecV1.Platform)
+	for i := range index.Manifests {
+		m := index.Manifests[i]
+		if m.Annotations[AnnotationDockerReferenceType] == DockerReferenceTypeAttestationManifest {
+			continue
+		}
+		if m.Platform != nil {
+			platformByDigest[m.Digest.String()] = m.Platform
+		}
+	}
+
 	var sboms []SBOM
 	for _, m := range index.Manifests {
 		if m.Annotations[AnnotationDockerReferenceType] != DockerReferenceTypeAttestationManifest {
 			continue
 		}
+		platform := platformByDigest[m.Annotations[AnnotationDockerReferenceDigest]]
 		manifest, err := fetchManifest(ctx, store, m)
 		if err != nil {
 			return nil, fmt.Errorf("fetching attestation manifest %q failed: %w", m.Digest, err)
@@ -161,6 +193,7 @@ func fetchAttestationSBOMs(ctx context.Context, store spec.Store, rootDesc ociIm
 			if err != nil {
 				return nil, err
 			}
+			sbom.Platform = platform
 			sboms = append(sboms, *sbom)
 		}
 	}

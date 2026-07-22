@@ -36,14 +36,13 @@ func New() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		Long: `Download an orchestrating Software Bill of Materials (SBOM) for a component version.
 
-This command discovers the SBOM of every resource in the given component version and assembles
-them into a single hierarchical CycloneDX document. SBOMs are discovered (never generated) in two ways:
-
-  1. a resource of type 'sbom' linked to another resource via the 'software.ocm/sbom' label, and
-  2. an SBOM attached to a resource's OCI image (buildx attestation or OCI Referrers API).
+This command collects the baked SBOM of every resource in the given component version and assembles
+them into a single hierarchical CycloneDX document. SBOMs are discovered at build time (by the SBoM/v1
+input method or by adding a resource of type 'sbom' linked via the 'software.ocm/sbom' label) and
+embedded as local blobs; this command performs a pure local read and never fetches SBOMs from a registry.
 
 Discovered SPDX SBOMs are normalized to CycloneDX so the whole document is a single CycloneDX BOM.
-Resources without a discoverable SBOM are skipped with a warning.
+Resources without a baked SBOM are skipped with a warning.
 
 With --recursive, the orchestration also descends into referenced (child) component versions,
 nesting their SBOMs under the parent.`,
@@ -185,13 +184,15 @@ func (b *nodeBuilder) build(component, version string) (*sbomassembly.Node, erro
 	return node, nil
 }
 
-// discoverResourceSBOMs finds the SBOM(s) for a single resource, first via the
-// label-linked sbom resource(s), then via an on-image SBOM. Each discovered blob
-// is normalized to CycloneDX.
+// discoverResourceSBOMs finds the baked SBOM(s) for a single resource via the
+// label-linked sbom resource(s). Each discovered blob is normalized to CycloneDX.
+//
+// SBOMs are discovered at build time by the SBoM/v1 input method (which bakes them
+// as local blobs carrying the software.ocm/sbom label); this command performs a
+// pure local read and does not fetch SBOMs from a registry.
 func (b *nodeBuilder) discoverResourceSBOMs(desc *descriptor.Descriptor, repo repository.ComponentVersionRepository, component, version string, res *descriptor.Resource) ([]sbomassembly.ResourceSBOM, error) {
 	target := res.ToIdentity()
 
-	// 1. Label-linked sbom resources.
 	linked, err := descriptor.FindSBOMResources(desc, target)
 	if err != nil {
 		return nil, fmt.Errorf("finding linked SBOM for resource %q failed: %w", res.Name, err)
@@ -209,25 +210,9 @@ func (b *nodeBuilder) discoverResourceSBOMs(desc *descriptor.Descriptor, repo re
 		}
 		out = append(out, sbomassembly.ResourceSBOM{ResourceName: res.Name, BOM: bom})
 	}
-	if len(out) > 0 {
-		return out, nil
-	}
-
-	// 2. On-image SBOM (attestation / referrer). Returns nil for non-OCI access.
-	imageSBOMs, err := shared.DownloadImageSBOMs(b.ctx, b.pluginManager, b.credentialGraph, res)
-	if err != nil {
-		return nil, fmt.Errorf("fetching on-image SBOM for resource %q failed: %w", res.Name, err)
-	}
-	for _, s := range imageSBOMs {
-		bom, err := normalizeBlob(s.Blob, s.MediaType)
-		if err != nil {
-			return nil, fmt.Errorf("normalizing on-image SBOM for resource %q failed: %w", res.Name, err)
-		}
-		out = append(out, sbomassembly.ResourceSBOM{ResourceName: res.Name, BOM: bom})
-	}
 
 	if len(out) == 0 {
-		b.logger.Warn("no SBOM discovered for resource, skipping", slog.String("resource", res.Name))
+		b.logger.Warn("no baked SBOM discovered for resource, skipping", slog.String("resource", res.Name))
 	}
 	return out, nil
 }
