@@ -52,6 +52,10 @@
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.repository.v1.ctf.AccessMode",
           "description": "AccessMode can be set to request readonly access or creation\nThe format of the path is determined by the access mode bitmask aggregated with |.\nIf not specified, the AccessMode will be interpreted as AccessModeReadOnly for read-based operations\nand as AccessModeReadWrite for write-based operations."
         },
+        "componentVersionLayout": {
+          "type": "string",
+          "description": "ComponentVersionLayout selects the storage layout used when adding component versions\nto this repository. \"\" or \"v2\" = the default access-bearing manifest; \"normalized\" = the\ncosign-signable normalized layout (a stable, access-free manifest as the tag target)."
+        },
         "filePath": {
           "type": "string",
           "description": "Path is the path of the CTF Archive on the filesystem.\n\nExamples\n- ./relative/path/to/archive.tgz\n- relative/path/to/archive.tar\n- /absolute/path/to/archive-folder"

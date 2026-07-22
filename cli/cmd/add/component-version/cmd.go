@@ -35,6 +35,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
+	"ocm.software/open-component-model/cli/internal/layout"
 	"ocm.software/open-component-model/cli/internal/render"
 	"ocm.software/open-component-model/cli/internal/render/graph/list"
 	"ocm.software/open-component-model/cli/internal/render/graph/tree"
@@ -52,6 +53,7 @@ const (
 	FlagSkipReferenceDigestProcessing      = "skip-reference-digest-processing"
 	FlagOutput                             = "output"
 	FlagDisplayMode                        = "display-mode"
+	FlagLayout                             = "layout"
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
@@ -225,6 +227,7 @@ add component-version --%[1]s ./archive --%[2]s %[3]s.yaml
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
 	enum.Var(cmd.Flags(), FlagExternalComponentVersionCopyPolicy, ExternalComponentVersionCopyPolicies(), "policy to apply when a component reference to a component version outside of the constructor or target repository is encountered")
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
+	cmd.Flags().String(FlagLayout, "v2", "component version storage layout: v2 (default) or normalized (cosign-signable, stable digest)")
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the component descriptors")
 	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current construction state of the component graph`)
@@ -299,6 +302,14 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	repoSpec, err := GetRepositorySpec(cmd)
 	if err != nil {
 		return fmt.Errorf("getting repository spec failed: %w", err)
+	}
+
+	layoutValue, err := cmd.Flags().GetString(FlagLayout)
+	if err != nil {
+		return fmt.Errorf("getting layout flag failed: %w", err)
+	}
+	if err := layout.Apply(repoSpec, layoutValue); err != nil {
+		return err
 	}
 
 	cacheDir, err := cmd.Flags().GetString(FlagBlobCacheDirectory)

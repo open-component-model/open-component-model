@@ -65,6 +65,15 @@ type ComponentVersionRepository interface {
 	LocalSourceRepository
 }
 
+// ComponentSignatureCarrier is an optional capability implemented by repositories that can copy a
+// component version manifest's external referrers (e.g. cosign signatures/attestations) from a
+// source repository into themselves. Implementations MUST skip OCM-managed referrers (the access
+// descriptor) and only carry referrers that remain valid because the component manifest digest is
+// preserved across the copy (the normalized layout).
+type ComponentSignatureCarrier interface {
+	CarryComponentSignatures(ctx context.Context, source ComponentVersionRepository, component, version string) error
+}
+
 // LocalResourceRepository defines the interface for managing local resources within a component version repository.
 // Local resources are artifacts that are stored directly in the repository rather than referenced externally.
 type LocalResourceRepository interface {
