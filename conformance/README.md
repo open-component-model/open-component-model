@@ -24,6 +24,7 @@ Conformance testing ensures that OCM implementations correctly handle:
 ## Current Scenarios
 
 - [`sovereign/`](./scenarios/sovereign) - Demonstrates modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment (ADR-0013)
+- [`cosign-normalized/`](./scenarios/cosign-normalized) - Publishes a component version in the normalized OCI layout, signs it with plain `cosign`, and checks that the signature survives `ocm sign` and `ocm transfer` across registries (ADR-0032)
 
 - [`compatibility/`](./scenarios/compatibility) - Validates OCM v1-produced signatures, resources, access specifications, and local inputs with the current CLI
 

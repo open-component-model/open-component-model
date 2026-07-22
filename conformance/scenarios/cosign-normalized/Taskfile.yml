@@ -1,0 +1,175 @@
+# Taskfile for the cosign/normalized-layout conformance scenario: a component
+# version published in the normalized OCI layout is signed with plain cosign,
+# keeps its digest through `ocm sign` and `ocm transfer`, and the cosign
+# signature verifies on the target registry without re-signing.
+version: '3'
+
+dotenv: ['.env']
+
+vars:
+  CLI_IMAGE: '{{ .CLI_IMAGE | default "ghcr.io/open-component-model/cli:main" }}'
+  ZOT_IMAGE: 'ghcr.io/project-zot/zot:{{ .ZOT_VERSION }}'
+  NAME: acme.org/cosign/normalized
+  VERSION: '1.0.0'
+  WORK: '{{ .TASKFILE_DIR }}/tmp'
+  CTF: '{{ .WORK }}/transport-archive'
+  NETWORK: ocm-conformance-cosign
+  SOURCE: zot-source
+  TARGET: zot-target
+  SOURCE_PORT: '{{ .SOURCE_PORT | default "15001" }}'
+  TARGET_PORT: '{{ .TARGET_PORT | default "15002" }}'
+  # Paths inside the registries and the references the CLI image uses on the scenario network.
+  REPO: ocm/component-descriptors/{{ .NAME }}
+  SOURCE_CV: oci::http://{{ .SOURCE }}:5000/ocm//{{ .NAME }}:{{ .VERSION }}
+  TARGET_CV: oci::http://{{ .TARGET }}:5000/ocm//{{ .NAME }}:{{ .VERSION }}
+  run: >-
+    docker run --rm
+    --user $(id -u):$(id -g)
+    --network {{ .NETWORK }}
+    --tmpfs /tmp:rw,exec,mode=1777
+    -v {{ .TASKFILE_DIR }}:{{ .TASKFILE_DIR }}
+    -w {{ .TASKFILE_DIR }}
+    -e HOME=/tmp -e TMPDIR=/tmp
+    -e NAME={{ .NAME }} -e VERSION={{ .VERSION }}
+  ocm: '{{ .run }} {{ .CLI_IMAGE }}'
+  # cosign ships in the full CLI image; COSIGN_PASSWORD is empty for the generated key.
+  cosign: >-
+    {{ .run }} -e COSIGN_PASSWORD=
+    --entrypoint /usr/local/bin/cosign {{ .CLI_IMAGE }}
+  COSIGN_FLAGS: --allow-insecure-registry --allow-http-registry
+  # Reads the manifest digest a tag resolves to on a registry published on localhost.
+  tag_digest: >-
+    curl -sSfI -H 'Accept: application/vnd.oci.image.manifest.v1+json'
+  ACCEPT_MANIFEST: "-H 'Accept: application/vnd.oci.image.manifest.v1+json'"
+
+tasks:
+  run:
+    desc: Run the cosign/normalized-layout conformance scenario end-to-end
+    deps: [check]
+    cmds:
+      - task: clean
+      - task: registries
+      - task: keys
+      - task: publish
+      - task: cosign:sign
+      - task: ocm:sign
+      - task: transfer
+      - task: verify:target
+
+  check:
+    silent: true
+    desc: Check required dependencies are installed
+    cmds:
+      - cmd: which docker || (echo "❌ Docker not found" && exit 1)
+      - cmd: which curl || (echo "❌ curl not found" && exit 1)
+      - cmd: which jq || (echo "❌ jq not found" && exit 1)
+      - cmd: which openssl || (echo "❌ openssl not found" && exit 1)
+
+  # === SETUP TASKS ===
+  registries:
+    desc: Start a source and a target zot registry (OCI referrers API) on a private network
+    cmds:
+      - docker network create {{ .NETWORK }} >/dev/null
+      - for: [SOURCE, TARGET]
+        cmd: |
+          name={{ if eq .ITEM "SOURCE" }}{{ .SOURCE }}{{ else }}{{ .TARGET }}{{ end }}
+          port={{ if eq .ITEM "SOURCE" }}{{ .SOURCE_PORT }}{{ else }}{{ .TARGET_PORT }}{{ end }}
+          docker run -d --name "$name" --network {{ .NETWORK }} -p "127.0.0.1:$port:5000" \
+            -v {{ .TASKFILE_DIR }}/zot-config.json:/etc/zot/config.json:ro \
+            {{ .ZOT_IMAGE }} >/dev/null
+          for i in $(seq 1 30); do curl -sf "http://127.0.0.1:$port/v2/" >/dev/null && exit 0; sleep 1; done
+          echo "❌ registry $name did not become ready"; exit 1
+
+  keys:
+    desc: Generate a cosign key pair and an RSA key pair for OCM signatures
+    cmds:
+      - mkdir -p {{ .WORK }}/keys
+      - '{{ .cosign }} generate-key-pair --output-key-prefix {{ .WORK }}/keys/cosign >/dev/null'
+      - openssl genpkey -algorithm RSA -out {{ .WORK }}/keys/rsa-private.pem -pkeyopt rsa_keygen_bits:3072 2>/dev/null
+      - openssl rsa -pubout -in {{ .WORK }}/keys/rsa-private.pem -out {{ .WORK }}/keys/rsa-public.pem 2>/dev/null
+      - for: [private, public]
+        cmd: |
+          cat > {{ .WORK }}/{{ .ITEM }}.ocmconfig <<EOF
+          type: generic.config.ocm.software/v1
+          configurations:
+          - type: credentials.config.ocm.software
+            consumers:
+            - identity:
+                type: RSA/v1alpha1
+                algorithm: RSASSA-PSS
+                signature: default
+              credentials:
+              - type: Credentials/v1
+                properties:
+                  {{ .ITEM }}_key_pem_file: {{ .WORK }}/keys/rsa-{{ .ITEM }}.pem
+          EOF
+
+  # === SCENARIO TASKS ===
+  publish:
+    desc: Publish the component version in the normalized layout and record its manifest digest
+    cmds:
+      - |
+        {{ .ocm }} add componentversion --layout normalized \
+          --repository oci::http://{{ .SOURCE }}:5000/ocm \
+          --constructor component-constructor.yaml
+      - |
+        manifest=$(curl -sSf {{ .ACCEPT_MANIFEST }} "http://127.0.0.1:{{ .SOURCE_PORT }}/v2/{{ .REPO }}/manifests/{{ .VERSION }}")
+        at=$(echo "$manifest" | jq -r .artifactType)
+        [ "$at" = "application/vnd.ocm.software.component-descriptor.normalized.v1" ] \
+          || { echo "❌ tag resolves to artifactType $at, not the normalized layout"; exit 1; }
+        {{ .tag_digest }} "http://127.0.0.1:{{ .SOURCE_PORT }}/v2/{{ .REPO }}/manifests/{{ .VERSION }}" \
+          | awk 'tolower($1)=="docker-content-digest:" {print $2}' | tr -d '\r' > {{ .WORK }}/d_norm
+        echo "✅ published in the normalized layout: $(cat {{ .WORK }}/d_norm)"
+
+  cosign:sign:
+    desc: Sign the component version with plain cosign and verify it on the source registry
+    vars:
+      REF: '{{ .SOURCE }}:5000/{{ .REPO }}@$(cat {{ .WORK }}/d_norm)'
+    cmds:
+      - '{{ .cosign }} sign --key {{ .WORK }}/keys/cosign.key --use-signing-config=false --tlog-upload=false {{ .COSIGN_FLAGS }} --yes {{ .REF }} >/dev/null'
+      - '{{ .cosign }} verify --key {{ .WORK }}/keys/cosign.pub --insecure-ignore-tlog=true {{ .COSIGN_FLAGS }} {{ .REF }} >/dev/null'
+      - echo "✅ cosign signature verifies on the source registry"
+
+  ocm:sign:
+    desc: An OCM signature must not move the tag off the cosign-signed manifest
+    cmds:
+      - '{{ .ocm }} sign componentversion --config {{ .WORK }}/private.ocmconfig {{ .SOURCE_CV }}'
+      - |
+        after=$({{ .tag_digest }} "http://127.0.0.1:{{ .SOURCE_PORT }}/v2/{{ .REPO }}/manifests/{{ .VERSION }}" \
+          | awk 'tolower($1)=="docker-content-digest:" {print $2}' | tr -d '\r')
+        [ "$after" = "$(cat {{ .WORK }}/d_norm)" ] \
+          || { echo "❌ ocm sign moved the tag from $(cat {{ .WORK }}/d_norm) to $after"; exit 1; }
+      - '{{ .cosign }} verify --key {{ .WORK }}/keys/cosign.pub --insecure-ignore-tlog=true {{ .COSIGN_FLAGS }} {{ .SOURCE }}:5000/{{ .REPO }}:{{ .VERSION }} >/dev/null'
+      - '{{ .ocm }} verify componentversion --config {{ .WORK }}/public.ocmconfig {{ .SOURCE_CV }}'
+      - echo "✅ ocm sign kept the normalized layout; cosign and OCM signatures both verify"
+
+  transfer:
+    desc: Transfer source → CTF → target without layout flags; the layout and signature travel along
+    cmds:
+      - '{{ .ocm }} transfer componentversion {{ .SOURCE_CV }} ctf::{{ .CTF }}'
+      - '{{ .ocm }} transfer componentversion ctf::{{ .CTF }}//{{ .NAME }}:{{ .VERSION }} oci::http://{{ .TARGET }}:5000/ocm'
+      - |
+        target=$({{ .tag_digest }} "http://127.0.0.1:{{ .TARGET_PORT }}/v2/{{ .REPO }}/manifests/{{ .VERSION }}" \
+          | awk 'tolower($1)=="docker-content-digest:" {print $2}' | tr -d '\r')
+        [ "$target" = "$(cat {{ .WORK }}/d_norm)" ] \
+          || { echo "❌ target tag resolves to $target, source was $(cat {{ .WORK }}/d_norm)"; exit 1; }
+        echo "✅ manifest digest preserved across transfer"
+
+  verify:target:
+    desc: The source's cosign and OCM signatures verify on the target; the download returns the signed content
+    cmds:
+      - '{{ .cosign }} verify --key {{ .WORK }}/keys/cosign.pub --insecure-ignore-tlog=true {{ .COSIGN_FLAGS }} {{ .TARGET }}:5000/{{ .REPO }}:{{ .VERSION }} >/dev/null'
+      - '{{ .ocm }} verify componentversion --config {{ .WORK }}/public.ocmconfig {{ .TARGET_CV }}'
+      - |
+        {{ .ocm }} download resource "{{ .TARGET_CV }}" \
+          --identity name=notice --output {{ .WORK }}/notice.txt
+        cmp -s {{ .WORK }}/notice.txt notice.txt || { echo "❌ downloaded content differs"; exit 1; }
+      - echo "✅ signature made on the source verifies on the target without re-signing"
+
+  # === CLEANUP TASKS ===
+  clean:
+    desc: Remove registries, network and generated data
+    cmds:
+      - docker rm -f {{ .SOURCE }} {{ .TARGET }} >/dev/null 2>&1 || true
+      - docker network rm {{ .NETWORK }} >/dev/null 2>&1 || true
+      - rm -rf {{ .WORK }}

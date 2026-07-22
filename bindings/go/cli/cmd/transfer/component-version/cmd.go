@@ -17,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
+	"ocm.software/open-component-model/bindings/go/cli/internal/layout"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress/bar"
@@ -45,6 +46,7 @@ const (
 	FlagConstraint   = "constraint"
 	FlagLatest       = "latest"
 	FlagConcurrency  = "concurrency-limit"
+	FlagLayout       = "layout"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the tracker consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -89,9 +91,18 @@ still work: they are translated into uploader entries appended after the configu
 the "Migrate from --upload-as to Uploader Configurations" guide on ocm.software). --recursive walks the
 component's references and transfers them too.
 
+Component version layout and signatures:
+  Component versions are stored in the v2 layout or in the normalized layout, whose manifest digest
+  is stable across registries and can be signed with cosign; its only layer is the normalized
+  descriptor, whose digest is the component version digest. --layout (or componentVersionLayout
+  in the transfer configuration) selects the layout of every transferred component version. Without
+  it, the layout set on the target repository specification applies, and otherwise each component
+  version keeps the layout of its source. For a normalized target, a CarryComponentSignatures node
+  copies the signatures attached to the normalized source; the transfer fails if they cannot be copied.
+
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
-  (passed via --config) sets defaults for --recursive. Its unmatchedResourcePolicy (Ignore, Warn,
+  (passed via --config) sets defaults for --recursive and --layout. Its unmatchedResourcePolicy (Ignore, Warn,
   Fail; default Warn) decides whether a resource no uploader selects is silently given the
   baseline, logged as a warning, or fails the transfer.
   Explicit command-line flags always override the values from the configuration.
@@ -102,7 +113,7 @@ Two-step workflow (generate, review, replay):
   from a file (or stdin with "-"):
     1. Generate the spec:  transfer cv --dry-run -o yaml -r {reference} {target} > spec.yaml
     2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
-  All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer or uploader
+  All graph-shaping flags (--recursive, --layout, --copy-resources, --upload-as) and any transfer or uploader
   configuration entry are baked into the spec during step 1 and are therefore ignored in
   step 2 - the spec is the full graph definition. Only --dry-run, --output, and
   --concurrency-limit remain meaningful when replaying a spec.
@@ -112,6 +123,7 @@ How the graph is built:
   selected based on the source/target references:
     1. CTFGetComponentVersion -> OCIGetComponentVersion
     2. CTFAddComponentVersion -> OCIAddComponentVersion
+       (-> CTFCarryComponentSignatures / OCICarryComponentSignatures for normalized targets)
     3. GetOCIArtifact -> OCIAddLocalResource, or TransferOCIArtifact (OCI uploader)
     4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)
     5. GetGitResource -> OCIAddLocalResource, or GetGitResource / OCIGetLocalResource -> AddGitResource (Git uploader)`,
@@ -180,6 +192,10 @@ transfer component-version --transfer-spec spec.yaml
 	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
 	cmd.Flags().Int(FlagConcurrency, 4, "maximum number of transformation nodes processed in parallel; independent nodes run concurrently while dependency ordering is preserved. Increase it to speed up large graphs, decrease it to reduce load on the registry")
+	layout.RegisterFlag(cmd.Flags(), FlagLayout, layout.FlagUsage+
+		". Sets componentVersionLayout of the transfer configuration. When neither is set, a target keeps the layout of its "+
+		"repository specification, or else inherits the layout of each source component version; a normalized target also "+
+		"receives the signatures (e.g. cosign) attached to the normalized source")
 
 	return cmd
 }
@@ -194,7 +210,7 @@ func transferArgs(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return fmt.Errorf("positional arguments are not allowed when --%s is set", FlagTransferSpec)
 		}
-		ignoredFlags := []string{FlagRecursive, FlagCopyResources, FlagUploadAs}
+		ignoredFlags := []string{FlagRecursive, FlagCopyResources, FlagUploadAs, FlagLayout}
 		for _, name := range ignoredFlags {
 			if cmd.Flags().Changed(name) {
 				slog.Warn(fmt.Sprintf("--%s has no effect when --%s is set", name, FlagTransferSpec))
@@ -445,6 +461,14 @@ func buildGraphDefinitionFromArgs(
 	uploaderCfgs, err := transferv1alpha1.LookupUploaderConfigs(uploaderSource)
 	if err != nil {
 		return nil, fmt.Errorf("looking up uploader configs failed: %w", err)
+	}
+
+	layoutValue, layoutSet, err := layout.FromFlag(cmd.Flags(), FlagLayout)
+	if err != nil {
+		return nil, err
+	}
+	if layoutSet {
+		transferCfg.ComponentVersionLayout = layoutValue
 	}
 
 	if cmd.Flags().Changed(FlagRecursive) {

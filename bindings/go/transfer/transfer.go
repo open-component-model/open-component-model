@@ -17,7 +17,8 @@ import (
 // describes how to transfer component versions between repositories.
 //
 // cfg carries the declarative transfer settings. A nil cfg resolves to the
-// defaults: no recursion.
+// defaults: no recursion, and each component version keeps the layout of its
+// source unless its target repository specification sets one.
 //
 // uploaders select the resources to move and are evaluated in declaration order:
 // the first uploader whose match selects a resource handles it, and a selected
@@ -60,6 +61,7 @@ func BuildGraphDefinition(
 		"roots", len(roots),
 		"recursive", resolved.Recursive,
 		"unmatchedResourcePolicy", resolved.UnmatchedResourcePolicy.Normalize(),
+		"componentVersionLayout", resolved.ComponentVersionLayout,
 		"uploaders", len(uploaders))
 
 	return internal.BuildGraphDefinition(ctx, roots, resolved, uploaders)

@@ -6,6 +6,18 @@
   "type": "object",
   "description": "Config is the canonical wire format for transfer settings. It is carried as an\nentry inside the central generic configuration\n(generic.config.ocm.software/v1) and extracted with [LookupConfig].\nDownstream consumers (CLI, controllers) pass it directly to\n[transfer.BuildGraphDefinition], so any new transfer setting belongs here first.\nWhich resources are copied is decided by uploader configurations (see\n[UploaderConfig]), not by this type.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: transfer.config.ocm.software/v1alpha1\nrecursive: -1\nunmatchedResourcePolicy: Fail",
   "properties": {
+    "componentVersionLayout": {
+      "type": "string",
+      "description": "ComponentVersionLayout selects the storage layout of every component\nversion written to an OCI or CTF target and overrides the layout set on\nthe target repository specification. When both are empty, a component\nversion inherits the layout of its source, so a normalized source stays\nnormalized and its cosign signatures remain valid; other sources are\nwritten in the default v2 layout. For a normalized target, the transfer\nalso copies the signature referrers of the source component version.",
+      "oneOf": [
+        {
+          "const": "v2"
+        },
+        {
+          "const": "normalized"
+        }
+      ]
+    },
     "recursive": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.Recursive",
       "description": "Recursive configures transferring component references with the parent\ncomponent: -1 means infinite recursion, 0 means no recursion. Positive\ndepths are reserved but not implemented yet. See [Recursive]."

@@ -45,9 +45,18 @@ still work: they are translated into uploader entries appended after the configu
 the "Migrate from --upload-as to Uploader Configurations" guide on ocm.software). --recursive walks the
 component's references and transfers them too.
 
+Component version layout and signatures:
+  Component versions are stored in the v2 layout or in the normalized layout, whose manifest digest
+  is stable across registries and can be signed with cosign; its only layer is the normalized
+  descriptor, whose digest is the component version digest. --layout (or componentVersionLayout
+  in the transfer configuration) selects the layout of every transferred component version. Without
+  it, the layout set on the target repository specification applies, and otherwise each component
+  version keeps the layout of its source. For a normalized target, a CarryComponentSignatures node
+  copies the signatures attached to the normalized source; the transfer fails if they cannot be copied.
+
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
-  (passed via --config) sets defaults for --recursive. Its unmatchedResourcePolicy (Ignore, Warn,
+  (passed via --config) sets defaults for --recursive and --layout. Its unmatchedResourcePolicy (Ignore, Warn,
   Fail; default Warn) decides whether a resource no uploader selects is silently given the
   baseline, logged as a warning, or fails the transfer.
   Explicit command-line flags always override the values from the configuration.
@@ -58,7 +67,7 @@ Two-step workflow (generate, review, replay):
   from a file (or stdin with "-"):
     1. Generate the spec:  transfer cv --dry-run -o yaml -r {reference} {target} > spec.yaml
     2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
-  All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer or uploader
+  All graph-shaping flags (--recursive, --layout, --copy-resources, --upload-as) and any transfer or uploader
   configuration entry are baked into the spec during step 1 and are therefore ignored in
   step 2 - the spec is the full graph definition. Only --dry-run, --output, and
   --concurrency-limit remain meaningful when replaying a spec.
@@ -68,6 +77,7 @@ How the graph is built:
   selected based on the source/target references:
     1. CTFGetComponentVersion -> OCIGetComponentVersion
     2. CTFAddComponentVersion -> OCIAddComponentVersion
+       (-> CTFCarryComponentSignatures / OCICarryComponentSignatures for normalized targets)
     3. GetOCIArtifact -> OCIAddLocalResource, or TransferOCIArtifact (OCI uploader)
     4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)
     5. GetGitResource -> OCIAddLocalResource, or GetGitResource / OCIGetLocalResource -> AddGitResource (Git uploader)
@@ -140,6 +150,8 @@ transfer component-version --transfer-spec spec.yaml
       --dry-run                 build and validate the graph but do not execute
   -h, --help                    help for component-version
       --latest                  if set, only the latest version of the component is transferred; only used when no version is specified in the reference
+      --layout enum             component version storage layout: v2 (manifest with the full descriptor) or normalized (manifest with the normalized descriptor as its only layer; the manifest digest is stable across registries and can be signed with cosign). Sets componentVersionLayout of the transfer configuration. When neither is set, a target keeps the layout of its repository specification, or else inherits the layout of each source component version; a normalized target also receives the signatures (e.g. cosign) attached to the normalized source
+                                (must be one of [normalized v2])
   -o, --output enum             output format of the component descriptors
                                 (must be one of [json ndjson yaml]) (default yaml)
   -r, --recursive               recursively discover and transfer component versions

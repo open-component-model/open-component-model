@@ -70,8 +70,8 @@ type Options struct {
 type ReferrerListerOptions struct {
 	// Subject is the descriptor of the component to find versions for
 	Subject ociImageSpecV1.Descriptor
-	// ArtifactType filters referrers by their artifact type
-	ArtifactType string
+	// ArtifactTypes filters referrers by their artifact type; referrers of any listed type are considered.
+	ArtifactTypes []string
 	// VersionResolver converts a referrer descriptor to a version string
 	VersionResolver ReferrerVersionResolver
 }
@@ -247,8 +247,10 @@ func listViaReferrrers(ctx context.Context, lister registry.ReferrerLister, opts
 		return nil
 	}
 
-	if err := lister.Referrers(ctx, indexv1.Descriptor, opts.ArtifactType, list); err != nil {
-		return nil, fmt.Errorf("failed to list referrers: %w", err)
+	for _, artifactType := range opts.ArtifactTypes {
+		if err := lister.Referrers(ctx, indexv1.Descriptor, artifactType, list); err != nil {
+			return nil, errors.Join(fmt.Errorf("failed to list referrers of type %q: %w", artifactType, err), wg.Wait())
+		}
 	}
 
 	if err := wg.Wait(); err != nil {
