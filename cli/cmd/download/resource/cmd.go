@@ -204,7 +204,7 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	}()
 
 	if includeSBOM {
-		if err := downloadLinkedSBOMs(cmd, pluginManager, credentialGraph, ref, repo, desc, requestedIdentity, finalOutputPath, logger); err != nil {
+		if err := downloadLinkedSBOMs(cmd, pluginManager, credentialGraph, ref, repo, desc, requestedIdentity, res, finalOutputPath, logger); err != nil {
 			return err
 		}
 	}
@@ -250,6 +250,7 @@ func downloadLinkedSBOMs(
 	repo repository.ComponentVersionRepository,
 	desc *descriptor.Descriptor,
 	target runtime.Identity,
+	targetResource *descriptor.Resource,
 	resourceOutputPath string,
 	logger *slog.Logger,
 ) error {
@@ -258,8 +259,10 @@ func downloadLinkedSBOMs(
 		return fmt.Errorf("finding SBOM resources for %q failed: %w", target, err)
 	}
 	if len(sbomResources) == 0 {
-		logger.Warn("no SBOM linked to resource, nothing to download", slog.String("resource", target.String()))
-		return nil
+		// No label-linked SBOM resource in the component version. Fall back to an
+		// SBOM attached to the resource's OCI image (buildx attestation or OCI
+		// referrer), e.g. the podinfo image case.
+		return downloadImageSBOMs(cmd, pluginManager, credentialGraph, targetResource, target, resourceOutputPath, logger)
 	}
 
 	multiple := len(sbomResources) > 1
@@ -277,6 +280,48 @@ func downloadLinkedSBOMs(
 			return fmt.Errorf("writing SBOM resource %q failed: %w", sbomRes.Name, err)
 		}
 		logger.Info("SBOM downloaded successfully", slog.String("output", outputPath), slog.String("resource", sbomRes.Name))
+	}
+
+	return nil
+}
+
+// downloadImageSBOMs fetches SBOM(s) attached to the target resource's OCI image
+// (buildx attestation or OCI Referrers API) and writes them alongside the
+// resource output. A missing SBOM is logged and treated as success.
+func downloadImageSBOMs(
+	cmd *cobra.Command,
+	pluginManager *manager.PluginManager,
+	credentialGraph credentials.Resolver,
+	targetResource *descriptor.Resource,
+	target runtime.Identity,
+	resourceOutputPath string,
+	logger *slog.Logger,
+) error {
+	if targetResource == nil {
+		logger.Warn("no SBOM linked to resource, nothing to download", slog.String("resource", target.String()))
+		return nil
+	}
+
+	sboms, err := shared.DownloadImageSBOMs(cmd.Context(), pluginManager, credentialGraph, targetResource)
+	if err != nil {
+		return fmt.Errorf("fetching image SBOMs for %q failed: %w", target, err)
+	}
+	if len(sboms) == 0 {
+		logger.Warn("no SBOM linked or attached to resource, nothing to download", slog.String("resource", target.String()))
+		return nil
+	}
+
+	multiple := len(sboms) > 1
+	for i, sbom := range sboms {
+		name := sbom.Format
+		if name == "" {
+			name = fmt.Sprintf("sbom-%d", i)
+		}
+		outputPath := sbomOutputPath(resourceOutputPath, sbom.Blob, multiple, name)
+		if err := shared.SaveBlobToFile(sbom.Blob, outputPath); err != nil {
+			return fmt.Errorf("writing image SBOM (%s) failed: %w", name, err)
+		}
+		logger.Info("image SBOM downloaded successfully", slog.String("output", outputPath), slog.String("format", sbom.Format), slog.String("predicateType", sbom.PredicateType))
 	}
 
 	return nil

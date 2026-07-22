@@ -149,6 +149,33 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return b, nil
 }
 
+// DownloadImageSBOMs fetches the SBOM(s) attached to the OCIImage of the given
+// resource, either as a buildx in-index attestation or via the OCI Referrers
+// API (see oci.Repository.FetchImageSBOMs). It returns an empty slice when the
+// resource access is not an OCI image or when no SBOM is attached, so callers
+// can treat a missing SBOM as a non-error.
+func (p *ResourceRepository) DownloadImageSBOMs(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) ([]oci.SBOM, error) {
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	access, ok := obj.(*v1.OCIImage)
+	if !ok {
+		// Not an OCI image; there is no on-image SBOM to fetch.
+		return nil, nil
+	}
+
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	if err != nil {
+		return nil, err
+	}
+	return repo.FetchImageSBOMs(ctx, access.ImageReference)
+}
+
 // AddOwnership attaches ownership information (i.e. the
 // component name and version) to a resource. The ownership is attached as a
 // referrer manifest pointing at the resource.

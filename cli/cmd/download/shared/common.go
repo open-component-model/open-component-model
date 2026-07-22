@@ -15,6 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -95,4 +96,44 @@ func IsLocal(access runtime.Typed) bool {
 		return false
 	}
 	return true
+}
+
+// ImageSBOMDownloader is the optional capability of a resource plugin that can
+// fetch the SBOM(s) attached to an OCI image resource (as a buildx attestation
+// or via the OCI Referrers API). The builtin OCI resource plugin implements it.
+type ImageSBOMDownloader interface {
+	DownloadImageSBOMs(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) ([]oci.SBOM, error)
+}
+
+// DownloadImageSBOMs resolves the resource plugin for the given resource and, if
+// that plugin supports on-image SBOM discovery, returns any SBOM(s) attached to
+// the resource's OCI image. If the resource is not backed by a plugin that
+// supports on-image SBOM discovery (e.g. a local blob or a non-OCI access), it
+// returns nil so callers can treat the absence as "no on-image SBOM".
+func DownloadImageSBOMs(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, res *descriptor.Resource) ([]oci.SBOM, error) {
+	access := res.GetAccess()
+	if access == nil {
+		return nil, nil
+	}
+
+	plugin, err := pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, access)
+	if err != nil {
+		// No resource plugin handles this access type (e.g. LocalBlob). Such a
+		// resource cannot carry an on-image SBOM, so this is not an error.
+		return nil, nil
+	}
+
+	downloader, ok := plugin.(ImageSBOMDownloader)
+	if !ok {
+		return nil, nil
+	}
+
+	var creds runtime.Typed
+	if credIdentity, err := plugin.GetResourceCredentialConsumerIdentity(ctx, res); err == nil {
+		if creds, err = credentialGraph.Resolve(ctx, credIdentity); err != nil && !errors.Is(err, credentials.ErrNotFound) {
+			return nil, fmt.Errorf("getting credentials for resource %q failed: %w", res.Name, err)
+		}
+	}
+
+	return downloader.DownloadImageSBOMs(ctx, res, creds)
 }
