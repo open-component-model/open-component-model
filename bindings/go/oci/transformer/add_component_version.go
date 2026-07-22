@@ -40,20 +40,9 @@ func (t *AddComponentVersion) Transform(ctx context.Context, step runtime.Typed)
 		return nil, fmt.Errorf("unexpected transformation type: %T", transformation)
 	}
 
-	var creds runtime.Typed
-	if t.CredentialProvider != nil {
-		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec); err == nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
-				if !errors.Is(err, credentials.ErrNotFound) {
-					return nil, fmt.Errorf("failed resolving credentials: %w", err)
-				}
-			}
-		}
-	}
-
-	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, repoSpec, creds)
+	repo, err := openComponentVersionRepository(ctx, t.RepoProvider, t.CredentialProvider, repoSpec)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting component version repository: %w", err)
+		return nil, err
 	}
 
 	desc, err := descriptor.ConvertFromV2(v2desc)
@@ -67,4 +56,31 @@ func (t *AddComponentVersion) Transform(ctx context.Context, step runtime.Typed)
 	}
 
 	return transformation, nil
+}
+
+// openComponentVersionRepository opens the repository for spec, resolving its
+// credentials if a credential provider is configured. Missing credentials are
+// not an error: the repository may allow anonymous access.
+func openComponentVersionRepository(
+	ctx context.Context,
+	provider repository.ComponentVersionRepositoryProvider,
+	credentialProvider credentials.Resolver,
+	spec runtime.Typed,
+) (repository.ComponentVersionRepository, error) {
+	var creds runtime.Typed
+	if credentialProvider != nil {
+		if consumerId, err := provider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, spec); err == nil {
+			if creds, err = credentialProvider.Resolve(ctx, consumerId); err != nil {
+				if !errors.Is(err, credentials.ErrNotFound) {
+					return nil, fmt.Errorf("failed resolving credentials: %w", err)
+				}
+			}
+		}
+	}
+
+	repo, err := provider.GetComponentVersionRepository(ctx, spec, creds)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting component version repository: %w", err)
+	}
+	return repo, nil
 }

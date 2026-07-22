@@ -42,6 +42,15 @@ func uploadLabel(c *descriptor.Component, toSpec runtime.Typed, targetIdx, numTa
 	return fmt.Sprintf("%s [Upload to %s]", componentLabel(c), targetKind(toSpec))
 }
 
+// carryLabel renders the label for a CarryComponentSignatures transformation,
+// e.g. "my-app@1.0.0 [Carry signatures to OCI]", disambiguated like uploadLabel.
+func carryLabel(c *descriptor.Component, toSpec runtime.Typed, targetIdx, numTargets int) string {
+	if numTargets > 1 {
+		return fmt.Sprintf("%s [Carry signatures to %s \u2192 target %d]", componentLabel(c), targetKind(toSpec), targetIdx+1)
+	}
+	return fmt.Sprintf("%s [Carry signatures to %s]", componentLabel(c), targetKind(toSpec))
+}
+
 // getLabel renders the label for a resource Get transformation,
 // e.g. "my-app@1.0.0 [Get icons]".
 func getLabel(c *descriptor.Component, resourceName string) string {

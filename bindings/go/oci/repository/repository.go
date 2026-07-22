@@ -24,12 +24,16 @@ import (
 // The path is cleaned to ensure it is a valid file path.
 // The access mode is converted to a bitmask for use with the CTF archive.
 func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository, options ...oci.RepositoryOption) (*oci.Repository, error) {
+	layout, err := oci.LayoutFromSpec(repository.ComponentVersionLayout)
+	if err != nil {
+		return nil, err
+	}
 	store, err := NewStoreFromCTFRepoV1(ctx, repository, options...)
 	if err != nil {
 		return nil, err
 	}
 
-	repo, err := oci.NewRepository(append(options, ocictf.WithCTF(store))...)
+	repo, err := oci.NewRepository(append([]oci.RepositoryOption{oci.WithComponentVersionLayout(layout)}, append(options, ocictf.WithCTF(store))...)...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create new repository: %w", err)
 	}
@@ -145,9 +149,13 @@ func NewResolver(_ context.Context, client remote.Client, repository *ocirepospe
 //
 // This wrapper is kept only for backwards compatibility.
 func NewFromOCIRepoV1(ctx context.Context, repository *ocirepospecv1.Repository, client remote.Client, options ...oci.RepositoryOption) (*oci.Repository, error) {
+	layout, err := oci.LayoutFromSpec(repository.ComponentVersionLayout)
+	if err != nil {
+		return nil, err
+	}
 	resolver, err := NewResolver(ctx, client, repository)
 	if err != nil {
 		return nil, fmt.Errorf("could not create OCI resolver for OCI repository %q: %w", repository.BaseUrl, err)
 	}
-	return oci.NewRepository(append(options, oci.WithResolver(resolver))...)
+	return oci.NewRepository(append([]oci.RepositoryOption{oci.WithComponentVersionLayout(layout)}, append(options, oci.WithResolver(resolver))...)...)
 }

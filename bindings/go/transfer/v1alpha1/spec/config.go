@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -44,9 +45,20 @@ type Config struct {
 	// component: -1 means infinite recursion, 0 means no recursion. Positive
 	// depths are reserved but not implemented yet. See [Recursive].
 	Recursive Recursive `json:"recursive,omitempty"`
+
+	// ComponentVersionLayout selects the storage layout of every component
+	// version written to an OCI or CTF target and overrides the layout set on
+	// the target repository specification. When both are empty, a component
+	// version inherits the layout of its source, so a normalized source stays
+	// normalized and its cosign signatures remain valid; other sources are
+	// written in the default v2 layout. For a normalized target, the transfer
+	// also copies the signature referrers of the source component version.
+	// +ocm:jsonschema-gen:enum=v2,normalized
+	ComponentVersionLayout layout.ComponentVersionLayout `json:"componentVersionLayout,omitempty"`
 }
 
-// Validate rejects a non-matching [Config.Type] and unsupported recursion depths.
+// Validate rejects a non-matching [Config.Type], unsupported recursion depths
+// and unknown component version layouts.
 // An empty Type is allowed so callers constructing a Config programmatically
 // (without going through [Scheme.Decode]) do not need to set it explicitly.
 func (cfg *Config) Validate() error {
@@ -66,6 +78,9 @@ func (cfg *Config) Validate() error {
 	}
 	if cfg.Recursive > RecursiveNone {
 		return fmt.Errorf("recursive depth %d is not implemented yet (use -1 for infinite recursion or 0 for none)", cfg.Recursive)
+	}
+	if err := cfg.ComponentVersionLayout.Validate(); err != nil {
+		return fmt.Errorf("invalid componentVersionLayout: %w", err)
 	}
 	return nil
 }
@@ -98,7 +113,8 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 }
 
 // Merge merges the provided configs into a single config. Later entries win:
-// a non-zero Recursive overrides whatever earlier entries set. An explicit
+// a non-zero Recursive or non-empty ComponentVersionLayout overrides whatever
+// earlier entries set. An explicit
 // "recursive: 0" cannot be distinguished from an omitted field; both leave the
 // default of no recursion.
 func Merge(configs ...*Config) *Config {
@@ -114,6 +130,9 @@ func Merge(configs ...*Config) *Config {
 		}
 		if cfg.Recursive != RecursiveNone {
 			merged.Recursive = cfg.Recursive
+		}
+		if cfg.ComponentVersionLayout != "" {
+			merged.ComponentVersionLayout = cfg.ComponentVersionLayout
 		}
 	}
 	return merged
