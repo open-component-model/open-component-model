@@ -83,6 +83,33 @@ func TestNormalizeToCycloneDX_SniffFallback(t *testing.T) {
 	assert.Contains(t, componentNames(*bom.Components), "foo")
 }
 
+const cycloneDXXMLInput = `<?xml version="1.0" encoding="UTF-8"?>
+<bom xmlns="http://cyclonedx.org/schema/bom/1.6" version="1">
+  <components>
+    <component type="library">
+      <name>foo</name>
+      <version>1.0.0</version>
+      <purl>pkg:golang/example.com/foo@1.0.0</purl>
+    </component>
+  </components>
+</bom>`
+
+func TestNormalizeToCycloneDX_XMLDirectDecode(t *testing.T) {
+	// A CycloneDX XML document must decode natively, not be routed to protobom.
+	bom, err := sbom.NormalizeToCycloneDX(strings.NewReader(cycloneDXXMLInput), "application/vnd.cyclonedx+xml")
+	require.NoError(t, err)
+	require.NotNil(t, bom.Components)
+	assert.Contains(t, componentNames(*bom.Components), "foo")
+}
+
+func TestNormalizeToCycloneDX_XMLContentOverMediaType(t *testing.T) {
+	// Content is authoritative: XML content wins even if the media type says json.
+	bom, err := sbom.NormalizeToCycloneDX(strings.NewReader(cycloneDXXMLInput), "application/vnd.cyclonedx+json")
+	require.NoError(t, err)
+	require.NotNil(t, bom.Components)
+	assert.Contains(t, componentNames(*bom.Components), "foo")
+}
+
 func TestNormalizeToCycloneDX_Empty(t *testing.T) {
 	_, err := sbom.NormalizeToCycloneDX(strings.NewReader("   "), "")
 	require.Error(t, err)
@@ -113,18 +140,32 @@ func TestOrchestrate_SingleComponent(t *testing.T) {
 	assert.Equal(t, cyclonedx.SpecVersion1_6, bom.SpecVersion)
 
 	require.NotNil(t, bom.Components)
-	// The resource "cli" should appear as a nested component.
+	// The resource "cli" appears as a structural component.
 	names := componentNames(*bom.Components)
 	assert.Contains(t, names, "cli")
 
-	// The resource component's nested package refs are namespaced by the CV.
-	cli := findComponent(*bom.Components, "cli")
-	require.NotNil(t, cli)
-	require.NotNil(t, cli.Components)
-	for _, nested := range *cli.Components {
-		assert.True(t, strings.HasPrefix(nested.BOMRef, "ocm.software/test-sbom@0.1.0:"),
-			"nested ref %q should be namespaced by the component version", nested.BOMRef)
+	// Components are FLAT: no component carries nested sub-components. The "foo"
+	// package from the embedded SBOM appears at top level, not nested under cli.
+	for _, c := range *bom.Components {
+		assert.Nil(t, c.Components, "component %q must not nest sub-components (flat structure)", c.BOMRef)
 	}
+	assert.Contains(t, names, "foo", "embedded package must be flattened to top level")
+
+	// Every embedded package ref is namespaced by its resource component.
+	fooRef := ""
+	for _, c := range *bom.Components {
+		if c.Name == "foo" {
+			fooRef = c.BOMRef
+		}
+	}
+	assert.True(t, strings.HasPrefix(fooRef, "ocm.software/test-sbom@0.1.0:resource:cli:"),
+		"package ref %q should be namespaced by the resource component", fooRef)
+
+	// The resource component depends on its package(s) via the dependency graph.
+	cliDeps := findDependency(*bom.Dependencies, "ocm.software/test-sbom@0.1.0:resource:cli")
+	require.NotNil(t, cliDeps, "resource component must have a dependency node")
+	assert.Contains(t, derefStrings(cliDeps.Dependencies), fooRef,
+		"resource component must depend on its flattened package")
 }
 
 func TestOrchestrate_Recursive(t *testing.T) {
@@ -188,16 +229,18 @@ func TestOrchestrate_DuplicateResourceSBOMsGetUniqueRefs(t *testing.T) {
 	bom, err := sbom.Orchestrate(root)
 	require.NoError(t, err)
 	require.NotNil(t, bom.Components)
-	require.Len(t, *bom.Components, 3)
+	// 3 resource wrappers + 3 flattened "foo" packages = 6 components, all flat.
+	require.Len(t, *bom.Components, 6)
 
 	refs := map[string]int{}
 	for _, c := range *bom.Components {
+		assert.Nil(t, c.Components, "flat structure: %q must not nest", c.BOMRef)
 		refs[c.BOMRef]++
 	}
 	for ref, n := range refs {
 		assert.Equal(t, 1, n, "bom-ref %q must be unique across resource SBOMs", ref)
 	}
-	// The dependency graph must reference each unique ref exactly once.
+	// The root component version depends on the 3 distinct resource wrappers.
 	rootDeps := findDependency(*bom.Dependencies, "ocm.software/test-sbom@0.1.0")
 	require.NotNil(t, rootDeps)
 	assert.Len(t, derefStrings(rootDeps.Dependencies), 3)

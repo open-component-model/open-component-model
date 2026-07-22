@@ -40,6 +40,22 @@ type ResourceSBOM struct {
 // BOM-refs from every embedded SBOM are namespaced by their owning component
 // version (component@version:ref) so that identical package refs from different
 // sources do not collide in the merged document.
+// Orchestrate assembles a single hierarchical CycloneDX 1.6 BOM for the given
+// root component version. The result's metadata.component represents the root
+// component; each resource SBOM and each child component version is represented
+// by a structural component, and a dependency graph links parents to children.
+//
+// All components — the structural wrappers (component versions, resources) and
+// every real package from the embedded SBOMs — are emitted as a FLAT top-level
+// components list. The hierarchy is expressed purely through the dependencies
+// graph, never through nested component.components sub-trees. This is what
+// CycloneDX consumers such as Trivy expect: scanners walk the flat components
+// list and will not descend into nested component sub-trees, so nesting hides the
+// packages from vulnerability detection.
+//
+// BOM-refs from every embedded SBOM are namespaced by their owning resource
+// component (component@version:resource:name[:ref]) so that identical package
+// refs from different sources do not collide in the merged document.
 func Orchestrate(root *Node) (*cyclonedx.BOM, error) {
 	if root == nil {
 		return nil, fmt.Errorf("nil root node")
@@ -53,8 +69,7 @@ func Orchestrate(root *Node) (*cyclonedx.BOM, error) {
 	components := make([]cyclonedx.Component, 0)
 	dependencies := make([]cyclonedx.Dependency, 0)
 
-	// Recursively fold the tree into flat component + dependency lists, each
-	// component nested under its parent via the Components field.
+	// Recursively fold the tree into flat component + dependency lists.
 	rootRefs := foldNode(root, &components, &dependencies)
 	dependencies = append(dependencies, cyclonedx.Dependency{
 		Ref:          rootComponent.BOMRef,
@@ -67,30 +82,37 @@ func Orchestrate(root *Node) (*cyclonedx.BOM, error) {
 }
 
 // foldNode appends the components contributed by node (its resource SBOMs and
-// child component versions) to components, records their dependency edges, and
-// returns the list of bom-refs that node directly depends on.
+// child component versions) to components as a flat list, records their
+// dependency edges, and returns the list of bom-refs that node directly depends
+// on.
 func foldNode(node *Node, components *[]cyclonedx.Component, dependencies *[]cyclonedx.Dependency) []string {
 	var directDeps []string
 
-	// One nested component per resource SBOM, holding that SBOM's components.
-	// A single OCM resource can yield multiple SBOMs (e.g. one attestation per
-	// platform of a multi-arch image), so each gets a unique bom-ref suffix and
-	// a unique nested-ref namespace to keep the document collision-free.
+	// One structural component per resource SBOM. A single OCM resource can yield
+	// multiple SBOMs (e.g. one attestation per platform of a multi-arch image), so
+	// each gets a unique bom-ref suffix and a unique ref namespace to keep the
+	// document collision-free.
 	seen := make(map[string]int)
 	for _, res := range node.Resources {
 		instance := seen[res.ResourceName]
 		seen[res.ResourceName]++
 
 		resComp := componentForResource(node, res, instance)
-		if res.BOM != nil && res.BOM.Components != nil {
-			nested := namespaceComponents(*res.BOM.Components, resComp.BOMRef)
-			resComp.Components = &nested
-		}
 		*components = append(*components, resComp)
 		directDeps = append(directDeps, resComp.BOMRef)
+
+		// Emit the embedded SBOM's components FLAT (never nested) and wire them
+		// under the resource component via the dependency graph.
+		if res.BOM != nil {
+			pkgRefs := appendEmbeddedSBOM(res.BOM, resComp.BOMRef, components, dependencies)
+			*dependencies = append(*dependencies, cyclonedx.Dependency{
+				Ref:          resComp.BOMRef,
+				Dependencies: &pkgRefs,
+			})
+		}
 	}
 
-	// One nested component per child component version, recursively folded.
+	// One structural component per child component version, recursively folded.
 	for _, child := range node.Children {
 		childComp := componentForNode(child)
 		childDeps := foldNode(child, components, dependencies)
@@ -103,6 +125,68 @@ func foldNode(node *Node, components *[]cyclonedx.Component, dependencies *[]cyc
 	}
 
 	return directDeps
+}
+
+// appendEmbeddedSBOM flattens an embedded SBOM's components into the top-level
+// components list (namespacing their bom-refs by ns), carries over the embedded
+// SBOM's own dependency edges (also namespaced), and returns the direct package
+// refs to attach under the owning resource component.
+func appendEmbeddedSBOM(embedded *cyclonedx.BOM, ns string, components *[]cyclonedx.Component, dependencies *[]cyclonedx.Dependency) []string {
+	if embedded.Components == nil {
+		return nil
+	}
+
+	var directRefs []string
+	flattenComponents(*embedded.Components, ns, components, &directRefs)
+
+	// Preserve the embedded SBOM's internal dependency graph, namespaced.
+	if embedded.Dependencies != nil {
+		for _, dep := range *embedded.Dependencies {
+			nsDep := cyclonedx.Dependency{Ref: namespaceRef(dep.Ref, ns)}
+			if dep.Dependencies != nil {
+				refs := make([]string, 0, len(*dep.Dependencies))
+				for _, r := range *dep.Dependencies {
+					refs = append(refs, namespaceRef(r, ns))
+				}
+				nsDep.Dependencies = &refs
+			}
+			*dependencies = append(*dependencies, nsDep)
+		}
+	}
+
+	return directRefs
+}
+
+// flattenComponents appends every component (and, recursively, any nested
+// component sub-trees the source SBOM happened to use) to out as a flat list with
+// namespaced bom-refs. The refs of the top-level (direct) components are collected
+// into directRefs. Nested sub-trees are flattened, not preserved, so no
+// component.components remains in the output.
+func flattenComponents(in []cyclonedx.Component, ns string, out *[]cyclonedx.Component, directRefs *[]string) {
+	for _, c := range in {
+		nested := c.Components
+		c.Components = nil
+		if c.BOMRef != "" {
+			c.BOMRef = namespaceRef(c.BOMRef, ns)
+		}
+		*out = append(*out, c)
+		if directRefs != nil && c.BOMRef != "" {
+			*directRefs = append(*directRefs, c.BOMRef)
+		}
+		if nested != nil {
+			// Deeper components are flattened too, but they are not "direct"
+			// dependencies of the resource component.
+			flattenComponents(*nested, ns, out, nil)
+		}
+	}
+}
+
+// namespaceRef prefixes a bom-ref with ns unless it is already prefixed.
+func namespaceRef(ref, ns string) string {
+	if ref == "" {
+		return ref
+	}
+	return ns + ":" + ref
 }
 
 // componentForNode builds the CycloneDX component that represents an OCM
@@ -136,23 +220,6 @@ func componentForResource(node *Node, res ResourceSBOM, instance int) cyclonedx.
 		comp.PackageURL = res.BOM.Metadata.Component.PackageURL
 	}
 	return comp
-}
-
-// namespaceComponents deep-namespaces the bom-refs of a slice of components (and
-// their nested children) so refs from different sources cannot collide.
-func namespaceComponents(in []cyclonedx.Component, ns string) []cyclonedx.Component {
-	out := make([]cyclonedx.Component, len(in))
-	for i, c := range in {
-		if c.BOMRef != "" {
-			c.BOMRef = ns + ":" + c.BOMRef
-		}
-		if c.Components != nil {
-			nested := namespaceComponents(*c.Components, ns)
-			c.Components = &nested
-		}
-		out[i] = c
-	}
-	return out
 }
 
 // componentVersionNamespace is the stable bom-ref prefix for a component version.
