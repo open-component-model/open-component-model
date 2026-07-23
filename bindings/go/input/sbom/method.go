@@ -2,7 +2,7 @@
 // construction time it discovers the Software Bill of Materials (SBOM) attached
 // to a referenced resource's OCI image, merges the discovered SBOM(s) into a
 // single CycloneDX document, and embeds it as a local blob. It also attaches the
-// software.ocm/sbom back-link label pointing at the referenced resource so the
+// ocm.software/sbom back-link label pointing at the referenced resource so the
 // baked SBOM can later be discovered via descriptor.FindSBOMResources.
 package sbom
 
@@ -90,7 +90,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context,
 }
 
 // ProcessResource discovers the SBOM(s) for the referenced resource, merges them
-// into a single CycloneDX document, attaches the software.ocm/sbom back-link
+// into a single CycloneDX document, attaches the ocm.software/sbom back-link
 // label to the resource, and returns the merged document as local blob data.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	if i.Discoverer == nil {
@@ -129,7 +129,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		return nil, fmt.Errorf("reading discovered SBOM for resource %q failed: %w", resource.Name, err)
 	}
 
-	// Attach the software.ocm/sbom back-link label pointing at the subject.
+	// Attach the ocm.software/sbom back-link label pointing at the subject.
 	if err := attachSBOMLabel(resource, spec.Resource); err != nil {
 		return nil, fmt.Errorf("attaching SBOM label to resource %q failed: %w", resource.Name, err)
 	}
@@ -216,7 +216,7 @@ func readBlob(b blob.ReadOnlyBlob, mediaType string) (_ []byte, _ string, err er
 	return data, mediaType, nil
 }
 
-// attachSBOMLabel appends (or replaces) the software.ocm/sbom label on the
+// attachSBOMLabel appends (or replaces) the ocm.software/sbom label on the
 // resource, linking the baked SBOM to the subject resource identity.
 func attachSBOMLabel(resource *constructorruntime.Resource, subject runtime.Identity) error {
 	value := descriptor.SBOMLabelValue{

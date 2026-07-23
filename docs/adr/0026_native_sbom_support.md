@@ -69,7 +69,7 @@ Justification:
 Two attachment models are supported:
 
 * **Label-linked** — a resource of `type: sbom` is linked to the resource it
-  describes via a `software.ocm/sbom` label whose value lists the described
+  describes via a `ocm.software/sbom` label whose value lists the described
   resource identities.
 * **On-image** — an SBOM attached to a resource's OCI image, discovered from
   buildx in-index attestations (in-toto SPDX/CycloneDX predicates) or the OCI
@@ -88,14 +88,14 @@ time and bakes the result:
   selector is an error.
 * The discovered SBOM is baked **verbatim, in its original format** (e.g. SPDX
   stays SPDX). No conversion occurs at build time.
-* The input **auto-adds** the `software.ocm/sbom` back-link label pointing at the
+* The input **auto-adds** the `ocm.software/sbom` back-link label pointing at the
   subject, so the baked SBOM is discoverable.
 
 The **`ocm download sbom <cv> [--recursive]`** command assembles an orchestrating
 SBOM:
 
 * It is **baked-only**: it reads `type: sbom` local blobs discovered via the
-  `software.ocm/sbom` label and performs no live registry discovery.
+  `ocm.software/sbom` label and performs no live registry discovery.
 * It emits a **single CycloneDX 1.6 document**. SPDX (and CycloneDX XML) inputs are
   normalized to CycloneDX JSON. Format detection is **content-authoritative**: the
   document body decides the format; the media type is only a fallback hint.
@@ -116,7 +116,7 @@ constructor.yaml
   descriptor:
     resource podinfo-sbom
       access: localBlob (application/spdx+json)
-      label:  software.ocm/sbom → { references: [ {resource: {name: podinfo}} ] }
+      label:  ocm.software/sbom → { references: [ {resource: {name: podinfo}} ] }
 ```
 
 Download (aggregate):
@@ -144,7 +144,7 @@ bom-refs are namespaced `component@version:resource:name[:originalRef]` (with a
 
 #### Contract
 
-* **Label** `software.ocm/sbom` (version `v1`), value
+* **Label** `ocm.software/sbom` (version `v1`), value
   `{ references: [ { resource: <identity> } ] }`, marked signing-relevant.
 * **Input** `SBoM/v1`: `{ resource: <identity>, platform?: <os/arch[/variant]> }`;
   `access` is populated by the pre-construction pass, not authored by hand.

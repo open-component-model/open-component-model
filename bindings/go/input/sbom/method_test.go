@@ -110,7 +110,7 @@ func TestProcessResource_SelectsPlatformAndKeepsOriginalFormat(t *testing.T) {
 	assert.Equal(t, spdxDoc, readAll(t, result.ProcessedBlobData))
 	assert.Equal(t, oci.MediaTypeSPDXJSON, mediaTypeOf(t, result.ProcessedBlobData))
 
-	// The software.ocm/sbom back-link label was attached, pointing at podinfo.
+	// The ocm.software/sbom back-link label was attached, pointing at podinfo.
 	label := findLabel(res.Labels, descriptor.LabelSBOM)
 	require.NotNil(t, label, "sbom back-link label must be attached")
 	var value descriptor.SBOMLabelValue

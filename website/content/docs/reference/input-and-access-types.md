@@ -144,6 +144,36 @@ resources:
       env: production
 ```
 
+### `SBoM/v1`
+
+Discovers the Software Bill of Materials (SBOM) attached to another resource's OCI image and embeds it as a local blob at construction time. The SBOM is discovered (never generated) from a buildx in-index attestation or via the OCI Referrers API, and is stored **in its original format** (e.g. SPDX). The input also adds a `ocm.software/sbom` label linking the embedded SBOM back to the resource it describes, so it is later discoverable by `ocm download resource --sbom` and `ocm download sbom`.
+
+| Field | Type | Required | Description |
+| ----- | ---- | -------- | ----------- |
+| `resource` | identity | yes | Identity of the resource whose SBOM should be embedded, e.g. `{ name: podinfo }`. The referenced resource must exist in the same component version and carry an OCI image access. |
+| `platform` | string | conditional | Selects one platform's SBOM from a multi-arch image, as `os/arch[/variant]` (e.g. `linux/amd64`) or a bare architecture (e.g. `amd64`). Required when the referenced image is multi-arch; ignored for single-platform images. |
+
+```yaml
+resources:
+  # The image whose SBOM should be discovered.
+  - name: podinfo
+    type: ociImage
+    version: "1.0.0"
+    access:
+      type: OCIImage/v1
+      imageReference: ghcr.io/stefanprodan/podinfo:6.9.1
+  # Discovers + embeds the image's SBOM for linux/amd64.
+  - name: podinfo-sbom
+    type: sbom
+    input:
+      type: SBoM/v1
+      resource:
+        name: podinfo
+      platform: linux/amd64
+```
+
+The `resource` reference is resolved by name to the referenced resource's access before construction, so you write the image reference only once. If the referenced resource is missing or has no OCI access, construction fails with an explanatory error. For design background, see [ADR 0026: Native SBOM Support](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0026_native_sbom_support.md).
+
 ## Access Types
 
 ### `OCIImage/v1`

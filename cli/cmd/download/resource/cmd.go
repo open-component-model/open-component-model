@@ -239,7 +239,7 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 var ErrCannotExtractFS = errors.New("cannot extract resource as filesystem")
 
 // downloadLinkedSBOMs finds the SBOM resource(s) linked to the target resource
-// via the software.ocm/sbom label, downloads each, and writes it alongside the
+// via the ocm.software/sbom label, downloads each, and writes it alongside the
 // resource output (resourceOutputPath). If no SBOM is linked, it logs a warning
 // and returns nil so a missing SBOM is not treated as a failure.
 func downloadLinkedSBOMs(

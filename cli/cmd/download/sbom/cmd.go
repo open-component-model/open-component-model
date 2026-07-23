@@ -38,7 +38,7 @@ func New() *cobra.Command {
 
 This command collects the baked SBOM of every resource in the given component version and assembles
 them into a single hierarchical CycloneDX document. SBOMs are discovered at build time (by the SBoM/v1
-input method or by adding a resource of type 'sbom' linked via the 'software.ocm/sbom' label) and
+input method or by adding a resource of type 'sbom' linked via the 'ocm.software/sbom' label) and
 embedded as local blobs; this command performs a pure local read and never fetches SBOMs from a registry.
 
 Discovered SPDX SBOMs are normalized to CycloneDX so the whole document is a single CycloneDX BOM.
@@ -188,7 +188,7 @@ func (b *nodeBuilder) build(component, version string) (*sbomassembly.Node, erro
 // label-linked sbom resource(s). Each discovered blob is normalized to CycloneDX.
 //
 // SBOMs are discovered at build time by the SBoM/v1 input method (which bakes them
-// as local blobs carrying the software.ocm/sbom label); this command performs a
+// as local blobs carrying the ocm.software/sbom label); this command performs a
 // pure local read and does not fetch SBOMs from a registry.
 func (b *nodeBuilder) discoverResourceSBOMs(desc *descriptor.Descriptor, repo repository.ComponentVersionRepository, component, version string, res *descriptor.Resource) ([]sbomassembly.ResourceSBOM, error) {
 	target := res.ToIdentity()

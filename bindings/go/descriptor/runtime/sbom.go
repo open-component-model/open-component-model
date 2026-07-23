@@ -16,13 +16,13 @@ const (
 	//	- name: cli-sbom
 	//	  type: sbom
 	//	  labels:
-	//	    - name: software.ocm/sbom
+	//	    - name: ocm.software/sbom
 	//	      version: v1
 	//	      value:
 	//	        references:
 	//	          - resource:
 	//	              name: cli
-	LabelSBOM = "software.ocm/sbom"
+	LabelSBOM = "ocm.software/sbom"
 
 	// ResourceTypeSBOM is the OCM resource type used for resources that carry a
 	// Software Bill of Materials (SBOM), e.g. in SPDX or CycloneDX format.

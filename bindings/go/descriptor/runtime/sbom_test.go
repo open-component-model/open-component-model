@@ -10,7 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// sbomResource builds a resource of type "sbom" carrying a software.ocm/sbom
+// sbomResource builds a resource of type "sbom" carrying a ocm.software/sbom
 // label that references the given resource identities.
 func sbomResource(t *testing.T, name string, refs ...runtime.Identity) descriptor.Resource {
 	t.Helper()
