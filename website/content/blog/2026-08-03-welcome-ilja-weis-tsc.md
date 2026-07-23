@@ -1,6 +1,6 @@
 ---
 title: "Welcome Ilja Weis to the OCM Technical Steering Committee"
-description: "BWI's Ilja Weis joins the OCM TSC, deepening the collaboration between BWI and the Open Component Model project."
+description: "Ilja Weis from BWI GmbH joins the OCM TSC, deepening the collaboration between BWI and the Open Component Model project."
 date: 2026-08-03T12:00:00+02:00
 contributors: []
 tags: ["community", "governance", "tsc", "bwi"]
