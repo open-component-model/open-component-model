@@ -48,7 +48,7 @@ ocm download resource [flags]
   -h, --help                     help for resource
       --identity string          resource identity to download
       --output string            output location to download to. If no transformer is specified, and no format was discovered that can be written to a directory, the resource will be written to a file.
-      --transformer string       transformer to use for the output. If not specified, the resource will be written as is. 
+      --transformer string       transformer to use for the output. If not specified, the resource will be written as is.
 ```
 
 ### Options inherited from parent commands

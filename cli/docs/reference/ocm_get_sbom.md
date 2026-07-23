@@ -1,24 +1,59 @@
 ---
-title: ocm get
-description: Get anything from OCM.
+title: ocm get sbom
+description: Get an orchestrating SBOM for a component version.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm get
+## ocm get sbom
 
-Get anything from OCM
+Get an orchestrating SBOM for a component version
+
+### Synopsis
+
+Get an orchestrating Software Bill of Materials (SBOM) for a component version.
+
+This command collects the baked SBOM of every resource in the given component version and assembles
+them into a single hierarchical CycloneDX document, printed to stdout. SBOMs are discovered at build
+time (by the SBoM/v1 input method or by adding a resource of type 'sbom' linked via the
+'ocm.software/sbom' label) and embedded as local blobs; this command performs a pure local read and
+never fetches SBOMs from a registry.
+
+Discovered SPDX SBOMs are normalized to CycloneDX so the whole document is a single CycloneDX BOM.
+Resources without a baked SBOM are skipped with a warning. Where a resource carries per-architecture
+SBOMs, the one matching the host platform is selected.
+
+Use --output/-o to choose the serialization format (json or yaml). Redirect stdout to write a file.
+
+With --recursive, the orchestration also descends into referenced (child) component versions,
+nesting their SBOMs under the parent.
 
 ```
-ocm get {component-version|component-versions|cv|cvs|sbom|config|cfg} [flags]
+ocm get sbom <component-version> [flags]
+```
+
+### Examples
+
+```
+ # Orchestrating SBOM for a single component version (CycloneDX JSON)
+  ocm get sbom ghcr.io/org/component:v1
+
+  # As YAML
+  ocm get sbom ghcr.io/org/component:v1 -o yaml
+
+  # Include referenced child component versions, write to a file
+  ocm get sbom ghcr.io/org/component:v1 --recursive > sbom.cdx.json
 ```
 
 ### Options
 
 ```
-  -h, --help   help for get
+  -h, --help                 help for sbom
+  -o, --output enum          output format of the orchestrating SBOM
+                             (must be one of [json yaml]) (default json)
+      --recursive int[=-1]   depth of recursion into referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))
 ```
 
 ### Options inherited from parent commands
@@ -65,9 +100,5 @@ ocm get {component-version|component-versions|cv|cvs|sbom|config|cfg} [flags]
 
 ### SEE ALSO
 
-* [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
-* [ocm get component-version]({{< relref "ocm_get_component-version.md" >}})	 - Get component version(s) from an OCM repository
-* [ocm get config]({{< relref "ocm_get_config.md" >}})	 - Display the effective merged OCM configuration
-* [ocm get sbom]({{< relref "ocm_get_sbom.md" >}})	 - Get an orchestrating SBOM for a component version
-* [ocm get types]({{< relref "ocm_get_types.md" >}})	 - Describe OCM types and their configuration schema
+* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
 

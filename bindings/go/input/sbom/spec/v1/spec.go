@@ -43,6 +43,8 @@ type SBOM struct {
 // optionally, os/variant) to pick which platform's SBOM to embed. The name and
 // version identify the subject resource; extraIdentity.architecture additionally
 // selects the platform among the SBOMs attached to that image.
+//
+// +k8s:deepcopy-gen=true
 type ResourceReference struct {
 	// Name is the resource name (required).
 	Name string `json:"name"`
