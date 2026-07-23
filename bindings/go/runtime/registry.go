@@ -375,6 +375,11 @@ func (r *Scheme) DefaultType(typed Typed) (updated bool, err error) {
 //   - Raw → Typed: unmarshals Raw.Data JSON via json.Unmarshal into the Typed object (if Typed.GetType is registered).
 //   - Typed → Raw: marshals the Typed with json.Marshal, applies canonicalization, and stores the result in Raw.Data.
 //     (See Raw.UnmarshalJSON for equivalent behavior)
+//   - Unstructured → Unstructured: performs a deep copy of the underlying map.
+//   - Unstructured → Typed: marshals Unstructured.Data to JSON and unmarshals it into the Typed object
+//     (if Typed.GetType is registered). The "type" field in the map identifies the target type.
+//   - Typed → Unstructured: reflectively converts the Typed into Unstructured.Data, preserving concrete
+//     numeric types (int64/float64) rather than coercing them to float64 (if Typed.GetType is registered).
 //   - Typed → Typed: performs a deep copy using Typed.DeepCopyTyped, with reflection-based assignment.
 //
 // Errors are returned if:
@@ -395,29 +400,86 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		if err != nil && !r.allowUnknown {
 			return fmt.Errorf("cannot convert from unregistered type: %w", err)
 		}
-		from.SetType(typ)
+		// Only stamp a resolved type; an empty one would add a spurious "type" entry.
+		if !typ.IsEmpty() {
+			from.SetType(typ)
+		}
 	}
 	fromType := from.GetType()
 
-	// Case 1: Raw -> Raw or Raw -> Typed
-	if rawFrom, ok := from.(*Raw); ok {
-		// Raw → Raw: Deep copy the underlying data.
-		if rawInto, ok := into.(*Raw); ok {
-			rawFrom.DeepCopyInto(rawInto)
-			return nil
+	switch v := from.(type) {
+	case *Raw:
+		if err := r.convertFromRaw(v, into, fromType); err != nil {
+			return fmt.Errorf("conversion from raw failed: %w", err)
 		}
-
-		// Raw → Typed: Unmarshal the Raw.Data into the target.
-		if !r.IsRegistered(fromType) && !r.allowUnknown {
-			return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
+		return nil
+	case *Unstructured:
+		if err := r.convertFromUnstructured(v, into, fromType); err != nil {
+			return fmt.Errorf("conversion from unstructured failed: %w", err)
 		}
-		if err := json.Unmarshal(rawFrom.Data, into); err != nil {
-			return fmt.Errorf("failed to unmarshal from raw: %w", err)
+		return nil
+	default:
+		if err := r.convertFromTyped(from, into, fromType); err != nil {
+			return fmt.Errorf("conversion from typed failed: %w", err)
 		}
 		return nil
 	}
+}
 
-	// Case 2: Typed -> Raw
+// convertFromRaw handles conversions where the source is a *Raw.
+// It supports Raw → Raw (deep copy of the underlying []byte) and Raw → Typed
+// (json.Unmarshal of Raw.Data into the target, gated on the type being registered
+// unless allowUnknown is set).
+func (r *Scheme) convertFromRaw(from *Raw, into Typed, fromType Type) error {
+	// Raw → Raw: deep copy the underlying data.
+	if rawInto, ok := into.(*Raw); ok {
+		from.DeepCopyInto(rawInto)
+		return nil
+	}
+
+	// Raw → Typed: unmarshal the Raw.Data into the target.
+	if !r.IsRegistered(fromType) && !r.allowUnknown {
+		return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
+	}
+	if err := json.Unmarshal(from.Data, into); err != nil {
+		return fmt.Errorf("failed to unmarshal from raw: %w", err)
+	}
+	return nil
+}
+
+// convertFromUnstructured handles conversions where the source is an *Unstructured.
+// It supports Unstructured → Unstructured (deep copy of the underlying map) and
+// Unstructured → Typed (incl. Raw), marshaling Unstructured.Data to JSON and unmarshaling
+// it into the target. The "type" field in the map identifies the source type, mirroring
+// Raw → Typed; the conversion is gated on that type being registered unless allowUnknown is set.
+func (r *Scheme) convertFromUnstructured(from *Unstructured, into Typed, fromType Type) error {
+	// Unstructured → Unstructured: deep copy the underlying map.
+	if unstructuredInto, ok := into.(*Unstructured); ok {
+		from.DeepCopyInto(unstructuredInto)
+		return nil
+	}
+
+	// Unstructured → Typed: marshal the map and unmarshal into the target.
+	if !r.IsRegistered(fromType) && !r.allowUnknown {
+		return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
+	}
+	data, err := json.Marshal(from.Data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal from unstructured: %w", err)
+	}
+	if err := json.Unmarshal(data, into); err != nil {
+		return fmt.Errorf("failed to unmarshal from unstructured: %w", err)
+	}
+	return nil
+}
+
+// convertFromTyped handles conversions where the source is a concrete Typed object.
+// It supports Typed → Raw (json.Marshal + canonicalization), Typed → Unstructured
+// (json.Marshal decoded into Unstructured.Data), and generic Typed → Typed via a
+// reflection-based deep-copy assignment. Encoding conversions are gated on the source
+// type being registered unless allowUnknown is set.
+func (r *Scheme) convertFromTyped(from Typed, into Typed, fromType Type) error {
+	// Typed → Raw: marshal, canonicalize, and store in Raw.Data.
 	if rawInto, ok := into.(*Raw); ok {
 		if !r.IsRegistered(fromType) && !r.allowUnknown {
 			return fmt.Errorf("cannot encode from unregistered type: %s", fromType)
@@ -435,7 +497,22 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		return nil
 	}
 
-	// Case 3: Generic Typed -> Typed conversion using reflection.
+	// Typed → Unstructured: reflect over the source, preserving concrete numeric types
+	// (int64/float64) rather than coercing everything through JSON's float64, which would
+	// silently lose precision for int64 values beyond 2^53.
+	if unstructuredInto, ok := into.(*Unstructured); ok {
+		if !r.IsRegistered(fromType) && !r.allowUnknown {
+			return fmt.Errorf("cannot encode from unregistered type: %s", fromType)
+		}
+		data, err := toUnstructuredMap(from)
+		if err != nil {
+			return fmt.Errorf("failed to convert into unstructured: %w", err)
+		}
+		unstructuredInto.Data = data
+		return nil
+	}
+
+	// Generic Typed → Typed conversion using reflection.
 	intoVal := reflect.ValueOf(into)
 	if intoVal.Kind() != reflect.Pointer || intoVal.IsNil() {
 		return fmt.Errorf("'into' must be a non-nil pointer")
