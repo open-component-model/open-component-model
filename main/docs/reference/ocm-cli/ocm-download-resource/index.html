@@ -69,6 +69,9 @@ It supports optional transformation of the resource using a registered transform
 the appropriate file extension will be added to the output file name if no output location is given.</p><p>Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>ocm download resource [flags]</code></pre></figure></div><h3 id=examples>Examples<a href=#examples class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code> # Download a resource with identity &#39;name=example&#39; and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
 
+  # Download a resource with identity &#39;name=example&#39; and &#39;architecture=amd64&#39; and write to default output
+  ocm download resource ghcr.io/org/component:v1 --identity name=example,architecture=amd64
+
   # Download a resource and specify an output file
   ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
 
