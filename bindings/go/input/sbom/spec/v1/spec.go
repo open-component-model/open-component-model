@@ -11,14 +11,13 @@ const (
 )
 
 // SBOM describes an input that discovers the Software Bill of Materials (SBOM)
-// attached to another resource's OCI image at construction time, merges the
-// discovered SBOM(s) into a single CycloneDX document, and embeds it as a local
-// blob in the component version.
+// attached to another resource's OCI image at construction time and embeds it as
+// a local blob in the component version, in its original format.
 //
-// The subject resource is referenced by identity via Resource (typically just
-// its name). The CLI resolves that reference to the subject's access before
-// construction and fills Access, so the input method has a self-contained access
-// to run discovery against. See the SBoM/v1 input method for details.
+// The subject resource is referenced via Resource (name, optional version, and
+// optional extraIdentity). The CLI resolves that reference to the subject's access
+// before construction and fills Access, so the input method has a self-contained
+// access to run discovery against. See the SBoM/v1 input method for details.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -28,16 +27,8 @@ type SBOM struct {
 	// +ocm:jsonschema-gen:enum:deprecated=sbom,SBoM
 	Type runtime.Type `json:"type"`
 
-	// Resource is the (possibly partial) identity of the resource whose SBOM
-	// should be discovered and embedded, e.g. {"name": "podinfo"}. It is matched
-	// as a subset against the sibling resources of the same component version.
-	Resource runtime.Identity `json:"resource"`
-
-	// Platform selects a single per-architecture SBOM from a multi-arch image
-	// (e.g. "linux/amd64" or just "amd64"). A multi-arch image attaches one SBOM
-	// per platform; this picks exactly one. Required when the referenced image is
-	// multi-arch; ignored for single-platform images.
-	Platform string `json:"platform,omitempty"`
+	// Resource selects the resource whose SBOM should be discovered and embedded.
+	Resource ResourceReference `json:"resource"`
 
 	// Access carries the resolved access of the referenced resource. It is not
 	// authored by hand: the CLI copies the subject resource's access here before
@@ -45,9 +36,46 @@ type SBOM struct {
 	Access *runtime.Raw `json:"access,omitempty"`
 }
 
-func (t *SBOM) String() string {
-	if t.Resource != nil {
-		return t.Resource.String()
+// ResourceReference selects a resource of the same component version by name,
+// optional version, and optional extra identity attributes.
+//
+// For a multi-architecture OCI image, set extraIdentity.architecture (and,
+// optionally, os/variant) to pick which platform's SBOM to embed. The name and
+// version identify the subject resource; extraIdentity.architecture additionally
+// selects the platform among the SBOMs attached to that image.
+type ResourceReference struct {
+	// Name is the resource name (required).
+	Name string `json:"name"`
+	// Version is the optional resource version.
+	Version string `json:"version,omitempty"`
+	// ExtraIdentity holds additional identity attributes. For multi-arch images,
+	// "architecture" (and optionally "os"/"variant") selects the platform's SBOM.
+	ExtraIdentity runtime.Identity `json:"extraIdentity,omitempty"`
+}
+
+// Identity flattens the reference into an identity map (name + version), used to
+// match the subject resource and to build the back-link label. The architecture
+// in ExtraIdentity is a platform selector for the SBOM, not part of the OCI image
+// resource's own identity, so it is intentionally excluded here.
+func (r ResourceReference) Identity() runtime.Identity {
+	id := runtime.Identity{}
+	if r.Name != "" {
+		id["name"] = r.Name
 	}
-	return Type
+	if r.Version != "" {
+		id["version"] = r.Version
+	}
+	return id
+}
+
+// Architecture returns the platform selector from ExtraIdentity, or "" if unset.
+func (r ResourceReference) Architecture() string {
+	if r.ExtraIdentity == nil {
+		return ""
+	}
+	return r.ExtraIdentity["architecture"]
+}
+
+func (t *SBOM) String() string {
+	return t.Resource.Name
 }

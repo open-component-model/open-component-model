@@ -117,9 +117,10 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}
 
 	// Select exactly one SBOM. A multi-arch image attaches one SBOM per platform;
-	// spec.Platform picks which one. The original SBOM document is embedded as-is
-	// (its native format, e.g. SPDX) without conversion or merging.
-	selected, err := selectSBOM(sboms, spec.Platform, resource.Name)
+	// the reference's architecture (extraIdentity) picks which one. The original
+	// SBOM document is embedded as-is (its native format, e.g. SPDX) without
+	// conversion or merging.
+	selected, err := selectSBOM(sboms, spec.Resource.Architecture(), resource.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +131,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}
 
 	// Attach the ocm.software/sbom back-link label pointing at the subject.
-	if err := attachSBOMLabel(resource, spec.Resource); err != nil {
+	if err := attachSBOMLabel(resource, spec.Resource.Identity()); err != nil {
 		return nil, fmt.Errorf("attaching SBOM label to resource %q failed: %w", resource.Name, err)
 	}
 
@@ -140,25 +141,24 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}, nil
 }
 
-// selectSBOM picks a single SBOM from the discovered set. When platform is set it
-// matches the SBOM whose image platform equals it ("os/arch[/variant]" or a bare
-// "arch"). When platform is empty and exactly one SBOM was discovered, that one is
-// used; otherwise an explicit platform is required.
-func selectSBOM(sboms []oci.SBOM, platform, resourceName string) (*oci.SBOM, error) {
-	if platform == "" {
+// selectSBOM picks a single SBOM from the discovered set. When arch is set it
+// matches the SBOM whose image architecture equals it (a bare "arch", or a full
+// "os/arch[/variant]"). When arch is empty and exactly one SBOM was discovered,
+// that one is used; otherwise the reference must set extraIdentity.architecture.
+func selectSBOM(sboms []oci.SBOM, arch, resourceName string) (*oci.SBOM, error) {
+	if arch == "" {
 		if len(sboms) == 1 {
 			return &sboms[0], nil
 		}
-		return nil, fmt.Errorf("resource %q image is multi-arch (%s); set input.platform to select one", resourceName, strings.Join(availablePlatforms(sboms), ", "))
+		return nil, fmt.Errorf("resource %q image is multi-arch (%s); set resource.extraIdentity.architecture to select one", resourceName, strings.Join(availablePlatforms(sboms), ", "))
 	}
 
-	want := platform
 	for idx := range sboms {
-		if platformString(sboms[idx].Platform) == want || archOf(sboms[idx].Platform) == want {
+		if platformString(sboms[idx].Platform) == arch || archOf(sboms[idx].Platform) == arch {
 			return &sboms[idx], nil
 		}
 	}
-	return nil, fmt.Errorf("no SBOM for platform %q on resource %q; available: %s", platform, resourceName, strings.Join(availablePlatforms(sboms), ", "))
+	return nil, fmt.Errorf("no SBOM for architecture %q on resource %q; available: %s", arch, resourceName, strings.Join(availablePlatforms(sboms), ", "))
 }
 
 // availablePlatforms lists the platform labels of the discovered SBOMs for use in

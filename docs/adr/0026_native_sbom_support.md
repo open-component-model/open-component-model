@@ -39,9 +39,9 @@ The solution must:
 
 * **Option 1 — Build-time discovery + baked local blob + flat aggregate BOM**
   (chosen): a `SBoM/v1` input discovers and bakes an SBOM as a local resource at
-  construction; `ocm download sbom` aggregates baked SBOMs into a flat CycloneDX
+  construction; `ocm get sbom` aggregates baked SBOMs into a flat CycloneDX
   document whose hierarchy is carried by the dependency graph.
-* **Option 2 — Read-time discovery only**: no baking; `ocm download sbom`
+* **Option 2 — Read-time discovery only**: no baking; `ocm get sbom`
   discovers SBOMs live from the registry on each invocation.
 * **Option 3 — Nested aggregate BOM**: aggregate SBOM nests each source SBOM's
   packages inside `component.components` sub-trees (the shape of the OCM v1
@@ -83,19 +83,27 @@ time and bakes the result:
   access and embeds it in the input spec before construction runs. This is
   possible because a resource's access is static input data known at parse time,
   so no change to the input-method contract or construction ordering is required.
-* For multi-architecture images it selects **exactly one** SBOM via a required
-  `platform` attribute (e.g. `linux/amd64`); a multi-arch image without a platform
-  selector is an error.
+* For a multi-architecture image it attaches the SBOM of **every** platform by
+  default. The pre-construction pass reads the image index to enumerate platforms
+  and **expands** the single authored `SBoM/v1` resource into one resource per
+  platform — each pinned to its platform and tagged with a matching `extraIdentity`
+  (`os`/`architecture`). Setting `resource.extraIdentity.architecture` pins a single
+  platform instead. Expansion happens in the CLI pre-pass, so the input method (and
+  the plugin RPC contract) still processes exactly one resource → one SBOM.
 * The discovered SBOM is baked **verbatim, in its original format** (e.g. SPDX
   stays SPDX). No conversion occurs at build time.
 * The input **auto-adds** the `ocm.software/sbom` back-link label pointing at the
   subject, so the baked SBOM is discoverable.
 
-The **`ocm download sbom <cv> [--recursive]`** command assembles an orchestrating
+The **`ocm get sbom <cv> [--recursive]`** command assembles an orchestrating
 SBOM:
 
 * It is **baked-only**: it reads `type: sbom` local blobs discovered via the
   `ocm.software/sbom` label and performs no live registry discovery.
+* When a resource carries per-architecture SBOMs, it selects the one matching the
+  host platform (`GOOS`/`GOARCH`) by `extraIdentity` subset match — mirroring how a
+  multi-arch image resource is selected by identity. If none matches the host, all
+  arch-tagged SBOMs are kept (cross-arch audit) rather than dropped.
 * It emits a **single CycloneDX 1.6 document**. SPDX (and CycloneDX XML) inputs are
   normalized to CycloneDX JSON. Format detection is **content-authoritative**: the
   document body decides the format; the media type is only a fallback hint.
@@ -108,22 +116,24 @@ Construction (bake):
 
 ```text
 constructor.yaml
-  resource podinfo      (access: OCIImage/v1)
-  resource podinfo-sbom (input: SBoM/v1, resource:{name: podinfo}, platform: linux/amd64)
+  resource podinfo      (access: OCIImage/v1, multi-arch)
+  resource podinfo-sbom (input: SBoM/v1, resource:{name: podinfo})   # no platform → all
         │
-        ▼  pre-construction pass: copy podinfo.access into the SBoM/v1 input
-        ▼  SBoM/v1 input method: FetchImageSBOMs → select platform → bake verbatim
+        ▼  pre-construction pass: copy podinfo.access into the input; read the image
+        ▼  index to enumerate platforms; expand into one resource per platform
+        ▼  SBoM/v1 input method (per resource): FetchImageSBOMs → bake verbatim
   descriptor:
-    resource podinfo-sbom
+    resource podinfo-sbom (extraIdentity os=linux,arch=amd64)
       access: localBlob (application/spdx+json)
       label:  ocm.software/sbom → { references: [ {resource: {name: podinfo}} ] }
+    resource podinfo-sbom (extraIdentity os=linux,arch=arm64)   # same shape, arm64
 ```
 
-Download (aggregate):
+Aggregate (get):
 
 ```text
-ocm download sbom <cv> --recursive
-  for each resource: FindSBOMResources (label) → read baked local blob → normalize→CDX
+ocm get sbom <cv> --recursive
+  for each resource: FindSBOMResources (label) → select host-arch SBOM → read blob → normalize→CDX
   descend referenced CVs (recursive)
   assemble → one flat CycloneDX 1.6 BOM
 ```
@@ -146,8 +156,9 @@ bom-refs are namespaced `component@version:resource:name[:originalRef]` (with a
 
 * **Label** `ocm.software/sbom` (version `v1`), value
   `{ references: [ { resource: <identity> } ] }`, marked signing-relevant.
-* **Input** `SBoM/v1`: `{ resource: <identity>, platform?: <os/arch[/variant]> }`;
-  `access` is populated by the pre-construction pass, not authored by hand.
+* **Input** `SBoM/v1`: `{ resource: { name, version?, extraIdentity? } }`, where
+  `resource.extraIdentity.architecture` optionally pins one platform of a multi-arch
+  image; `access` is populated by the pre-construction pass, not authored by hand.
 * **Resource type** `sbom`; baked access is `localBlob` with the SBOM's original
   media type.
 * **Discovery** (bindings): `descriptor.FindSBOMResources` (label model);
@@ -164,7 +175,7 @@ bom-refs are namespaced `component@version:resource:name[:originalRef]` (with a
 Pros:
 
 * Reproducible and signable: the SBOM is fixed at build time and stored locally.
-* `download sbom` needs no network access and no credentials.
+* `get sbom` needs no network access and no credentials.
 * Flat aggregate BOM is scanned correctly by Trivy and other SBOM tools.
 * No constructor-core contract change; heavy deps isolated in new modules.
 
@@ -206,7 +217,7 @@ Cons:
   and does not pull SBOM-conversion libraries. On-image discovery and the shared
   `ImageSBOMDownloader` interface live in `bindings/go/oci`.
 * The CLI wires the pre-construction resolution pass into `add component-version`,
-  registers the built-in `SBoM/v1` input method, and exposes `download sbom`.
+  registers the built-in `SBoM/v1` input method, and exposes `get sbom`.
 * SPDX→CycloneDX normalization is lossy for fields without a CycloneDX equivalent;
   acceptable for an aggregate overview and documented in command help.
 

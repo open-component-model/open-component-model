@@ -17,12 +17,9 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -35,7 +32,6 @@ const (
 	FlagOutput           = "output"
 	FlagTransformer      = "transformer"
 	FlagExtractionPolicy = "extraction-policy"
-	FlagSBOM             = "sbom"
 )
 
 const (
@@ -69,10 +65,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
   ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
 
   # Download a resource and apply a transformer
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
-
-  # Download a resource and also write its linked SBOM alongside the output
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./cli --sbom`,
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer`,
 		RunE:              DownloadResource,
 		DisableAutoGenTag: true,
 	}
@@ -80,9 +73,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
 	cmd.Flags().String(FlagOutput, "", "output location to download to. If no transformer is specified, and no "+
 		"format was discovered that can be written to a directory, the resource will be written to a file.")
-	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
-	cmd.Flags().Bool(FlagSBOM, false, "additionally download the SBOM linked to the resource (via a resource of type "+
-		"'sbom' carrying the '"+descriptor.LabelSBOM+"' label) and write it alongside the resource output.")
+	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is.")
 	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
 		"policy to apply when extracting a resource. "+
 			"If set to 'disable', the resource will not be extracted, even if they could be. "+
@@ -124,11 +115,6 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	transformer, err := cmd.Flags().GetString(FlagTransformer)
 	if err != nil {
 		return fmt.Errorf("getting transformer flag failed: %w", err)
-	}
-
-	includeSBOM, err := cmd.Flags().GetBool(FlagSBOM)
-	if err != nil {
-		return fmt.Errorf("getting sbom flag failed: %w", err)
 	}
 
 	requestedIdentity, err := runtime.ParseIdentity(identityStr)
@@ -203,12 +189,6 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		logger.Info("resource downloaded successfully", slog.String("output", finalOutputPath))
 	}()
 
-	if includeSBOM {
-		if err := downloadLinkedSBOMs(cmd, pluginManager, credentialGraph, ref, repo, desc, requestedIdentity, res, finalOutputPath, logger); err != nil {
-			return err
-		}
-	}
-
 	switch extractionPolicy {
 	case ExtractionPolicyAuto:
 		// decompress in any case - DecompressedBlob lazily decompresses or returns the original blob based on the media type
@@ -237,119 +217,6 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 }
 
 var ErrCannotExtractFS = errors.New("cannot extract resource as filesystem")
-
-// downloadLinkedSBOMs finds the SBOM resource(s) linked to the target resource
-// via the ocm.software/sbom label, downloads each, and writes it alongside the
-// resource output (resourceOutputPath). If no SBOM is linked, it logs a warning
-// and returns nil so a missing SBOM is not treated as a failure.
-func downloadLinkedSBOMs(
-	cmd *cobra.Command,
-	pluginManager *manager.PluginManager,
-	credentialGraph credentials.Resolver,
-	ref *compref.Ref,
-	repo repository.ComponentVersionRepository,
-	desc *descriptor.Descriptor,
-	target runtime.Identity,
-	targetResource *descriptor.Resource,
-	resourceOutputPath string,
-	logger *slog.Logger,
-) error {
-	sbomResources, err := descriptor.FindSBOMResources(desc, target)
-	if err != nil {
-		return fmt.Errorf("finding SBOM resources for %q failed: %w", target, err)
-	}
-	if len(sbomResources) == 0 {
-		// No label-linked SBOM resource in the component version. Fall back to an
-		// SBOM attached to the resource's OCI image (buildx attestation or OCI
-		// referrer), e.g. the podinfo image case.
-		return downloadImageSBOMs(cmd, pluginManager, credentialGraph, targetResource, target, resourceOutputPath, logger)
-	}
-
-	multiple := len(sbomResources) > 1
-	for i := range sbomResources {
-		sbomRes := &sbomResources[i]
-		sbomIdentity := sbomRes.ToIdentity()
-
-		data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, ref.Component, ref.Version, repo, sbomRes, sbomIdentity)
-		if err != nil {
-			return fmt.Errorf("downloading SBOM resource %q failed: %w", sbomRes.Name, err)
-		}
-
-		outputPath := sbomOutputPath(resourceOutputPath, data, multiple, sbomRes.Name)
-		if err := shared.SaveBlobToFile(data, outputPath); err != nil {
-			return fmt.Errorf("writing SBOM resource %q failed: %w", sbomRes.Name, err)
-		}
-		logger.Info("SBOM downloaded successfully", slog.String("output", outputPath), slog.String("resource", sbomRes.Name))
-	}
-
-	return nil
-}
-
-// downloadImageSBOMs fetches SBOM(s) attached to the target resource's OCI image
-// (buildx attestation or OCI Referrers API) and writes them alongside the
-// resource output. A missing SBOM is logged and treated as success.
-func downloadImageSBOMs(
-	cmd *cobra.Command,
-	pluginManager *manager.PluginManager,
-	credentialGraph credentials.Resolver,
-	targetResource *descriptor.Resource,
-	target runtime.Identity,
-	resourceOutputPath string,
-	logger *slog.Logger,
-) error {
-	if targetResource == nil {
-		logger.Warn("no SBOM linked to resource, nothing to download", slog.String("resource", target.String()))
-		return nil
-	}
-
-	sboms, err := shared.DownloadImageSBOMs(cmd.Context(), pluginManager, credentialGraph, targetResource)
-	if err != nil {
-		return fmt.Errorf("fetching image SBOMs for %q failed: %w", target, err)
-	}
-	if len(sboms) == 0 {
-		logger.Warn("no SBOM linked or attached to resource, nothing to download", slog.String("resource", target.String()))
-		return nil
-	}
-
-	multiple := len(sboms) > 1
-	for i, sbom := range sboms {
-		name := sbom.Format
-		if name == "" {
-			name = fmt.Sprintf("sbom-%d", i)
-		}
-		outputPath := sbomOutputPath(resourceOutputPath, sbom.Blob, multiple, name)
-		if err := shared.SaveBlobToFile(sbom.Blob, outputPath); err != nil {
-			return fmt.Errorf("writing image SBOM (%s) failed: %w", name, err)
-		}
-		logger.Info("image SBOM downloaded successfully", slog.String("output", outputPath), slog.String("format", sbom.Format), slog.String("predicateType", sbom.PredicateType))
-	}
-
-	return nil
-}
-
-// sbomOutputPath derives the file path for an SBOM written next to the resource
-// output. For a single SBOM it uses "<resourceBase>.sbom<ext>"; for multiple it
-// disambiguates with the SBOM resource name: "<resourceBase>.<sbomName>.sbom<ext>".
-// The extension is inferred from the blob media type when available.
-func sbomOutputPath(resourceOutputPath string, data blob.ReadOnlyBlob, multiple bool, sbomName string) string {
-	ext := ""
-	if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
-		if mediaType, known := mediaTypeAware.MediaType(); known {
-			if extensions, err := mime.ExtensionsByType(mediaType); err == nil && len(extensions) > 0 {
-				ext = extensions[0]
-			}
-		}
-	}
-
-	base := strings.TrimSuffix(resourceOutputPath, filepath.Ext(resourceOutputPath))
-	if base == "" {
-		base = resourceOutputPath
-	}
-	if multiple {
-		return base + "." + sbomName + ".sbom" + ext
-	}
-	return base + ".sbom" + ext
-}
 
 func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
 	mediaTypeAware, ok := b.(blob.MediaTypeAware)

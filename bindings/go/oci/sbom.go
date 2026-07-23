@@ -105,6 +105,14 @@ type ImageSBOMDownloader interface {
 	DownloadImageSBOMs(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) ([]SBOM, error)
 }
 
+// ImagePlatformLister is the optional capability of a resource plugin that can
+// enumerate the platforms of an OCI image resource. The builtin OCI resource
+// plugin implements it. It lets callers (e.g. the CLI SBOM input expansion) learn
+// an image's platforms without fetching its SBOMs.
+type ImagePlatformLister interface {
+	ListImagePlatforms(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) ([]ociImageSpecV1.Platform, error)
+}
+
 // FetchImageSBOMs discovers and fetches the SBOM(s) attached to the given OCI
 // image reference. It looks in two places, in order:
 //
@@ -145,6 +153,51 @@ func (repo *Repository) FetchImageSBOMs(ctx context.Context, imageReference stri
 
 	// Mechanism B: OCI Referrers API.
 	return fetchReferrerSBOMs(ctx, store, rootDesc)
+}
+
+// ListImagePlatforms returns the platforms of the given image reference. For a
+// multi-arch image index it returns one entry per non-attestation image manifest
+// that declares a platform. For a single-platform image (a plain manifest, or an
+// index without platform metadata) it returns nil, signalling "no per-platform
+// split needed".
+func (repo *Repository) ListImagePlatforms(ctx context.Context, imageReference string) ([]ociImageSpecV1.Platform, error) {
+	store, err := repo.resolver.StoreForReference(ctx, imageReference)
+	if err != nil {
+		return nil, fmt.Errorf("resolving store for %q failed: %w", imageReference, err)
+	}
+
+	resolved, err := looseref.ParseReference(imageReference)
+	if err != nil {
+		return nil, fmt.Errorf("parsing image reference %q failed: %w", imageReference, err)
+	}
+
+	rootDesc, err := store.Resolve(ctx, resolved.ReferenceOrTag())
+	if err != nil {
+		return nil, fmt.Errorf("resolving reference %q failed: %w", imageReference, err)
+	}
+	if rootDesc.MediaType != ociImageSpecV1.MediaTypeImageIndex {
+		// Single-platform image: no split needed.
+		return nil, nil
+	}
+
+	index, err := fetchIndex(ctx, store, rootDesc)
+	if err != nil {
+		return nil, err
+	}
+
+	var platforms []ociImageSpecV1.Platform
+	for _, m := range index.Manifests {
+		// Skip buildx attestation manifests; they describe an image, they are not
+		// a platform of their own (their platform is "unknown/unknown").
+		if m.Annotations[AnnotationDockerReferenceType] == DockerReferenceTypeAttestationManifest {
+			continue
+		}
+		if m.Platform == nil || m.Platform.Architecture == "" || m.Platform.Architecture == "unknown" {
+			continue
+		}
+		platforms = append(platforms, *m.Platform)
+	}
+	return platforms, nil
 }
 
 // fetchAttestationSBOMs implements mechanism A. It only applies when rootDesc is

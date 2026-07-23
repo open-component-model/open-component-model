@@ -19,8 +19,8 @@ In this tutorial you start from a component with **no local resources** — a bi
 - Generate a CycloneDX SBOM for a binary with `syft`
 - Attach an SBOM to a resource with the `ocm.software/sbom` label (the `File/v1` path)
 - Discover and bake an OCI image's SBOM at build time with the `SBoM/v1` input type
-- Download a single resource's SBOM with `ocm download resource --sbom`
-- Assemble an orchestrating SBOM for a component version — and recursively across referenced components — with `ocm download sbom`
+- Download a single resource's SBOM with `ocm download resource` (an SBOM is a named resource)
+- Assemble an orchestrating SBOM for a component version — and recursively across referenced components — with `ocm get sbom`
 - Validate the result with `trivy sbom`
 
 ## Prerequisites
@@ -146,13 +146,13 @@ components:
           type: OCIImage/v1
           imageReference: ghcr.io/stefanprodan/podinfo:6.9.1
       # Discover + bake the image's existing SBOM at construction time.
+      # podinfo is multi-arch, so this attaches one SBOM per platform.
       - name: podinfo-sbom
         type: sbom
         input:
           type: SBoM/v1
           resource:
             name: podinfo
-          platform: linux/amd64
 
   - name: ocm.software/tutorial-sbom-umbrella
     version: "1.0.0"
@@ -193,7 +193,7 @@ components:
 Two attachment styles sit side by side:
 
 - **`cli-sbom`** uses the `File/v1` input to embed the SBOM you generated, and a `ocm.software/sbom` label to link it to `cli`. The label is marked `signing: true`, so it is covered by the component signature.
-- **`podinfo-sbom`** uses the `SBoM/v1` input. It references `podinfo` by name; OCM resolves that reference, discovers the SBOM attached to the image, and bakes it. Because `podinfo:6.9.1` is multi-arch, `platform: linux/amd64` selects which architecture's SBOM to embed. The back-link label is added automatically. See the [`SBoM/v1` input type]({{< relref "docs/reference/input-and-access-types.md" >}}#sbomv1) reference and [ADR 0026: Native SBOM Support](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0026_native_sbom_support.md) for the design details.
+- **`podinfo-sbom`** uses the `SBoM/v1` input. It references `podinfo` by name; OCM resolves that reference, discovers the SBOM attached to the image, and bakes it. Because `podinfo:6.9.1` is multi-arch, OCM attaches **every** platform's SBOM — expanding `podinfo-sbom` into one resource per architecture, each tagged with an `os`/`architecture` `extraIdentity`. (Set `resource.extraIdentity.architecture` to attach just one.) The back-link label is added automatically. See the [`SBoM/v1` input type]({{< relref "docs/reference/input-and-access-types.md" >}}#sbomv1) reference and [ADR 0026: Native SBOM Support](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0026_native_sbom_support.md) for the design details.
 
 {{< /step >}}
 
@@ -214,18 +214,21 @@ ocm add cv
  ocm.software/tutorial-sbom          │ 1.0.0   │ ocm.software
 ```
 
-Inspect the discovered `podinfo-sbom` — it was baked as a local blob **in its original SPDX format**, with the back-link label added for you:
+Inspect the discovered `podinfo-sbom` resources. Because `podinfo` is multi-arch, one was baked **per platform** — each a local blob **in its original SPDX format**, tagged with an `os`/`architecture` `extraIdentity` and the back-link label added for you:
 
 ```shell
 $ ocm get cv ./transport-archive//ocm.software/tutorial-sbom:1.0.0 -o yaml
 ```
 
 ```yaml
-# ... podinfo-sbom resource:
+# ... one podinfo-sbom resource per platform (amd64 shown):
       access:
         localReference: sha256:9ae84e41d0bd9055ae8ef29a0a89013027e6c3680744ba5ead0d4750fe8f337b
         mediaType: application/spdx+json      # original format, not converted
         type: LocalBlob/v1
+      extraIdentity:
+        architecture: amd64                   # disambiguates the per-platform SBOMs
+        os: linux
       labels:
         - name: ocm.software/sbom             # added automatically by SBoM/v1
           value:
@@ -243,16 +246,20 @@ $ ocm get cv ./transport-archive//ocm.software/tutorial-sbom:1.0.0 -o yaml
 
 ### Download a single resource's SBOM
 
-`ocm download resource --sbom` writes a resource together with its linked SBOM:
+An SBOM is modelled as an ordinary resource of `type: sbom`, so you download it by its name — no special flag. The `cli-sbom` resource holds the `cli` binary's SBOM:
 
 ```shell
 $ ocm download resource ./transport-archive//ocm.software/tutorial-sbom:1.0.0 \
-    --identity name=cli --sbom --output ./cli-download
-time=... level=INFO msg="SBOM downloaded successfully" output=./cli-download.sbom resource=cli-sbom
-time=... level=INFO msg="resource downloaded successfully" output=./cli-download
+    --identity name=cli-sbom --output ./cli.sbom
+time=... level=INFO msg="resource downloaded successfully" output=./cli.sbom
 ```
 
-You get two files: the binary (`cli-download`) and its SBOM (`cli-download.sbom`).
+For a multi-arch image, each platform's SBOM is a separate resource sharing the same name, disambiguated by an `architecture` extra identity — select one by adding it to the identity:
+
+```shell
+ocm download resource ./transport-archive//ocm.software/tutorial-sbom:1.0.0 \
+    --identity name=podinfo-sbom,architecture=amd64 --output ./podinfo.sbom
+```
 
 {{< /step >}}
 
@@ -260,14 +267,13 @@ You get two files: the binary (`cli-download`) and its SBOM (`cli-download.sbom`
 
 ### Assemble the orchestrating SBOM
 
-`ocm download sbom` collects the baked SBOM of every resource and assembles them into a single CycloneDX document. Start with the leaf component:
+`ocm get sbom` collects the baked SBOM of every resource and assembles them into a single CycloneDX document, printed to stdout. Where a resource carries per-architecture SBOMs (like `podinfo`), it picks the one matching your host platform — the same way OCM selects a multi-arch image resource. Redirect stdout to save it. Start with the leaf component:
 
 ```shell
-$ ocm download sbom ./transport-archive//ocm.software/tutorial-sbom:1.0.0 -o leaf.cdx.json
-time=... level=INFO msg="orchestrating SBOM written" output=leaf.cdx.json
+ocm get sbom ./transport-archive//ocm.software/tutorial-sbom:1.0.0 > leaf.cdx.json
 ```
 
-The document is a **flat** CycloneDX BOM — every package sits at the top level, and the component → resource → package hierarchy is expressed through the `dependencies` graph. This is the structure vulnerability scanners expect.
+The document is a **flat** CycloneDX BOM — every package sits at the top level, and the component → resource → package hierarchy is expressed through the `dependencies` graph. This is the structure vulnerability scanners expect. Use `-o yaml` for YAML instead of the default JSON.
 
 ```shell
 $ python3 -c "import json; b=json.load(open('leaf.cdx.json')); print('components:', len(b['components']), '| dependency nodes:', len(b['dependencies']))"
@@ -283,9 +289,8 @@ components: 494 | dependency nodes: 613
 Add `--recursive` to descend into referenced component versions and nest their SBOMs under the parent:
 
 ```shell
-$ ocm download sbom ./transport-archive//ocm.software/tutorial-sbom-umbrella:1.0.0 \
-    --recursive -o umbrella.cdx.json
-time=... level=INFO msg="orchestrating SBOM written" output=umbrella.cdx.json
+ocm get sbom ./transport-archive//ocm.software/tutorial-sbom-umbrella:1.0.0 \
+    --recursive > umbrella.cdx.json
 ```
 
 ```shell
@@ -333,14 +338,14 @@ ocm transfer cv --recursive --copy-resources \
   ./transport-archive//ocm.software/tutorial-sbom-umbrella:1.0.0 \
   localhost:5000/sbom-tutorial
 
-# The SBOM download works identically against the registry.
-ocm download sbom localhost:5000/sbom-tutorial//ocm.software/tutorial-sbom-umbrella:1.0.0 \
-  --recursive -o umbrella-registry.cdx.json
+# Getting the SBOM works identically against the registry.
+ocm get sbom localhost:5000/sbom-tutorial//ocm.software/tutorial-sbom-umbrella:1.0.0 \
+  --recursive > umbrella-registry.cdx.json
 
 trivy sbom umbrella-registry.cdx.json
 ```
 
-Because the SBOMs were baked as local blobs at build time, the download is a pure read — no live registry discovery is needed, and the result is identical to the CTF run.
+Because the SBOMs were baked as local blobs at build time, getting them is a pure read — no live registry discovery is needed, and the result is identical to the CTF run.
 
 {{< /step >}}
 
@@ -355,9 +360,9 @@ cd .. && rm -rf ocm-sbom-tutorial /tmp/ocm-cli-bin
 ## What You Learned
 
 - **`syft` + `File/v1` + label** attaches an SBOM you generate yourself, linked to its resource with `ocm.software/sbom`.
-- **`SBoM/v1` input** discovers an OCI image's SBOM and bakes it at build time, in its original format, with the back-link label added automatically — and `platform` selects one architecture from a multi-arch image.
-- **`ocm download resource --sbom`** retrieves a single resource and its SBOM together.
-- **`ocm download sbom [--recursive]`** assembles a flat, scannable CycloneDX document for a whole component tree.
+- **`SBoM/v1` input** discovers an OCI image's SBOM and bakes it at build time, in its original format, with the back-link label added automatically — attaching every platform's SBOM for a multi-arch image (or one, if you set `platform`).
+- **`ocm download resource --identity name=<sbom-resource>`** downloads an SBOM like any other resource (SBOMs are modelled as `type: sbom` resources).
+- **`ocm get sbom [--recursive]`** assembles a flat, scannable CycloneDX document for a whole component tree, printed to stdout (JSON or `-o yaml`).
 - Because SBOMs are baked at construction, the download works offline against a CTF or a registry alike, and the result is reproducible and signable.
 
 ## Next Steps

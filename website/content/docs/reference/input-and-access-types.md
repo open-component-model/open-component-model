@@ -146,12 +146,17 @@ resources:
 
 ### `SBoM/v1`
 
-Discovers the Software Bill of Materials (SBOM) attached to another resource's OCI image and embeds it as a local blob at construction time. The SBOM is discovered (never generated) from a buildx in-index attestation or via the OCI Referrers API, and is stored **in its original format** (e.g. SPDX). The input also adds a `ocm.software/sbom` label linking the embedded SBOM back to the resource it describes, so it is later discoverable by `ocm download resource --sbom` and `ocm download sbom`.
+Discovers the Software Bill of Materials (SBOM) attached to another resource's OCI image and embeds it as a local blob at construction time. The SBOM is discovered (never generated) from a buildx in-index attestation or via the OCI Referrers API, and is stored **in its original format** (e.g. SPDX). The input also adds a `ocm.software/sbom` label linking the embedded SBOM back to the resource it describes. Because the result is an ordinary resource of `type: sbom`, it is downloaded like any other resource (`ocm download resource --identity name=<sbom-resource>`) and aggregated by `ocm get sbom`.
+
+For a multi-architecture image, the SBOM of **every** platform is attached by default: the input is expanded into one `sbom` resource per platform, each tagged with a matching `extraIdentity` (`os`/`architecture`). Set `resource.extraIdentity.architecture` to attach only one platform's SBOM instead. `ocm get sbom` then selects the SBOM matching the host platform.
+
+The `resource` field selects the subject resource of the same component version:
 
 | Field | Type | Required | Description |
 | ----- | ---- | -------- | ----------- |
-| `resource` | identity | yes | Identity of the resource whose SBOM should be embedded, e.g. `{ name: podinfo }`. The referenced resource must exist in the same component version and carry an OCI image access. |
-| `platform` | string | conditional | Selects one platform's SBOM from a multi-arch image, as `os/arch[/variant]` (e.g. `linux/amd64`) or a bare architecture (e.g. `amd64`). Required when the referenced image is multi-arch; ignored for single-platform images. |
+| `resource.name` | string | yes | Name of the resource whose SBOM should be embedded. It must exist in the same component version and carry an OCI image access. |
+| `resource.version` | string | no | Version of the subject resource. |
+| `resource.extraIdentity` | map | no | Extra identity attributes of the subject. For a multi-arch image, `architecture` (and optionally `os`/`variant`) pins one platform; omit it to attach all platforms. |
 
 ```yaml
 resources:
@@ -162,17 +167,19 @@ resources:
     access:
       type: OCIImage/v1
       imageReference: ghcr.io/stefanprodan/podinfo:6.9.1
-  # Discovers + embeds the image's SBOM for linux/amd64.
+  # Discovers + embeds the image's SBOM. For a multi-arch image this attaches every
+  # platform's SBOM (one 'podinfo-sbom' resource per platform, arch-tagged via
+  # extraIdentity). Add resource.extraIdentity.architecture to attach only one.
   - name: podinfo-sbom
     type: sbom
     input:
       type: SBoM/v1
       resource:
         name: podinfo
-      platform: linux/amd64
+        version: "1.0.0"
 ```
 
-The `resource` reference is resolved by name to the referenced resource's access before construction, so you write the image reference only once. If the referenced resource is missing or has no OCI access, construction fails with an explanatory error. For design background, see [ADR 0026: Native SBOM Support](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0026_native_sbom_support.md).
+The `resource` reference is resolved by name to the referenced resource's access before construction, so you write the image reference only once. Enumerating a multi-arch image's platforms requires reading the image index from the registry at `add cv` time. If the referenced resource is missing or has no OCI access, construction fails with an explanatory error. For design background, see [ADR 0026: Native SBOM Support](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0026_native_sbom_support.md).
 
 ## Access Types
 

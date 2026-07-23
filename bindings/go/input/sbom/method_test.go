@@ -52,15 +52,19 @@ func spdxSBOM(os, arch string) oci.SBOM {
 }
 
 // newSBOMInputResource builds a constructor resource whose input is SBoM/v1
-// referencing the given subject name, with a pre-resolved access and platform.
-func newSBOMInputResource(t *testing.T, subject, platform string, access runtime.Typed) *constructorruntime.Resource {
+// referencing the given subject name, with a pre-resolved access and (optional)
+// architecture selector.
+func newSBOMInputResource(t *testing.T, subject, arch string, access runtime.Typed) *constructorruntime.Resource {
 	t.Helper()
 	var raw runtime.Raw
 	require.NoError(t, runtime.NewScheme(runtime.WithAllowUnknown()).Convert(access, &raw))
+	ref := v1.ResourceReference{Name: subject}
+	if arch != "" {
+		ref.ExtraIdentity = runtime.Identity{"architecture": arch}
+	}
 	spec := &v1.SBOM{
 		Type:     runtime.NewVersionedType(v1.Type, v1.Version),
-		Resource: runtime.Identity{constructorruntime.IdentityAttributeName: subject},
-		Platform: platform,
+		Resource: ref,
 		Access:   &raw,
 	}
 	res := &constructorruntime.Resource{Type: descriptor.ResourceTypeSBOM}
@@ -99,7 +103,7 @@ func TestProcessResource_SelectsPlatformAndKeepsOriginalFormat(t *testing.T) {
 			spdxSBOM("linux", "arm64"),
 		}},
 	}
-	res := newSBOMInputResource(t, "podinfo", "linux/arm64", dummyAccess())
+	res := newSBOMInputResource(t, "podinfo", "arm64", dummyAccess())
 
 	result, err := method.ProcessResource(context.Background(), res, nil)
 	require.NoError(t, err)
@@ -160,10 +164,10 @@ func TestProcessResource_ErrorWhenPlatformNotFound(t *testing.T) {
 			spdxSBOM("linux", "amd64"),
 		}},
 	}
-	res := newSBOMInputResource(t, "podinfo", "linux/ppc64le", dummyAccess())
+	res := newSBOMInputResource(t, "podinfo", "ppc64le", dummyAccess())
 	_, err := method.ProcessResource(context.Background(), res, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no SBOM for platform")
+	assert.Contains(t, err.Error(), "no SBOM for architecture")
 }
 
 func findLabel(labels []constructorruntime.Label, name string) *constructorruntime.Label {

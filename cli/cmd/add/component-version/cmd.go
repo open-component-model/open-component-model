@@ -317,8 +317,10 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Resolve SBoM/v1 inputs: embed each referenced resource's access into the
-	// input spec before construction, where all sibling resources are visible.
-	if err := resolveSBOMInputs(constructorSpec); err != nil {
+	// input spec before construction, and expand multi-arch images into one SBOM
+	// resource per platform. All sibling resources are visible at this point.
+	sbomPlatformLister := &resourcePluginPlatformLister{pluginManager: pluginManager, credentialGraph: credentialGraph}
+	if err := resolveSBOMInputs(cmd.Context(), constructorSpec, sbomPlatformLister); err != nil {
 		return fmt.Errorf("resolving sbom inputs failed: %w", err)
 	}
 
