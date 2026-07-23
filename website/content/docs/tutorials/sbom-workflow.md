@@ -43,7 +43,12 @@ flowchart TD
     L --- Lb(["cli-sbom (File/v1 · syft)"])
     L --- Lc(["podinfo (OCIImage)"])
     L --- Ld(["podinfo-sbom (SBoM/v1 · discovered)"])
+    Ub -.-> Ua
+    Lb -.-> La
+    Ld -.-> Lc
 ```
+
+Solid lines are component/resource containment; dotted lines are the `ocm.software/sbom` label linking each SBOM resource back to the resource it describes.
 
 - **`File/v1` + label** — you produce an SBOM yourself (here with `syft`) and attach it as a resource of `type: sbom` carrying a `ocm.software/sbom` label that points back at the resource it describes.
 - **`SBoM/v1` input** — OCM discovers the SBOM already attached to an OCI image (as a buildx attestation or via the OCI Referrers API) and bakes it into the component **at build time**, in its original format, auto-adding the back-link label for you.
@@ -196,8 +201,10 @@ Two attachment styles sit side by side:
 
 ### Build the component archive
 
+`ocm add cv` defaults to a repository named `transport-archive` and a constructor file named `component-constructor.yaml` in the current directory — both match what we have, so no flags are needed:
+
 ```shell
-ocm add cv --repository ./transport-archive --constructor ./component-constructor.yaml
+ocm add cv
 ```
 
 ```text
