@@ -152,6 +152,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/wget/integration/Taskfile.yml
     dir: ./bindings/go/wget/integration
+  bindings/go/s3:
+    optional: true
+    taskfile: ./bindings/go/s3/Taskfile.yml
+    dir: ./bindings/go/s3
+  bindings/go/s3/integration:
+    optional: true
+    taskfile: ./bindings/go/s3/integration/Taskfile.yml
+    dir: ./bindings/go/s3/integration
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml
