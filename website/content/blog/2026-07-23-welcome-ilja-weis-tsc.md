@@ -11,7 +11,7 @@ We are glad to announce that [Ilja Weis](https://github.com/iljaweis) from
 [BWI GmbH](https://www.bwi.de/) has been voted into the OCM Technical Steering Committee.
 
 BWI, the IT service provider for the German Armed Forces, 
-[joined the NeoNephos Foundation as a Premium Member](https://neonephos.org/blog/20260218_bwi_joins_neonephos)
+[joined the NeoNephos Foundation as a Premier Member](https://neonephos.org/blog/20260218_bwi_joins_neonephos)
 earlier this year. Since then, the collaboration has been active: BWI contributed
 [ocm-kit](https://github.com/open-component-model/community) to the OCM community repository, a Go library and CLI tool
 for working with OCM-based Helm values templates. The TSC 
