@@ -2798,3 +2798,100 @@ func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
 	r.NoError(err)
 	r.Nil(body, "a raw-blob subject must yield no ownership referrer")
 }
+
+func TestRepository_DeleteComponentVersion(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	ctfStore := ctf.NewFileSystemCTF(fs)
+	store := ocictf.NewFromCTF(ctfStore)
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	const componentName = "ocm.software/test-component"
+
+	// Create test component descriptor
+	desc1 := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "test-provider"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    componentName,
+					Version: "1.0.0",
+				},
+			},
+		},
+	}
+
+	desc2 := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "test-provider"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    componentName,
+					Version: "2.0.0",
+				},
+			},
+		},
+	}
+
+	// 1. Add version 1.0.0 & 2.0.0
+	r.NoError(repo.AddComponentVersion(ctx, desc1))
+	r.NoError(repo.AddComponentVersion(ctx, desc2))
+
+	// Ensure they exist
+	_, err = repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.NoError(err)
+	_, err = repo.GetComponentVersion(ctx, componentName, "2.0.0")
+	r.NoError(err)
+
+	// List versions
+	versions, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.Contains(versions, "1.0.0")
+	r.Contains(versions, "2.0.0")
+
+	// Get list of blobs before deletion
+	blobsBefore, err := ctfStore.ListBlobs(ctx)
+	r.NoError(err)
+	r.NotEmpty(blobsBefore)
+
+	// 2. Delete version 1.0.0
+	deleter, ok := any(repo).(repository.ComponentVersionDeleter)
+	r.True(ok, "repository must implement ComponentVersionDeleter")
+	r.NoError(deleter.DeleteComponentVersion(ctx, componentName, "1.0.0"))
+
+	// Ensure 1.0.0 is gone, but 2.0.0 still exists
+	_, err = repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.ErrorIs(err, repository.ErrNotFound)
+	_, err = repo.GetComponentVersion(ctx, componentName, "2.0.0")
+	r.NoError(err)
+
+	versionsAfter, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.NotContains(versionsAfter, "1.0.0")
+	r.Contains(versionsAfter, "2.0.0")
+
+	// 3. Delete non-existent/already deleted version 1.0.0 (idempotency check)
+	err = deleter.DeleteComponentVersion(ctx, componentName, "1.0.0")
+	r.ErrorIs(err, repository.ErrNotFound)
+
+	// 4. Delete 2.0.0
+	r.NoError(deleter.DeleteComponentVersion(ctx, componentName, "2.0.0"))
+
+	// Ensure 2.0.0 is also gone
+	_, err = repo.GetComponentVersion(ctx, componentName, "2.0.0")
+	r.ErrorIs(err, repository.ErrNotFound)
+
+	versionsFinal, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.Empty(versionsFinal)
+
+	// 5. Verify CTF blobs are pruned
+	blobsAfter, err := ctfStore.ListBlobs(ctx)
+	r.NoError(err)
+	r.Less(len(blobsAfter), len(blobsBefore))
+}

@@ -2314,3 +2314,44 @@ func TestGetOCMConfigForCommand(t *testing.T) {
 		r.Len(cfg.Configurations, 6)
 	})
 }
+
+func Test_Delete_Component_Version(t *testing.T) {
+	r := require.New(t)
+
+	// Setup test repository with a single component version
+	desc := createTestDescriptor("ocm.software/test-component", "0.0.1")
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, desc)
+	r.NoError(err)
+
+	ref := compref.Ref{
+		Repository: &ctfv1.Repository{
+			FilePath: archivePath,
+		},
+		Component: desc.Component.Name,
+		Version:   desc.Component.Version,
+	}
+	path := ref.String()
+
+	// 1. Verify component version is initially get-able
+	result := new(bytes.Buffer)
+	_, err = test.OCM(t, test.WithArgs("get", "cv", path), test.WithOutput(result))
+	r.NoError(err)
+	r.Contains(result.String(), "ocm.software/test-component")
+	r.Contains(result.String(), "0.0.1")
+
+	// 2. Delete the component version
+	deleteResult := new(bytes.Buffer)
+	_, err = test.OCM(t, test.WithArgs("delete", "cv", path), test.WithOutput(deleteResult))
+	r.NoError(err)
+	r.Contains(deleteResult.String(), "Successfully deleted component version ocm.software/test-component:0.0.1")
+
+	// 3. Verify it is no longer get-able
+	getErrorResult := new(bytes.Buffer)
+	_, err = test.OCM(t, test.WithArgs("get", "cv", path), test.WithErrorOutput(getErrorResult))
+	r.Error(err)
+
+	// 4. Verify deleting again fails (not found)
+	deleteAgainResult := new(bytes.Buffer)
+	_, err = test.OCM(t, test.WithArgs("delete", "cv", path), test.WithErrorOutput(deleteAgainResult))
+	r.Error(err)
+}
