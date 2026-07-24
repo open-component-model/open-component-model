@@ -3125,3 +3125,192 @@ func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
 	r.NoError(err)
 	r.Nil(body, "a raw-blob subject must yield no ownership referrer")
 }
+
+func TestRepository_DeleteComponentVersion(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	ctfStore := ctf.NewFileSystemCTF(fs)
+	store := ocictf.NewFromCTF(ctfStore)
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	const componentName = "ocm.software/test-component"
+
+	// Create test component descriptor
+	desc1 := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "test-provider"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    componentName,
+					Version: "1.0.0",
+				},
+			},
+		},
+	}
+
+	desc2 := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "test-provider"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    componentName,
+					Version: "2.0.0",
+				},
+			},
+		},
+	}
+
+	// 1. Add version 1.0.0 & 2.0.0
+	r.NoError(repo.AddComponentVersion(ctx, desc1))
+	r.NoError(repo.AddComponentVersion(ctx, desc2))
+
+	// Ensure they exist
+	_, err = repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.NoError(err)
+	_, err = repo.GetComponentVersion(ctx, componentName, "2.0.0")
+	r.NoError(err)
+
+	// List versions
+	versions, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.Contains(versions, "1.0.0")
+	r.Contains(versions, "2.0.0")
+
+	// Get list of blobs before deletion
+	blobsBefore, err := ctfStore.ListBlobs(ctx)
+	r.NoError(err)
+	r.NotEmpty(blobsBefore)
+
+	// 2. Delete version 1.0.0
+	deleter, ok := any(repo).(repository.ComponentVersionDeleter)
+	r.True(ok, "repository must implement ComponentVersionDeleter")
+	r.NoError(deleter.DeleteComponentVersion(ctx, componentName, "1.0.0"))
+
+	// Ensure 1.0.0 is gone, but 2.0.0 still exists
+	_, err = repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.ErrorIs(err, repository.ErrNotFound)
+	_, err = repo.GetComponentVersion(ctx, componentName, "2.0.0")
+	r.NoError(err)
+
+	versionsAfter, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.NotContains(versionsAfter, "1.0.0")
+	r.Contains(versionsAfter, "2.0.0")
+
+	// 3. Delete non-existent/already deleted version 1.0.0 (idempotency check)
+	err = deleter.DeleteComponentVersion(ctx, componentName, "1.0.0")
+	r.ErrorIs(err, repository.ErrNotFound)
+
+	// 4. Delete 2.0.0
+	r.NoError(deleter.DeleteComponentVersion(ctx, componentName, "2.0.0"))
+
+	// Ensure 2.0.0 is also gone
+	_, err = repo.GetComponentVersion(ctx, componentName, "2.0.0")
+	r.ErrorIs(err, repository.ErrNotFound)
+
+	versionsFinal, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.Empty(versionsFinal)
+
+	// 5. Verify CTF blobs are pruned
+	blobsAfter, err := ctfStore.ListBlobs(ctx)
+	r.NoError(err)
+	r.Less(len(blobsAfter), len(blobsBefore))
+}
+
+// TestRepository_DeleteComponentVersion_SharedBlobSurvives verifies the central
+// safety invariant of the ComponentVersionDeleter contract: deleting one
+// component version MUST NOT reclaim content still referenced by a surviving
+// version. Two versions carry a local resource with byte-identical content, so
+// both descriptors point at the same local blob digest. After deleting one
+// version, the shared blob must remain present and readable through the other.
+func TestRepository_DeleteComponentVersion_SharedBlobSurvives(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	ctfStore := ctf.NewFileSystemCTF(fs)
+	store := ocictf.NewFromCTF(ctfStore)
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	const componentName = "ocm.software/test-component"
+	shared := []byte("shared-resource-content")
+	sharedDigest := digest.FromBytes(shared).String()
+
+	mkDesc := func(version string) *descriptor.Descriptor {
+		return &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider: descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: version},
+				},
+			},
+		}
+	}
+	mkResource := func() *descriptor.Resource {
+		return &descriptor.Resource{
+			Relation:    descriptor.LocalRelation,
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "shared", Version: "v1.0.0"}},
+			Type:        "blob",
+			Access: &v2.LocalBlob{
+				LocalReference: sharedDigest,
+				MediaType:      "application/octet-stream",
+			},
+		}
+	}
+
+	desc1 := mkDesc("1.0.0")
+	res1, err := repo.AddLocalResource(ctx, componentName, "1.0.0", mkResource(), inmemory.New(bytes.NewReader(shared)))
+	r.NoError(err)
+	desc1.Component.Resources = []descriptor.Resource{*res1}
+	r.NoError(repo.AddComponentVersion(ctx, desc1))
+
+	desc2 := mkDesc("2.0.0")
+	res2, err := repo.AddLocalResource(ctx, componentName, "2.0.0", mkResource(), inmemory.New(bytes.NewReader(shared)))
+	r.NoError(err)
+	desc2.Component.Resources = []descriptor.Resource{*res2}
+	r.NoError(repo.AddComponentVersion(ctx, desc2))
+
+	// Both versions must reference the same underlying local blob.
+	r.Equal(sharedDigest, res1.Access.(*v2.LocalBlob).LocalReference)
+	r.Equal(sharedDigest, res2.Access.(*v2.LocalBlob).LocalReference)
+
+	blobs, err := ctfStore.ListBlobs(ctx)
+	r.NoError(err)
+	r.Contains(blobs, sharedDigest, "shared blob must exist before deletion")
+
+	// Delete 2.0.0; the shared blob is still owned by surviving 1.0.0.
+	deleter, ok := any(repo).(repository.ComponentVersionDeleter)
+	r.True(ok, "repository must implement ComponentVersionDeleter")
+	r.NoError(deleter.DeleteComponentVersion(ctx, componentName, "2.0.0"))
+
+	// The prune MUST NOT have reclaimed the still-referenced shared blob.
+	blobsAfter, err := ctfStore.ListBlobs(ctx)
+	r.NoError(err)
+	r.Contains(blobsAfter, sharedDigest, "shared blob must survive: still referenced by 1.0.0")
+
+	// It must remain readable through the surviving version. The CTF Fetch
+	// holds a read lock until the reader is closed, so close it before the
+	// next mutating delete.
+	b, _, err := repo.GetLocalResource(ctx, componentName, "1.0.0", res1.ToIdentity())
+	r.NoError(err)
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	got, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.NoError(reader.Close())
+	r.Equal(shared, got, "surviving version's resource content must be intact")
+
+	// Deleting the last version finally reclaims the shared blob.
+	r.NoError(deleter.DeleteComponentVersion(ctx, componentName, "1.0.0"))
+	blobsFinal, err := ctfStore.ListBlobs(ctx)
+	r.NoError(err)
+	r.NotContains(blobsFinal, sharedDigest, "shared blob must be pruned after the last referencing version is deleted")
+}
