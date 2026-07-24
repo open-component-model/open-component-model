@@ -217,7 +217,7 @@ ocm add cv
 Inspect the discovered `podinfo-sbom` resources. Because `podinfo` is multi-arch, one was baked **per platform** — each a local blob **in its original SPDX format**, tagged with an `os`/`architecture` `extraIdentity` and the back-link label added for you:
 
 ```shell
-$ ocm get cv ./transport-archive//ocm.software/tutorial-sbom:1.0.0 -o yaml
+ocm get cv ./transport-archive//ocm.software/tutorial-sbom:1.0.0 -o yaml
 ```
 
 ```yaml
@@ -309,7 +309,7 @@ The umbrella's own `launcher` SBOM plus the referenced `tutorial-sbom` component
 The orchestrating SBOM is a standard CycloneDX document, so any SBOM-aware scanner can consume it. Scan for vulnerabilities:
 
 ```shell
-$ trivy sbom umbrella.cdx.json
+trivy sbom umbrella.cdx.json
 ```
 
 ```text
