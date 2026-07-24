@@ -11,6 +11,19 @@
     },
     "repository": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.repository.v1.ctf.Repository"
+    },
+    "sourceRepository": {
+      "type": "object",
+      "description": "SourceRepository is the optional specification of the repository the component version originates from, used to carry component-level signature referrers into the target.",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": true
     }
   },
   "required": [
@@ -749,6 +762,10 @@
         "accessMode": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.repository.v1.ctf.AccessMode",
           "description": "AccessMode can be set to request readonly access or creation\nThe format of the path is determined by the access mode bitmask aggregated with |.\nIf not specified, the AccessMode will be interpreted as AccessModeReadOnly for read-based operations\nand as AccessModeReadWrite for write-based operations."
+        },
+        "componentVersionLayout": {
+          "type": "string",
+          "description": "ComponentVersionLayout selects the storage layout used when adding component versions\nto this repository. \"\" or \"v2\" = the default access-bearing manifest; \"normalized\" = the\ncosign-signable normalized layout (a stable, access-free manifest as the tag target)."
         },
         "filePath": {
           "type": "string",

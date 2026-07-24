@@ -57,6 +57,10 @@ type Repository struct {
 	//     BaseUrl="ghcr.io/open-component-model/ocm" + SubPath=""
 	//     → Auto-extracts to: BaseUrl="ghcr.io", SubPath="open-component-model/ocm"
 	SubPath string `json:"subPath,omitempty"`
+	// ComponentVersionLayout selects the storage layout used when adding component versions
+	// to this repository. "" or "v2" = the default access-bearing manifest; "normalized" = the
+	// cosign-signable normalized layout (a stable, access-free manifest as the tag target).
+	ComponentVersionLayout string `json:"componentVersionLayout,omitempty"`
 }
 
 func (spec *Repository) String() string {

@@ -148,6 +148,11 @@ func (in *CTFAddComponentVersionSpec) DeepCopyInto(out *CTFAddComponentVersionSp
 		*out = new(v2.Descriptor)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.SourceRepository != nil {
+		in, out := &in.SourceRepository, &out.SourceRepository
+		*out = new(runtime.Raw)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 
@@ -530,6 +535,11 @@ func (in *OCIAddComponentVersionSpec) DeepCopyInto(out *OCIAddComponentVersionSp
 	if in.Descriptor != nil {
 		in, out := &in.Descriptor, &out.Descriptor
 		*out = new(v2.Descriptor)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.SourceRepository != nil {
+		in, out := &in.SourceRepository, &out.SourceRepository
+		*out = new(runtime.Raw)
 		(*in).DeepCopyInto(*out)
 	}
 	return

@@ -53,6 +53,12 @@ type RepositoryOptions struct {
 	// DescriptorEncodingMediaType is the media type of the descriptor encoding used for component versions.
 	DescriptorEncodingMediaType string
 
+	// Layout selects the OCI storage layout used when adding component versions.
+	// The default (LayoutV2) is the access-bearing v2 descriptor manifest as the tag target.
+	// LayoutNormalized produces the cosign-signable normalized layout (a stable, access-free
+	// normalized manifest as the tag target, with the access-bearing descriptor as a referrer).
+	Layout Layout
+
 	// DescriptorUnmarshalFunc is used to unmarshal descriptors from OCI stores.
 	// If not provided, DefaultDescriptorUnmarshalFunc will be used.
 	DescriptorUnmarshalFunc descriptor.UnmarshalFunc
@@ -167,6 +173,11 @@ func WithGlobalAccessPolicy(policy GlobalAccessPolicy) RepositoryOption {
 	}
 }
 
+// WithComponentVersionLayout selects the OCI storage layout used when adding component versions.
+func WithComponentVersionLayout(l Layout) RepositoryOption {
+	return func(o *RepositoryOptions) { o.Layout = l }
+}
+
 // NewRepository creates a new Repository instance with the given options.
 func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	options := &RepositoryOptions{}
@@ -229,5 +240,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		unmarshalDescriptorFunc:     options.DescriptorUnmarshalFunc,
 		tempDir:                     options.TempDir,
 		globalAccessPolicy:          options.GlobalAccessPolicy,
+		layout:                      options.Layout,
 	}, nil
 }
