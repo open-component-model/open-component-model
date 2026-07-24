@@ -20,13 +20,15 @@ import (
 //	"<hostname>[:<port>]<path>|<credential-discriminator>"
 //
 // The credential discriminator is the username (basic auth), or the
-// first 16 bytes of the access or refresh token (bearer auth). When
-// no credentials are provided the discriminator is empty, producing a
-// stable "anonymous" scope that maps to a predictable subdirectory
-// rather than mixing with any authenticated scope.
+// access or refresh token (bearer auth). When no credentials are
+// provided the discriminator is empty, producing a stable "anonymous"
+// scope that maps to a predictable subdirectory rather than mixing
+// with any authenticated scope.
 //
-// Only the hash, never the raw credential material, is written to
-// disk or used as a directory name.
+// The full credential material is fed into the SHA-256 input so two
+// distinct tokens that happen to share a common prefix never collapse
+// into the same scope. Only the hash, never the raw credential
+// material, is written to disk or used as a directory name.
 func ScopeKey(identity *identityv1.OCIRegistryIdentity, creds *credv1.OCICredentials) string {
 	var b strings.Builder
 
@@ -46,9 +48,9 @@ func ScopeKey(identity *identityv1.OCIRegistryIdentity, creds *credv1.OCICredent
 		case creds.Username != "":
 			b.WriteString(creds.Username)
 		case creds.AccessToken != "":
-			b.WriteString(creds.AccessToken[:min(len(creds.AccessToken), 16)])
+			b.WriteString(creds.AccessToken)
 		case creds.RefreshToken != "":
-			b.WriteString(creds.RefreshToken[:min(len(creds.RefreshToken), 16)])
+			b.WriteString(creds.RefreshToken)
 		}
 	}
 

@@ -2,11 +2,11 @@ package cache
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -16,36 +16,54 @@ import (
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"golang.org/x/sync/singleflight"
 )
 
 // referenceSubdir is the directory under [Options.Dir] that the
 // reference cache owns. Each namespace gets its own JSON file inside
-// it, named after the FNV-1a hash of the namespace string. Splitting
+// it, named after the SHA-256 hash of the namespace string. Splitting
 // per namespace means an [ReferenceCache.Add] only rewrites the file
 // for the affected namespace and namespaces never compete for the
 // same snapshot file. The layout mirrors [BlobCache]'s
 // `<Dir>/blobs/...` scoping.
 //
-// FNV is chosen for hashing because we only need a stable filename
-// derived from the namespace — not a cryptographic property — and
-// FNV's small fixed output keeps the filename compact. The canonical
-// namespace string is also written into the snapshot file body, so
-// any unlikely hash collision is recoverable on reseed (the colliding
-// writer simply overwrites the file; the loser's entries age out via
-// TTL).
+// SHA-256 is used purely to derive a stable, collision-free filename
+// from the namespace — not for any security property. A cryptographic
+// digest makes filename collisions between distinct namespaces
+// infeasible in practice, so two namespaces can never clobber each
+// other's snapshot file. The canonical namespace string is still
+// written into the snapshot body so a reseed recovers the exact key
+// without trusting the filename to preserve it.
 const referenceSubdir = "refs"
 
 // referenceFileExt is appended to the hashed namespace to form the
 // per-namespace snapshot filename.
 const referenceFileExt = ".json"
 
+// referenceEntry is the on-disk shape of a single cached resolve.
+// SavedAt records when the entry was first resolved so a reseed can
+// honour [Options.TTL] instead of resurrecting arbitrarily stale
+// mappings with a fresh in-memory expiry.
+type referenceEntry struct {
+	Descriptor ociImageSpecV1.Descriptor `json:"descriptor"`
+	SavedAt    time.Time                 `json:"savedAt"`
+}
+
 // referenceFileSnapshot is the on-disk shape of a single namespace's
 // portion of [ReferenceCache.lru]. Namespace is recorded so a future
 // reseed can recover the exact key without trusting the filename to
 // preserve it.
 type referenceFileSnapshot struct {
-	Namespace  string                               `json:"namespace"`
-	References map[string]ociImageSpecV1.Descriptor `json:"references"`
+	Namespace  string                    `json:"namespace"`
+	References map[string]referenceEntry `json:"references"`
+}
+
+// referenceValue is the in-memory LRU value. It carries the resolved
+// descriptor plus the time it was first recorded so the value can be
+// persisted with an accurate age (see [referenceEntry]).
+type referenceValue struct {
+	descriptor ociImageSpecV1.Descriptor
+	savedAt    time.Time
 }
 
 // Resolver is the upstream contract that [ReferenceCache.Resolve]
@@ -69,11 +87,15 @@ type Resolver interface {
 type ReferenceCache struct {
 	opts   Options
 	logger *slog.Logger
-	lru    *expirable.LRU[referenceKey, ociImageSpecV1.Descriptor]
+	lru    *expirable.LRU[referenceKey, referenceValue]
 
 	// mu serialises per-namespace snapshot rewrites so concurrent Add
 	// calls for the same namespace do not interleave file writes.
 	mu sync.Mutex
+
+	// sf collapses concurrent upstream resolves for the same
+	// (namespace, reference) into a single round-trip.
+	sf singleflight.Group
 }
 
 // referenceKey is the in-memory LRU key. Splitting namespace and
@@ -110,7 +132,7 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 	}
 	c.lru = expirable.NewLRU(
 		opts.MaxEntries,
-		func(k referenceKey, _ ociImageSpecV1.Descriptor) {
+		func(k referenceKey, _ referenceValue) {
 			c.logger.Debug("refcache: evicted",
 				slog.String("namespace", k.namespace),
 				slog.String("reference", k.reference))
@@ -144,9 +166,28 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 // in-memory entry is still added and a warning is logged. The caller
 // never sees an error from this method.
 func (c *ReferenceCache) Add(namespace, reference string, desc ociImageSpecV1.Descriptor) {
-	c.lru.Add(referenceKey{namespace, reference}, desc)
+	c.lru.Add(referenceKey{namespace, reference}, referenceValue{descriptor: desc, savedAt: time.Now()})
 	if err := c.writeNamespace(namespace); err != nil {
 		c.logger.Warn("refcache: write snapshot failed",
+			slog.String("namespace", namespace),
+			slog.String("reference", reference),
+			slog.String("err", err.Error()))
+	}
+}
+
+// Invalidate removes the (namespace, reference) mapping from the
+// in-memory LRU and rewrites the namespace's on-disk snapshot so the
+// stale mapping does not survive a process restart. It is a no-op if
+// the entry is not cached. Callers must invalidate whenever a tag is
+// re-pointed or deleted upstream, because OCI tags are mutable and the
+// cache otherwise keeps serving the old descriptor until TTL expiry.
+func (c *ReferenceCache) Invalidate(namespace, reference string) {
+	if c == nil {
+		return
+	}
+	c.lru.Remove(referenceKey{namespace, reference})
+	if err := c.writeNamespace(namespace); err != nil {
+		c.logger.Warn("refcache: write snapshot after invalidate failed",
 			slog.String("namespace", namespace),
 			slog.String("reference", reference),
 			slog.String("err", err.Error()))
@@ -157,7 +198,8 @@ func (c *ReferenceCache) Add(namespace, reference string, desc ociImageSpecV1.De
 // pair and whether it was found. See [ReferenceCache.Add] for the
 // namespace contract.
 func (c *ReferenceCache) Lookup(namespace, reference string) (ociImageSpecV1.Descriptor, bool) {
-	return c.lru.Get(referenceKey{namespace, reference})
+	v, ok := c.lru.Get(referenceKey{namespace, reference})
+	return v.descriptor, ok
 }
 
 // Resolve consults the reference cache before delegating to upstream.
@@ -172,19 +214,31 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, namespa
 	if c == nil {
 		return upstream.Resolve(ctx, reference)
 	}
-	if desc, ok := c.lru.Get(referenceKey{namespace, reference}); ok {
+	if v, ok := c.lru.Get(referenceKey{namespace, reference}); ok {
 		c.logger.DebugContext(ctx, "refcache: hit",
 			slog.String("namespace", namespace),
 			slog.String("reference", reference),
-			slog.String("digest", desc.Digest.String()))
-		return desc, nil
+			slog.String("digest", v.descriptor.Digest.String()))
+		return v.descriptor, nil
 	}
-	desc, err := upstream.Resolve(ctx, reference)
+	// Collapse concurrent misses for the same key into one upstream
+	// round-trip so a burst of identical resolves does not stampede the
+	// registry.
+	v, err, _ := c.sf.Do(namespace+"\x00"+reference, func() (any, error) {
+		if v, ok := c.lru.Get(referenceKey{namespace, reference}); ok {
+			return v.descriptor, nil
+		}
+		desc, err := upstream.Resolve(ctx, reference)
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, err
+		}
+		c.Add(namespace, reference, desc)
+		return desc, nil
+	})
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
-	c.Add(namespace, reference, desc)
-	return desc, nil
+	return v.(ociImageSpecV1.Descriptor), nil
 }
 
 // pathForNamespace returns the absolute path of the snapshot file
@@ -192,9 +246,8 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, namespa
 // the namespace string; see [referenceSubdir] for why a non-crypto
 // hash is sufficient.
 func (c *ReferenceCache) pathForNamespace(namespace string) string {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(namespace))
-	return filepath.Join(c.opts.Dir, hex.EncodeToString(h.Sum(nil))+referenceFileExt)
+	sum := sha256.Sum256([]byte(namespace))
+	return filepath.Join(c.opts.Dir, hex.EncodeToString(sum[:])+referenceFileExt)
 }
 
 // snapshotNamespace materialises the LRU entries for a single
@@ -204,14 +257,14 @@ func (c *ReferenceCache) pathForNamespace(namespace string) string {
 func (c *ReferenceCache) snapshotNamespace(namespace string) referenceFileSnapshot {
 	out := referenceFileSnapshot{
 		Namespace:  namespace,
-		References: make(map[string]ociImageSpecV1.Descriptor),
+		References: make(map[string]referenceEntry),
 	}
 	for _, k := range c.lru.Keys() {
 		if k.namespace != namespace {
 			continue
 		}
 		if v, ok := c.lru.Peek(k); ok {
-			out.References[k.reference] = v
+			out.References[k.reference] = referenceEntry{Descriptor: v.descriptor, SavedAt: v.savedAt}
 		}
 	}
 	return out
@@ -293,8 +346,21 @@ func (c *ReferenceCache) load() (loaded int, err error) {
 			_ = os.Remove(full)
 			continue
 		}
-		for ref, desc := range snap.References {
-			c.lru.Add(referenceKey{namespace: snap.Namespace, reference: ref}, desc)
+		now := time.Now()
+		for ref, entry := range snap.References {
+			// Honour TTL across restarts: drop entries whose recorded
+			// age already exceeds the configured TTL instead of
+			// resurrecting them with a fresh in-memory expiry. savedAt
+			// is preserved so the logical age keeps advancing on the
+			// next persist.
+			if c.opts.TTL > 0 && !entry.SavedAt.IsZero() && now.Sub(entry.SavedAt) > c.opts.TTL {
+				continue
+			}
+			savedAt := entry.SavedAt
+			if savedAt.IsZero() {
+				savedAt = now
+			}
+			c.lru.Add(referenceKey{namespace: snap.Namespace, reference: ref}, referenceValue{descriptor: entry.Descriptor, savedAt: savedAt})
 			loaded++
 		}
 	}

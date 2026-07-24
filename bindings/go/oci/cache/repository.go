@@ -77,9 +77,31 @@ func (r *Repository) Unwrap() content.Storage {
 
 // Untag implements [content.Untagger] by delegating to the underlying
 // remote repository so alias deletion keeps working when the cache
-// decorator is in the store chain.
+// decorator is in the store chain. On success it invalidates the
+// reference cache entry so a restart does not resurrect the stale
+// tag→descriptor mapping.
 func (r *Repository) Untag(ctx context.Context, reference string) error {
-	return (&remotestore.RemoteStore{Repository: r.Repository}).Untag(ctx, reference)
+	if err := (&remotestore.RemoteStore{Repository: r.Repository}).Untag(ctx, reference); err != nil {
+		return err
+	}
+	r.ReferenceCache.Invalidate(r.referenceNamespace(), reference)
+	return nil
+}
+
+// Tag associates reference with desc on the underlying remote
+// repository and, on success, refreshes the reference cache so the
+// mutable tag now resolves to the newly tagged descriptor. Without
+// this the cache would keep serving a previously resolved digest for
+// the tag until TTL expiry (OCI tags are mutable). A nil
+// ReferenceCache degrades to a pure passthrough.
+func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
+	if err := r.Repository.Tag(ctx, desc, reference); err != nil {
+		return err
+	}
+	if r.ReferenceCache != nil {
+		r.ReferenceCache.Add(r.referenceNamespace(), reference, desc)
+	}
+	return nil
 }
 
 // ProxyRepository proxies the given repo with the configured caches

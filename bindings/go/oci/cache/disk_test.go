@@ -81,6 +81,67 @@ func TestWriteAtomic_NoTempLeak_OnError(t *testing.T) {
 	assert.True(t, errors.Is(err, fs.ErrNotExist), "final file must not exist on error")
 }
 
+func TestWriteAtomic_TempLivesInAlgoDir(t *testing.T) {
+	dir := t.TempDir()
+	dgst := digest.FromBytes([]byte("anything"))
+
+	// Fail mid-write and capture where the temp file was created by
+	// scanning both the cache root and the algo subdir. The temp must
+	// live in the algo subdir (next to its final destination) so that
+	// scanExisting reclaims a leftover after a crash.
+	sawTempInAlgo := false
+	r := &probeReader{after: 4, onRead: func() {
+		algo := filepath.Join(dir, digest.Canonical.String())
+		if entries, err := os.ReadDir(algo); err == nil {
+			for _, e := range entries {
+				if strings.HasPrefix(e.Name(), ".incoming-") {
+					sawTempInAlgo = true
+				}
+			}
+		}
+		// The cache root must never hold the temp file.
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, e := range entries {
+				assert.False(t, strings.HasPrefix(e.Name(), ".incoming-"),
+					"temp file must not be created in the cache root")
+			}
+		}
+	}}
+
+	_, _, err := writeAtomic(dir, dgst, 0, r)
+	require.Error(t, err)
+	assert.True(t, sawTempInAlgo, "temp file must be created inside the algo subdir")
+}
+
+// probeReader yields `after` bytes, invokes onRead, then errors. It
+// lets a test observe on-disk state while a write is in flight.
+type probeReader struct {
+	after  int
+	onRead func()
+	fired  bool
+}
+
+func (r *probeReader) Read(p []byte) (int, error) {
+	if r.after <= 0 {
+		if !r.fired {
+			r.fired = true
+			if r.onRead != nil {
+				r.onRead()
+			}
+		}
+		return 0, errors.New("boom")
+	}
+	n := r.after
+	if n > len(p) {
+		n = len(p)
+	}
+	for i := 0; i < n; i++ {
+		p[i] = 'x'
+	}
+	r.after -= n
+	return n, nil
+}
+
 func TestWriteAtomic_SizeCap(t *testing.T) {
 	dir := t.TempDir()
 	data := []byte("0123456789")

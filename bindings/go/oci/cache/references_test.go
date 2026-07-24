@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -59,6 +61,132 @@ func TestReferenceCache_Resolve_HitAfterFirstCall(t *testing.T) {
 	assert.Equal(t, desc, got2)
 
 	assert.EqualValues(t, 1, calls.Load(), "second Resolve must hit reference cache")
+}
+
+func TestReferenceCache_Invalidate_RemovesEntryAndSurvivesRestart(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "refcache")
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("x")),
+		Size:      1,
+	}
+
+	c1, err := NewReferenceCache(Options{Dir: dir})
+	require.NoError(t, err)
+	c1.Add("ns", "tag:v1", desc)
+	_, ok := c1.Lookup("ns", "tag:v1")
+	require.True(t, ok)
+
+	c1.Invalidate("ns", "tag:v1")
+	_, ok = c1.Lookup("ns", "tag:v1")
+	assert.False(t, ok, "entry must be gone from the in-memory LRU")
+
+	// A restart must not resurrect the invalidated mapping.
+	c2, err := NewReferenceCache(Options{Dir: dir})
+	require.NoError(t, err)
+	_, ok = c2.Lookup("ns", "tag:v1")
+	assert.False(t, ok, "invalidated mapping must not survive a restart")
+}
+
+func TestReferenceCache_Invalidate_UnknownEntryIsNoOp(t *testing.T) {
+	c := newTestRefCache(t, Options{})
+	c.Invalidate("ns", "never-added")
+}
+
+func TestReferenceCache_Invalidate_NilReceiver(t *testing.T) {
+	var c *ReferenceCache
+	c.Invalidate("ns", "ref")
+}
+
+func TestReferenceCache_Load_DropsExpiredEntries(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "refcache")
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("stale")),
+		Size:      5,
+	}
+
+	c1, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
+	require.NoError(t, err)
+	c1.Add("ns", "tag:v1", desc)
+
+	// Backdate the persisted entry beyond the TTL by rewriting its
+	// snapshot file with an old savedAt.
+	snapPath := c1.pathForNamespace("ns")
+	raw, err := os.ReadFile(snapPath)
+	require.NoError(t, err)
+	var snap referenceFileSnapshot
+	require.NoError(t, json.Unmarshal(raw, &snap))
+	entry := snap.References["tag:v1"]
+	entry.SavedAt = time.Now().Add(-2 * time.Hour)
+	snap.References["tag:v1"] = entry
+	rewritten, err := json.Marshal(snap)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(snapPath, rewritten, 0o600))
+
+	// A restart must honour the TTL and drop the stale mapping.
+	c2, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
+	require.NoError(t, err)
+	_, ok := c2.Lookup("ns", "tag:v1")
+	assert.False(t, ok, "entry older than TTL must be dropped on reload")
+}
+
+func TestReferenceCache_Load_KeepsFreshEntriesWithinTTL(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "refcache")
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("fresh")),
+		Size:      5,
+	}
+
+	c1, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
+	require.NoError(t, err)
+	c1.Add("ns", "tag:v1", desc)
+
+	c2, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
+	require.NoError(t, err)
+	got, ok := c2.Lookup("ns", "tag:v1")
+	require.True(t, ok, "a fresh entry within TTL must survive a restart")
+	assert.Equal(t, desc, got)
+}
+
+func TestReferenceCache_Resolve_CollapsesConcurrentMisses(t *testing.T) {
+	c := newTestRefCache(t, Options{})
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("m")),
+		Size:      1,
+	}
+
+	// Gate the upstream so all goroutines pile up on the same in-flight
+	// resolve before the leader completes.
+	release := make(chan struct{})
+	var calls atomic.Int64
+	upstream := resolverFn(func(_ context.Context, _ string) (ociImageSpecV1.Descriptor, error) {
+		calls.Add(1)
+		<-release
+		return desc, nil
+	})
+
+	const N = 8
+	var wg sync.WaitGroup
+	results := make([]ociImageSpecV1.Descriptor, N)
+	for i := range N {
+		wg.Go(func() {
+			got, err := c.Resolve(t.Context(), upstream, "ns", "tag:v1")
+			require.NoError(t, err)
+			results[i] = got
+		})
+	}
+	// Give the goroutines time to coalesce on the singleflight key.
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	for i := range results {
+		assert.Equal(t, desc, results[i], "resolver %d", i)
+	}
+	assert.EqualValues(t, 1, calls.Load(), "concurrent misses must collapse into a single upstream resolve")
 }
 
 func TestReferenceCache_Resolve_NamespacesIsolateCollisions(t *testing.T) {

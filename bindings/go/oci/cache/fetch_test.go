@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -152,6 +153,49 @@ func TestCache_Fetch_ConcurrentReadersGetEqualBytes(t *testing.T) {
 	for i := range results {
 		assert.Equal(t, manifest, results[i], "reader %d", i)
 	}
+}
+
+// gatedReadOnly blocks inside Fetch until release is closed so a test
+// can guarantee concurrent Fetch calls overlap on the same digest.
+type gatedReadOnly struct {
+	*fakeReadOnly
+	release chan struct{}
+}
+
+func (s *gatedReadOnly) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	<-s.release
+	return s.fakeReadOnly.Fetch(ctx, target)
+}
+
+func TestCache_Fetch_CollapsesConcurrentMisses(t *testing.T) {
+	c := newTestCache(t, Options{})
+	base := newFakeReadOnly()
+	manifest := bytes.Repeat([]byte("m"), 4096)
+	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
+	gated := &gatedReadOnly{fakeReadOnly: base, release: make(chan struct{})}
+
+	const N = 8
+	results := make([][]byte, N)
+	var wg sync.WaitGroup
+	for i := range N {
+		wg.Go(func() {
+			rc, err := c.Fetch(t.Context(), gated, desc)
+			require.NoError(t, err)
+			results[i] = readAllAndClose(t, rc)
+		})
+	}
+	// Let the goroutines pile onto the singleflight key before the
+	// leader is allowed to complete its upstream fetch.
+	time.Sleep(50 * time.Millisecond)
+	close(gated.release)
+	wg.Wait()
+
+	for i := range results {
+		assert.Equal(t, manifest, results[i], "reader %d", i)
+	}
+	assert.EqualValues(t, 1, base.fetches.Load(),
+		"concurrent misses must collapse into a single upstream fetch")
+	assert.True(t, c.Has(desc.Digest), "blob must be persisted after the collapsed fetch")
 }
 
 func TestCache_Fetch_UpstreamErrorPropagates(t *testing.T) {

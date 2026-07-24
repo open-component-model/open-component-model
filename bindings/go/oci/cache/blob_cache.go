@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,12 +9,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"golang.org/x/sync/singleflight"
 	"oras.land/oras-go/v2/content"
 )
 
@@ -42,6 +43,13 @@ type BlobCache struct {
 	opts   Options
 	logger *slog.Logger
 	lru    *expirable.LRU[digest.Digest, blobEntry]
+
+	// sf collapses concurrent upstream fetches for the same digest into
+	// a single round-trip. Because cached blobs are small (manifests
+	// and descriptors, bounded by [Options.MaxBlobSize]), the shared
+	// result is buffered in memory and each waiter is served its own
+	// reader over those bytes.
+	sf singleflight.Group
 }
 
 // NewBlobCache constructs a [BlobCache]. [Options.Dir] is required;
@@ -170,17 +178,17 @@ func (c *BlobCache) Populate(ctx context.Context, dgst digest.Digest, size int64
 
 // Fetch is the cache-aware Fetch primitive used by store
 // implementations that want to layer the cache in front of an
-// upstream [content.ReadOnlyStorage]. It mirrors the oras-go
-// internal/cas/proxy.go pattern: cache hit returns the on-disk file;
-// miss reads from upstream and tees the bytes into the cache.
+// upstream [content.ReadOnlyStorage]. A cache hit returns the on-disk
+// file directly; a miss reads the (small) blob from upstream, tees it
+// to disk, and serves the caller from the in-memory copy.
 //
 // Fetch honours [Options.Accept] and [Options.MaxBlobSize]: if the
 // descriptor fails either filter (or c is nil), the call falls
-// straight through to upstream.Fetch.
+// straight through to upstream.Fetch and nothing is buffered.
 //
-// Concurrent calls for the same digest each issue their own
-// upstream.Fetch; the [os.Rename]s race but produce byte-identical
-// files because the digest is the key.
+// Concurrent Fetches for the same digest are collapsed via
+// singleflight into a single upstream.Fetch; every caller receives an
+// independent reader over identical bytes.
 func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	if c == nil || !c.Accept(target.MediaType) ||
 		(c.MaxBlobSize() > 0 && target.Size > c.MaxBlobSize()) {
@@ -196,28 +204,33 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		return f, nil
 	}
 
-	upstreamRC, err := upstream.Fetch(ctx, target)
+	// Miss: collapse concurrent fetches for the same digest into one
+	// upstream round-trip. The leader reads the blob fully, tees it to
+	// disk (best-effort) and returns the bytes; all waiters share those
+	// bytes and each wraps its own reader.
+	v, err, _ := c.sf.Do(target.Digest.String(), func() (any, error) {
+		upstreamRC, err := upstream.Fetch(ctx, target)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = upstreamRC.Close() }()
+
+		data, err := io.ReadAll(upstreamRC)
+		if err != nil {
+			return nil, fmt.Errorf("blobcache: read upstream: %w", err)
+		}
+		// Populate is best-effort: a failure to persist must not fail the
+		// fetch, since we already hold the bytes to serve the caller.
+		if _, perr := c.Populate(ctx, target.Digest, target.Size, bytes.NewReader(data)); perr != nil {
+			c.logger.DebugContext(ctx, "blobcache: populate failed, serving from memory",
+				slog.String("digest", target.Digest.String()), slog.String("err", perr.Error()))
+		}
+		return data, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	pr, pw := io.Pipe()
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		// Populate drains pr; if it errors we propagate the error
-		// back through the pipe so the consumer's TeeReader Close
-		// observes it.
-		if _, perr := c.Populate(ctx, target.Digest, target.Size, pr); perr != nil {
-			_ = pr.CloseWithError(perr)
-		}
-	})
-
-	return &teeReadCloser{
-		r:        io.TeeReader(upstreamRC, pw),
-		upstream: upstreamRC,
-		pw:       pw,
-		wg:       &wg,
-	}, nil
+	return io.NopCloser(bytes.NewReader(v.([]byte))), nil
 }
 
 // onEvict is the LRU's eviction callback. It removes the on-disk file
@@ -234,29 +247,4 @@ func (c *BlobCache) onEvict(dgst digest.Digest, e blobEntry) {
 	c.logger.Debug("blobcache: evicted",
 		slog.String("digest", dgst.String()),
 		slog.Int64("size", e.size))
-}
-
-// teeReadCloser is the ReadCloser returned by [BlobCache.Fetch] on a
-// cache miss. It tees upstream bytes into a pipe that the background
-// populate goroutine drains. Close shuts down both ends in the right
-// order so the cache write completes before Close returns.
-type teeReadCloser struct {
-	r        io.Reader
-	upstream io.ReadCloser
-	pw       *io.PipeWriter
-	wg       *sync.WaitGroup
-}
-
-func (t *teeReadCloser) Read(p []byte) (int, error) {
-	return t.r.Read(p)
-}
-
-func (t *teeReadCloser) Close() error {
-	upErr := t.upstream.Close()
-	// Closing the pipe writer signals EOF to the populate goroutine so
-	// writeAtomic can finalize. If the consumer closes early, Populate
-	// will observe a short read and skip the LRU insert.
-	_ = t.pw.Close()
-	t.wg.Wait()
-	return upErr
 }

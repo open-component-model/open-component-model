@@ -35,11 +35,17 @@ func writeAtomic(dir string, dgst digest.Digest, maxSize int64, r io.Reader) (pa
 	}
 
 	final := pathFor(dir, dgst)
-	if err := os.MkdirAll(filepath.Dir(final), 0o700); err != nil {
+	algoDir := filepath.Dir(final)
+	if err := os.MkdirAll(algoDir, 0o700); err != nil {
 		return "", 0, fmt.Errorf("create algo dir: %w", err)
 	}
 
-	tmp, err := os.CreateTemp(dir, ".incoming-*")
+	// Create the temp file inside the algorithm subdirectory (next to
+	// its final destination) rather than the cache root. This keeps the
+	// rename on the same directory and, crucially, places leftover
+	// `.incoming-*` files from a crashed write where scanExisting looks
+	// for them so they are reclaimed on the next startup.
+	tmp, err := os.CreateTemp(algoDir, ".incoming-*")
 	if err != nil {
 		return "", 0, fmt.Errorf("create temp file: %w", err)
 	}
