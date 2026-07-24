@@ -8,13 +8,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	credv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -236,4 +240,35 @@ func TestWithHTTPConfig_ShortTimeoutCausesError(t *testing.T) {
 	// ListComponentVersions triggers HTTP traffic — should time out.
 	_, err = repo.ListComponentVersions(t.Context(), "example.org/component")
 	require.Error(t, err)
+}
+
+// TestCacheIsolation_ReferenceScopeKeys verifies the ScopeKey invariants used
+// by ReferenceCache partitioning:
+//   - different credentials → different keys (isolated ref caches)
+//   - same credentials → same key (single ref cache reused)
+//   - different registries → different keys
+func TestCacheIsolation_ReferenceScopeKeys(t *testing.T) {
+	t.Parallel()
+
+	identity := &identityv1.OCIRegistryIdentity{Hostname: "ghcr.io"}
+
+	creds1 := &credv1.OCICredentials{Username: "alice"}
+	creds2 := &credv1.OCICredentials{Username: "bob"}
+	credsAnon := (*credv1.OCICredentials)(nil)
+
+	key1 := cache.ScopeKey(identity, creds1)
+	key2 := cache.ScopeKey(identity, creds2)
+	keyAnon := cache.ScopeKey(identity, credsAnon)
+
+	a := assert.New(t)
+	a.NotEqual(key1, key2, "different usernames must yield different scope keys")
+	a.NotEqual(key1, keyAnon, "authenticated and anonymous scopes must differ")
+	a.NotEqual(key2, keyAnon, "authenticated and anonymous scopes must differ")
+
+	// same credentials always reproduce the same key
+	a.Equal(key1, cache.ScopeKey(identity, creds1), "same creds must be stable")
+
+	// same credentials, different registry → different key
+	other := &identityv1.OCIRegistryIdentity{Hostname: "registry.example.com"}
+	a.NotEqual(key1, cache.ScopeKey(other, creds1), "different hostname must differ")
 }
