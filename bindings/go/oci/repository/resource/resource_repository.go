@@ -7,6 +7,8 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -147,6 +149,57 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("error downloading resource: %w", err)
 	}
 	return b, nil
+}
+
+// DownloadImageSBOMs fetches the SBOM(s) attached to the OCIImage of the given
+// resource, either as a buildx in-index attestation or via the OCI Referrers
+// API (see oci.Repository.FetchImageSBOMs). It returns an empty slice when the
+// resource access is not an OCI image or when no SBOM is attached, so callers
+// can treat a missing SBOM as a non-error.
+func (p *ResourceRepository) DownloadImageSBOMs(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) ([]oci.SBOM, error) {
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	access, ok := obj.(*v1.OCIImage)
+	if !ok {
+		// Not an OCI image; there is no on-image SBOM to fetch.
+		return nil, nil
+	}
+
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	if err != nil {
+		return nil, err
+	}
+	return repo.FetchImageSBOMs(ctx, access.ImageReference)
+}
+
+// ListImagePlatforms returns the platforms of the OCIImage of the given resource
+// (see oci.Repository.ListImagePlatforms). It returns nil when the resource access
+// is not an OCI image or the image is single-platform.
+func (p *ResourceRepository) ListImagePlatforms(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) ([]ociImageSpecV1.Platform, error) {
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	access, ok := obj.(*v1.OCIImage)
+	if !ok {
+		return nil, nil
+	}
+
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	if err != nil {
+		return nil, err
+	}
+	return repo.ListImagePlatforms(ctx, access.ImageReference)
 }
 
 // AddOwnership attaches ownership information (i.e. the
