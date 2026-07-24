@@ -12,6 +12,17 @@ import (
 // see https://github.com/open-component-model/ocm/blob/4a1aa4fa4668b2a0758a0d0a2d2c0e7c5d180d7e/api/ocm/extensions/repositories/genericocireg/componentmapping/constants.go#L45
 const MediaType = "application/vnd.ocm.software.component.config.v1+json"
 
+// LegacyMediaType and Legacy2MediaType are the config media types of component
+// versions published by pre-OCM Gardener (cnudie) tooling. Those manifests
+// carry no software.ocm.componentversion annotation, so the config media type
+// is the only marker identifying them as component versions. The names mirror
+// OCM v1's LegacyComponentDescriptorConfigMimeType and
+// Legacy2ComponentDescriptorConfigMimeType.
+const (
+	LegacyMediaType  = "application/vnd.gardener.cloud.cnudie.component.config.v1+json"
+	Legacy2MediaType = "application/vnd.oci.gardener.cloud.cnudie.component-descriptor-metadata.config.v2+json"
+)
+
 // Config is a Component-Descriptor OCI configuration that is used to componentVersionStore the reference to the
 // (pseudo-)layer used to componentVersionStore the Component-Descriptor in.
 type Config struct {

@@ -59,8 +59,11 @@ func ComponentVersionDescriptor(
 		// Checks for old component versions pre-2024 which didn't have an annotation.
 		// In that case, we check if the manifest has a config of type ocm config and if yes, we can just return
 		// the tag as valid. We only do this for manifest layers and not index layers because pre-2024 component versions
-		// didn't have indexes.
-		oldOCMComponentVersion = manifest.Config.MediaType == componentConfig.MediaType
+		// didn't have indexes. The legacy cnudie config media types identify component versions published by
+		// pre-OCM Gardener tooling, which also carry no annotation (see issue #2889).
+		oldOCMComponentVersion = manifest.Config.MediaType == componentConfig.MediaType ||
+			manifest.Config.MediaType == componentConfig.LegacyMediaType ||
+			manifest.Config.MediaType == componentConfig.Legacy2MediaType
 	case ociImageSpecV1.MediaTypeImageIndex:
 		data, err = fetcher.Fetch(ctx, desc)
 		if err != nil {
