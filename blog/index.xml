@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Blog on Open Component Model</title><link>https://ocm.software/blog/</link><description>Recent content in Blog on Open Component Model</description><generator>Hugo</generator><language>en-US</language><lastBuildDate>Thu, 23 Jul 2026 12:00:00 +0200</lastBuildDate><atom:link href="https://ocm.software/blog/index.xml" rel="self" type="application/rss+xml"/><item><title>Welcome Ilja Weis to the OCM Technical Steering Committee</title><link>https://ocm.software/blog/2026-07-23-welcome-ilja-weis-tsc/</link><pubDate>Thu, 23 Jul 2026 12:00:00 +0200</pubDate><guid>https://ocm.software/blog/2026-07-23-welcome-ilja-weis-tsc/</guid><description>&lt;p&gt;We are glad to announce that &lt;a href="https://github.com/iljaweis" target="_blank" rel="noopener"&gt;Ilja Weis&lt;/a&gt; from
 &lt;a href="https://www.bwi.de/" target="_blank" rel="noopener"&gt;BWI GmbH&lt;/a&gt; has been voted into the OCM Technical Steering Committee.&lt;/p&gt;
 &lt;p&gt;BWI, the IT service provider for the German Armed Forces,
-&lt;a href="https://neonephos.org/blog/20260218_bwi_joins_neonephos" target="_blank" rel="noopener"&gt;joined the NeoNephos Foundation as a Premium Member&lt;/a&gt;
+&lt;a href="https://neonephos.org/blog/20260218_bwi_joins_neonephos" target="_blank" rel="noopener"&gt;joined the NeoNephos Foundation as a Premier Member&lt;/a&gt;
 earlier this year. Since then, the collaboration has been active: BWI contributed
 &lt;a href="https://github.com/open-component-model/community" target="_blank" rel="noopener"&gt;ocm-kit&lt;/a&gt; to the OCM community repository, a Go library and CLI tool
 for working with OCM-based Helm values templates. The TSC
