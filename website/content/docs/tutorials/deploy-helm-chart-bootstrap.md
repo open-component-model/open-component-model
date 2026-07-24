@@ -25,7 +25,7 @@ By the end, you'll have:
 Before starting, make sure you have set up your environment as described in the [setup guide]({{< relref "setup-controller-environment.md" >}}).
 {{< /callout >}}
 
-- [Controller environment]({{< relref "setup-controller-environment.md" >}}) with OCM Controllers, kro, and Flux installed
+- [Controller environment]({{< relref "setup-controller-environment.md" >}}) with OCM Controllers, kro, and a deployer (Flux or Argo CD) installed
 - [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions`
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
@@ -108,8 +108,8 @@ flowchart TB
                 subgraph rgd[RGD: Bootstrap]
                     rgdResourceHelm[Resource: HelmChart]
                     rgdResourceImage[Resource: Image]
-                    rgdSource[Flux: OCI Repository]
-                    rgdHelmRelease[Flux: HelmRelease]
+                    rgdSource[Deployer: Source]
+                    rgdHelmRelease[Deployer: Release]
                 end
                 crdBootstrap[CRD: Bootstrap]
                 subgraph instanceBootstrap[Instance: Bootstrap]
@@ -117,9 +117,9 @@ flowchart TB
                         k8sResourceHelm[Resource: HelmChart]
                         k8sResourceImage[Resource: Image]
                     end
-                    subgraph flux[Flux]
-                        source[OCI Repository]
-                        helmRelease[HelmRelease]
+                    subgraph deployer[Deployer]
+                        source[Source]
+                        helmRelease[Release]
                     end
                     k8sResourceImage ---info[localization reference] --> helmRelease
                 end
@@ -136,7 +136,7 @@ flowchart TB
     class references,creates,instanceOf legendItems;
     class templateOf,rgdResourceHelm,rgdResourceImage,rgdSource,rgdHelmRelease templateOf;
     class info information;
-    class reconciledBy,ocmK8sToolkit,bootstrap,flux,kro reconciledBy;
+    class reconciledBy,ocmK8sToolkit,bootstrap,deployer,kro reconciledBy;
     class k8sObject,rgd,k8sRepo,k8sComponent,k8sResourceRGD,k8sDeployer,k8sResourceHelm,k8sResourceImage,source,helmRelease,deployment,crdBootstrap,instanceBootstrap k8sObject;
     class ocmRepo,ocmCV,ocmResourceHelm,ocmResourceRGD,ocmResourceImage ocm;
     class k8sCluster cluster;
@@ -203,6 +203,12 @@ As you can see, the resource `resource-graph-definition` is of type `blob` and c
 following content:
 
 {{< details "ResourceGraphDefinition (resourceGraphDefinition.yaml)" >}}
+The `resourceChart` and `resourceImage` resources are identical for both deployers.
+Choose your deployer tab for the deployer-specific resources:
+
+{{< tabs "bootstrap-rgd-deployer" >}}
+{{< tab "Flux" >}}
+
 ```yaml
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
@@ -312,6 +318,108 @@ spec:
               repository: ${resourceImage.status.additional.oci.registry}/${resourceImage.status.additional.oci.repository}
               tag: latest@${resourceImage.status.additional.oci.digest}
 ```
+
+{{< /tab >}}
+{{< tab "Argo CD" >}}
+
+```yaml
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: bootstrap
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: Bootstrap
+  resources:
+    # In this guide, we will not create a "Repository" and "Component" resource in this ResourceGraphDefinition. Those
+    # resources will be created to bootstrap the ResourceGraphDefinition itself and will be present in the Kubernetes
+    # cluster to be referenced by the following resources (see the bootstrap resource in one of the following sections).
+
+    # This resource refers to the resource "helm-resource" defined in the OCM component version. It will be downloaded,
+    # verified, and its location is made available in the status of the resource.
+    - id: resourceChart
+      readyWhen:
+        - ${resourceChart.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: bootstrap-helm-resource
+        spec:
+          # This component will be part of the bootstrap resources that will be created later.
+          componentRef:
+            name: bootstrap-component
+          resource:
+            byReference:
+              resource:
+                name: helm-resource
+          additionalStatusFields:
+            # toOCI() converts the resource access to an OCI reference object containing registry, repository, tag, and digest
+            oci: resource.access.toOCI()
+          # ocmConfig is required, if the OCM repository requires credentials to access it.
+          # ocmConfig:
+    # This resource refers to the resource "image-resource" defined in the OCM component version. It will be downloaded,
+    # verified, and its location is made available in the status of the resource.
+    - id: resourceImage
+      readyWhen:
+        - ${resourceImage.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: bootstrap-image-resource
+        spec:
+          # This component will be part of the bootstrap resources that will be created later.
+          componentRef:
+            name: bootstrap-component
+          resource:
+            byReference:
+              resource:
+                name: image-resource
+          additionalStatusFields:
+            oci: resource.access.toOCI()
+          # ocmConfig is required, if the OCM repository requires credentials to access it.
+          # ocmConfig:
+    # Argo CD Application deploys the Helm chart directly from the OCI registry.
+    # Values are injected via valuesObject (structured YAML, avoids escaping issues).
+    - id: argocdApplication
+      readyWhen:
+        - ${argocdApplication.status.health.status == "Healthy"}
+        - ${argocdApplication.status.sync.status == "Synced"}
+      template:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: bootstrap
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: default
+          source:
+            chart: podinfo
+            repoURL: oci://${resourceChart.status.additional.oci.registry}/${resourceChart.status.additional.oci.repository}
+            targetRevision: ${resourceChart.status.additional.oci.tag}
+            helm:
+              releaseName: bootstrap-release
+              valuesObject:
+                image:
+                  repository: ${resourceImage.status.additional.oci.registry}/${resourceImage.status.additional.oci.repository}
+                  tag: latest@${resourceImage.status.additional.oci.digest}
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: default
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true
+```
+
+{{< /tab >}}
+{{< /tabs >}}
 {{< /details >}}
 
 To make your component public in GitHub Container Registry, go to the `packages` tab in your GitHub repository `https://github.com/$GITHUB_USERNAME?tab=packages`,
@@ -348,18 +456,20 @@ Then update the resources to use credentials:
          name: ghcr-secret
    ```
 
-2. **Flux OCIRepository**: Uncomment `secretRef` in the RGD's ocirepository
-resource:
+2. **Flux OCIRepository**: Uncomment `secretRef` in the RGD's ocirepository resource (Flux only):
 
    ```yaml
    secretRef:
      name: ghcr-secret
    ```
+
+   For Argo CD, add a `secretRef` under `spec.source` in the Application resource instead — see the [Argo CD private registry docs](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#repositories).
+
 3. **Pod imagePullSecrets**: The deployed pods also need credentials to pull
-images. Add this to the HelmRelease values in the RGD:
+images. Add this to the HelmRelease values (Flux) or `valuesObject` (Argo CD) in the RGD:
 
    ```yaml
-   values:
+   values:        # use valuesObject: for Argo CD
      image:
        repository: ${resourceImage.status.additional.oci.registry}/${resourceImage.status.additional.oci.repository}
        tag: latest@${resourceImage.status.additional.oci.digest}
@@ -384,7 +494,7 @@ ocm add cv
 Transfer to your registry with `--copy-resources` to enable localization (this copies the Helm chart and image to your registry):
 
 ```bash
-ocm transfer cv --copy-resources transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
+ocm transfer cv --copy-resources --upload-as ociArtifact transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
 ```
 {{< /step >}}
 
