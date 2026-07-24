@@ -314,6 +314,14 @@ func (c *DefaultConstructor) processDescriptor(
 		})
 	}
 
+	if len(component.Sources) > 0 {
+		// Sources carry no digest in the component descriptor, so unlike
+		// resources their content is never validated during construction and
+		// cannot be verified afterwards. The limitation is the same for every
+		// source, so one warning per component version is enough.
+		logger.Warn("source content is recorded without a digest and is not verifiable; declare the artifact as a resource if content validation is needed")
+	}
+
 	for i, source := range component.Sources {
 		sourceLogger := logger.With("source", source.ToIdentity())
 		sourceLogger.Debug("processing source")
