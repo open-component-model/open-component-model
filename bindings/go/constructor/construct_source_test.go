@@ -1,7 +1,9 @@
 package constructor
 
 import (
+	"bytes"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -157,6 +159,34 @@ func TestConstructWithSourceAccess(t *testing.T) {
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedSources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
+}
+
+// Sources carry no digest, so constructing with one must warn that the content
+// is not verifiable and point at resources as the checked alternative.
+func TestConstructWithSourceWarnsAboutUnverifiableContent(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	constructor := setupTestComponentWithSource(t, `
+       - name: test-source
+         version: v1.0.0
+         type: git
+         access:
+           type: LocalBlob
+           mediaType: application/octet-stream
+           localReference: test-ref
+`)
+
+	opts := Options{
+		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: newMockTargetRepository()},
+	}
+	err := NewDefaultConstructor(constructor, opts).Construct(t.Context())
+	require.NoError(t, err)
+
+	assert.Contains(t, logs.String(), "declare the artifact as a resource if content validation is needed",
+		"constructing a component version with a source must warn that source content is unverifiable")
 }
 
 func TestConstructWithSourceCredentialResolution(t *testing.T) {
