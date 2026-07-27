@@ -7,41 +7,37 @@ import (
 )
 
 const (
-	// LabelSBOM is the name of the label that links an SBOM resource to the
-	// resource(s) it describes. It is carried by a resource of type
-	// ResourceTypeSBOM and its value is an SBOMLabelValue.
+	// LabelArtefactReference is the name of the label that links a resource to
+	// another resource (an "artefact reference"), following the OCM spec
+	// convention. An SBOM resource (type ResourceTypeSBOM) uses it to point at the
+	// resource it describes; the SBOM-ness comes from the resource type, not the
+	// label. Its value is an ArtefactReferenceLabelValue.
 	//
 	// Example (component constructor):
 	//
 	//	- name: cli-sbom
 	//	  type: sbom
 	//	  labels:
-	//	    - name: ocm.software/sbom
+	//	    - name: ocm.software/artefactReference
 	//	      version: v1
 	//	      value:
-	//	        references:
-	//	          - resource:
-	//	              name: cli
-	LabelSBOM = "ocm.software/sbom"
+	//	        identitySelector:
+	//	          name: cli
+	LabelArtefactReference = "ocm.software/artefactReference"
 
 	// ResourceTypeSBOM is the OCM resource type used for resources that carry a
 	// Software Bill of Materials (SBOM), e.g. in SPDX or CycloneDX format.
 	ResourceTypeSBOM = "sbom"
 )
 
-// SBOMLabelValue is the parsed value of the LabelSBOM label. It lists the
-// resources that the SBOM resource describes.
-type SBOMLabelValue struct {
-	// References lists the resources described by the SBOM.
-	References []SBOMReference `json:"references"`
-}
-
-// SBOMReference points to a single resource described by an SBOM resource via
-// its element identity. The identity is typically partial (e.g. only the name),
-// in which case it is matched as a subset against the full resource identity.
-type SBOMReference struct {
-	// Resource is the (possibly partial) identity of the described resource.
-	Resource runtime.Identity `json:"resource"`
+// ArtefactReferenceLabelValue is the parsed value of the LabelArtefactReference
+// label. It selects the resource that the labelled resource refers to.
+type ArtefactReferenceLabelValue struct {
+	// IdentitySelector is the (possibly partial) identity of the referenced
+	// resource, as a flat map of identity attributes (e.g. {"name": "cli"} or
+	// {"name": "podinfo", "architecture": "amd64"}). It is matched as a subset
+	// against the full resource identity.
+	IdentitySelector runtime.Identity `json:"identitySelector"`
 }
 
 // GetLabel returns a pointer to the label with the given name, or nil if the
@@ -60,7 +56,7 @@ func (m *ElementMeta) GetLabel(name string) *Label {
 }
 
 // FindSBOMResources returns the resources of type ResourceTypeSBOM in the given
-// component version whose LabelSBOM label references the target identity.
+// component version whose LabelArtefactReference label references the target identity.
 //
 // A reference matches when its (possibly partial) identity is a subset of the
 // target identity (see runtime.IdentitySubset). This lets a label that only
@@ -87,21 +83,18 @@ func FindSBOMResources(desc *Descriptor, target runtime.Identity) ([]Resource, e
 		if res.Type != ResourceTypeSBOM {
 			continue
 		}
-		label := res.GetLabel(LabelSBOM)
+		label := res.GetLabel(LabelArtefactReference)
 		if label == nil {
 			continue
 		}
 
-		var value SBOMLabelValue
+		var value ArtefactReferenceLabelValue
 		if err := label.GetValue(&value); err != nil {
-			return nil, fmt.Errorf("parsing %q label of sbom resource %q failed: %w", LabelSBOM, res.Name, err)
+			return nil, fmt.Errorf("parsing %q label of sbom resource %q failed: %w", LabelArtefactReference, res.Name, err)
 		}
 
-		for _, ref := range value.References {
-			if runtime.IdentitySubset(ref.Resource, target) {
-				matches = append(matches, res)
-				break
-			}
+		if runtime.IdentitySubset(value.IdentitySelector, target) {
+			matches = append(matches, res)
 		}
 	}
 

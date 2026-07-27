@@ -114,13 +114,16 @@ func TestProcessResource_SelectsPlatformAndKeepsOriginalFormat(t *testing.T) {
 	assert.Equal(t, spdxDoc, readAll(t, result.ProcessedBlobData))
 	assert.Equal(t, oci.MediaTypeSPDXJSON, mediaTypeOf(t, result.ProcessedBlobData))
 
-	// The ocm.software/sbom back-link label was attached, pointing at podinfo.
-	label := findLabel(res.Labels, descriptor.LabelSBOM)
-	require.NotNil(t, label, "sbom back-link label must be attached")
-	var value descriptor.SBOMLabelValue
+	// The ocm.software/artefactReference label was attached, pointing at podinfo.
+	// The selector carries name/version only (NOT architecture) so it stays a
+	// subset of the subject image's identity; per-arch disambiguation is via the
+	// SBOM resource's own extraIdentity.
+	label := findLabel(res.Labels, descriptor.LabelArtefactReference)
+	require.NotNil(t, label, "artefact-reference label must be attached")
+	var value descriptor.ArtefactReferenceLabelValue
 	require.NoError(t, label.GetValue(&value))
-	require.Len(t, value.References, 1)
-	assert.Equal(t, "podinfo", value.References[0].Resource[constructorruntime.IdentityAttributeName])
+	assert.Equal(t, "podinfo", value.IdentitySelector[constructorruntime.IdentityAttributeName])
+	assert.Empty(t, value.IdentitySelector["architecture"], "selector must not carry architecture")
 }
 
 func TestProcessResource_SelectsByBareArch(t *testing.T) {

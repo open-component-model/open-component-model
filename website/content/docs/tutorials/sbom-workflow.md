@@ -17,7 +17,7 @@ In this tutorial you start from a component with **no local resources** — a bi
 ## What You'll Learn
 
 - Generate a CycloneDX SBOM for a binary with `syft`
-- Attach an SBOM to a resource with the `ocm.software/sbom` label (the `File/v1` path)
+- Attach an SBOM to a resource with the `ocm.software/artefactReference` label (the `File/v1` path)
 - Discover and bake an OCI image's SBOM at build time with the `SBoM/v1` input type
 - Download a single resource's SBOM with `ocm download resource` (an SBOM is a named resource)
 - Assemble an orchestrating SBOM for a component version — and recursively across referenced components — with `ocm get sbom`
@@ -48,9 +48,9 @@ flowchart TD
     Ld -.-> Lc
 ```
 
-Solid lines are component/resource containment; dotted lines are the `ocm.software/sbom` label linking each SBOM resource back to the resource it describes.
+Solid lines are component/resource containment; dotted lines are the `ocm.software/artefactReference` label linking each SBOM resource back to the resource it describes.
 
-- **`File/v1` + label** — you produce an SBOM yourself (here with `syft`) and attach it as a resource of `type: sbom` carrying a `ocm.software/sbom` label that points back at the resource it describes.
+- **`File/v1` + label** — you produce an SBOM yourself (here with `syft`) and attach it as a resource of `type: sbom` carrying a `ocm.software/artefactReference` label that points back at the resource it describes.
 - **`SBoM/v1` input** — OCM discovers the SBOM already attached to an OCI image (as a buildx attestation or via the OCI Referrers API) and bakes it into the component **at build time**, in its original format, auto-adding the back-link label for you.
 
 Both produce the same thing: a `type: sbom` resource stored as a local blob and linked to its subject — so the download tooling treats them identically.
@@ -127,12 +127,11 @@ components:
       - name: cli-sbom
         type: sbom
         labels:
-          - name: ocm.software/sbom
+          - name: ocm.software/artefactReference
             version: v1
             value:
-              references:
-                - resource:
-                    name: cli
+              identitySelector:
+                name: cli
             signing: true
         input:
           type: File/v1
@@ -177,12 +176,11 @@ components:
       - name: launcher-sbom
         type: sbom
         labels:
-          - name: ocm.software/sbom
+          - name: ocm.software/artefactReference
             version: v1
             value:
-              references:
-                - resource:
-                    name: launcher
+              identitySelector:
+                name: launcher
             signing: true
         input:
           type: File/v1
@@ -192,7 +190,7 @@ components:
 
 Two attachment styles sit side by side:
 
-- **`cli-sbom`** uses the `File/v1` input to embed the SBOM you generated, and a `ocm.software/sbom` label to link it to `cli`. The label is marked `signing: true`, so it is covered by the component signature.
+- **`cli-sbom`** uses the `File/v1` input to embed the SBOM you generated, and a `ocm.software/artefactReference` label to link it to `cli`. The label is marked `signing: true`, so it is covered by the component signature.
 - **`podinfo-sbom`** uses the `SBoM/v1` input. It references `podinfo` by name; OCM resolves that reference, discovers the SBOM attached to the image, and bakes it. Because `podinfo:6.9.1` is multi-arch, OCM attaches **every** platform's SBOM — expanding `podinfo-sbom` into one resource per architecture, each tagged with an `os`/`architecture` `extraIdentity`. (Set `resource.extraIdentity.architecture` to attach just one.) The back-link label is added automatically. See the [`SBoM/v1` input type]({{< relref "docs/reference/input-and-access-types.md" >}}#sbomv1) reference and [ADR 0026: Native SBOM Support](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0026_native_sbom_support.md) for the design details.
 
 {{< /step >}}
@@ -230,11 +228,10 @@ ocm get cv ./transport-archive//ocm.software/tutorial-sbom:1.0.0 -o yaml
         architecture: amd64                   # disambiguates the per-platform SBOMs
         os: linux
       labels:
-        - name: ocm.software/sbom             # added automatically by SBoM/v1
+        - name: ocm.software/artefactReference   # added automatically by SBoM/v1
           value:
-            references:
-              - resource:
-                  name: podinfo
+            identitySelector:
+              name: podinfo
           signing: true
       name: podinfo-sbom
       type: sbom
@@ -359,7 +356,7 @@ cd .. && rm -rf ocm-sbom-tutorial /tmp/ocm-cli-bin
 
 ## What You Learned
 
-- **`syft` + `File/v1` + label** attaches an SBOM you generate yourself, linked to its resource with `ocm.software/sbom`.
+- **`syft` + `File/v1` + label** attaches an SBOM you generate yourself, linked to its resource with `ocm.software/artefactReference`.
 - **`SBoM/v1` input** discovers an OCI image's SBOM and bakes it at build time, in its original format, with the back-link label added automatically — attaching every platform's SBOM for a multi-arch image (or one, if you set `platform`).
 - **`ocm download resource --identity name=<sbom-resource>`** downloads an SBOM like any other resource (SBOMs are modelled as `type: sbom` resources).
 - **`ocm get sbom [--recursive]`** assembles a flat, scannable CycloneDX document for a whole component tree, printed to stdout (JSON or `-o yaml`).
