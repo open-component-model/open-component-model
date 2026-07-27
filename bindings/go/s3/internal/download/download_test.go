@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -455,41 +456,36 @@ func TestDownload_CredentialConversionErrorIsWrapped(t *testing.T) {
 }
 
 func TestHTTPConfig(t *testing.T) {
-	t.Run("nil config yields a config with retry disabled", func(t *testing.T) {
+	t.Run("nil config yields an empty config", func(t *testing.T) {
 		got := httpConfig(nil, false)
 		require.NotNil(t, got)
-		require.NotNil(t, got.Retry)
-		require.NotNil(t, got.Retry.MaxRetries)
-		// The AWS SDK retries GetObject itself; a second layer would multiply attempts.
-		assert.Equal(t, -1, *got.Retry.MaxRetries)
+		assert.Nil(t, got.Retry, "nothing configured leaves the transport on its own default")
 		assert.Nil(t, got.InsecureSkipVerify)
 	})
 
-	t.Run("retry is disabled even when the caller configures it", func(t *testing.T) {
+	t.Run("the caller's retry config reaches the transport", func(t *testing.T) {
 		callerRetries := 7
 		got := httpConfig(&httpv1alpha1.Config{
 			Retry: &httpv1alpha1.RetryConfig{MaxRetries: &callerRetries},
 		}, false)
+		require.NotNil(t, got.Retry)
 		require.NotNil(t, got.Retry.MaxRetries)
-		assert.Equal(t, -1, *got.Retry.MaxRetries)
+		assert.Equal(t, 7, *got.Retry.MaxRetries)
 	})
 
-	t.Run("per-host retry is disabled too", func(t *testing.T) {
-		// A per-host entry overrides the global config, so a host left untouched
-		// would quietly reinstate the retry layer beneath the SDK.
+	t.Run("per-host retry reaches the transport too", func(t *testing.T) {
 		hostRetries := 3
 		got := httpConfig(&httpv1alpha1.Config{
 			Hosts: map[string]*httpv1alpha1.HostConfig{
 				"s3.amazonaws.com": {Retry: &httpv1alpha1.RetryConfig{MaxRetries: &hostRetries}},
-				"minio.internal":   {},
 			},
 		}, false)
 
-		for host, hc := range got.Hosts {
-			require.NotNil(t, hc.Retry, "host %q kept no retry config", host)
-			require.NotNil(t, hc.Retry.MaxRetries, "host %q kept no retry count", host)
-			assert.Equal(t, -1, *hc.Retry.MaxRetries, "host %q still retries in the transport", host)
-		}
+		hc := got.Hosts["s3.amazonaws.com"]
+		require.NotNil(t, hc)
+		require.NotNil(t, hc.Retry)
+		require.NotNil(t, hc.Retry.MaxRetries)
+		assert.Equal(t, 3, *hc.Retry.MaxRetries)
 	})
 
 	t.Run("a nil host entry is left alone", func(t *testing.T) {
@@ -526,72 +522,10 @@ func TestHTTPConfig(t *testing.T) {
 		}
 		got := httpConfig(cfg, true)
 
-		assert.Equal(t, 7, *cfg.Retry.MaxRetries, "the caller's retry config must be left alone")
 		assert.Nil(t, cfg.InsecureSkipVerify, "the caller's TLS config must be left alone")
 		assert.NotSame(t, cfg, got)
+		assert.NotSame(t, cfg.Retry, got.Retry, "the retry config must be copied, not shared")
 	})
-}
-
-// TestSDKMaxAttempts covers the retry intent surviving the move from the transport
-// to the SDK. httpConfig takes retry away from the transport, so a configured retry
-// only has an effect if it is translated into the SDK's attempt count here.
-func TestSDKMaxAttempts(t *testing.T) {
-	cfgWithRetries := func(maxRetries *int) *httpv1alpha1.Config {
-		return &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: maxRetries}}
-	}
-	intPtr := func(v int) *int { return &v }
-
-	tests := []struct {
-		name string
-		cfg  *httpv1alpha1.Config
-		// want is the SDK attempt count; 0 leaves the SDK's own default in place.
-		want int
-	}{
-		{
-			name: "no config leaves the SDK default",
-			cfg:  nil,
-			want: 0,
-		},
-		{
-			name: "config without retry leaves the SDK default",
-			cfg:  &httpv1alpha1.Config{},
-			want: 0,
-		},
-		{
-			name: "retry config without a count leaves the SDK default",
-			cfg:  cfgWithRetries(nil),
-			want: 0,
-		},
-		{
-			// MaxAttempts counts the first request, MaxRetries does not.
-			name: "three retries become four attempts",
-			cfg:  cfgWithRetries(intPtr(3)),
-			want: 4,
-		},
-		{
-			name: "one retry becomes two attempts",
-			cfg:  cfgWithRetries(intPtr(1)),
-			want: 2,
-		},
-		{
-			name: "disabled retry becomes a single attempt",
-			cfg:  cfgWithRetries(intPtr(-1)),
-			want: 1,
-		},
-		{
-			// The SDK has no way to express unbounded retries, so its default is
-			// used rather than approximating "forever" with some large number.
-			name: "unbounded retry falls back to the SDK default",
-			cfg:  cfgWithRetries(intPtr(0)),
-			want: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, sdkMaxAttempts(tt.cfg))
-		})
-	}
 }
 
 func TestNewClient(t *testing.T) {
@@ -685,19 +619,21 @@ func TestNewClient(t *testing.T) {
 		assert.Same(t, injected, client.Options().HTTPClient, "the caller's client must not be rebuilt from config")
 	})
 
-	t.Run("configured retry reaches the SDK", func(t *testing.T) {
+	t.Run("the configured retry is left to the transport", func(t *testing.T) {
+		// Retry from the OCM config drives the transport. The SDK keeps its own
+		// attempt count, because the two layers retry different failures.
 		maxRetries := 3
 		client, err := newClient(ctx, Request{}, &option{
 			HTTPConfig: &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}},
 		})
 		require.NoError(t, err)
-		// Retry is disabled in the transport, so it only survives via the SDK.
-		assert.Equal(t, 4, client.Options().RetryMaxAttempts)
+		assert.Zero(t, client.Options().RetryMaxAttempts, "the SDK must stay on its own default")
 	})
 
-	t.Run("no configured retry leaves the SDK to its own default", func(t *testing.T) {
+	t.Run("the SDK retryer is left at its default", func(t *testing.T) {
 		client, err := newClient(ctx, Request{}, &option{})
 		require.NoError(t, err)
 		assert.Zero(t, client.Options().RetryMaxAttempts, "an unset value lets the SDK apply its default")
+		assert.Equal(t, retry.DefaultMaxAttempts, client.Options().Retryer.MaxAttempts())
 	})
 }
