@@ -28,11 +28,6 @@ const defaultRegion = "us-east-1"
 // tempFilePattern names the files [Download] streams object bodies into.
 const tempFilePattern = "ocm-s3-download-*"
 
-// retryDisabled is httpv1alpha1.RetryConfig's encoding of "no retries at all".
-// Note that a nil RetryConfig does not mean this: it selects the shared client's
-// default of five retries.
-const retryDisabled = -1
-
 // UnversionedVersionID is the versionId S3 reports for objects that carry no
 // real version: those in buckets where versioning was never enabled, and those
 // written before it was. It is a valid input to GetObject but pins nothing —
@@ -175,11 +170,12 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 
 // httpConfig derives the HTTP configuration handed to the shared client.
 //
-// Retry is stripped out of the transport, globally and per host: the AWS SDK
-// already retries GetObject and understands S3's throttling responses, so a
-// second retry layer beneath it would multiply attempts and work against the
-// SDK's backoff. The caller's retry intent is not lost — [sdkMaxAttempts] carries
-// it over to the SDK, which is the layer that can act on it properly.
+// Retry is passed through as the caller configured it, because the transport and
+// the SDK retry different things. The transport retries a single round trip and
+// sees only connection errors and status codes, which is what the OCM HTTP config
+// describes. The SDK retries the whole operation, re-signing each attempt and
+// classifying S3's error codes, and keeps its own defaults here. The two layers
+// therefore stay independent rather than one standing in for the other.
 //
 // InsecureSkipTLSVerify from the access spec is folded into the TLS config so the
 // shared client applies it through its own transport, which warns once per host
@@ -190,53 +186,12 @@ func httpConfig(cfg *httpv1alpha1.Config, insecureSkipTLSVerify bool) *httpv1alp
 		out = &httpv1alpha1.Config{}
 	}
 
-	out.Retry = noRetry()
-	// A per-host entry overrides the global config, so leaving these would let a
-	// host re-enable the retry layer the global setting just removed.
-	for host, hc := range out.Hosts {
-		if hc == nil {
-			continue
-		}
-		hc.Retry = noRetry()
-		out.Hosts[host] = hc
-	}
-
 	if insecureSkipTLSVerify {
 		skip := true
 		out.InsecureSkipVerify = &skip
 	}
 
 	return out
-}
-
-// noRetry builds a retry config that turns the transport's retry layer off.
-func noRetry() *httpv1alpha1.RetryConfig {
-	maxRetries := retryDisabled
-	return &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}
-}
-
-// sdkMaxAttempts translates the caller's retry config into the AWS SDK's attempt
-// count, so that configuring retry still has an effect once [httpConfig] has taken
-// retry away from the transport.
-//
-// The two count differently: MaxRetries counts the retries after the first request,
-// while the SDK's MaxAttempts counts that first request too. Returns 0 when the
-// config says nothing the SDK can act on, which leaves the SDK's own default in place.
-func sdkMaxAttempts(cfg *httpv1alpha1.Config) int {
-	if cfg == nil || cfg.Retry == nil || cfg.Retry.MaxRetries == nil {
-		return 0
-	}
-
-	switch n := *cfg.Retry.MaxRetries; {
-	case n > 0:
-		return n + 1
-	case n == retryDisabled:
-		return 1
-	default:
-		// Zero asks for unbounded retries, which the SDK cannot express. Its
-		// default is a saner answer than approximating "forever" with a number.
-		return 0
-	}
 }
 
 // newClient builds an S3 client from the request and the download options. When no
@@ -253,15 +208,11 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 		httpClient = ocmhttp.New(ocmhttp.WithConfig(httpConfig(o.HTTPConfig, req.InsecureSkipTLSVerify)))
 	}
 
+	// No retry option is set: the SDK resolves its own attempt count, honouring
+	// AWS_MAX_ATTEMPTS and AWS_RETRY_MODE like any other AWS client.
 	loadOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(region),
 		config.WithHTTPClient(httpClient),
-	}
-
-	// Retry lives in the SDK rather than the transport, so a configured retry has
-	// to be applied here to have any effect.
-	if attempts := sdkMaxAttempts(o.HTTPConfig); attempts > 0 {
-		loadOpts = append(loadOpts, config.WithRetryMaxAttempts(attempts))
 	}
 
 	if o.Credentials != nil {
