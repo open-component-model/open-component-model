@@ -7,16 +7,20 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// S3 describes access to a single blob (object) stored in an S3 or S3-compatible
+const (
+	Type = "S3Bucket"
+)
+
+// S3Bucket describes access to a single blob (object) stored in an S3Bucket or S3Bucket-compatible
 // bucket. It references exactly one object; it is not a repository/storage backend.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
-type S3 struct {
-	// +ocm:jsonschema-gen:enum=S3/v1,s3/v1
-	// +ocm:jsonschema-gen:enum:deprecated=S3,s3
+type S3Bucket struct {
+	// +ocm:jsonschema-gen:enum=S3Bucket/v1,s3Bucket/v1
+	// +ocm:jsonschema-gen:enum:deprecated=S3Bucket,s3Bucket
 	Type runtime.Type `json:"type"`
 
 	// Region is the region of the bucket. Optional; when empty it is resolved from
@@ -32,24 +36,24 @@ type S3 struct {
 	// MediaType is the media type of the referenced object.
 	MediaType string `json:"mediaType,omitempty"`
 
-	// Version pins a specific S3 object version (versionId). When empty the latest
+	// Version pins a specific S3Bucket object version (versionId). When empty the latest
 	// version is read.
 	Version string `json:"version,omitempty"`
 
-	// Endpoint is the base endpoint of an S3-compatible store (e.g. MinIO, Ceph,
-	// R2). When empty, AWS S3 is targeted.
+	// Endpoint is the base endpoint of an S3Bucket-compatible store (e.g. MinIO, Ceph,
+	// R2). When empty, AWS S3Bucket is targeted.
 	Endpoint string `json:"endpoint,omitempty"`
 
 	// UsePathStyle enables path-style addressing (bucket in the path instead of the
-	// host). Required by most self-hosted S3-compatible stores.
+	// host). Required by most self-hosted S3Bucket-compatible stores.
 	UsePathStyle bool `json:"usePathStyle,omitempty"`
 
 	// InsecureSkipTLSVerify disables TLS certificate verification for the endpoint.
 	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
 }
 
-// Validate verifies that the required fields of the S3 access are set.
-func (t *S3) Validate() error {
+// Validate verifies that the required fields of the S3Bucket access are set.
+func (t *S3Bucket) Validate() error {
 	if t.BucketName == "" {
 		return fmt.Errorf("bucketName is required")
 	}
@@ -59,7 +63,7 @@ func (t *S3) Validate() error {
 	return nil
 }
 
-func (t *S3) String() string {
+func (t *S3Bucket) String() string {
 	loc := t.BucketName + "/" + t.ObjectKey
 	if t.Endpoint != "" {
 		return strings.TrimSuffix(t.Endpoint, "/") + "/" + loc

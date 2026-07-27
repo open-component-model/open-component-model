@@ -49,7 +49,7 @@ func (f *fakeGetter) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...fu
 	return out, nil
 }
 
-func s3Resource(spec *v1.S3) *descriptor.Resource {
+func s3Resource(spec *v1.S3Bucket) *descriptor.Resource {
 	spec.Type = accessspec.V1VersionedType
 	r := &descriptor.Resource{}
 	r.Access = spec
@@ -60,7 +60,7 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	repo := NewResourceRepository(nil)
 
 	id, err := repo.GetResourceCredentialConsumerIdentity(context.Background(),
-		s3Resource(&v1.S3{BucketName: "my-bucket", ObjectKey: "path/to/blob", Region: "eu-central-1"}))
+		s3Resource(&v1.S3Bucket{BucketName: "my-bucket", ObjectKey: "path/to/blob", Region: "eu-central-1"}))
 	require.NoError(t, err)
 	require.Empty(t, id[runtime.IdentityAttributeHostname])
 	require.Empty(t, id[runtime.IdentityAttributeScheme])
@@ -68,19 +68,19 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	require.Equal(t, accessspec.S3BucketConsumerType, id[runtime.IdentityAttributeType])
 
 	id, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
-		s3Resource(&v1.S3{BucketName: "my-bucket"}))
+		s3Resource(&v1.S3Bucket{BucketName: "my-bucket"}))
 	require.NoError(t, err)
 	require.Empty(t, id[runtime.IdentityAttributeHostname])
 	require.Equal(t, "my-bucket", id[runtime.IdentityAttributePath])
 
 	id, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
-		s3Resource(&v1.S3{BucketName: "b", ObjectKey: "obj", Endpoint: "https://minio.internal:9000"}))
+		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "obj", Endpoint: "https://minio.internal:9000"}))
 	require.NoError(t, err)
 	require.Equal(t, "minio.internal", id[runtime.IdentityAttributeHostname])
 	require.Equal(t, "9000", id[runtime.IdentityAttributePort])
 	require.Equal(t, "b/obj", id[runtime.IdentityAttributePath])
 
-	_, err = repo.GetResourceCredentialConsumerIdentity(context.Background(), s3Resource(&v1.S3{}))
+	_, err = repo.GetResourceCredentialConsumerIdentity(context.Background(), s3Resource(&v1.S3Bucket{}))
 	require.Error(t, err)
 	_, err = repo.GetResourceCredentialConsumerIdentity(context.Background(), nil)
 	require.Error(t, err)
@@ -92,7 +92,7 @@ func Test_DownloadResource(t *testing.T) {
 	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()}, WithClient(fake))
 
 	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(&v1.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"}), nil)
+		s3Resource(&v1.S3Bucket{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"}), nil)
 	require.NoError(t, err)
 
 	rc, err := b.ReadCloser()
@@ -114,7 +114,7 @@ func Test_ProcessResourceDigest(t *testing.T) {
 		WithClient(&fakeGetter{body: content}))
 
 	res, err := repo.ProcessResourceDigest(context.Background(),
-		s3Resource(&v1.S3{BucketName: "b", ObjectKey: "k"}), nil)
+		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"}), nil)
 	require.NoError(t, err)
 	require.NotNil(t, res.Digest)
 	require.Equal(t, godigest.FromBytes(content).Encoded(), res.Digest.Value)
@@ -166,11 +166,11 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()},
 				WithClient(&fakeGetter{body: []byte("digest me"), versionID: tt.versionID}))
 
-			resource := s3Resource(&v1.S3{BucketName: "b", ObjectKey: "k", Version: tt.specVersion})
+			resource := s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k", Version: tt.specVersion})
 			res, err := repo.ProcessResourceDigest(context.Background(), resource, nil)
 			require.NoError(t, err)
 
-			spec := v1.S3{}
+			spec := v1.S3Bucket{}
 			require.NoError(t, accessspec.Scheme.Convert(res.Access, &spec))
 			require.Equal(t, tt.wantVersion, spec.Version)
 
@@ -185,15 +185,15 @@ func Test_ProcessResourceDigest_DoesNotMutateInputResource(t *testing.T) {
 	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()},
 		WithClient(&fakeGetter{body: []byte("digest me"), versionID: "v-99"}))
 
-	resource := s3Resource(&v1.S3{BucketName: "b", ObjectKey: "k"})
+	resource := s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"})
 	res, err := repo.ProcessResourceDigest(context.Background(), resource, nil)
 	require.NoError(t, err)
 
-	original := v1.S3{}
+	original := v1.S3Bucket{}
 	require.NoError(t, accessspec.Scheme.Convert(resource.Access, &original))
 	require.Empty(t, original.Version, "the caller's resource must not be pinned in place")
 
-	pinned := v1.S3{}
+	pinned := v1.S3Bucket{}
 	require.NoError(t, accessspec.Scheme.Convert(res.Access, &pinned))
 	require.Equal(t, "v-99", pinned.Version)
 }
@@ -205,7 +205,7 @@ func Test_DownloadResource_StreamsIntoConfiguredTempFolder(t *testing.T) {
 		WithClient(&fakeGetter{body: content}))
 
 	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(&v1.S3{BucketName: "b", ObjectKey: "k"}), nil)
+		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"}), nil)
 	require.NoError(t, err)
 
 	entries, err := os.ReadDir(tempFolder)
@@ -229,7 +229,7 @@ func Test_NewResourceRepository_NilFilesystemConfig(t *testing.T) {
 	repo := NewResourceRepository(nil, WithClient(&fakeGetter{body: content}))
 
 	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(&v1.S3{BucketName: "b", ObjectKey: "k"}), nil)
+		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"}), nil)
 	require.NoError(t, err)
 
 	rc, err := b.ReadCloser()

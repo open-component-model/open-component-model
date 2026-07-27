@@ -75,7 +75,7 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 		return nil, fmt.Errorf("resource access is required")
 	}
 
-	spec := v1.S3{}
+	spec := v1.S3Bucket{}
 	if err := r.GetResourceRepositoryScheme().Convert(resource.Access, &spec); err != nil {
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
@@ -123,7 +123,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return result.Blob, nil
 }
 
-func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S3, error) {
+func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S3Bucket, error) {
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
 	}
@@ -131,7 +131,7 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S
 		return nil, fmt.Errorf("resource access is required")
 	}
 
-	spec := &v1.S3{}
+	spec := &v1.S3Bucket{}
 	if err := accessspec.Scheme.Convert(resource.Access, spec); err != nil {
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
@@ -140,7 +140,7 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S
 }
 
 // download streams the object described by spec into tempDir.
-func (r *ResourceRepository) download(ctx context.Context, spec *v1.S3, credentials runtime.Typed, tempDir string) (*download.Result, error) {
+func (r *ResourceRepository) download(ctx context.Context, spec *v1.S3Bucket, credentials runtime.Typed, tempDir string) (*download.Result, error) {
 	opts := []download.Option{
 		download.WithCredentials(credentials),
 		download.WithTempDir(tempDir),
@@ -258,7 +258,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 // [download.UnversionedVersionID], neither of which survives an overwrite. Those are
 // logged rather than pinned or rejected, because erroring would make digests unusable
 // for every unversioned bucket.
-func (r *ResourceRepository) pinAccess(ctx context.Context, resource *descriptor.Resource, spec *v1.S3, versionID string) {
+func (r *ResourceRepository) pinAccess(ctx context.Context, resource *descriptor.Resource, spec *v1.S3Bucket, versionID string) {
 	if spec.Version != "" {
 		return
 	}
