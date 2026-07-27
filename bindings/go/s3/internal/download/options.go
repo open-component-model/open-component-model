@@ -2,6 +2,7 @@ package download
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
@@ -23,6 +24,7 @@ type ObjectGetter interface {
 
 type option struct {
 	Client          ObjectGetter
+	HTTPClient      *http.Client
 	Credentials     runtime.Typed
 	MaxDownloadSize *int64
 	TempDir         string
@@ -58,7 +60,19 @@ func WithTempDir(dir string) Option {
 }
 
 // WithHTTPConfig sets the HTTP configuration used to build the S3 client's
-// underlying HTTP client. When nil, the shared client's defaults apply.
+// underlying HTTP client. Ignored when a client is supplied via [WithHTTPClient].
+// When nil, the shared client's defaults apply.
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 	return func(o *option) { o.HTTPConfig = cfg }
+}
+
+// WithHTTPClient sets the HTTP client the S3 client sends its requests through.
+// The client carries no bucket, region or endpoint of its own — those come from
+// the [Request] — so one client serves every object correctly.
+//
+// It is used exactly as given: its TLS, timeout and retry behaviour belong to the
+// caller, so [WithHTTPConfig] and the request's InsecureSkipTLSVerify do not apply
+// to it. When unset, a client is built from the HTTP config instead.
+func WithHTTPClient(c *http.Client) Option {
+	return func(o *option) { o.HTTPClient = c }
 }

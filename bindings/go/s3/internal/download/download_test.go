@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +31,8 @@ type fakeGetter struct {
 	contentLength *int64
 	// bodyReader overrides body, so tests can inject a reader that fails mid-stream.
 	bodyReader io.ReadCloser
+	// versionID is the object version S3 reports for the read. Empty reports none.
+	versionID string
 	// err is returned instead of an output when set.
 	err error
 
@@ -60,6 +63,9 @@ func (f *fakeGetter) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...fu
 	}
 	if f.contentType != "" {
 		out.ContentType = aws.String(f.contentType)
+	}
+	if f.versionID != "" {
+		out.VersionId = aws.String(f.versionID)
 	}
 	return out, nil
 }
@@ -156,11 +162,11 @@ func TestDownload_ReturnsObjectBody(t *testing.T) {
 	content := []byte("hello from s3")
 	fake := &fakeGetter{body: content, contentType: "text/plain"}
 
-	b, err := Download(t.Context(), Request{BucketName: "my-bucket", ObjectKey: "path/blob.txt"},
+	res, err := Download(t.Context(), Request{BucketName: "my-bucket", ObjectKey: "path/blob.txt"},
 		WithClient(fake), WithTempDir(t.TempDir()))
 	require.NoError(t, err)
 
-	assert.Equal(t, content, readBlob(t, b))
+	assert.Equal(t, content, readBlob(t, res.Blob))
 	assert.True(t, fake.closed, "the object body must be closed")
 
 	assert.Equal(t, "my-bucket", aws.ToString(fake.gotInput.Bucket))
@@ -172,21 +178,21 @@ func TestDownload_ReturnsObjectBody(t *testing.T) {
 // may be called repeatedly, each call reading from the start.
 func TestDownload_BlobIsReReadable(t *testing.T) {
 	content := []byte("read me twice")
-	b, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
+	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
 		WithClient(&fakeGetter{body: content}), WithTempDir(t.TempDir()))
 	require.NoError(t, err)
 
-	assert.Equal(t, content, readBlob(t, b))
-	assert.Equal(t, content, readBlob(t, b))
+	assert.Equal(t, content, readBlob(t, res.Blob))
+	assert.Equal(t, content, readBlob(t, res.Blob))
 }
 
 func TestDownload_BlobReportsSize(t *testing.T) {
 	content := []byte("sized content")
-	b, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
+	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
 		WithClient(&fakeGetter{body: content}), WithTempDir(t.TempDir()))
 	require.NoError(t, err)
 
-	sizeAware, ok := b.(blob.SizeAware)
+	sizeAware, ok := res.Blob.(blob.SizeAware)
 	require.True(t, ok, "the returned blob must report its size")
 	assert.Equal(t, int64(len(content)), sizeAware.Size())
 }
@@ -199,6 +205,42 @@ func TestDownload_PinnedVersionIsForwarded(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "v-1", aws.ToString(fake.gotInput.VersionId))
+}
+
+// TestDownload_ResolvedVersionIsReturned covers the version S3 reports for the read.
+// The repository pins the access spec with it, so it has to survive the download.
+func TestDownload_ResolvedVersionIsReturned(t *testing.T) {
+	tests := []struct {
+		name      string
+		versionID string
+		want      string
+	}{
+		{
+			name:      "versioned bucket reports the object version",
+			versionID: "3sL4kqtJlcpXroDTDmJ+rmSpXd3dIbrHY+MTRCxf3vjVBH40Nr8X8gdRQBpUMLUo",
+			want:      "3sL4kqtJlcpXroDTDmJ+rmSpXd3dIbrHY+MTRCxf3vjVBH40Nr8X8gdRQBpUMLUo",
+		},
+		{
+			name:      "unversioned object reports the null placeholder",
+			versionID: UnversionedVersionID,
+			want:      UnversionedVersionID,
+		},
+		{
+			name:      "store reporting no version at all yields an empty version",
+			versionID: "",
+			want:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
+				WithClient(&fakeGetter{body: []byte("content"), versionID: tt.versionID}),
+				WithTempDir(t.TempDir()))
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, res.VersionID)
+		})
+	}
 }
 
 func TestDownload_MediaType(t *testing.T) {
@@ -233,13 +275,13 @@ func TestDownload_MediaType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := Download(t.Context(),
+			res, err := Download(t.Context(),
 				Request{BucketName: "b", ObjectKey: "k", MediaType: tt.mediaType},
 				WithClient(&fakeGetter{body: []byte("content"), contentType: tt.contentType}),
 				WithTempDir(t.TempDir()))
 			require.NoError(t, err)
 
-			mediaTypeAware, ok := b.(blob.MediaTypeAware)
+			mediaTypeAware, ok := res.Blob.(blob.MediaTypeAware)
 			require.True(t, ok, "the returned blob must report its media type")
 			got, known := mediaTypeAware.MediaType()
 			assert.True(t, known)
@@ -282,7 +324,7 @@ func TestDownload_StreamsIntoTempDir(t *testing.T) {
 	tempDir := t.TempDir()
 	content := []byte("streamed to disk")
 
-	b, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
+	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
 		WithClient(&fakeGetter{body: content}), WithTempDir(tempDir))
 	require.NoError(t, err)
 
@@ -294,7 +336,7 @@ func TestDownload_StreamsIntoTempDir(t *testing.T) {
 	onDisk, err := os.ReadFile(filepath.Join(tempDir, names[0]))
 	require.NoError(t, err)
 	assert.Equal(t, content, onDisk)
-	assert.Equal(t, content, readBlob(t, b))
+	assert.Equal(t, content, readBlob(t, res.Blob))
 }
 
 // TestDownload_TempFileOutlivesCall documents the ownership rule: the file backing
@@ -303,12 +345,12 @@ func TestDownload_StreamsIntoTempDir(t *testing.T) {
 func TestDownload_TempFileOutlivesCall(t *testing.T) {
 	tempDir := t.TempDir()
 
-	b, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
+	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
 		WithClient(&fakeGetter{body: []byte("still here")}), WithTempDir(tempDir))
 	require.NoError(t, err)
 
 	require.Len(t, filesIn(t, tempDir), 1)
-	assert.Equal(t, []byte("still here"), readBlob(t, b))
+	assert.Equal(t, []byte("still here"), readBlob(t, res.Blob))
 }
 
 func TestDownload_MaxDownloadSize(t *testing.T) {
@@ -355,7 +397,7 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 				opts = append(opts, WithMaxDownloadSize(tt.maxSize))
 			}
 
-			b, err := Download(t.Context(), Request{BucketName: "my-bucket", ObjectKey: "my-key"}, opts...)
+			res, err := Download(t.Context(), Request{BucketName: "my-bucket", ObjectKey: "my-key"}, opts...)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "exceeds maximum allowed size")
@@ -363,7 +405,7 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, content, readBlob(t, b))
+			assert.Equal(t, content, readBlob(t, res.Blob))
 		})
 	}
 }
@@ -395,10 +437,10 @@ func TestDownload_TempDirUnwritable(t *testing.T) {
 }
 
 func TestDownload_EmptyObject(t *testing.T) {
-	b, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
+	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
 		WithClient(&fakeGetter{body: []byte{}}), WithTempDir(t.TempDir()))
 	require.NoError(t, err)
-	assert.Empty(t, readBlob(t, b))
+	assert.Empty(t, readBlob(t, res.Blob))
 }
 
 func TestDownload_CredentialConversionErrorIsWrapped(t *testing.T) {
@@ -413,18 +455,13 @@ func TestDownload_CredentialConversionErrorIsWrapped(t *testing.T) {
 }
 
 func TestHTTPConfig(t *testing.T) {
-	// retryDisabled is httpv1alpha1.RetryConfig's encoding of "no retries at all".
-	// It is spelled out rather than compared against sdkOwnedRetries, which would
-	// make the assertion agree with the constant whatever its value.
-	const retryDisabled = -1
-
 	t.Run("nil config yields a config with retry disabled", func(t *testing.T) {
 		got := httpConfig(nil, false)
 		require.NotNil(t, got)
 		require.NotNil(t, got.Retry)
 		require.NotNil(t, got.Retry.MaxRetries)
 		// The AWS SDK retries GetObject itself; a second layer would multiply attempts.
-		assert.Equal(t, retryDisabled, *got.Retry.MaxRetries)
+		assert.Equal(t, -1, *got.Retry.MaxRetries)
 		assert.Nil(t, got.InsecureSkipVerify)
 	})
 
@@ -434,7 +471,32 @@ func TestHTTPConfig(t *testing.T) {
 			Retry: &httpv1alpha1.RetryConfig{MaxRetries: &callerRetries},
 		}, false)
 		require.NotNil(t, got.Retry.MaxRetries)
-		assert.Equal(t, retryDisabled, *got.Retry.MaxRetries)
+		assert.Equal(t, -1, *got.Retry.MaxRetries)
+	})
+
+	t.Run("per-host retry is disabled too", func(t *testing.T) {
+		// A per-host entry overrides the global config, so a host left untouched
+		// would quietly reinstate the retry layer beneath the SDK.
+		hostRetries := 3
+		got := httpConfig(&httpv1alpha1.Config{
+			Hosts: map[string]*httpv1alpha1.HostConfig{
+				"s3.amazonaws.com": {Retry: &httpv1alpha1.RetryConfig{MaxRetries: &hostRetries}},
+				"minio.internal":   {},
+			},
+		}, false)
+
+		for host, hc := range got.Hosts {
+			require.NotNil(t, hc.Retry, "host %q kept no retry config", host)
+			require.NotNil(t, hc.Retry.MaxRetries, "host %q kept no retry count", host)
+			assert.Equal(t, -1, *hc.Retry.MaxRetries, "host %q still retries in the transport", host)
+		}
+	})
+
+	t.Run("a nil host entry is left alone", func(t *testing.T) {
+		got := httpConfig(&httpv1alpha1.Config{
+			Hosts: map[string]*httpv1alpha1.HostConfig{"s3.amazonaws.com": nil},
+		}, false)
+		assert.Nil(t, got.Hosts["s3.amazonaws.com"])
 	})
 
 	t.Run("insecureSkipTLSVerify is folded into the TLS config", func(t *testing.T) {
@@ -470,17 +532,79 @@ func TestHTTPConfig(t *testing.T) {
 	})
 }
 
+// TestSDKMaxAttempts covers the retry intent surviving the move from the transport
+// to the SDK. httpConfig takes retry away from the transport, so a configured retry
+// only has an effect if it is translated into the SDK's attempt count here.
+func TestSDKMaxAttempts(t *testing.T) {
+	cfgWithRetries := func(maxRetries *int) *httpv1alpha1.Config {
+		return &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: maxRetries}}
+	}
+	intPtr := func(v int) *int { return &v }
+
+	tests := []struct {
+		name string
+		cfg  *httpv1alpha1.Config
+		// want is the SDK attempt count; 0 leaves the SDK's own default in place.
+		want int
+	}{
+		{
+			name: "no config leaves the SDK default",
+			cfg:  nil,
+			want: 0,
+		},
+		{
+			name: "config without retry leaves the SDK default",
+			cfg:  &httpv1alpha1.Config{},
+			want: 0,
+		},
+		{
+			name: "retry config without a count leaves the SDK default",
+			cfg:  cfgWithRetries(nil),
+			want: 0,
+		},
+		{
+			// MaxAttempts counts the first request, MaxRetries does not.
+			name: "three retries become four attempts",
+			cfg:  cfgWithRetries(intPtr(3)),
+			want: 4,
+		},
+		{
+			name: "one retry becomes two attempts",
+			cfg:  cfgWithRetries(intPtr(1)),
+			want: 2,
+		},
+		{
+			name: "disabled retry becomes a single attempt",
+			cfg:  cfgWithRetries(intPtr(-1)),
+			want: 1,
+		},
+		{
+			// The SDK has no way to express unbounded retries, so its default is
+			// used rather than approximating "forever" with some large number.
+			name: "unbounded retry falls back to the SDK default",
+			cfg:  cfgWithRetries(intPtr(0)),
+			want: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sdkMaxAttempts(tt.cfg))
+		})
+	}
+}
+
 func TestNewClient(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("region defaults when unset", func(t *testing.T) {
-		client, err := newClient(ctx, Request{BucketName: "b", ObjectKey: "k"}, nil, nil)
+		client, err := newClient(ctx, Request{BucketName: "b", ObjectKey: "k"}, &option{})
 		require.NoError(t, err)
 		assert.Equal(t, defaultRegion, client.Options().Region)
 	})
 
 	t.Run("explicit region is used", func(t *testing.T) {
-		client, err := newClient(ctx, Request{Region: "eu-central-1"}, nil, nil)
+		client, err := newClient(ctx, Request{Region: "eu-central-1"}, &option{})
 		require.NoError(t, err)
 		assert.Equal(t, "eu-central-1", client.Options().Region)
 	})
@@ -489,26 +613,26 @@ func TestNewClient(t *testing.T) {
 		client, err := newClient(ctx, Request{
 			Endpoint:     "https://minio.internal:9000",
 			UsePathStyle: true,
-		}, nil, nil)
+		}, &option{})
 		require.NoError(t, err)
 		assert.Equal(t, "https://minio.internal:9000", aws.ToString(client.Options().BaseEndpoint))
 		assert.True(t, client.Options().UsePathStyle)
 	})
 
 	t.Run("no endpoint leaves the base endpoint unset", func(t *testing.T) {
-		client, err := newClient(ctx, Request{Region: "us-west-2"}, nil, nil)
+		client, err := newClient(ctx, Request{Region: "us-west-2"}, &option{})
 		require.NoError(t, err)
 		assert.Nil(t, client.Options().BaseEndpoint, "AWS is targeted when no endpoint is given")
 		assert.False(t, client.Options().UsePathStyle)
 	})
 
 	t.Run("static credentials are applied", func(t *testing.T) {
-		client, err := newClient(ctx, Request{Region: "us-east-1"}, &credv1.S3Credentials{
+		client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &credv1.S3Credentials{
 			Type:            credv1.S3CredentialsVersionedType,
 			AccessKeyID:     "AKIA",
 			SecretAccessKey: "secret",
 			SessionToken:    "session",
-		}, nil)
+		}})
 		require.NoError(t, err)
 
 		creds, err := client.Options().Credentials.Retrieve(ctx)
@@ -522,23 +646,58 @@ func TestNewClient(t *testing.T) {
 		// An empty access key ID means "not statically configured", so the AWS
 		// default credential chain must stay in place rather than be replaced
 		// with an empty static provider.
-		client, err := newClient(ctx, Request{Region: "us-east-1"}, &credv1.S3Credentials{
+		client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &credv1.S3Credentials{
 			Type: credv1.S3CredentialsVersionedType,
-		}, nil)
+		}})
 		require.NoError(t, err)
 		require.NotNil(t, client.Options().Credentials)
 	})
 
 	t.Run("unconvertible credentials error", func(t *testing.T) {
 		unknown := &runtime.Raw{Type: runtime.NewVersionedType("Unknown", "v1"), Data: []byte("{}")}
-		_, err := newClient(ctx, Request{}, unknown, nil)
+		_, err := newClient(ctx, Request{}, &option{Credentials: unknown})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "error converting s3 credentials")
 	})
 
 	t.Run("an HTTP client is always installed", func(t *testing.T) {
-		client, err := newClient(ctx, Request{InsecureSkipTLSVerify: true}, nil, nil)
+		client, err := newClient(ctx, Request{InsecureSkipTLSVerify: true}, &option{})
 		require.NoError(t, err)
 		assert.NotNil(t, client.Options().HTTPClient, "the shared ocm HTTP client must back the s3 client")
+	})
+
+	t.Run("a supplied HTTP client is used as-is", func(t *testing.T) {
+		// An HTTP client carries no bucket, region or endpoint, so injecting one is
+		// safe across resources — unlike injecting a pre-built S3 client.
+		injected := &http.Client{}
+		client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{HTTPClient: injected})
+		require.NoError(t, err)
+		assert.Same(t, injected, client.Options().HTTPClient)
+	})
+
+	t.Run("a supplied HTTP client wins over the HTTP config", func(t *testing.T) {
+		injected := &http.Client{}
+		client, err := newClient(ctx, Request{}, &option{
+			HTTPClient: injected,
+			HTTPConfig: &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: httpv1alpha1.NewTimeout(42)}},
+		})
+		require.NoError(t, err)
+		assert.Same(t, injected, client.Options().HTTPClient, "the caller's client must not be rebuilt from config")
+	})
+
+	t.Run("configured retry reaches the SDK", func(t *testing.T) {
+		maxRetries := 3
+		client, err := newClient(ctx, Request{}, &option{
+			HTTPConfig: &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}},
+		})
+		require.NoError(t, err)
+		// Retry is disabled in the transport, so it only survives via the SDK.
+		assert.Equal(t, 4, client.Options().RetryMaxAttempts)
+	})
+
+	t.Run("no configured retry leaves the SDK to its own default", func(t *testing.T) {
+		client, err := newClient(ctx, Request{}, &option{})
+		require.NoError(t, err)
+		assert.Zero(t, client.Options().RetryMaxAttempts, "an unset value lets the SDK apply its default")
 	})
 }
