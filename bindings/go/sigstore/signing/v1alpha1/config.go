@@ -107,7 +107,7 @@ type VerifyConfig struct {
 	// deployed Sigstore stack. When set, the verifier skips the public Rekor
 	// transparency-log lookup; signature, certificate chain, identity, and SCT
 	// checks are unchanged. Must be paired with a trusted-root credential.
-	// Maps to cosign --private-infrastructure.
+	// Maps to cosign --insecure-ignore-tlog.
 	PrivateInfrastructure bool `json:"privateInfrastructure,omitempty"`
 
 	// CertificateOIDCIssuer is the exact OIDC issuer URL the signing certificate
