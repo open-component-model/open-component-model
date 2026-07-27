@@ -23,23 +23,18 @@ import (
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
-// fakeGetter is a stand-in S3 client returning canned object content. It records
-// the input it was called with, so download tests need no network or real bucket.
+// fakeGetter is a stand-in S3 client returning canned object content and recording
+// the input it was called with.
 type fakeGetter struct {
-	body        []byte
-	contentType string
-	// contentLength overrides the reported object size. When nil, len(body) is used.
+	body          []byte
+	contentType   string
 	contentLength *int64
-	// bodyReader overrides body, so tests can inject a reader that fails mid-stream.
-	bodyReader io.ReadCloser
-	// versionID is the object version S3 reports for the read. Empty reports none.
-	versionID string
-	// err is returned instead of an output when set.
-	err error
+	bodyReader    io.ReadCloser
+	versionID     string
+	err           error
 
 	gotInput *s3.GetObjectInput
-	// closed records whether the returned body was closed.
-	closed bool
+	closed   bool
 }
 
 func (f *fakeGetter) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -145,8 +140,6 @@ func TestDownload_RequiredFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// A client is injected so a validation miss would surface as a call
-			// attempt rather than passing silently.
 			fake := &fakeGetter{body: []byte("unused")}
 			_, err := Download(t.Context(), tt.req, WithClient(fake), WithTempDir(t.TempDir()))
 			require.Error(t, err)
@@ -172,8 +165,6 @@ func TestDownload_ReturnsObjectBody(t *testing.T) {
 	assert.Nil(t, fake.gotInput.VersionId, "no version pinned means the latest object")
 }
 
-// TestDownload_BlobIsReReadable guards the blob.ReadOnlyBlob contract: ReadCloser
-// may be called repeatedly, each call reading from the start.
 func TestDownload_BlobIsReReadable(t *testing.T) {
 	content := []byte("read me twice")
 	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
@@ -205,8 +196,6 @@ func TestDownload_PinnedVersionIsForwarded(t *testing.T) {
 	assert.Equal(t, "v-1", aws.ToString(fake.gotInput.VersionId))
 }
 
-// TestDownload_ResolvedVersionIsReturned covers the version S3 reports for the read.
-// The repository pins the access spec with it, so it has to survive the download.
 func TestDownload_ResolvedVersionIsReturned(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -315,8 +304,6 @@ func TestDownload_BodyReadErrorIsWrappedAndFileRemoved(t *testing.T) {
 	assert.True(t, fake.closed, "the object body must be closed even when the read fails")
 }
 
-// TestDownload_StreamsIntoTempDir pins the streaming contract: the body is written
-// to a file under the configured directory rather than buffered in memory.
 func TestDownload_StreamsIntoTempDir(t *testing.T) {
 	tempDir := t.TempDir()
 	content := []byte("streamed to disk")
@@ -329,15 +316,12 @@ func TestDownload_StreamsIntoTempDir(t *testing.T) {
 	require.Len(t, names, 1, "the object must be streamed into exactly one file")
 	assert.True(t, strings.HasPrefix(names[0], "ocm-s3-download-"), "unexpected file name %q", names[0])
 
-	// The file is the blob's backing store, not a discarded copy.
 	onDisk, err := os.ReadFile(filepath.Join(tempDir, names[0]))
 	require.NoError(t, err)
 	assert.Equal(t, content, onDisk)
 	assert.Equal(t, content, readBlob(t, res.Blob))
 }
 
-// TestDownload_TempFileOutlivesCall documents the ownership rule: the file backing
-// the blob is deliberately not removed when Download returns, so the caller owns it.
 func TestDownload_TempFileOutlivesCall(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -350,15 +334,12 @@ func TestDownload_TempFileOutlivesCall(t *testing.T) {
 }
 
 func TestDownload_MaxDownloadSize(t *testing.T) {
-	content := []byte("0123456789") // 10 bytes
+	content := []byte("0123456789")
 
 	tests := []struct {
-		name string
-		// maxSize is applied via WithMaxDownloadSize unless unset is true.
-		maxSize int64
-		unset   bool
-		// contentLength overrides the reported size, decoupling it from the body
-		// so the up-front check and the streaming check can be exercised apart.
+		name          string
+		maxSize       int64
+		unset         bool
 		contentLength *int64
 		wantErr       bool
 	}{
@@ -406,8 +387,6 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 	}
 }
 
-// TestDownload_OversizedObjectIsRejectedBeforeTransfer verifies the up-front
-// ContentLength check short-circuits before the body is read.
 func TestDownload_OversizedObjectIsRejectedBeforeTransfer(t *testing.T) {
 	body := &errReader{err: fmt.Errorf("body must not be read")}
 	fake := &fakeGetter{
@@ -439,8 +418,6 @@ func TestDownload_EmptyObject(t *testing.T) {
 }
 
 func TestDownload_CredentialConversionErrorIsWrapped(t *testing.T) {
-	// No client is injected, so the download builds one and must convert the
-	// credentials first. An unregistered type cannot convert.
 	unknown := &runtime.Raw{Type: runtime.NewVersionedType("Unknown", "v1"), Data: []byte("{}")}
 
 	_, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
@@ -571,9 +548,6 @@ func TestNewClient(t *testing.T) {
 	})
 
 	t.Run("credentials without an access key fall through to the default chain", func(t *testing.T) {
-		// An empty access key ID means "not statically configured", so the AWS
-		// default credential chain must stay in place rather than be replaced
-		// with an empty static provider.
 		client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &credv1.S3Credentials{
 			Type: credv1.S3CredentialsVersionedType,
 		}})
@@ -595,8 +569,6 @@ func TestNewClient(t *testing.T) {
 	})
 
 	t.Run("a supplied HTTP client is used as-is", func(t *testing.T) {
-		// An HTTP client carries no bucket, region or endpoint, so injecting one is
-		// safe across resources — unlike injecting a pre-built S3 client.
 		injected := &http.Client{}
 		client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{HTTPClient: injected})
 		require.NoError(t, err)
@@ -614,8 +586,6 @@ func TestNewClient(t *testing.T) {
 	})
 
 	t.Run("the configured retry is left to the transport", func(t *testing.T) {
-		// Retry from the OCM config drives the transport. The SDK keeps its own
-		// attempt count, because the two layers retry different failures.
 		maxRetries := 3
 		client, err := newClient(ctx, Request{}, &option{
 			HTTPConfig: &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}},

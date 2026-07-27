@@ -20,14 +20,21 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
 )
 
-// fakeGetter is a stand-in S3 client that returns canned object content and records
-// the input it was called with, so download tests need no network or real bucket.
+// WithClient injects a pre-built S3 client. It lives in this test-only file because
+// it is sound only when every resource shares one endpoint, region and identity.
+func WithClient(client download.ObjectGetter) Option {
+	return func(o *Options) {
+		o.client = client
+	}
+}
+
+// fakeGetter is a stand-in S3 client returning canned object content and recording
+// the input it was called with.
 type fakeGetter struct {
 	body        []byte
 	contentType string
-	// versionID is the object version S3 reports for the read. Empty reports none.
-	versionID string
-	gotInput  *s3.GetObjectInput
+	versionID   string
+	gotInput    *s3.GetObjectInput
 }
 
 func (f *fakeGetter) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -52,7 +59,6 @@ func s3Resource(spec *v1.S3) *descriptor.Resource {
 func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	repo := NewResourceRepository(nil)
 
-	// AWS (no endpoint): no hostname or scheme is set (host-agnostic); the path carries bucket/objectKey.
 	id, err := repo.GetResourceCredentialConsumerIdentity(context.Background(),
 		s3Resource(&v1.S3{BucketName: "my-bucket", ObjectKey: "path/to/blob", Region: "eu-central-1"}))
 	require.NoError(t, err)
@@ -61,14 +67,12 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	require.Equal(t, "my-bucket/path/to/blob", id[runtime.IdentityAttributePath])
 	require.Equal(t, accessspec.S3BucketConsumerType, id[runtime.IdentityAttributeType])
 
-	// No object key: the path is just the bucket.
 	id, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
 		s3Resource(&v1.S3{BucketName: "my-bucket"}))
 	require.NoError(t, err)
 	require.Empty(t, id[runtime.IdentityAttributeHostname])
 	require.Equal(t, "my-bucket", id[runtime.IdentityAttributePath])
 
-	// Custom endpoint: host, port and path come from the endpoint plus bucket/objectKey.
 	id, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
 		s3Resource(&v1.S3{BucketName: "b", ObjectKey: "obj", Endpoint: "https://minio.internal:9000"}))
 	require.NoError(t, err)
@@ -76,7 +80,6 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	require.Equal(t, "9000", id[runtime.IdentityAttributePort])
 	require.Equal(t, "b/obj", id[runtime.IdentityAttributePath])
 
-	// Missing bucket and nil resource are rejected.
 	_, err = repo.GetResourceCredentialConsumerIdentity(context.Background(), s3Resource(&v1.S3{}))
 	require.Error(t, err)
 	_, err = repo.GetResourceCredentialConsumerIdentity(context.Background(), nil)
@@ -99,7 +102,6 @@ func Test_DownloadResource(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, content, got)
 
-	// The access spec fields are forwarded to GetObject, including the pinned version.
 	require.Equal(t, "my-bucket", aws.ToString(fake.gotInput.Bucket))
 	require.Equal(t, "path/blob.txt", aws.ToString(fake.gotInput.Key))
 	require.Equal(t, "v-1", aws.ToString(fake.gotInput.VersionId))
@@ -119,27 +121,21 @@ func Test_ProcessResourceDigest(t *testing.T) {
 	require.Equal(t, hashAlgorithmSHA256, res.Digest.HashAlgorithm)
 	require.Equal(t, genericBlobDigestV1, res.Digest.NormalisationAlgorithm)
 
-	// The blob never leaves ProcessResourceDigest, so unlike DownloadResource it
-	// owns the downloaded file and must not leave it behind.
 	entries, err := os.ReadDir(tempFolder)
 	require.NoError(t, err)
 	require.Empty(t, entries, "digest processing must clean up the object it downloaded")
 }
 
-// Test_ProcessResourceDigest_PinsAccess covers the ResourceDigestProcessor
-// requirement that a processed access "MUST always reference the content described
-// by the digest and cannot be mutated": once digested, the access must name the
-// exact object version that was hashed.
+// Test_ProcessResourceDigest_PinsAccess covers the ResourceDigestProcessor requirement
+// that a processed access "MUST always reference the content described by the digest
+// and cannot be mutated".
 func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 	const versionID = "3sL4kqtJlcpXroDTDmJ+rmSpXd3dIbrHY+MTRCxf3vjVBH40Nr8X8gdRQBpUMLUo"
 
 	tests := []struct {
-		name string
-		// specVersion is the version already on the access spec, if any.
+		name        string
 		specVersion string
-		// versionID is what S3 reports for the read.
-		versionID string
-		// wantVersion is the version expected on the access after processing.
+		versionID   string
 		wantVersion string
 	}{
 		{
@@ -154,8 +150,6 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 			wantVersion: "pinned-by-author",
 		},
 		{
-			// A bucket without versioning cannot be pinned: "null" survives an
-			// overwrite, so recording it would imply a guarantee that does not hold.
 			name:        "unversioned object is left unpinned rather than pinned to null",
 			versionID:   download.UnversionedVersionID,
 			wantVersion: "",
@@ -180,7 +174,6 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 			require.NoError(t, accessspec.Scheme.Convert(res.Access, &spec))
 			require.Equal(t, tt.wantVersion, spec.Version)
 
-			// Pinning must not disturb the resource identity or the digest itself.
 			require.Equal(t, "b", spec.BucketName)
 			require.Equal(t, "k", spec.ObjectKey)
 			require.NotNil(t, res.Digest)
@@ -188,8 +181,6 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 	}
 }
 
-// Test_ProcessResourceDigest_DoesNotMutateInputResource guards the DeepCopy: pinning
-// writes to the returned resource, never to the caller's.
 func Test_ProcessResourceDigest_DoesNotMutateInputResource(t *testing.T) {
 	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()},
 		WithClient(&fakeGetter{body: []byte("digest me"), versionID: "v-99"}))
@@ -207,8 +198,6 @@ func Test_ProcessResourceDigest_DoesNotMutateInputResource(t *testing.T) {
 	require.Equal(t, "v-99", pinned.Version)
 }
 
-// Test_DownloadResource_StreamsIntoConfiguredTempFolder pins the injected
-// filesystem config to the file the object is streamed into.
 func Test_DownloadResource_StreamsIntoConfiguredTempFolder(t *testing.T) {
 	content := []byte("hello from s3")
 	tempFolder := t.TempDir()
@@ -223,7 +212,6 @@ func Test_DownloadResource_StreamsIntoConfiguredTempFolder(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1, "the object must be streamed into the configured temp folder")
 
-	// The file backs the returned blob and outlives the call; the caller owns it.
 	rc, err := b.ReadCloser()
 	require.NoError(t, err)
 	defer func() { _ = rc.Close() }()
@@ -232,8 +220,6 @@ func Test_DownloadResource_StreamsIntoConfiguredTempFolder(t *testing.T) {
 	require.Equal(t, content, got)
 }
 
-// Test_NewResourceRepository_NilFilesystemConfig guards the documented default:
-// a nil config is valid and falls back to the OS temporary directory.
 func Test_NewResourceRepository_NilFilesystemConfig(t *testing.T) {
 	// Redirect the OS temp dir so the downloaded file is cleaned up with it.
 	osTempDir := t.TempDir()
