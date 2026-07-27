@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/s3/spec/access/v1/schemas/S3Bucket.schema.json",
   "title": "S3Bucket",
   "type": "object",
-  "description": "S3Bucket describes access to a single blob (object) stored in an S3Bucket or S3Bucket-compatible\nbucket. It references exactly one object; it is not a repository/storage backend.",
+  "description": "S3Bucket describes access to a single blob (object) stored in an S3 or\nS3-compatible bucket. It references exactly one object; it is not a\nrepository/storage backend.",
   "properties": {
     "bucketName": {
       "type": "string",
@@ -12,7 +12,7 @@
     },
     "endpoint": {
       "type": "string",
-      "description": "Endpoint is the base endpoint of an S3Bucket-compatible store (e.g. MinIO, Ceph,\nR2). When empty, AWS S3Bucket is targeted."
+      "description": "Endpoint is the base endpoint of an S3-compatible store (e.g. MinIO, Ceph,\nR2). When empty, AWS S3 is targeted."
     },
     "insecureSkipTLSVerify": {
       "type": "boolean",
@@ -51,11 +51,11 @@
     },
     "usePathStyle": {
       "type": "boolean",
-      "description": "UsePathStyle enables path-style addressing (bucket in the path instead of the\nhost). Required by most self-hosted S3Bucket-compatible stores."
+      "description": "UsePathStyle enables path-style addressing (bucket in the path instead of the\nhost). Required by most self-hosted S3-compatible stores."
     },
     "version": {
       "type": "string",
-      "description": "Version pins a specific S3Bucket object version (versionId). When empty the latest\nversion is read."
+      "description": "Version pins a specific S3 object version (versionId). When empty the latest\nversion is read."
     }
   },
   "required": [

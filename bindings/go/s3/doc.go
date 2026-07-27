@@ -1,14 +1,19 @@
 // Package s3 provides access to OCM resources stored as objects in an S3 or
 // S3-compatible bucket.
 //
-// It implements the "S3" access type: a resource whose bytes are a single object
-// in a bucket, described by a
-// [ocm.software/open-component-model/bindings/go/s3/spec/access/v1.S3] access
-// spec. Besides the bucket and object key, the spec carries optional details:
-// region, media type, a pinned object version (versionId), and — for
+// It implements the "S3Bucket" access type: a resource whose bytes are a single
+// object in a bucket, described by a
+// [ocm.software/open-component-model/bindings/go/s3/spec/access/v1.S3Bucket]
+// access spec. Besides the bucket and object key, the spec carries optional
+// details: region, media type, a pinned object version (versionId), and — for
 // S3-compatible stores such as MinIO, Ceph or R2 — a custom endpoint, path-style
-// addressing, and a switch to skip TLS verification. An S3 access references one
-// object; it is not a component-version storage backend.
+// addressing, and a switch to skip TLS verification. An S3Bucket access references
+// one object; it is not a component-version storage backend.
+//
+// The type is named for what it addresses (a bucket) rather than for the AWS
+// service, so it reads the same for the S3-compatible stores it also covers. It is
+// deliberately not the ocmv1 "s3" access type and does not resolve specs written
+// against that name; see "Wire types" below.
 //
 // [ocm.software/open-component-model/bindings/go/s3/repository.ResourceRepository]
 // is the entry point. It resolves the access spec of a resource, builds an
@@ -97,8 +102,19 @@
 // flow returns a single identity, and multi-identity resolution is tracked by
 // https://github.com/open-component-model/ocm-project/issues/847
 //
-// The wire types are each registered in their package scheme for typed
-// conversion. Both the versioned (s3/v1) and unversioned (s3) type names are
-// registered, and legacy upper-case access specs remain parsable because JSON
-// field matching is case-insensitive.
+// # Wire types
+//
+// The wire types are registered in their package scheme for typed conversion. The
+// access type resolves under four names — versioned and unversioned, each spelled
+// with a leading upper-case or lower-case letter:
+//
+//	S3Bucket/v1
+//	S3Bucket
+//	s3Bucket/v1
+//	s3Bucket
+//
+// Matching is exact, so no other spelling resolves: neither an all-lower-case
+// s3bucket nor the ocmv1 "s3" access type, whose descriptors have to have their
+// access type rewritten to be readable here. Field names within the spec are
+// matched case-insensitively, as JSON decoding is.
 package s3

@@ -8,11 +8,13 @@ import (
 )
 
 const (
-	Type = "S3Bucket"
+	Type          = "S3Bucket"
+	LowerCaseType = "s3Bucket"
 )
 
-// S3Bucket describes access to a single blob (object) stored in an S3Bucket or S3Bucket-compatible
-// bucket. It references exactly one object; it is not a repository/storage backend.
+// S3Bucket describes access to a single blob (object) stored in an S3 or
+// S3-compatible bucket. It references exactly one object; it is not a
+// repository/storage backend.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -36,16 +38,16 @@ type S3Bucket struct {
 	// MediaType is the media type of the referenced object.
 	MediaType string `json:"mediaType,omitempty"`
 
-	// Version pins a specific S3Bucket object version (versionId). When empty the latest
+	// Version pins a specific S3 object version (versionId). When empty the latest
 	// version is read.
 	Version string `json:"version,omitempty"`
 
-	// Endpoint is the base endpoint of an S3Bucket-compatible store (e.g. MinIO, Ceph,
-	// R2). When empty, AWS S3Bucket is targeted.
+	// Endpoint is the base endpoint of an S3-compatible store (e.g. MinIO, Ceph,
+	// R2). When empty, AWS S3 is targeted.
 	Endpoint string `json:"endpoint,omitempty"`
 
 	// UsePathStyle enables path-style addressing (bucket in the path instead of the
-	// host). Required by most self-hosted S3Bucket-compatible stores.
+	// host). Required by most self-hosted S3-compatible stores.
 	UsePathStyle bool `json:"usePathStyle,omitempty"`
 
 	// InsecureSkipTLSVerify disables TLS certificate verification for the endpoint.
