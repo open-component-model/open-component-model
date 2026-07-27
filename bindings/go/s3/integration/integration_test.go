@@ -49,8 +49,8 @@ func Test_Integration_S3(t *testing.T) {
 	}
 	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
 
-	access := func(bucket, key, version string) *accessv1.S3 {
-		return &accessv1.S3{
+	access := func(bucket, key, version string) *accessv1.S3Bucket {
+		return &accessv1.S3Bucket{
 			Type:         accessspec.V1VersionedType,
 			Region:       "us-east-1",
 			BucketName:   bucket,
@@ -60,7 +60,7 @@ func Test_Integration_S3(t *testing.T) {
 			Version:      version,
 		}
 	}
-	resourceFor := func(a *accessv1.S3) *descriptor.Resource {
+	resourceFor := func(a *accessv1.S3Bucket) *descriptor.Resource {
 		res := &descriptor.Resource{}
 		res.Access = a
 		return res
