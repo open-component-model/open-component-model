@@ -1721,3 +1721,30 @@ func TestConvertFromV1Resource(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertResourceDigestV1RoundTrip(t *testing.T) {
+	v1res := v1.Resource{
+		ElementMeta: v1.ElementMeta{
+			ObjectMeta: v1.ObjectMeta{Name: "test-resource", Version: "1.0.0"},
+		},
+		Type:     "blob",
+		Relation: v1.ExternalRelation,
+		Digest: &v1.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  "abc123",
+		},
+	}
+
+	// v1 -> runtime carries the digest.
+	rt := ConvertToRuntimeConstructorResource(v1res)
+	assert.NotNil(t, rt.Digest)
+	assert.Equal(t, "SHA-256", rt.Digest.HashAlgorithm)
+	assert.Equal(t, "genericBlobDigest/v1", rt.Digest.NormalisationAlgorithm)
+	assert.Equal(t, "abc123", rt.Digest.Value)
+
+	// runtime -> v1 restores an equal digest.
+	back, err := ConvertToV1Resource(&rt)
+	assert.NoError(t, err)
+	assert.Equal(t, v1res.Digest, back.Digest)
+}
