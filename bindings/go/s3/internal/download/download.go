@@ -120,7 +120,6 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 
 	body := io.Reader(out.Body)
 	if maxDownloadSize > 0 {
-		// One byte past the limit is enough to tell "at the limit" from "over" it.
 		body = io.LimitReader(out.Body, maxDownloadSize+1)
 	}
 
@@ -129,7 +128,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 		return nil, fmt.Errorf("error creating temporary file for s3 object %s/%s: %w", req.BucketName, req.ObjectKey, err)
 	}
 	path := file.Name()
-	// Only the returned blob gives the file an owner, so a failure below must remove it.
+
 	defer func() {
 		if err != nil {
 			_ = os.Remove(path)
@@ -165,10 +164,6 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 	return &Result{Blob: b, VersionID: aws.ToString(out.VersionId)}, nil
 }
 
-// httpConfig folds the access spec's InsecureSkipTLSVerify into a copy of cfg, so
-// the shared client applies it through its own transport and warns once per host
-// instead of disabling verification silently. Retry passes through untouched; see
-// the package documentation of the s3 module for how the two retry layers relate.
 func httpConfig(cfg *httpv1alpha1.Config, insecureSkipTLSVerify bool) *httpv1alpha1.Config {
 	out := cfg.DeepCopy()
 	if out == nil {
@@ -184,7 +179,7 @@ func httpConfig(cfg *httpv1alpha1.Config, insecureSkipTLSVerify bool) *httpv1alp
 }
 
 // newClient builds an S3 client from the request and the download options. When no
-// static credentials are supplied, the AWS default credential chain is used.
+// credentials are supplied, the AWS default credential chain is used.
 func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) {
 	region := req.Region
 	if region == "" {
