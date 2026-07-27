@@ -260,7 +260,9 @@ func (h *Handler) Verify(
 		extraArgs = append(extraArgs, "--trusted-root", trustedRootPath)
 	}
 	if cfg.PrivateInfrastructure {
-		extraArgs = append(extraArgs, "--private-infrastructure")
+		// --insecure-ignore-tlog replaces --private-infrastructure, which cosign deprecated in
+		// v3.1.0 and removes in v4. It is a pure alias, available since cosign v2.0.
+		extraArgs = append(extraArgs, "--insecure-ignore-tlog")
 	}
 
 	slog.InfoContext(ctx, "sigstore verify: enforcing identity constraints",

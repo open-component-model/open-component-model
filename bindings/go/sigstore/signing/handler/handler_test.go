@@ -635,7 +635,7 @@ func TestHandler_Verify(t *testing.T) {
 			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
 			assertArgs: func(t *testing.T, args []string) {
 				r := require.New(t)
-				r.True(hasArg(args, "--private-infrastructure"))
+				r.True(hasArg(args, "--insecure-ignore-tlog"))
 				r.Equal("/path/to/private_trusted_root.json", argValue(args, "--trusted-root"))
 			},
 		},
@@ -813,7 +813,7 @@ func TestVerify_PrivateInfrastructureWithTrustedRootCredential(t *testing.T) {
 	err := h.Verify(t.Context(), signed, cfg, creds)
 	r.NoError(err)
 	r.NotNil(mock.lastVerifyArgs)
-	r.True(hasArg(mock.lastVerifyArgs, "--private-infrastructure"))
+	r.True(hasArg(mock.lastVerifyArgs, "--insecure-ignore-tlog"))
 }
 
 func TestVerify_CertificateOIDCIssuerAcceptsHTTP(t *testing.T) {
