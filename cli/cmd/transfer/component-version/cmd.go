@@ -24,6 +24,7 @@ import (
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
+	"ocm.software/open-component-model/cli/internal/layout"
 	"ocm.software/open-component-model/cli/internal/render"
 	"ocm.software/open-component-model/cli/internal/render/progress"
 	"ocm.software/open-component-model/cli/internal/render/progress/bar"
@@ -39,6 +40,7 @@ const (
 	FlagTransferSpec     = "transfer-spec"
 	FlagSemverConstraint = "semver-constraint"
 	FlagLatest           = "latest"
+	FlagLayout           = "layout"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the tracker consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -155,6 +157,7 @@ transfer component-version --transfer-spec spec.yaml
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin)")
 	cmd.Flags().String(FlagSemverConstraint, "", "semantic version constraint restricting which versions to transfer (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
+	cmd.Flags().String(FlagLayout, "v2", "component version storage layout: v2 (default) or normalized (cosign-signable, stable digest)")
 
 	return cmd
 }
@@ -169,7 +172,7 @@ func transferArgs(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return fmt.Errorf("positional arguments are not allowed when --%s is set", FlagTransferSpec)
 		}
-		ignoredFlags := []string{FlagRecursive, FlagCopyResources, FlagUploadAs}
+		ignoredFlags := []string{FlagRecursive, FlagCopyResources, FlagUploadAs, FlagLayout}
 		for _, name := range ignoredFlags {
 			if cmd.Flags().Changed(name) {
 				slog.Warn(fmt.Sprintf("--%s has no effect when --%s is set", name, FlagTransferSpec))
@@ -349,6 +352,14 @@ func buildGraphDefinitionFromArgs(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("invalid target repository spec: %w", err)
+	}
+
+	layoutValue, err := cmd.Flags().GetString(FlagLayout)
+	if err != nil {
+		return nil, fmt.Errorf("getting layout flag failed: %w", err)
+	}
+	if err := layout.Apply(toSpec, layoutValue); err != nil {
+		return nil, err
 	}
 
 	transferCfg, err := transferv1alpha1.LookupConfig(cfg)

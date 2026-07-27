@@ -1,0 +1,12 @@
+components:
+  - name: ocm.software/demo/cosign-normalized
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    resources:
+      - name: greeting
+        type: plainText
+        version: 1.0.0
+        input:
+          type: utf8
+          text: "hello from the normalized, cosign-signed component"

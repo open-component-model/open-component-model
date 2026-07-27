@@ -35,4 +35,11 @@ type CTFAddComponentVersionOutput struct{}
 type CTFAddComponentVersionSpec struct {
 	Repository ctf.Repository `json:"repository"`
 	Descriptor *v2.Descriptor `json:"descriptor"`
+	// SourceRepository is the optional specification of the repository the
+	// component version originates from. When set, it enables carrying
+	// component-level signature referrers (e.g. cosign signatures) from the
+	// source into the target repository after the component version has been
+	// added. It is a no-op for repositories that do not implement signature
+	// carrying or when source and target do not resolve the same manifest.
+	SourceRepository *runtime.Raw `json:"sourceRepository,omitempty"`
 }

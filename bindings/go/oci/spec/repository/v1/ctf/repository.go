@@ -43,6 +43,11 @@ type Repository struct {
 	// If not specified, the AccessMode will be interpreted as AccessModeReadOnly for read-based operations
 	// and as AccessModeReadWrite for write-based operations.
 	AccessMode AccessMode `json:"accessMode,omitempty"`
+
+	// ComponentVersionLayout selects the storage layout used when adding component versions
+	// to this repository. "" or "v2" = the default access-bearing manifest; "normalized" = the
+	// cosign-signable normalized layout (a stable, access-free manifest as the tag target).
+	ComponentVersionLayout string `json:"componentVersionLayout,omitempty"`
 }
 
 func (spec *Repository) String() string {

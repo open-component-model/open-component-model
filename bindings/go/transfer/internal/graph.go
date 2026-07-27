@@ -213,7 +213,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 			}
 			allFileRefs = append(allFileRefs, fileRefs...)
 
-			if err := addUploadTransformation(v2desc, id, baseID, target, tgd, resourceTransformIDs); err != nil {
+			if err := addUploadTransformation(v2desc, id, baseID, target, val.SourceRepository, tgd, resourceTransformIDs); err != nil {
 				return err
 			}
 		}
@@ -353,7 +353,7 @@ func addDescriptorToEnvironment(v2desc *descriptorv2.Descriptor, id string, tgd 
 // addUploadTransformation creates the final upload (AddComponentVersion) transformation
 // for a component, reconstructing the descriptor with CEL references to modified resources.
 // envID is the base ID used to reference the descriptor in the environment (without target suffix).
-func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID string, toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string) error {
+func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID string, toSpec runtime.Typed, fromSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string) error {
 	descriptorSpec := buildDescriptorSpec(v2desc, envID, resourceTransformIDs)
 
 	addType, err := chooseAddType(toSpec)
@@ -366,15 +366,30 @@ func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID s
 		return fmt.Errorf("cannot convert target spec to unstructured: %w", err)
 	}
 
+	specData := map[string]any{
+		"repository": toRepo.Data,
+		"descriptor": descriptorSpec,
+	}
+
+	// Thread the source repository spec into the upload step so the add
+	// transformer can carry component-level signature referrers (e.g. cosign
+	// signatures) from the source into the target. This is a no-op for targets
+	// that do not implement signature carrying or when source and target do not
+	// resolve the same manifest digest.
+	if fromSpec != nil {
+		fromRepo, err := asUnstructured(fromSpec)
+		if err != nil {
+			return fmt.Errorf("cannot convert source spec to unstructured: %w", err)
+		}
+		specData["sourceRepository"] = fromRepo.Data
+	}
+
 	upload := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
 			Type: addType,
 			ID:   id + "Upload",
 		},
-		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository": toRepo.Data,
-			"descriptor": descriptorSpec,
-		}},
+		Spec: &runtime.Unstructured{Data: specData},
 	}
 
 	tgd.Transformations = append(tgd.Transformations, upload)
