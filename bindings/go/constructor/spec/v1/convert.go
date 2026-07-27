@@ -26,6 +26,13 @@ func ConvertToRuntimeResource(resource Resource) descriptor.Resource {
 	if resource.ExtraIdentity != nil {
 		target.ExtraIdentity = resource.ExtraIdentity.DeepCopy()
 	}
+	if resource.Digest != nil {
+		target.Digest = &descriptor.Digest{
+			HashAlgorithm:          resource.Digest.HashAlgorithm,
+			NormalisationAlgorithm: resource.Digest.NormalisationAlgorithm,
+			Value:                  resource.Digest.Value,
+		}
+	}
 	target.Relation = descriptor.ResourceRelation(resource.Relation)
 	return target
 }
