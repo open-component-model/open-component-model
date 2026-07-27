@@ -13,6 +13,7 @@ import (
 
 	godigest "github.com/opencontainers/go-digest"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
@@ -37,8 +38,8 @@ type DigestProcessor struct {
 
 // NewDigestProcessor creates a new GitHub digest processor. opts are forwarded
 // to the underlying resource repository, whose HTTP client performs both the
-// ref resolution and the archive download; the archive is hashed from its
-// in-memory buffer.
+// ref resolution and the archive download; the archive's digest is computed
+// while it is buffered in memory, not by a second read.
 func NewDigestProcessor(opts ...resource.Option) *DigestProcessor {
 	return &DigestProcessor{
 		resourceRepository: resource.NewResourceRepository(opts...),
@@ -113,26 +114,21 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	if err != nil {
 		return nil, fmt.Errorf("error downloading github resource for digest processing: %w", err)
 	}
-	reader, err := downloaded.ReadCloser()
-	if err != nil {
-		return nil, fmt.Errorf("error reading downloaded github archive: %w", err)
+	var raw string
+	if aware, ok := downloaded.(blob.DigestAware); ok {
+		raw, _ = aware.Digest()
 	}
-	defer func() {
-		if err := reader.Close(); err != nil {
-			slog.WarnContext(ctx, "error closing downloaded github archive", "error", err)
-		}
-	}()
-
-	resolvedDigest, err := godigest.SHA256.FromReader(reader)
+	resolvedDigest, err := godigest.Parse(raw)
 	if err != nil {
-		return nil, fmt.Errorf("error digesting downloaded github archive: %w", err)
+		return nil, fmt.Errorf("downloaded github archive blob does not carry a valid digest: %w", err)
 	}
+	resolvedValue := resolvedDigest.Encoded()
 
 	if res.Digest == nil {
 		res.Digest = &descriptor.Digest{
 			HashAlgorithm:          hashAlgorithmSHA256,
 			NormalisationAlgorithm: normalisationGenericBlobDigestV1,
-			Value:                  resolvedDigest.Encoded(),
+			Value:                  resolvedValue,
 		}
 		return res, nil
 	}
@@ -150,14 +146,14 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	if res.Digest.NormalisationAlgorithm != "" && !strings.EqualFold(res.Digest.NormalisationAlgorithm, normalisationGenericBlobDigestV1) {
 		return nil, fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisationGenericBlobDigestV1, res.Digest.NormalisationAlgorithm)
 	}
-	if !strings.EqualFold(res.Digest.Value, resolvedDigest.Encoded()) {
-		return nil, fmt.Errorf("digest value mismatch: expected %s, got %s", res.Digest.Value, resolvedDigest.Encoded())
+	if !strings.EqualFold(res.Digest.Value, resolvedValue) {
+		return nil, fmt.Errorf("digest value mismatch: expected %s, got %s", res.Digest.Value, resolvedValue)
 	}
 
 	// Canonicalize the accepted spellings so descriptors do not vary by author.
 	res.Digest.HashAlgorithm = hashAlgorithmSHA256
 	res.Digest.NormalisationAlgorithm = normalisationGenericBlobDigestV1
-	res.Digest.Value = resolvedDigest.Encoded()
+	res.Digest.Value = resolvedValue
 
 	return res, nil
 }

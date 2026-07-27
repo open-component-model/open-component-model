@@ -9,8 +9,9 @@
 //
 // # Usage
 //
-//	// A nil filesystem config buffers archives in the OS temp directory.
-//	repo := resource.NewResourceRepository(nil)
+//	// Archives are buffered in memory; pass WithHTTPConfig or WithHTTPClient
+//	// to tune the HTTP client.
+//	repo := resource.NewResourceRepository()
 //
 //	res := &descriptor.Resource{
 //		Access: &v1.GitHub{
