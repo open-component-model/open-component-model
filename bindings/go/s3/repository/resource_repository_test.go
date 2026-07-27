@@ -15,6 +15,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
 )
@@ -24,7 +25,9 @@ import (
 type fakeGetter struct {
 	body        []byte
 	contentType string
-	gotInput    *s3.GetObjectInput
+	// versionID is the object version S3 reports for the read. Empty reports none.
+	versionID string
+	gotInput  *s3.GetObjectInput
 }
 
 func (f *fakeGetter) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -32,6 +35,9 @@ func (f *fakeGetter) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...fu
 	out := &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(f.body))}
 	if f.contentType != "" {
 		out.ContentType = aws.String(f.contentType)
+	}
+	if f.versionID != "" {
+		out.VersionId = aws.String(f.versionID)
 	}
 	return out, nil
 }
@@ -118,6 +124,87 @@ func Test_ProcessResourceDigest(t *testing.T) {
 	entries, err := os.ReadDir(tempFolder)
 	require.NoError(t, err)
 	require.Empty(t, entries, "digest processing must clean up the object it downloaded")
+}
+
+// Test_ProcessResourceDigest_PinsAccess covers the ResourceDigestProcessor
+// requirement that a processed access "MUST always reference the content described
+// by the digest and cannot be mutated": once digested, the access must name the
+// exact object version that was hashed.
+func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
+	const versionID = "3sL4kqtJlcpXroDTDmJ+rmSpXd3dIbrHY+MTRCxf3vjVBH40Nr8X8gdRQBpUMLUo"
+
+	tests := []struct {
+		name string
+		// specVersion is the version already on the access spec, if any.
+		specVersion string
+		// versionID is what S3 reports for the read.
+		versionID string
+		// wantVersion is the version expected on the access after processing.
+		wantVersion string
+	}{
+		{
+			name:        "unpinned access is pinned to the digested version",
+			versionID:   versionID,
+			wantVersion: versionID,
+		},
+		{
+			name:        "an already pinned access is left alone",
+			specVersion: "pinned-by-author",
+			versionID:   versionID,
+			wantVersion: "pinned-by-author",
+		},
+		{
+			// A bucket without versioning cannot be pinned: "null" survives an
+			// overwrite, so recording it would imply a guarantee that does not hold.
+			name:        "unversioned object is left unpinned rather than pinned to null",
+			versionID:   download.UnversionedVersionID,
+			wantVersion: "",
+		},
+		{
+			name:        "store reporting no version leaves the access unpinned",
+			versionID:   "",
+			wantVersion: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()},
+				WithClient(&fakeGetter{body: []byte("digest me"), versionID: tt.versionID}))
+
+			resource := s3Resource(&v1.S3{BucketName: "b", ObjectKey: "k", Version: tt.specVersion})
+			res, err := repo.ProcessResourceDigest(context.Background(), resource, nil)
+			require.NoError(t, err)
+
+			spec := v1.S3{}
+			require.NoError(t, accessspec.Scheme.Convert(res.Access, &spec))
+			require.Equal(t, tt.wantVersion, spec.Version)
+
+			// Pinning must not disturb the resource identity or the digest itself.
+			require.Equal(t, "b", spec.BucketName)
+			require.Equal(t, "k", spec.ObjectKey)
+			require.NotNil(t, res.Digest)
+		})
+	}
+}
+
+// Test_ProcessResourceDigest_DoesNotMutateInputResource guards the DeepCopy: pinning
+// writes to the returned resource, never to the caller's.
+func Test_ProcessResourceDigest_DoesNotMutateInputResource(t *testing.T) {
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()},
+		WithClient(&fakeGetter{body: []byte("digest me"), versionID: "v-99"}))
+
+	resource := s3Resource(&v1.S3{BucketName: "b", ObjectKey: "k"})
+	res, err := repo.ProcessResourceDigest(context.Background(), resource, nil)
+	require.NoError(t, err)
+
+	original := v1.S3{}
+	require.NoError(t, accessspec.Scheme.Convert(resource.Access, &original))
+	require.Empty(t, original.Version, "the caller's resource must not be pinned in place")
+
+	pinned := v1.S3{}
+	require.NoError(t, accessspec.Scheme.Convert(res.Access, &pinned))
+	require.Equal(t, "v-99", pinned.Version)
 }
 
 // Test_DownloadResource_StreamsIntoConfiguredTempFolder pins the injected

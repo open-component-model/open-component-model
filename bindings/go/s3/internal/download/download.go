@@ -18,7 +18,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
@@ -29,10 +28,27 @@ const defaultRegion = "us-east-1"
 // tempFilePattern names the files [Download] streams object bodies into.
 const tempFilePattern = "ocm-s3-download-*"
 
-// sdkOwnedRetries disables the shared HTTP client's retry transport. The AWS SDK
-// already retries GetObject and understands S3's throttling responses, so a
-// second retry layer beneath it would only multiply attempts.
-const sdkOwnedRetries = -1
+// retryDisabled is httpv1alpha1.RetryConfig's encoding of "no retries at all".
+// Note that a nil RetryConfig does not mean this: it selects the shared client's
+// default of five retries.
+const retryDisabled = -1
+
+// UnversionedVersionID is the versionId S3 reports for objects that carry no
+// real version: those in buckets where versioning was never enabled, and those
+// written before it was. It is a valid input to GetObject but pins nothing —
+// overwriting such an object leaves the versionId unchanged.
+const UnversionedVersionID = "null"
+
+// Result is the outcome of a [Download].
+type Result struct {
+	// Blob is the object body, backed by a file on disk.
+	Blob blob.ReadOnlyBlob
+	// VersionID is the object version that was actually read, as reported by S3.
+	// It is [UnversionedVersionID] for an unversioned object and empty for stores
+	// that do not report a version at all, so it identifies immutable content only
+	// when it is neither. Callers pin an access spec with it; see the s3 repository.
+	VersionID string
+}
 
 // Request describes a single S3 object download.
 type Request struct {
@@ -56,13 +72,14 @@ type Request struct {
 }
 
 // Download fetches the object described by req and returns its body as a blob
-// backed by a file on disk. Objects are streamed rather than buffered, so memory
-// use stays flat regardless of object size; the file is created under the
-// directory given by [WithTempDir] and outlives this call, so the caller owns it.
+// backed by a file on disk, along with the object version that was read. Objects
+// are streamed rather than buffered, so memory use stays flat regardless of object
+// size; the file is created under the directory given by [WithTempDir] and outlives
+// this call, so the caller owns it.
 //
 // The S3 client, credentials and maximum size are supplied via options; see
 // [WithClient], [WithCredentials] and [WithMaxDownloadSize].
-func Download(ctx context.Context, req Request, opts ...Option) (_ blob.ReadOnlyBlob, err error) {
+func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err error) {
 	o := &option{}
 	for _, opt := range opts {
 		opt(o)
@@ -77,7 +94,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ blob.ReadOnly
 
 	getter := o.Client
 	if getter == nil {
-		client, err := newClient(ctx, req, o.Credentials, o.HTTPConfig)
+		client, err := newClient(ctx, req, o)
 		if err != nil {
 			return nil, err
 		}
@@ -153,10 +170,17 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ blob.ReadOnly
 	}
 	b.SetMediaType(mediaType)
 
-	return b, nil
+	return &Result{Blob: b, VersionID: aws.ToString(out.VersionId)}, nil
 }
 
 // httpConfig derives the HTTP configuration handed to the shared client.
+//
+// Retry is stripped out of the transport, globally and per host: the AWS SDK
+// already retries GetObject and understands S3's throttling responses, so a
+// second retry layer beneath it would multiply attempts and work against the
+// SDK's backoff. The caller's retry intent is not lost — [sdkMaxAttempts] carries
+// it over to the SDK, which is the layer that can act on it properly.
+//
 // InsecureSkipTLSVerify from the access spec is folded into the TLS config so the
 // shared client applies it through its own transport, which warns once per host
 // that verification is off instead of disabling it silently.
@@ -166,8 +190,16 @@ func httpConfig(cfg *httpv1alpha1.Config, insecureSkipTLSVerify bool) *httpv1alp
 		out = &httpv1alpha1.Config{}
 	}
 
-	maxRetries := sdkOwnedRetries
-	out.Retry = &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}
+	out.Retry = noRetry()
+	// A per-host entry overrides the global config, so leaving these would let a
+	// host re-enable the retry layer the global setting just removed.
+	for host, hc := range out.Hosts {
+		if hc == nil {
+			continue
+		}
+		hc.Retry = noRetry()
+		out.Hosts[host] = hc
+	}
 
 	if insecureSkipTLSVerify {
 		skip := true
@@ -177,21 +209,63 @@ func httpConfig(cfg *httpv1alpha1.Config, insecureSkipTLSVerify bool) *httpv1alp
 	return out
 }
 
-// newClient builds an S3 client from the request and OCM credentials. When no
+// noRetry builds a retry config that turns the transport's retry layer off.
+func noRetry() *httpv1alpha1.RetryConfig {
+	maxRetries := retryDisabled
+	return &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}
+}
+
+// sdkMaxAttempts translates the caller's retry config into the AWS SDK's attempt
+// count, so that configuring retry still has an effect once [httpConfig] has taken
+// retry away from the transport.
+//
+// The two count differently: MaxRetries counts the retries after the first request,
+// while the SDK's MaxAttempts counts that first request too. Returns 0 when the
+// config says nothing the SDK can act on, which leaves the SDK's own default in place.
+func sdkMaxAttempts(cfg *httpv1alpha1.Config) int {
+	if cfg == nil || cfg.Retry == nil || cfg.Retry.MaxRetries == nil {
+		return 0
+	}
+
+	switch n := *cfg.Retry.MaxRetries; {
+	case n > 0:
+		return n + 1
+	case n == retryDisabled:
+		return 1
+	default:
+		// Zero asks for unbounded retries, which the SDK cannot express. Its
+		// default is a saner answer than approximating "forever" with a number.
+		return 0
+	}
+}
+
+// newClient builds an S3 client from the request and the download options. When no
 // static credentials are supplied, the AWS default credential chain is used.
-func newClient(ctx context.Context, req Request, creds runtime.Typed, cfg *httpv1alpha1.Config) (*s3.Client, error) {
+func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) {
 	region := req.Region
 	if region == "" {
 		region = defaultRegion
 	}
 
-	loadOpts := []func(*config.LoadOptions) error{
-		config.WithRegion(region),
-		config.WithHTTPClient(ocmhttp.New(ocmhttp.WithConfig(httpConfig(cfg, req.InsecureSkipTLSVerify)))),
+	// A supplied client is used as-is; its transport behaviour is the caller's.
+	httpClient := o.HTTPClient
+	if httpClient == nil {
+		httpClient = ocmhttp.New(ocmhttp.WithConfig(httpConfig(o.HTTPConfig, req.InsecureSkipTLSVerify)))
 	}
 
-	if creds != nil {
-		s3creds, err := credv1.ConvertToS3Credentials(creds)
+	loadOpts := []func(*config.LoadOptions) error{
+		config.WithRegion(region),
+		config.WithHTTPClient(httpClient),
+	}
+
+	// Retry lives in the SDK rather than the transport, so a configured retry has
+	// to be applied here to have any effect.
+	if attempts := sdkMaxAttempts(o.HTTPConfig); attempts > 0 {
+		loadOpts = append(loadOpts, config.WithRetryMaxAttempts(attempts))
+	}
+
+	if o.Credentials != nil {
+		s3creds, err := credv1.ConvertToS3Credentials(o.Credentials)
 		if err != nil {
 			return nil, fmt.Errorf("error converting s3 credentials: %w", err)
 		}
