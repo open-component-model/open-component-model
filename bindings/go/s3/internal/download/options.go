@@ -10,10 +10,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// DefaultMaxDownloadSize is the default maximum object size. Zero means
-// unlimited: the object body is streamed to a file rather than held in memory,
-// so an object is bounded by free disk rather than by RAM. Callers that read
-// from untrusted buckets can still cap it with [WithMaxDownloadSize].
+// DefaultMaxDownloadSize is the default maximum object size. Zero means unlimited:
+// bodies are streamed to disk rather than held in memory, so an object is bounded
+// by free disk rather than by RAM. Use [WithMaxDownloadSize] to cap it.
 const DefaultMaxDownloadSize int64 = 0
 
 // ObjectGetter is the subset of the S3 client used by the downloader. The
@@ -67,12 +66,9 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 }
 
 // WithHTTPClient sets the HTTP client the S3 client sends its requests through.
-// The client carries no bucket, region or endpoint of its own — those come from
-// the [Request] — so one client serves every object correctly.
-//
-// It is used exactly as given: its TLS, timeout and retry behaviour belong to the
-// caller, so [WithHTTPConfig] and the request's InsecureSkipTLSVerify do not apply
-// to it. When unset, a client is built from the HTTP config instead.
+// It is used exactly as given, so [WithHTTPConfig] and the request's
+// InsecureSkipTLSVerify do not apply to it. When unset, a client is built from the
+// HTTP config instead.
 func WithHTTPClient(c *http.Client) Option {
 	return func(o *option) { o.HTTPClient = c }
 }

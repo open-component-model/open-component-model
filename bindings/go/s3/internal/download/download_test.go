@@ -71,7 +71,6 @@ func (f *fakeGetter) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...fu
 	return out, nil
 }
 
-// trackedBody records that Close was called on the object body.
 type trackedBody struct {
 	io.ReadCloser
 	closed *bool
@@ -100,7 +99,6 @@ func (e *errReader) Read(p []byte) (int, error) {
 
 func (e *errReader) Close() error { return nil }
 
-// readBlob reads a blob's content in full.
 func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	t.Helper()
 	rc, err := b.ReadCloser()
@@ -111,7 +109,6 @@ func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	return data
 }
 
-// filesIn lists the entries of a directory.
 func filesIn(t *testing.T, dir string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
@@ -318,9 +315,8 @@ func TestDownload_BodyReadErrorIsWrappedAndFileRemoved(t *testing.T) {
 	assert.True(t, fake.closed, "the object body must be closed even when the read fails")
 }
 
-// TestDownload_StreamsIntoTempDir pins the streaming contract: the object body is
-// written to a file under the configured directory rather than buffered in memory,
-// and that file backs the returned blob.
+// TestDownload_StreamsIntoTempDir pins the streaming contract: the body is written
+// to a file under the configured directory rather than buffered in memory.
 func TestDownload_StreamsIntoTempDir(t *testing.T) {
 	tempDir := t.TempDir()
 	content := []byte("streamed to disk")
@@ -341,8 +337,7 @@ func TestDownload_StreamsIntoTempDir(t *testing.T) {
 }
 
 // TestDownload_TempFileOutlivesCall documents the ownership rule: the file backing
-// the returned blob is deliberately not removed when Download returns, so the blob
-// stays readable. The caller owns it.
+// the blob is deliberately not removed when Download returns, so the caller owns it.
 func TestDownload_TempFileOutlivesCall(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -412,8 +407,7 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 }
 
 // TestDownload_OversizedObjectIsRejectedBeforeTransfer verifies the up-front
-// ContentLength check short-circuits: an object reported as oversized must be
-// rejected without its body being read.
+// ContentLength check short-circuits before the body is read.
 func TestDownload_OversizedObjectIsRejectedBeforeTransfer(t *testing.T) {
 	body := &errReader{err: fmt.Errorf("body must not be read")}
 	fake := &fakeGetter{

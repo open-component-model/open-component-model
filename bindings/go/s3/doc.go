@@ -39,6 +39,27 @@
 // names are also accepted: awsAccessKeyID, awsSecretAccessKey, and token (mapped to
 // the session token).
 //
+// # HTTP client and retries
+//
+// Downloads go through the shared ocm HTTP client, built from an
+// [ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1.Config]
+// (timeouts, TLS, per-host overrides, retry). The access spec's
+// insecureSkipTLSVerify is folded into its TLS settings. A client supplied with
+// repository.WithHTTPClient is used exactly as given and none of this applies to it.
+//
+// Two independent retry layers are in play, because they retry different failures.
+// The transport retries a single round trip and sees only connection errors and
+// status codes; that layer is what the ocm HTTP config describes. The aws-sdk-go-v2
+// client retries the whole operation, re-signing every attempt, classifying S3's
+// error codes (throttling, SlowDown, clock skew) and rate-limiting its own retries;
+// that layer keeps the SDK defaults and is configured the AWS way, through
+// AWS_MAX_ATTEMPTS and AWS_RETRY_MODE or the equivalent shared-config keys. Since
+// the layers compose, the worst-case number of requests for one download is the
+// product of the two attempt counts.
+//
+// Neither layer covers a body that fails mid-stream: SDK retry ends once the
+// response headers are deserialised, and the object is streamed after that.
+//
 // # Credential consumer identity
 //
 // GetResourceCredentialConsumerIdentity resolves the identity a credential resolver
