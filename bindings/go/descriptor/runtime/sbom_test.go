@@ -10,16 +10,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// sbomResource builds a resource of type "sbom" carrying a ocm.software/sbom
-// label that references the given resource identities.
-func sbomResource(t *testing.T, name string, refs ...runtime.Identity) descriptor.Resource {
+// sbomResource builds a resource of type "sbom" carrying a
+// ocm.software/artefactReference label whose identitySelector points at the given
+// resource identity.
+func sbomResource(t *testing.T, name string, selector runtime.Identity) descriptor.Resource {
 	t.Helper()
-	references := make([]descriptor.SBOMReference, 0, len(refs))
-	for _, id := range refs {
-		references = append(references, descriptor.SBOMReference{Resource: id})
-	}
-	label := descriptor.Label{Name: descriptor.LabelSBOM, Version: "v1"}
-	require.NoError(t, label.SetValue(descriptor.SBOMLabelValue{References: references}))
+	label := descriptor.Label{Name: descriptor.LabelArtefactReference, Version: "v1"}
+	require.NoError(t, label.SetValue(descriptor.ArtefactReferenceLabelValue{IdentitySelector: selector}))
 	res := descriptor.Resource{Type: descriptor.ResourceTypeSBOM}
 	res.Name = name
 	res.Labels = []descriptor.Label{label}
@@ -96,7 +93,7 @@ func TestFindSBOMResources(t *testing.T) {
 
 	t.Run("malformed label value returns an error", func(t *testing.T) {
 		bad := namedResource("bad-sbom", descriptor.ResourceTypeSBOM)
-		bad.Labels = []descriptor.Label{{Name: descriptor.LabelSBOM, Value: []byte(`"not-an-object"`)}}
+		bad.Labels = []descriptor.Label{{Name: descriptor.LabelArtefactReference, Value: []byte(`"not-an-object"`)}}
 		desc := descWith(cli, bad)
 		_, err := descriptor.FindSBOMResources(desc, runtime.Identity{"name": "cli"})
 		require.Error(t, err)
@@ -113,9 +110,9 @@ func TestElementMetaGetLabel(t *testing.T) {
 	res := sbomResource(t, "cli-sbom", runtime.Identity{"name": "cli"})
 
 	t.Run("present", func(t *testing.T) {
-		got := res.GetLabel(descriptor.LabelSBOM)
+		got := res.GetLabel(descriptor.LabelArtefactReference)
 		require.NotNil(t, got)
-		assert.Equal(t, descriptor.LabelSBOM, got.Name)
+		assert.Equal(t, descriptor.LabelArtefactReference, got.Name)
 	})
 
 	t.Run("absent", func(t *testing.T) {
@@ -124,6 +121,6 @@ func TestElementMetaGetLabel(t *testing.T) {
 
 	t.Run("nil receiver", func(t *testing.T) {
 		var m *descriptor.ElementMeta
-		assert.Nil(t, m.GetLabel(descriptor.LabelSBOM))
+		assert.Nil(t, m.GetLabel(descriptor.LabelArtefactReference))
 	})
 }

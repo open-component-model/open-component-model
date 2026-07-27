@@ -146,7 +146,7 @@ resources:
 
 ### `SBoM/v1`
 
-Discovers the Software Bill of Materials (SBOM) attached to another resource's OCI image and embeds it as a local blob at construction time. The SBOM is discovered (never generated) from a buildx in-index attestation or via the OCI Referrers API, and is stored **in its original format** (e.g. SPDX). The input also adds a `ocm.software/sbom` label linking the embedded SBOM back to the resource it describes. Because the result is an ordinary resource of `type: sbom`, it is downloaded like any other resource (`ocm download resource --identity name=<sbom-resource>`) and aggregated by `ocm get sbom`.
+Discovers the Software Bill of Materials (SBOM) attached to another resource's OCI image and embeds it as a local blob at construction time. The SBOM is discovered (never generated) from a buildx in-index attestation or via the OCI Referrers API, and is stored **in its original format** (e.g. SPDX). The input also adds a `ocm.software/artefactReference` label linking the embedded SBOM back to the resource it describes. Because the result is an ordinary resource of `type: sbom`, it is downloaded like any other resource (`ocm download resource --identity name=<sbom-resource>`) and aggregated by `ocm get sbom`.
 
 For a multi-architecture image, the SBOM of **every** platform is attached by default: the input is expanded into one `sbom` resource per platform, each tagged with a matching `extraIdentity` (`os`/`architecture`). Set `resource.extraIdentity.architecture` to attach only one platform's SBOM instead. `ocm get sbom` then selects the SBOM matching the host platform.
 

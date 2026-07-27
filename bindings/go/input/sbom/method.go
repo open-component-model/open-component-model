@@ -130,9 +130,15 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		return nil, fmt.Errorf("reading discovered SBOM for resource %q failed: %w", resource.Name, err)
 	}
 
-	// Attach the ocm.software/sbom back-link label pointing at the subject.
+	// Attach the ocm.software/artefactReference label pointing at the subject.
+	// The selector mirrors the subject resource's identity (name/version). It does
+	// NOT include the architecture: the subject OCI image is a single multi-arch
+	// resource with no architecture in its own identity, so an architecture in the
+	// selector would make it a superset and break subset matching. Per-arch SBOMs
+	// are instead disambiguated by their own extraIdentity, and `get sbom` selects
+	// the host platform from those.
 	if err := attachSBOMLabel(resource, spec.Resource.Identity()); err != nil {
-		return nil, fmt.Errorf("attaching SBOM label to resource %q failed: %w", resource.Name, err)
+		return nil, fmt.Errorf("attaching artefact-reference label to resource %q failed: %w", resource.Name, err)
 	}
 
 	sbomBlob := inmemory.New(bytes.NewReader(data), inmemory.WithMediaType(mediaType))
@@ -216,14 +222,14 @@ func readBlob(b blob.ReadOnlyBlob, mediaType string) (_ []byte, _ string, err er
 	return data, mediaType, nil
 }
 
-// attachSBOMLabel appends (or replaces) the ocm.software/sbom label on the
-// resource, linking the baked SBOM to the subject resource identity.
-func attachSBOMLabel(resource *constructorruntime.Resource, subject runtime.Identity) error {
-	value := descriptor.SBOMLabelValue{
-		References: []descriptor.SBOMReference{{Resource: subject}},
+// attachSBOMLabel appends (or replaces) the ocm.software/artefactReference label
+// on the resource, linking the baked SBOM to the subject resource identity.
+func attachSBOMLabel(resource *constructorruntime.Resource, selector runtime.Identity) error {
+	value := descriptor.ArtefactReferenceLabelValue{
+		IdentitySelector: selector,
 	}
 	label := constructorruntime.Label{
-		Name:    descriptor.LabelSBOM,
+		Name:    descriptor.LabelArtefactReference,
 		Version: "v1",
 		Signing: true,
 	}
@@ -239,7 +245,7 @@ func attachSBOMLabel(resource *constructorruntime.Resource, subject runtime.Iden
 	}
 	// Replace any pre-existing label of the same name to stay idempotent.
 	for idx := range resource.Labels {
-		if resource.Labels[idx].Name == descriptor.LabelSBOM {
+		if resource.Labels[idx].Name == descriptor.LabelArtefactReference {
 			resource.Labels[idx] = label
 			return nil
 		}

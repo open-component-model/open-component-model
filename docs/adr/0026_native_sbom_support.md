@@ -69,8 +69,8 @@ Justification:
 Two attachment models are supported:
 
 * **Label-linked** — a resource of `type: sbom` is linked to the resource it
-  describes via a `ocm.software/sbom` label whose value lists the described
-  resource identities.
+  describes via a `ocm.software/artefactReference` label whose value is an
+  `identitySelector` for the described resource.
 * **On-image** — an SBOM attached to a resource's OCI image, discovered from
   buildx in-index attestations (in-toto SPDX/CycloneDX predicates) or the OCI
   Referrers API.
@@ -92,14 +92,14 @@ time and bakes the result:
   the plugin RPC contract) still processes exactly one resource → one SBOM.
 * The discovered SBOM is baked **verbatim, in its original format** (e.g. SPDX
   stays SPDX). No conversion occurs at build time.
-* The input **auto-adds** the `ocm.software/sbom` back-link label pointing at the
+* The input **auto-adds** the `ocm.software/artefactReference` back-link label pointing at the
   subject, so the baked SBOM is discoverable.
 
 The **`ocm get sbom <cv> [--recursive]`** command assembles an orchestrating
 SBOM:
 
 * It is **baked-only**: it reads `type: sbom` local blobs discovered via the
-  `ocm.software/sbom` label and performs no live registry discovery.
+  `ocm.software/artefactReference` label and performs no live registry discovery.
 * When a resource carries per-architecture SBOMs, it selects the one matching the
   host platform (`GOOS`/`GOARCH`) by `extraIdentity` subset match — mirroring how a
   multi-arch image resource is selected by identity. If none matches the host, all
@@ -125,7 +125,7 @@ constructor.yaml
   descriptor:
     resource podinfo-sbom (extraIdentity os=linux,arch=amd64)
       access: localBlob (application/spdx+json)
-      label:  ocm.software/sbom → { references: [ {resource: {name: podinfo}} ] }
+      label:  ocm.software/artefactReference → { identitySelector: {name: podinfo} }
     resource podinfo-sbom (extraIdentity os=linux,arch=arm64)   # same shape, arm64
 ```
 
@@ -154,8 +154,10 @@ bom-refs are namespaced `component@version:resource:name[:originalRef]` (with a
 
 #### Contract
 
-* **Label** `ocm.software/sbom` (version `v1`), value
-  `{ references: [ { resource: <identity> } ] }`, marked signing-relevant.
+* **Label** `ocm.software/artefactReference` (version `v1`), value
+  `{ identitySelector: <flat identity> }` (name/version of the described resource;
+  no architecture, so it stays a subset of the subject image's identity), marked
+  signing-relevant. Following the ocm-spec artefact-reference convention.
 * **Input** `SBoM/v1`: `{ resource: { name, version?, extraIdentity? } }`, where
   `resource.extraIdentity.architecture` optionally pins one platform of a multi-arch
   image; `access` is populated by the pre-construction pass, not authored by hand.
