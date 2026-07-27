@@ -84,6 +84,9 @@ type Resource struct {
 	Relation ResourceRelation `json:"-"`
 	// Options bundles optional, construction-time directives for the resource.
 	Options ResourceOptions `json:"-"`
+	// Digest is the optional digest of the referenced resource.
+	// If provided, it will be verified against the calculated digest during construction.
+	Digest *Digest `json:"-"`
 	// AccessOrInput defines the access or input information of the resource.
 	// In a component constructor, there is only one access or input information.
 	AccessOrInput `json:"-"`

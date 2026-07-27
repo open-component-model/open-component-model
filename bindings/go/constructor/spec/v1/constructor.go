@@ -126,6 +126,9 @@ type Resource struct {
 	// Options bundles optional, construction-time directives for the resource
 	// It is omitted entirely when no options are set.
 	Options *ResourceOptions `json:"options,omitempty"`
+	// Digest is the optional digest of the referenced resource.
+	// If provided, it will be verified against the calculated digest during construction.
+	Digest *Digest `json:"digest,omitempty"`
 
 	AccessOrInput `json:",inline"`
 }
