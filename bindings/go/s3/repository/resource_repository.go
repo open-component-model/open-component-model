@@ -23,9 +23,7 @@ import (
 )
 
 const (
-	// hashAlgorithmSHA256 is the hash algorithm used for s3 resource digests.
 	hashAlgorithmSHA256 = "SHA-256"
-	// genericBlobDigestV1 is the normalisation algorithm for a plain downloaded blob.
 	genericBlobDigestV1 = "genericBlobDigest/v1"
 )
 
@@ -65,14 +63,10 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 	return accessspec.Scheme
 }
 
-// GetResourceCredentialConsumerIdentity resolves the credential consumer identity for the given resource.
-//
-// The object path (bucket/objectKey) is always encoded as the path attribute. The
-// hostname is set only for a custom S3-compatible endpoint, where it identifies where
-// credentials apply. For plain AWS S3 (no endpoint) the identity carries no hostname:
-// AWS is the default target, so credentials resolve host-agnostically and a config does
-// not need to name the AWS host. The default matcher requires equal hostnames, so a
-// hostname is deliberately omitted rather than defaulted to the AWS host.
+// GetResourceCredentialConsumerIdentity resolves the credential consumer identity
+// for the given resource. It always carries the object path, and a hostname only for
+// a custom endpoint; see the package documentation of the s3 module for the full
+// matching rules.
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
@@ -121,7 +115,6 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, err
 	}
 
-	// An empty TempFolder is a valid config and selects the OS default.
 	result, err := r.download(ctx, spec, credentials, r.filesystemConfig.TempFolder)
 	if err != nil {
 		return nil, err
@@ -130,7 +123,6 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return result.Blob, nil
 }
 
-// convertAccess resolves the resource's access into the typed S3 access spec.
 func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S3, error) {
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
@@ -147,8 +139,7 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S
 	return spec, nil
 }
 
-// download streams the object described by spec into tempDir and returns a blob
-// backed by the resulting file, along with the object version that was read.
+// download streams the object described by spec into tempDir.
 func (r *ResourceRepository) download(ctx context.Context, spec *v1.S3, credentials runtime.Typed, tempDir string) (*download.Result, error) {
 	opts := []download.Option{
 		download.WithCredentials(credentials),
@@ -193,21 +184,21 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 	return r.GetResourceCredentialConsumerIdentity(ctx, resource)
 }
 
-// ProcessResourceDigest computes the digest of an S3 resource by downloading the referenced
-// object and hashing it. When the resource already carries a digest, the computed value is
-// verified against it. OCM's own SHA-256 over the content is the source of truth, not the S3 ETag.
+// ProcessResourceDigest computes the digest of an S3 resource by downloading the
+// referenced object and hashing it with SHA-256, which is the source of truth rather
+// than the S3 ETag. When the resource already carries a digest, the computed value is
+// verified against it.
 //
-// After a successful digest, the access is pinned to the object version that was read, so it
-// keeps referencing the content the digest describes. See [ResourceRepository.pinAccess] for
-// the case where S3 offers no version to pin to.
+// After a successful digest, the access is pinned to the object version that was read;
+// see [ResourceRepository.pinAccess].
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	spec, err := r.convertAccess(resource)
 	if err != nil {
 		return nil, err
 	}
 
-	// The object is only read to hash it and the blob never leaves this function,
-	// so unlike DownloadResource this owns the downloaded file and removes it.
+	// The blob never leaves this function, so unlike DownloadResource this owns the
+	// downloaded file and removes it.
 	tempDir, err := os.MkdirTemp(r.filesystemConfig.TempFolder, "ocm-s3-digest-*")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary directory for digest processing: %w", err)
@@ -258,19 +249,15 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	return resource, nil
 }
 
-// pinAccess points the resource's access at the exact object version the digest was
-// computed over, so the access cannot later resolve to different content. This is the
-// [repository.ResourceDigestProcessor] requirement that a processed access "MUST always
-// reference the content described by the digest and cannot be mutated".
+// pinAccess points the resource's access at the object version the digest was computed
+// over, satisfying the [repository.ResourceDigestProcessor] requirement that a processed
+// access "MUST always reference the content described by the digest and cannot be mutated".
+// An access that already names a version was pinned by whoever wrote it and is left alone.
 //
-// An access that already names a version is left alone: it was pinned by whoever wrote
-// it, and the download honoured it.
-//
-// Not every object can be pinned. A bucket without versioning reports no version, or
-// the placeholder [download.UnversionedVersionID], neither of which survives an
-// overwrite. Rather than record a version that pins nothing, the access is left as it
-// is and the gap is logged: erroring instead would make digests unusable for every
-// unversioned bucket, which is a bigger break than the one it would prevent.
+// Unversioned buckets report no version, or the placeholder
+// [download.UnversionedVersionID], neither of which survives an overwrite. Those are
+// logged rather than pinned or rejected, because erroring would make digests unusable
+// for every unversioned bucket.
 func (r *ResourceRepository) pinAccess(ctx context.Context, resource *descriptor.Resource, spec *v1.S3, versionID string) {
 	if spec.Version != "" {
 		return

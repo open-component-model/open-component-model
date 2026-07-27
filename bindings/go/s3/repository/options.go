@@ -9,13 +9,10 @@ import (
 
 // Options holds configuration for the S3 resource repository.
 type Options struct {
-	// client injects a pre-built S3 client in tests. It is deliberately not
-	// settable from outside this package: a client bakes in one endpoint, region
-	// and identity, while a repository serves resources whose access specs each
-	// carry their own. Injecting one would silently route every download to the
-	// same place and ignore the credentials handed to DownloadResource. When nil
-	// (always, outside tests) a client is built per download from the access spec
-	// and credentials, which is what makes multi-bucket use correct.
+	// client injects a pre-built S3 client in tests. It is deliberately not settable
+	// from outside this package: an S3 client bakes in one endpoint, region and
+	// identity, so injecting one would route every resource to the same place
+	// regardless of its access spec and credentials.
 	client download.ObjectGetter
 	// MaxDownloadSize caps the number of bytes read from an object. Nil uses the
 	// default (unlimited).
@@ -51,13 +48,12 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 }
 
 // WithHTTPClient sets the HTTP client used for object downloads. Unlike an S3
-// client, an HTTP client carries no bucket, region or endpoint of its own — those
-// come from each resource's access spec — so one client serves them all correctly.
+// client, it carries no bucket, region or endpoint of its own, so one client serves
+// every resource correctly.
 //
-// It is used exactly as given: its TLS, timeout and retry behaviour belong to the
-// caller, so neither [WithHTTPConfig] nor the access spec's insecureSkipTLSVerify
-// applies to it. Callers wanting the shared ocm client with their own settings can
-// build one with ocmhttp.New and pass it here.
+// It is used exactly as given, so neither [WithHTTPConfig] nor the access spec's
+// insecureSkipTLSVerify applies to it. Build one with ocmhttp.New to get the shared
+// ocm client with custom settings.
 func WithHTTPClient(client *http.Client) Option {
 	return func(o *Options) {
 		o.HTTPClient = client
