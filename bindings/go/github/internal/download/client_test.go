@@ -282,5 +282,6 @@ func TestFetch_DownloadErrorDoesNotLeakTheSignedArchiveLink(t *testing.T) {
 	assert.NotContains(t, err.Error(), "ghp_secret", "the caller's github token must not reach the error")
 	assert.Contains(t, err.Error(), "octocat/Hello-World@"+commit,
 		"the commit coordinates must survive so the failure stays diagnosable")
+	assert.Contains(t, err.Error(), "token="+redactedToken, "the signed link's token must be visibly redacted, not silently dropped")
 	assert.ErrorContains(t, err, "connection refused", "the underlying cause must survive")
 }

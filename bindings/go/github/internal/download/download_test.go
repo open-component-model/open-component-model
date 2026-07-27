@@ -1,9 +1,13 @@
 package download
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -79,5 +83,63 @@ func TestDownload(t *testing.T) {
 		}, nil, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "error resolving github archive link")
+	})
+}
+
+func TestRedact(t *testing.T) {
+	t.Run("strips the token of a url rendered by net/http", func(t *testing.T) {
+		err := &url.Error{
+			Op:  "Get",
+			URL: "https://codeload.github.com/octocat/Hello-World/legacy.tar.gz/7fd1a60?token=supersecret",
+			Err: context.Canceled,
+		}
+		got := redact(err)
+		assert.Equal(t, `Get "https://codeload.github.com/octocat/Hello-World/legacy.tar.gz/7fd1a60?token=REDACTED": context canceled`, got.Error())
+	})
+
+	t.Run("keeps every other parameter legible", func(t *testing.T) {
+		err := &url.Error{
+			Op:  "Get",
+			URL: "https://codeload.github.com/o/r?ref=main&token=supersecret&format=tarball",
+			Err: context.Canceled,
+		}
+		got := redact(err).Error()
+		assert.Contains(t, got, "ref=main")
+		assert.Contains(t, got, "format=tarball", "redaction must stop at the parameter separator")
+		assert.NotContains(t, got, "supersecret")
+	})
+
+	t.Run("strips a token quoted inside a response header", func(t *testing.T) {
+		// The shape go-github produces when net/http cannot parse the Location
+		// header it reads the archive link from.
+		err := errors.New(`malformed MIME header line: "Location: https://codeload.github.com/o/r?token=supersecret\x7f"`)
+		assert.NotContains(t, redact(err).Error(), "supersecret")
+	})
+
+	t.Run("keeps the cause matchable", func(t *testing.T) {
+		err := &url.Error{Op: "Get", URL: "https://example.com/a?token=secret", Err: context.Canceled}
+		require.ErrorIs(t, redact(err), context.Canceled)
+
+		var urlErr *url.Error
+		require.ErrorAs(t, redact(err), &urlErr, "the chain must stay walkable for callers that classify by type")
+	})
+
+	t.Run("survives further wrapping", func(t *testing.T) {
+		err := &url.Error{Op: "Get", URL: "https://example.com/a?token=secret", Err: context.Canceled}
+		wrapped := fmt.Errorf("error downloading github archive o/r@sha: %w", redact(err))
+		assert.NotContains(t, wrapped.Error(), "secret")
+		assert.ErrorIs(t, wrapped, context.Canceled)
+	})
+
+	t.Run("returns an error with no token unchanged", func(t *testing.T) {
+		// The common go-github failure: an API error naming an unsigned URL.
+		err := errors.New("GET https://api.github.com/repos/octocat/Hello-World/tarball/7fd1a60: 404 Not Found []")
+		assert.Same(t, err, redact(err), "an error with nothing to redact must not be wrapped needlessly")
+	})
+
+	t.Run("leaves a public archive link alone", func(t *testing.T) {
+		// A public repository redirects to codeload without a token at all.
+		err := &url.Error{Op: "Get", URL: "https://codeload.github.com/octocat/Hello-World/legacy.tar.gz/7fd1a60", Err: context.Canceled}
+		assert.Equal(t, err.Error(), redact(err).Error())
 	})
 }

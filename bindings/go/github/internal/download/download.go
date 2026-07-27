@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -55,10 +56,64 @@ func Download(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHu
 	// Load eagerly so the network stream can be closed on return and a
 	// download failure surfaces here instead of on the first read.
 	if err := archive.Load(); err != nil {
-		return nil, fmt.Errorf("error buffering GitHub commit archive: %w", err)
+		// The read runs against the signed archive link, so a transport failure
+		// here can carry it the same way the download itself can; see redact.
+		return nil, fmt.Errorf("error buffering GitHub commit archive: %w", redact(err))
 	}
 
 	slog.DebugContext(ctx, "Downloaded GitHub commit archive", "repoUrl", gitHub.RepoURL, "commit", gitHub.Commit, "bytes", archive.Size())
 
 	return archive, nil
 }
+
+// redactedToken stands in for the signed link's token in a rendered error. It
+// is not a valid token, so a reader can tell the value was removed rather than
+// never set.
+const redactedToken = "REDACTED"
+
+// queryToken matches the token parameter of a URL query as net/http renders one
+// into an error message. The value runs to the next parameter, to whitespace,
+// or to the quote that closes a quoted URL, which is how *url.Error and a
+// quoted response header both present it. The match is case-insensitive because
+// nothing guarantees the casing a GitHub Enterprise deployment redirects with.
+var queryToken = regexp.MustCompile(`(?i)([?&]token=)[^&\s"]*`)
+
+// redact returns err with the value of every token query parameter in its
+// message replaced by redactedToken, or err itself when its message holds none.
+//
+// GitHub authorizes the archive download for a private repository with a
+// short-lived token in the link's query string, and net/http renders the full
+// request URL into the *url.Error it returns — so wrapping such a failure
+// verbatim publishes a live credential into the caller's logs. Unwrapping the
+// *url.Error is not enough on its own: go-github reads the link out of a
+// Location header, and a response net/http cannot parse quotes that header,
+// token and all, in the innermost error's own text.
+//
+// Only the token parameter is redacted, so the host, path, and any other
+// parameter stay legible for diagnosis. That is scoped to what GitHub actually
+// signs with today: a deployment that authorized an archive under some other
+// parameter name would not be covered, and this pattern would have to grow to
+// match it.
+//
+// The original error stays reachable through Unwrap, so a caller keeps
+// errors.Is against context.Canceled and errors.As against
+// *github.ErrorResponse; only the rendered text changes.
+func redact(err error) error {
+	msg := err.Error()
+	redacted := queryToken.ReplaceAllString(msg, "${1}"+redactedToken)
+	if redacted == msg {
+		return err
+	}
+	return &redactedError{msg: redacted, cause: err}
+}
+
+// redactedError renders a scrubbed message while keeping its cause in the error
+// chain.
+type redactedError struct {
+	msg   string
+	cause error
+}
+
+func (e *redactedError) Error() string { return e.msg }
+
+func (e *redactedError) Unwrap() error { return e.cause }

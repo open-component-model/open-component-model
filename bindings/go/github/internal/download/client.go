@@ -2,7 +2,6 @@ package download
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -135,20 +134,18 @@ func fetch(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCr
 	link, _, err := gh.Repositories.GetArchiveLink(ctx, owner, repo, github.Tarball,
 		&github.RepositoryContentGetOptions{Ref: commit}, archiveMaxRedirects)
 	if err != nil {
-		return nil, fmt.Errorf("error resolving github archive link for %s/%s@%s: %w", owner, repo, commit, err)
+		// The failure can quote the Location header this call was reading, and
+		// for a private repository that header is a signed link; see redact.
+		return nil, fmt.Errorf("error resolving github archive link for %s/%s@%s: %w", owner, repo, commit, redact(err))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("error creating github archive download request for %s/%s@%s: %w", owner, repo, commit, err)
+		return nil, fmt.Errorf("error creating github archive download request for %s/%s@%s: %w", owner, repo, commit, redact(err))
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		// For a private repository GitHub signs the link with a short-lived token
-		// in its query, and the *url.Error net/http returns renders the full
-		// request URL. Report the cause against the commit coordinates instead,
-		// so the token cannot reach a log.
-		return nil, fmt.Errorf("error downloading github archive %s/%s@%s: %w", owner, repo, commit, errors.Unwrap(err))
+		return nil, fmt.Errorf("error downloading github archive %s/%s@%s: %w", owner, repo, commit, redact(err))
 	}
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
