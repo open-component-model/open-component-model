@@ -175,9 +175,10 @@ See [Credential Consumer Identities: Wget]({{< relref "credential-consumer-ident
 ### Download Behavior
 
 Performs the request described by the access specification (`verb`, `header`, `body`, `noRedirect`) and returns the
-response body as an in-memory blob. Only 2xx responses are accepted and bodies are limited to 100 MiB. The media type of
-the blob is taken from `mediaType`, falling back to the response `Content-Type` and then to
-`application/octet-stream`.
+response body as a file-backed blob. Only 2xx responses are accepted. The body is streamed to a file under the
+`tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration type rather than buffered in memory, and
+there is no size limit by default. The media type of the blob is taken from `mediaType`, falling back to the response
+`Content-Type` and then to `application/octet-stream`.
 
 Request timeouts, retries, and per-host settings come from the
 [HTTP client configuration]({{< relref "http-client-configuration.md" >}}).

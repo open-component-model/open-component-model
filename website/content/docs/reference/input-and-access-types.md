@@ -386,7 +386,7 @@ in the target repository.
 ## Wget
 
 The following applies to both the `Wget/v1` input type and the `Wget/v1` access type — they share one transport,
-credential, and size-limiting implementation.
+credential, and download implementation.
 
 ### Media Type Resolution
 
@@ -407,16 +407,31 @@ Redirects are followed by default. With `noRedirect: true` the request stops at 
 a 3xx status is not a success status the operation fails with an error reporting that status. Use it to assert that a URL
 serves content directly rather than to fetch the redirect target.
 
-### Response Status and Size Limit
+### Response Status and Caching
 
-Only 2xx responses are accepted; any other status fails the operation. Response bodies are limited to **100 MiB** and are
-held in memory for the duration of the operation. The limit is a safeguard against unbounded downloads and is not
-configurable from the CLI — it can only be changed by callers of the Go bindings.
+Only 2xx responses are accepted; any other status fails the operation.
+
+Response bodies are **streamed to a file on disk** rather than buffered, so memory use stays flat regardless of how large
+the artifact is. There is **no size limit by default** — a download is bounded by free disk space. A limit can be set by
+callers of the Go bindings, and when one is set an oversized response is rejected before any of it is transferred
+whenever the server announces its `Content-Length`.
+
+The file is created under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration type, falling
+back to the operating system's temporary directory:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: filesystem.config.ocm.software/v1alpha1
+    tempFolder: /var/tmp/ocm
+```
+
+Point `tempFolder` at a volume with enough free space when you reference large artifacts, and at an encrypted volume
+when the content is sensitive.
 
 {{< callout type="note" >}}
-Both the fixed limit and the in-memory buffering are planned to change — see
-[ocm-project#1234](https://github.com/open-component-model/ocm-project/issues/1234), which tracks spooling large
-downloads to a temporary file and making the limit configurable.
+Digest computation cleans up after itself, but a downloaded resource is handed to the caller as a file-backed blob, so
+that file lives until the surrounding operation finishes with it.
 {{< /callout >}}
 
 Error messages report the request URL with userinfo, query parameters, and fragment stripped, so credentials embedded in
@@ -484,7 +499,6 @@ constructor files using the input type.
 | Area          | OCM v1                                                                             | OCM v2                                                    |
 |---------------|------------------------------------------------------------------------------------|-----------------------------------------------------------|
 | Media type    | `mediaType` → `Content-Type` → **URL file extension** → `application/octet-stream` | `mediaType` → `Content-Type` → `application/octet-stream` |
-| Download size | Unbounded; responses over 4 KiB stream to a temporary file                         | Capped at 100 MiB by default and held in memory           |
 | Minimum TLS   | TLS 1.3                                                                            | TLS 1.2                                                   |
 
 Set `mediaType` explicitly wherever OCM v1 relied on the URL's file extension — a `.tar.gz` URL that previously resolved
