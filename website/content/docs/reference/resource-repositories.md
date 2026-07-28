@@ -134,9 +134,9 @@ Handles resources served over plain HTTP or HTTPS.
 
 ### Supported Access Types
 
-| Access Type                                                           |
-|-----------------------------------------------------------------------|
-| [`Wget/v1`]({{< relref "input-and-access-types.md" >}}#wgetv1-access) |
+| Access Type                                                      |
+|------------------------------------------------------------------|
+| [`Wget/v1`]({{< relref "input-and-access-types.md" >}}#wgetv1-1) |
 
 ### Capabilities
 
@@ -167,7 +167,7 @@ The credential consumer identity is derived from the `url` field in the access s
 | `scheme`   | `https`                    |
 | `path`     | `myapp/1.0.0/myapp.tar.gz` |
 
-The [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input) derives the identity the same way, so one
+The [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1) derives the identity the same way, so one
 consumer entry covers construction and later downloads.
 
 See [Credential Consumer Identities: Wget]({{< relref "credential-consumer-identities.md" >}}#wget) for matching rules.

@@ -144,7 +144,7 @@ resources:
       env: production
 ```
 
-### `Wget/v1` (Input)
+### `Wget/v1`
 
 Downloads content from an HTTP or HTTPS URL while the component version is constructed and embeds it as a local blob.
 Use it when the upstream artifact is a plain HTTP download (a release archive, a checksum file, a signed binary) and you
@@ -321,13 +321,13 @@ resources:
 This access type is **alpha** (`v1alpha1`). Its schema may change in future releases.
 {{< /callout >}}
 
-### `Wget/v1` (Access)
+### `Wget/v1`
 
 References content served over HTTP or HTTPS. The bytes stay on the remote server — they are fetched when the resource
 is downloaded, when its digest is computed, and when the component version is transferred.
 
 The legacy type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical. The fields are identical
-to those of the [`Wget/v1` input type](#wgetv1-input), so the same request can be expressed either by value or by reference.
+to those of the [`Wget/v1` input type](#wgetv1), so the same request can be expressed either by value or by reference.
 
 | Field        | Type                  | Required | Description                                                                                                                               |
 |--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
