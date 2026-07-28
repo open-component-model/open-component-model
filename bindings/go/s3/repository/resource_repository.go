@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path"
-	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
 
@@ -20,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
+	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 )
 
 const (
@@ -81,28 +80,7 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
 
-	if spec.BucketName == "" {
-		return nil, fmt.Errorf("bucketName is required")
-	}
-
-	loc := path.Join(spec.BucketName, spec.ObjectKey)
-
-	var identity runtime.Identity
-	if spec.Endpoint != "" {
-		id, err := runtime.ParseURLToIdentity(strings.TrimSuffix(spec.Endpoint, "/") + "/" + loc)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing s3 endpoint to identity: %w", err)
-		}
-		identity = id
-	} else {
-		identity = runtime.Identity{
-			runtime.IdentityAttributePath: loc,
-		}
-	}
-
-	identity.SetType(runtime.NewUnversionedType(accessspec.S3BucketConsumerType))
-
-	return identity, nil
+	return identityv1.IdentityFromObject(spec.BucketName, spec.ObjectKey, spec.Endpoint)
 }
 
 // DownloadResource downloads a resource from the bucket/key described by the
