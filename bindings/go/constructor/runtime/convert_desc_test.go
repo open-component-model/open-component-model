@@ -1272,9 +1272,10 @@ func TestConvertResourceDigestRoundTrip(t *testing.T) {
 	assert.Equal(t, "genericBlobDigest/v1", desc.Digest.NormalisationAlgorithm)
 	assert.Equal(t, "abc123", desc.Digest.Value)
 
-	// descriptor -> runtime restores an equal digest.
+	// descriptor -> runtime restores an equal, distinct digest.
 	back := ConvertFromDescriptorResource(desc)
 	assert.Equal(t, digest, back.Digest)
+	assert.NotSame(t, digest, back.Digest)
 }
 
 func TestConvertResourceDigestNil(t *testing.T) {
