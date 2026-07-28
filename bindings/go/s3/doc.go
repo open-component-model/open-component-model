@@ -57,6 +57,16 @@
 // the layers compose, the worst-case number of requests for one download is the
 // product of the two attempt counts.
 //
+// With the defaults on both sides that product is not obvious: the transport allows
+// 5 retries (6 attempts) and the SDK's standard mode allows 3, so a single failing
+// download can issue up to 18 requests. The same composition applies to time: the
+// ocm timeout (30s by default) bounds one transport round trip including its own
+// retries, and the SDK starts a fresh one per attempt, so the wall-clock ceiling is
+// roughly the SDK attempt count times that timeout, not the timeout itself. Lower
+// retry.maxRetries in the ocm config, or AWS_MAX_ATTEMPTS on the SDK side, when a
+// tighter bound matters; setting either to 1 attempt collapses the product to the
+// other layer alone.
+//
 // Neither layer covers a body that fails mid-stream: SDK retry ends once the
 // response headers are deserialised, and the object is streamed after that.
 //
