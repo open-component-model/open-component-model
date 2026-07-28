@@ -215,9 +215,12 @@ Used when OCM fetches a resource over plain HTTP or HTTPS — the
 | `privateKey`           | PEM-encoded private key paired with `certificate`                                                           |
 | `certificateAuthority` | PEM-encoded CA certificate used to verify the server certificate. Only applied together with `certificate`. |
 
-Use [`WgetCredentials/v1`]({{< relref "credential-types.md#wgetcredentialsv1" >}}) for the typed field reference. The
-mutual TLS certificate is a transport-layer credential and can be combined with either header-based mechanism; Basic Auth
-and a bearer token both set the `Authorization` header and are mutually exclusive.
+Use [`WgetCredentials/v1`]({{< relref "credential-types.md#wgetcredentialsv1" >}}) for the typed field reference.
+
+Basic Auth and a bearer token both set the `Authorization` header and are therefore mutually exclusive — when both are
+configured the bearer token wins and a warning is logged. The mutual TLS certificate is a transport-layer credential and
+combines with either of them, but it only takes effect during a TLS handshake: supplying one for an `http://` URL logs a
+warning and has no effect.
 
 ### Matching Behavior
 
@@ -225,8 +228,10 @@ The same three chained checks as [`OCIRegistry`](#matching-behavior) apply — p
 default-port handling), then exact equality on the remaining attributes.
 
 {{< callout context="caution" >}}
-The identity type is matched by exact string. OCM v1 used the lowercase consumer type `wget`; entries carried over
-unchanged will not match. Use `type: Wget`.
+The identity type is matched by exact string and is **unversioned** — `type: Wget`. Neither `Wget/v1` (the name of the
+[access and input type]({{< relref "input-and-access-types.md" >}}#wget-access)) nor the lowercase `wget` used by OCM v1
+will match. A non-matching entry fails silently: no credentials are resolved and the request goes out unauthenticated,
+so the symptom is a `401` from the server rather than a configuration error.
 {{< /callout >}}
 
 ### Examples

@@ -421,11 +421,10 @@ configurations:
 See [HTTP Client Configuration]({{< relref "http-client-configuration.md" >}}) for the full schema, defaults, and
 per-host merge semantics.
 
-## Wget Authentication
+### Authentication {#wget-authentication}
 
-Credentials are resolved from the resource URL. OCM builds a consumer identity of type `Wget` with the `hostname`,
-`scheme`, `port`, and `path` taken from the URL, then matches it against the consumers configured in `.ocmconfig`. The
-input type and the access type derive the identity the same way, so one entry covers both.
+Credentials are resolved from the resource URL via a consumer identity of type `Wget`. The input type and the access type
+derive it the same way, so one entry in `.ocmconfig` covers both:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -442,20 +441,10 @@ configurations:
             password: my-password
 ```
 
-Three authentication mechanisms are supported:
-
-| Mechanism       | Fields                                                         | Notes                                                              |
-|-----------------|----------------------------------------------------------------|----------------------------------------------------------------------|
-| HTTP Basic Auth | `username`, `password`                                         | Sets the `Authorization` header.                                   |
-| Bearer token    | `identityToken`                                                | Sets the `Authorization` header. Takes precedence over Basic Auth. |
-| Mutual TLS      | `certificate`, `privateKey`, optionally `certificateAuthority` | Transport-layer; combines with either header-based mechanism.      |
-
-Basic Auth and a bearer token both write the `Authorization` header and are therefore mutually exclusive — when both are
-configured the bearer token wins and a warning is logged. A client certificate is only effective over HTTPS; supplying
-one for an `http://` URL logs a warning and has no effect.
-
-See [Credential Consumer Identities: Wget]({{< relref "credential-consumer-identities.md" >}}#wget) for matching rules
-and [Credential Types: WgetCredentials/v1]({{< relref "credential-types.md" >}}#wgetcredentialsv1) for the full field
+HTTP Basic Auth, bearer tokens, and mutual TLS are supported. See
+[Credential Consumer Identities: Wget]({{< relref "credential-consumer-identities.md" >}}#wget) for the identity
+attributes, credential properties, and matching rules, and
+[Credential Types: WgetCredentials/v1]({{< relref "credential-types.md" >}}#wgetcredentialsv1) for the full field
 reference.
 
 ## Migrating wget from OCM v1
