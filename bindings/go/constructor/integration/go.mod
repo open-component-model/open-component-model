@@ -11,7 +11,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/constructor v0.0.11
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260717060357-df059e15a4cb
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260728010257-ba2ab4bca27b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
 	ocm.software/open-component-model/bindings/go/oci v0.0.48
@@ -54,7 +54,7 @@ require (
 	github.com/moby/moby/client v0.5.0 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/moby/sys/sequential v0.7.0 // indirect
-	github.com/moby/sys/user v0.4.0 // indirect
+	github.com/moby/sys/user v0.4.1 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/nlepage/go-tarfs v1.2.1 // indirect
@@ -81,7 +81,7 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260716142305-3b46fe9f481f // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260728010257-ba2ab4bca27b // indirect
 )
 
 replace ocm.software/open-component-model/bindings/go/constructor => ../

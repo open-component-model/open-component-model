@@ -76,8 +76,8 @@ github.com/moby/patternmatcher v0.6.1 h1:qlhtafmr6kgMIJjKJMDmMWq7WLkKIo23hsrpR3x
 github.com/moby/patternmatcher v0.6.1/go.mod h1:hDPoyOpDY7OrrMDLaYoY3hf52gNCR/YOUYxkhApJIxc=
 github.com/moby/sys/sequential v0.7.0 h1:ASQNGNROJSuOO6LL6bPHbKvuZu6NU8P4ldPWk31zj/8=
 github.com/moby/sys/sequential v0.7.0/go.mod h1:NfSTAp6V3fw4tmkD62PEcOKeZKquXT8VKCkf7aVR79o=
-github.com/moby/sys/user v0.4.0 h1:jhcMKit7SA80hivmFJcbB1vqmw//wU61Zdui2eQXuMs=
-github.com/moby/sys/user v0.4.0/go.mod h1:bG+tYYYJgaMtRKgEmuueC0hJEAZWwtIbZTB+85uoHjs=
+github.com/moby/sys/user v0.4.1 h1:RgjRlaDKi/Xmyrz4t8lyzXT6v2ooFeO/7xtchmhVWE0=
+github.com/moby/sys/user v0.4.1/go.mod h1:E9QsW5WRe1kUAf7kW8hXKwu1uhsZEAdPLYHYSDudF4Y=
 github.com/moby/sys/userns v0.1.0 h1:tVLXkFOxVu9A64/yh59slHVv9ahO9UIev4JZusOLG/g=
 github.com/moby/sys/userns v0.1.0/go.mod h1:IHUYgu/kao6N8YZlp9Cf444ySSvCmDlmzUcYfDHOl28=
 github.com/moby/term v0.5.2 h1:6qk3FJAFDs6i/q3W/pQ97SX192qKfZgGjCQqfCJkgzQ=
@@ -165,10 +165,10 @@ ocm.software/open-component-model/bindings/go/ctf v0.4.1 h1:rzSzKGuUkO6ykPLd49Z4
 ocm.software/open-component-model/bindings/go/ctf v0.4.1/go.mod h1:5EoiS3GHkAWBCSyx2i06Prg0sBays8v3tc8Qzq8DguM=
 ocm.software/open-component-model/bindings/go/dag v0.0.6 h1:To76QJAmFD88C101oB/HgYvtomp8mm0270ewDLcVncw=
 ocm.software/open-component-model/bindings/go/dag v0.0.6/go.mod h1:mQbO95zYvX59VXNJGer4+wGsKY0BVI4FKwlR5BlPugM=
-ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260716142305-3b46fe9f481f h1:J323pWMAxlT8UJJJ6r6qQRZ1mK9GqXVnC0r+7gL0XU0=
-ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260716142305-3b46fe9f481f/go.mod h1:kylAu8kjmNWnpRBkvOGWwY1qgbF/ORVZS+1l10tEw3M=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260717060357-df059e15a4cb h1:3REIxy7p/tF3GC8aIZvUUB8zOfmKQtYHAwsi/jTH0O0=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260717060357-df059e15a4cb/go.mod h1:EzsJGXfl7q6O7FZlbF5rySawZ6oG0K8qexQXkZOehUU=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260728010257-ba2ab4bca27b h1:rvBX6w9jM1JfDtIuVE85/GXzo9FFZgv57VheQENhW7E=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260728010257-ba2ab4bca27b/go.mod h1:MNd2BPvLrMI0dNsrcpSYgmgavEVRP/HKXefhYrP2kzM=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260728010257-ba2ab4bca27b h1:Gqps2rBihANLu1Yfb9XuD7E4D15ICUrHmqCTpK0vGtY=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260728010257-ba2ab4bca27b/go.mod h1:EzsJGXfl7q6O7FZlbF5rySawZ6oG0K8qexQXkZOehUU=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 h1:bTb7LgRFAAuhr5FGkkBVStU4YLtFZz3uhO9V4VFhW64=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3/go.mod h1:miNDxmNWsrYI9f3QNZIOBrK6jVmWnyFj0Z/ZGFjR5Qk=
 ocm.software/open-component-model/bindings/go/input/file v0.0.5 h1:RbolMn7cCHiXzafzJORYPklkN2QO0vV/sSCOw0XUyPY=
