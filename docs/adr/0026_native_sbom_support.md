@@ -46,6 +46,10 @@ The solution must:
 * **Option 3 — Nested aggregate BOM**: aggregate SBOM nests each source SBOM's
   packages inside `component.components` sub-trees (the shape of the OCM v1
   prototype).
+* **Option 4 — Compositions-based aggregate**: like Option 1 but the
+  CV→resource→package hierarchy is expressed via CycloneDX `compositions`
+  (aggregate/assembly relationships), keeping the `dependencies` graph limited to
+  genuine package→package edges.
 
 ## Decision Outcome
 
@@ -94,6 +98,11 @@ time and bakes the result:
   stays SPDX). No conversion occurs at build time.
 * The input **auto-adds** the `ocm.software/artefactReference` back-link label pointing at the
   subject, so the baked SBOM is discoverable.
+
+Only SBOM predicates (SPDX, CycloneDX) are extracted from an image's attestation
+manifests. Other in-toto predicates carried alongside them — notably SLSA
+provenance (`https://slsa.dev/provenance/*`) — are intentionally ignored; surfacing
+provenance is possible future work.
 
 The **`ocm get sbom <cv> [--recursive]`** command assembles an orchestrating
 SBOM:
@@ -211,6 +220,23 @@ Cons:
 * **Vulnerability scanners (e.g. Trivy) do not recurse into nested
   `component.components`** — such a BOM scans as empty (0 components), defeating
   the auditing goal.
+
+### [Option 4] Compositions-based aggregate
+
+Pros:
+
+* Spec-faithful: `compositions` is CycloneDX's mechanism for aggregate/assembly
+  relationships, so `dependencies` stays limited to genuine package→package edges.
+* Scans identically to Option 1 in Trivy — the flat `components` list, which
+  scanners read, is unchanged.
+
+Cons:
+
+* `compositions` is one of the least-consumed CycloneDX fields; Dependency-Track
+  and most dependency-graph viewers do not surface it, so the provenance/hierarchy
+  ("which resource/CV shipped this finding?") becomes invisible in the tools
+  auditors actually use — whereas Option 1 exposes it through the widely-read
+  `dependencies` graph.
 
 ## Discovery and Distribution
 
