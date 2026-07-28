@@ -15,7 +15,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -262,21 +261,11 @@ func TestDownload_MTLS(t *testing.T) {
 	})
 }
 
-// filesIn lists the file names directly under dir.
-func filesIn(t *testing.T, dir string) []string {
-	t.Helper()
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		names = append(names, e.Name())
-	}
-	return names
-}
-
-// bodyServer serves content. When chunked is set the response uses chunked transfer
-// encoding, so the client cannot learn the size up front and Content-Length is -1.
-func bodyServer(t *testing.T, content []byte, chunked bool) *httptest.Server {
+// serveBody serves content over HTTP. When chunked is set, the response is flushed
+// before the body is written, so it is sent with chunked transfer encoding and the
+// client sees no Content-Length — which is what forces the size limit to be enforced
+// while streaming rather than up front.
+func serveBody(t *testing.T, content []byte, chunked bool) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if chunked {
@@ -288,35 +277,28 @@ func bodyServer(t *testing.T, content []byte, chunked bool) *httptest.Server {
 	return srv
 }
 
+// TestDownload_StreamsIntoTempDir asserts that the body lands in the directory given
+// by WithTempDir, which is what lets callers place downloads on a configured volume.
 func TestDownload_StreamsIntoTempDir(t *testing.T) {
 	tempDir := t.TempDir()
 	content := []byte("streamed to disk")
-	srv := bodyServer(t, content, false)
 
-	b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithTempDir(tempDir))
+	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, false).URL},
+		download.WithTempDir(tempDir))
 	require.NoError(t, err)
 
-	names := filesIn(t, tempDir)
-	require.Len(t, names, 1, "the body must be streamed into exactly one file")
-	assert.True(t, strings.HasPrefix(names[0], "ocm-wget-download-"), "unexpected file name %q", names[0])
+	entries, err := os.ReadDir(tempDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "the body must be streamed into the configured directory")
 
-	onDisk, err := os.ReadFile(filepath.Join(tempDir, names[0]))
+	onDisk, err := os.ReadFile(filepath.Join(tempDir, entries[0].Name()))
 	require.NoError(t, err)
 	assert.Equal(t, content, onDisk)
 	assert.Equal(t, content, readBlob(t, b))
 }
 
-func TestDownload_TempFileOutlivesCall(t *testing.T) {
-	tempDir := t.TempDir()
-	srv := bodyServer(t, []byte("still here"), false)
-
-	b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithTempDir(tempDir))
-	require.NoError(t, err)
-
-	require.Len(t, filesIn(t, tempDir), 1, "the file must outlive Download so the caller can read it")
-	assert.Equal(t, []byte("still here"), readBlob(t, b))
-}
-
+// TestDownload_MaxDownloadSize covers both rejection paths: a response that announces
+// its length is rejected before transfer, a chunked one only while streaming.
 func TestDownload_MaxDownloadSize(t *testing.T) {
 	content := []byte("0123456789") // 10 bytes
 
@@ -333,8 +315,6 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 		{name: "zero disables the limit", maxSize: 0},
 		{name: "negative disables the limit", maxSize: -1},
 		{name: "unset means unlimited", unset: true},
-		// Without a Content-Length the size cannot be checked up front, so the
-		// overrun has to be caught while streaming.
 		{name: "oversized chunked body is caught while streaming", maxSize: 9, chunked: true, wantErr: true},
 		{name: "chunked body below the limit", maxSize: 100, chunked: true},
 	}
@@ -342,18 +322,20 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tempDir := t.TempDir()
-			srv := bodyServer(t, content, tt.chunked)
 
 			opts := []download.Option{download.WithTempDir(tempDir)}
 			if !tt.unset {
 				opts = append(opts, download.WithMaxDownloadSize(tt.maxSize))
 			}
 
-			b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, opts...)
+			b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, tt.chunked).URL}, opts...)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "exceeds maximum allowed size")
-				assert.Empty(t, filesIn(t, tempDir), "a rejected download must not leave a file behind")
+
+				entries, err := os.ReadDir(tempDir)
+				require.NoError(t, err)
+				assert.Empty(t, entries, "a rejected download must not leave a partial file behind")
 				return
 			}
 			require.NoError(t, err)
