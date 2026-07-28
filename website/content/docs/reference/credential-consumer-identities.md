@@ -292,10 +292,6 @@ so the symptom is a `401` from the server rather than a configuration error.
 
 ### Migrating wget credentials from OCM v1
 
-The credential property names are unchanged — `username`, `password`, `identityToken`, `certificate`, `privateKey`, and
-`certificateAuthority` mean the same thing in both versions. An existing `Credentials/v1` properties map keeps working
-once the identity is corrected. What changed is the identity that selects it, and how the properties are applied.
-
 | Area              | OCM v1                             | OCM v2             | What to do                                                                                                             |
 |-------------------|------------------------------------|--------------------|------------------------------------------------------------------------------------------------------------------------|
 | Consumer identity | `type: wget`                       | `type: Wget`       | Update `.ocmconfig`. Identity types match by exact string, so the lowercase spelling silently resolves no credentials. |
@@ -318,7 +314,7 @@ username/password pair, both versions behave identically. Split such entries if 
 mechanisms.
 
 For the migration of the wget access and input specifications themselves, see
-[Migrating wget from OCM v1]({{< relref "input-and-access-types.md" >}}#migrating-wget-from-ocm-v1).
+[Migrating wget from OCM v1]({{< relref "input-and-access-types.md" >}}#migrating-from-ocm-v1).
 
 ---
 

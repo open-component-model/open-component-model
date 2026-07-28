@@ -164,7 +164,7 @@ Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1
 {{< callout type="warning" >}}
 Do not put credentials in `header`. The input specification is resolved at construction time and is not written to the
 component descriptor, but it does live in your `component-constructor.yaml`, which is normally checked into version
-control. Configure authentication through the [credential system](#wget-authentication) instead, which keeps secrets in
+control. Configure authentication through the [credential system](#authentication) instead, which keeps secrets in
 `.ocmconfig` and out of the artifacts you publish.
 {{< /callout >}}
 
@@ -200,8 +200,8 @@ resources:
     body: eyJmb3JtYXQiOiJqc29uIn0=
 ```
 
-See [Wget behavior](#wget-behavior) for redirects, size limits, and HTTP client settings, and
-[Wget authentication](#wget-authentication) for credential configuration.
+See [Wget behavior](#wget) for redirects, size limits, and HTTP client settings, and
+[Wget authentication](#authentication) for credential configuration.
 
 ## Access Types
 
@@ -349,7 +349,7 @@ to those of the [`Wget/v1` input type](#wgetv1), so the same request can be expr
 **Never put credentials in `header`.** Unlike an input specification, an access specification is stored **verbatim in
 the component descriptor**. Any header written here is persisted with the component version, travels with it through
 every transfer, is covered by its signature, and is readable by anyone who can read the component version. Configure
-authentication through the [credential system](#wget-authentication) instead — credentials are resolved at request time
+authentication through the [credential system](#authentication) instead — credentials are resolved at request time
 from `.ocmconfig` and never become part of the component version.
 {{< /callout >}}
 
@@ -383,7 +383,7 @@ The distinction only holds for as long as the component version stays where it w
 always transferred by value, transferring a component version turns its `Wget/v1` access specifications into local blobs
 in the target repository.
 
-## Wget Behavior
+## Wget
 
 The following applies to both the `Wget/v1` input type and the `Wget/v1` access type — they share one transport,
 credential, and size-limiting implementation.
@@ -436,7 +436,7 @@ configurations:
 See [HTTP Client Configuration]({{< relref "http-client-configuration.md" >}}) for the full schema, defaults, and
 per-host merge semantics.
 
-### Authentication {#wget-authentication}
+### Authentication
 
 Credentials are resolved from the resource URL via a consumer identity of type `Wget`. The input type and the access type
 derive it the same way, so one entry in `.ocmconfig` covers both:
@@ -462,17 +462,9 @@ attributes, credential properties, and matching rules, and
 [Credential Types: WgetCredentials/v1]({{< relref "credential-types.md" >}}#wgetcredentialsv1) for the full field
 reference.
 
-## Migrating wget from OCM v1
+### Migrating from OCM v1
 
-The wget access and input types carry over from OCM v1 with the same purpose and largely the same schema. The type names
-are unchanged — OCM v1 and OCM v2 both register `Wget/v1`, `wget/v1`, `Wget`, and `wget`, so an existing `type:` line
-keeps working. `Wget/v1` is the canonical spelling in OCM v2.
-
-The field names `url`, `mediaType`, `header`, `verb`, `body`, and `noRedirect` are also unchanged, including the
-camelCase spelling of `noRedirect`. The OCM v1 CLI flag was `--noredirect`, but the specification field was already
-`noRedirect`.
-
-### Breaking changes
+#### Breaking changes
 
 | Area         | OCM v1       | OCM v2                    | What to do                                              |
 |--------------|--------------|---------------------------|---------------------------------------------------------|
@@ -481,7 +473,7 @@ camelCase spelling of `noRedirect`. The OCM v1 CLI flag was `--noredirect`, but 
 The OCM v1 access specification typed `body` as an `io.Reader`, which has no YAML representation, so this affects
 constructor files using the input type.
 
-### Behavior changes
+#### Behavior changes
 
 | Area          | OCM v1                                                                             | OCM v2                                                    |
 |---------------|------------------------------------------------------------------------------------|-----------------------------------------------------------|
@@ -492,7 +484,7 @@ constructor files using the input type.
 Set `mediaType` explicitly wherever OCM v1 relied on the URL's file extension — a `.tar.gz` URL that previously resolved
 to `application/x-gzip` now falls back to the server's `Content-Type`, or to `application/octet-stream`.
 
-### Credentials
+#### Credentials
 
 The consumer identity type and its path attribute both changed, and the order in which authentication mechanisms are
 applied was inverted. See
