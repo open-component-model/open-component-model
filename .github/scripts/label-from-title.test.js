@@ -64,6 +64,12 @@ test("special 'Initial commit' title is valid but yields no labels", () => {
   assert.deepStrictEqual(labels, []);
 });
 
+test("'Merge' title is valid but yields no labels", () => {
+  const { valid, labels } = deriveLabels("Merge branch 'main' into feature", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, []);
+});
+
 test("invalid title format is reported as not valid", () => {
   const { valid, labels } = deriveLabels("no conventional prefix here", maps);
   assert.strictEqual(valid, false);
@@ -72,6 +78,15 @@ test("invalid title format is reported as not valid", () => {
 
 test("unknown type is treated as an invalid title (not in allowed types)", () => {
   const { valid, labels } = deriveLabels("wip: something", maps);
+  assert.strictEqual(valid, false);
+  assert.deepStrictEqual(labels, []);
+});
+
+// A type that collides with an Object.prototype name must be rejected by the
+// regex (type is constrained to the allowed set), so it never reaches the map
+// lookup. This documents where the type-position defense lives.
+test("type colliding with a prototype name is rejected by the regex", () => {
+  const { valid, labels } = deriveLabels("constructor: add field", maps);
   assert.strictEqual(valid, false);
   assert.deepStrictEqual(labels, []);
 });
