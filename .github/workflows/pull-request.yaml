@@ -82,15 +82,19 @@ jobs:
                 labels.push(process.env.BREAKING_CHANGE_LABEL);
               }
 
-              // Add type-based label
-              if (type && typeToLabel[type]) {
+              // Add type-based label. Object.hasOwn guards against inherited
+              // properties (e.g. a "constructor" type would otherwise resolve to
+              // Object.prototype.constructor and push an invalid label).
+              if (type && Object.hasOwn(typeToLabel, type)) {
                 labels.push(typeToLabel[type]);
               } else {
                 console.log(`No label found for type: ${type}`);
               }
 
-              // Add scope-based label if scope exists
-              if (scope && scopeToLabel[scope]) {
+              // Add scope-based label if scope exists. Object.hasOwn guards against
+              // inherited properties (e.g. a "constructor" scope would otherwise
+              // resolve to Object.prototype.constructor and push an invalid label).
+              if (scope && Object.hasOwn(scopeToLabel, scope)) {
                 labels.push(scopeToLabel[scope]);
               } else if (scope) {
                 console.log(`No label found for scope: ${scope}`);
