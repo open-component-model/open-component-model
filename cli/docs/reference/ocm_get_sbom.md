@@ -1,57 +1,59 @@
 ---
-title: ocm download resource
-description: Download resources described in a component version in an OCM Repository.
+title: ocm get sbom
+description: Get an orchestrating SBOM for a component version.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm download resource
+## ocm get sbom
 
-Download resources described in a component version in an OCM Repository
+Get an orchestrating SBOM for a component version
 
 ### Synopsis
 
-Download a resource from a component version located in an Open Component Model (OCM) repository.
+Get an orchestrating Software Bill of Materials (SBOM) for a component version.
 
-This command fetches a specific resource from the given OCM component version reference and stores it at the specified output location. 
-It supports optional transformation of the resource using a registered transformer plugin.
+This command collects the baked SBOM of every resource in the given component version and assembles
+them into a single hierarchical CycloneDX document, printed to stdout. SBOMs are discovered at build
+time (by the SBoM/v1 input method or by adding a resource of type 'sbom' linked via the
+'ocm.software/sbom' label) and embedded as local blobs; this command performs a pure local read and
+never fetches SBOMs from a registry.
 
-If no transformer is specified, the resource is written directly in its original format. If the media type is known,
-the appropriate file extension will be added to the output file name if no output location is given.
+Discovered SPDX SBOMs are normalized to CycloneDX so the whole document is a single CycloneDX BOM.
+Resources without a baked SBOM are skipped with a warning. Where a resource carries per-architecture
+SBOMs, the one matching the host platform is selected.
 
-Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
+Use --output/-o to choose the serialization format (json or yaml). Redirect stdout to write a file.
+
+With --recursive, the orchestration also descends into referenced (child) component versions,
+nesting their SBOMs under the parent.
 
 ```
-ocm download resource [flags]
+ocm get sbom <component-version> [flags]
 ```
 
 ### Examples
 
 ```
- # Download a resource with identity 'name=example' and write to default output
-  ocm download resource ghcr.io/org/component:v1 --identity name=example
+ # Orchestrating SBOM for a single component version (CycloneDX JSON)
+  ocm get sbom ghcr.io/org/component:v1
 
-  # Download a resource with identity 'name=example' and 'architecture=amd64' and write to default output
-  ocm download resource ghcr.io/org/component:v1 --identity name=example,architecture=amd64
+  # As YAML
+  ocm get sbom ghcr.io/org/component:v1 -o yaml
 
-  # Download a resource and specify an output file
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
-
-  # Download a resource and apply a transformer
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
+  # Include referenced child component versions, write to a file
+  ocm get sbom ghcr.io/org/component:v1 --recursive > sbom.cdx.json
 ```
 
 ### Options
 
 ```
-      --extraction-policy enum   policy to apply when extracting a resource. If set to 'disable', the resource will not be extracted, even if they could be. If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.
-                                 (must be one of [auto disable]) (default auto)
-  -h, --help                     help for resource
-      --identity string          resource identity to download
-      --output string            output location to download to. If no transformer is specified, and no format was discovered that can be written to a directory, the resource will be written to a file.
-      --transformer string       transformer to use for the output. If not specified, the resource will be written as is.
+  -h, --help                 help for sbom
+  -o, --output enum          output format of the orchestrating SBOM
+                             (must be one of [json yaml]) (default json)
+      --recursive int[=-1]   depth of recursion into referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))
 ```
 
 ### Options inherited from parent commands
@@ -98,5 +100,5 @@ ocm download resource [flags]
 
 ### SEE ALSO
 
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
+* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
 

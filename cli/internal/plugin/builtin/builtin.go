@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/dir"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/file"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/helm"
+	sbominput "ocm.software/open-component-model/cli/internal/plugin/builtin/input/sbom"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/utf8"
 	ociplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/oci"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/oidc"
@@ -47,6 +48,9 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	}
 	if err := dir.Register(manager.InputRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register dir input plugin: %w", err)
+	}
+	if err := sbominput.Register(manager.InputRegistry, manager.ResourcePluginRegistry); err != nil {
+		return fmt.Errorf("could not register sbom input plugin: %w", err)
 	}
 	if err := helm.Register(manager.InputRegistry, manager.CredentialRepositoryRegistry, filesystemConfig, httpConfig); err != nil {
 		return fmt.Errorf("could not register helm input plugin: %w", err)

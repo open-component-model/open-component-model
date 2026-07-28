@@ -316,6 +316,14 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
+	// Resolve SBoM/v1 inputs: embed each referenced resource's access into the
+	// input spec before construction, and expand multi-arch images into one SBOM
+	// resource per platform. All sibling resources are visible at this point.
+	sbomPlatformLister := &resourcePluginPlatformLister{pluginManager: pluginManager, credentialGraph: credentialGraph}
+	if err := resolveSBOMInputs(cmd.Context(), constructorSpec, sbomPlatformLister); err != nil {
+		return fmt.Errorf("resolving sbom inputs failed: %w", err)
+	}
+
 	output, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
