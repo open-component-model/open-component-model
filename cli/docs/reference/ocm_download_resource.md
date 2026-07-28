@@ -33,6 +33,9 @@ ocm download resource [flags]
  # Download a resource with identity 'name=example' and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
 
+  # Download a resource with identity 'name=example' and 'architecture=amd64' and write to default output
+  ocm download resource ghcr.io/org/component:v1 --identity name=example,architecture=amd64
+
   # Download a resource and specify an output file
   ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
 
