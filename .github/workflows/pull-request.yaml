@@ -21,8 +21,7 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-24.04-arm
     steps:
-      # Check out only the scripts directory from the base repository. No PR code
-      # is executed; pull_request_target runs against the base ref by default.
+      # Base ref only (pull_request_target default); no PR code is executed.
       - name: Checkout scripts
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
