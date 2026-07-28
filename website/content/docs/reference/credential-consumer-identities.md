@@ -37,11 +37,12 @@ The consumer identity type is extensible — any string in `Name` or `Name/Versi
 Plugins and integrations can introduce additional types (e.g. `AWSSecretsManager`, `HashiCorpVault`, `MavenRepository`).
 The following types are defined by the core OCM modules:
 
-| Identity Type                                 | Used For                                       |
-|-----------------------------------------------|------------------------------------------------|
-| [`OCIRegistry`](#ociregistry)                 | Authenticating against OCI registries          |
-| [`HelmChartRepository`](#helmchartrepository) | Authenticating against Helm chart repositories |
-| [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys        |
+| Identity Type                                 | Used For                                        |
+|-----------------------------------------------|-------------------------------------------------|
+| [`OCIRegistry`](#ociregistry)                 | Authenticating against OCI registries           |
+| [`HelmChartRepository`](#helmchartrepository) | Authenticating against Helm chart repositories  |
+| [`Wget`](#wget)                               | Authenticating against plain HTTP/HTTPS servers |
+| [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys         |
 
 ---
 
@@ -173,6 +174,110 @@ identity is derived from the Helm repository URL using the same URL-based attrib
     - type: OCICredentials/v1
       username: registry-user
       password: registry-token
+```
+
+---
+
+## Wget
+
+Used when OCM fetches a resource over plain HTTP or HTTPS — the
+[`Wget/v1` access type]({{< relref "input-and-access-types.md" >}}#wget-access) and the
+[`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wget-input). The identity is derived from the resource
+`url`; the access type and the input type derive it identically, so a single consumer entry covers both.
+
+### Identity Attributes
+
+| Attribute  | Required | Description                                                                                                                           |
+|------------|----------|---------------------------------------------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `Wget`                                                                                                                        |
+| `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`)                                                                                        |
+| `path`     | No       | URL path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
+| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                             |
+| `port`     | No       | Port number as string. Default ports are applied when `scheme` is set: `https` defaults to `443`, `http` to `80`.                     |
+
+**Example derivation:** for `url: https://downloads.example.com/myapp/1.0.0/myapp.tar.gz`, the lookup identity is:
+
+| Attribute  | Value                      |
+|------------|----------------------------|
+| `type`     | `Wget`                     |
+| `hostname` | `downloads.example.com`    |
+| `scheme`   | `https`                    |
+| `path`     | `myapp/1.0.0/myapp.tar.gz` |
+
+### Credential Properties
+
+| Property               | Description                                                                                                 |
+|------------------------|---------------------------------------------------------------------------------------------------------------|
+| `username`             | Username for HTTP Basic Authentication                                                                      |
+| `password`             | Password for HTTP Basic Authentication                                                                      |
+| `identityToken`        | Bearer token sent as `Authorization: Bearer <token>`. Takes precedence over Basic Auth.                     |
+| `certificate`          | PEM-encoded client certificate for mutual TLS                                                               |
+| `privateKey`           | PEM-encoded private key paired with `certificate`                                                           |
+| `certificateAuthority` | PEM-encoded CA certificate used to verify the server certificate. Only applied together with `certificate`. |
+
+Use [`WgetCredentials/v1`]({{< relref "credential-types.md#wgetcredentialsv1" >}}) for the typed field reference. The
+mutual TLS certificate is a transport-layer credential and can be combined with either header-based mechanism; Basic Auth
+and a bearer token both set the `Authorization` header and are mutually exclusive.
+
+### Matching Behavior
+
+The same three chained checks as [`OCIRegistry`](#matching-behavior) apply — path glob, URL (scheme, hostname, port with
+default-port handling), then exact equality on the remaining attributes.
+
+{{< callout context="caution" >}}
+The identity type is matched by exact string. OCM v1 used the lowercase consumer type `wget`; entries carried over
+unchanged will not match. Use `type: Wget`.
+{{< /callout >}}
+
+### Examples
+
+**Hostname only** — matches every download from that host:
+
+```yaml
+- identity:
+    type: Wget
+    hostname: downloads.example.com
+  credentials:
+    - type: WgetCredentials/v1
+      username: download-user
+      password: download-token
+```
+
+**Bearer token for a specific path prefix:**
+
+```yaml
+- identity:
+    type: Wget
+    hostname: api.example.com
+    scheme: https
+    path: artifacts/*
+  credentials:
+    - type: WgetCredentials/v1
+      identityToken: eyJhbGciOi...
+```
+
+**Mutual TLS against an internal server:**
+
+```yaml
+- identity:
+    type: Wget
+    hostname: artifacts.internal
+    scheme: https
+    port: "8443"
+  credentials:
+    - type: WgetCredentials/v1
+      certificate: |
+        -----BEGIN CERTIFICATE-----
+        MIIDdzCCAl+gAwIBAgIEbGVnYWw...
+        -----END CERTIFICATE-----
+      privateKey: |
+        -----BEGIN PRIVATE KEY-----
+        MIIEvQIBADANBgkqhkiG9w0BAQ...
+        -----END PRIVATE KEY-----
+      certificateAuthority: |
+        -----BEGIN CERTIFICATE-----
+        MIIDQTCCAimgAwIBAgITBmyf...
+        -----END CERTIFICATE-----
 ```
 
 ---

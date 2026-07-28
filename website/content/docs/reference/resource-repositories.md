@@ -128,6 +128,69 @@ resolves the OCI manifest digest via the registry API.
 
 ---
 
+## Wget Resource Repository
+
+Handles resources served over plain HTTP or HTTPS.
+
+### Supported Access Types
+
+| Access Type                                                        |
+|--------------------------------------------------------------------|
+| [`Wget/v1`]({{< relref "input-and-access-types.md" >}}#wget-access) |
+
+### Capabilities
+
+| Operation         | Supported |
+|-------------------|-----------|
+| Download          | Yes       |
+| Upload            | No        |
+| Digest Processing | Yes       |
+
+{{< callout type="info" >}}
+Upload is not supported because a plain HTTP endpoint has no standardized write API. Wget resources are therefore always
+transferred by value: the transfer downloads the content and stores it as a
+[`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1) in the target repository, regardless of the
+requested upload type.
+{{< /callout >}}
+
+### Credential Resolution
+
+The credential consumer identity is derived from the `url` field in the access specification. The identity type is
+`Wget`.
+
+**Example:** for a resource with `url: https://downloads.example.com/myapp/1.0.0/myapp.tar.gz`:
+
+| Attribute  | Value                      |
+|------------|----------------------------|
+| `type`     | `Wget`                     |
+| `hostname` | `downloads.example.com`    |
+| `scheme`   | `https`                    |
+| `path`     | `myapp/1.0.0/myapp.tar.gz` |
+
+The [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wget-input) derives the identity the same way, so one
+consumer entry covers construction and later downloads.
+
+See [Credential Consumer Identities: Wget]({{< relref "credential-consumer-identities.md" >}}#wget) for matching rules.
+
+### Download Behavior
+
+Performs the request described by the access specification (`verb`, `header`, `body`, `noRedirect`) and returns the
+response body as an in-memory blob. Only 2xx responses are accepted and bodies are limited to 100 MiB. The media type of
+the blob is taken from `mediaType`, falling back to the response `Content-Type` and then to
+`application/octet-stream`.
+
+Request timeouts, retries, and per-host settings come from the
+[HTTP client configuration]({{< relref "http-client-configuration.md" >}}).
+
+### Digest Processing
+
+The wget digest processor downloads the referenced content and hashes it with SHA-256, using the
+`genericBlobDigest/v1` normalisation. When the resource already carries a digest, the computed value is verified against
+it and a mismatch fails the operation. Because the digest is computed over the fetched bytes, a URL whose content
+changes will not verify against a previously recorded digest.
+
+---
+
 ## External Resource Repositories (Plugins)
 
 External plugins declare supported access types in their capability specification and implement the same three
