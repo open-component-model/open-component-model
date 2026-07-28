@@ -9,10 +9,10 @@ import (
 	_ "embed"
 )
 
-//go:embed schemas/S3.schema.json
-var schemaS3 []byte
+//go:embed schemas/S3Bucket.schema.json
+var schemaS3Bucket []byte
 
-// JSONSchema returns the JSON Schema for S3.
-func (S3) JSONSchema() []byte {
-	return schemaS3
+// JSONSchema returns the JSON Schema for S3Bucket.
+func (S3Bucket) JSONSchema() []byte {
+	return schemaS3Bucket
 }

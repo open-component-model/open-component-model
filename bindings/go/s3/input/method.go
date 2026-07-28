@@ -36,7 +36,7 @@ func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
 // an S3 input. It uses the same S3Bucket consumer identity as the access type so that
 // credentials configured for a bucket resolve for both.
 func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
-	spec := v1.S3{}
+	spec := v1.S3Bucket{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &spec); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
@@ -56,7 +56,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 // ProcessResource downloads the object described by the S3 input specification and
 // returns it as local blob data to be stored in the component version.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
-	spec := v1.S3{}
+	spec := v1.S3Bucket{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &spec); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}

@@ -1,18 +1,11 @@
 package input
 
 import (
-	"strings"
-
 	"ocm.software/open-component-model/bindings/go/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/s3/spec/input/v1"
 )
 
-const (
-	// S3InputType is the OCM type name for the S3 input method.
-	S3InputType = "S3"
-)
-
-var V1VersionedType = runtime.NewVersionedType(S3InputType, v1.Version)
+var V1VersionedType = runtime.NewVersionedType(v1.Type, v1.Version)
 
 var Scheme = runtime.NewScheme()
 
@@ -21,13 +14,11 @@ func init() {
 }
 
 func MustAddToScheme(scheme *runtime.Scheme) {
-	spec := &v1.S3{}
-
-	lowerCaseInputType := strings.ToLower(S3InputType)
+	spec := &v1.S3Bucket{}
 	scheme.MustRegisterWithAlias(spec,
 		V1VersionedType,
-		runtime.NewUnversionedType(S3InputType),
-		runtime.NewVersionedType(lowerCaseInputType, v1.Version),
-		runtime.NewUnversionedType(lowerCaseInputType),
+		runtime.NewUnversionedType(v1.Type),
+		runtime.NewVersionedType(v1.LowerCaseType, v1.Version),
+		runtime.NewUnversionedType(v1.LowerCaseType),
 	)
 }

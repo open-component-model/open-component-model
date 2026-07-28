@@ -16,6 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/minio"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
@@ -25,8 +26,8 @@ import (
 
 const minioImage = "minio/minio:RELEASE.2024-01-16T16-07-38Z"
 
-// Test_Integration_S3 spins up a MinIO container, seeds objects with the AWS SDK,
-// then exercises the S3 ResourceRepository end to end against a real (S3-compatible) store.
+// Test_Integration_S3 exercises the S3 ResourceRepository end to end against a MinIO
+// container.
 func Test_Integration_S3(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -39,7 +40,6 @@ func Test_Integration_S3(t *testing.T) {
 	r.NoError(err)
 	endpoint := "http://" + hostPort
 
-	// setup talks to MinIO directly to create buckets and seed objects.
 	setup := newSetupClient(t, ctx, endpoint, container.Username, container.Password)
 
 	creds := &credv1.S3Credentials{
@@ -47,10 +47,10 @@ func Test_Integration_S3(t *testing.T) {
 		AccessKeyID:     container.Username,
 		SecretAccessKey: container.Password,
 	}
-	repo := repository.NewResourceRepository()
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
 
-	access := func(bucket, key, version string) *accessv1.S3 {
-		return &accessv1.S3{
+	access := func(bucket, key, version string) *accessv1.S3Bucket {
+		return &accessv1.S3Bucket{
 			Type:         accessspec.V1VersionedType,
 			Region:       "us-east-1",
 			BucketName:   bucket,
@@ -60,7 +60,7 @@ func Test_Integration_S3(t *testing.T) {
 			Version:      version,
 		}
 	}
-	resourceFor := func(a *accessv1.S3) *descriptor.Resource {
+	resourceFor := func(a *accessv1.S3Bucket) *descriptor.Resource {
 		res := &descriptor.Resource{}
 		res.Access = a
 		return res
@@ -99,7 +99,6 @@ func Test_Integration_S3(t *testing.T) {
 
 		v1Content := []byte("version one")
 		v1ID := putObjectReturningVersion(t, ctx, setup, bucket, key, v1Content)
-		// overwrite the same key; without a versionId the latest would be returned.
 		putObject(t, ctx, setup, bucket, key, []byte("version two"))
 
 		b, err := repo.DownloadResource(ctx, resourceFor(access(bucket, key, v1ID)), creds)
