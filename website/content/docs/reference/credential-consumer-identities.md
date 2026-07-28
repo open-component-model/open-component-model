@@ -290,7 +290,7 @@ so the symptom is a `401` from the server rather than a configuration error.
         -----END CERTIFICATE-----
 ```
 
-### Migrating wget credentials from OCM v1
+### Migrating Wget credentials from OCM v1
 
 | Area              | OCM v1                             | OCM v2             | What to do                                                                                                             |
 |-------------------|------------------------------------|--------------------|------------------------------------------------------------------------------------------------------------------------|
@@ -313,8 +313,8 @@ The precedence flip only becomes visible when a single entry carries `identityTo
 username/password pair, both versions behave identically. Split such entries if the server distinguishes the two
 mechanisms.
 
-For the migration of the wget access and input specifications themselves, see
-[Migrating wget from OCM v1]({{< relref "input-and-access-types.md" >}}#migrating-from-ocm-v1).
+For the migration of the Wget access and input specifications themselves, see
+[Migrating Wget from OCM v1]({{< relref "input-and-access-types.md" >}}#migrating-from-ocm-v1).
 
 ---
 

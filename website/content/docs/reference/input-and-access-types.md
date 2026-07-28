@@ -366,7 +366,7 @@ resources:
 ```
 
 {{< callout type="note" >}}
-Upload is not supported for this access type — a plain HTTP endpoint has no standardized write API. Consequently, wget
+Upload is not supported for this access type — a plain HTTP endpoint has no standardized write API. Consequently, Wget
 resources are **always transferred by value**: transferring a component version downloads the content and stores it as a
 [`LocalBlob/v1`](#localblobv1) in the target repository, so the target no longer depends on the origin server.
 {{< /callout >}}
@@ -379,7 +379,7 @@ resources are **always transferred by value**: transferring a component version 
 | The upstream URL may disappear or change content            | The artifact is large and should not be duplicated              |
 | You are building an air-gapped or self-contained repository | Consumers are expected to fetch directly from the origin server |
 
-The distinction only holds for as long as the component version stays where it was built. Because wget resources are
+The distinction only holds for as long as the component version stays where it was built. Because Wget resources are
 always transferred by value, transferring a component version turns its `Wget/v1` access specifications into local blobs
 in the target repository.
 
@@ -409,9 +409,15 @@ serves content directly rather than to fetch the redirect target.
 
 ### Response Status and Size Limit
 
-Only 2xx responses are accepted; any other status fails the operation. Response bodies are limited to **100 MiB**. The
-limit is a safeguard against unbounded downloads and is not configurable from the CLI — it can only be changed by callers
-of the Go bindings.
+Only 2xx responses are accepted; any other status fails the operation. Response bodies are limited to **100 MiB** and are
+held in memory for the duration of the operation. The limit is a safeguard against unbounded downloads and is not
+configurable from the CLI — it can only be changed by callers of the Go bindings.
+
+{{< callout type="note" >}}
+Both the fixed limit and the in-memory buffering are planned to change — see
+[ocm-project#1234](https://github.com/open-component-model/ocm-project/issues/1234), which tracks spooling large
+downloads to a temporary file and making the limit configurable.
+{{< /callout >}}
 
 Error messages report the request URL with userinfo, query parameters, and fragment stripped, so credentials embedded in
 presigned URLs are not leaked into logs.
@@ -419,7 +425,7 @@ presigned URLs are not leaked into logs.
 ### HTTP Client Configuration
 
 Timeouts, retries, connection settings, and per-host overrides come from the `http.config.ocm.software/v1alpha1`
-configuration type and apply to every wget request:
+configuration type and apply to every Wget request:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -478,7 +484,7 @@ constructor files using the input type.
 | Area          | OCM v1                                                                             | OCM v2                                                    |
 |---------------|------------------------------------------------------------------------------------|-----------------------------------------------------------|
 | Media type    | `mediaType` → `Content-Type` → **URL file extension** → `application/octet-stream` | `mediaType` → `Content-Type` → `application/octet-stream` |
-| Download size | Unbounded; responses over 4 KiB stream to a temporary file                         | Capped at 100 MiB and held in memory                      |
+| Download size | Unbounded; responses over 4 KiB stream to a temporary file                         | Capped at 100 MiB by default and held in memory           |
 | Minimum TLS   | TLS 1.3                                                                            | TLS 1.2                                                   |
 
 Set `mediaType` explicitly wherever OCM v1 relied on the URL's file extension — a `.tar.gz` URL that previously resolved

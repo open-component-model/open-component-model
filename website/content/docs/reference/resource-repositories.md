@@ -184,7 +184,7 @@ Request timeouts, retries, and per-host settings come from the
 
 ### Digest Processing
 
-The wget digest processor downloads the referenced content and hashes it with SHA-256, using the
+The Wget digest processor downloads the referenced content and hashes it with SHA-256, using the
 `genericBlobDigest/v1` normalisation. When the resource already carries a digest, the computed value is verified against
 it and a mismatch fails the operation. Because the digest is computed over the fetched bytes, a URL whose content
 changes will not verify against a previously recorded digest.
