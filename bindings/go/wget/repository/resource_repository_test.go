@@ -50,7 +50,7 @@ func TestDownloadResource(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{
 			"url": server.URL + "/resource",
 		})
@@ -79,7 +79,7 @@ func TestDownloadResource(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{
 			"url": server.URL + "/resource",
 		})
@@ -100,8 +100,7 @@ func TestDownloadResource(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
 			repository.WithMaxDownloadSize(10),
 		)
 		resource := wgetResource(t, server.URL, map[string]any{
@@ -114,14 +113,14 @@ func TestDownloadResource(t *testing.T) {
 	})
 
 	t.Run("returns error for nil resource", func(t *testing.T) {
-		repo := repository.NewResourceRepository()
+		repo := repository.NewResourceRepository(nil)
 		_, err := repo.DownloadResource(t.Context(), nil, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "resource is required")
 	})
 
 	t.Run("returns error for nil access", func(t *testing.T) {
-		repo := repository.NewResourceRepository()
+		repo := repository.NewResourceRepository(nil)
 		resource := &descruntime.Resource{}
 		resource.Name = "test"
 		_, err := repo.DownloadResource(t.Context(), resource, nil)
@@ -133,7 +132,7 @@ func TestDownloadResource(t *testing.T) {
 func TestUploadResource(t *testing.T) {
 	t.Parallel()
 
-	repo := repository.NewResourceRepository()
+	repo := repository.NewResourceRepository(nil)
 	_, err := repo.UploadResource(t.Context(), nil, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -142,7 +141,7 @@ func TestUploadResource(t *testing.T) {
 func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
 
-	repo := repository.NewResourceRepository()
+	repo := repository.NewResourceRepository(nil)
 
 	resource := &descruntime.Resource{}
 	resource.Name = "test"
@@ -166,7 +165,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 func TestGetResourceRepositoryScheme(t *testing.T) {
 	t.Parallel()
 
-	repo := repository.NewResourceRepository()
+	repo := repository.NewResourceRepository(nil)
 	scheme := repo.GetResourceRepositoryScheme()
 	require.NotNil(t, scheme)
 	assert.True(t, scheme.IsRegistered(runtime.NewVersionedType("wget", v1.Version)))
@@ -197,7 +196,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 
 		processed, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
@@ -217,7 +216,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -235,7 +234,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -255,7 +254,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-512",
@@ -275,7 +274,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",

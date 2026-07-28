@@ -10,10 +10,13 @@
 //
 // [ocm.software/open-component-model/bindings/go/wget/repository.ResourceRepository]
 // is the entry point. It resolves the access spec of a resource, performs the
-// request (following redirects unless the spec disables them in the access), enforces a
-// configurable maximum download size, and returns the response body as a blob:
+// request (following redirects unless the spec disables them in the access), and
+// returns the response body as a blob. Bodies are streamed into a file under the
+// temp folder of the supplied filesystem configuration rather than buffered, so
+// memory use stays flat regardless of response size. There is no size limit by
+// default; [repository.WithMaxDownloadSize] adds one:
 //
-//	repo := repository.NewResourceRepository(
+//	repo := repository.NewResourceRepository(filesystemConfig,
 //	    repository.WithMaxDownloadSize(50 * 1024 * 1024),
 //	)
 //	b, err := repo.DownloadResource(ctx, resource, credentials)

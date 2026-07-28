@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	godigest "github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -28,12 +30,18 @@ var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
 // ResourceRepository implements the ResourceRepository interface for wget access types.
 type ResourceRepository struct {
-	client          *http.Client
-	maxDownloadSize int64
+	client           *http.Client
+	maxDownloadSize  int64
+	filesystemConfig *filesystemv1alpha1.Config
 }
 
-// NewResourceRepository creates a new wget resource repository.
-func NewResourceRepository(opts ...Option) *ResourceRepository {
+// NewResourceRepository creates a new wget resource repository. If filesystemConfig
+// is non-nil, its TempFolder is used for the files downloaded bodies are streamed
+// into; otherwise os.CreateTemp's default directory is used.
+func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
+	if filesystemConfig == nil {
+		filesystemConfig = &filesystemv1alpha1.Config{}
+	}
 	options := &Options{}
 	for _, opt := range opts {
 		opt(options)
@@ -49,8 +57,9 @@ func NewResourceRepository(opts ...Option) *ResourceRepository {
 		maxSize = DefaultMaxDownloadSize
 	}
 	return &ResourceRepository{
-		client:          client,
-		maxDownloadSize: maxSize,
+		client:           client,
+		maxDownloadSize:  maxSize,
+		filesystemConfig: filesystemConfig,
 	}
 }
 
@@ -86,7 +95,14 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 }
 
 // DownloadResource downloads a resource from the URL specified in the wget access spec.
+// The returned blob is backed by a file under the configured temp folder that outlives
+// this call, so the caller owns it.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	return r.download(ctx, resource, credentials, r.filesystemConfig.TempFolder)
+}
+
+// download streams the resource body into tempDir and returns it as a file-backed blob.
+func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, tempDir string) (blob.ReadOnlyBlob, error) {
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
 	}
@@ -110,6 +126,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		download.WithClient(r.client),
 		download.WithMaxDownloadSize(r.maxDownloadSize),
 		download.WithCredentials(credentials),
+		download.WithTempDir(tempDir),
 	)
 }
 
@@ -128,7 +145,17 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 // ProcessResourceDigest computes the digest of a wget resource by downloading the referenced
 // content and hashing it. When the resource already carries a digest, the computed value is verified against it.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
-	data, err := r.DownloadResource(ctx, resource, credentials)
+	// The blob never leaves this function, so unlike DownloadResource this owns the
+	// downloaded file and removes it.
+	tempDir, err := os.MkdirTemp(r.filesystemConfig.TempFolder, "ocm-wget-digest-*")
+	if err != nil {
+		return nil, fmt.Errorf("error creating temporary directory for digest processing: %w", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
+
+	data, err := r.download(ctx, resource, credentials, tempDir)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource for digest processing: %w", err)
 	}

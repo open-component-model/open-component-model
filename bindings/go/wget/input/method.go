@@ -29,6 +29,11 @@ type InputMethod struct {
 	// MaxDownloadSize limits the number of bytes read from a response body. When zero,
 	// the download package default [download.DefaultMaxDownloadSize] is used. A negative value disables the limit.
 	MaxDownloadSize int64
+	// TempFolder is the directory the downloaded body is streamed into. When empty,
+	// the OS temporary directory is used. The file backing the returned blob is
+	// created here and is not removed, because it holds the content the constructor
+	// stores as a local blob.
+	TempFolder string
 }
 
 func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
@@ -84,6 +89,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	opts := []download.Option{
 		download.WithClient(client),
 		download.WithCredentials(credentials),
+		download.WithTempDir(i.TempFolder),
 	}
 
 	if i.MaxDownloadSize != 0 {
