@@ -290,6 +290,36 @@ so the symptom is a `401` from the server rather than a configuration error.
         -----END CERTIFICATE-----
 ```
 
+### Migrating wget credentials from OCM v1
+
+The credential property names are unchanged — `username`, `password`, `identityToken`, `certificate`, `privateKey`, and
+`certificateAuthority` mean the same thing in both versions. An existing `Credentials/v1` properties map keeps working
+once the identity is corrected. What changed is the identity that selects it, and how the properties are applied.
+
+| Area              | OCM v1                             | OCM v2             | What to do                                                                                                             |
+|-------------------|------------------------------------|--------------------|------------------------------------------------------------------------------------------------------------------------|
+| Consumer identity | `type: wget`                       | `type: Wget`       | Update `.ocmconfig`. Identity types match by exact string, so the lowercase spelling silently resolves no credentials. |
+| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute and convert prefixes to globs — `pathprefix: my-org` becomes `path: my-org/*`.                    |
+
+Both are breaking: a carried-over entry does not match, no credentials are resolved, and the request goes out
+unauthenticated — so the symptom is a `401` from the server rather than a configuration error.
+
+The following change what a matching entry does, without any change to the entry itself:
+
+| Area            | OCM v1                                            | OCM v2                                                          |
+|-----------------|---------------------------------------------------|-----------------------------------------------------------------|
+| Auth precedence | Basic auth wins; the bearer token is a fallback   | Bearer token wins; Basic auth is used only when no token is set |
+| Basic auth      | Requires both `username` and `password`           | Sent as soon as `username` is set                               |
+| Custom CA       | Root CAs from credentials always applied          | `certificateAuthority` applied only alongside `certificate`     |
+
+The precedence flip only becomes visible when a single entry carries `identityToken` **and** both `username` and
+`password`: OCM v1 sends Basic auth, OCM v2 sends the bearer token and logs a warning. With only a token, or only a
+username/password pair, both versions behave identically. Split such entries if the server distinguishes the two
+mechanisms.
+
+For the migration of the wget access and input specifications themselves, see
+[Migrating wget from OCM v1]({{< relref "input-and-access-types.md" >}}#migrating-wget-from-ocm-v1).
+
 ---
 
 ## RSA/v1alpha1

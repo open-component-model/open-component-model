@@ -474,29 +474,26 @@ camelCase spelling of `noRedirect`. The OCM v1 CLI flag was `--noredirect`, but 
 
 ### Breaking changes
 
-| Area              | OCM v1                             | OCM v2                    | What to do                                                                                                             |
-|-------------------|------------------------------------|---------------------------|------------------------------------------------------------------------------------------------------------------------|
-| Consumer identity | `type: wget`                       | `type: Wget`              | Update `.ocmconfig`. Identity types match by exact string, so the lowercase spelling silently resolves no credentials. |
-| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match        | Rename the attribute and convert prefixes to globs — `pathprefix: my-org` becomes `path: my-org/*`.                    |
-| Input `body`      | Plain string                       | Base64-encoded byte slice | Base64-encode the body in `component-constructor.yaml`.                                                                |
+| Area         | OCM v1       | OCM v2                    | What to do                                              |
+|--------------|--------------|---------------------------|---------------------------------------------------------|
+| Input `body` | Plain string | Base64-encoded byte slice | Base64-encode the body in `component-constructor.yaml`. |
+
+The OCM v1 access specification typed `body` as an `io.Reader`, which has no YAML representation, so this affects
+constructor files using the input type.
 
 ### Behavior changes
 
-| Area            | OCM v1                                                                                           | OCM v2                                                          |
-|-----------------|--------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|
-| Media type      | `mediaType` → `Content-Type` → **URL file extension** → `application/octet-stream`               | `mediaType` → `Content-Type` → `application/octet-stream`       |
-| Auth precedence | Basic auth wins; the bearer token is used only if `username` **and** `password` are not both set | Bearer token wins; Basic auth is used only when no token is set |
-| Basic auth      | Requires both `username` and `password`                                                          | Sent as soon as `username` is set                               |
-| Download size   | Unbounded; responses over 4 KiB stream to a temporary file                                       | Capped at 100 MiB and held in memory                            |
-| Minimum TLS     | TLS 1.3                                                                                          | TLS 1.2                                                         |
-| Custom CA       | Root CAs from credentials always applied                                                         | `certificateAuthority` applied only alongside `certificate`     |
-
-The two auth rows matter most when a consumer entry carries both a token and a username/password pair: OCM v1 would send
-Basic auth, OCM v2 sends the bearer token and logs a warning. Split such entries if the server distinguishes them.
+| Area          | OCM v1                                                                             | OCM v2                                                    |
+|---------------|------------------------------------------------------------------------------------|-----------------------------------------------------------|
+| Media type    | `mediaType` → `Content-Type` → **URL file extension** → `application/octet-stream` | `mediaType` → `Content-Type` → `application/octet-stream` |
+| Download size | Unbounded; responses over 4 KiB stream to a temporary file                         | Capped at 100 MiB and held in memory                      |
+| Minimum TLS   | TLS 1.3                                                                            | TLS 1.2                                                   |
 
 Set `mediaType` explicitly wherever OCM v1 relied on the URL's file extension — a `.tar.gz` URL that previously resolved
 to `application/x-gzip` now falls back to the server's `Content-Type`, or to `application/octet-stream`.
 
-The credential property names (`username`, `password`, `identityToken`, `certificate`, `privateKey`,
-`certificateAuthority`) are unchanged, so an existing `Credentials/v1` properties map keeps working once the identity
-type is corrected to `Wget`.
+### Credentials
+
+The consumer identity type and its path attribute both changed, and the order in which authentication mechanisms are
+applied was inverted. See
+[Migrating Wget credentials from OCM v1]({{< relref "credential-consumer-identities.md" >}}#migrating-wget-credentials-from-ocm-v1).
