@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
+	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
 const (
@@ -76,12 +77,10 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 		return nil, fmt.Errorf("url is required")
 	}
 
-	identity, err := runtime.ParseURLToIdentity(wget.URL)
+	identity, err := identityv1.IdentityFromURL(wget.URL)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing wget URL to identity: %w", err)
 	}
-
-	identity.SetType(runtime.NewUnversionedType(accessspec.WgetConsumerType))
 
 	return identity, nil
 }

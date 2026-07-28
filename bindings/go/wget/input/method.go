@@ -12,6 +12,7 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
+	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/wget/spec/input"
 	v1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
 )
@@ -55,12 +56,10 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 		return nil, fmt.Errorf("wget url must use http or https scheme, got %q", parsed.Scheme)
 	}
 
-	identity, err := runtime.ParseURLToIdentity(wget.URL)
+	identity, err := identityv1.IdentityFromURL(wget.URL)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing wget URL to identity: %w", err)
 	}
-
-	identity.SetType(runtime.NewUnversionedType(input.WgetConsumerType))
 
 	return identity, nil
 }
