@@ -493,6 +493,7 @@ test('updateImportTags: updates versioned tags for matching version', () => {
         'ocm.software/open-component-model/bindings/go/oci': 'v0.0.47',
         'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/sigstore': 'v0.0.2',
+        'ocm.software/open-component-model/bindings/go/wget': 'v0.0.2',
     };
     const parsed = {
         imports: [
@@ -552,6 +553,11 @@ test('updateImportTags: updates versioned tags for matching version', () => {
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
             },
             {
+                path: 'ocm.software/open-component-model/bindings/go/wget',
+                version: 'bindings/go/wget/v0.0.1',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+            {
                 path: 'ocm.software/open-component-model/kubernetes/controller',
                 version: 'kubernetes/controller/v0.3.0',
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
@@ -573,6 +579,7 @@ test('updateImportTags: updates versioned tags for matching version', () => {
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/oci'], 'v0.0.47');
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/rsa'], 'v0.0.2');
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/sigstore'], 'v0.0.2');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/wget'], 'v0.0.2');
     assert.equal(byPath['ocm.software/open-component-model/kubernetes/controller'], 'v0.3.1');
 });
 
@@ -653,6 +660,7 @@ test('updateImportTags: patching freshly-built blocks equals building directly w
         'ocm.software/open-component-model/bindings/go/oci': 'v0.0.47',
         'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/sigstore': 'v0.0.2',
+        'ocm.software/open-component-model/bindings/go/wget': 'v0.0.2',
     };
 
     // Path A: build at 0.3.0 with old deps, then patch to 0.3.1 with new deps

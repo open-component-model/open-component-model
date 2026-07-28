@@ -450,6 +450,8 @@ function updateImportTags(parsed, version, fullVersion, deps) {
             newTag = deps[`${MODULE_PREFIX}/bindings/go/sigstore`];
         } else if (deps && imp.path.endsWith('/bindings/go/credentials')) {
             newTag = deps[`${MODULE_PREFIX}/bindings/go/credentials`];
+        } else if (deps && imp.path.endsWith('/bindings/go/wget')) {
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/wget`];
         }
 
         if (newTag && imp.version !== newTag) {

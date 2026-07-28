@@ -181,19 +181,19 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 ## Wget
 
 Used when OCM fetches a resource over plain HTTP or HTTPS — the
-[`Wget/v1` access type]({{< relref "input-and-access-types.md" >}}#wget-access) and the
-[`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wget-input). The identity is derived from the resource
+[`Wget/v1` access type]({{< relref "input-and-access-types.md" >}}#wgetv1-access) and the
+[`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input). The identity is derived from the resource
 `url`; the access type and the input type derive it identically, so a single consumer entry covers both.
 
 ### Identity Attributes
 
-| Attribute  | Required | Description                                                                                                                           |
-|------------|----------|---------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `Wget`                                                                                                                        |
-| `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`)                                                                                        |
+| Attribute  | Required | Description                                                                                                                            |
+|------------|----------|----------------------------------------------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `Wget`                                                                                                                         |
+| `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`)                                                                                         |
 | `path`     | No       | URL path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
-| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                             |
-| `port`     | No       | Port number as string. Default ports are applied when `scheme` is set: `https` defaults to `443`, `http` to `80`.                     |
+| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                              |
+| `port`     | No       | Port number as string. During matching, default ports are applied when `scheme` is set: `https` defaults to `443`, `http` to `80`.     |
 
 **Example derivation:** for `url: https://downloads.example.com/myapp/1.0.0/myapp.tar.gz`, the lookup identity is:
 
@@ -204,10 +204,15 @@ Used when OCM fetches a resource over plain HTTP or HTTPS — the
 | `scheme`   | `https`                    |
 | `path`     | `myapp/1.0.0/myapp.tar.gz` |
 
+The URL carries no explicit port, so no `port` attribute is derived. Default ports stay implicit in the identity and
+are applied by the URL matcher instead, so this identity matches a consumer entry with `port: "443"` as well as one
+with no `port` at all. A URL that names its port (`https://downloads.example.com:8443/...`) does derive
+`port: "8443"`.
+
 ### Credential Properties
 
 | Property               | Description                                                                                                 |
-|------------------------|---------------------------------------------------------------------------------------------------------------|
+|------------------------|-------------------------------------------------------------------------------------------------------------|
 | `username`             | Username for HTTP Basic Authentication                                                                      |
 | `password`             | Password for HTTP Basic Authentication                                                                      |
 | `identityToken`        | Bearer token sent as `Authorization: Bearer <token>`. Takes precedence over Basic Auth.                     |
@@ -229,7 +234,7 @@ default-port handling), then exact equality on the remaining attributes.
 
 {{< callout context="caution" >}}
 The identity type is matched by exact string and is **unversioned** — `type: Wget`. Neither `Wget/v1` (the name of the
-[access and input type]({{< relref "input-and-access-types.md" >}}#wget-access)) nor the lowercase `wget` used by OCM v1
+[access and input type]({{< relref "input-and-access-types.md" >}}#wgetv1-access)) nor the lowercase `wget` used by OCM v1
 will match. A non-matching entry fails silently: no credentials are resolved and the request goes out unauthenticated,
 so the symptom is a `401` from the server rather than a configuration error.
 {{< /callout >}}

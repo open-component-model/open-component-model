@@ -144,7 +144,7 @@ resources:
       env: production
 ```
 
-### `Wget/v1` {#wget-input}
+### `Wget/v1` (Input)
 
 Downloads content from an HTTP or HTTPS URL while the component version is constructed and embeds it as a local blob.
 Use it when the upstream artifact is a plain HTTP download (a release archive, a checksum file, a signed binary) and you
@@ -152,14 +152,14 @@ want the bytes captured in the component version rather than fetched again at co
 
 The legacy type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical.
 
-| Field        | Type                | Required | Description                                                                                                                              |
-|--------------|---------------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `url`        | string              | yes      | HTTP or HTTPS endpoint to download from. Other URL schemes are rejected.                                                                 |
-| `mediaType`  | string              | no       | Media type of the downloaded content. If omitted, the response `Content-Type` header is used, falling back to `application/octet-stream`. |
-| `header`     | map[string][]string | no       | Additional HTTP headers to send with the request.                                                                                        |
-| `verb`       | string              | no       | HTTP method to use. Defaults to `GET`.                                                                                                   |
-| `body`       | string (base64)     | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                    |
-| `noRedirect` | boolean             | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                       |
+| Field        | Type                  | Required | Description                                                                                                                               |
+|--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `url`        | string                | yes      | HTTP or HTTPS endpoint to download from. Other URL schemes are rejected.                                                                  |
+| `mediaType`  | string                | no       | Media type of the downloaded content. If omitted, the response `Content-Type` header is used, falling back to `application/octet-stream`. |
+| `header`     | `map[string][]string` | no       | Additional HTTP headers to send with the request.                                                                                         |
+| `verb`       | string                | no       | HTTP method to use. Defaults to `GET`.                                                                                                    |
+| `body`       | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
+| `noRedirect` | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
 
 ```yaml
 resources:
@@ -321,22 +321,22 @@ resources:
 This access type is **alpha** (`v1alpha1`). Its schema may change in future releases.
 {{< /callout >}}
 
-### `Wget/v1` {#wget-access}
+### `Wget/v1` (Access)
 
 References content served over HTTP or HTTPS. The bytes stay on the remote server — they are fetched when the resource
 is downloaded, when its digest is computed, and when the component version is transferred.
 
 The legacy type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical. The fields are identical
-to those of the [`Wget/v1` input type](#wget-input), so the same request can be expressed either by value or by reference.
+to those of the [`Wget/v1` input type](#wgetv1-input), so the same request can be expressed either by value or by reference.
 
-| Field        | Type                | Required | Description                                                                                                                              |
-|--------------|---------------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `url`        | string              | yes      | HTTP or HTTPS endpoint to download from. Other URL schemes are rejected.                                                                 |
-| `mediaType`  | string              | no       | Media type of the referenced content. If omitted, the response `Content-Type` header is used, falling back to `application/octet-stream`. |
-| `header`     | map[string][]string | no       | Additional HTTP headers to send with the request.                                                                                        |
-| `verb`       | string              | no       | HTTP method to use. Defaults to `GET`.                                                                                                   |
-| `body`       | string (base64)     | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                    |
-| `noRedirect` | boolean             | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                       |
+| Field        | Type                  | Required | Description                                                                                                                               |
+|--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `url`        | string                | yes      | HTTP or HTTPS endpoint to download from. Other URL schemes are rejected.                                                                  |
+| `mediaType`  | string                | no       | Media type of the referenced content. If omitted, the response `Content-Type` header is used, falling back to `application/octet-stream`. |
+| `header`     | `map[string][]string` | no       | Additional HTTP headers to send with the request.                                                                                         |
+| `verb`       | string                | no       | HTTP method to use. Defaults to `GET`.                                                                                                    |
+| `body`       | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
+| `noRedirect` | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
 
 ```yaml
 resources:
@@ -453,12 +453,12 @@ The wget access and input types carry over from OCM v1 with the same purpose and
 changed:
 
 | OCM v1                                    | OCM v2                                     | Notes                                                                                                             |
-|-------------------------------------------|--------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+|-------------------------------------------|--------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
 | `type: wget`                              | `type: Wget/v1`                            | `wget`, `Wget`, and `wget/v1` remain accepted as deprecated aliases.                                              |
 | `noredirect`                              | `noRedirect`                               | Field names are matched case-insensitively, so the old spelling still parses; `noRedirect` is the canonical form. |
 | Consumer identity type `wget`             | Consumer identity type `Wget`              | **Breaking.** Identity types are matched by exact string — the lowercase spelling no longer matches.              |
 | `pathprefix` in the consumer identity     | `path` in the consumer identity            | **Breaking.** Matching changed from longest-prefix to glob (`*` matches a single path segment).                   |
-| Media type deduced from the URL extension | Media type from `mediaType`/`Content-Type` | Set `mediaType` explicitly where OCM v1 relied on the file extension.                                            |
+| Media type deduced from the URL extension | Media type from `mediaType`/`Content-Type` | Set `mediaType` explicitly where OCM v1 relied on the file extension.                                             |
 
 The credential property names (`username`, `password`, `identityToken`, `certificate`, `privateKey`,
 `certificateAuthority`) are unchanged, so an existing `Credentials/v1` properties map keeps working once the identity
