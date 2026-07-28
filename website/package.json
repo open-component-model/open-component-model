@@ -57,6 +57,7 @@
   "overrides": {
     "adm-zip": "0.6.0",
     "semver": "^7.5.4",
+    "brace-expansion": "^5.0.8",
     "eslint-config-developit": {
       "eslint-plugin-compat": {
         "eslint": "$eslint"
