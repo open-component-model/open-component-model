@@ -150,7 +150,7 @@ Downloads content from an HTTP or HTTPS URL while the component version is const
 Use it when the upstream artifact is a plain HTTP download (a release archive, a checksum file, a signed binary) and you
 want the bytes captured in the component version rather than fetched again at consumption time.
 
-The legacy type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical.
+Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical.
 
 | Field        | Type                  | Required | Description                                                                                                                               |
 |--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
@@ -160,6 +160,13 @@ The legacy type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1`
 | `verb`       | string                | no       | HTTP method to use. Defaults to `GET`.                                                                                                    |
 | `body`       | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
 | `noRedirect` | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
+
+{{< callout type="warning" >}}
+Do not put credentials in `header`. The input specification is resolved at construction time and is not written to the
+component descriptor, but it does live in your `component-constructor.yaml`, which is normally checked into version
+control. Configure authentication through the [credential system](#wget-authentication) instead, which keeps secrets in
+`.ocmconfig` and out of the artifacts you publish.
+{{< /callout >}}
 
 ```yaml
 resources:
@@ -326,7 +333,7 @@ This access type is **alpha** (`v1alpha1`). Its schema may change in future rele
 References content served over HTTP or HTTPS. The bytes stay on the remote server — they are fetched when the resource
 is downloaded, when its digest is computed, and when the component version is transferred.
 
-The legacy type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical. The fields are identical
+Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical. The fields are identical
 to those of the [`Wget/v1` input type](#wgetv1), so the same request can be expressed either by value or by reference.
 
 | Field        | Type                  | Required | Description                                                                                                                               |
@@ -337,6 +344,14 @@ to those of the [`Wget/v1` input type](#wgetv1), so the same request can be expr
 | `verb`       | string                | no       | HTTP method to use. Defaults to `GET`.                                                                                                    |
 | `body`       | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
 | `noRedirect` | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
+
+{{< callout type="warning" >}}
+**Never put credentials in `header`.** Unlike an input specification, an access specification is stored **verbatim in
+the component descriptor**. Any header written here is persisted with the component version, travels with it through
+every transfer, is covered by its signature, and is readable by anyone who can read the component version. Configure
+authentication through the [credential system](#wget-authentication) instead — credentials are resolved at request time
+from `.ocmconfig` and never become part of the component version.
+{{< /callout >}}
 
 ```yaml
 resources:
@@ -449,16 +464,38 @@ reference.
 
 ## Migrating wget from OCM v1
 
-The wget access and input types carry over from OCM v1 with the same purpose and the same fields, but a few names
-changed:
+The wget access and input types carry over from OCM v1 with the same purpose and largely the same schema. The type names
+are unchanged — OCM v1 and OCM v2 both register `Wget/v1`, `wget/v1`, `Wget`, and `wget`, so an existing `type:` line
+keeps working. `Wget/v1` is the canonical spelling in OCM v2.
 
-| OCM v1                                    | OCM v2                                     | Notes                                                                                                             |
-|-------------------------------------------|--------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `type: wget`                              | `type: Wget/v1`                            | `wget`, `Wget`, and `wget/v1` remain accepted as deprecated aliases.                                              |
-| `noredirect`                              | `noRedirect`                               | Field names are matched case-insensitively, so the old spelling still parses; `noRedirect` is the canonical form. |
-| Consumer identity type `wget`             | Consumer identity type `Wget`              | **Breaking.** Identity types are matched by exact string — the lowercase spelling no longer matches.              |
-| `pathprefix` in the consumer identity     | `path` in the consumer identity            | **Breaking.** Matching changed from longest-prefix to glob (`*` matches a single path segment).                   |
-| Media type deduced from the URL extension | Media type from `mediaType`/`Content-Type` | Set `mediaType` explicitly where OCM v1 relied on the file extension.                                             |
+The field names `url`, `mediaType`, `header`, `verb`, `body`, and `noRedirect` are also unchanged, including the
+camelCase spelling of `noRedirect`. The OCM v1 CLI flag was `--noredirect`, but the specification field was already
+`noRedirect`.
+
+### Breaking changes
+
+| Area              | OCM v1                             | OCM v2                    | What to do                                                                                                             |
+|-------------------|------------------------------------|---------------------------|------------------------------------------------------------------------------------------------------------------------|
+| Consumer identity | `type: wget`                       | `type: Wget`              | Update `.ocmconfig`. Identity types match by exact string, so the lowercase spelling silently resolves no credentials. |
+| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match        | Rename the attribute and convert prefixes to globs — `pathprefix: my-org` becomes `path: my-org/*`.                    |
+| Input `body`      | Plain string                       | Base64-encoded byte slice | Base64-encode the body in `component-constructor.yaml`.                                                                |
+
+### Behavior changes
+
+| Area            | OCM v1                                                                                           | OCM v2                                                          |
+|-----------------|--------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|
+| Media type      | `mediaType` → `Content-Type` → **URL file extension** → `application/octet-stream`               | `mediaType` → `Content-Type` → `application/octet-stream`       |
+| Auth precedence | Basic auth wins; the bearer token is used only if `username` **and** `password` are not both set | Bearer token wins; Basic auth is used only when no token is set |
+| Basic auth      | Requires both `username` and `password`                                                          | Sent as soon as `username` is set                               |
+| Download size   | Unbounded; responses over 4 KiB stream to a temporary file                                       | Capped at 100 MiB and held in memory                            |
+| Minimum TLS     | TLS 1.3                                                                                          | TLS 1.2                                                         |
+| Custom CA       | Root CAs from credentials always applied                                                         | `certificateAuthority` applied only alongside `certificate`     |
+
+The two auth rows matter most when a consumer entry carries both a token and a username/password pair: OCM v1 would send
+Basic auth, OCM v2 sends the bearer token and logs a warning. Split such entries if the server distinguishes them.
+
+Set `mediaType` explicitly wherever OCM v1 relied on the URL's file extension — a `.tar.gz` URL that previously resolved
+to `application/x-gzip` now falls back to the server's `Content-Type`, or to `application/octet-stream`.
 
 The credential property names (`username`, `password`, `identityToken`, `certificate`, `privateKey`,
 `certificateAuthority`) are unchanged, so an existing `Credentials/v1` properties map keeps working once the identity
