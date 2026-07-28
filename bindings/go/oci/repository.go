@@ -281,9 +281,75 @@ func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descript
 		return repo.ProcessResourceDigest(ctx, res)
 	case *accessv1.OCIImage:
 		return repo.processOCIImageDigest(ctx, res, typed)
+	case *accessv1.OCIImageLayer:
+		return repo.processOCIImageLayerDigest(ctx, res, typed)
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
+}
+
+// validateOCIImageLayerAccess checks the parts of a layer access the repository relies on.
+// It parses the reference with looseref rather than calling OCIImageLayer.Validate, which
+// goes through registry.ParseReference and so rejects the scheme-prefixed references
+// (http://host/repo) this binding accepts everywhere else for plain-HTTP registries.
+func validateOCIImageLayerAccess(typed *accessv1.OCIImageLayer) error {
+	if typed.Reference == "" {
+		return fmt.Errorf("OCI image layer access has no reference set in field %q", "ref")
+	}
+	if err := typed.Digest.Validate(); err != nil {
+		return fmt.Errorf("invalid digest %q in OCI image layer access %q: %w", typed.Digest, typed.Reference, err)
+	}
+	ref, err := looseref.ParseReference(typed.Reference)
+	if err != nil {
+		return fmt.Errorf("error parsing layer reference %q: %w", typed.Reference, err)
+	}
+	if dig, err := ref.Digest(); err == nil && dig != typed.Digest {
+		return fmt.Errorf("digest field value %q does not match digest contained in reference %q", typed.Digest, typed.Reference)
+	}
+	return nil
+}
+
+func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImageLayer) (*descriptor.Resource, error) {
+	if err := validateOCIImageLayerAccess(typed); err != nil {
+		return nil, err
+	}
+
+	src, err := repo.resolver.StoreForReference(ctx, typed.Reference)
+	if err != nil {
+		return nil, err
+	}
+
+	// A layer is addressed by digest and carries no manifest, so there is nothing
+	// to resolve: unlike an OCI image reference it can never be tag-based. All the
+	// registry can tell us is whether the blob is there, which Exists answers via
+	// the blob endpoint. Resolve would query the manifest endpoint and 404.
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: typed.MediaType,
+		Digest:    typed.Digest,
+		Size:      typed.Size,
+	}
+	exists, err := src.Exists(ctx, desc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify existence of layer %q in %q: %w", typed.Digest, typed.Reference, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("layer %q does not exist in %q", typed.Digest, typed.Reference)
+	}
+
+	// if the resource did not have a digest, we apply the one from the access
+	// if it did, we verify it against the access.
+	if res.Digest == nil {
+		res.Digest = &descriptor.Digest{}
+		if err := internaldigest.Apply(res.Digest, typed.Digest); err != nil {
+			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		}
+	} else if err := internaldigest.Verify(res.Digest, typed.Digest); err != nil {
+		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+	}
+
+	res.Access = typed
+
+	return res, nil
 }
 
 func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImage) (*descriptor.Resource, error) {
@@ -1099,6 +1165,30 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			},
 			TempDir: repo.tempDir,
 			Tags:    tags,
+		}, nil
+	case *accessv1.OCIImageLayer:
+		if err := validateOCIImageLayerAccess(typed); err != nil {
+			return nil, err
+		}
+
+		src, err := repo.resolver.StoreForReference(ctx, typed.Reference)
+		if err != nil {
+			return nil, err
+		}
+
+		graph, ok := src.(content.ReadOnlyGraphStorage)
+		if !ok {
+			return nil, fmt.Errorf("store %T does not support predecessor walks", src)
+		}
+		// The layer is addressed by digest, so its descriptor is fully known from
+		// the access alone and no resolution against the registry is needed.
+		return &ocistream.OCILayerResourceStream{
+			ReadOnlyGraphStorage: graph,
+			Descriptor: ociImageSpecV1.Descriptor{
+				MediaType: typed.MediaType,
+				Digest:    typed.Digest,
+				Size:      typed.Size,
+			},
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
