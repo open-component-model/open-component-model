@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -78,9 +79,7 @@ func TestDownload_HappyPath(t *testing.T) {
 	require.NotNil(t, b)
 	assert.Equal(t, content, readBlob(t, b))
 
-	mt, ok := b.(blob.MediaTypeAware)
-	require.True(t, ok)
-	got, _ := mt.MediaType()
+	got, _ := b.MediaType()
 	assert.Equal(t, "text/plain", got)
 }
 
@@ -295,6 +294,53 @@ func TestDownload_StreamsIntoTempDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, content, onDisk)
 	assert.Equal(t, content, readBlob(t, b))
+}
+
+// TestDownload_CloseRemovesTempFile asserts that closing the returned blob reclaims
+// the temporary file, so a caller that is done with a download leaves nothing behind.
+func TestDownload_CloseRemovesTempFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, []byte("payload"), false).URL},
+		download.WithTempDir(tempDir))
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(tempDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	require.NoError(t, b.Close())
+	entries, err = os.ReadDir(tempDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "closing the blob must remove the temporary file")
+
+	assert.NoError(t, b.Close(), "closing twice must not fail")
+}
+
+// TestDownload_AbandonedBlobIsReclaimed asserts that a blob dropped without being
+// closed still has its temporary file removed, so callers that cannot close it do
+// not accumulate downloads for the lifetime of the process.
+func TestDownload_AbandonedBlobIsReclaimed(t *testing.T) {
+	tempDir := t.TempDir()
+	srv := serveBody(t, []byte("payload"), false)
+
+	func() {
+		b, err := download.Download(t.Context(), download.Request{URL: srv.URL},
+			download.WithTempDir(tempDir))
+		require.NoError(t, err)
+		require.NotNil(t, b)
+
+		entries, err := os.ReadDir(tempDir)
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+	}()
+
+	// The cleanup runs asynchronously once the blob is unreachable, so collect and poll.
+	require.Eventually(t, func() bool {
+		runtime.GC()
+		entries, err := os.ReadDir(tempDir)
+		return err == nil && len(entries) == 0
+	}, 10*time.Second, 20*time.Millisecond, "an abandoned download must not leave its temporary file behind")
 }
 
 // TestDownload_MaxDownloadSize covers both rejection paths: a response that announces

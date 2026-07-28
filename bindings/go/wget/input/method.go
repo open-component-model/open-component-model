@@ -31,8 +31,9 @@ type InputMethod struct {
 	MaxDownloadSize int64
 	// TempFolder is the directory the downloaded body is streamed into. When empty,
 	// the OS temporary directory is used. The file backing the returned blob is
-	// created here and is not removed, because it holds the content the constructor
-	// stores as a local blob.
+	// created here and outlives ProcessResource, because it holds the content the
+	// constructor stores as a local blob. It is removed once the constructor releases
+	// the blob; see [download.Blob].
 	TempFolder string
 }
 

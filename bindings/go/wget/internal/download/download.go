@@ -15,8 +15,6 @@ import (
 	"net/url"
 	"os"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
@@ -44,11 +42,14 @@ type Request struct {
 // Download performs the HTTP request described by req and returns the response body
 // as a blob backed by a file on disk. Bodies are streamed rather than buffered, so
 // memory use stays flat regardless of response size; the file is created under the
-// directory given by [WithTempDir] and outlives this call, so the caller owns it.
+// directory given by [WithTempDir] and outlives this call.
+//
+// The returned [Blob] owns that file: callers should [Blob.Close] it once they are
+// done, and an unclosed blob has its file removed when it becomes unreachable.
 //
 // The HTTP client, credentials and maximum download size are supplied via options;
 // see [WithClient], [WithCredentials] and [WithMaxDownloadSize].
-func Download(ctx context.Context, req Request, opts ...Option) (_ blob.ReadOnlyBlob, err error) {
+func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err error) {
 	o := &option{}
 	for _, opt := range opts {
 		opt(o)
@@ -169,7 +170,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ blob.ReadOnly
 		mediaType = "application/octet-stream"
 	}
 
-	b, err := filesystem.GetBlobFromOSPath(path)
+	b, err := newBlob(path)
 	if err != nil {
 		return nil, fmt.Errorf("error creating blob for %s from %s: %w", safeURL.String(), path, err)
 	}

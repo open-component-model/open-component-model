@@ -23,6 +23,12 @@
 //	if err != nil {
 //	    return err
 //	}
+//	defer b.(io.Closer).Close()
+//
+// The returned blob owns the file it is backed by. Closing it removes that file;
+// a blob that is dropped without being closed has its file removed once it becomes
+// unreachable, so downloads do not pile up in the temp folder of a long-running
+// process.
 //
 // Credentials are optional. When supplied as
 // [ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1.WgetCredentials]

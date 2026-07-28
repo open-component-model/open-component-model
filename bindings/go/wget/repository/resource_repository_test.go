@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	godigest "github.com/opencontainers/go-digest"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
@@ -112,6 +114,32 @@ func TestDownloadResource(t *testing.T) {
 		assert.Contains(t, err.Error(), "exceeds maximum allowed size")
 	})
 
+	t.Run("closing the downloaded blob reclaims the temporary file", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("hello world"))
+		}))
+		defer server.Close()
+
+		tempFolder := t.TempDir()
+		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
+			repository.WithHTTPClient(server.Client()))
+
+		b, err := repo.DownloadResource(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)
+		require.NoError(t, err)
+
+		entries, err := os.ReadDir(tempFolder)
+		require.NoError(t, err)
+		require.Len(t, entries, 1, "the body must be streamed into the configured temp folder")
+
+		closer, ok := b.(io.Closer)
+		require.True(t, ok, "the downloaded blob must be closeable so callers can reclaim it")
+		require.NoError(t, closer.Close())
+
+		entries, err = os.ReadDir(tempFolder)
+		require.NoError(t, err)
+		assert.Empty(t, entries, "closing the blob must remove the temporary file")
+	})
+
 	t.Run("returns error for nil resource", func(t *testing.T) {
 		repo := repository.NewResourceRepository(nil)
 		_, err := repo.DownloadResource(t.Context(), nil, nil)
@@ -207,6 +235,24 @@ func TestProcessResourceDigest(t *testing.T) {
 		assert.Equal(t, godigest.FromBytes(content).Encoded(), processed.Digest.Value)
 		assert.Equal(t, 1, hits, "digest processing should download the content exactly once")
 		assert.Nil(t, resource.Digest, "the input resource must not be mutated")
+	})
+
+	t.Run("leaves no temporary file behind", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("hello digest world"))
+		}))
+		defer server.Close()
+
+		tempFolder := t.TempDir()
+		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
+			repository.WithHTTPClient(server.Client()))
+
+		_, err := repo.ProcessResourceDigest(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)
+		require.NoError(t, err)
+
+		entries, err := os.ReadDir(tempFolder)
+		require.NoError(t, err)
+		assert.Empty(t, entries, "digest processing must reclaim the file it downloaded")
 	})
 
 	t.Run("verifies a matching pre-existing digest", func(t *testing.T) {

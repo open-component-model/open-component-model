@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
-	"os"
 
 	godigest "github.com/opencontainers/go-digest"
 
@@ -96,13 +96,20 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 
 // DownloadResource downloads a resource from the URL specified in the wget access spec.
 // The returned blob is backed by a file under the configured temp folder that outlives
-// this call, so the caller owns it.
+// this call. The blob owns that file: callers should close it (it implements
+// io.Closer) once they are done, and an unclosed blob has its file removed when it
+// becomes unreachable.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	return r.download(ctx, resource, credentials, r.filesystemConfig.TempFolder)
+	b, err := r.download(ctx, resource, credentials)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
-// download streams the resource body into tempDir and returns it as a file-backed blob.
-func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, tempDir string) (blob.ReadOnlyBlob, error) {
+// download streams the resource body into the configured temp folder and returns it
+// as a file-backed blob owning that file.
+func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*download.Blob, error) {
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
 	}
@@ -126,7 +133,7 @@ func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.
 		download.WithClient(r.client),
 		download.WithMaxDownloadSize(r.maxDownloadSize),
 		download.WithCredentials(credentials),
-		download.WithTempDir(tempDir),
+		download.WithTempDir(r.filesystemConfig.TempFolder),
 	)
 }
 
@@ -145,20 +152,17 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 // ProcessResourceDigest computes the digest of a wget resource by downloading the referenced
 // content and hashing it. When the resource already carries a digest, the computed value is verified against it.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
-	// The blob never leaves this function, so unlike DownloadResource this owns the
-	// downloaded file and removes it.
-	tempDir, err := os.MkdirTemp(r.filesystemConfig.TempFolder, "ocm-wget-digest-*")
-	if err != nil {
-		return nil, fmt.Errorf("error creating temporary directory for digest processing: %w", err)
-	}
-	defer func() {
-		_ = os.RemoveAll(tempDir)
-	}()
-
-	data, err := r.download(ctx, resource, credentials, tempDir)
+	data, err := r.download(ctx, resource, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource for digest processing: %w", err)
 	}
+	// The blob never leaves this function, so its file is released right away
+	// instead of waiting for the caller or the cleanup to reclaim it.
+	defer func() {
+		if closeErr := data.Close(); closeErr != nil {
+			slog.WarnContext(ctx, "failed to remove temporary file after digest processing", "err", closeErr)
+		}
+	}()
 
 	rc, err := data.ReadCloser()
 	if err != nil {
