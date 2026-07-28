@@ -68,7 +68,7 @@ jobs:
         id: generate_token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          client-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
           repositories: ${{ github.event.repository.name }}
           # Post per-PR check results.
@@ -83,6 +83,8 @@ jobs:
           permission-statuses: write
           # Bump action SHAs in .github/workflows/*.
           permission-workflows: write
+          # Read Dependabot alerts so Renovate can prioritize security updates.
+          permission-vulnerability-alerts: read
 
       - name: Ensure Dry-Run on Pull Requests
         if: ${{ github.event_name == 'pull_request' }}
@@ -98,7 +100,7 @@ jobs:
           RENOVATE_ONBOARDING: 'false'
           RENOVATE_USERNAME: 'ocmbot[bot]'
           RENOVATE_PLATFORM: 'github'
-          RENOVATE_PLATFORM_COMMIT: 'true'
+          RENOVATE_PLATFORM_COMMIT: 'enabled'
           RENOVATE_REPOSITORIES: "${{ github.repository }}"
           RENOVATE_REPOSITORY_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.repoCache || 'enabled' }}
           RENOVATE_ALLOWED_COMMANDS: |
