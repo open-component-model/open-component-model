@@ -117,6 +117,46 @@ func TestComponentVersionDescriptor(t *testing.T) {
 			expectedVersion: "v0.9.0",
 		},
 		{
+			name:      "legacy cnudie manifest without annotation",
+			component: "example.com/component",
+			tag:       "v0.8.0",
+			descriptor: ociImageSpecV1.Descriptor{
+				MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			},
+			fetcher: &mockFetcher{
+				fetchFunc: func(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+					manifest := ociImageSpecV1.Manifest{
+						Config: ociImageSpecV1.Descriptor{
+							MediaType: componentConfig.LegacyMediaType,
+						},
+					}
+					data, _ := json.Marshal(manifest)
+					return io.NopCloser(bytes.NewReader(data)), nil
+				},
+			},
+			expectedVersion: "v0.8.0",
+		},
+		{
+			name:      "legacy cnudie metadata manifest without annotation",
+			component: "example.com/component",
+			tag:       "v0.7.0",
+			descriptor: ociImageSpecV1.Descriptor{
+				MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			},
+			fetcher: &mockFetcher{
+				fetchFunc: func(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+					manifest := ociImageSpecV1.Manifest{
+						Config: ociImageSpecV1.Descriptor{
+							MediaType: componentConfig.Legacy2MediaType,
+						},
+					}
+					data, _ := json.Marshal(manifest)
+					return io.NopCloser(bytes.NewReader(data)), nil
+				},
+			},
+			expectedVersion: "v0.7.0",
+		},
+		{
 			name:      "unsupported media type",
 			component: "example.com/component",
 			tag:       "v1.0.0",

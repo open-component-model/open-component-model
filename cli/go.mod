@@ -17,31 +17,31 @@ require (
 	golang.org/x/term v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260717061304-6dc39921399b
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260728064351-657389b11d79
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16
 	ocm.software/open-component-model/bindings/go/constructor v0.0.11
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260716142305-3b46fe9f481f
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260717060357-df059e15a4cb
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260728010257-ba2ab4bca27b
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260728010257-ba2ab4bca27b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260716142305-3b46fe9f481f
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260716142305-3b46fe9f481f
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260717062635-65d9c9c7d7b9
+	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260728064351-657389b11d79
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260728010257-ba2ab4bca27b
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260728010257-ba2ab4bca27b
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260717062635-65d9c9c7d7b9
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260728010257-ba2ab4bca27b
 	ocm.software/open-component-model/bindings/go/oci v0.0.48
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260717060357-df059e15a4cb
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260728010257-ba2ab4bca27b
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260716142305-3b46fe9f481f
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260716142305-3b46fe9f481f
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260716142305-3b46fe9f481f
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260716142305-3b46fe9f481f
-	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260717062635-65d9c9c7d7b9
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260728010257-ba2ab4bca27b
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260728010257-ba2ab4bca27b
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260728010257-ba2ab4bca27b
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260728010257-ba2ab4bca27b
+	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260728064351-657389b11d79
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -67,7 +67,7 @@ require (
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
-	github.com/go-openapi/jsonpointer v0.23.1 // indirect
+	github.com/go-openapi/jsonpointer v0.23.2 // indirect
 	github.com/go-openapi/jsonreference v0.21.6 // indirect
 	github.com/go-openapi/swag v0.26.1 // indirect
 	github.com/go-openapi/swag/cmdutils v0.26.1 // indirect
@@ -84,7 +84,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.28.1 // indirect
+	github.com/google/cel-go v0.29.0 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20260505044615-1ff4bf46051f // indirect

@@ -45,18 +45,19 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "25.9.5",
-    "eslint": "10.7.0",
+    "eslint": "10.8.0",
     "globals": "17.7.0",
     "hugo-extended": "0.164.0",
     "jiti": "2.7.0",
-    "js-yaml": "5.2.1",
+    "js-yaml": "5.2.2",
     "sass-embedded": "1.100.0",
     "shx": "0.4.0",
-    "typescript-eslint": "8.64.0"
+    "typescript-eslint": "8.65.0"
   },
   "overrides": {
     "adm-zip": "0.6.0",
     "semver": "^7.5.4",
+    "brace-expansion": "^5.0.8",
     "eslint-config-developit": {
       "eslint-plugin-compat": {
         "eslint": "$eslint"
