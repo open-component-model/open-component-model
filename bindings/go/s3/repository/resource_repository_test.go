@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -126,6 +127,71 @@ func Test_ProcessResourceDigest(t *testing.T) {
 	require.Empty(t, entries, "digest processing must clean up the object it downloaded")
 }
 
+// A hand-written digest in a constructor cannot know the normalisation algorithm and
+// need not restate the hash, so unset fields are filled in and spelling is ignored —
+// matching the github binding.
+func Test_ProcessResourceDigest_VerifiesLeniently(t *testing.T) {
+	content := []byte("digest me")
+	value := godigest.FromBytes(content).Encoded()
+
+	tests := []struct {
+		name    string
+		digest  *descriptor.Digest
+		wantErr string
+	}{
+		{
+			name:   "only the value is given",
+			digest: &descriptor.Digest{Value: value},
+		},
+		{
+			name:   "lowercase hash algorithm spelling",
+			digest: &descriptor.Digest{HashAlgorithm: "sha-256", NormalisationAlgorithm: genericBlobDigestV1, Value: value},
+		},
+		{
+			name:   "uppercase digest value",
+			digest: &descriptor.Digest{Value: strings.ToUpper(value)},
+		},
+		{
+			name:    "a genuinely different hash algorithm is a conflict",
+			digest:  &descriptor.Digest{HashAlgorithm: "SHA-512", Value: value},
+			wantErr: "hash algorithm mismatch",
+		},
+		{
+			name:    "a genuinely different normalisation algorithm is a conflict",
+			digest:  &descriptor.Digest{NormalisationAlgorithm: "ociArtifactDigest/v1", Value: value},
+			wantErr: "normalisation algorithm mismatch",
+		},
+		{
+			name:    "a different value is a conflict",
+			digest:  &descriptor.Digest{Value: godigest.FromString("something else").Encoded()},
+			wantErr: "digest value mismatch",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()},
+				WithClient(&fakeGetter{body: content}))
+
+			resource := s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"})
+			resource.Digest = tt.digest
+
+			res, err := repo.ProcessResourceDigest(context.Background(), resource, nil)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			// Accepted spellings are canonicalized so descriptors do not vary by author.
+			require.Equal(t, hashAlgorithmSHA256, res.Digest.HashAlgorithm)
+			require.Equal(t, genericBlobDigestV1, res.Digest.NormalisationAlgorithm)
+			require.Equal(t, value, res.Digest.Value)
+		})
+	}
+}
+
 // Test_ProcessResourceDigest_PinsAccess covers the ResourceDigestProcessor requirement
 // that a processed access "MUST always reference the content described by the digest
 // and cannot be mutated".
@@ -137,6 +203,7 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 		specVersion string
 		versionID   string
 		wantVersion string
+		wantErr     string
 	}{
 		{
 			name:        "unpinned access is pinned to the digested version",
@@ -146,8 +213,36 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 		{
 			name:        "an already pinned access is left alone",
 			specVersion: "pinned-by-author",
-			versionID:   versionID,
+			versionID:   "pinned-by-author",
 			wantVersion: "pinned-by-author",
+		},
+		{
+			name:        "a pinned access is kept when the store reports no version",
+			specVersion: "pinned-by-author",
+			versionID:   "",
+			wantVersion: "pinned-by-author",
+		},
+		{
+			// The pinned version is sent as the request's versionId, so a store answering
+			// with a different one served an object the access does not name.
+			name:        "a store serving a version other than the pinned one is rejected",
+			specVersion: "pinned-by-author",
+			versionID:   versionID,
+			wantErr:     "was requested at version",
+		},
+		{
+			// "null" pins nothing wherever it comes from, so an author who writes it has
+			// not pinned the access and the version actually served wins.
+			name:        "an author-written null version does not count as pinned",
+			specVersion: download.UnversionedVersionID,
+			versionID:   versionID,
+			wantVersion: versionID,
+		},
+		{
+			name:        "an author-written null version is not checked against a null from the store",
+			specVersion: download.UnversionedVersionID,
+			versionID:   download.UnversionedVersionID,
+			wantVersion: download.UnversionedVersionID,
 		},
 		{
 			name:        "unversioned object is left unpinned rather than pinned to null",
@@ -168,6 +263,11 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 
 			resource := s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k", Version: tt.specVersion})
 			res, err := repo.ProcessResourceDigest(context.Background(), resource, nil)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
 			require.NoError(t, err)
 
 			spec := v1.S3Bucket{}
