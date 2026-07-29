@@ -400,8 +400,6 @@ ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260728010257-ba2
 ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260728010257-ba2ab4bca27b/go.mod h1:8VecnSgMjQhvnHgULs0RHcLZtrDebMCtNWHMWpSgZO4=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260728010257-ba2ab4bca27b h1:NMq5E7WOF9MZ1Yo4NoCOA46SewLMlpVRiAwVrLuKugU=
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260728010257-ba2ab4bca27b/go.mod h1:Cu3Xmvx/Tp2/LUwOVQoZuB0EXAJ7Xcno8yMTqLecbHQ=
-ocm.software/open-component-model/bindings/go/wget v0.0.0-20260728064351-657389b11d79 h1:PHHSChgnF9idIgOrGtxJDgcAEZCdQp+ULYp2f8LvOQw=
-ocm.software/open-component-model/bindings/go/wget v0.0.0-20260728064351-657389b11d79/go.mod h1:LhGwPklYuNhmBJCiO0QzP5R7CZfRIGHMqM2g3HXVbkc=
 ocm.software/open-component-model/bindings/go/wget v0.0.0-20260729081840-fb1e6661e77b h1:ZgFkaTe9eCk5Si0/Ku4a9FFOasp+L1XoXRdso4XhmFE=
 ocm.software/open-component-model/bindings/go/wget v0.0.0-20260729081840-fb1e6661e77b/go.mod h1:E2jv5rri8Kym4l837SzAgLCP1CdczvuO1vlZnXa77cI=
 oras.land/oras-go/v2 v2.6.2 h1:N04RXngAp1LJKTG6ifz3xHPipasEkWr+hFmInja5YKo=
