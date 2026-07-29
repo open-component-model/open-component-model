@@ -12,6 +12,7 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
+	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/wget/spec/input"
 	v1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
 )
@@ -28,6 +29,12 @@ type InputMethod struct {
 	// MaxDownloadSize limits the number of bytes read from a response body. When zero,
 	// the download package default [download.DefaultMaxDownloadSize] is used. A negative value disables the limit.
 	MaxDownloadSize int64
+	// TempFolder is the directory the downloaded body is streamed into. When empty,
+	// the OS temporary directory is used. The file backing the returned blob is
+	// created here and outlives ProcessResource, because it holds the content the
+	// constructor stores as a local blob. It is removed once the constructor releases
+	// the blob; see [download.Blob].
+	TempFolder string
 }
 
 func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
@@ -55,12 +62,10 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 		return nil, fmt.Errorf("wget url must use http or https scheme, got %q", parsed.Scheme)
 	}
 
-	identity, err := runtime.ParseURLToIdentity(wget.URL)
+	identity, err := identityv1.IdentityFromURL(wget.URL)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing wget URL to identity: %w", err)
 	}
-
-	identity.SetType(runtime.NewUnversionedType(input.WgetConsumerType))
 
 	return identity, nil
 }
@@ -85,6 +90,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	opts := []download.Option{
 		download.WithClient(client),
 		download.WithCredentials(credentials),
+		download.WithTempDir(i.TempFolder),
 	}
 
 	if i.MaxDownloadSize != 0 {

@@ -1249,3 +1249,41 @@ func TestConvertFromDescriptorSourceRefs(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertResourceDigestRoundTrip(t *testing.T) {
+	digest := &Digest{
+		HashAlgorithm:          "SHA-256",
+		NormalisationAlgorithm: "genericBlobDigest/v1",
+		Value:                  "abc123",
+	}
+	input := &Resource{
+		ElementMeta: ElementMeta{
+			ObjectMeta: ObjectMeta{Name: "test-resource", Version: "1.0.0"},
+		},
+		Type:     "blob",
+		Relation: ExternalRelation,
+		Digest:   digest,
+	}
+
+	// runtime -> descriptor carries the digest.
+	desc := ConvertToDescriptorResource(input)
+	assert.NotNil(t, desc.Digest)
+	assert.Equal(t, "SHA-256", desc.Digest.HashAlgorithm)
+	assert.Equal(t, "genericBlobDigest/v1", desc.Digest.NormalisationAlgorithm)
+	assert.Equal(t, "abc123", desc.Digest.Value)
+
+	// descriptor -> runtime restores an equal, distinct digest.
+	back := ConvertFromDescriptorResource(desc)
+	assert.Equal(t, digest, back.Digest)
+	assert.NotSame(t, digest, back.Digest)
+}
+
+func TestConvertResourceDigestNil(t *testing.T) {
+	input := &Resource{
+		ElementMeta: ElementMeta{ObjectMeta: ObjectMeta{Name: "test-resource", Version: "1.0.0"}},
+		Type:        "blob",
+	}
+	desc := ConvertToDescriptorResource(input)
+	assert.Nil(t, desc.Digest)
+	assert.Nil(t, ConvertFromDescriptorResource(desc).Digest)
+}

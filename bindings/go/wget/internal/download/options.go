@@ -6,9 +6,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// DefaultMaxDownloadSize is the maximum download size (100 MiB) applied when a
-// [Download] call does not set one via [WithMaxDownloadSize].
-const DefaultMaxDownloadSize int64 = 100 * 1024 * 1024
+// DefaultMaxDownloadSize is the default maximum download size. Zero means unlimited:
+// bodies are streamed to disk rather than held in memory, so a download is bounded
+// by free disk rather than by RAM. Use [WithMaxDownloadSize] to cap it.
+const DefaultMaxDownloadSize int64 = 0
 
 // option holds the configuration for a single [Download] call.
 type option struct {
@@ -22,6 +23,10 @@ type option struct {
 	// Credentials are the OCM credentials applied to the request. When nil, the
 	// request is sent unauthenticated.
 	Credentials runtime.Typed
+
+	// TempDir is the directory the response body is written to. Empty uses the OS
+	// temporary directory.
+	TempDir string
 }
 
 // Option configures the behavior of [Download].
@@ -35,12 +40,20 @@ func WithClient(client *http.Client) Option {
 	}
 }
 
-// WithMaxDownloadSize limits the number of bytes read from a response body.
-// A zero or negative value disables the limit (not recommended for untrusted sources).
-// When this option is not supplied, [DefaultMaxDownloadSize] is applied.
+// WithMaxDownloadSize caps the number of bytes read from a response body.
+// Zero or negative (the default) means unlimited.
 func WithMaxDownloadSize(size int64) Option {
 	return func(o *option) {
 		o.MaxDownloadSize = &size
+	}
+}
+
+// WithTempDir sets the directory the response body is written to. Empty uses the
+// OS temporary directory. The file backing the returned blob is created here and
+// outlives [Download], so the caller owns its lifetime.
+func WithTempDir(dir string) Option {
+	return func(o *option) {
+		o.TempDir = dir
 	}
 }
 
