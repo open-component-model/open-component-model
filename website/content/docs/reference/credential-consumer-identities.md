@@ -181,8 +181,8 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 ## Wget
 
 Used when OCM fetches a resource over plain HTTP or HTTPS — the
-[`Wget/v1` access type]({{< relref "input-and-access-types.md" >}}#wgetv1-1) and the
-[`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1). The identity is derived from the resource
+[`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
+[`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}). The identity is derived from the resource
 `url`; the access type and the input type derive it identically, so a single consumer entry covers both.
 
 ### Identity Attributes
@@ -234,7 +234,7 @@ default-port handling), then exact equality on the remaining attributes.
 
 {{< callout context="caution" >}}
 The identity type is matched by exact string and is **unversioned** — `type: Wget`. Neither `Wget/v1` (the name of the
-[access and input type]({{< relref "input-and-access-types.md" >}}#wgetv1-1)) nor the lowercase `wget` used by OCM v1
+[access and input type]({{< relref "input-and-access-types.md#wgetv1-access" >}})) nor the lowercase `wget` used by OCM v1
 will match. A non-matching entry fails silently: no credentials are resolved and the request goes out unauthenticated,
 so the symptom is a `401` from the server rather than a configuration error.
 {{< /callout >}}
@@ -290,31 +290,9 @@ so the symptom is a `401` from the server rather than a configuration error.
         -----END CERTIFICATE-----
 ```
 
-### Migrating Wget credentials from OCM v1
-
-| Area              | OCM v1                             | OCM v2             | What to do                                                                                                             |
-|-------------------|------------------------------------|--------------------|------------------------------------------------------------------------------------------------------------------------|
-| Consumer identity | `type: wget`                       | `type: Wget`       | Update `.ocmconfig`. Identity types match by exact string, so the lowercase spelling silently resolves no credentials. |
-| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute and convert prefixes to globs — `pathprefix: my-org` becomes `path: my-org/*`.                    |
-
-Both are breaking: a carried-over entry does not match, no credentials are resolved, and the request goes out
-unauthenticated — so the symptom is a `401` from the server rather than a configuration error.
-
-The following change what a matching entry does, without any change to the entry itself:
-
-| Area            | OCM v1                                            | OCM v2                                                          |
-|-----------------|---------------------------------------------------|-----------------------------------------------------------------|
-| Auth precedence | Basic auth wins; the bearer token is a fallback   | Bearer token wins; Basic auth is used only when no token is set |
-| Basic auth      | Requires both `username` and `password`           | Sent as soon as `username` is set                               |
-| Custom CA       | Root CAs from credentials always applied          | `certificateAuthority` applied only alongside `certificate`     |
-
-The precedence flip only becomes visible when a single entry carries `identityToken` **and** both `username` and
-`password`: OCM v1 sends Basic auth, OCM v2 sends the bearer token and logs a warning. With only a token, or only a
-username/password pair, both versions behave identically. Split such entries if the server distinguishes the two
-mechanisms.
-
-For the migration of the Wget access and input specifications themselves, see
-[Migrating Wget from OCM v1]({{< relref "input-and-access-types.md" >}}#migrating-from-ocm-v1).
+For migrating a Wget consumer entry from OCM v1 — the renamed identity type, the `pathprefix` to `path` conversion,
+and the inverted authentication precedence — see
+[How-To: Add Resources from HTTP URLs]({{< relref "docs/how-to/add-resources-from-http-urls.md#credential-changes" >}}).
 
 ---
 

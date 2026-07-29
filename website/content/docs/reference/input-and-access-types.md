@@ -144,7 +144,7 @@ resources:
       env: production
 ```
 
-### `Wget/v1`
+### `Wget/v1` {#wgetv1-input}
 
 Downloads content from an HTTP or HTTPS URL while the component version is constructed and embeds it as a local blob.
 Use it when the upstream artifact is a plain HTTP download (a release archive, a checksum file, a signed binary) and you
@@ -161,10 +161,12 @@ Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1
 | `body`       | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
 | `noRedirect` | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
 
-{{< callout type="warning" >}}
-Do not put credentials in `header`. The input specification is resolved at construction time and is not written to the
+{{< callout context="caution" >}}
+Do not put credentials in `url`, `header`, or `body` — that includes userinfo (`https://user:token@host/...`) and
+presigned query parameters. The input specification is resolved at construction time and is not written to the
 component descriptor, but it does live in your `component-constructor.yaml`, which is normally checked into version
-control. Configure authentication through the [credential system](#authentication) instead, which keeps secrets in
+control. Configure authentication through the
+[credential system]({{< relref "credential-consumer-identities.md" >}}#wget) instead, which keeps secrets in
 `.ocmconfig` and out of the artifacts you publish.
 {{< /callout >}}
 
@@ -200,8 +202,8 @@ resources:
     body: eyJmb3JtYXQiOiJqc29uIn0=
 ```
 
-See [Wget behavior](#wget) for redirects, size limits, and HTTP client settings, and
-[Wget authentication](#authentication) for credential configuration.
+See [How-To: Add Resources from HTTP URLs]({{< relref "docs/how-to/add-resources-from-http-urls.md" >}}) for media type
+resolution, redirects, download tuning, and credential configuration.
 
 ## Access Types
 
@@ -297,7 +299,7 @@ resources:
       helmRepository: https://charts.bitnami.com/bitnami
 ```
 
-{{< callout type="note" >}}
+{{< callout context="note" >}}
 For Helm charts stored in OCI registries, use the [`OCIImage/v1`]({{< relref "input-and-access-types.md" >}}#ociimagev1)
 access type instead. The [Helm resource repository]({{< relref "resource-repositories.md" >}}#helm-resource-repository)
 only supports HTTP/HTTPS-based chart repositories.
@@ -324,17 +326,18 @@ resources:
       mediaType: text/markdown
 ```
 
-{{< callout type="warning" >}}
+{{< callout context="caution" >}}
 This access type is **alpha** (`v1alpha1`). Its schema may change in future releases.
 {{< /callout >}}
 
-### `Wget/v1`
+### `Wget/v1` {#wgetv1-access}
 
 References content served over HTTP or HTTPS. The bytes stay on the remote server — they are fetched when the resource
 is downloaded, when its digest is computed, and when the component version is transferred.
 
 Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical. The fields are identical
-to those of the [`Wget/v1` input type](#wgetv1), so the same request can be expressed either by value or by reference.
+to those of the [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input), so the same request can
+be expressed either by value or by reference.
 
 | Field        | Type                  | Required | Description                                                                                                                               |
 |--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
@@ -345,12 +348,14 @@ to those of the [`Wget/v1` input type](#wgetv1), so the same request can be expr
 | `body`       | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
 | `noRedirect` | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
 
-{{< callout type="warning" >}}
-**Never put credentials in `header`.** Unlike an input specification, an access specification is stored **verbatim in
-the component descriptor**. Any header written here is persisted with the component version, travels with it through
-every transfer, is covered by its signature, and is readable by anyone who can read the component version. Configure
-authentication through the [credential system](#authentication) instead — credentials are resolved at request time
-from `.ocmconfig` and never become part of the component version.
+{{< callout context="caution" >}}
+**Never put credentials in `url`, `header`, or `body`.** Unlike an input specification, an access specification is
+stored **verbatim in the component descriptor**. Everything written here — including userinfo
+(`https://user:token@host/...`) and presigned query parameters in `url` — is persisted with the component version,
+travels with it through every transfer, is covered by its signature, and is readable by anyone who can read the
+component version. Configure authentication through the
+[credential system]({{< relref "credential-consumer-identities.md" >}}#wget) instead — credentials are resolved at
+request time from `.ocmconfig` and never become part of the component version.
 {{< /callout >}}
 
 ```yaml
@@ -365,147 +370,13 @@ resources:
       mediaType: application/x-tar+gzip
 ```
 
-{{< callout type="note" >}}
+{{< callout context="note" >}}
 Upload is not supported for this access type — a plain HTTP endpoint has no standardized write API. Consequently, Wget
 resources are **always transferred by value**: transferring a component version downloads the content and stores it as a
-[`LocalBlob/v1`](#localblobv1) in the target repository, so the target no longer depends on the origin server.
+[`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1) in the target repository, so the target no
+longer depends on the origin server.
 {{< /callout >}}
 
-#### Choosing between the input and the access type
-
-| Use the **input type** when                                 | Use the **access type** when                                    |
-|-------------------------------------------------------------|-----------------------------------------------------------------|
-| The content must be reproducible and available offline      | The URL is the authoritative location and should stay so        |
-| The upstream URL may disappear or change content            | The artifact is large and should not be duplicated              |
-| You are building an air-gapped or self-contained repository | Consumers are expected to fetch directly from the origin server |
-
-The distinction only holds for as long as the component version stays where it was built. Because Wget resources are
-always transferred by value, transferring a component version turns its `Wget/v1` access specifications into local blobs
-in the target repository.
-
-## Wget
-
-The following applies to both the `Wget/v1` input type and the `Wget/v1` access type — they share one transport,
-credential, and download implementation.
-
-### Media Type Resolution
-
-The media type of the resulting blob is resolved in this order:
-
-1. The `mediaType` field of the specification, if set.
-2. The `Content-Type` header of the HTTP response.
-3. `application/octet-stream`.
-
-{{< callout type="note" >}}
-Unlike OCM v1, the media type is **not** derived from the URL's file extension. Set `mediaType` explicitly when the
-server does not send a useful `Content-Type`.
-{{< /callout >}}
-
-### Redirects
-
-Redirects are followed by default. With `noRedirect: true` the request stops at the first redirect response, and because
-a 3xx status is not a success status the operation fails with an error reporting that status. Use it to assert that a URL
-serves content directly rather than to fetch the redirect target.
-
-### Response Status and Caching
-
-Only 2xx responses are accepted; any other status fails the operation.
-
-Response bodies are **streamed to a file on disk** rather than buffered, so memory use stays flat regardless of how large
-the artifact is. There is **no size limit by default** — a download is bounded by free disk space. A limit can be set by
-callers of the Go bindings, and when one is set an oversized response is rejected before any of it is transferred
-whenever the server announces its `Content-Length`.
-
-The file is created under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration type, falling
-back to the operating system's temporary directory:
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: filesystem.config.ocm.software/v1alpha1
-    tempFolder: /var/tmp/ocm
-```
-
-Point `tempFolder` at a volume with enough free space when you reference large artifacts, and at an encrypted volume
-when the content is sensitive.
-
-{{< callout type="note" >}}
-Digest computation cleans up after itself, but a downloaded resource is handed to the caller as a file-backed blob, so
-that file lives until the surrounding operation finishes with it.
-{{< /callout >}}
-
-Error messages report the request URL with userinfo, query parameters, and fragment stripped, so credentials embedded in
-presigned URLs are not leaked into logs.
-
-### HTTP Client Configuration
-
-Timeouts, retries, connection settings, and per-host overrides come from the `http.config.ocm.software/v1alpha1`
-configuration type and apply to every Wget request:
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: http.config.ocm.software/v1alpha1
-    timeout: 2m
-    retry:
-      maxRetries: 3
-    hosts:
-      downloads.example.com:
-        timeout: 5m
-```
-
-See [HTTP Client Configuration]({{< relref "http-client-configuration.md" >}}) for the full schema, defaults, and
-per-host merge semantics.
-
-### Authentication
-
-Credentials are resolved from the resource URL via a consumer identity of type `Wget`. The input type and the access type
-derive it the same way, so one entry in `.ocmconfig` covers both:
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: credentials.config.ocm.software
-    consumers:
-      - identity:
-          type: Wget
-          hostname: downloads.example.com
-          scheme: https
-        credentials:
-          - type: WgetCredentials/v1
-            username: my-user
-            password: my-password
-```
-
-HTTP Basic Auth, bearer tokens, and mutual TLS are supported. See
-[Credential Consumer Identities: Wget]({{< relref "credential-consumer-identities.md" >}}#wget) for the identity
-attributes, credential properties, and matching rules, and
-[Credential Types: WgetCredentials/v1]({{< relref "credential-types.md" >}}#wgetcredentialsv1) for the full field
-reference.
-
-### Migrating from OCM v1
-
-#### Breaking changes
-
-| Area         | OCM v1       | OCM v2                    | What to do                                              |
-|--------------|--------------|---------------------------|---------------------------------------------------------|
-| Input `body` | Plain string | Base64-encoded byte slice | Base64-encode the body in `component-constructor.yaml`. |
-
-The OCM v1 access specification typed `body` as an `io.Reader`, which has no YAML representation, so this affects
-constructor files using the input type.
-
-#### Behavior changes
-
-| Area          | OCM v1                                                                             | OCM v2                                                    |
-|---------------|------------------------------------------------------------------------------------|-----------------------------------------------------------|
-| Media type    | `mediaType` → `Content-Type` → **URL file extension** → `application/octet-stream` | `mediaType` → `Content-Type` → `application/octet-stream` |
-| Minimum TLS   | TLS 1.3                                                                            | TLS 1.2                                                   |
-
-Set `mediaType` explicitly wherever OCM v1 relied on the URL's file extension — a `.tar.gz` URL that previously resolved
-to `application/x-gzip` now falls back to the server's `Content-Type`, or to `application/octet-stream`.
-
-#### Credentials
-
-The consumer identity type and its path attribute both changed, and the order in which authentication mechanisms are
-applied was inverted. See
-[Migrating Wget credentials from OCM v1]({{< relref "credential-consumer-identities.md" >}}#migrating-wget-credentials-from-ocm-v1).
+For guidance on choosing between the input and the access type, and for media type resolution, redirects, download
+tuning, and credential configuration, see
+[How-To: Add Resources from HTTP URLs]({{< relref "docs/how-to/add-resources-from-http-urls.md" >}}).

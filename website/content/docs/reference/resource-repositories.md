@@ -82,7 +82,7 @@ Handles Helm charts stored in HTTP/HTTPS-based chart repositories.
 | Upload            | No        |
 | Digest Processing | Yes       |
 
-{{< callout type="info" >}}
+{{< callout context="note" >}}
 Upload is not supported because traditional Helm chart repositories are read-only HTTP servers that serve a static
 `index.yaml` and packaged chart archives. There is no standardized upload API.
 
@@ -134,9 +134,9 @@ Handles resources served over plain HTTP or HTTPS.
 
 ### Supported Access Types
 
-| Access Type                                                      |
-|------------------------------------------------------------------|
-| [`Wget/v1`]({{< relref "input-and-access-types.md" >}}#wgetv1-1) |
+| Access Type                                                           |
+|-----------------------------------------------------------------------|
+| [`Wget/v1`]({{< relref "input-and-access-types.md" >}}#wgetv1-access) |
 
 ### Capabilities
 
@@ -146,7 +146,7 @@ Handles resources served over plain HTTP or HTTPS.
 | Upload            | No        |
 | Digest Processing | Yes       |
 
-{{< callout type="info" >}}
+{{< callout context="note" >}}
 Upload is not supported because a plain HTTP endpoint has no standardized write API. Wget resources are therefore always
 transferred by value: the transfer downloads the content and stores it as a
 [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1) in the target repository, regardless of the
@@ -167,8 +167,8 @@ The credential consumer identity is derived from the `url` field in the access s
 | `scheme`   | `https`                    |
 | `path`     | `myapp/1.0.0/myapp.tar.gz` |
 
-The [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1) derives the identity the same way, so one
-consumer entry covers construction and later downloads.
+The [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input) derives the identity the same way,
+so one consumer entry covers construction and later downloads.
 
 See [Credential Consumer Identities: Wget]({{< relref "credential-consumer-identities.md" >}}#wget) for matching rules.
 
