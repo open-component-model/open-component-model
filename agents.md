@@ -74,6 +74,14 @@ chore(deps): update dependencies
 
 Types: `feat`, `fix`, `chore`, `docs`, `test`, `perf`. Breaking changes use `!`: `feat(api)!: remove deprecated method`.
 
+### PR Labels
+
+Every PR needs at least one `kind/*` label or the `verify-labels` check rejects it.
+The title auto-labeler assigns one only for `feat` (`kind/feature`), `fix` (`kind/bugfix`),
+and `chore` (`kind/chore`). It does not for `docs`, `test`, or `perf`: those map to `area/*`
+only, so add a `kind/*` label by hand on such PRs (usually `kind/chore`). Accepted values:
+`kind/feature`, `kind/bugfix`, `kind/chore`, `kind/dependency`, `kind/refactor`.
+
 ### Code Generation
 
 Use `task generate` after adding or modifying code generation markers. 
