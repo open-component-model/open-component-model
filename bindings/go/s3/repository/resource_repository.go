@@ -224,6 +224,8 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	// Pinning the access to the version that was read satisfies the
 	// [repository.ResourceDigestProcessor] requirement that a processed access "MUST
 	// always reference the content described by the digest and cannot be mutated".
+	// See "Object versions and unversioned buckets" in the package documentation of
+	// the s3 module for what an unpinned access does and does not risk.
 	switch pinned, served := pinningVersion(spec.Version), pinningVersion(result.VersionID); {
 	case pinned != "":
 		// The version is sent as the versionId of the request, so a store answering with
@@ -238,9 +240,9 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		spec.Version = served
 		resource.Access = spec
 	default:
-		// TODO(matthiasbruns): Think about this more - maybe we need an optional flag to loosen this for buckets, that do not support versioning or have it disabled
-		// Logged rather than rejected, because erroring would make digests unusable for
-		// every unversioned bucket.
+		// Logged rather than rejected: an unpinned access risks availability rather than
+		// integrity, and erroring would make digests unusable for every unversioned
+		// bucket — which is the default on AWS.
 		slog.WarnContext(ctx, "s3 object carries no version, so its access cannot be pinned to the digested content and may later resolve to a different object",
 			slog.String("bucket", spec.BucketName),
 			slog.String("objectKey", spec.ObjectKey))
