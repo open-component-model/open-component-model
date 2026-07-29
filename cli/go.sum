@@ -402,6 +402,8 @@ ocm.software/open-component-model/bindings/go/transform v0.0.0-20260728010257-ba
 ocm.software/open-component-model/bindings/go/transform v0.0.0-20260728010257-ba2ab4bca27b/go.mod h1:Cu3Xmvx/Tp2/LUwOVQoZuB0EXAJ7Xcno8yMTqLecbHQ=
 ocm.software/open-component-model/bindings/go/wget v0.0.0-20260728064351-657389b11d79 h1:PHHSChgnF9idIgOrGtxJDgcAEZCdQp+ULYp2f8LvOQw=
 ocm.software/open-component-model/bindings/go/wget v0.0.0-20260728064351-657389b11d79/go.mod h1:LhGwPklYuNhmBJCiO0QzP5R7CZfRIGHMqM2g3HXVbkc=
+ocm.software/open-component-model/bindings/go/wget v0.0.0-20260729081840-fb1e6661e77b h1:ZgFkaTe9eCk5Si0/Ku4a9FFOasp+L1XoXRdso4XhmFE=
+ocm.software/open-component-model/bindings/go/wget v0.0.0-20260729081840-fb1e6661e77b/go.mod h1:E2jv5rri8Kym4l837SzAgLCP1CdczvuO1vlZnXa77cI=
 oras.land/oras-go/v2 v2.6.2 h1:N04RXngAp1LJKTG6ifz3xHPipasEkWr+hFmInja5YKo=
 oras.land/oras-go/v2 v2.6.2/go.mod h1:PlTtg4JTDJkDe8yVHpM2wz7/YDc00GVas+i4jAW2TZ4=
 sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 h1:IpInykpT6ceI+QxKBbEflcR5EXP7sU1kvOlxwZh5txg=
