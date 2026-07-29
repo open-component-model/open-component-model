@@ -3,7 +3,6 @@ package v1
 import (
 	"fmt"
 	"log/slog"
-	"path"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -97,21 +96,33 @@ func FromIdentity(id runtime.Identity) *S3BucketIdentity {
 // the object path, because AWS is reached at a well-known host; with one, the endpoint's
 // URL attributes are added so consumer entries can be scoped to that store. The
 // unversioned [Type] is used, consistent with the other consumer identities.
+//
+// An S3 key is an opaque string in which "//", ".", "..", "%", "?" and "#" are
+// ordinary characters naming real, distinct objects, so it is carried into the
+// identity byte for byte.
 func IdentityFromObject(bucketName, objectKey, endpoint string) (runtime.Identity, error) {
 	if bucketName == "" {
 		return nil, fmt.Errorf("bucketName is required")
 	}
 
-	loc := path.Join(bucketName, objectKey)
+	loc := bucketName
+	if objectKey != "" {
+		loc += "/" + objectKey
+	}
 
-	identity := runtime.Identity{runtime.IdentityAttributePath: loc}
+	identity := runtime.Identity{}
 	if endpoint != "" {
-		id, err := runtime.ParseURLToIdentity(strings.TrimSuffix(endpoint, "/") + "/" + loc)
+		id, err := runtime.ParseURLToIdentity(endpoint)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing s3 endpoint to identity: %w", err)
 		}
 		identity = id
+		// Only the endpoint is URL-parsed; the location is appended to its base path.
+		if prefix := identity[runtime.IdentityAttributePath]; prefix != "" {
+			loc = strings.TrimSuffix(prefix, "/") + "/" + loc
+		}
 	}
+	identity[runtime.IdentityAttributePath] = loc
 
 	identity.SetType(Type)
 

@@ -5,11 +5,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
@@ -181,9 +184,7 @@ func TestDownload_BlobReportsSize(t *testing.T) {
 		WithClient(&fakeGetter{body: content}), WithTempDir(t.TempDir()))
 	require.NoError(t, err)
 
-	sizeAware, ok := res.Blob.(blob.SizeAware)
-	require.True(t, ok, "the returned blob must report its size")
-	assert.Equal(t, int64(len(content)), sizeAware.Size())
+	assert.Equal(t, int64(len(content)), res.Blob.Size())
 }
 
 func TestDownload_PinnedVersionIsForwarded(t *testing.T) {
@@ -268,9 +269,7 @@ func TestDownload_MediaType(t *testing.T) {
 				WithTempDir(t.TempDir()))
 			require.NoError(t, err)
 
-			mediaTypeAware, ok := res.Blob.(blob.MediaTypeAware)
-			require.True(t, ok, "the returned blob must report its media type")
-			got, known := mediaTypeAware.MediaType()
+			got, known := res.Blob.MediaType()
 			assert.True(t, known)
 			assert.Equal(t, tt.want, got)
 		})
@@ -333,6 +332,62 @@ func TestDownload_TempFileOutlivesCall(t *testing.T) {
 	assert.Equal(t, []byte("still here"), readBlob(t, res.Blob))
 }
 
+func TestDownload_CloseRemovesTempFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
+		WithClient(&fakeGetter{body: []byte("payload")}), WithTempDir(tempDir))
+	require.NoError(t, err)
+	require.Len(t, filesIn(t, tempDir), 1)
+
+	require.NoError(t, res.Blob.Close())
+	assert.Empty(t, filesIn(t, tempDir), "closing the blob must remove the temporary file")
+
+	assert.NoError(t, res.Blob.Close(), "closing twice must not fail")
+}
+
+// A blob dropped without being closed must not keep its file for the lifetime of the
+// process.
+func TestDownload_AbandonedBlobIsReclaimed(t *testing.T) {
+	tempDir := t.TempDir()
+
+	func() {
+		_, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
+			WithClient(&fakeGetter{body: []byte("payload")}), WithTempDir(tempDir))
+		require.NoError(t, err)
+		require.Len(t, filesIn(t, tempDir), 1)
+	}()
+
+	// The cleanup runs asynchronously once the blob is unreachable, so collect and poll.
+	require.Eventually(t, func() bool {
+		goruntime.GC()
+		entries, err := os.ReadDir(tempDir)
+		return err == nil && len(entries) == 0
+	}, 10*time.Second, 20*time.Millisecond, "an abandoned download must not leave its temporary file behind")
+}
+
+// The cleanup must not pull the file out from under a read still in progress.
+func TestDownload_OpenReaderSurvivesCollection(t *testing.T) {
+	content := []byte("payload that is read after the blob goes out of scope")
+
+	rc := func() io.ReadCloser {
+		res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
+			WithClient(&fakeGetter{body: content}), WithTempDir(t.TempDir()))
+		require.NoError(t, err)
+
+		rc, err := res.Blob.ReadCloser()
+		require.NoError(t, err)
+		return rc
+	}()
+	t.Cleanup(func() { _ = rc.Close() })
+
+	goruntime.GC()
+
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+}
+
 func TestDownload_MaxDownloadSize(t *testing.T) {
 	content := []byte("0123456789")
 
@@ -349,6 +404,7 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 		{name: "zero disables the limit", maxSize: 0},
 		{name: "negative disables the limit", maxSize: -1},
 		{name: "unset uses the default", unset: true},
+		{name: "the largest limit does not overflow into a truncated read", maxSize: math.MaxInt64},
 		{
 			name:          "oversized object is rejected from its reported length",
 			maxSize:       5,
@@ -547,12 +603,64 @@ func TestNewClient(t *testing.T) {
 		assert.Equal(t, "session", creds.SessionToken)
 	})
 
-	t.Run("credentials without an access key fall through to the default chain", func(t *testing.T) {
+	t.Run("empty credentials fall through to the default chain", func(t *testing.T) {
 		client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &credv1.S3Credentials{
 			Type: credv1.S3CredentialsVersionedType,
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, client.Options().Credentials)
+	})
+
+	t.Run("partial credentials are rejected", func(t *testing.T) {
+		for _, tt := range []struct {
+			name    string
+			creds   credv1.S3Credentials
+			wantErr string
+		}{
+			{
+				name:    "secret access key without an access key id",
+				creds:   credv1.S3Credentials{SecretAccessKey: "secret"},
+				wantErr: "accessKeyId is required",
+			},
+			{
+				name:    "access key id without a secret access key",
+				creds:   credv1.S3Credentials{AccessKeyID: "AKIA"},
+				wantErr: "secretAccessKey is required",
+			},
+			{
+				name:    "session token alone",
+				creds:   credv1.S3Credentials{SessionToken: "session"},
+				wantErr: "accessKeyId is required",
+			},
+			{
+				name:    "access key id and session token without a secret",
+				creds:   credv1.S3Credentials{AccessKeyID: "AKIA", SessionToken: "session"},
+				wantErr: "secretAccessKey is required",
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				creds := tt.creds
+				creds.Type = credv1.S3CredentialsVersionedType
+				_, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &creds})
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "incomplete s3 credentials")
+				assert.Contains(t, err.Error(), tt.wantErr)
+			})
+		}
+	})
+
+	t.Run("static credentials without a session token are applied", func(t *testing.T) {
+		client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &credv1.S3Credentials{
+			Type:            credv1.S3CredentialsVersionedType,
+			AccessKeyID:     "AKIA",
+			SecretAccessKey: "secret",
+		}})
+		require.NoError(t, err)
+
+		creds, err := client.Options().Credentials.Retrieve(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "AKIA", creds.AccessKeyID)
+		assert.Empty(t, creds.SessionToken)
 	})
 
 	t.Run("unconvertible credentials error", func(t *testing.T) {
