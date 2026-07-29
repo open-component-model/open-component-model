@@ -13,12 +13,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
+
+const tempFilePattern = "ocm-wget-download-*"
 
 // Request describes a single HTTP download and carries the primitive parameters
 // of the request.
@@ -38,11 +39,17 @@ type Request struct {
 	NoRedirect bool
 }
 
-// Download performs the HTTP request described by req and returns the response
-// body as an in-memory blob. The HTTP client, credentials and maximum download
-// size are supplied via options; see [WithClient], [WithCredentials] and
-// [WithMaxDownloadSize].
-func Download(ctx context.Context, req Request, opts ...Option) (blob.ReadOnlyBlob, error) {
+// Download performs the HTTP request described by req and returns the response body
+// as a blob backed by a file on disk. Bodies are streamed rather than buffered, so
+// memory use stays flat regardless of response size; the file is created under the
+// directory given by [WithTempDir] and outlives this call.
+//
+// The returned [Blob] owns that file: callers should [Blob.Close] it once they are
+// done, and an unclosed blob has its file removed when it becomes unreachable.
+//
+// The HTTP client, credentials and maximum download size are supplied via options;
+// see [WithClient], [WithCredentials] and [WithMaxDownloadSize].
+func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err error) {
 	o := &option{}
 	for _, opt := range opts {
 		opt(o)
@@ -120,21 +127,39 @@ func Download(ctx context.Context, req Request, opts ...Option) (blob.ReadOnlyBl
 		maxDownloadSize = *o.MaxDownloadSize
 	}
 
-	var data []byte
+	// When the server announces the size up front, an oversized body is rejected
+	// before any of it is transferred. ContentLength is negative when unknown.
+	if maxDownloadSize > 0 && resp.ContentLength > maxDownloadSize {
+		return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), maxDownloadSize)
+	}
+
+	respBody := io.Reader(resp.Body)
 	if maxDownloadSize > 0 {
-		limitedReader := io.LimitReader(resp.Body, maxDownloadSize+1)
-		data, err = io.ReadAll(limitedReader)
+		respBody = io.LimitReader(resp.Body, maxDownloadSize+1)
+	}
+
+	file, err := os.CreateTemp(o.TempDir, tempFilePattern)
+	if err != nil {
+		return nil, fmt.Errorf("error creating temporary file for %s: %w", safeURL.String(), err)
+	}
+	path := file.Name()
+
+	defer func() {
 		if err != nil {
-			return nil, fmt.Errorf("error reading HTTP response body from %s: %w", safeURL.String(), err)
+			_ = os.Remove(path)
 		}
-		if int64(len(data)) > maxDownloadSize {
-			return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), maxDownloadSize)
-		}
-	} else {
-		data, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("error reading HTTP response body from %s: %w", safeURL.String(), err)
-		}
+	}()
+
+	written, err := io.Copy(file, respBody)
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error writing response body from %s to %s: %w", safeURL.String(), path, err)
+	}
+
+	if maxDownloadSize > 0 && written > maxDownloadSize {
+		return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), maxDownloadSize)
 	}
 
 	mediaType := req.MediaType
@@ -145,12 +170,13 @@ func Download(ctx context.Context, req Request, opts ...Option) (blob.ReadOnlyBl
 		mediaType = "application/octet-stream"
 	}
 
-	blobOpts := []inmemory.MemoryBlobOption{
-		inmemory.WithMediaType(mediaType),
-		inmemory.WithSize(int64(len(data))),
+	b, err := newBlob(path)
+	if err != nil {
+		return nil, fmt.Errorf("error creating blob for %s from %s: %w", safeURL.String(), path, err)
 	}
+	b.SetMediaType(mediaType)
 
-	return inmemory.New(bytes.NewReader(data), blobOpts...), nil
+	return b, nil
 }
 
 // applyCredentials applies OCM credentials to the HTTP request or client.
