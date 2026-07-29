@@ -122,7 +122,8 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		result.Configurations = append(result.Configurations, httpCfg)
 	}
 
-	if ocmCfg, err := ocmv1.Lookup(cfg); err != nil { //nolint:staticcheck // displaying deprecated config for user visibility
+	//nolint:staticcheck // displaying deprecated config for user visibility
+	if ocmCfg, err := ocmv1.Lookup(cfg); err != nil {
 		return nil, fmt.Errorf("config lookup failed for ocm: %w", err)
 	} else if ocmCfg != nil {
 		result.Configurations = append(result.Configurations, ocmCfg)

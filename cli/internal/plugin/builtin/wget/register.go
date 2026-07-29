@@ -3,6 +3,7 @@ package wget
 import (
 	"fmt"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	httpclient "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
@@ -20,6 +21,7 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	digestProcessorRegistry *digestprocessor.RepositoryRegistry,
 	credentialRepository *credentialrepository.RepositoryRegistry,
 	httpConfig *httpv1alpha1.Config,
+	filesystemConfig *filesystemv1alpha1.Config,
 ) error {
 	method := &wgetinput.InputMethod{
 		HTTPConfig: httpConfig,
@@ -32,6 +34,7 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	}
 
 	wgetResourceRepository := wgetrepository.NewResourceRepository(
+		filesystemConfig,
 		wgetrepository.WithHTTPClient(httpclient.New(httpclient.WithConfig(httpConfig))),
 	)
 	if err := resourcePluginRegistry.RegisterInternalResourcePlugin(wgetResourceRepository); err != nil {
