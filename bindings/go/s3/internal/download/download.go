@@ -171,8 +171,7 @@ func httpConfig(cfg *httpv1alpha1.Config, insecureSkipTLSVerify bool) *httpv1alp
 	}
 
 	if insecureSkipTLSVerify {
-		skip := true
-		out.InsecureSkipVerify = &skip
+		out.InsecureSkipVerify = new(insecureSkipTLSVerify)
 	}
 
 	return out
