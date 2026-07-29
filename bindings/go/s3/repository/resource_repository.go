@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
 
@@ -159,9 +160,9 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 }
 
 // ProcessResourceDigest computes the digest of an S3 resource by downloading the
-// referenced object and hashing it with SHA-256, which is the source of truth rather
-// than the S3 ETag. When the resource already carries a digest, the computed value is
-// verified against it.
+// referenced object and taking the SHA-256 the downloaded blob carries, which is the
+// source of truth rather than the S3 ETag. When the resource already carries a digest,
+// the computed value is verified against it.
 //
 // After a successful digest, the access is pinned to the object version that was read;
 // see [ResourceRepository.pinAccess].
@@ -183,64 +184,79 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		}
 	}()
 
-	rc, err := result.Blob.ReadCloser()
+	raw, _ := result.Blob.Digest()
+	resolved, err := godigest.Parse(raw)
 	if err != nil {
-		return nil, fmt.Errorf("error opening downloaded resource: %w", err)
+		return nil, fmt.Errorf("downloaded s3 object does not carry a valid digest: %w", err)
 	}
-	defer func() { _ = rc.Close() }()
-
-	dig, err := godigest.FromReader(rc)
-	if err != nil {
-		return nil, fmt.Errorf("error computing resource digest: %w", err)
-	}
+	resolvedValue := resolved.Encoded()
 
 	resource = resource.DeepCopy()
 	if resource.Digest == nil {
 		resource.Digest = &descriptor.Digest{
 			HashAlgorithm:          hashAlgorithmSHA256,
 			NormalisationAlgorithm: genericBlobDigestV1,
-			Value:                  dig.Encoded(),
+			Value:                  resolvedValue,
 		}
-		r.pinAccess(ctx, resource, spec, result.VersionID)
-		return resource, nil
+	} else {
+		// A hand-written resource.Digest in a component constructor cannot know the
+		// normalisation algorithm — the blob is never normalised — and need not restate
+		// the hash. An unset field means "fill it in with what we compute"; only a field
+		// pinned to a *different* algorithm is a genuine conflict. Spelling is not a
+		// conflict either: comparisons ignore case, so "sha-256" or an uppercase hex value
+		// verifies instead of failing while an absent field would have been accepted.
+		if resource.Digest.HashAlgorithm != "" && !strings.EqualFold(resource.Digest.HashAlgorithm, hashAlgorithmSHA256) {
+			return nil, fmt.Errorf("hash algorithm mismatch: expected %s, got %s", hashAlgorithmSHA256, resource.Digest.HashAlgorithm)
+		}
+		if resource.Digest.NormalisationAlgorithm != "" && !strings.EqualFold(resource.Digest.NormalisationAlgorithm, genericBlobDigestV1) {
+			return nil, fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", genericBlobDigestV1, resource.Digest.NormalisationAlgorithm)
+		}
+		if !strings.EqualFold(resource.Digest.Value, resolvedValue) {
+			return nil, fmt.Errorf("digest value mismatch: expected %s, got %s", resource.Digest.Value, resolvedValue)
+		}
+
+		// Canonicalize the accepted spellings so descriptors do not vary by author.
+		resource.Digest.HashAlgorithm = hashAlgorithmSHA256
+		resource.Digest.NormalisationAlgorithm = genericBlobDigestV1
+		resource.Digest.Value = resolvedValue
 	}
 
-	if resource.Digest.HashAlgorithm != hashAlgorithmSHA256 {
-		return nil, fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, resource.Digest.HashAlgorithm)
+	// Pinning the access to the version that was read satisfies the
+	// [repository.ResourceDigestProcessor] requirement that a processed access "MUST
+	// always reference the content described by the digest and cannot be mutated".
+	switch pinned, served := pinningVersion(spec.Version), pinningVersion(result.VersionID); {
+	case pinned != "":
+		// The version is sent as the versionId of the request, so a store answering with
+		// a different one did not serve the object the access names, and the digest would
+		// describe content found at neither version. A store reporting no version at all
+		// cannot be checked and is taken at its word.
+		if served != "" && served != pinned {
+			return nil, fmt.Errorf("s3 object %s/%s was requested at version %q but the store served version %q",
+				spec.BucketName, spec.ObjectKey, spec.Version, result.VersionID)
+		}
+	case served != "":
+		spec.Version = served
+		resource.Access = spec
+	default:
+		// TODO(matthiasbruns): Think about this more - maybe we need an optional flag to loosen this for buckets, that do not support versioning or have it disabled
+		// Logged rather than rejected, because erroring would make digests unusable for
+		// every unversioned bucket.
+		slog.WarnContext(ctx, "s3 object carries no version, so its access cannot be pinned to the digested content and may later resolve to a different object",
+			slog.String("bucket", spec.BucketName),
+			slog.String("objectKey", spec.ObjectKey))
 	}
-	if resource.Digest.NormalisationAlgorithm != genericBlobDigestV1 {
-		return nil, fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, resource.Digest.NormalisationAlgorithm)
-	}
-	if resource.Digest.Value != dig.Encoded() {
-		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", resource.Digest.Value, dig.Encoded())
-	}
-
-	r.pinAccess(ctx, resource, spec, result.VersionID)
 
 	return resource, nil
 }
 
-// pinAccess points the resource's access at the object version the digest was computed
-// over, satisfying the [repository.ResourceDigestProcessor] requirement that a processed
-// access "MUST always reference the content described by the digest and cannot be mutated".
-// An access that already names a version was pinned by whoever wrote it and is left alone.
-//
-// Unversioned buckets report no version, or the placeholder
-// [download.UnversionedVersionID], neither of which survives an overwrite. Those are
-// logged rather than pinned or rejected, because erroring would make digests unusable
-// for every unversioned bucket.
-func (r *ResourceRepository) pinAccess(ctx context.Context, resource *descriptor.Resource, spec *v1.S3Bucket, versionID string) {
-	if spec.Version != "" {
-		return
+// pinningVersion returns versionID when it identifies immutable content, and the empty
+// string when it does not. An unversioned bucket reports either no version at all or the
+// placeholder [download.UnversionedVersionID], and neither survives an overwrite — which
+// holds whether the value was reported by the store or written by the author, so both are
+// screened through here.
+func pinningVersion(versionID string) string {
+	if versionID == download.UnversionedVersionID {
+		return ""
 	}
-
-	if versionID == "" || versionID == download.UnversionedVersionID {
-		slog.WarnContext(ctx, "s3 object carries no version, so its access cannot be pinned to the digested content and may later resolve to a different object",
-			slog.String("bucket", spec.BucketName),
-			slog.String("objectKey", spec.ObjectKey))
-		return
-	}
-
-	spec.Version = versionID
-	resource.Access = spec
+	return versionID
 }
