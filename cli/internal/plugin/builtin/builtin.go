@@ -56,7 +56,8 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
 		manager.CredentialRepositoryRegistry,
-		httpConfig); err != nil {
+		httpConfig,
+		filesystemConfig); err != nil {
 		return fmt.Errorf("could not register wget inbuilt plugin: %w", err)
 	}
 
