@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,28 +15,28 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
-// AWS requires a region even when a custom endpoint is targeted; S3-compatible
-// stores usually ignore it.
-const defaultRegion = "us-east-1"
+const (
+	// defaultRegion is used when the request names none. AWS requires a region even
+	// when a custom endpoint is targeted; S3-compatible stores usually ignore it.
+	defaultRegion = "us-east-1"
 
-const tempFilePattern = "ocm-s3-download-*"
+	tempFilePattern = "ocm-s3-download-*"
 
-// UnversionedVersionID is the versionId S3 reports for objects that carry no real
-// version. It is a valid input to GetObject but pins nothing — overwriting such an
-// object leaves the versionId unchanged.
-const UnversionedVersionID = "null"
+	// UnversionedVersionID is the versionId S3 reports for objects that carry no real
+	// version. It is a valid input to GetObject but pins nothing — overwriting such an
+	// object leaves the versionId unchanged.
+	UnversionedVersionID = "null"
+)
 
 // Result is the outcome of a [Download].
 type Result struct {
-	// Blob is the object body, backed by a file on disk.
-	Blob blob.ReadOnlyBlob
+	// Blob is the object body, backed by a file on disk that the blob owns; see [Blob].
+	Blob *Blob
 	// VersionID is the object version that was read, as reported by S3. It is
 	// [UnversionedVersionID] for an unversioned object and empty for stores that do
 	// not report a version, so it identifies immutable content only when it is neither.
@@ -44,7 +45,8 @@ type Result struct {
 
 // Request describes a single S3 object download.
 type Request struct {
-	// Region is the bucket region. Optional for custom endpoints.
+	// Region is the bucket region. Optional: an empty one falls back to [defaultRegion],
+	// which is what lets a custom endpoint work without naming a region.
 	Region string
 	// BucketName is the bucket holding the object.
 	BucketName string
@@ -67,7 +69,10 @@ type Request struct {
 // backed by a file on disk, along with the object version that was read. Objects
 // are streamed rather than buffered, so memory use stays flat regardless of object
 // size; the file is created under the directory given by [WithTempDir] and outlives
-// this call, so the caller owns it.
+// this call.
+//
+// The returned [Blob] owns that file: callers should [Blob.Close] it once they are
+// done, and an unclosed blob has its file removed when it becomes unreachable.
 //
 // The S3 client, credentials and maximum size are supplied via options; see
 // [WithClient], [WithCredentials] and [WithMaxDownloadSize].
@@ -94,11 +99,11 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 	}
 
 	in := &s3.GetObjectInput{
-		Bucket: aws.String(req.BucketName),
-		Key:    aws.String(req.ObjectKey),
+		Bucket: new(req.BucketName),
+		Key:    new(req.ObjectKey),
 	}
 	if req.Version != "" {
-		in.VersionId = aws.String(req.Version)
+		in.VersionId = new(req.Version)
 	}
 
 	out, err := getter.GetObject(ctx, in)
@@ -118,9 +123,17 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 		return nil, fmt.Errorf("s3 object %s/%s exceeds maximum allowed size of %d bytes", req.BucketName, req.ObjectKey, maxDownloadSize)
 	}
 
+	// A store that reports no length, or lies about it, is caught while streaming. The
+	// extra byte separates an object that exceeds the limit from one that just reaches
+	// it; at MaxInt64 there is nothing to exceed, and incrementing would overflow to a
+	// negative bound that io.LimitReader reads as "no bytes at all".
 	body := io.Reader(out.Body)
 	if maxDownloadSize > 0 {
-		body = io.LimitReader(out.Body, maxDownloadSize+1)
+		limit := maxDownloadSize
+		if limit < math.MaxInt64 {
+			limit++
+		}
+		body = io.LimitReader(out.Body, limit)
 	}
 
 	file, err := os.CreateTemp(o.TempDir, tempFilePattern)
@@ -155,7 +168,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 		mediaType = "application/octet-stream"
 	}
 
-	b, err := filesystem.GetBlobFromOSPath(path)
+	b, err := newBlob(path)
 	if err != nil {
 		return nil, fmt.Errorf("error creating blob for s3 object %s/%s from %s: %w", req.BucketName, req.ObjectKey, path, err)
 	}
@@ -177,6 +190,28 @@ func httpConfig(cfg *httpv1alpha1.Config, insecureSkipTLSVerify bool) *httpv1alp
 	return out
 }
 
+// staticCredentials turns resolved S3 credentials into a static provider, or returns
+// nil to leave the AWS default credential chain in charge. SigV4 signs with the key
+// pair, and a session token only accompanies it, so a half-filled credential is
+// rejected here rather than reaching S3 as an opaque 403.
+func staticCredentials(creds *credv1.S3Credentials) (*credentials.StaticCredentialsProvider, error) {
+	if creds == nil {
+		return nil, nil
+	}
+
+	switch {
+	case creds.AccessKeyID == "" && creds.SecretAccessKey == "" && creds.SessionToken == "":
+		return nil, nil
+	case creds.AccessKeyID == "":
+		return nil, fmt.Errorf("incomplete s3 credentials: accessKeyId is required alongside the secret access key")
+	case creds.SecretAccessKey == "":
+		return nil, fmt.Errorf("incomplete s3 credentials: secretAccessKey is required alongside the access key id")
+	}
+
+	provider := credentials.NewStaticCredentialsProvider(creds.AccessKeyID, creds.SecretAccessKey, creds.SessionToken)
+	return &provider, nil
+}
+
 // newClient builds an S3 client from the request and the download options. When no
 // credentials are supplied, the AWS default credential chain is used.
 func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) {
@@ -190,8 +225,10 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 		httpClient = ocmhttp.New(ocmhttp.WithConfig(httpConfig(o.HTTPConfig, req.InsecureSkipTLSVerify)))
 	}
 
-	// Deliberately no retry option: the SDK resolves its own attempt count from
-	// AWS_MAX_ATTEMPTS and AWS_RETRY_MODE.
+	// RetryMaxAttempts and RetryMode keep the SDK defaults and are configured the AWS
+	// way, through AWS_MAX_ATTEMPTS and AWS_RETRY_MODE. The ocm HTTP config's retry
+	// bounds transport round trips, a different unit than an SDK operation attempt; how
+	// the two layers compose is described in the package documentation of the s3 module.
 	loadOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(region),
 		config.WithHTTPClient(httpClient),
@@ -202,10 +239,12 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 		if err != nil {
 			return nil, fmt.Errorf("error converting s3 credentials: %w", err)
 		}
-		if s3creds.AccessKeyID != "" {
-			loadOpts = append(loadOpts, config.WithCredentialsProvider(
-				credentials.NewStaticCredentialsProvider(s3creds.AccessKeyID, s3creds.SecretAccessKey, s3creds.SessionToken),
-			))
+		provider, err := staticCredentials(s3creds)
+		if err != nil {
+			return nil, fmt.Errorf("error getting static s3 credentials: %w", err)
+		}
+		if provider != nil {
+			loadOpts = append(loadOpts, config.WithCredentialsProvider(*provider))
 		}
 	}
 
@@ -216,7 +255,7 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 
 	return s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		if req.Endpoint != "" {
-			o.BaseEndpoint = aws.String(req.Endpoint)
+			o.BaseEndpoint = new(req.Endpoint)
 		}
 		o.UsePathStyle = req.UsePathStyle
 	}), nil

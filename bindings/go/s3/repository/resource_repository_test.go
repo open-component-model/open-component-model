@@ -220,6 +220,42 @@ func Test_DownloadResource_StreamsIntoConfiguredTempFolder(t *testing.T) {
 	require.Equal(t, content, got)
 }
 
+func Test_DownloadResource_BlobOwnsItsFile(t *testing.T) {
+	tempFolder := t.TempDir()
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
+		WithClient(&fakeGetter{body: []byte("hello from s3")}))
+
+	b, err := repo.DownloadResource(context.Background(),
+		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"}), nil)
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(tempFolder)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	closer, ok := b.(io.Closer)
+	require.True(t, ok, "the downloaded blob must be closeable so callers can release its file")
+	require.NoError(t, closer.Close())
+
+	entries, err = os.ReadDir(tempFolder)
+	require.NoError(t, err)
+	require.Empty(t, entries, "closing the blob must remove the downloaded file")
+}
+
+func Test_ProcessResourceDigest_LeavesNoTempFile(t *testing.T) {
+	tempFolder := t.TempDir()
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
+		WithClient(&fakeGetter{body: []byte("digest me")}))
+
+	_, err := repo.ProcessResourceDigest(context.Background(),
+		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"}), nil)
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(tempFolder)
+	require.NoError(t, err)
+	require.Empty(t, entries, "digest processing must not leave the downloaded object behind")
+}
+
 func Test_NewResourceRepository_NilFilesystemConfig(t *testing.T) {
 	// Redirect the OS temp dir so the downloaded file is cleaned up with it.
 	osTempDir := t.TempDir()

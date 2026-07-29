@@ -263,6 +263,56 @@ func TestIdentityFromObject(t *testing.T) {
 	}
 }
 
+// Keys that look like cleanable paths name real, distinct objects and must reach the
+// identity byte for byte.
+func TestIdentityFromObject_KeysAreNotCleaned(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		objectKey string
+		want      string
+	}{
+		{name: "empty segment", objectKey: "asdf//asdf", want: "my-bucket/asdf//asdf"},
+		{name: "single dot segment", objectKey: "asdf/./asdf", want: "my-bucket/asdf/./asdf"},
+		{name: "double dot segment", objectKey: "asdf/../asdf", want: "my-bucket/asdf/../asdf"},
+		{name: "trailing slash", objectKey: "asdf/", want: "my-bucket/asdf/"},
+		{name: "leading slash", objectKey: "/asdf", want: "my-bucket//asdf"},
+		{name: "dot file", objectKey: ".hidden", want: "my-bucket/.hidden"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := IdentityFromObject("my-bucket", tt.objectKey, "")
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got[runtime.IdentityAttributePath])
+
+			// The endpoint path is built separately, so it is checked separately.
+			got, err = IdentityFromObject("my-bucket", tt.objectKey, "https://s3.example.com")
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got[runtime.IdentityAttributePath])
+		})
+	}
+}
+
+func TestIdentityFromObject_EndpointKeepsItsBasePath(t *testing.T) {
+	got, err := IdentityFromObject("my-bucket", "object", "https://gateway.example.com/s3")
+	require.NoError(t, err)
+	assert.Equal(t, runtime.Identity{
+		runtime.IdentityAttributeType:     Type.String(),
+		runtime.IdentityAttributeHostname: "gateway.example.com",
+		runtime.IdentityAttributeScheme:   "https",
+		runtime.IdentityAttributePath:     "s3/my-bucket/object",
+	}, got)
+}
+
+// Characters a URL would treat specially stay literal in a key.
+func TestIdentityFromObject_KeyIsNotURLDecoded(t *testing.T) {
+	for _, objectKey := range []string{"a%2Fb", "report?draft", "notes#1", "a b"} {
+		t.Run(objectKey, func(t *testing.T) {
+			got, err := IdentityFromObject("my-bucket", objectKey, "https://s3.example.com")
+			require.NoError(t, err)
+			assert.Equal(t, "my-bucket/"+objectKey, got[runtime.IdentityAttributePath])
+		})
+	}
+}
+
 func TestIdentityFromObject_BucketNameRequired(t *testing.T) {
 	_, err := IdentityFromObject("", "some/key", "")
 	require.Error(t, err)
