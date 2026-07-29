@@ -211,20 +211,78 @@ defaults, and per-host merge semantics.
 ocm add cv --repository ./transport-archive --constructor component-constructor.yaml
 ```
 
+You should see the component listed:
+
+```text
+ COMPONENT                 │ VERSION │ PROVIDER
+───────────────────────────┼─────────┼──────────
+ github.com/acme.org/myapp │ 1.0.0   │ acme.org
+```
+
 Check that the resource landed with the media type you expect:
 
 ```bash
 ocm get cv ./transport-archive//github.com/acme.org/myapp:1.0.0 -o yaml
 ```
 
-For an input-type resource the descriptor shows a `localBlob` access; for an access-type resource it shows the
-`Wget/v1` specification with your URL. Downloading the resource proves the transport and credentials work end to end:
+An input-type resource resolves to a `LocalBlob/v1` access carrying the resolved media type:
+
+{{< details "Expected output" >}}
+
+```yaml
+    resources:
+    - access:
+        localReference: sha256:984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
+        mediaType: application/x-tar+gzip
+        type: LocalBlob/v1
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: 984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
+      name: release-archive
+      relation: local
+      type: blob
+      version: 1.0.0
+```
+
+{{< /details >}}
+
+An access-type resource keeps the `Wget/v1` specification verbatim, with the digest computed over the fetched bytes:
+
+{{< details "Expected output" >}}
+
+```yaml
+    resources:
+    - access:
+        mediaType: application/x-tar+gzip
+        type: Wget/v1
+        url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: 984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
+      name: release-archive
+      relation: external
+      type: blob
+      version: 1.0.0
+```
+
+{{< /details >}}
+
+Downloading the resource proves the transport and credentials work end to end:
 
 ```bash
 ocm download resource ./transport-archive//github.com/acme.org/myapp:1.0.0 \
   --identity name=release-archive \
-  --output myapp.tar.gz
+  --output ./release-archive
 ```
+
+You should see: `level=INFO msg="resource downloaded successfully" output=./release-archive`.
+
+{{< callout context="note" >}}
+When the media type is an archive format the CLI can unpack, `--output` is a **directory** holding the extracted
+contents. Other media types are written to a file at that path.
+{{< /callout >}}
 
 {{< /step >}}
 
@@ -303,19 +361,6 @@ to the URL's file extension.
 status.
 
 **Fix:** Remove `noRedirect`, or point `url` at the final location the redirect resolves to.
-
-### Symptom: the download fills up the disk or fails on a full volume
-
-**Cause:** Response bodies are streamed to disk under `tempFolder`, and there is no size limit by default.
-
-**Fix:** Point `tempFolder` at a volume with enough free space:
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: filesystem.config.ocm.software/v1alpha1
-    tempFolder: /var/tmp/ocm
-```
 
 ## Next Steps
 
