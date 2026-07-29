@@ -41,10 +41,10 @@ func (f *fakeGetter) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...fu
 	f.gotInput = in
 	out := &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(f.body))}
 	if f.contentType != "" {
-		out.ContentType = aws.String(f.contentType)
+		out.ContentType = new(f.contentType)
 	}
 	if f.versionID != "" {
-		out.VersionId = aws.String(f.versionID)
+		out.VersionId = new(f.versionID)
 	}
 	return out, nil
 }

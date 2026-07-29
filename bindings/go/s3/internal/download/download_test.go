@@ -58,13 +58,13 @@ func (f *fakeGetter) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...fu
 
 	out := &s3.GetObjectOutput{
 		Body:          &trackedBody{ReadCloser: body, closed: &f.closed},
-		ContentLength: aws.Int64(length),
+		ContentLength: new(length),
 	}
 	if f.contentType != "" {
-		out.ContentType = aws.String(f.contentType)
+		out.ContentType = new(f.contentType)
 	}
 	if f.versionID != "" {
-		out.VersionId = aws.String(f.versionID)
+		out.VersionId = new(f.versionID)
 	}
 	return out, nil
 }
@@ -408,13 +408,13 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 		{
 			name:          "oversized object is rejected from its reported length",
 			maxSize:       5,
-			contentLength: aws.Int64(1 << 30),
+			contentLength: new(int64(1 << 30)),
 			wantErr:       true,
 		},
 		{
 			name:          "understated length is still caught while streaming",
 			maxSize:       5,
-			contentLength: aws.Int64(1),
+			contentLength: new(int64(1)),
 			wantErr:       true,
 		},
 	}
@@ -448,7 +448,7 @@ func TestDownload_OversizedObjectIsRejectedBeforeTransfer(t *testing.T) {
 	fake := &fakeGetter{
 		body:          []byte("0123456789"),
 		bodyReader:    body,
-		contentLength: aws.Int64(1 << 30),
+		contentLength: new(int64(1 << 30)),
 	}
 
 	_, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},

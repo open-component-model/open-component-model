@@ -129,21 +129,21 @@ func newSetupClient(t *testing.T, ctx context.Context, endpoint, user, pass stri
 	)
 	require.NoError(t, err)
 	return s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(endpoint)
+		o.BaseEndpoint = new(endpoint)
 		o.UsePathStyle = true
 	})
 }
 
 func createBucket(t *testing.T, ctx context.Context, client *s3.Client, bucket string) {
 	t.Helper()
-	_, err := client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(bucket)})
+	_, err := client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: new(bucket)})
 	require.NoError(t, err)
 }
 
 func enableVersioning(t *testing.T, ctx context.Context, client *s3.Client, bucket string) {
 	t.Helper()
 	_, err := client.PutBucketVersioning(ctx, &s3.PutBucketVersioningInput{
-		Bucket:                  aws.String(bucket),
+		Bucket:                  new(bucket),
 		VersioningConfiguration: &types.VersioningConfiguration{Status: types.BucketVersioningStatusEnabled},
 	})
 	require.NoError(t, err)
@@ -152,8 +152,8 @@ func enableVersioning(t *testing.T, ctx context.Context, client *s3.Client, buck
 func putObject(t *testing.T, ctx context.Context, client *s3.Client, bucket, key string, content []byte) {
 	t.Helper()
 	_, err := client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
+		Bucket: new(bucket),
+		Key:    new(key),
 		Body:   bytes.NewReader(content),
 	})
 	require.NoError(t, err)
@@ -162,8 +162,8 @@ func putObject(t *testing.T, ctx context.Context, client *s3.Client, bucket, key
 func putObjectReturningVersion(t *testing.T, ctx context.Context, client *s3.Client, bucket, key string, content []byte) string {
 	t.Helper()
 	out, err := client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
+		Bucket: new(bucket),
+		Key:    new(key),
 		Body:   bytes.NewReader(content),
 	})
 	require.NoError(t, err)
