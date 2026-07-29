@@ -9,11 +9,11 @@ draft: false
 
 ## The Problem
 
-OCM already tells you *which artifacts* a component delivers — its Software Bill of Delivery. But that does not answer the question a security team actually has: *"which dependencies are bundled inside those artifacts, and am I affected by this vulnerability?"* Knowing a component ships `podinfo:6.9.1` and a CLI binary says nothing about the packages and libraries buried inside them.
+OCM already tells you *which artifacts* a component delivers — its Software Bill of Delivery. But that does not answer the question a security team actually has: *"which dependencies are bundled inside those artifacts, and am I affected by this vulnerability?"* Knowing a component ships an OCI image and a CLI binary as a resource, does not tell anything about the packages and libraries buried inside that resource.
 
 Those answers live in Software Bills of Materials (SBOMs) — but today they are scattered: natively attached to an individual OCI artifact (so you have to know to look there), added to the component but with no relation to the resource they describe, or transported entirely outside the component, where they drift out of sync with what actually shipped and lose their trustworthiness. There is rarely one trustworthy answer for a whole component.
 
-The idea explored here: make SBOMs travel *with* the component, related to the artifacts they describe, so the dependency-and-vulnerability question can be answered straight from the delivered component — online or air-gapped, and covered by the same trust as the rest of the component.
+The idea explored here: make SBOMs travel *with* the component, related to the artifacts they describe, so the dependency-and-vulnerability question can be answered straight from the delivered component — online or air-gapped, and covered by the same trust as the rest of the signed component.
 
 ---
 
@@ -39,7 +39,7 @@ To explore the idea, we built a proof of concept across three areas. None of thi
     mediaType: application/vnd.cyclonedx+json
 ```
 
-**Discovering SBOMs that already exist.** Many images already ship an SBOM (buildx attestations, OCI Referrers). A prototype `SBoM/v1` input discovers that SBOM at build time and links it to the component — *discover, never generate* — so it works with artifacts as they are, in their original format.
+**Discovering SBOMs that already exist.** Many images already ship an SBOM (Docker buildx attestations, OCI Referrers). A prototype `SBoM/v1` input discovers that SBOM at build time and links it to the component — *discover, never generate* — so it works with artifacts as they are, in their original format.
 
 ```yaml
 - name: podinfo-sbom
