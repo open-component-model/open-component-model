@@ -8,8 +8,8 @@ toc: true
 
 ## Goal
 
-Add a resource that is served over plain HTTP or HTTPS, such as a release archive, a checksum file, or a signed binary,
-to a component version, and configure its media type, authentication, and download behavior.
+Add a resource that is served over plain HTTP or HTTPS to a component version, and configure its media type,
+authentication, and download behavior. Typical content is a release archive, a checksum file, or a signed binary.
 
 OCM offers two ways to do this, and they share one transport, credential, and download implementation:
 
@@ -291,9 +291,9 @@ contents. Other media types are written to a file at that path.
 ## Pinning an expected digest
 
 Wget content comes from a server you do not control, so vet it before it enters the component version. Download the
-artifact and run whatever your process requires, such as a virus scan, a comparison against the checksum the vendor
-publishes, or a manual review. Then hash the copy you trust and pin that value with `digest`. `ocm add cv` fetches the
-URL, hashes what it gets, and fails without adding anything if the two do not match:
+artifact and run whatever your process requires: a virus scan, a check against the vendor's published checksum, a
+manual review. Then hash the copy you trust and pin that value with `digest`. On the next `ocm add cv`, OCM hashes what
+it fetches and refuses to add the resource if the two values differ:
 
 ```yaml
 components:
@@ -342,7 +342,7 @@ resource blob digest mismatch: resource 984a4a19… vs blob 3b1f0c72…  # input
 
 For the access type the check is not confined to construction. The bytes are fetched again whenever a component version
 referencing the URL is transferred, and verified against the same digest, so content that changes after publication
-makes the transfer fail rather than quietly substituting different bytes.
+makes the transfer fail rather than substituting different bytes.
 
 ## Migrating from OCM v1
 
