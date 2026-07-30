@@ -244,7 +244,7 @@ The Discovery controller watches the referenced `Component` CR. When the compone
 
 This is a proof of concept. Open questions and next steps:
 
-- **Efficiency.** Currently the controller downloads the entire component graph on every reconciliation, which is overkill. Potential improvements include leveraging the blob cache, a metadata informer that avoids full descriptor downloads, and introducing recursiveness when walking reference paths.
+- **Efficiency.** Currently the controller downloads the entire component graph on every reconciliation, which is overkill. Potential improvements include leveraging the blob cache, a metadata informer that avoids full descriptor downloads, and pruning traversal to only walk reference paths matched by the selector instead of the full graph.
 - **Signature verification of references.** The root component is already verified by the `Component` CR, but referenced components are not yet verified individually. The trade-off: verifying each reference means downloading the descriptor and computing a checksum, which may be too expensive for large graphs.
 - **CEL expressions.** Upgrading from simple dot-path extraction to CEL for richer projections and conditional logic.
 
