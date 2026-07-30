@@ -254,7 +254,7 @@ so the symptom is a `401` from the server rather than a configuration error.
       password: download-token
 ```
 
-**Bearer token for a single path segment** (matches `artifacts/build.zip`, not `artifacts/ci/build.zip`)**:**
+**Bearer token for a single path segment** (matches `artifacts/build.zip`, not `artifacts/ci/build.zip`):
 
 ```yaml
 - identity:
