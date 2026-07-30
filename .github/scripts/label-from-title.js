@@ -27,8 +27,8 @@ export function buildTitleRegex(allowedTypes) {
  * "constructor" or "toString" returns undefined instead of the corresponding
  * Object.prototype value. This makes every bracket lookup on the map safe.
  *
- * @param {Record<string,string>} source
- * @returns {Record<string,string>}
+ * @param {Record<string,string|string[]>} source
+ * @returns {Record<string,string|string[]>}
  */
 export function nullProtoMap(source) {
   return Object.assign(Object.create(null), source);
