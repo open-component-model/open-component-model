@@ -213,8 +213,8 @@ with no `port` at all. A URL that names its port (`https://downloads.example.com
 
 | Property               | Description                                                                                                 |
 |------------------------|-------------------------------------------------------------------------------------------------------------|
-| `username`             | Username for HTTP Basic Authentication                                                                      |
-| `password`             | Password for HTTP Basic Authentication                                                                      |
+| `username`             | Username for HTTP basic authentication                                                                      |
+| `password`             | Password for HTTP basic authentication                                                                      |
 | `identityToken`        | Bearer token sent as `Authorization: Bearer <token>`. Takes precedence over Basic Auth.                     |
 | `certificate`          | PEM-encoded client certificate for mutual TLS                                                               |
 | `privateKey`           | PEM-encoded private key paired with `certificate`                                                           |
@@ -229,7 +229,7 @@ logs a warning and has no effect.
 
 ### Matching Behavior
 
-The same three chained checks as [`OCIRegistry`](#matching-behavior) apply: path glob, URL (scheme, hostname, port with
+The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob, URL (scheme, hostname, port with
 default-port handling), then exact equality on the remaining attributes.
 
 {{< callout context="caution" >}}
@@ -254,7 +254,7 @@ so the symptom is a `401` from the server rather than a configuration error.
       password: download-token
 ```
 
-**Bearer token for a specific path prefix:**
+**Bearer token for a single path segment** (matches `artifacts/build.zip`, not `artifacts/ci/build.zip`)**:**
 
 ```yaml
 - identity:

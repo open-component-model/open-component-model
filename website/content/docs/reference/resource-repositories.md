@@ -158,7 +158,7 @@ requested upload type.
 The credential consumer identity is derived from the `url` field in the access specification. The identity type is
 `Wget`.
 
-**Example:** for a resource with `url: https://downloads.example.com/myapp/1.0.0/myapp.tar.gz`:
+**Example:** For a resource with `url: https://downloads.example.com/myapp/1.0.0/myapp.tar.gz`:
 
 | Attribute  | Value                      |
 |------------|----------------------------|

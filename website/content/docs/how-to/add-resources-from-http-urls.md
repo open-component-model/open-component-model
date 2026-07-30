@@ -468,8 +468,7 @@ status.
 
 ## Next Steps
 
-- [How-To: Download Resources from Component Versions]({{< relref "
-  docs/how-to/download-resources-from-component-versions.md" >}}) -
+- [How-To: Download Resources from Component Versions]({{< relref "docs/how-to/download-resources-from-component-versions.md" >}}) -
   Fetch the resource you just added
 - [How-To: Air-Gap Transfer]({{< relref "docs/how-to/air-gap-transfer.md" >}}) - Move component versions into
   disconnected environments
