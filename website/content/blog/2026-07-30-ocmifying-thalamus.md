@@ -307,15 +307,15 @@ Using the above content in a `component-constructor.yaml`, we simply ran:
 ```console
 ocm add component-version \
   --constructor component-constructor.yaml \
-  --repository <target-repo>/thalamus
+  --repository ghcr.io/source-repository/thalamus
 ```
 
 Once the component was created properly we transferred it to a new location:
 
 ```console
 ocm transfer cv \
-  <source-repository>//github.com/cobaltcore-dev/thalamus:0.1.0 \
-  <target-repository> \
+  ghcr.io/source-repository//github.com/cobaltcore-dev/thalamus:0.1.0 \
+  ghcr.io/target-repository \
   --recursive --copy-resources --upload-as ociArtifact
 ```
 
@@ -377,12 +377,12 @@ spec:
 ```
 
 ... we were able to deploy the entire application architecture without problems with all the image references
-pointing to the new locations (<target-repository>).
+pointing to the new locations (target-repository).
 
 ### LLM usage and Skill
 
-Because of some prior work we did in open-component-model v2, it was quite easy to use a popular LLM (Claude, for example)
-to almost one-shot a complete component version for the entire Thalamus project.
+Because of prior work (explained in the below two points) we did in open-component-model v2, it was quite easy to use a
+popular LLM (Claude, for example) to almost one-shot a complete component version for the entire Thalamus project.
 
 #### Schema
 
@@ -407,7 +407,7 @@ from here: [Kro RGD JSON Schema](https://raw.githubusercontent.com/kubernetes-si
 than point the LLM to a website like the rendered schema on Kro's page here: [Rendered RGD](https://kro.run/api/crds/resourcegraphdefinition/). This is
 much harder to parse and takes up too much context to process and then keep "in mind". The more specific, the better.
 
-Once it understands Kro, now is a good time to point it at the folder containing the sovereign scenario, then make the
+Once the LLM understands Kro, now is a good time to point it at the folder containing the sovereign scenario, then make the
 following prompt:
 
 > Read the example in this folder. It contains a complex example for structuring and creating component versions. The example
@@ -440,7 +440,7 @@ component constructors for each individual component. The idea was that separate
 organization specific ones. For example, if you had your own gpu-operator implementation that used a specific, platform
 dependent implementation then you should be able to configure the deployment to use that instead.
 
-We basically created a plug-and-play style architecture for the components where a component can be exchanged for a different
+We created a plug-and-play style architecture for the components where a component can be exchanged for a different
 one and the whole would still be valid and would work as intended.
 
 This was not feasible in the end however, because it introduced a silent API that was not easy to discover and understand by
