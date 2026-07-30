@@ -39,7 +39,7 @@ func RenderShimmer(text string, frame int) string {
 // Both stop when done is closed.
 func RunAnimation(done <-chan struct{}, onSpin func(spinFrame, dotFrame int)) {
 	go func() {
-		spinTicker := time.NewTicker(80 * time.Millisecond)
+		spinTicker := time.NewTicker(100 * time.Millisecond)
 		dotTicker := time.NewTicker(400 * time.Millisecond)
 		defer spinTicker.Stop()
 		defer dotTicker.Stop()

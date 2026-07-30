@@ -5,13 +5,17 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/configuration"
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
@@ -44,6 +48,7 @@ func TestOCMConfig(t *testing.T) {
 	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.SetContext(context.Background())
+		Syscalls(cmd)
 		configuration.RegisterConfigFlag(cmd)
 		require.NoError(t, cmd.PersistentFlags().Set(configuration.OCMConfigCommandArgument, "/nonexistent/config.yaml"))
 
@@ -55,6 +60,7 @@ func TestOCMConfig(t *testing.T) {
 	t.Run("no config flag proceeds without error", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.SetContext(context.Background())
+		Syscalls(cmd)
 		configuration.RegisterConfigFlag(cmd)
 
 		err := OCMConfig(cmd)
@@ -531,7 +537,7 @@ func TestFilesystemConfigIntegration(t *testing.T) {
 	tempDir := t.TempDir()
 	workingDir := filepath.Join(tempDir, "working")
 	customTempDir := filepath.Join(tempDir, "custom")
-	err := os.MkdirAll(customTempDir, 0755)
+	err := os.MkdirAll(customTempDir, 0o755)
 	r.NoError(err, "failed to create custom temp dir")
 
 	// Test complete integration from command setup to context retrieval
@@ -564,4 +570,76 @@ func TestFilesystemConfigIntegration(t *testing.T) {
 	// Execute the command
 	err = cmd.ExecuteContext(context.Background())
 	r.NoError(err, "command should execute successfully")
+}
+
+// TestPluginManager_ResolveHTTPConfig verifies that PluginManager resolves the
+// HTTP config from the OCM context and passes it to builtin.Register without error.
+// This exercises the wiring in setup.go between OCMConfig → PluginManager.
+func TestPluginManager_ResolveHTTPConfig(t *testing.T) {
+	t.Run("resolves default HTTP config when none configured", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.SetContext(context.Background())
+		Syscalls(cmd)
+		configuration.RegisterConfigFlag(cmd)
+
+		require.NoError(t, OCMConfig(cmd))
+
+		ocmContext := ocmctx.FromContext(cmd.Context())
+		require.NotNil(t, ocmContext)
+
+		cfg := ocmContext.Configuration()
+		httpCfg, err := httpv1alpha1.ResolveHTTPConfig(cfg)
+		require.NoError(t, err)
+		require.NotNil(t, httpCfg)
+		require.NotNil(t, httpCfg.Timeout)
+		assert.Equal(t, httpv1alpha1.Timeout(time.Duration(httpv1alpha1.DefaultTimeout)), *httpCfg.Timeout,
+			"default timeout should be 30s when not configured")
+	})
+
+	t.Run("resolves custom HTTP config from YAML", func(t *testing.T) {
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    timeout: 2m
+    tlsHandshakeTimeout: 5s
+    hosts:
+      "ghcr.io:443":
+        timeout: 5m
+`
+		var generic genericv1.Config
+		err := genericv1.Scheme.Decode(strings.NewReader(yaml), &generic)
+		require.NoError(t, err)
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.SetContext(ocmctx.WithConfiguration(context.Background(), &generic))
+
+		httpCfg, err := httpv1alpha1.ResolveHTTPConfig(ocmctx.FromContext(cmd.Context()).Configuration())
+		require.NoError(t, err)
+		require.NotNil(t, httpCfg)
+
+		require.NotNil(t, httpCfg.Timeout)
+		assert.Equal(t, httpv1alpha1.Timeout(2*time.Minute), *httpCfg.Timeout)
+		require.NotNil(t, httpCfg.TLSHandshakeTimeout)
+		assert.Equal(t, httpv1alpha1.Timeout(5*time.Second), *httpCfg.TLSHandshakeTimeout)
+		require.Contains(t, httpCfg.Hosts, "ghcr.io:443")
+		require.NotNil(t, httpCfg.Hosts["ghcr.io:443"].Timeout)
+		assert.Equal(t, httpv1alpha1.Timeout(5*time.Minute), *httpCfg.Hosts["ghcr.io:443"].Timeout)
+	})
+
+	t.Run("invalid HTTP config returns error from ResolveHTTPConfig", func(t *testing.T) {
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    timeout: -10s
+`
+		var generic genericv1.Config
+		err := genericv1.Scheme.Decode(strings.NewReader(yaml), &generic)
+		require.NoError(t, err)
+
+		_, err = httpv1alpha1.ResolveHTTPConfig(&generic)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid http configuration")
+	})
 }

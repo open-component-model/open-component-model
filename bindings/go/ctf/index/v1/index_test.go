@@ -264,6 +264,7 @@ func TestAddArtifact_RetagFromUntaggedToLatest(t *testing.T) {
 		t.Error("expected old artifact (sha256:old) to have its tag cleared")
 	}
 }
+
 func TestAddArtifact_MultipleUntaggedArtifacts(t *testing.T) {
 	idx := NewIndex()
 	// Add multiple untagged artifacts with different digests - all should be stored
@@ -288,6 +289,55 @@ func TestAddArtifact_MultipleUntaggedArtifacts(t *testing.T) {
 	for _, expectedDigest := range []string{"sha256:abc", "sha256:def", "sha256:ghi"} {
 		if !digests[expectedDigest] {
 			t.Errorf("expected digest %q to exist", expectedDigest)
+		}
+	}
+}
+
+func TestRemoveTag(t *testing.T) {
+	idx := NewIndex()
+	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
+	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "stable", Digest: "sha256:abc"})
+
+	if err := idx.RemoveTag("repo1", "latest"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	arts := idx.GetArtifacts()
+	if len(arts) != 1 {
+		t.Fatalf("expected 1 artifact after removal, got %d", len(arts))
+	}
+	if arts[0].Tag != "stable" {
+		t.Errorf("expected remaining tag to be 'stable', got %q", arts[0].Tag)
+	}
+}
+
+func TestRemoveTag_NotFound(t *testing.T) {
+	idx := NewIndex()
+	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
+
+	err := idx.RemoveTag("repo1", "nonexistent")
+	if !errors.Is(err, ErrArtifactNotFound) {
+		t.Errorf("expected ErrArtifactNotFound, got %v", err)
+	}
+}
+
+func TestRemoveTag_OnlyMatchingTag(t *testing.T) {
+	idx := NewIndex()
+	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "v1.0.0", Digest: "sha256:abc"})
+	idx.AddArtifact(ArtifactMetadata{Repository: "repo1", Tag: "latest", Digest: "sha256:abc"})
+	idx.AddArtifact(ArtifactMetadata{Repository: "repo2", Tag: "latest", Digest: "sha256:abc"})
+
+	if err := idx.RemoveTag("repo1", "latest"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	arts := idx.GetArtifacts()
+	if len(arts) != 2 {
+		t.Fatalf("expected 2 artifacts after removal, got %d", len(arts))
+	}
+	for _, art := range arts {
+		if art.Repository == "repo1" && art.Tag == "latest" {
+			t.Error("repo1/latest should have been removed")
 		}
 	}
 }

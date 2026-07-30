@@ -40,12 +40,12 @@ tasks:
 
   # Development
   manifests:
-    desc: "Generate raw CRD and RBAC YAML into bin/gen (consumed by helm/generate-crds and helm/generate-rbac)"
+    desc: "Generate raw CRD into config/crd/bases and RBAC YAML into bin/gen (consumed by helm/generate-crds and helm/generate-rbac)"
     deps: [controller-gen]
     cmds:
-      - rm -rf bin/gen
-      - mkdir -p bin/gen/crd bin/gen/rbac
-      - '"{{.CONTROLLER_GEN}}" rbac:roleName=manager-role crd paths="{{ .TASKFILE_DIR }}/..." output:rbac:artifacts:config=bin/gen/rbac output:crd:artifacts:config=bin/gen/crd'
+      - rm -rf bin/gen config/crd/bases
+      - mkdir -p bin/gen/rbac config/crd/bases
+      - '"{{.CONTROLLER_GEN}}" rbac:roleName=manager-role crd paths="{{ .TASKFILE_DIR }}/..." output:rbac:artifacts:config=bin/gen/rbac output:crd:artifacts:config=config/crd/bases'
 
   generate:
     desc: "Generate Go deepcopy and runtime.Object implementations"
@@ -81,14 +81,29 @@ tasks:
           LOAD: "true"
     cmds:
       - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} bash test/e2e/hacks/setup.sh'
-      - 'kind load docker-image {{.CONTROLLER_IMG}}'
+      - 'kind load docker-image {{.CONTROLLER_IMG}} --name ocm-e2e'
+
+  test/e2e/setup/teardown:
+    desc: "Delete the 'ocm-e2e' Kind cluster and its registry. Only affects resources created by test/e2e/setup/local."
+    cmds:
+      - 'kind delete cluster --name ocm-e2e 2>/dev/null || true'
+      - 'docker rm -f ocm-e2e-registry 2>/dev/null || true'
 
   test/e2e:
-    desc: "Run end-to-end tests against a running cluster"
-    dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
+    desc: "Run end-to-end tests against a running cluster. Pass ginkgo flags via `--`, e.g. `task test/e2e -- -ginkgo.focus=helm-simple`. Omit to run all scenarios."
+    dotenv: [ '{{.TASKFILE_DIR}}/test/e2e/hacks/.env' ]
     cmds:
       - task: helm/install
-      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v
+      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v {{.CLI_ARGS}}
+
+  test/e2e/fresh:
+    desc: "Teardown, setup, and run E2E tests from scratch. Pass ginkgo flags via `--`, e.g. `task test/e2e/fresh -- -ginkgo.focus=helm-simple`."
+    cmds:
+      - task: test/e2e/setup/teardown
+      - task: test/e2e/setup/local
+      - task: test/e2e
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   # Build
   build:
@@ -97,10 +112,10 @@ tasks:
     cmd: 'go build -o bin/manager {{.TASKFILE_DIR}}/cmd/main.go'
 
   run:
-    desc: "Run the controller manager locally"
-    deps: [manifests, generate, fmt, vet]
-    cmd: 'go run {{.TASKFILE_DIR}}/cmd/main.go'
-
+    desc: "Run the controller manager locally (installs CRDs into the current kube-context first)"
+    deps: [manifests, generate, fmt, vet, helm/install-crds]
+    cmds:
+      - 'go run {{.TASKFILE_DIR}}/cmd/main.go'
 
   # Always build only for the host architecture.
   # We force "linux" OS because all Docker base images are Linux,
@@ -163,7 +178,7 @@ tasks:
   helm/generate-crds:
     desc: "Generate Helm-wrapped CRD templates from controller-gen output"
     deps: [manifests, yq]
-    cmd: 'YQ="{{.YQ}}" {{.TASKFILE_DIR}}/hack/helm.generate.sh {{.TASKFILE_DIR}}/bin/gen/crd {{.TASKFILE_DIR}}/chart'
+    cmd: 'YQ="{{.YQ}}" {{.TASKFILE_DIR}}/hack/helm.generate.sh {{.TASKFILE_DIR}}/config/crd/bases {{.TASKFILE_DIR}}/chart'
 
   helm/generate-rbac:
     desc: "Generate chart/templates/rbac/manager-role.yaml from controller-gen RBAC output"
@@ -244,6 +259,11 @@ tasks:
           --wait \
           --timeout 120s
 
+  helm/install-crds:
+    desc: "Render the chart CRDs and apply them to the current kube-context"
+    deps: [helm/generate-crds]
+    cmd: 'helm template ocm-k8s-toolkit chart/ --show-only "templates/crd/*.yaml" | kubectl apply --server-side --force-conflicts -f -'
+
   helm/uninstall:
     desc: "Uninstall the Helm chart"
     cmd: 'helm uninstall ocm-k8s-toolkit --namespace ocm-k8s-toolkit-system --ignore-not-found'
@@ -256,7 +276,7 @@ tasks:
       - '"{{.HELM_DOCS}}"'
       # Strip SHA digests from README.md for cleaner documentation
       # The digest is kept in values.yaml for security, but removed from docs for readability
-      - sed -i'' -e 's/@sha256:[a-f0-9]\{64\}//g' README.md
+      - tmp=$(mktemp) && sed 's/@sha256:[a-f0-9]\{64\}//g' README.md > "$tmp" && mv "$tmp" README.md
     sources:
       - chart/values.yaml
       - chart/README.md

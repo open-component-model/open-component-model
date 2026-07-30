@@ -628,6 +628,127 @@ var _ = Describe("Component Controller", func() {
 			Expect(k8sClient.Create(ctx, component)).To(Succeed())
 
 			By("checking that the component has not been reconciled successfully")
+			test.WaitForNotReadyObject(ctx, k8sClient, component, v1alpha1.GetComponentVersionFailedReason)
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		It("respects SemverFilter to exclude non-matching versions", func(ctx SpecContext) {
+			// SemverFilter is a regex applied to the version list before the
+			// Semver constraint picks a winner. Here the filter accepts only
+			// canonical MAJOR.MINOR.PATCH (no pre-release suffix), so the
+			// "1.1.0-rc.1" build must be excluded and the constraint
+			// ">=1.0.0-0" should resolve to the highest remaining release,
+			// "1.2.0".
+			By("creating component versions, mixing release and pre-release builds")
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: "1.0.0",
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: "1.1.0-rc.1",
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: "1.2.0",
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a component constrained by a constraint and a release-only filter")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component:    componentName,
+					Semver:       ">=1.0.0-0",
+					SemverFilter: `^[0-9]+\.[0-9]+\.[0-9]+$`,
+					Interval:     metav1.Duration{Duration: time.Minute * 10},
+				},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the highest non-pre-release version was selected")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": "1.2.0",
+			})
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		It("fails reconciliation when SemverFilter is an invalid regex", func(ctx SpecContext) {
+			// An unparseable regex must surface as a CheckVersion failure
+			// rather than crashing the reconciler or silently disabling the
+			// filter.
+			By("creating a component version")
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a component with an invalid SemverFilter regex")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component:    componentName,
+					Semver:       ">=1.0.0",
+					SemverFilter: "(",
+					Interval:     metav1.Duration{Duration: time.Minute * 10},
+				},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has not been reconciled successfully")
 			test.WaitForNotReadyObject(ctx, k8sClient, component, v1alpha1.CheckVersionFailedReason)
 
 			By("delete resources manually")

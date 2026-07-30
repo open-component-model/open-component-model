@@ -1,0 +1,17 @@
+{{- with .Params.seo.canonical }}
+  <link rel="canonical" href="{{ . }}">
+{{- else }}
+  {{- if .Site.Version.IsDefault }}
+  <link rel="canonical" href="{{ .Permalink }}">
+  {{- else }}
+    {{- $canonicalURL := .Permalink }}
+    {{- with .Rotate "version" }}
+      {{- range . }}
+        {{- if .Site.Version.IsDefault }}
+          {{- $canonicalURL = .Permalink }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  <link rel="canonical" href="{{ $canonicalURL }}">
+  {{- end }}
+{{- end }}

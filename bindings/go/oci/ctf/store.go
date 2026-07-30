@@ -1,6 +1,7 @@
 package ctf
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 
@@ -161,18 +163,13 @@ func (s *repository) exists(ctx context.Context, target ociImageSpecV1.Descripto
 func (s *repository) FetchReference(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
 	s.mu.RLock()
 
-	desc, err := s.resolve(ctx, reference)
+	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
 		s.mu.RUnlock()
-		return ociImageSpecV1.Descriptor{}, nil, err
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("unable to get index: %w", err)
 	}
 
-	b, err := s.archive.GetBlob(ctx, desc.Digest.String())
-	if err != nil {
-		s.mu.RUnlock()
-		return ociImageSpecV1.Descriptor{}, nil, err
-	}
-	rc, err := b.ReadCloser()
+	desc, rc, err := s.fetchReference(ctx, idx, reference)
 	if err != nil {
 		s.mu.RUnlock()
 		return ociImageSpecV1.Descriptor{}, nil, err
@@ -180,19 +177,86 @@ func (s *repository) FetchReference(ctx context.Context, reference string) (ociI
 	return desc, s.asLockedReader(rc), nil
 }
 
+// fetchReference resolves reference against the provided artifact-index
+// snapshot and opens its blob. The returned io.ReadCloser is not lock-aware;
+// callers must either hold s.mu themselves or wrap it (see
+// [repository.FetchReference]).
+func (s *repository) fetchReference(ctx context.Context, idx v1.Index, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
+	desc, err := s.resolve(ctx, idx, reference)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, err
+	}
+	b, err := s.archive.GetBlob(ctx, desc.Digest.String())
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, err
+	}
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, err
+	}
+	return desc, rc, nil
+}
+
 // Push stores a new blob in the CTF archive with the expected descriptor.
 // The content is read from the provided io.Reader.
+//
+// Push also updates referrers for manifests with a subject field.
 func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
+	if !introspection.IsOCICompliantMediaType(expected.MediaType) {
+		if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
+			return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
+		}
+		return nil
+	}
+
+	return s.pushManifest(ctx, expected, data)
+}
+
+// pushManifest is the manifest branch of Push.
+//
+// The caller MUST hold the write lock.
+func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
+	// Buffer the manifest so its subject can be inspected. content.ReadAll
+	// also verifies the content against the expected size and digest, which
+	// SaveBlob alone does not (it trusts the descriptor's digest).
+	manifestJSON, err := content.ReadAll(data, expected)
+	if err != nil {
+		return fmt.Errorf("unable to read manifest content for descriptor %v: %w", expected, err)
+	}
+	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(bytes.NewReader(manifestJSON)), expected)); err != nil {
 		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 	}
-	if introspection.IsOCICompliantManifest(expected) {
-		if err := s.tag(ctx, expected, expected.Digest.String()); err != nil {
-			return fmt.Errorf("unable to save manifest for descriptor %v: %w", expected, err)
+
+	referrer, subject, err := referrerFromManifest(expected, manifestJSON)
+	if err != nil {
+		// Content with a manifest media type that does not decode as JSON
+		// exists in the wild — e.g. legacy CTF artifact sets whose media type
+		// is assumed to be an image manifest (see resolve). Such content
+		// cannot carry a subject, so skip referrer indexing instead of
+		// failing the push. The content itself was already verified against
+		// the descriptor above.
+		slog.DebugContext(ctx, "skipping referrer indexing for undecodable manifest content",
+			"digest", expected.Digest.String(), "mediaType", expected.MediaType, "error", err)
+		subject = nil
+	}
+
+	idx, err := s.archive.GetIndex(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to get index: %w", err)
+	}
+	if err := s.applyTag(ctx, idx, expected, expected.Digest.String()); err != nil {
+		return fmt.Errorf("unable to save manifest for descriptor %v: %w", expected, err)
+	}
+	if subject != nil {
+		if err := s.updateReferrersIndex(ctx, idx, *subject, referrer); err != nil {
+			return fmt.Errorf("unable to index referrer %s for subject %s: %w", referrer.Digest, subject.Digest, err)
 		}
+	}
+	if err := s.archive.SetIndex(ctx, idx); err != nil {
+		return fmt.Errorf("unable to set index: %w", err)
 	}
 
 	return nil
@@ -207,17 +271,19 @@ func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 func (s *repository) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.resolve(ctx, reference)
-}
-
-// resolve is the internal version of Resolve that assumes the caller holds the lock.
-func (s *repository) resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
-	var b blob.ReadOnlyBlob
-
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unable to get index: %w", err)
 	}
+	return s.resolve(ctx, idx, reference)
+}
+
+// resolve walks the provided artifact-index snapshot for reference and falls
+// back to a digest lookup against the blob store. The caller must hold s.mu
+// (read or write); pulling the index out of the call lets push paths resolve
+// against the same in-memory snapshot they are about to mutate.
+func (s *repository) resolve(ctx context.Context, idx v1.Index, reference string) (ociImageSpecV1.Descriptor, error) {
+	var b blob.ReadOnlyBlob
 
 	repo := s.repo
 
@@ -240,6 +306,7 @@ func (s *repository) resolve(ctx context.Context, reference string) (ociImageSpe
 		}
 
 		var size int64
+		var err error
 		if b, err = s.archive.GetBlob(ctx, artifact.Digest); err == nil {
 			if sizeAware, ok := b.(blob.SizeAware); ok {
 				size = sizeAware.Size()
@@ -290,44 +357,6 @@ func (s *repository) tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		return fmt.Errorf("unable to get index: %w", err)
 	}
 
-	repo := s.repo
-
-	var meta v1.ArtifactMetadata
-	if ref, err := looseref.ParseReference(reference); err == nil {
-		if err := ref.ValidateReferenceAsTag(); err == nil {
-			meta = v1.ArtifactMetadata{
-				Repository: repo,
-				Tag:        ref.Tag,
-				Digest:     desc.Digest.String(),
-				MediaType:  desc.MediaType,
-			}
-		} else if err := ref.ValidateReferenceAsDigest(); err == nil {
-			meta = v1.ArtifactMetadata{
-				Repository: repo,
-				Digest:     desc.Digest.String(),
-				MediaType:  desc.MediaType,
-			}
-		} else {
-			ref := registry.Reference{Reference: reference}
-			if err := ref.ValidateReferenceAsTag(); err == nil {
-				meta = v1.ArtifactMetadata{
-					Repository: repo,
-					Tag:        reference,
-					Digest:     desc.Digest.String(),
-					MediaType:  desc.MediaType,
-				}
-			} else if err := ref.ValidateReferenceAsDigest(); err == nil {
-				meta = v1.ArtifactMetadata{
-					Repository: repo,
-					Digest:     desc.Digest.String(),
-					MediaType:  desc.MediaType,
-				}
-			} else {
-				return fmt.Errorf("invalid raw reference %q: %w", reference, err)
-			}
-		}
-	}
-
 	ok, err := s.exists(ctx, desc)
 	if err != nil {
 		return fmt.Errorf("unable to check if descriptor exists: %w", err)
@@ -337,14 +366,79 @@ func (s *repository) tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		return fmt.Errorf("descriptor %s does not exist in the archive", desc.Digest)
 	}
 
-	slog.DebugContext(ctx, "adding artifact to index", "meta", meta)
-
-	idx.AddArtifact(meta)
+	if err := s.applyTag(ctx, idx, desc, reference); err != nil {
+		return err
+	}
 
 	if err := s.archive.SetIndex(ctx, idx); err != nil {
 		return fmt.Errorf("unable to set index: %w", err)
 	}
 	return nil
+}
+
+// applyTag records desc under reference in the provided index snapshot
+// without touching the archive; callers persist the snapshot with SetIndex.
+// Unlike tag, it does not check blob existence — Push uses it for blobs it
+// has just saved itself, and bundles several applications into a single
+// SetIndex.
+func (s *repository) applyTag(ctx context.Context, idx v1.Index, desc ociImageSpecV1.Descriptor, reference string) error {
+	meta, err := artifactMetadataForReference(s.repo, desc, reference)
+	if err != nil {
+		return err
+	}
+
+	slog.DebugContext(ctx, "adding artifact to index", "meta", meta)
+
+	idx.AddArtifact(meta)
+	return nil
+}
+
+// artifactMetadataForReference derives the CTF index entry for desc stored
+// under reference within repo. reference may be a full reference, a bare tag
+// (e.g. a referrers tag "sha256-<hex>"), or a digest; digest references
+// produce an untagged entry.
+func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, reference string) (v1.ArtifactMetadata, error) {
+	ref, err := looseref.ParseReference(reference)
+	if err != nil {
+		return v1.ArtifactMetadata{}, fmt.Errorf("invalid reference %q: %w", reference, err)
+	}
+
+	if err := ref.ValidateReferenceAsTag(); err == nil {
+		return v1.ArtifactMetadata{
+			Repository: repo,
+			Tag:        ref.Tag,
+			Digest:     desc.Digest.String(),
+			MediaType:  desc.MediaType,
+		}, nil
+	}
+	if err := ref.ValidateReferenceAsDigest(); err == nil {
+		return v1.ArtifactMetadata{
+			Repository: repo,
+			Digest:     desc.Digest.String(),
+			MediaType:  desc.MediaType,
+		}, nil
+	}
+
+	// the reference is neither a full reference with a tag nor a digest;
+	// fall back to interpreting the raw string, e.g. a bare tag.
+	rawRef := registry.Reference{Reference: reference}
+	if err := rawRef.ValidateReferenceAsTag(); err == nil {
+		return v1.ArtifactMetadata{
+			Repository: repo,
+			Tag:        reference,
+			Digest:     desc.Digest.String(),
+			MediaType:  desc.MediaType,
+		}, nil
+	}
+	if err := rawRef.ValidateReferenceAsDigest(); err == nil {
+		return v1.ArtifactMetadata{
+			Repository: repo,
+			Digest:     desc.Digest.String(),
+			MediaType:  desc.MediaType,
+		}, nil
+	}
+
+	return v1.ArtifactMetadata{}, fmt.Errorf("invalid raw reference %q: %w", reference, errdef.ErrInvalidReference)
 }
 
 func (s *repository) Tags(ctx context.Context, _ string, fn func(tags []string) error) error {
@@ -380,4 +474,38 @@ func (s *repository) Tags(ctx context.Context, _ string, fn func(tags []string) 
 	// Unlock before invoking the callback to avoid potential re-entrant locking deadlocks.
 	s.mu.RUnlock()
 	return fn(tags)
+}
+
+// Untag removes a tag from the CTF archive's index.
+// The reference should be in the format "repository:tag", but can also be just a tag.
+// Following the content.Untagger contract, only the tag entry is removed —
+// the manifest and its blobs are NOT deleted. Floating tags always point to
+// manifests that remain referenced by their component version entry, so no
+// blob ever becomes unreachable through this operation.
+func (s *repository) Untag(ctx context.Context, reference string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.untag(ctx, reference)
+}
+
+func (s *repository) untag(ctx context.Context, reference string) error {
+	tag := reference
+	if ref, err := looseref.ParseReference(reference); err == nil && ref.Tag != "" {
+		tag = ref.Tag
+	}
+	idx, err := s.archive.GetIndex(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to get index: %w", err)
+	}
+
+	if err := idx.RemoveTag(s.repo, tag); err != nil {
+		if errors.Is(err, v1.ErrArtifactNotFound) {
+			return errdef.ErrNotFound
+		}
+		return fmt.Errorf("unable to remove tag %q: %w", tag, err)
+	}
+	if err := s.archive.SetIndex(ctx, idx); err != nil {
+		return fmt.Errorf("unable to persist index after tag removal: %w", err)
+	}
+	return nil
 }

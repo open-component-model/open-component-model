@@ -88,7 +88,7 @@ Create `component-constructor.yaml`:
 
 ```shell
 cat > component-constructor.yaml << 'EOF'
-# yaml-language-server: $schema=https://ocm.software/latest/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 
 # ── Frontend ────────────────────────────────────────────────────
@@ -259,7 +259,7 @@ With all five components defined in a single constructor file, you can now creat
   <summary>Complete <code>component-constructor.yaml</code></summary>
 
 ```yaml
-# yaml-language-server: $schema=https://ocm.software/latest/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 
 # ── Frontend ────────────────────────────────────────────────────
@@ -364,7 +364,11 @@ components:
 ```
 </details>
 
-> **Note:** We don't need to pass `--constructor component-constructor.yaml` because the CLI looks for a file named `component-constructor.yaml` in the current directory by default.
+{{< callout title="Note" icon="outline/info-circle" >}}
+We don't need to pass `--constructor component-constructor.yaml` because the CLI looks for a file named `component-constructor.yaml` in the current directory by default.
+
+We pass `--repository my-product` to override the default archive name (`transport-archive`). Later commands reference the archive by name (e.g., `my-product//...`).
+{{< /callout >}}
 
 ```shell
 ocm add cv --repository my-product
@@ -470,7 +474,7 @@ In practice you rarely hard-code version numbers — they are typically provided
 
 ```shell
 cat > component-constructor.yaml << 'EOF'
-# yaml-language-server: $schema=https://ocm.software/latest/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 
 - name: ocm.software/tutorials/frontend

@@ -9,11 +9,11 @@ sidebar:
 
 Protect the integrity and authenticity of your component versions through cryptographic signing and verification.
 
-These guides walk you through the complete signing workflow — from generating keys to verifying signatures in production.
+These guides walk you through the complete signing workflow — covering both keyed (RSA) and keyless (Sigstore) algorithms, from generating keys or trusting identities to verifying signatures in production.
 
 ## Guides in This Section
 
 - **Generate Signing Keys** — Create RSA key pairs for signing and verification
 - **Configure Signing Credentials** — Set up OCM to use your keys
-- **Sign Component Versions** — Attach cryptographic signatures to component versions
-- **Verify Component Versions** — Validate signatures to ensure authenticity and integrity
+- **Sign Component Versions** — Attach cryptographic signatures to component versions, using either RSA or Sigstore (keyless)
+- **Verify Component Versions** — Validate signatures to ensure authenticity and integrity, for either RSA or Sigstore (keyless)

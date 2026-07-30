@@ -13,6 +13,7 @@ import (
 	credsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -35,6 +36,7 @@ var _ interface {
 // the system's default temporary directory will be used.
 type InputMethod struct {
 	TempFolder string
+	HTTPConfig *httpv1alpha1.Config
 }
 
 // LegacyHelmChartConsumerType is the type of the identity for remote helm repositories.
@@ -97,6 +99,9 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 			}
 			credOpts = append(credOpts, WithCredentials(helmCreds))
 		}
+	}
+	if i.HTTPConfig != nil {
+		credOpts = append(credOpts, WithHTTPConfig(i.HTTPConfig))
 	}
 
 	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder, credOpts...)

@@ -25,14 +25,14 @@ This guide covers installation options for different platforms.
 {{< tab "wget" >}}
 
 ```shell
-wget -qO- https://ocm.software/install-cli.sh | bash
+wget -qO- https://ocm.software/install-cli.sh | {{< site-version "env" >}}bash
 ```
 
 {{< /tab >}}
 {{< tab "curl" >}}
 
 ```shell
-curl -sfL https://ocm.software/install-cli.sh | bash
+curl -sfL https://ocm.software/install-cli.sh | {{< site-version "env" >}}bash
 ```
 
 {{< /tab >}}
@@ -46,6 +46,7 @@ Building from source is not officially supported. Use the pre-built binaries via
 
 - [Git](https://git-scm.com/)
 - [Go](https://go.dev/)
+- [Task](https://taskfile.dev)
 
 ### Clone and build
 
@@ -54,7 +55,7 @@ Build the OCM CLI from the `open-component-model/open-component-model` monorepo.
 ```shell
 git clone https://github.com/open-component-model/open-component-model.git
 cd open-component-model
-task cli:build   # builds to cli/tmp/bin/ocm
+{{< site-version "branch" >}}task cli:build   # builds to cli/tmp/bin/ocm
 task cli:install # installs to /usr/local/bin (requires sudo)
 ```
 

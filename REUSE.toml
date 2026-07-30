@@ -27,3 +27,9 @@ path = "bindings/go/dag/**"
 precedence = "override"
 SPDX-FileCopyrightText = "Copyright 2025 The Kube Resource Orchestrator Authors."
 SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "bindings/go/http/internal/retry/**"
+precedence = "override"
+SPDX-FileCopyrightText = "The ORAS Authors"
+SPDX-License-Identifier = "Apache-2.0"

@@ -1,6 +1,6 @@
 /** Converts Kubernetes CRD YAML into SchemaModel(s). Handles multi-doc and multi-version CRDs. */
 
-import yaml from "js-yaml";
+import { loadAll } from "js-yaml";
 import { jsonSchemaToModel } from "./json-schema-converter.ts";
 import type { CrdDocument, CrdVersion } from "./crd-yaml-converter.types.ts";
 import type { SchemaMeta, SchemaModel } from "./schema-model.types.ts";
@@ -32,7 +32,7 @@ function versionToModel(crd: CrdDocument, version: CrdVersion): SchemaModel {
 
 /** Convert a CRD YAML string into one or more SchemaModels. */
 export function crdYamlToModels(text: string): SchemaModel[] {
-  const docs = yaml.loadAll(text).filter(Boolean) as Record<string, unknown>[];
+  const docs = loadAll(text).filter(Boolean) as Record<string, unknown>[];
   const crds = docs.filter((d) => d.kind === "CustomResourceDefinition") as unknown as CrdDocument[];
   if (!crds.length) return [];
 

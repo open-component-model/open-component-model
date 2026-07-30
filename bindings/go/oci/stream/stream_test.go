@@ -23,7 +23,7 @@ func TestOCIResourceStream_Fetch(t *testing.T) {
 	layerContent := []byte("hello layer")
 	layerDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageLayer, layerContent)
 
-	s := &OCIResourceStream{ReadOnlyStorage: store, Descriptor: layerDesc, CopyOpts: oras.DefaultCopyGraphOptions}
+	s := &OCIResourceStream{ReadOnlyGraphStorage: store, Descriptor: layerDesc, ExtendedCopyOpts: oras.DefaultExtendedCopyGraphOptions}
 
 	rc, err := s.Fetch(ctx, layerDesc)
 	require.NoError(t, err)
@@ -41,7 +41,7 @@ func TestOCIResourceStream_Exists(t *testing.T) {
 	layerContent := []byte("exists check")
 	layerDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageLayer, layerContent)
 
-	s := &OCIResourceStream{ReadOnlyStorage: store, Descriptor: layerDesc, CopyOpts: oras.DefaultCopyGraphOptions}
+	s := &OCIResourceStream{ReadOnlyGraphStorage: store, Descriptor: layerDesc, ExtendedCopyOpts: oras.DefaultExtendedCopyGraphOptions}
 
 	exists, err := s.Exists(ctx, layerDesc)
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestOCIResourceStream_Root(t *testing.T) {
 		Size:      4,
 	}
 
-	s := &OCIResourceStream{ReadOnlyStorage: store, Descriptor: desc, CopyOpts: oras.DefaultCopyGraphOptions}
+	s := &OCIResourceStream{ReadOnlyGraphStorage: store, Descriptor: desc, ExtendedCopyOpts: oras.DefaultExtendedCopyGraphOptions}
 	assert.Equal(t, desc, s.Root())
 }
 
@@ -89,7 +89,7 @@ func TestOCIResourceStream_Materialize(t *testing.T) {
 	require.NoError(t, err)
 	manifestDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageManifest, manifestBytes)
 
-	s := &OCIResourceStream{ReadOnlyStorage: store, Descriptor: manifestDesc, CopyOpts: oras.DefaultCopyGraphOptions, TempDir: t.TempDir()}
+	s := &OCIResourceStream{ReadOnlyGraphStorage: store, Descriptor: manifestDesc, ExtendedCopyOpts: oras.DefaultExtendedCopyGraphOptions, TempDir: t.TempDir()}
 
 	blob, err := s.Materialize(ctx)
 	require.NoError(t, err)
@@ -124,7 +124,7 @@ func TestOCIResourceStream_CopyGraph(t *testing.T) {
 	require.NoError(t, err)
 	manifestDesc := pushBlob(t, ctx, srcStore, ocispec.MediaTypeImageManifest, manifestBytes)
 
-	s := &OCIResourceStream{ReadOnlyStorage: srcStore, Descriptor: manifestDesc, CopyOpts: oras.DefaultCopyGraphOptions}
+	s := &OCIResourceStream{ReadOnlyGraphStorage: srcStore, Descriptor: manifestDesc, ExtendedCopyOpts: oras.DefaultExtendedCopyGraphOptions}
 
 	err = oras.CopyGraph(ctx, s, dstStore, s.Root(), oras.DefaultCopyGraphOptions)
 	require.NoError(t, err)

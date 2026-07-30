@@ -20,6 +20,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/constructor/Taskfile.yml
     dir: ./bindings/go/constructor
+  bindings/go/constructor/integration:
+    optional: true
+    taskfile: ./bindings/go/constructor/integration/Taskfile.yml
+    dir: ./bindings/go/constructor/integration
   bindings/go/input/dir:
     optional: true
     taskfile: ./bindings/go/input/dir/Taskfile.yml
@@ -28,6 +32,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/input/file/Taskfile.yml
     dir: ./bindings/go/input/file
+  bindings/go/github:
+    optional: true
+    taskfile: ./bindings/go/github/Taskfile.yml
+    dir: ./bindings/go/github
+  bindings/go/github/integration:
+    optional: true
+    taskfile: ./bindings/go/github/integration/Taskfile.yml
+    dir: ./bindings/go/github/integration
   bindings/go/helm:
     optional: true
     taskfile: ./bindings/go/helm/Taskfile.yml
@@ -88,6 +100,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/configuration/Taskfile.yml
     dir: ./bindings/go/configuration
+  bindings/go/http:
+    optional: true
+    taskfile: ./bindings/go/http/Taskfile.yml
+    dir: ./bindings/go/http
+  bindings/go/http/integration:
+    optional: true
+    taskfile: ./bindings/go/http/integration/Taskfile.yml
+    dir: ./bindings/go/http/integration
   bindings/go/repository:
     optional: true
     taskfile: ./bindings/go/repository/Taskfile.yml
@@ -96,6 +116,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/rsa/Taskfile.yml
     dir: ./bindings/go/rsa
+  bindings/go/gpg:
+    optional: true
+    taskfile: ./bindings/go/gpg/Taskfile.yml
+    dir: ./bindings/go/gpg
   bindings/go/signing:
     optional: true
     taskfile: ./bindings/go/signing/Taskfile.yml
@@ -120,6 +144,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/transform/Taskfile.yml
     dir: ./bindings/go/transform
+  bindings/go/wget:
+    optional: true
+    taskfile: ./bindings/go/wget/Taskfile.yml
+    dir: ./bindings/go/wget
+  bindings/go/wget/integration:
+    optional: true
+    taskfile: ./bindings/go/wget/integration/Taskfile.yml
+    dir: ./bindings/go/wget/integration
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml
@@ -190,3 +222,4 @@ tasks:
         vars:
           CLI_DOCUMENTATION_MODE: "hugo"
           CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/cli/docs/reference'
+      - task: 'tidy'

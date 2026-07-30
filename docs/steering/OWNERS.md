@@ -30,6 +30,7 @@ This page contains all active and inactive TSC members.
 | Frederic Wilhelm  | SAP SE          | [frewilhelm](https://github.com/frewilhelm)           |
 | Philipp Heil      | SAP SE          | [zkdev](https://github.com/zkdev)                     |
 | Gergely Bräutigam | Kubermatic GmbH | [skarlso](https://github.com/skarlso)                 |
+| Ilja Weis         | BWI             | [iljaweis](https://github.com/iljaweis)               |
 
 ## Emeritus Members
 

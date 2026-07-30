@@ -35,6 +35,10 @@ This applies to both custom resources and standard Kubernetes resources. Common 
 
 Create a `ClusterRole` with the permissions your deployers require, then bind it to the controller's service account.
 
+{{<callout context="note" title="The service account name depends on the Helm release name" icon="outline/info-circle">}}
+The binding below uses `ocm-k8s-toolkit-controller-manager` as the service account name only when the chart's release name contains `ocm-k8s-toolkit`. Other release names (and GitOps tools such as Flux) produce names like `<release-name>-ocm-k8s-toolkit-controller-manager`. Pin it with `fullnameOverride: ocm-k8s-toolkit`, or look it up: `kubectl get sa -n ocm-k8s-toolkit-system -l app.kubernetes.io/name=ocm-k8s-toolkit`.
+{{</callout>}}
+
 Below is an example granting permissions for kro `ResourceGraphDefinitions` and the Kubernetes resources that the deployer manages:
 
 ```yaml
@@ -89,7 +93,7 @@ roleRef:
   name: ocm-controller-custom
 subjects:
   - kind: ServiceAccount
-    name: ocm-k8s-toolkit-controller-manager
+    name: ocm-k8s-toolkit-controller-manager # replace with your service account name if you did not pin it (see above)
     namespace: ocm-k8s-toolkit-system
 ```
 

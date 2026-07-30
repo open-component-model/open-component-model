@@ -306,7 +306,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 		// Ignore error, but log event
-		event.New(r.EventRecorder, component, nil, v1alpha1.EventSeverityError, err.Error())
+		event.New(r.EventRecorder, component, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
@@ -391,6 +391,13 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Co
 func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, component *v1alpha1.Component,
 	repo repository.ComponentVersionRepository,
 ) (string, error) {
+	// Fast path: if Spec.Semver is a single version (not a constraint),
+	// skip the ListComponentVersions call. Any not-found error will be
+	// surfaced by the subsequent GetComponentVersion call.
+	if pinned, err := semver.NewVersion(component.Spec.Semver); err == nil {
+		return ocm.ApplyDowngradePolicy(component, pinned)
+	}
+
 	versions, err := repo.ListComponentVersions(ctx, component.Spec.Component)
 	if err != nil {
 		return "", fmt.Errorf("failed to list versions: %w", err)
@@ -407,27 +414,5 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 		return "", reconcile.TerminalError(fmt.Errorf("failed to get valid latest version: %w", err))
 	}
 
-	// we didn't yet reconcile anything, return whatever the retrieved version is.
-	if component.Status.Component.Version == "" {
-		return latestSemver.Original(), nil
-	}
-
-	currentSemver, err := semver.NewVersion(component.Status.Component.Version)
-	if err != nil {
-		return "", reconcile.TerminalError(fmt.Errorf("failed to check reconciled version: %w", err))
-	}
-
-	if latestSemver.GreaterThanEqual(currentSemver) {
-		return latestSemver.Original(), nil
-	}
-
-	switch component.Spec.DowngradePolicy {
-	case v1alpha1.DowngradePolicyDeny:
-		return "", reconcile.TerminalError(fmt.Errorf("component version cannot be downgraded from version %s "+
-			"to version %s", currentSemver.Original(), latestSemver.Original()))
-	case v1alpha1.DowngradePolicyAllow:
-		return latestSemver.Original(), nil
-	default:
-		return "", reconcile.TerminalError(errors.New("unknown downgrade policy: " + string(component.Spec.DowngradePolicy)))
-	}
+	return ocm.ApplyDowngradePolicy(component, latestSemver)
 }

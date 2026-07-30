@@ -55,7 +55,7 @@ func processHelm(resource v2.Resource, id string, val *discoveryValue, tgd *tran
 			return fmt.Errorf("failed to create oci upload transformation: %w", err)
 		}
 	} else {
-		if addResourceTransform, err = ociUploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, convertResourceID, imageReferenceFromAccess(convertResourceID)); err != nil {
+		if addResourceTransform, err = uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, convertResourceID, imageReferenceFromAccess(convertResourceID)); err != nil {
 			return fmt.Errorf("failed to create oci upload as local resource transformation: %w", err)
 		}
 	}

@@ -55,9 +55,10 @@ Anyone can propose work for an upcoming sprint. The process is:
 ## Meetings
 
 {{<callout context="note" title="Joining meetings" icon="outline/info-circle">}}
-We are working on making all meeting links publicly discoverable. In the meantime, reach out on
-[Zulip](/community/#zulip) or
-[Slack](/community/#slack) to receive a calendar invite.
+All public meetings are listed on the
+[OCM community calendar on LFX](https://zoom-lfx.platform.linuxfoundation.org/meetings/open-component-model?view=month).
+Open the page for join links, or subscribe to the feed in your own
+calendar app and every change shows up automatically.
 {{</callout>}}
 
 | Meeting | Cadence | Purpose |

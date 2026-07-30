@@ -49,8 +49,11 @@ tasks:
     cmds:
       - |
         echo "Removing sslip.io scaffolding entries from /etc/hosts..."
-        sudo sed -i '' '/\.172\.18\.255\.1\.sslip\.io/d' /etc/hosts
-        sudo sed -i '' '/registry\.local/d' /etc/hosts
+        # Avoid `sed -i` — its in-place flag differs between BSD sed (macOS default) and GNU sed
+        # (Homebrew gnubin). Write to a tmp file, then `cp` (not `mv`) back to preserve the
+        # original root:wheel ownership and permissions of /etc/hosts.
+        tmp=$(mktemp) && sudo sed '/\.172\.18\.255\.1\.sslip\.io/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
+        tmp=$(mktemp) && sudo sed '/registry\.local/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
 
   scaffolding:setup:
     desc: "Create kind cluster and deploy sigstore scaffolding (~5 min, skips if already running)"
@@ -126,7 +129,9 @@ tasks:
           URL="${URL%/}:{{.SIGSTORE_BRIDGE_PORT}}"
           TOKEN=$(curl -sSf "$URL")
           [[ -n "$TOKEN" ]] || { echo "empty token from gettoken" >&2; exit 1; }
-          sed -i '' "s|^export SIGSTORE_OIDC_TOKEN=.*|export SIGSTORE_OIDC_TOKEN='${TOKEN}'|" {{.SIGSTORE_ENV_FILE}}
+          # Avoid `sed -i` — its in-place flag differs between BSD sed (macOS default) and GNU
+          # sed (Homebrew gnubin). Write to a tmp file and move it back.
+          tmp=$(mktemp) && sed "s|^export SIGSTORE_OIDC_TOKEN=.*|export SIGSTORE_OIDC_TOKEN='${TOKEN}'|" {{.SIGSTORE_ENV_FILE}} > "$tmp" && mv "$tmp" {{.SIGSTORE_ENV_FILE}}
           echo "Token refreshed. Re-source: source {{.SIGSTORE_ENV_FILE}}"
         platforms: [darwin]
       - cmd: |

@@ -30,6 +30,7 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 	}
 	slog.SetDefault(logger)
 
+	setup.Syscalls(cmd)
 	if err := setup.OCMConfig(cmd); err != nil {
 		return fmt.Errorf("setup ocm config: %w", err)
 	}

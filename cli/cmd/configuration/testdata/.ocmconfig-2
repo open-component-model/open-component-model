@@ -1,0 +1,12 @@
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: "ghcr-user"
+        password: "ghcr-token"

@@ -1,4 +1,5 @@
 Runtime's
+acls
 accessmethod
 accessmethoddescriptor
 accessmethods
@@ -46,6 +47,7 @@ autoscaler
 aws
 backend
 backends
+backoff
 backport
 backports
 basename
@@ -85,6 +87,8 @@ changelog
 changelogs
 checksums
 chocolateyinstall
+cdn
+cidrs
 cicd
 cli
 cli's
@@ -145,6 +149,7 @@ contradictive
 contributability
 converthelmtooci
 crd
+cyclonedx
 crds
 creatable
 creationtime
@@ -154,6 +159,7 @@ creds
 crossplatform
 crs
 crypto
+cryptoapi
 cryptographic
 cryptographically
 csl
@@ -175,6 +181,10 @@ debugability
 deduplicated
 deduplicates
 deduplication
+decrypt
+decrypted
+decrypting
+decrypts
 deepcopy
 deepdive
 defs
@@ -231,6 +241,7 @@ elementmeta
 enablement
 entrypoint
 enum
+env
 envtest
 eol
 etcd
@@ -332,6 +343,7 @@ hidechildren
 hoc
 homebrew
 hostname
+hostnames
 hostpath
 href
 hsm
@@ -368,6 +380,7 @@ jakobmoellerdev
 jakobmoellersap
 jarm
 jfrog
+jitter
 jq
 js
 json
@@ -376,6 +389,7 @@ jsonschema
 jsonschemagen
 jwt
 kelch
+keychain
 kep
 keycloak
 keyless
@@ -538,9 +552,12 @@ onboarding
 oncefunc
 oo
 openapi
+openbao
 openfluxcd
 openid
 openmcp
+openpgp
+OpenSSF
 openssf
 openssl
 opinionation
@@ -555,6 +572,7 @@ outputspecification
 overexplain
 overriden
 overwritable
+ownershipPolicy
 packageidentifier
 packagename
 packagespec
@@ -568,6 +586,7 @@ pcc
 pem
 pendingdeprecationwarning
 performant
+peribolos
 pflag
 philipp
 pipelinespec
@@ -592,6 +611,8 @@ prem
 priyanka
 prodan's
 programmatically
+protobuf
+protonmail
 prototyped
 proxying
 prs
@@ -616,6 +637,7 @@ reconcilers
 refcount
 referencesconfig
 referrs
+referrers
 reimplement
 rekor
 relativeocireference
@@ -653,6 +675,7 @@ resourcereference
 resourcespec
 resourcestatus
 resubmission
+retryconfig
 retrigger
 rgd
 rgd's
@@ -716,10 +739,12 @@ socio
 sonatype
 sourceref
 spdx
+syft
 src
 srcrefs
 sre
 sres
+ssl
 stackit
 standup
 stateful
@@ -753,6 +778,7 @@ suppresstitle
 svg
 tac
 taskfile
+trivy
 taskfiles
 tbd
 tcp
@@ -794,6 +820,7 @@ uis
 uncomment
 uncommenting
 undefine
+unencrypted
 unmarshal
 unmarshalled
 unmarshaller
@@ -820,6 +847,7 @@ ux
 valuemergehandler
 valuemergehandlerdescriptor
 valueset
+vex
 valuesfrom
 valuessource
 variadic
@@ -899,3 +927,16 @@ oss
 runnable
 GmbH
 ANSI's
+UA
+dialer
+TimeoutConfig
+HostConfig
+MergeTimeoutConfig
+durations
+CLA
+GardenLinux
+IronCore
+Neisener
+ilja
+iljaweis
+weis

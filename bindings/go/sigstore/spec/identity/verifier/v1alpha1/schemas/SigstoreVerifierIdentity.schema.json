@@ -8,7 +8,7 @@
   "properties": {
     "algorithm": {
       "type": "string",
-      "description": "Algorithm restricts this identity to a specific signing algorithm.\nFor Sigstore keyless signing the value is \"sigstore\" (v1alpha1.AlgorithmSigstore).\nOmit to match all algorithms."
+      "description": "Algorithm restricts this identity to a specific signing algorithm.\nPopulated from the signature's Algorithm: typically \"Sigstore/v1alpha1\"\n(v1alpha1.AlgorithmSigstoreV1Alpha1), or \"sigstore\" (v1alpha1.AlgorithmSigstoreLegacy)\nfor legacy signatures. Omit to match all algorithms."
     },
     "signature": {
       "type": "string",

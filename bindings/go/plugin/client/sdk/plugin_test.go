@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -166,9 +167,10 @@ func TestIdleChecker(t *testing.T) {
 			return false
 		}
 
-		r.ErrorContains(err, "dial unix /tmp/test-plugin-idle-plugin.socket: connect: no such file or directory")
+		// The socket may return EOF while it's still shutting down before
+		// being removed. Only consider the test done once the socket is gone.
+		return strings.Contains(err.Error(), "no such file or directory")
 
-		return true
 	}, 5*time.Second, 20*time.Millisecond)
 }
 

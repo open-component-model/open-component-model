@@ -106,6 +106,9 @@ The mission of SIG Runtime is to allow OCM components to be:
 
 > Unless otherwise specified here, processes follow the **OCM SIG Handbook** (decision-making, conflict resolution, escalation).
 
+The [OCM Maintainers group](https://github.com/orgs/open-component-model/teams/maintainers) is formally part of SIG Runtime.
+It operates under the SIG's governance and, through the SIG, reports to the NeoNephos TSC.
+
 ### Roles
 
 - **Chair** — Gergely Bräutigam (Kubermatic) - @skarlso
@@ -115,7 +118,9 @@ The mission of SIG Runtime is to allow OCM components to be:
   Define technical direction, approve designs and roadmaps, and act as final reviewers for architectural changes.
 
 - **Maintainers**  
-  Defined in repository [`CODEOWNERS`](https://github.com/open-component-model/open-component-model/blob/main/.github/CODEOWNERS); responsible for code quality, reviews, and releases.
+  The [OCM Maintainers group](https://github.com/orgs/open-component-model/teams/maintainers) is SIG Runtime's maintainer body.
+  Per-repository ownership is declared in [`CODEOWNERS`](https://github.com/open-component-model/open-component-model/blob/main/.github/CODEOWNERS);
+  maintainers are responsible for code quality, reviews, and releases.
 
 - **Contributors**  
   Any community member following the Code of Conduct and contribution guidelines.

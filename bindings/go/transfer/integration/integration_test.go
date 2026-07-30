@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -32,7 +34,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
+	ociresource "ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
@@ -40,8 +42,12 @@ import (
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-
 	"ocm.software/open-component-model/bindings/go/transfer"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	wgetrepository "ocm.software/open-component-model/bindings/go/wget/repository"
+	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
+	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
+	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
 
 const (
@@ -198,12 +204,12 @@ func Test_Integration_TransferLocalBlob_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err, "graph definition should build successfully")
 	r.NotNil(tgd)
@@ -216,7 +222,7 @@ func Test_Integration_TransferLocalBlob_CTFToOCI(t *testing.T) {
 	repoProvider := provider.NewComponentVersionRepositoryProvider(
 		provider.WithTempDir(t.TempDir()),
 	)
-	resourceRepo := resource.NewResourceRepository(nil)
+	resourceRepo := ociresource.NewResourceRepository(nil)
 
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
 	graph, err := b.BuildAndCheck(tgd)
@@ -323,12 +329,12 @@ func Test_Integration_TransferDescriptorOnly_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -337,7 +343,7 @@ func Test_Integration_TransferDescriptorOnly_CTFToOCI(t *testing.T) {
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := resource.NewResourceRepository(nil)
+	resourceRepo := ociresource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
@@ -392,12 +398,12 @@ func Test_Integration_TransferMultipleResources_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -406,7 +412,7 @@ func Test_Integration_TransferMultipleResources_CTFToOCI(t *testing.T) {
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := resource.NewResourceRepository(nil)
+	resourceRepo := ociresource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
@@ -462,12 +468,12 @@ func Test_Integration_TransferCTFToCTF(t *testing.T) {
 		AccessMode: "readwrite|create",
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -475,7 +481,7 @@ func Test_Integration_TransferCTFToCTF(t *testing.T) {
 	// 3. Build and execute the graph (no credentials needed for CTF-to-CTF).
 	ctx := t.Context()
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := resource.NewResourceRepository(nil)
+	resourceRepo := ociresource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
@@ -523,13 +529,15 @@ func Test_Integration_TransferMultipleComponents_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(component1Name, component1Version),
-			transfer.Component(component2Name, component2Version),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{
+				{Component: component1Name, Version: component1Version},
+				{Component: component2Name, Version: component2Version},
+			},
+			Target:   targetSpec,
+			Resolver: transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -538,7 +546,7 @@ func Test_Integration_TransferMultipleComponents_CTFToOCI(t *testing.T) {
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := resource.NewResourceRepository(nil)
+	resourceRepo := ociresource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
@@ -585,7 +593,7 @@ func Test_Integration_TransferWithFromRepository(t *testing.T) {
 		"repo-resource": []byte("from-repository data"),
 	})
 
-	// 3. Build the transfer graph using FromRepository instead of FromResolver.
+	// 3. Build the transfer graph using NewRepositoryResolver instead of a full resolver.
 	sourceSpec := &ctfrepospec.Repository{
 		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
 		FilePath: sourceCTFPath,
@@ -595,12 +603,12 @@ func Test_Integration_TransferWithFromRepository(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -609,7 +617,7 @@ func Test_Integration_TransferWithFromRepository(t *testing.T) {
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := resource.NewResourceRepository(nil)
+	resourceRepo := ociresource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
@@ -701,12 +709,12 @@ func Test_Integration_TransferRecursive_CTFToOCI(t *testing.T) {
 	}
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithRecursive(true),
-		transfer.WithTransfer(
-			transfer.Component(parentName, parentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+		&transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite},
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: parentName, Version: parentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -715,7 +723,7 @@ func Test_Integration_TransferRecursive_CTFToOCI(t *testing.T) {
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := resource.NewResourceRepository(nil)
+	resourceRepo := ociresource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
@@ -872,12 +880,12 @@ func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T
 	)
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		transfer.WithCopyMode(transfer.CopyModeAllResources),
-		transfer.WithTransfer(
-			transfer.Component(componentName, componentVersion),
-			transfer.ToRepositorySpec(targetSpec),
-			transfer.FromRepository(ctfRepo, sourceSpec),
-		),
+		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
 	)
 	r.NoError(err)
 	r.NotNil(tgd)
@@ -896,7 +904,7 @@ func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T
 	// 5. Build and execute the graph.
 	ctx := t.Context()
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := resource.NewResourceRepository(nil)
+	resourceRepo := ociresource.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
@@ -942,4 +950,512 @@ func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T
 	content, err := io.ReadAll(reader)
 	r.NoError(err)
 	r.NotEmpty(content, "local blob content should not be empty")
+}
+
+// Test_Integration_TransferOCIArtifact_OCIToOCI verifies the streaming TransferOCIArtifact path:
+// an OCIImage resource is transferred directly from one OCI registry to another without
+// intermediate tar materialisation. The resource access in the target descriptor must
+// be an OCI image reference, not a local blob.
+func Test_Integration_TransferOCIArtifact_OCIToOCI(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	// 1. Start source and target OCI registries.
+	sourceAddr, sourceUser, sourcePwd := startRegistry(t)
+	targetAddr, targetUser, targetPwd := startRegistry(t)
+
+	// 2. Push a test OCI image into the source registry.
+	imageRef := pushTestOCIImage(t, sourceAddr, sourceUser, sourcePwd, "test/image", "v1")
+
+	// 3. Build a component with an external OCIImage resource pointing at that image
+	//    and push it to a source OCI registry (not a CTF).
+	componentName := "ocm.software/streaming-transfer-test"
+	componentVersion := "1.0.0"
+
+	credResolver := newCredResolver(t,
+		registryCreds{sourceAddr, sourceUser, sourcePwd},
+		registryCreds{targetAddr, targetUser, targetPwd},
+	)
+
+	// Push the component descriptor to the source OCI registry.
+	sourceSpec := &ocirepospec.Repository{
+		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+		BaseUrl: fmt.Sprintf("http://%s", sourceAddr),
+	}
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	resourceRepo := ociresource.NewResourceRepository(nil)
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+
+	// Seed the source registry via the transfer builder itself.
+	sourceCTFPath := t.TempDir()
+	ctfRepo := createCTFRepository(t, sourceCTFPath)
+	ctfSpec := &ctfrepospec.Repository{
+		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath: sourceCTFPath,
+	}
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    componentName,
+					Version: componentVersion,
+				},
+			},
+			Provider: descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: "streamed-image", Version: "1.0.0"},
+					},
+					Type:     "ociImage",
+					Relation: descriptor.ExternalRelation,
+					Access: &ociaccessv1.OCIImage{
+						Type:           runtime.NewVersionedType(ociaccessv1.LegacyType, ociaccessv1.LegacyTypeVersion),
+						ImageReference: imageRef,
+					},
+				},
+			},
+		},
+	}
+	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
+
+	// CTF → source OCI (seed).
+	seedTGD, err := transfer.BuildGraphDefinition(t.Context(), nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     sourceSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, ctfSpec),
+		},
+	)
+	r.NoError(err)
+	seedGraph, err := b.BuildAndCheck(seedTGD)
+	r.NoError(err)
+	r.NoError(seedGraph.Process(t.Context()))
+
+	// 4. Transfer OCI → OCI with UploadAsOciArtifact (streaming path).
+	targetSpec := &ocirepospec.Repository{
+		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+		BaseUrl: fmt.Sprintf("http://%s", targetAddr),
+	}
+
+	// Build a live repo client for the source OCI registry so it can be used as FromRepository.
+	sourceClient := createAuthClient(sourceAddr, sourceUser, sourcePwd)
+	sourceURLRes, err := urlresolver.New(
+		urlresolver.WithBaseURL(sourceAddr),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(sourceClient),
+	)
+	r.NoError(err)
+	sourceRepo, err := oci.NewRepository(oci.WithResolver(sourceURLRes), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	tgd, err := transfer.BuildGraphDefinition(t.Context(),
+		&transferv1alpha1.Config{
+			CopyMode:   transferv1alpha1.CopyModeAllResources,
+			UploadType: transferv1alpha1.UploadAsOciArtifact,
+		},
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+		},
+	)
+	r.NoError(err)
+
+	// Verify the graph contains a TransferOCIArtifact node, not GetOCIArtifact.
+	hasTransfer := false
+	for _, tr := range tgd.Transformations {
+		if tr.Type.Name == "TransferOCIArtifact" {
+			hasTransfer = true
+		}
+		r.NotEqual("GetOCIArtifact", tr.Type.Name,
+			"streaming path must not emit GetOCIArtifact")
+	}
+	r.True(hasTransfer, "UploadAsOciArtifact OCI→OCI must emit TransferOCIArtifact")
+
+	// Execute the graph.
+	streamGraph, err := b.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(streamGraph.Process(t.Context()))
+
+	// 5. Verify the resource in the target has an OCI image reference (not a local blob).
+	client := createAuthClient(targetAddr, targetUser, targetPwd)
+	urlRes, err := urlresolver.New(
+		urlresolver.WithBaseURL(targetAddr),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+	targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	gotDesc, err := targetRepo.GetComponentVersion(t.Context(), componentName, componentVersion)
+	r.NoError(err, "component must be present in target registry")
+	r.Len(gotDesc.Component.Resources, 1)
+
+	gotAccess := gotDesc.Component.Resources[0].Access
+	r.NotNil(gotAccess)
+
+	// Streaming transfer must produce an OCI image reference in the target, not a local blob.
+	r.Equal(ociaccessv1.LegacyType, gotAccess.GetType().Name,
+		"resource access must be OCIImage (not local blob) after streaming OCI-to-OCI transfer")
+
+	// Unmarshal the raw access to verify the image reference points at the target registry.
+	rawAccess, ok := gotAccess.(*runtime.Raw)
+	r.True(ok, "access must be a *runtime.Raw")
+	var ociAccess ociaccessv1.OCIImage
+	r.NoError(json.Unmarshal(rawAccess.Data, &ociAccess),
+		"resource access must unmarshal to OCIImage after streaming transfer")
+	r.Contains(ociAccess.ImageReference, targetAddr,
+		"image reference must point to the target registry")
+}
+
+// pushTestDockerManifest pushes a minimal Docker v2 manifest image to the given registry
+// and returns (imageRef http://addr/repo:tag, raw manifest bytes).
+func pushTestDockerManifest(t *testing.T, registryAddr, user, password, repoPath, tag string) (string, []byte) {
+	t.Helper()
+
+	const (
+		dockerManifestMediaType = "application/vnd.docker.distribution.manifest.v2+json"
+		dockerConfigMediaType   = "application/vnd.docker.container.image.v1+json"
+		dockerLayerMediaType    = "application/vnd.docker.image.rootfs.diff.tar.gzip"
+	)
+
+	ref := fmt.Sprintf("%s/%s:%s", registryAddr, repoPath, tag)
+
+	layerContent := []byte("docker layer content for integration test")
+	layerDesc := ocispecv1.Descriptor{
+		MediaType: dockerLayerMediaType,
+		Digest:    digestOf(layerContent),
+		Size:      int64(len(layerContent)),
+	}
+
+	configContent := []byte(`{"architecture":"amd64","os":"linux"}`)
+	configDesc := ocispecv1.Descriptor{
+		MediaType: dockerConfigMediaType,
+		Digest:    digestOf(configContent),
+		Size:      int64(len(configContent)),
+	}
+
+	// Docker manifest v2 uses a different mediaType from OCI.
+	type dockerManifest struct {
+		SchemaVersion int                    `json:"schemaVersion"`
+		MediaType     string                 `json:"mediaType"`
+		Config        ocispecv1.Descriptor   `json:"config"`
+		Layers        []ocispecv1.Descriptor `json:"layers"`
+	}
+	manifest := dockerManifest{
+		SchemaVersion: 2,
+		MediaType:     dockerManifestMediaType,
+		Config:        configDesc,
+		Layers:        []ocispecv1.Descriptor{layerDesc},
+	}
+	manifestContent, err := json.Marshal(manifest)
+	require.NoError(t, err)
+
+	manifestDesc := ocispecv1.Descriptor{
+		MediaType: dockerManifestMediaType,
+		Digest:    digestOf(manifestContent),
+		Size:      int64(len(manifestContent)),
+	}
+
+	store := memory.New()
+	ctx := t.Context()
+	require.NoError(t, store.Push(ctx, layerDesc, bytes.NewReader(layerContent)))
+	require.NoError(t, store.Push(ctx, configDesc, bytes.NewReader(configContent)))
+	require.NoError(t, store.Push(ctx, manifestDesc, bytes.NewReader(manifestContent)))
+	require.NoError(t, store.Tag(ctx, manifestDesc, tag))
+
+	repo, err := remote.NewRepository(ref)
+	require.NoError(t, err)
+	repo.PlainHTTP = true
+	repo.Client = &auth.Client{
+		Client:     retry.DefaultClient,
+		Credential: auth.StaticCredential(registryAddr, auth.Credential{Username: user, Password: password}),
+	}
+
+	_, err = oras.Copy(ctx, store, tag, repo, tag, oras.DefaultCopyOptions)
+	require.NoError(t, err, "should push Docker manifest to registry")
+
+	return fmt.Sprintf("http://%s", ref), manifestContent
+}
+
+// Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI tests that a LocalBlob resource
+// with a Docker manifest media type is correctly transferred as an OCI artifact when using
+// UploadAsOciArtifact mode. This is a regression test for the bug where Docker manifests
+// were excluded from isOCICompliantManifest, causing them to be silently stored as local blobs.
+func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	const dockerManifestMediaType = "application/vnd.docker.distribution.manifest.v2+json"
+
+	// 1. Start source and target registries.
+	sourceAddr, sourceUser, sourcePwd := startRegistry(t)
+	targetAddr, targetUser, targetPwd := startRegistry(t)
+
+	// 2. Push a Docker manifest image to the source registry.
+	imageRef, _ := pushTestDockerManifest(t, sourceAddr, sourceUser, sourcePwd, "test/docker-image", "v1")
+
+	// 3. Create source CTF with an OCIImage resource pointing at the Docker manifest in source registry.
+	componentName := "ocm.software/docker-manifest-test"
+	componentVersion := "1.0.0"
+	sourceCTFPath := t.TempDir()
+	ctfRepo := createCTFRepository(t, sourceCTFPath)
+
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion},
+			},
+			Provider: descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: "docker-image", Version: "1.0.0"},
+					},
+					Type:     "ociImage",
+					Relation: descriptor.ExternalRelation,
+					Access: &ociaccessv1.OCIImage{
+						Type:           runtime.NewVersionedType(ociaccessv1.LegacyType, ociaccessv1.LegacyTypeVersion),
+						ImageReference: imageRef,
+					},
+				},
+			},
+		},
+	}
+	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
+
+	// 4. Transfer with CopyModeAllResources + UploadAsOciArtifact.
+	//    The Docker manifest OCIImage resource must be correctly transferred end-to-end.
+	sourceSpec := &ctfrepospec.Repository{
+		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath: sourceCTFPath,
+	}
+	targetSpec := &ocirepospec.Repository{
+		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+		BaseUrl: fmt.Sprintf("http://%s", targetAddr),
+	}
+
+	credResolver := newCredResolver(t,
+		registryCreds{sourceAddr, sourceUser, sourcePwd},
+		registryCreds{targetAddr, targetUser, targetPwd},
+	)
+
+	tgd, err := transfer.BuildGraphDefinition(t.Context(),
+		&transferv1alpha1.Config{
+			CopyMode:   transferv1alpha1.CopyModeAllResources,
+			UploadType: transferv1alpha1.UploadAsOciArtifact,
+		},
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
+	)
+	r.NoError(err)
+	r.NotNil(tgd)
+
+	// With CopyModeAllResources + UploadAsOciArtifact targeting an OCI registry, the graph
+	// takes the streaming path and emits TransferOCIArtifact (not GetOCIArtifact).
+	hasTransferOCIArtifact := false
+	for _, tr := range tgd.Transformations {
+		if tr.Type.Name == "TransferOCIArtifact" {
+			hasTransferOCIArtifact = true
+			break
+		}
+	}
+	r.True(hasTransferOCIArtifact, "Docker manifest OCIImage resource with CopyModeAllResources+UploadAsOciArtifact to OCI target should generate TransferOCIArtifact transformation")
+
+	// 5. Execute the transfer.
+	ctx := t.Context()
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	resourceRepo := ociresource.NewResourceRepository(nil)
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	graph, err := b.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	// 6. Verify the component exists in the target and the resource has OCIImage access pointing to the target.
+	client := createAuthClient(targetAddr, targetUser, targetPwd)
+	urlRes, err := urlresolver.New(
+		urlresolver.WithBaseURL(targetAddr),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+	targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	gotDesc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err, "transferred component should be in target registry")
+	r.Equal(componentName, gotDesc.Component.Name)
+	r.Len(gotDesc.Component.Resources, 1)
+
+	// With UploadAsOciArtifact the Docker manifest image should be stored as an OCI artifact
+	// (OCIImage access) in the target, not as a local blob.
+	gotAccess := gotDesc.Component.Resources[0].Access
+	r.NotNil(gotAccess)
+	r.Equal(ociaccessv1.LegacyType, gotAccess.GetType().Name,
+		"Docker manifest resource should be stored as OCIImage access after CopyModeAllResources+UploadAsOciArtifact transfer")
+
+	var typedOCIAccess ociaccessv1.OCIImage
+	rawAccess, err := json.Marshal(gotAccess)
+	r.NoError(err)
+	r.NoError(json.Unmarshal(rawAccess, &typedOCIAccess))
+	r.Contains(typedOCIAccess.ImageReference, targetAddr,
+		"OCIImage access should reference the target registry after transfer")
+}
+
+// Test_Integration_TransferWgetResource_CopyModeAllResources verifies that a wget resource (content
+// behind an HTTP URL, not stored in the source CTF) is transferred by value: the content is
+// downloaded from the URL and embedded as a localBlob in the target OCI registry. wget resources are
+// external, so they are only copied under CopyModeAllResources.
+func Test_Integration_TransferWgetResource_CopyModeAllResources(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	// 1. Serve the resource content over HTTP.
+	resourceData := []byte("Hello from wget integration test!")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write(resourceData)
+	}))
+	t.Cleanup(srv.Close)
+
+	// 2. Start the target OCI registry.
+	registryAddr, user, password := startRegistry(t)
+
+	// 3. Create the source CTF with a component whose resource points at the HTTP server.
+	componentName := "ocm.software/wget-resource-test"
+	componentVersion := "1.0.0"
+	sourceCTFPath := t.TempDir()
+	ctfRepo := createCTFRepository(t, sourceCTFPath)
+
+	// The wget access lives in a separate binding the CTF/OCI repository scheme does not know,
+	// so store it pre-encoded as raw JSON (how descriptors carry access on disk). The transfer
+	// discovery decodes it via its own scheme, which registers the wget access type.
+	wgetAccess := &wgetaccessv1.Wget{
+		Type:      runtime.NewVersionedType(wgetaccess.WgetConsumerType, wgetaccessv1.Version),
+		URL:       srv.URL + "/artifact.txt",
+		MediaType: "text/plain",
+	}
+	rawWgetAccess := &runtime.Raw{}
+	r.NoError(runtime.NewScheme(runtime.WithAllowUnknown()).Convert(wgetAccess, rawWgetAccess))
+
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    componentName,
+					Version: componentVersion,
+				},
+			},
+			Provider: descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: "wget-resource", Version: "1.0.0"},
+					},
+					Type:     "blob",
+					Relation: descriptor.ExternalRelation,
+					Access:   rawWgetAccess,
+				},
+			},
+		},
+	}
+	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
+
+	// 4. Build the transfer graph with CopyModeAllResources (external resources are skipped otherwise).
+	sourceSpec := &ctfrepospec.Repository{
+		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath: sourceCTFPath,
+	}
+	targetSpec := &ocirepospec.Repository{
+		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
+	}
+
+	tgd, err := transfer.BuildGraphDefinition(t.Context(),
+		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
+	)
+	r.NoError(err)
+	r.NotNil(tgd)
+
+	// A wget resource should generate a DownloadWgetResource transformation.
+	hasDownloadWget := false
+	for _, tr := range tgd.Transformations {
+		if tr.Type.Name == wgetv1alpha1.DownloadWgetResourceType {
+			hasDownloadWget = true
+			break
+		}
+	}
+	r.True(hasDownloadWget, "wget resource should generate a DownloadWgetResource transformation")
+
+	// 5. Build and execute the graph.
+	ctx := t.Context()
+	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	// A wget resource is downloaded via the wget resource repository. In the CLI this is a dynamic
+	// registry dispatching by access type; here the transfer only involves a wget resource, so the
+	// wget repository is the concrete repo to provide (mirrors the OCI tests passing the OCI repo).
+	resourceRepo := wgetrepository.NewResourceRepository(nil)
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	graph, err := b.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	// 6. Verify the component arrived in the target registry with the resource stored as a localBlob.
+	client := createAuthClient(registryAddr, user, password)
+	urlRes, err := urlresolver.New(
+		urlresolver.WithBaseURL(registryAddr),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+	targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	gotDesc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err, "should find transferred component in target registry")
+	r.Equal(componentName, gotDesc.Component.Name)
+	r.Len(gotDesc.Component.Resources, 1)
+	r.Equal("wget-resource", gotDesc.Component.Resources[0].Name)
+
+	gotAccess := gotDesc.Component.Resources[0].Access
+	r.NotNil(gotAccess, "resource access should not be nil")
+	r.Equal(descriptorv2.LocalBlobAccessType, gotAccess.GetType().Name,
+		"wget resource should be stored as localBlob in target after transfer")
+
+	// Verify GlobalAccess is not set — transfer should produce a pure local blob without global access.
+	accessScheme := runtime.NewScheme(runtime.WithAllowUnknown())
+	descriptorv2.MustAddToScheme(accessScheme)
+	var typedLocalBlob descriptorv2.LocalBlob
+	r.NoError(accessScheme.Convert(gotAccess, &typedLocalBlob), "should convert access to LocalBlob")
+	r.Nil(typedLocalBlob.GlobalAccess, "localBlob should not have globalAccess after transfer")
+	r.Equal("text/plain", typedLocalBlob.MediaType, "localBlob should preserve the wget media type")
+
+	// The stored resource must be fully described: a digest over the downloaded content.
+	r.NotNil(gotDesc.Component.Resources[0].Digest, "transferred resource should carry a digest")
+	r.Equal(digestOf(resourceData).Encoded(), gotDesc.Component.Resources[0].Digest.Value,
+		"resource digest should be the sha256 of the served content")
+
+	// 7. Verify the blob is present and its content matches what the HTTP server served.
+	resourceIdentity := gotDesc.Component.Resources[0].ToIdentity()
+	localBlob, _, err := targetRepo.GetLocalResource(ctx, componentName, componentVersion, resourceIdentity)
+	r.NoError(err, "local blob should be retrievable from target repository")
+	reader, err := localBlob.ReadCloser()
+	r.NoError(err, "local blob should be readable")
+	defer func() { r.NoError(reader.Close()) }()
+	content, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.Equal(resourceData, content, "transferred blob content should match the served content")
 }

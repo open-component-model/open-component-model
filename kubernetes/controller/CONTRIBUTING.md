@@ -54,7 +54,7 @@ its lifecycle.
 CRDs and RBAC rules are generated from [kubebuilder markers](https://book.kubebuilder.io/reference/markers) in the Go
 source files under `api/v1alpha1/`. The generation pipeline has three steps:
 
-1. **`task manifests`** - Runs `controller-gen` to produce raw CRD YAML into `bin/gen/crd/` and raw RBAC into
+1. **`task manifests`** - Runs `controller-gen` to produce raw CRD YAML into `config/crd/bases` and raw RBAC into
    `bin/gen/rbac/`.
 2. **`task generate`** - Generates Go deepcopy and `runtime.Object` implementations from type definitions.
 3. **`task helm/generate`** - Wraps the raw CRDs and RBAC from step 1 into Helm chart templates (adding conditionals,

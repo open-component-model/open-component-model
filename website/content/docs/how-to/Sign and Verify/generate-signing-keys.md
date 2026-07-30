@@ -1,13 +1,13 @@
 ---
 title: "Generate Signing Keys"
-description: "Create an RSA key pair for signing and verifying OCM component versions."
+description: "Create an RSA or GPG key pair for signing and verifying OCM component versions."
 weight: 4
 toc: true
 ---
 
 ## Goal
 
-Generate an RSA key pair that can be used to sign and verify OCM component versions.
+Generate a key pair that can be used to sign and verify OCM component versions. Pick the tab that matches the algorithm you want to use.
 
 ## You'll end up with
 
@@ -16,6 +16,10 @@ Generate an RSA key pair that can be used to sign and verify OCM component versi
 
 **Estimated time:** ~2 minutes
 
+{{< tabs "key-type" >}}
+{{< tab "RSA" >}}
+
+<!-- markdownlint-disable-next-line MD024 -->
 ## Prerequisites
 
 - [OpenSSL](https://openssl-library.org) installed on your system (typically pre-installed on Linux/macOS)
@@ -83,6 +87,102 @@ You should see both files:
 
 {{< /steps >}}
 
+{{< /tab >}}
+{{< tab "GPG" >}}
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Prerequisites
+
+- [GnuPG](https://gnupg.org/download/) installed (`gpg` binary available in `$PATH`)
+
+## Generate a GPG key pair
+
+If you already use a GPG key for signing Git tags or release artifacts, that key works as-is for OCM — skip ahead and just export it (Step 2). Otherwise, generate a new one in `/tmp/keys` so the file paths line up with the rest of the how-tos.
+
+{{< steps >}}
+
+{{< step >}}
+
+### Generate the key pair
+
+Create a folder `/tmp/keys` and generate an RSA 4096 GPG key non-interactively (no expiry, no passphrase — fine for tutorials; for production, drop `%no-protection` to be prompted for one):
+
+```bash
+mkdir -p /tmp/keys && cd /tmp/keys
+
+gpg --batch --gen-key << 'EOF'
+%no-protection
+Key-Type: RSA
+Key-Length: 4096
+Subkey-Type: RSA
+Subkey-Length: 4096
+Name-Real: OCM Signing Key
+Name-Email: ocm-signer@example.com
+Expire-Date: 0
+%commit
+EOF
+```
+
+List the key and note its **fingerprint** (the 40-character hex string under `sec`):
+
+```bash
+gpg --list-secret-keys --keyid-format=long
+```
+
+{{< details "Expected output" >}}
+
+```text
+sec   rsa4096/167C7102F8AC81E4 2026-06-15 [SCEAR]
+      B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+uid           [ ultimate ] OCM Signing Key <ocm-signer@example.com>
+ssb   rsa4096/23F18B76957B0A91 2026-06-15 [SEA]
+      26C11231549F81AF2AAC4F7723F18B76957B0A91
+```
+
+{{< /details >}}
+
+> ⚠️ **Keep your private key secure!** ⚠️  
+> Never commit it to version control or share it. For production use, prefer a hardware token (YubiKey, OpenPGP card) or a passphrase-protected key.
+
+{{< /step >}}
+
+{{< step >}}
+
+### Export the keys to ASCII-armored files
+
+OCM loads GPG keys from ASCII-armored files (`.asc`). Export both — replace `<key fingerprint>` with the value from the previous step:
+
+```bash
+gpg --export-secret-keys --armor <key fingerprint> > /tmp/keys/signing-key.asc
+gpg --export --armor <key fingerprint> > /tmp/keys/verify-key.asc
+
+chmod 600 /tmp/keys/signing-key.asc
+```
+
+{{< /step >}}
+
+{{< step >}}
+
+### Verify the keys were created
+
+```bash
+ls -la /tmp/keys/*.asc
+```
+
+You should see both files:
+
+```text
+-rw-------  1 user  group  7487 Jun 15 12:00 signing-key.asc
+-rw-r--r--  1 user  group  3988 Jun 15 12:00 verify-key.asc
+```
+
+{{< /step >}}
+
+{{< /steps >}}
+
+{{< /tab >}}
+{{< /tabs >}}
+
 ## Key management tips
 
 | Key             | Who has it                     | Purpose                  |
@@ -104,6 +204,14 @@ You should see both files:
 - Ubuntu/Debian: `sudo apt-get install openssl`
 - RHEL/CentOS: `sudo dnf install openssl`
 
+### Symptom: "command not found: gpg"
+
+**Fix:** Install GnuPG:
+
+- macOS: `brew install gnupg`
+- Ubuntu/Debian: `sudo apt-get install gnupg`
+- RHEL/CentOS: `sudo dnf install gnupg2`
+
 ### Symptom: Permission denied when creating files
 
 **Fix:** Ensure you have write permissions in the current directory, or specify a full path where you have access.
@@ -118,3 +226,4 @@ You should see both files:
 
 - [Concept: Signing and Verification]({{< relref "signing-and-verification-concept.md" >}}) - Understand how OCM signing and verification works
 - [Tutorial: Sign Your First Component]({{< relref "docs/tutorials/signing/plain.md" >}}) - A hands-on tutorial for signing components end-to-end
+- [Tutorial: GPG Signatures]({{< relref "docs/tutorials/signing/gpg.md" >}}) - End-to-end GPG signing tutorial

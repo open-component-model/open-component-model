@@ -19,6 +19,17 @@
 //   - SigstoreSigningConfiguration/v1alpha1 — passed via --signer-spec
 //   - SigstoreVerificationConfiguration/v1alpha1 — passed via --verifier-spec
 //
+// # Algorithm Versioning
+//
+// The OCM Sigstore algorithm is versioned. The current generation is
+// "Sigstore/v1alpha1" (signing/v1alpha1.AlgorithmSigstoreV1Alpha1); when
+// SignConfig.SignatureAlgorithm is empty, signing/v1alpha1.AlgorithmSigstoreDefault
+// is used.
+//
+// The bare string "sigstore" emitted by pre-versioning OCM CLIs is accepted
+// on verify under signing/v1alpha1.AlgorithmSigstoreLegacy as an alias for
+// AlgorithmSigstoreV1Alpha1; new signatures always emit AlgorithmSigstoreV1Alpha1.
+//
 // # Endpoint Discovery
 //
 // Signing endpoints (Fulcio, Rekor, TSA) are configured via a signing config

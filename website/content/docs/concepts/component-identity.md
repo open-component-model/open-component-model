@@ -3,7 +3,6 @@ title: "Component Identity"
 description: "How OCM identifies components, versions, and artifacts — from naming to descriptors."
 icon: "🪪"
 weight: 1
-url: /docs/concepts/component-identity
 toc: true
 ---
 

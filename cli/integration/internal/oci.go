@@ -15,6 +15,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/oci"
+	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
@@ -110,4 +112,23 @@ func CreateOCIRegistry(t *testing.T) (*OCIRegistry, error) {
 
 func (r *OCIRegistry) Reference(ref string) string {
 	return fmt.Sprintf("%s/%s", r.RegistryAddress, ref)
+}
+
+// Connect builds an [*oci.Repository] client wired up to this registry with
+// the registry's credentials, plain HTTP, and a fresh per-test temp dir.
+// Useful for inspecting transferred component versions in assertions.
+func (r *OCIRegistry) Connect(t *testing.T) *oci.Repository {
+	t.Helper()
+	req := require.New(t)
+
+	client := CreateAuthClient(r.RegistryAddress, r.User, r.Password)
+	resolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(r.RegistryAddress),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	req.NoError(err)
+	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
+	req.NoError(err)
+	return repo
 }

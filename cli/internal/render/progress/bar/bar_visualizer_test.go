@@ -69,19 +69,19 @@ func TestHandleEvent_OrderTracking(t *testing.T) {
 
 func TestRenderEvents_OutputFormat(t *testing.T) {
 	t.Run("renders single item", func(t *testing.T) {
-		v, buf := newTestVisualizer(3)
+		v, _ := newTestVisualizer(3)
 		v.events = []progress.Event[string]{{ID: "item1", Name: "item1", State: progress.Completed}}
 
-		v.renderEvents()
+		v.writeEvents()
 
-		output := buf.String()
+		output := v.buf.String()
 		assert.Equal(t, 3, strings.Count(output, "\n"))
 		assert.Contains(t, output, "✓")
 		assert.Contains(t, output, "item1")
 	})
 
 	t.Run("only shows last maxLogs items when exceeding limit", func(t *testing.T) {
-		v, buf := newTestVisualizer(6)
+		v, _ := newTestVisualizer(6)
 		v.events = []progress.Event[string]{
 			{ID: "item1", Name: "item1", State: progress.Completed},
 			{ID: "item2", Name: "item2", State: progress.Completed},
@@ -91,9 +91,9 @@ func TestRenderEvents_OutputFormat(t *testing.T) {
 			{ID: "item6", Name: "item6", State: progress.Completed},
 		}
 
-		v.renderEvents()
+		v.writeEvents()
 
-		output := buf.String()
+		output := v.buf.String()
 		assert.NotContains(t, output, "item1")
 		assert.NotContains(t, output, "item2")
 		assert.Contains(t, output, "item3")
@@ -131,22 +131,23 @@ func TestFormatItem_FallsBackToID(t *testing.T) {
 
 func TestLogBuffer(t *testing.T) {
 	t.Run("drain prints and clears buffer", func(t *testing.T) {
-		v, out := newTestVisualizer(1)
+		v, _ := newTestVisualizer(1)
 		logBuf := &progress.SyncBuffer{}
 		v.SetLogBuffer(logBuf)
 
 		logBuf.Write([]byte("line one\nline two\n"))
-		v.drainLogBuffer()
+		v.writeLogBuffer()
 
-		assert.Contains(t, out.String(), "line one")
-		assert.Contains(t, out.String(), "line two")
+		output := v.buf.String()
+		assert.Contains(t, output, "line one")
+		assert.Contains(t, output, "line two")
 		assert.Equal(t, 0, logBuf.Len())
 	})
 
 	t.Run("drain is noop when buffer is nil", func(t *testing.T) {
-		v, out := newTestVisualizer(1)
-		v.drainLogBuffer()
-		assert.Empty(t, out.String())
+		v, _ := newTestVisualizer(1)
+		v.writeLogBuffer()
+		assert.Empty(t, v.buf.String())
 	})
 }
 
@@ -240,49 +241,49 @@ func TestNewVisualizer_SetErrorFormatter(t *testing.T) {
 	assert.Contains(t, buf.String(), "CUSTOM:")
 }
 
-// --- renderBar tests ---
+// --- writeBar tests ---
 
 func TestRenderBar_ProgressPercentage(t *testing.T) {
-	v, buf := newTestVisualizer(4)
+	v, _ := newTestVisualizer(4)
 	v.events = []progress.Event[string]{
 		{ID: "a", State: progress.Completed},
 		{ID: "b", State: progress.Completed},
 	}
 
-	v.renderBar()
-	output := stripANSI(buf.String())
+	v.writeBar()
+	output := stripANSI(v.buf.String())
 
 	assert.Contains(t, output, "50%")
 	assert.Contains(t, output, "2/4")
 }
 
 func TestRenderBar_ShowsFailedCount(t *testing.T) {
-	v, buf := newTestVisualizer(3)
+	v, _ := newTestVisualizer(3)
 	v.events = []progress.Event[string]{
 		{ID: "a", State: progress.Completed},
 		{ID: "b", State: progress.Failed},
 	}
 
-	v.renderBar()
-	output := stripANSI(buf.String())
+	v.writeBar()
+	output := stripANSI(v.buf.String())
 
 	assert.Contains(t, output, "1 failed")
 }
 
 func TestRenderBar_ShowsCancelledCount(t *testing.T) {
-	v, buf := newTestVisualizer(3)
+	v, _ := newTestVisualizer(3)
 	v.events = []progress.Event[string]{
 		{ID: "a", State: progress.Completed},
 		{ID: "b", State: progress.Cancelled},
 	}
 
-	v.renderBar()
-	output := stripANSI(buf.String())
+	v.writeBar()
+	output := stripANSI(v.buf.String())
 
 	assert.Contains(t, output, "1 cancelled")
 }
 
-// --- renderFailureSummary tests ---
+// --- writeFailureSummary tests ---
 
 func TestRenderFailureSummary_ShowsErrorIDs(t *testing.T) {
 	v, buf := newTestVisualizer(2)
@@ -291,7 +292,7 @@ func TestRenderFailureSummary_ShowsErrorIDs(t *testing.T) {
 		{ID: "task-2", State: progress.Failed, Err: assert.AnError},
 	}
 
-	v.renderFailureSummary()
+	v.writeFailureSummary()
 	output := stripANSI(buf.String())
 
 	assert.Contains(t, output, "Errors:")

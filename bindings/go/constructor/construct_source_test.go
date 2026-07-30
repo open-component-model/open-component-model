@@ -1,63 +1,21 @@
 package constructor
 
 import (
-	"context"
+	"bytes"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-// mockSourceInputMethod implements SourceInputMethod for testing
-type mockSourceInputMethod struct {
-	processedSource *descriptor.Source
-	processedBlob   blob.ReadOnlyBlob
-}
-
-func (m *mockSourceInputMethod) GetInputMethodScheme() *runtime.Scheme {
-	return runtime.NewScheme()
-}
-
-func (m *mockSourceInputMethod) GetSourceCredentialConsumerIdentity(ctx context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
-	id := runtime.Identity{}
-	id.SetType(runtime.NewVersionedType("mock", "v1"))
-	return id, nil
-}
-
-func (m *mockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorruntime.Source, creds runtime.Typed) (*SourceInputMethodResult, error) {
-	if m.processedSource != nil {
-		return &SourceInputMethodResult{
-			ProcessedSource: m.processedSource,
-		}, nil
-	}
-	if m.processedBlob != nil {
-		return &SourceInputMethodResult{
-			ProcessedBlobData: m.processedBlob,
-		}, nil
-	}
-	return nil, nil
-}
-
-// mockSourceInputMethodProvider implements SourceInputMethodProvider for testing
-type mockSourceInputMethodProvider struct {
-	methods map[runtime.Type]SourceInputMethod
-}
-
-func (m *mockSourceInputMethodProvider) GetSourceInputMethod(ctx context.Context, source *constructorruntime.Source) (SourceInputMethod, error) {
-	if method, ok := m.methods[source.Input.GetType()]; ok {
-		return method, nil
-	}
-	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", source.Input.GetType())
-}
 
 // setupTestComponentWithSource creates a basic component constructor with a source for testing
 func setupTestComponentWithSource(t *testing.T, sourceYAML string) *constructorruntime.ComponentConstructor {
@@ -201,6 +159,34 @@ func TestConstructWithSourceAccess(t *testing.T) {
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedSources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
+}
+
+// Sources carry no digest, so constructing with one must warn that the content
+// is not verifiable and point at resources as the checked alternative.
+func TestConstructWithSourceWarnsAboutUnverifiableContent(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	constructor := setupTestComponentWithSource(t, `
+       - name: test-source
+         version: v1.0.0
+         type: git
+         access:
+           type: LocalBlob
+           mediaType: application/octet-stream
+           localReference: test-ref
+`)
+
+	opts := Options{
+		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: newMockTargetRepository()},
+	}
+	err := NewDefaultConstructor(constructor, opts).Construct(t.Context())
+	require.NoError(t, err)
+
+	assert.Contains(t, logs.String(), "declare the artifact as a resource if content validation is needed",
+		"constructing a component version with a source must warn that source content is unverifiable")
 }
 
 func TestConstructWithSourceCredentialResolution(t *testing.T) {

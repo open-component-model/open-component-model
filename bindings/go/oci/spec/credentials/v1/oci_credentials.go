@@ -9,6 +9,22 @@ const OCICredentialsType = "OCICredentials"
 
 var OCICredentialsVersionedType = runtime.NewVersionedType(OCICredentialsType, Version)
 
+// MustRegisterCredentialType registers OCICredentials/v1 (and its unversioned
+// alias) in the given scheme.
+//
+// OCICredentials is a credential payload type (it carries username/password
+// or tokens that authenticate against an OCI registry). It is NOT a credential
+// repository configuration — it must be registered with the credential-type
+// scheme of the credential graph (see
+// credentialrepository.RepositoryRegistry.Register), never with a scheme that
+// maps repository specs to repository plugins.
+func MustRegisterCredentialType(scheme *runtime.Scheme) {
+	scheme.MustRegisterWithAlias(&OCICredentials{},
+		OCICredentialsVersionedType,
+		runtime.NewUnversionedType(OCICredentialsType),
+	)
+}
+
 // OCICredentials represents typed credentials for OCI registry authentication.
 // It supports username/password and token-based authentication flows used by
 // container registries that implement the OCI distribution specification.

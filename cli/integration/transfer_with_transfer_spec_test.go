@@ -12,8 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/oci"
-	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/cli/cmd"
 	"ocm.software/open-component-model/cli/integration/internal"
 )
@@ -91,24 +89,6 @@ func executeTransferSpec(t *testing.T, specFile, cfgPath string) {
 	require.NoError(t, transferCMD.ExecuteContext(ctx), "transfer from spec should succeed")
 }
 
-// connectToOCIRegistry creates a repository client for an OCI registry.
-func connectToOCIRegistry(t *testing.T, reg *internal.OCIRegistry) *oci.Repository {
-	t.Helper()
-	r := require.New(t)
-
-	client := internal.CreateAuthClient(reg.RegistryAddress, reg.User, reg.Password)
-	resolver, err := urlresolver.New(
-		urlresolver.WithBaseURL(reg.RegistryAddress),
-		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(client),
-	)
-	r.NoError(err)
-	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
-	r.NoError(err)
-
-	return repo
-}
-
 // Test_Integration_TransferWithTransferSpec_CTFToOCI performs a two-step transfer:
 // 1. Generate the transfer spec via --dry-run
 // 2. Execute the spec via --transfer-spec
@@ -139,7 +119,7 @@ func Test_Integration_TransferWithTransferSpec_CTFToOCI(t *testing.T) {
 	executeTransferSpec(t, specFile, cfgPath)
 
 	// Verify component exists in target registry
-	repo := connectToOCIRegistry(t, registry)
+	repo := registry.Connect(t)
 	desc, err := repo.GetComponentVersion(t.Context(), componentName, componentVersion)
 	r.NoError(err, "should be able to retrieve transferred component")
 	r.Equal(componentName, desc.Component.Name)
@@ -184,7 +164,7 @@ func Test_Integration_TransferWithTransferSpec_ModifiedTarget(t *testing.T) {
 	executeTransferSpec(t, specFile, cfgPath)
 
 	// Verify component exists in registry B (the modified target)
-	repoB := connectToOCIRegistry(t, registryB)
+	repoB := registryB.Connect(t)
 	desc, err := repoB.GetComponentVersion(t.Context(), componentName, componentVersion)
 	r.NoError(err, "should be able to retrieve component from registry B")
 	r.Equal(componentName, desc.Component.Name)
@@ -193,7 +173,7 @@ func Test_Integration_TransferWithTransferSpec_ModifiedTarget(t *testing.T) {
 	r.Equal("test-resource", desc.Component.Resources[0].Name)
 
 	// Verify component does NOT exist in registry A (the original target)
-	repoA := connectToOCIRegistry(t, registryA)
+	repoA := registryA.Connect(t)
 	_, err = repoA.GetComponentVersion(t.Context(), componentName, componentVersion)
 	r.Error(err, "component should NOT exist in registry A")
 }

@@ -65,6 +65,52 @@ function normalizeType(type: string | string[] | undefined): string {
     return type || "object";
 }
 
+function isConstAliasBranch(node: SchemaNode): boolean {
+    return typeof node.const === "string" && !node.properties && !node.items && !node.oneOf && !node.anyOf;
+}
+
+function constStrings(branches: SchemaNode[]): string[] {
+    return branches
+        .map((branch) => branch.const)
+        .filter((value): value is string => typeof value === "string");
+}
+
+/**
+ * A oneOf/anyOf union whose branches are all bare `const` aliases enumerates the
+ * allowed literal values of a field (e.g. a `type` discriminator and its
+ * deprecated aliases) rather than describing polymorphic object shapes.
+ */
+function constAliasUnion(node: SchemaNode): { kw: "oneOf" | "anyOf"; branches: SchemaNode[] } | null {
+    for (const kw of ["oneOf", "anyOf"] as const) {
+        const branches = node[kw];
+        if (Array.isArray(branches) && branches.length && branches.every(isConstAliasBranch)) return {kw, branches};
+    }
+    return null;
+}
+
+function constAliasesFrom(node: SchemaNode): { constValues: string[]; deprecatedConstValues: string[] } {
+    const union = constAliasUnion(node);
+    if (!union) {
+        return {
+            constValues: typeof node.const === "string" ? [node.const] : [],
+            deprecatedConstValues: [],
+        };
+    }
+
+    return {
+        constValues: constStrings(union.branches.filter((branch) => !branch.deprecated)),
+        deprecatedConstValues: constStrings(union.branches.filter((branch) => branch.deprecated)),
+    };
+}
+
+function withoutConstAliasUnion(node: SchemaNode): SchemaNode {
+    const union = constAliasUnion(node);
+    if (!union) return node;
+
+    const {[union.kw]: _, ...rest} = node;
+    return rest;
+}
+
 /**
  * Merge shared parent properties into a oneOf/anyOf branch.
  */
@@ -103,6 +149,9 @@ function fieldsFrom(node: SchemaNode, root: SchemaNode, seen: Set<string>): Sche
  */
 function convertField(name: string, raw: SchemaNode, requiredList: string[], root: SchemaNode, seen = new Set<string>()): SchemaField {
     const prop = resolve(raw, root, new Set(seen));
+    const isTypeField = name === "type";
+    const constAliases = isTypeField ? constAliasesFrom(prop) : {constValues: [], deprecatedConstValues: []};
+    const displayProp = isTypeField ? withoutConstAliasUnion(prop) : prop;
     const immutable = prop["x-kubernetes-validations"]?.some((v: {
         rule?: string
     }) => v.rule?.includes("== oldSelf")) || false;
@@ -110,10 +159,10 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
 
     // Polymorphic oneOf/anyOf
     for (const kw of ["oneOf", "anyOf"] as const) {
-        if (Array.isArray(prop[kw])) {
-            const hasSharedProps = !!prop.properties;
-            const variants: FieldVariant[] = (prop[kw] as SchemaNode[]).map((branch, i) => {
-                const merged = mergeParentInto(branch, prop, kw);
+        if (Array.isArray(displayProp[kw])) {
+            const hasSharedProps = !!displayProp.properties;
+            const variants: FieldVariant[] = (displayProp[kw] as SchemaNode[]).map((branch, i) => {
+                const merged = mergeParentInto(branch, displayProp, kw);
                 const resolved = resolve(merged, root, new Set(seen));
                 const title = variantTitle(resolved, i);
                 const fields = resolved.properties ? fieldsFrom(resolved, root, new Set(seen)) : null;
@@ -123,15 +172,16 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
                 };
             });
             return {
-                name, type: normalizeType(prop.type), description: prop.description || "",
+                name, type: normalizeType(displayProp.type), description: displayProp.description || "",
+                ...constAliases,
                 required, immutable, properties: null, variants,
             };
         }
     }
 
     // Array with items
-    if (prop.type === "array" && prop.items) {
-        const items = resolve(prop.items, root, new Set(seen));
+    if (displayProp.type === "array" && displayProp.items) {
+        const items = resolve(displayProp.items, root, new Set(seen));
 
         for (const kw of ["oneOf", "anyOf"] as const) {
             if (Array.isArray(items[kw])) {
@@ -147,14 +197,16 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
                     };
                 });
                 return {
-                    name, type: `[]${normalizeType(items.type)}`, description: prop.description || "",
+                    name, type: `[]${normalizeType(items.type)}`, description: displayProp.description || "",
+                    ...constAliases,
                     required, immutable, properties: null, variants,
                 };
             }
         }
 
         return {
-            name, type: `[]${normalizeType(items.type)}`, description: prop.description || "",
+            name, type: `[]${normalizeType(items.type)}`, description: displayProp.description || "",
+            ...constAliases,
             required, immutable, variants: null,
             properties: items.properties ? fieldsFrom(items, root, new Set(seen)) : null,
         };
@@ -162,9 +214,10 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
 
     // Plain object or scalar
     return {
-        name, type: normalizeType(prop.type), description: prop.description || "",
+        name, type: normalizeType(displayProp.type), description: displayProp.description || "",
+        ...constAliases,
         required, immutable, variants: null,
-        properties: prop.properties ? fieldsFrom(prop, root, new Set(seen)) : null,
+        properties: displayProp.properties ? fieldsFrom(displayProp, root, new Set(seen)) : null,
     };
 }
 

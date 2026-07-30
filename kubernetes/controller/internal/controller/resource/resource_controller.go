@@ -349,7 +349,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 		// Ignore error, but log event
-		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, err.Error())
+		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
@@ -388,7 +388,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 		// Ignore error, but log event
-		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, err.Error())
+		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())

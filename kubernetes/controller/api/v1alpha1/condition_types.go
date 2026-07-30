@@ -8,6 +8,8 @@ const (
 	ReconcilingCondition = "Reconciling"
 	// StalledCondition indicates the resource has stalled and will not be retried.
 	StalledCondition = "Stalled"
+	// TransferInProgressCondition indicates a Replication transfer is in flight.
+	TransferInProgressCondition = "TransferInProgress"
 )
 
 // Generic condition reasons.
@@ -74,4 +76,10 @@ const (
 
 	// ComponentDriftResolutionInProgress the component and the deployer are catching up.
 	ComponentDriftResolutionInProgress = "ComponentDriftResolutionInProgress"
+
+	// TransferInProgressReason is used when a Replication transfer is in flight.
+	TransferInProgressReason = "TransferInProgress"
+
+	// TransferCompleteReason is used when no Replication transfer is done.
+	TransferCompleteReason = "TransferComplete"
 )

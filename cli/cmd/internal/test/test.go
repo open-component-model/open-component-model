@@ -14,16 +14,26 @@ import (
 	"github.com/spf13/cobra"
 
 	"ocm.software/open-component-model/cli/cmd"
+	context "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 )
 
 // Options holds configuration for executing OCM CLI commands in tests
 type Options struct {
-	args   []string  // Command line arguments to pass to the CLI
-	in     io.Reader // Input reader to supply stdin to the command
-	out    io.Writer // Output writer to capture command output
-	errout io.Writer // Error writer to capture command errors and logs
-	format string    // Log format to use (e.g., json, text)
+	args     []string          // Command line arguments to pass to the CLI
+	in       io.Reader         // Input reader to supply stdin to the command
+	out      io.Writer         // Output writer to capture command output
+	errout   io.Writer         // Error writer to capture command errors and logs
+	format   string            // Log format to use (e.g., json, text)
+	syscalls *context.Syscalls // Environment to dependency inject into the test execution
+}
+
+var noopSyscalls = &context.Syscalls{
+	Stat:        func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+	Getenv:      func(_ string) string { return "" },
+	UserHomeDir: func() (string, error) { return "", nil },
+	Getwd:       func() (string, error) { return "", nil },
+	Executable:  func() (string, error) { return "", nil },
 }
 
 // Option is a function that configures Options
@@ -53,6 +63,33 @@ func WithOutput(out io.Writer) Option {
 func WithErrorOutput(errout io.Writer) Option {
 	return func(o *Options) {
 		o.errout = errout
+	}
+}
+
+func WithSyscalls(si *context.Syscalls) Option {
+	return func(o *Options) {
+		if si == nil {
+			o.syscalls = nil
+			return
+		}
+
+		merged := *noopSyscalls
+		if si.Stat != nil {
+			merged.Stat = si.Stat
+		}
+		if si.Getenv != nil {
+			merged.Getenv = si.Getenv
+		}
+		if si.UserHomeDir != nil {
+			merged.UserHomeDir = si.UserHomeDir
+		}
+		if si.Getwd != nil {
+			merged.Getwd = si.Getwd
+		}
+		if si.Executable != nil {
+			merged.Executable = si.Executable
+		}
+		o.syscalls = &merged
 	}
 }
 
@@ -93,6 +130,11 @@ func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 	if opt.format == "" {
 		opt.format = log.FormatJSON
 	}
+
+	if opt.syscalls == nil {
+		opt.syscalls = noopSyscalls
+	}
+
 	f := instance.PersistentFlags().Lookup(log.FormatFlagName)
 	if err := f.Value.Set(opt.format); err != nil {
 		return nil, fmt.Errorf("failed to set format: %w", err)
@@ -107,7 +149,7 @@ func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 	}
 
 	instance.SetArgs(opt.args)
-	return instance.ExecuteContextC(tb.Context())
+	return instance.ExecuteContextC(context.WithSyscalls(tb.Context(), opt.syscalls))
 }
 
 // JSONLogReader provides functionality to read and parse JSON-formatted log output

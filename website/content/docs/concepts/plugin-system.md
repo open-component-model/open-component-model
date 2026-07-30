@@ -104,6 +104,18 @@ Integrates with external credential stores. Instead of managing credentials dire
 configuration, a credential plugin can resolve them from systems like Vault, AWS Secrets
 Manager, or other secret backends.
 
+A credential repository plugin can introduce its own credential types for use in `.ocmconfig`. These custom types are declared in the `customCredentialTypes` field of the plugin's capability spec:
+
+```yaml
+# Excerpt from a plugin capability spec
+customCredentialTypes:
+  - com.hashicorp.vault.VaultCredentials/v1
+```
+
+OCM registers these types at plugin discovery time. Built-in credential types (`OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`, `DirectCredentials/v1`) are already registered at startup and must **not** be listed in `customCredentialTypes`.
+
+External plugin credential types use a **reverse-domain prefix** by convention (e.g., `com.hashicorp.vault.VaultCredentials/v1`). This prevents name collisions between independently developed plugins. The convention follows the same idea as Jenkins plugin identifiers — two plugins that both want to use `MyCredentials/v1` can coexist as `com.vendor-a.MyCredentials/v1` and `com.vendor-b.MyCredentials/v1`.
+
 ### Signing Handler
 
 Adds new signing and verification mechanisms. OCM ships with standard signing support, but

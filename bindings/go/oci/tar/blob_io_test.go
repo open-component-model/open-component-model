@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -15,6 +18,8 @@ import (
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/memory"
+	orasoci "oras.land/oras-go/v2/content/oci"
+	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 )
@@ -219,64 +224,34 @@ func buildSingleLayerOCILayout(t *testing.T) (layoutBytes []byte, root, layer oc
 	return buf.Bytes(), root, layer
 }
 
-// TestCopyOCILayoutWithIndex_ReferrersFunc verifies the ReferrersFunc hook:
-// the callback's descriptors land in dst alongside the artifact, and a
-// referrer's Subject back-reference to root does not cause CopyGraph to loop
-// back.
-func TestCopyOCILayoutWithIndex_ReferrersFunc(t *testing.T) {
-	layoutBytes, rootDesc, layerDesc := buildSingleLayerOCILayout(t)
-
-	var receivedRoot, referrerDesc ociImageSpecV1.Descriptor
-	referrerFn := func(ctx context.Context, top ociImageSpecV1.Descriptor) ([]Referrer, error) {
-		receivedRoot = top
-		emptyDesc := ociImageSpecV1.DescriptorEmptyJSON
-		body, err := json.Marshal(ociImageSpecV1.Manifest{
-			Versioned:    specs.Versioned{SchemaVersion: 2},
-			MediaType:    ociImageSpecV1.MediaTypeImageManifest,
-			ArtifactType: "application/test.referrer.v1+json",
-			Config:       emptyDesc,
-			Layers:       []ociImageSpecV1.Descriptor{emptyDesc},
-			Subject:      &top,
-		})
-		if err != nil {
-			return nil, err
-		}
-		referrerDesc = ociImageSpecV1.Descriptor{
-			MediaType:    ociImageSpecV1.MediaTypeImageManifest,
-			ArtifactType: "application/test.referrer.v1+json",
-			Digest:       digest.FromBytes(body),
-			Size:         int64(len(body)),
-		}
-		return []Referrer{
-			{Descriptor: referrerDesc, Raw: body},
-			{Descriptor: emptyDesc, Raw: []byte("{}")},
-		}, nil
-	}
+// TestCopyOCILayoutWithIndex_TransferReferrer verifies that a referrer carried
+// in the source layout (subject points back at the artifact root) lands in dst
+// alongside the artifact. ExtendedCopyGraph walks predecessors of the root via
+// src.Predecessors and copies each as its own root.
+func TestCopyOCILayoutWithIndex_TransferReferrer(t *testing.T) {
+	const artifactType = "application/test.referrer.v1+json"
+	layoutBytes := buildLayoutWithSourceReferrer(t, artifactType)
 
 	dst := memory.New()
 	returnedTop, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutBytes}, CopyOCILayoutWithIndexOptions{
 		MutateParentFunc: func(d *ociImageSpecV1.Descriptor) error { return nil },
-		ReferrersFunc:    []ReferrersFunc{referrerFn},
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, rootDesc.Digest, receivedRoot.Digest)
-
-	for _, d := range []ociImageSpecV1.Descriptor{returnedTop, layerDesc, referrerDesc} {
-		ok, err := dst.Exists(t.Context(), d)
-		require.NoError(t, err)
-		assert.Truef(t, ok, "%s must be in dst", d.Digest)
-	}
+	ok, err := dst.Exists(t.Context(), returnedTop)
+	require.NoError(t, err)
+	assert.True(t, ok, "artifact root must be in dst")
 
 	predecessors, err := dst.Predecessors(t.Context(), returnedTop)
 	require.NoError(t, err)
-	require.Len(t, predecessors, 1, "subject back-reference must yield exactly one referrer")
-	assert.Equal(t, referrerDesc.Digest, predecessors[0].Digest)
+	require.Len(t, predecessors, 1, "the source-carried referrer must land in dst as a predecessor of the root")
+	assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, predecessors[0].MediaType)
 }
 
-// TestCopyOCILayoutWithIndex_NilReferrersFunc verifies that a nil callback
-// leaves the pre-ReferrersFunc behaviour intact: only the artifact lands.
-func TestCopyOCILayoutWithIndex_NilReferrersFunc(t *testing.T) {
+// TestCopyOCILayoutWithIndex_NoReferrer verifies that a layout without any
+// referrer copies only the artifact root and its successors — dst has no
+// predecessors of the root.
+func TestCopyOCILayoutWithIndex_NoReferrer(t *testing.T) {
 	layoutBytes, rootDesc, _ := buildSingleLayerOCILayout(t)
 
 	dst := memory.New()
@@ -289,6 +264,179 @@ func TestCopyOCILayoutWithIndex_NilReferrersFunc(t *testing.T) {
 	predecessors, err := dst.Predecessors(t.Context(), returnedTop)
 	require.NoError(t, err)
 	assert.Empty(t, predecessors)
+}
+
+// buildLayoutWithSourceReferrer produces an OCI layout (one layer + manifest,
+// tagged) that also carries a referrer manifest of artifactType in its index —
+// i.e. what an incoming layout looks like on transfer once the source referrer
+// has been pulled into it.
+func buildLayoutWithSourceReferrer(t *testing.T, artifactType string) []byte {
+	t.Helper()
+	r := require.New(t)
+	ctx := t.Context()
+
+	var buf bytes.Buffer
+	w, err := NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	r.NoError(err)
+
+	layerData := []byte("layer content")
+	layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerData)
+	r.NoError(w.Push(ctx, layer, bytes.NewReader(layerData)))
+
+	main, err := oras.PackManifest(ctx, w, oras.PackManifestVersion1_1, "application/artifact", oras.PackManifestOptions{
+		Layers: []ociImageSpecV1.Descriptor{layer},
+	})
+	r.NoError(err)
+
+	empty := ociImageSpecV1.DescriptorEmptyJSON
+	if err := w.Push(ctx, empty, bytes.NewReader(empty.Data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		r.NoError(err)
+	}
+	refBody, err := json.Marshal(ociImageSpecV1.Manifest{
+		Versioned:    specs.Versioned{SchemaVersion: 2},
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: artifactType,
+		Config:       empty,
+		Layers:       []ociImageSpecV1.Descriptor{empty},
+		Subject:      &main,
+	})
+	r.NoError(err)
+	refDesc := ociImageSpecV1.Descriptor{
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: artifactType,
+		Digest:       digest.FromBytes(refBody),
+		Size:         int64(len(refBody)),
+	}
+	r.NoError(w.Push(ctx, refDesc, bytes.NewReader(refBody)))
+
+	r.NoError(w.Tag(ctx, main, "latest"))
+	r.NoError(w.Close())
+	return buf.Bytes()
+}
+
+// TestCopyOCILayoutWithIndex_AnnotationSurvivalAndIdempotency uses a layout-backed
+// destination (oras-go's oci.Store) so MutateParentFunc-injected annotations are
+// observable in the destination's index.json — memory.New() drops annotations on
+// Push. The same call repeated converges (idempotent re-run).
+func TestCopyOCILayoutWithIndex_AnnotationSurvivalAndIdempotency(t *testing.T) {
+	r := require.New(t)
+	const artifactType = "application/test.referrer.v1+json"
+	layoutBytes := buildLayoutWithSourceReferrer(t, artifactType)
+
+	dstDir := t.TempDir()
+	dst, err := orasoci.New(dstDir)
+	r.NoError(err)
+
+	mutate := func(d *ociImageSpecV1.Descriptor) error {
+		if d.Annotations == nil {
+			d.Annotations = map[string]string{}
+		}
+		d.Annotations["software.ocm/test"] = "value"
+		return nil
+	}
+
+	returnedTop, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutBytes}, CopyOCILayoutWithIndexOptions{
+		MutateParentFunc: mutate,
+	})
+	r.NoError(err)
+
+	t.Run("annotations survive into the destination layout's index.json", func(t *testing.T) {
+		raw, err := os.ReadFile(filepath.Join(dstDir, "index.json"))
+		require.NoError(t, err)
+		var idx ociImageSpecV1.Index
+		require.NoError(t, json.Unmarshal(raw, &idx))
+		var found *ociImageSpecV1.Descriptor
+		for i := range idx.Manifests {
+			if idx.Manifests[i].Digest == returnedTop.Digest {
+				found = &idx.Manifests[i]
+				break
+			}
+		}
+		require.NotNil(t, found, "the copied root must be present in the destination index.json")
+		assert.Equal(t, "value", found.Annotations["software.ocm/test"])
+	})
+
+	t.Run("transferred referrer lands as a predecessor of the root", func(t *testing.T) {
+		predecessors, err := dst.Predecessors(t.Context(), returnedTop)
+		require.NoError(t, err)
+		require.Len(t, predecessors, 1)
+	})
+
+	t.Run("repeated copy is idempotent", func(t *testing.T) {
+		_, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutBytes}, CopyOCILayoutWithIndexOptions{
+			MutateParentFunc: mutate,
+		})
+		require.NoError(t, err)
+
+		predecessors, err := dst.Predecessors(t.Context(), returnedTop)
+		require.NoError(t, err)
+		assert.Len(t, predecessors, 1, "re-run must converge on the same referrer")
+	})
+}
+
+// TestCopyOCILayoutWithIndex_IdempotencyWhenRootExistsButReferrerMissing verifies
+// the per-root copy semantics of ExtendedCopyGraph: when the artifact root is
+// already in dst but a referrer is not, the missing referrer still lands. This
+// is the regression check that the old CopyReferrerRoots second-pass handled.
+func TestCopyOCILayoutWithIndex_IdempotencyWhenRootExistsButReferrerMissing(t *testing.T) {
+	r := require.New(t)
+	const artifactType = "application/test.referrer.v1+json"
+
+	// First copy the artifact with no referrer attached, so only the root and
+	// layer land in dst.
+	layoutWithRef := buildLayoutWithSourceReferrer(t, artifactType)
+	dst := memory.New()
+	// Strip the referrer manifest from the source by feeding only the artifact
+	// root into a fresh layout — emulates a prior transfer that did not carry
+	// the referrer.
+	layoutNoRef := stripReferrerFromLayout(t, layoutWithRef)
+	rootNoRef, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutNoRef}, CopyOCILayoutWithIndexOptions{
+		MutateParentFunc: func(*ociImageSpecV1.Descriptor) error { return nil },
+	})
+	r.NoError(err)
+
+	// Now copy a layout that carries a referrer for the same root. The root is
+	// already in dst; the referrer must still land via ExtendedCopyGraph's
+	// per-predecessor copy.
+	rootWithRef, err := CopyOCILayoutWithIndex(t.Context(), dst, &testReadOnlyBlob{data: layoutWithRef}, CopyOCILayoutWithIndexOptions{
+		MutateParentFunc: func(*ociImageSpecV1.Descriptor) error { return nil },
+	})
+	r.NoError(err)
+	r.Equal(rootNoRef.Digest, rootWithRef.Digest, "both layouts pack to the same root")
+
+	predecessors, err := dst.Predecessors(t.Context(), rootWithRef)
+	r.NoError(err)
+	assert.Len(t, predecessors, 1, "missing referrer must still land even when the root already exists in dst")
+}
+
+// stripReferrerFromLayout copies layoutBytes into a fresh layout containing
+// only the tagged root manifest and its successors, dropping any referrer
+// manifests that point at the root.
+func stripReferrerFromLayout(t *testing.T, layoutBytes []byte) []byte {
+	t.Helper()
+	r := require.New(t)
+	ctx := t.Context()
+
+	src, err := ReadOCILayout(ctx, &testReadOnlyBlob{data: layoutBytes})
+	r.NoError(err)
+	defer src.Close()
+
+	var root ociImageSpecV1.Descriptor
+	for _, m := range src.Index.Manifests {
+		if m.Annotations[ociImageSpecV1.AnnotationRefName] != "" {
+			root = m
+			break
+		}
+	}
+	r.NotEmpty(root.Digest, "tagged root must exist in source layout")
+
+	var buf bytes.Buffer
+	w, err := NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	r.NoError(err)
+	r.NoError(oras.CopyGraph(ctx, src, w, root, oras.CopyGraphOptions{}))
+	r.NoError(w.Tag(ctx, root, "latest"))
+	r.NoError(w.Close())
+	return buf.Bytes()
 }
 
 func TestCopyOCILayoutWithIndex_ErrorCases(t *testing.T) {
@@ -318,6 +466,10 @@ func (s *invalidStore) Fetch(ctx context.Context, desc ociImageSpecV1.Descriptor
 
 func (s *invalidStore) Push(ctx context.Context, desc ociImageSpecV1.Descriptor, content io.Reader) error {
 	return assert.AnError
+}
+
+func (s *invalidStore) Predecessors(ctx context.Context, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	return nil, assert.AnError
 }
 
 // testReadOnlyBlob implements blob.ReadOnlyBlob for testing

@@ -32,6 +32,49 @@ curl -s https://ocm.software/install.sh | sudo bash
 brew install open-component-model/tap/ocm
 ```
 
+{{<callout context="note" title="One-time migration for users on older releases" icon="outline/refresh-cw">}}
+Earlier releases of the tap installed the OCM CLI as a version-pinned formula
+(e.g. `ocm@0.43.0`), which caused each release to accumulate as a separate
+keg instead of upgrading in place. The tap has been fixed to use the
+canonical, unversioned `ocm` formula, but Homebrew tracks installed packages
+by the formula they were installed as — so existing version-pinned installs
+need a one-time migration to switch onto the canonical formula.
+
+**Symptom you may see first:**
+
+```text
+$ brew upgrade open-component-model/tap/ocm
+Error: open-component-model/tap/ocm not installed
+```
+
+This is expected. From Homebrew's perspective you have `ocm@<version>`
+installed, not `ocm` — they are two different formulas, even though they
+ship the same binary. `brew upgrade` only upgrades formulas you already have,
+so the canonical `ocm` is skipped and the existing `ocm@<version>` keg has
+nothing newer to upgrade to. Run the migration below to switch over.
+
+**Quick path** — installs the canonical formula and retargets the `ocm`
+symlink in one go (older `ocm@X.Y.Z` kegs stay on disk; clean them up with
+the next step or later at your leisure):
+
+```sh
+brew install open-component-model/tap/ocm
+brew link --overwrite ocm
+```
+
+**Full cleanup** — remove every version-pinned keg as well:
+
+```sh
+# list every version-pinned keg you currently have installed
+brew list | grep '^ocm@'
+
+# uninstall each one (repeat for every entry above)
+brew uninstall ocm@<version>   # e.g. brew uninstall ocm@0.43.0
+```
+
+After migrating, `brew upgrade` replaces the binary in place on every release.
+{{</callout>}}
+
 ## Install using Nix (with Flakes)
 
 ```sh

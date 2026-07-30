@@ -75,6 +75,9 @@ spec:
                     {{- if hasKey . "subscriberBufferSize" }}
                     - --resolver-subscriber-buffer-size={{ .subscriberBufferSize }}
                     {{- end }}
+                    {{- if hasKey . "cacheTTL" }}
+                    - --resolver-cache-ttl={{ .cacheTTL }}
+                    {{- end }}
                     {{- end }}
                     {{- /* Cache */}}
                     {{- with .Values.manager.cache }}

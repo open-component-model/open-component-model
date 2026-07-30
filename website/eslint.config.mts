@@ -16,4 +16,11 @@ export default defineConfig([
             "@typescript-eslint/no-unused-vars": ["error", {argsIgnorePattern: "^_", varsIgnorePattern: "^_"}],
         }
     },
+    {
+        // Node CLI helpers in scripts/ are CommonJS - require() is idiomatic here.
+        files: ["scripts/**/*.{js,cjs}"],
+        rules: {
+            "@typescript-eslint/no-require-imports": "off",
+        }
+    },
 ]);

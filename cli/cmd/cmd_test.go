@@ -30,6 +30,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	componentversion "ocm.software/open-component-model/cli/cmd/add/component-version"
+	"ocm.software/open-component-model/cli/cmd/configuration"
 	"ocm.software/open-component-model/cli/cmd/internal/test"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
@@ -2029,4 +2030,287 @@ resources:
 
 	// Verify referenced component is still accessible
 	_ = referencedDesc
+}
+
+func Test_Get_Config(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		configsYAML    []string
+		expectedOutput string
+		expectedError  bool
+	}{
+		{
+			name: "no config - only default temp folder is output",
+			args: []string{"get", "config"},
+			expectedOutput: fmt.Sprintf(`configurations:
+- tempFolder: %s
+  type: filesystem.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
+`, os.TempDir()),
+		},
+		{
+			name: "filesystem config - yaml output",
+			args: []string{"get", "config"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /work
+type: generic.config.ocm.software/v1
+`,
+		},
+		{
+			name: "filesystem config - merge multiple files",
+			args: []string{"get", "config"},
+			// Config file combination covers: a value that gets overriden, a value that is preserved, and a value that is added from the second file
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/overridden
+  workingDirectory: /work
+- type: http.config.ocm.software/v1alpha1
+  timeout: 60s
+`, `
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /work
+- timeout: 1m0s
+  type: http.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
+`,
+		},
+		{
+			name: "filesystem config - json output",
+			args: []string{"get", "config", "--output=json"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `{
+  "type": "generic.config.ocm.software/v1",
+  "configurations": [
+    {
+      "type": "filesystem.config.ocm.software/v1alpha1",
+      "tempFolder": "/tmp/custom",
+      "workingDirectory": "/work"
+    }
+  ]
+}`,
+		},
+		{
+			name: "filesystem config - ndjson output",
+			args: []string{"get", "config", "--output=ndjson"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `{"type":"generic.config.ocm.software/v1","configurations":[{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/tmp/custom","workingDirectory":"/work"}]}`,
+		},
+		{
+			name: "multiple config types",
+			args: []string{"get", "config"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/test
+- type: http.config.ocm.software/v1alpha1
+  timeout: 60s`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/test
+  type: filesystem.config.ocm.software/v1alpha1
+- timeout: 1m0s
+  type: http.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
+`,
+		},
+		{
+			name: "all config types populated",
+			args: []string{"get", "config"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /workspace
+- type: http.config.ocm.software/v1alpha1
+  timeout: 45s
+- type: resolvers.config.ocm.software/v1alpha1
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      filePath: /some/archive
+    componentNamePattern: "ocm.software/*"
+    versionConstraint: ">=1.0.0"
+- type: extract.oci.artifact.ocm.software/v1alpha1
+  rules:
+  - filename: output.tar
+    layerSelectors:
+    - matchProperties:
+        layer.mediaType: application/vnd.oci.image.layer.v1.tar+gzip
+      matchExpressions:
+      - key: layer.index
+        operator: In
+        values: ["0"]
+- type: ocm.config.ocm.software/v1
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      filePath: /legacy/archive
+    prefix: ocm.software/legacy
+- type: transfer.config.ocm.software/v1alpha1
+  recursive: -1
+  copyMode: allResources
+  uploadType: ociArtifact
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry/v1
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: user
+        password: pass
+`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /workspace
+- timeout: 45s
+  type: http.config.ocm.software/v1alpha1
+- resolvers:
+  - prefix: ocm.software/legacy
+    repository:
+      filePath: /legacy/archive
+      type: CommonTransportFormat/v1
+  type: ocm.config.ocm.software/v1
+- resolvers:
+  - componentNamePattern: ocm.software/*
+    repository:
+      filePath: /some/archive
+      type: CommonTransportFormat/v1
+    versionConstraint: '>=1.0.0'
+  type: resolvers.config.ocm.software/v1alpha1
+- copyMode: allResources
+  recursive: -1
+  type: transfer.config.ocm.software/v1alpha1
+  uploadType: ociArtifact
+- rules:
+  - filename: output.tar
+    layerSelectors:
+    - matchExpressions:
+      - key: layer.index
+        operator: In
+        values:
+        - "0"
+      matchProperties:
+        layer.mediaType: application/vnd.oci.image.layer.v1.tar+gzip
+  type: extract.oci.artifact.ocm.software/v1alpha1
+- consumers:
+  - credentials:
+    - properties:
+        password: pass
+        username: user
+      type: Credentials/v1
+    identities:
+    - hostname: ghcr.io
+      type: OCIRegistry/v1
+  type: credentials.config.ocm.software
+type: generic.config.ocm.software/v1`,
+		},
+
+		{
+			name:          "invalid output format",
+			args:          []string{"get", "config", "--output=invalid"},
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			args := tt.args
+
+			tmp := t.TempDir()
+			if len(tt.configsYAML) > 0 {
+				for i, configYAML := range tt.configsYAML {
+					configFilePath := filepath.Join(tmp, fmt.Sprintf("config%d.yaml", i))
+					r.NoError(os.WriteFile(configFilePath, []byte(configYAML), 0o600))
+					args = append(args, "--config", configFilePath)
+				}
+			}
+
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err := test.OCM(t, test.WithArgs(args...), test.WithOutput(result), test.WithErrorOutput(logs))
+
+			if tt.expectedError {
+				r.Error(err, "expected error but got none")
+				return
+			}
+
+			r.NoError(err, "failed to run command")
+
+			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()))
+		})
+	}
+}
+
+func TestGetOCMConfigForCommand(t *testing.T) {
+	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
+		r := require.New(t)
+		path := filepath.Join(t.TempDir(), "nonexistent", "path", "config.yaml")
+		_, err := test.OCM(t, test.WithArgs([]string{"--" + configuration.OCMConfigCommandArgument, path}...))
+		r.Error(err, "expected error but got none")
+		r.Contains(err.Error(), path)
+	})
+
+	t.Run("explicit config flag with existing file succeeds", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t, test.WithArgs([]string{"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-1"}...))
+		r.NoError(err)
+		cfg, err := configuration.GetOCMConfigForCommand(cmd)
+		r.NoError(err)
+		r.NotNil(cfg)
+	})
+
+	t.Run("no config flag uses default discovery", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t)
+		r.NoError(err)
+		_, err = configuration.GetOCMConfigForCommand(cmd)
+		r.Error(err, "expected error but got none")
+		r.Contains(err.Error(), "config not found in any known locations, see --help for details on how to supply configuration files")
+	})
+
+	t.Run("multiple config flags merges configurations", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t, test.WithArgs([]string{
+			"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-1",
+			"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-2",
+		}...))
+		r.NoError(err)
+		cfg, err := configuration.GetOCMConfigForCommand(cmd)
+		r.NoError(err)
+		// .ocmconfig-1 has 5 configurations, .ocmconfig-2 has 1
+		r.Len(cfg.Configurations, 6)
+	})
 }

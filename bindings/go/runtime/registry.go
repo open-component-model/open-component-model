@@ -437,12 +437,12 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 
 	// Case 3: Generic Typed -> Typed conversion using reflection.
 	intoVal := reflect.ValueOf(into)
-	if intoVal.Kind() != reflect.Ptr || intoVal.IsNil() {
+	if intoVal.Kind() != reflect.Pointer || intoVal.IsNil() {
 		return fmt.Errorf("'into' must be a non-nil pointer")
 	}
 	copied := from.DeepCopyTyped()
 	copiedVal := reflect.ValueOf(copied)
-	if copiedVal.Kind() == reflect.Ptr {
+	if copiedVal.Kind() == reflect.Pointer {
 		copiedVal = copiedVal.Elem()
 	}
 	intoElem := intoVal.Elem()

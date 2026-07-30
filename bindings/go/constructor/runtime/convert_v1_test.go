@@ -34,9 +34,6 @@ func TestConvertToRuntimeResource(t *testing.T) {
 				},
 				Type:     "test-type",
 				Relation: v1.LocalRelation,
-				ConstructorAttributes: v1.ConstructorAttributes{
-					CopyPolicy: v1.CopyPolicyByValue,
-				},
 			},
 			want: Resource{
 				ElementMeta: ElementMeta{
@@ -50,9 +47,6 @@ func TestConvertToRuntimeResource(t *testing.T) {
 				},
 				Type:     "test-type",
 				Relation: LocalRelation,
-				ConstructorAttributes: ConstructorAttributes{
-					CopyPolicy: CopyPolicyByValue,
-				},
 			},
 		},
 		{
@@ -139,6 +133,57 @@ func TestConvertToRuntimeResource(t *testing.T) {
 						Data: []byte(`{"test": "value"}`),
 					},
 				},
+			},
+		},
+		{
+			name: "resource with ownership policy Always",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicyAlways},
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: OwnershipPolicyAlways},
+			},
+		},
+		{
+			name: "resource with ownership policy Never",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicyNever},
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: OwnershipPolicyNever},
+			},
+		},
+		{
+			name: "resource with unknown ownership policy",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: "bogus"},
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: "bogus"},
 			},
 		},
 	}
@@ -477,6 +522,88 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 			},
 		},
 		{
+			name: "constructor with component labels",
+			constructor: &v1.ComponentConstructor{
+				Components: []v1.Component{
+					{
+						ComponentMeta: v1.ComponentMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-component",
+								Version: "1.0.0",
+								Labels: []v1.Label{
+									{
+										Name:    "component-label",
+										Value:   []byte("component-value"),
+										Signing: true,
+									},
+								},
+							},
+						},
+						Provider: v1.Provider{
+							Name: "test-provider",
+						},
+					},
+				},
+			},
+			want: &ComponentConstructor{
+				Components: []Component{
+					{
+						ComponentMeta: ComponentMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-component",
+								Version: "1.0.0",
+								Labels: []Label{
+									{
+										Name:    "component-label",
+										Value:   []byte("component-value"),
+										Signing: true,
+									},
+								},
+							},
+						},
+						Provider: Provider{
+							Name: "test-provider",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "constructor with empty component labels",
+			constructor: &v1.ComponentConstructor{
+				Components: []v1.Component{
+					{
+						ComponentMeta: v1.ComponentMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-component",
+								Version: "1.0.0",
+								Labels:  []v1.Label{},
+							},
+						},
+						Provider: v1.Provider{
+							Name: "test-provider",
+						},
+					},
+				},
+			},
+			want: &ComponentConstructor{
+				Components: []Component{
+					{
+						ComponentMeta: ComponentMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-component",
+								Version: "1.0.0",
+								Labels:  []Label{},
+							},
+						},
+						Provider: Provider{
+							Name: "test-provider",
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "constructor with provider labels",
 			constructor: &v1.ComponentConstructor{
 				Components: []v1.Component{
@@ -538,6 +665,7 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 			if len(got.Components) > 0 {
 				assert.Equal(t, tt.want.Components[0].Name, got.Components[0].Name)
 				assert.Equal(t, tt.want.Components[0].Version, got.Components[0].Version)
+				assert.Equal(t, tt.want.Components[0].Labels, got.Components[0].Labels)
 				assert.Equal(t, tt.want.Components[0].Provider.Name, got.Components[0].Provider.Name)
 
 				// Check provider labels
@@ -1288,6 +1416,99 @@ func TestConvertToV1Resource(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "resource with ownership policy Always",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: OwnershipPolicyAlways},
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicyAlways},
+			},
+		},
+		{
+			name: "resource with ownership policy Never",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: OwnershipPolicyNever},
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicyNever},
+			},
+		},
+		{
+			name: "resource with empty ownership policy omits options",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type: "test-type",
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type: "test-type",
+			},
+		},
+		{
+			name: "resource with unknown ownership policy",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: ResourceOptions{OwnershipPolicy: "bogus"},
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:    "test-type",
+				Options: &v1.ResourceOptions{OwnershipPolicy: "bogus"},
+			},
+		},
+		{
+			name: "resource with digest",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:     "test-type",
+				Relation: ExternalRelation,
+				Digest: &Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  "abc123",
+				},
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:     "test-type",
+				Relation: v1.ExternalRelation,
+				Digest: &v1.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  "abc123",
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1518,6 +1739,33 @@ func TestConvertFromV1Resource(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "resource with digest",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:     "test-type",
+				Relation: v1.ExternalRelation,
+				Digest: &v1.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  "abc123",
+				},
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:     "test-type",
+				Relation: ExternalRelation,
+				Digest: &Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  "abc123",
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1526,4 +1774,75 @@ func TestConvertFromV1Resource(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestConvertResourceDigestV1RoundTrip(t *testing.T) {
+	v1res := v1.Resource{
+		ElementMeta: v1.ElementMeta{
+			ObjectMeta: v1.ObjectMeta{Name: "test-resource", Version: "1.0.0"},
+		},
+		Type:     "blob",
+		Relation: v1.ExternalRelation,
+		Digest: &v1.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  "abc123",
+		},
+	}
+
+	// v1 -> runtime carries the digest.
+	rt := ConvertToRuntimeConstructorResource(v1res)
+	assert.NotNil(t, rt.Digest)
+	assert.Equal(t, "SHA-256", rt.Digest.HashAlgorithm)
+	assert.Equal(t, "genericBlobDigest/v1", rt.Digest.NormalisationAlgorithm)
+	assert.Equal(t, "abc123", rt.Digest.Value)
+	// The digest must be a distinct allocation, not aliased to the source.
+	assert.NotSame(t, v1res.Digest, rt.Digest)
+
+	// runtime -> v1 restores an equal, distinct digest.
+	back, err := ConvertToV1Resource(&rt)
+	assert.NoError(t, err)
+	assert.Equal(t, v1res.Digest, back.Digest)
+	assert.NotSame(t, rt.Digest, back.Digest)
+}
+
+func TestConvertResourceDigestV1Nil(t *testing.T) {
+	v1res := v1.Resource{
+		ElementMeta: v1.ElementMeta{
+			ObjectMeta: v1.ObjectMeta{Name: "test-resource", Version: "1.0.0"},
+		},
+		Type: "blob",
+	}
+	rt := ConvertToRuntimeConstructorResource(v1res)
+	assert.Nil(t, rt.Digest)
+
+	back, err := ConvertToV1Resource(&rt)
+	assert.NoError(t, err)
+	assert.Nil(t, back.Digest)
+}
+
+// TestConvertResourceDigestFullChain proves a pinned digest survives the entire
+// conversion chain v1 -> runtime -> descriptor -> runtime -> v1 unchanged.
+func TestConvertResourceDigestFullChain(t *testing.T) {
+	original := &v1.Digest{
+		HashAlgorithm:          "SHA-256",
+		NormalisationAlgorithm: "genericBlobDigest/v1",
+		Value:                  "abc123",
+	}
+	v1res := v1.Resource{
+		ElementMeta: v1.ElementMeta{
+			ObjectMeta: v1.ObjectMeta{Name: "test-resource", Version: "1.0.0"},
+		},
+		Type:     "blob",
+		Relation: v1.ExternalRelation,
+		Digest:   original,
+	}
+
+	runtimeRes := ConvertToRuntimeConstructorResource(v1res)
+	descRes := ConvertToDescriptorResource(&runtimeRes)
+	backToRuntime := ConvertFromDescriptorResource(descRes)
+	backToV1, err := ConvertToV1Resource(backToRuntime)
+	assert.NoError(t, err)
+
+	assert.Equal(t, original, backToV1.Digest)
 }

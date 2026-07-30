@@ -77,7 +77,7 @@ func buildCmdToLink(basePath string) map[string]string {
 		"ocm transfer",
 		"ocm verify componentversions",
 		"ocm verify",
-		"ocm",
+		rootCmdName,
 	}
 
 	cmdToLink := map[string]string{
@@ -103,8 +103,8 @@ func toRelref(path string) string {
 
 // Maps a CLI command to its markdown file path under docs/reference/ocm-cli.
 func commandToDocPath(command string) (string, bool) {
-	if command == "ocm" {
-		return "_index.md", true
+	if command == rootCmdName {
+		return indexFileName, true
 	}
 
 	parts := strings.Fields(command)
@@ -117,7 +117,7 @@ func commandToDocPath(command string) (string, bool) {
 	}
 
 	if len(parts) == 2 {
-		return fmt.Sprintf("%s/_index.md", parts[1]), true
+		return fmt.Sprintf("%s/%s", parts[1], indexFileName), true
 	}
 
 	return fmt.Sprintf("%s/%s.md", parts[1], commandToID(command)), true
