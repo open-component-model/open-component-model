@@ -162,7 +162,7 @@ Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1
 | `noRedirect` | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
 
 {{< callout context="caution" >}}
-Do not put credentials in `url`, `header`, or `body` — that includes userinfo (`https://user:token@host/...`) and
+Do not put credentials in `url`, `header`, or `body`. That includes userinfo (`https://user:token@host/...`) and
 presigned query parameters. The input specification is resolved at construction time and is not written to the
 component descriptor, but it does live in your `component-constructor.yaml`, which is normally checked into version
 control. Configure authentication through the
@@ -332,8 +332,12 @@ This access type is **alpha** (`v1alpha1`). Its schema may change in future rele
 
 ### `Wget/v1` {#wgetv1-access}
 
-References content served over HTTP or HTTPS. The bytes stay on the remote server — they are fetched when the resource
+References content served over HTTP or HTTPS. The bytes stay on the remote server and are fetched when the resource
 is downloaded, when its digest is computed, and when the component version is transferred.
+
+Because the content is not under your control, the expected digest can be pinned on the resource itself, using the
+`digest` field alongside `access` rather than inside it. It is then verified on every fetch. See
+[How-To: Add Resources from HTTP URLs]({{< relref "docs/how-to/add-resources-from-http-urls.md" >}}#pinning-an-expected-digest).
 
 Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical. The fields are identical
 to those of the [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input), so the same request can
@@ -350,11 +354,11 @@ be expressed either by value or by reference.
 
 {{< callout context="caution" >}}
 **Never put credentials in `url`, `header`, or `body`.** Unlike an input specification, an access specification is
-stored **verbatim in the component descriptor**. Everything written here — including userinfo
-(`https://user:token@host/...`) and presigned query parameters in `url` — is persisted with the component version,
+stored **verbatim in the component descriptor**. Everything written here, including userinfo
+(`https://user:token@host/...`) and presigned query parameters in `url`, is persisted with the component version,
 travels with it through every transfer, is covered by its signature, and is readable by anyone who can read the
 component version. Configure authentication through the
-[credential system]({{< relref "credential-consumer-identities.md" >}}#wget) instead — credentials are resolved at
+[credential system]({{< relref "credential-consumer-identities.md" >}}#wget) instead. Credentials are resolved at
 request time from `.ocmconfig` and never become part of the component version.
 {{< /callout >}}
 
@@ -371,7 +375,7 @@ resources:
 ```
 
 {{< callout context="note" >}}
-Upload is not supported for this access type — a plain HTTP endpoint has no standardized write API. Consequently, Wget
+Upload is not supported for this access type, because a plain HTTP endpoint has no standardized write API. Wget
 resources are **always transferred by value**: transferring a component version downloads the content and stores it as a
 [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1) in the target repository, so the target no
 longer depends on the origin server.

@@ -8,8 +8,8 @@ toc: true
 
 ## Goal
 
-Add a resource that is served over plain HTTP or HTTPS — a release archive, a checksum file, a signed binary — to a
-component version, and configure its media type, authentication, and download behavior.
+Add a resource that is served over plain HTTP or HTTPS, such as a release archive, a checksum file, or a signed binary,
+to a component version, and configure its media type, authentication, and download behavior.
 
 OCM offers two ways to do this, and they share one transport, credential, and download implementation:
 
@@ -79,7 +79,7 @@ resources:
 {{< /tab >}}
 {{< /tabs >}}
 
-Both spellings accept the same fields. For a non-`GET` request, set `verb`, `header`, and `body` — `body` is
+Both spellings accept the same fields. For a non-`GET` request, set `verb`, `header`, and `body`. Note that `body` is
 base64-encoded in YAML because the underlying field is a byte slice:
 
 ```yaml
@@ -103,13 +103,13 @@ resources:
 
 {{< callout context="caution" >}}
 **Never put credentials in `url`, `header`, or `body`.** That includes userinfo (`https://user:token@host/...`) and
-presigned query parameters — anything that is part of the specification is stored, not just headers.
+presigned query parameters. Anything that is part of the specification is stored, not just headers.
 
 An **access** specification is stored verbatim in the component descriptor: everything written there is persisted with
 the component version, travels with it through every transfer, is covered by its signature, and is readable by anyone
 who can read the component version. An **input** specification is resolved at construction time and never reaches the
 descriptor, but it does live in your `component-constructor.yaml`, which is normally checked into version control.
-Configure authentication through the credential system instead — see the next step.
+Configure authentication through the credential system instead, as described in the next step.
 {{< /callout >}}
 
 {{< /step >}}
@@ -125,7 +125,7 @@ The media type of the resulting blob is resolved in this order:
 
 {{< callout context="note" >}}
 Unlike OCM v1, the media type is **not** derived from the URL's file extension. Set `mediaType` whenever the server does
-not send a useful `Content-Type` — otherwise the resource ends up as `application/octet-stream`.
+not send a useful `Content-Type`. Otherwise the resource ends up as `application/octet-stream`.
 {{< /callout >}}
 
 {{< /step >}}
@@ -152,7 +152,7 @@ configurations:
 ```
 
 HTTP Basic Auth, bearer tokens, and mutual TLS are supported. Basic Auth and a bearer token both set the
-`Authorization` header and are mutually exclusive — when both are configured the bearer token wins and a warning is
+`Authorization` header and are mutually exclusive. When both are configured, the bearer token wins and a warning is
 logged. A client certificate combines with either, but only takes effect during a TLS handshake.
 
 See [Credential Consumer Identities: Wget]({{< relref "docs/reference/credential-consumer-identities.md#wget" >}}) for
@@ -165,12 +165,12 @@ full field reference.
 {{< step >}}
 **Tune the download (optional)**
 
-Only 2xx responses are accepted; any other status fails the operation. Redirects are followed by default — set
+Only 2xx responses are accepted; any other status fails the operation. Redirects are followed by default. Set
 `noRedirect: true` to assert that a URL serves content directly rather than to fetch the redirect target. The request
 then stops at the first redirect response and fails, because a 3xx status is not a success status.
 
 Response bodies are streamed to a file on disk rather than buffered, so memory use stays flat regardless of artifact
-size. There is no size limit by default — a download is bounded by free disk space. The file is created under the
+size. There is no size limit by default, so a download is bounded by free disk space. The file is created under the
 `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration type, falling back to the operating
 system's temporary directory:
 
@@ -288,6 +288,62 @@ contents. Other media types are written to a file at that path.
 
 {{< /steps >}}
 
+## Pinning an expected digest
+
+Wget content comes from a server you do not control, so vet it before it enters the component version. Download the
+artifact and run whatever your process requires, such as a virus scan, a comparison against the checksum the vendor
+publishes, or a manual review. Then hash the copy you trust and pin that value with `digest`. `ocm add cv` fetches the
+URL, hashes what it gets, and fails without adding anything if the two do not match:
+
+```yaml
+components:
+  - name: github.com/acme.org/myapp
+    version: 1.0.0
+    provider:
+      name: acme.org
+    resources:
+      - name: release-archive
+        type: blob
+        version: 1.0.0
+        digest:
+          hashAlgorithm: SHA-256
+          normalisationAlgorithm: genericBlobDigest/v1
+          value: 984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
+        access:
+          type: Wget/v1
+          url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
+          mediaType: application/x-tar+gzip
+```
+
+The field is optional and applies to both the input and the access type.
+
+Hash the copy you trust:
+
+```bash
+sha256sum myapp-linux-amd64.tar.gz     # Linux
+shasum -a 256 myapp-linux-amd64.tar.gz # macOS
+```
+
+{{< callout context="caution" >}}
+All three fields are required, and the constructor schema rejects a partial `digest` block. Each one is matched exactly:
+
+- `hashAlgorithm` must be `SHA-256`. It is the only algorithm the Wget resource repository computes.
+- `normalisationAlgorithm` must be `genericBlobDigest/v1`, meaning the raw bytes are hashed with no normalisation.
+- `value` is the bare lowercase hex digest, **without** a `sha256:` prefix.
+{{< /callout >}}
+
+The two types report a mismatch differently, because the check happens in a different place. The access type verifies
+while computing the digest, the input type while storing the blob:
+
+```text
+digest mismatch: expected 984a4a19…, got 3b1f0c72…                   # access type
+resource blob digest mismatch: resource 984a4a19… vs blob 3b1f0c72…  # input type
+```
+
+For the access type the check is not confined to construction. The bytes are fetched again whenever a component version
+referencing the URL is transferred, and verified against the same digest, so content that changes after publication
+makes the transfer fail rather than quietly substituting different bytes.
+
 ## Migrating from OCM v1
 
 ### Constructor changes
@@ -306,18 +362,18 @@ constructor files using the input type.
 | Media type  | `mediaType` → `Content-Type` → **URL file extension** → `application/octet-stream` | `mediaType` → `Content-Type` → `application/octet-stream` |
 | Minimum TLS | TLS 1.3                                                                            | TLS 1.2                                                   |
 
-Set `mediaType` explicitly wherever OCM v1 relied on the URL's file extension — a `.tar.gz` URL that previously
+Set `mediaType` explicitly wherever OCM v1 relied on the URL's file extension. A `.tar.gz` URL that previously
 resolved to `application/x-gzip` now falls back to the server's `Content-Type`, or to `application/octet-stream`.
 
 ### Credential changes
 
 Two changes are breaking. A carried-over entry does not match, no credentials are resolved, and the request goes out
-unauthenticated — so the symptom is a `401` from the server rather than a configuration error.
+unauthenticated, so the symptom is a `401` from the server rather than a configuration error.
 
 | Area              | OCM v1                             | OCM v2             | What to do                                                                                                             |
 |-------------------|------------------------------------|--------------------|------------------------------------------------------------------------------------------------------------------------|
 | Consumer identity | `type: wget`                       | `type: Wget`       | Update `.ocmconfig`. Identity types match by exact string, so the lowercase spelling silently resolves no credentials. |
-| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute and convert prefixes to globs — `pathprefix: my-org` becomes `path: my-org/*`.                    |
+| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute and convert prefixes to globs, so `pathprefix: my-org` becomes `path: my-org/*`.                 |
 
 The following change what a matching entry does, without any change to the entry itself:
 
@@ -337,7 +393,7 @@ mechanisms.
 ### Symptom: `401 Unauthorized` from the origin server
 
 **Cause:** No consumer entry matched, so the request went out unauthenticated. The identity type is matched by exact
-string and is unversioned — neither `Wget/v1` nor the lowercase `wget` used by OCM v1 will match.
+string and is unversioned, so neither `Wget/v1` nor the lowercase `wget` used by OCM v1 will match.
 
 **Fix:** Set `type: Wget` in the consumer identity and convert any `pathprefix` to a `path` glob:
 
@@ -354,6 +410,29 @@ string and is unversioned — neither `Wget/v1` nor the lowercase `wget` used by
 to the URL's file extension.
 
 **Fix:** Set `mediaType` on the input or access specification.
+
+### Symptom: `digest mismatch` when adding the component version
+
+**Cause:** The resource pins a `digest` and the fetched bytes hash to something else. The content behind the URL
+changed, the download was truncated or corrupted, or the pinned value was taken from a different artifact. The input
+type reports the same condition as `resource blob digest mismatch`.
+
+**Fix:** Re-download the URL and recompute the digest with `sha256sum`. If the new value is the one you trust, update
+`value` in the constructor; if it is not, the content behind the URL changed and the pin did its job.
+
+### Symptom: `unsupported hash algorithm` or `unsupported normalisation algorithm`
+
+**Cause:** The pinned `digest` names something other than the pair the Wget resource repository computes. Both fields
+are matched exactly, so `sha256` or `SHA256` do not resolve to `SHA-256`.
+
+**Fix:** Use the exact spellings:
+
+```yaml
+digest:
+  hashAlgorithm: SHA-256                       # not "sha256", not "SHA256"
+  normalisationAlgorithm: genericBlobDigest/v1
+  value: 984a4a19…                             # bare hex, no "sha256:" prefix
+```
 
 ### Symptom: the operation fails reporting a 3xx status
 

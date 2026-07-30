@@ -202,8 +202,8 @@ consumers:
 ```
 
 {{< callout context="note" >}}
-`username`/`password` and `identityToken` both set the `Authorization` header and are mutually exclusive — when both are
-present the bearer token is used and a warning is logged. The mutual TLS pair (`certificate` + `privateKey`) is a
+`username`/`password` and `identityToken` both set the `Authorization` header and are mutually exclusive. When both are
+present, the bearer token is used and a warning is logged. The mutual TLS pair (`certificate` + `privateKey`) is a
 transport-layer credential and can be combined with either. `certificateAuthority` is only evaluated when `certificate`
 is set, and a client certificate has no effect on a plain `http://` URL.
 {{< /callout >}}

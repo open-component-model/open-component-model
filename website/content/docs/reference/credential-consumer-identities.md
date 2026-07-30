@@ -180,7 +180,7 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 
 ## Wget
 
-Used when OCM fetches a resource over plain HTTP or HTTPS — the
+Used when OCM fetches a resource over plain HTTP or HTTPS through the
 [`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
 [`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}). The identity is derived from the resource
 `url`; the access type and the input type derive it identically, so a single consumer entry covers both.
@@ -222,18 +222,19 @@ with no `port` at all. A URL that names its port (`https://downloads.example.com
 
 Use [`WgetCredentials/v1`]({{< relref "credential-types.md#wgetcredentialsv1" >}}) for the typed field reference.
 
-Basic Auth and a bearer token both set the `Authorization` header and are therefore mutually exclusive — when both are
-configured the bearer token wins and a warning is logged. The mutual TLS certificate is a transport-layer credential and
-combines with either of them, but it only takes effect during a TLS handshake: supplying one for an `http://` URL logs a
-warning and has no effect.
+Basic Auth and a bearer token both set the `Authorization` header and are therefore mutually exclusive. When both are
+configured, the bearer token wins and a warning is logged. The mutual TLS certificate is a transport-layer credential
+and combines with either of them, but it only takes effect during a TLS handshake: supplying one for an `http://` URL
+logs a warning and has no effect.
 
 ### Matching Behavior
 
-The same three chained checks as [`OCIRegistry`](#matching-behavior) apply — path glob, URL (scheme, hostname, port with
+The same three chained checks as [`OCIRegistry`](#matching-behavior) apply: path glob, URL (scheme, hostname, port with
 default-port handling), then exact equality on the remaining attributes.
 
 {{< callout context="caution" >}}
-The identity type is matched by exact string and is **unversioned** — `type: Wget`. Neither `Wget/v1` (the name of the
+The identity type is matched by exact string and is **unversioned**, so it must be written as `type: Wget`. Neither
+`Wget/v1` (the name of the
 [access and input type]({{< relref "input-and-access-types.md#wgetv1-access" >}})) nor the lowercase `wget` used by OCM v1
 will match. A non-matching entry fails silently: no credentials are resolved and the request goes out unauthenticated,
 so the symptom is a `401` from the server rather than a configuration error.
@@ -241,7 +242,7 @@ so the symptom is a `401` from the server rather than a configuration error.
 
 ### Examples
 
-**Hostname only** — matches every download from that host:
+**Hostname only.** Matches every download from that host:
 
 ```yaml
 - identity:
@@ -290,8 +291,8 @@ so the symptom is a `401` from the server rather than a configuration error.
         -----END CERTIFICATE-----
 ```
 
-For migrating a Wget consumer entry from OCM v1 — the renamed identity type, the `pathprefix` to `path` conversion,
-and the inverted authentication precedence — see
+For migrating a Wget consumer entry from OCM v1, covering the renamed identity type, the `pathprefix` to `path`
+conversion, and the inverted authentication precedence, see
 [How-To: Add Resources from HTTP URLs]({{< relref "docs/how-to/add-resources-from-http-urls.md#credential-changes" >}}).
 
 ---
