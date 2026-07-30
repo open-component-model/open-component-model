@@ -414,6 +414,7 @@ mechanisms.
 
 **Cause:** No consumer entry matched, so the request went out unauthenticated. The identity type is matched by exact
 string and is unversioned, so neither `Wget/v1` nor the lowercase `wget` used by OCM v1 will match.
+Another silent cause: an entry that sets only certificateAuthority without certificate. In OCM v2, certificateAuthority is only evaluated alongside a client certificate. It is not applied for server-side certificate verification on its own.
 
 **Fix:** Set `type: Wget` in the consumer identity, and drop `pathprefix`. `path` is matched with `path.Match`, whose
 `*` does not cross `/`, so it cannot express a prefix over nested paths. Omitting it matches every path on the host:
