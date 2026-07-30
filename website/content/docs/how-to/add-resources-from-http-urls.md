@@ -135,10 +135,8 @@ The media type of the resulting blob is resolved in this order:
 2. The `Content-Type` header of the HTTP response.
 3. `application/octet-stream`.
 
-{{< callout context="note" >}}
-Unlike OCM v1, the media type is **not** derived from the URL's file extension. Set `mediaType` whenever the server does
-not send a useful `Content-Type`. Otherwise the resource ends up as `application/octet-stream`.
-{{< /callout >}}
+Set `mediaType` whenever the server does not send a useful `Content-Type`. Otherwise the resource ends up as
+`application/octet-stream`.
 
 {{< /step >}}
 
