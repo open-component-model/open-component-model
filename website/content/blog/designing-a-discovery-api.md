@@ -1,7 +1,7 @@
 ---
 title: "Component Discovery - the Missing Kubernetes Primitive"
 description: "A new Discovery API for the OCM Kubernetes controllers that makes component graphs queryable from within a cluster."
-date: 2026-07-23T10:00:00+02:00
+date: 2026-07-30T10:00:00+02:00
 contributors: []
 tags: ["Kubernetes", "Controller", "discovery", "supply-chain"]
 draft: false
