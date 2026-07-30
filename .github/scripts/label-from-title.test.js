@@ -65,6 +65,18 @@ test("type with a label list applies every label (docs)", () => {
   assert.deepStrictEqual(labels, ["kind/chore", "area/documentation"]);
 });
 
+test("type with a label list applies every label (test)", () => {
+  const { valid, labels } = deriveLabels("test: add unit tests", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/testing"]);
+});
+
+test("type with a label list applies every label (perf)", () => {
+  const { valid, labels } = deriveLabels("perf: reduce allocations", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/performance"]);
+});
+
 test("refactor maps to kind/refactor", () => {
   const { valid, labels } = deriveLabels("refactor: simplify resolver", maps);
   assert.strictEqual(valid, true);
