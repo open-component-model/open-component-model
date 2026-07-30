@@ -1,6 +1,6 @@
 ---
 title: "Add Resources from HTTP URLs"
-description: "Add resources served over HTTP or HTTPS to a component version with the Wget input and access types, including authentication, download tuning, and migration from OCM v1."
+description: "Add resources served over HTTP or HTTPS to a component version with the Wget input and access types, including authentication and download tuning."
 icon: "🌐"
 weight: 17
 toc: true
@@ -18,6 +18,15 @@ OCM offers two ways to do this, and they share one transport, credential, and do
 - The [`Wget/v1` access type]({{< relref "docs/reference/input-and-access-types.md#wgetv1-access" >}}) stores the URL
   and leaves the bytes on the remote server.
 
+## You'll end up with
+
+- A component version containing a resource fetched over HTTP or HTTPS, either embedded as a local blob or referenced
+  by URL
+- Credentials for the origin server configured in `.ocmconfig` rather than in the resource specification
+- The resource downloaded back out of the component version to verify the round trip
+
+**Estimated time:** ~10 minutes
+
 ## Prerequisites
 
 - [OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed
@@ -29,7 +38,8 @@ OCM offers two ways to do this, and they share one transport, credential, and do
 {{< steps >}}
 
 {{< step >}}
-**Decide whether to embed or reference the content**
+
+### Decide whether to embed or reference the content
 
 | Use the **input type** when                                 | Use the **access type** when                                    |
 |-------------------------------------------------------------|-----------------------------------------------------------------|
@@ -45,7 +55,8 @@ repository.
 {{< /step >}}
 
 {{< step >}}
-**Add the resource to your constructor**
+
+### Add the resource to your constructor
 
 {{< tabs "wget-spec" >}}
 {{< tab "Input type" >}}
@@ -115,7 +126,8 @@ Configure authentication through the credential system instead, as described in 
 {{< /step >}}
 
 {{< step >}}
-**Set the media type explicitly**
+
+### Set the media type explicitly
 
 The media type of the resulting blob is resolved in this order:
 
@@ -131,7 +143,8 @@ not send a useful `Content-Type`. Otherwise the resource ends up as `application
 {{< /step >}}
 
 {{< step >}}
-**Configure credentials for the host**
+
+### Configure credentials for the host
 
 Credentials are resolved from the resource URL through a consumer identity of type `Wget`. The input type and the access
 type derive that identity identically, so a single entry in `.ocmconfig` covers construction and later downloads:
@@ -163,7 +176,8 @@ full field reference.
 {{< /step >}}
 
 {{< step >}}
-**Tune the download (optional)**
+
+### Tune the download (optional)
 
 Only 2xx responses are accepted; any other status fails the operation. Redirects are followed by default. Set
 `noRedirect: true` to assert that a URL serves content directly rather than to fetch the redirect target. The request
@@ -205,7 +219,8 @@ defaults, and per-host merge semantics.
 {{< /step >}}
 
 {{< step >}}
-**Build the component version and verify**
+
+### Build the component version and verify
 
 ```bash
 ocm add cv --repository ./transport-archive --constructor component-constructor.yaml
@@ -231,18 +246,18 @@ An input-type resource resolves to a `LocalBlob/v1` access carrying the resolved
 
 ```yaml
     resources:
-    - access:
-        localReference: sha256:984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
-        mediaType: application/x-tar+gzip
-        type: LocalBlob/v1
-      digest:
-        hashAlgorithm: SHA-256
-        normalisationAlgorithm: genericBlobDigest/v1
-        value: 984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
-      name: release-archive
-      relation: local
-      type: blob
-      version: 1.0.0
+      - access:
+          localReference: sha256:984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
+          mediaType: application/x-tar+gzip
+          type: LocalBlob/v1
+        digest:
+          hashAlgorithm: SHA-256
+          normalisationAlgorithm: genericBlobDigest/v1
+          value: 984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
+        name: release-archive
+        relation: local
+        type: blob
+        version: 1.0.0
 ```
 
 {{< /details >}}
@@ -253,18 +268,18 @@ An access-type resource keeps the `Wget/v1` specification verbatim, with the dig
 
 ```yaml
     resources:
-    - access:
-        mediaType: application/x-tar+gzip
-        type: Wget/v1
-        url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
-      digest:
-        hashAlgorithm: SHA-256
-        normalisationAlgorithm: genericBlobDigest/v1
-        value: 984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
-      name: release-archive
-      relation: external
-      type: blob
-      version: 1.0.0
+      - access:
+          mediaType: application/x-tar+gzip
+          type: Wget/v1
+          url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
+        digest:
+          hashAlgorithm: SHA-256
+          normalisationAlgorithm: genericBlobDigest/v1
+          value: 984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
+        name: release-archive
+        relation: external
+        type: blob
+        version: 1.0.0
 ```
 
 {{< /details >}}
@@ -325,24 +340,29 @@ shasum -a 256 myapp-linux-amd64.tar.gz # macOS
 ```
 
 {{< callout context="caution" >}}
-All three fields are required, and the constructor schema rejects a partial `digest` block. Each one is matched exactly:
+Write all three fields:
 
 - `hashAlgorithm` must be `SHA-256`. It is the only algorithm the Wget resource repository computes.
 - `normalisationAlgorithm` must be `genericBlobDigest/v1`, meaning the raw bytes are hashed with no normalisation.
 - `value` is the bare lowercase hex digest, **without** a `sha256:` prefix.
+
+On an access-type resource the constructor schema requires all three and each is matched exactly. On an input-type
+resource the schema does not validate the block at all, and only `hashAlgorithm` and `value` are checked, so a wrong
+`normalisationAlgorithm` is accepted and written to the descriptor unchanged.
 {{< /callout >}}
 
 The two types report a mismatch differently, because the check happens in a different place. The access type verifies
-while computing the digest, the input type while storing the blob:
+while computing the digest; the input type verifies while storing the blob, and prefixes the computed value:
 
 ```text
-digest mismatch: expected 984a4a19…, got 3b1f0c72…                   # access type
-resource blob digest mismatch: resource 984a4a19… vs blob 3b1f0c72…  # input type
+digest mismatch: expected 984a4a19…, got 3b1f0c72…                          # access type
+resource blob digest mismatch: resource 984a4a19… vs blob sha256:3b1f0c72…  # input type
 ```
 
 For the access type the check is not confined to construction. The bytes are fetched again whenever a component version
 referencing the URL is transferred, and verified against the same digest, so content that changes after publication
-makes the transfer fail rather than substituting different bytes.
+makes the transfer fail rather than substituting different bytes. That transfer-time check is the input-type one, since
+the content is stored as a local blob in the target.
 
 ## Migrating from OCM v1
 
@@ -370,21 +390,21 @@ resolved to `application/x-gzip` now falls back to the server's `Content-Type`, 
 Two changes are breaking. A carried-over entry does not match, no credentials are resolved, and the request goes out
 unauthenticated, so the symptom is a `401` from the server rather than a configuration error.
 
-| Area              | OCM v1                             | OCM v2             | What to do                                                                                                             |
-|-------------------|------------------------------------|--------------------|------------------------------------------------------------------------------------------------------------------------|
-| Consumer identity | `type: wget`                       | `type: Wget`       | Update `.ocmconfig`. Identity types match by exact string, so the lowercase spelling silently resolves no credentials. |
-| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute and convert prefixes to globs, so `pathprefix: my-org` becomes `path: my-org/*`.                 |
+| Area              | OCM v1                             | OCM v2             | What to do                                                                                                                                         |
+|-------------------|------------------------------------|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Consumer identity | `type: wget`                       | `type: Wget`       | Update `.ocmconfig`. Identity types match by exact string, so the lowercase spelling silently resolves no credentials.                             |
+| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute. `*` matches one path segment, so a prefix spanning nested paths has no glob equivalent: omit `path` to match the whole host. |
 
 The following change what a matching entry does, without any change to the entry itself:
 
 | Area            | OCM v1                                          | OCM v2                                                          |
 |-----------------|-------------------------------------------------|-----------------------------------------------------------------|
-| Auth precedence | Basic auth wins; the bearer token is a fallback | Bearer token wins; Basic auth is used only when no token is set |
-| Basic auth      | Requires both `username` and `password`         | Sent as soon as `username` is set                               |
+| Auth precedence | Basic Auth wins; the bearer token is a fallback | Bearer token wins; Basic Auth is used only when no token is set |
+| Basic Auth      | Requires both `username` and `password`         | Sent as soon as `username` is set                               |
 | Custom CA       | Root CAs from credentials always applied        | `certificateAuthority` applied only alongside `certificate`     |
 
 The precedence flip only becomes visible when a single entry carries `identityToken` **and** both `username` and
-`password`: OCM v1 sends Basic auth, OCM v2 sends the bearer token and logs a warning. With only a token, or only a
+`password`: OCM v1 sends Basic Auth, OCM v2 sends the bearer token and logs a warning. With only a token, or only a
 username/password pair, both versions behave identically. Split such entries if the server distinguishes the two
 mechanisms.
 
@@ -395,14 +415,18 @@ mechanisms.
 **Cause:** No consumer entry matched, so the request went out unauthenticated. The identity type is matched by exact
 string and is unversioned, so neither `Wget/v1` nor the lowercase `wget` used by OCM v1 will match.
 
-**Fix:** Set `type: Wget` in the consumer identity and convert any `pathprefix` to a `path` glob:
+**Fix:** Set `type: Wget` in the consumer identity, and drop `pathprefix`. `path` is matched with `path.Match`, whose
+`*` does not cross `/`, so it cannot express a prefix over nested paths. Omitting it matches every path on the host:
 
 ```yaml
 - identity:
     type: Wget            # not "wget", not "Wget/v1"
     hostname: downloads.example.com
-    path: my-org/*        # was: pathprefix: my-org
+    # was: pathprefix: my-org
 ```
+
+Set `path` only to pin one exact object (`path: my-org/app/1.0/app.tgz`), or a single segment (`path: my-org/*`, which
+matches `my-org/app.tgz` but not `my-org/app/1.0.tgz`).
 
 ### Symptom: the resource has media type `application/octet-stream`
 
@@ -420,10 +444,11 @@ type reports the same condition as `resource blob digest mismatch`.
 **Fix:** Re-download the URL and recompute the digest with `sha256sum`. If the new value is the one you trust, update
 `value` in the constructor; if it is not, the content behind the URL changed and the pin did its job.
 
-### Symptom: `unsupported hash algorithm` or `unsupported normalisation algorithm`
+### Symptom: `unsupported hash algorithm`, `unsupported normalisation algorithm`, or `invalid hash algorithm`
 
-**Cause:** The pinned `digest` names something other than the pair the Wget resource repository computes. Both fields
-are matched exactly, so `sha256` or `SHA256` do not resolve to `SHA-256`.
+**Cause:** The pinned `digest` names something other than the pair the Wget resource repository computes. Matching is
+exact, so `sha256` or `SHA256` do not resolve to `SHA-256`. The access type reports `unsupported …`; the input type
+reports `invalid hash algorithm` and never checks the normalisation algorithm at all.
 
 **Fix:** Use the exact spellings:
 
@@ -443,7 +468,8 @@ status.
 
 ## Next Steps
 
-- [How-To: Download Resources from Component Versions]({{< relref "docs/how-to/download-resources-from-component-versions.md" >}}) -
+- [How-To: Download Resources from Component Versions]({{< relref "
+  docs/how-to/download-resources-from-component-versions.md" >}}) -
   Fetch the resource you just added
 - [How-To: Air-Gap Transfer]({{< relref "docs/how-to/air-gap-transfer.md" >}}) - Move component versions into
   disconnected environments
