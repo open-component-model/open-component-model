@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	godigest "github.com/opencontainers/go-digest"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
@@ -50,7 +52,7 @@ func TestDownloadResource(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{
 			"url": server.URL + "/resource",
 		})
@@ -79,7 +81,7 @@ func TestDownloadResource(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{
 			"url": server.URL + "/resource",
 		})
@@ -100,8 +102,7 @@ func TestDownloadResource(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
 			repository.WithMaxDownloadSize(10),
 		)
 		resource := wgetResource(t, server.URL, map[string]any{
@@ -113,15 +114,41 @@ func TestDownloadResource(t *testing.T) {
 		assert.Contains(t, err.Error(), "exceeds maximum allowed size")
 	})
 
+	t.Run("closing the downloaded blob reclaims the temporary file", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("hello world"))
+		}))
+		defer server.Close()
+
+		tempFolder := t.TempDir()
+		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
+			repository.WithHTTPClient(server.Client()))
+
+		b, err := repo.DownloadResource(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)
+		require.NoError(t, err)
+
+		entries, err := os.ReadDir(tempFolder)
+		require.NoError(t, err)
+		require.Len(t, entries, 1, "the body must be streamed into the configured temp folder")
+
+		closer, ok := b.(io.Closer)
+		require.True(t, ok, "the downloaded blob must be closeable so callers can reclaim it")
+		require.NoError(t, closer.Close())
+
+		entries, err = os.ReadDir(tempFolder)
+		require.NoError(t, err)
+		assert.Empty(t, entries, "closing the blob must remove the temporary file")
+	})
+
 	t.Run("returns error for nil resource", func(t *testing.T) {
-		repo := repository.NewResourceRepository()
+		repo := repository.NewResourceRepository(nil)
 		_, err := repo.DownloadResource(t.Context(), nil, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "resource is required")
 	})
 
 	t.Run("returns error for nil access", func(t *testing.T) {
-		repo := repository.NewResourceRepository()
+		repo := repository.NewResourceRepository(nil)
 		resource := &descruntime.Resource{}
 		resource.Name = "test"
 		_, err := repo.DownloadResource(t.Context(), resource, nil)
@@ -133,7 +160,7 @@ func TestDownloadResource(t *testing.T) {
 func TestUploadResource(t *testing.T) {
 	t.Parallel()
 
-	repo := repository.NewResourceRepository()
+	repo := repository.NewResourceRepository(nil)
 	_, err := repo.UploadResource(t.Context(), nil, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -142,7 +169,7 @@ func TestUploadResource(t *testing.T) {
 func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
 
-	repo := repository.NewResourceRepository()
+	repo := repository.NewResourceRepository(nil)
 
 	resource := &descruntime.Resource{}
 	resource.Name = "test"
@@ -166,7 +193,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 func TestGetResourceRepositoryScheme(t *testing.T) {
 	t.Parallel()
 
-	repo := repository.NewResourceRepository()
+	repo := repository.NewResourceRepository(nil)
 	scheme := repo.GetResourceRepositoryScheme()
 	require.NotNil(t, scheme)
 	assert.True(t, scheme.IsRegistered(runtime.NewVersionedType("wget", v1.Version)))
@@ -197,7 +224,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 
 		processed, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
@@ -210,6 +237,24 @@ func TestProcessResourceDigest(t *testing.T) {
 		assert.Nil(t, resource.Digest, "the input resource must not be mutated")
 	})
 
+	t.Run("leaves no temporary file behind", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("hello digest world"))
+		}))
+		defer server.Close()
+
+		tempFolder := t.TempDir()
+		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
+			repository.WithHTTPClient(server.Client()))
+
+		_, err := repo.ProcessResourceDigest(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)
+		require.NoError(t, err)
+
+		entries, err := os.ReadDir(tempFolder)
+		require.NoError(t, err)
+		assert.Empty(t, entries, "digest processing must reclaim the file it downloaded")
+	})
+
 	t.Run("verifies a matching pre-existing digest", func(t *testing.T) {
 		content := []byte("verify me")
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -217,7 +262,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -235,7 +280,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -255,7 +300,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-512",
@@ -275,7 +320,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
