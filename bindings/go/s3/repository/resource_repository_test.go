@@ -204,11 +204,13 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 		versionID   string
 		wantVersion string
 		wantErr     string
+		wantRaw     bool
 	}{
 		{
 			name:        "unpinned access is pinned to the digested version",
 			versionID:   versionID,
 			wantVersion: versionID,
+			wantRaw:     true,
 		},
 		{
 			name:        "an already pinned access is left alone",
@@ -237,6 +239,7 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 			specVersion: download.UnversionedVersionID,
 			versionID:   versionID,
 			wantVersion: versionID,
+			wantRaw:     true,
 		},
 		{
 			name:        "an author-written null version is not checked against a null from the store",
@@ -269,6 +272,13 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
+
+			if tt.wantRaw {
+				// A rewritten access is handed back in the raw form a constructor parsed,
+				// because the v2 descriptor encoder cannot encode a typed access it has no
+				// scheme for. An access we do not rewrite is returned exactly as it came in.
+				require.IsType(t, &runtime.Raw{}, res.Access)
+			}
 
 			spec := v1.S3Bucket{}
 			require.NoError(t, accessspec.Scheme.Convert(res.Access, &spec))

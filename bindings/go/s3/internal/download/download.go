@@ -177,6 +177,11 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 	return &Result{Blob: b, VersionID: aws.ToString(out.VersionId)}, nil
 }
 
+// disableRetry is the maxRetries value that turns the ocm transport's retry off.
+// The [httpv1alpha1.RetryConfig] scale is -1 to disable, 0 for infinite, positive for a
+// count of retries after the initial request.
+const disableRetry = -1
+
 func httpConfig(cfg *httpv1alpha1.Config, insecureSkipTLSVerify bool) *httpv1alpha1.Config {
 	out := cfg.DeepCopy()
 	if out == nil {
@@ -187,29 +192,56 @@ func httpConfig(cfg *httpv1alpha1.Config, insecureSkipTLSVerify bool) *httpv1alp
 		out.InsecureSkipVerify = new(insecureSkipTLSVerify)
 	}
 
+	// Retrying is left to the SDK, which retries the whole operation, re-signs every
+	// attempt and classifies S3's error codes. Retrying here as well would multiply the
+	// two attempt counts. Per-host entries override the global policy, so they are
+	// switched off too.
+	out.Retry = &httpv1alpha1.RetryConfig{MaxRetries: new(disableRetry)}
+	for host, hostCfg := range out.Hosts {
+		if hostCfg == nil {
+			continue
+		}
+		hostCfg.Retry = &httpv1alpha1.RetryConfig{MaxRetries: new(disableRetry)}
+		out.Hosts[host] = hostCfg
+	}
+
 	return out
 }
 
-// staticCredentials turns resolved S3 credentials into a static provider, or returns
-// nil to leave the AWS default credential chain in charge. SigV4 signs with the key
-// pair, and a session token only accompanies it, so a half-filled credential is
-// rejected here rather than reaching S3 as an opaque 403.
-func staticCredentials(creds *credv1.S3Credentials) (*credentials.StaticCredentialsProvider, error) {
-	if creds == nil {
-		return nil, nil
+// sdkRetryAttempts translates the ocm retry configuration into the SDK's attempt count.
+// The SDK counts the initial request, maxRetries counts only what follows it. Zero means
+// the configuration expressed no opinion, leaving the SDK on its own default.
+func sdkRetryAttempts(cfg *httpv1alpha1.Config) int {
+	if cfg == nil || cfg.Retry == nil || cfg.Retry.MaxRetries == nil {
+		return 0
 	}
 
-	switch {
-	case creds.AccessKeyID == "" && creds.SecretAccessKey == "" && creds.SessionToken == "":
-		return nil, nil
-	case creds.AccessKeyID == "":
-		return nil, fmt.Errorf("incomplete s3 credentials: accessKeyId is required alongside the secret access key")
-	case creds.SecretAccessKey == "":
-		return nil, fmt.Errorf("incomplete s3 credentials: secretAccessKey is required alongside the access key id")
+	switch n := *cfg.Retry.MaxRetries; n {
+	case disableRetry:
+		return 1
+	case 0:
+		return math.MaxInt
+	default:
+		return n + 1
+	}
+}
+
+// staticCredentials turns resolved S3 credentials into a static provider, or returns
+// nil to leave the AWS default credential chain in charge — which is how an in-cluster
+// setup reaches S3, resolving a short-lived STS triple from IRSA, an instance role or
+// an SSO profile without any key material in the OCM configuration.
+//
+// Credentials that set any field at all are handed to the SDK as given, including a
+// combination it will refuse. Validating the fields here would duplicate the SDK's own
+// rules; what must not happen is dropping them silently, because the request then goes
+// out on whatever the default chain resolves, under a different identity.
+func staticCredentials(creds *credv1.S3Credentials) *credentials.StaticCredentialsProvider {
+	if creds == nil || (creds.AccessKeyID == "" && creds.SecretAccessKey == "" && creds.SessionToken == "") {
+		return nil
 	}
 
 	provider := credentials.NewStaticCredentialsProvider(creds.AccessKeyID, creds.SecretAccessKey, creds.SessionToken)
-	return &provider, nil
+	return &provider
 }
 
 // newClient builds an S3 client from the request and the download options. When no
@@ -225,13 +257,15 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 		httpClient = ocmhttp.New(ocmhttp.WithConfig(httpConfig(o.HTTPConfig, req.InsecureSkipTLSVerify)))
 	}
 
-	// RetryMaxAttempts and RetryMode keep the SDK defaults and are configured the AWS
-	// way, through AWS_MAX_ATTEMPTS and AWS_RETRY_MODE. The ocm HTTP config's retry
-	// bounds transport round trips, a different unit than an SDK operation attempt; how
-	// the two layers compose is described in the package documentation of the s3 module.
+	// Retrying happens in the SDK alone; see [httpConfig]. The ocm retry configuration
+	// drives it, so one setting means one thing, and an unset one leaves the SDK on its
+	// own default rather than silently adopting the transport's.
 	loadOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(region),
 		config.WithHTTPClient(httpClient),
+	}
+	if attempts := sdkRetryAttempts(o.HTTPConfig); attempts > 0 {
+		loadOpts = append(loadOpts, config.WithRetryMaxAttempts(attempts))
 	}
 
 	if o.Credentials != nil {
@@ -239,11 +273,7 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 		if err != nil {
 			return nil, fmt.Errorf("error converting s3 credentials: %w", err)
 		}
-		provider, err := staticCredentials(s3creds)
-		if err != nil {
-			return nil, fmt.Errorf("error getting static s3 credentials: %w", err)
-		}
-		if provider != nil {
+		if provider := staticCredentials(s3creds); provider != nil {
 			loadOpts = append(loadOpts, config.WithCredentialsProvider(*provider))
 		}
 	}

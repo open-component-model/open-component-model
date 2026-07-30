@@ -16,6 +16,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -486,21 +487,27 @@ func TestHTTPConfig(t *testing.T) {
 	t.Run("nil config yields an empty config", func(t *testing.T) {
 		got := httpConfig(nil, false)
 		require.NotNil(t, got)
-		assert.Nil(t, got.Retry, "nothing configured leaves the transport on its own default")
+		require.NotNil(t, got.Retry)
+		require.NotNil(t, got.Retry.MaxRetries)
+		assert.Equal(t, disableRetry, *got.Retry.MaxRetries, "retrying is left to the SDK")
 		assert.Nil(t, got.InsecureSkipVerify)
 	})
 
-	t.Run("the caller's retry config reaches the transport", func(t *testing.T) {
+	// Retrying is the SDK's job, so the transport handed to it must not retry as well;
+	// otherwise the two attempt counts multiply.
+	t.Run("the caller's retry config is disabled for the transport", func(t *testing.T) {
 		callerRetries := 7
-		got := httpConfig(&httpv1alpha1.Config{
-			Retry: &httpv1alpha1.RetryConfig{MaxRetries: &callerRetries},
-		}, false)
+		cfg := &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: &callerRetries}}
+		got := httpConfig(cfg, false)
 		require.NotNil(t, got.Retry)
 		require.NotNil(t, got.Retry.MaxRetries)
-		assert.Equal(t, 7, *got.Retry.MaxRetries)
+		assert.Equal(t, disableRetry, *got.Retry.MaxRetries)
+		assert.Equal(t, 7, *cfg.Retry.MaxRetries, "the caller keeps the retry count it configured")
 	})
 
-	t.Run("per-host retry reaches the transport too", func(t *testing.T) {
+	// A per-host entry overrides the global policy, so leaving one on would reinstate
+	// transport retries for exactly the host being downloaded from.
+	t.Run("per-host retry is disabled too", func(t *testing.T) {
 		hostRetries := 3
 		got := httpConfig(&httpv1alpha1.Config{
 			Hosts: map[string]*httpv1alpha1.HostConfig{
@@ -512,7 +519,7 @@ func TestHTTPConfig(t *testing.T) {
 		require.NotNil(t, hc)
 		require.NotNil(t, hc.Retry)
 		require.NotNil(t, hc.Retry.MaxRetries)
-		assert.Equal(t, 3, *hc.Retry.MaxRetries)
+		assert.Equal(t, disableRetry, *hc.Retry.MaxRetries)
 	})
 
 	t.Run("a nil host entry is left alone", func(t *testing.T) {
@@ -611,40 +618,33 @@ func TestNewClient(t *testing.T) {
 		require.NotNil(t, client.Options().Credentials)
 	})
 
-	t.Run("partial credentials are rejected", func(t *testing.T) {
+	// A half-filled credential cannot sign a request, and the SDK says so. What matters
+	// here is that it reaches the SDK at all: dropping it would send the request under
+	// whatever identity the default credential chain happens to resolve.
+	t.Run("partial credentials reach the SDK, which rejects them", func(t *testing.T) {
 		for _, tt := range []struct {
-			name    string
-			creds   credv1.S3Credentials
-			wantErr string
+			name  string
+			creds credv1.S3Credentials
 		}{
+			{name: "secret access key without an access key id", creds: credv1.S3Credentials{SecretAccessKey: "secret"}},
+			{name: "access key id without a secret access key", creds: credv1.S3Credentials{AccessKeyID: "AKIA"}},
+			{name: "session token alone", creds: credv1.S3Credentials{SessionToken: "session"}},
 			{
-				name:    "secret access key without an access key id",
-				creds:   credv1.S3Credentials{SecretAccessKey: "secret"},
-				wantErr: "accessKeyId is required",
-			},
-			{
-				name:    "access key id without a secret access key",
-				creds:   credv1.S3Credentials{AccessKeyID: "AKIA"},
-				wantErr: "secretAccessKey is required",
-			},
-			{
-				name:    "session token alone",
-				creds:   credv1.S3Credentials{SessionToken: "session"},
-				wantErr: "accessKeyId is required",
-			},
-			{
-				name:    "access key id and session token without a secret",
-				creds:   credv1.S3Credentials{AccessKeyID: "AKIA", SessionToken: "session"},
-				wantErr: "secretAccessKey is required",
+				name:  "access key id and session token without a secret",
+				creds: credv1.S3Credentials{AccessKeyID: "AKIA", SessionToken: "session"},
 			},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
 				creds := tt.creds
 				creds.Type = credv1.S3CredentialsVersionedType
-				_, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &creds})
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "incomplete s3 credentials")
-				assert.Contains(t, err.Error(), tt.wantErr)
+
+				client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &creds})
+				require.NoError(t, err, "building the client does not validate the credential")
+
+				_, err = client.Options().Credentials.Retrieve(ctx)
+				var empty *credentials.StaticCredentialsEmptyError
+				require.ErrorAs(t, err, &empty,
+					"the configured credential must be the one that fails, not a fallback from the default chain")
 			})
 		}
 	})
@@ -693,19 +693,43 @@ func TestNewClient(t *testing.T) {
 		assert.Same(t, injected, client.Options().HTTPClient, "the caller's client must not be rebuilt from config")
 	})
 
-	t.Run("the configured retry is left to the transport", func(t *testing.T) {
-		maxRetries := 3
-		client, err := newClient(ctx, Request{}, &option{
-			HTTPConfig: &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}},
-		})
-		require.NoError(t, err)
-		assert.Zero(t, client.Options().RetryMaxAttempts, "the SDK must stay on its own default")
+	// Retrying happens in the SDK alone, driven by the ocm retry configuration, so the
+	// configured count is not multiplied by a second layer of transport retries.
+	t.Run("the configured retry drives the SDK", func(t *testing.T) {
+		for _, tt := range []struct {
+			name       string
+			maxRetries *int
+			want       int
+		}{
+			{name: "retries become attempts including the initial request", maxRetries: new(3), want: 4},
+			{name: "disabled retry is a single attempt", maxRetries: new(disableRetry), want: 1},
+			{name: "infinite retry has no attempt ceiling", maxRetries: new(0), want: math.MaxInt},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				client, err := newClient(ctx, Request{}, &option{
+					HTTPConfig: &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: tt.maxRetries}},
+				})
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, client.Options().RetryMaxAttempts)
+			})
+		}
 	})
 
-	t.Run("the SDK retryer is left at its default", func(t *testing.T) {
-		client, err := newClient(ctx, Request{}, &option{})
-		require.NoError(t, err)
-		assert.Zero(t, client.Options().RetryMaxAttempts, "an unset value lets the SDK apply its default")
-		assert.Equal(t, retry.DefaultMaxAttempts, client.Options().Retryer.MaxAttempts())
+	t.Run("an unconfigured retry leaves the SDK on its own default", func(t *testing.T) {
+		for _, tt := range []struct {
+			name string
+			cfg  *httpv1alpha1.Config
+		}{
+			{name: "no http config at all", cfg: nil},
+			{name: "config without a retry section", cfg: &httpv1alpha1.Config{}},
+			{name: "retry section without a count", cfg: &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{}}},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				client, err := newClient(ctx, Request{}, &option{HTTPConfig: tt.cfg})
+				require.NoError(t, err)
+				assert.Zero(t, client.Options().RetryMaxAttempts, "an unset value lets the SDK apply its default")
+				assert.Equal(t, retry.DefaultMaxAttempts, client.Options().Retryer.MaxAttempts())
+			})
+		}
 	})
 }

@@ -238,7 +238,15 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		}
 	case served != "":
 		spec.Version = served
-		resource.Access = spec
+
+		// Hand the pinned access back in the raw form a constructor parsed. The v2
+		// descriptor encoder passes a [runtime.Raw] straight through but has to look a
+		// typed access up in its own scheme, where S3Bucket is not registered.
+		raw := &runtime.Raw{}
+		if err := accessspec.Scheme.Convert(spec, raw); err != nil {
+			return nil, fmt.Errorf("error encoding pinned s3 access: %w", err)
+		}
+		resource.Access = raw
 	default:
 		// Logged rather than rejected: an unpinned access risks availability rather than
 		// integrity, and erroring would make digests unusable for every unversioned
