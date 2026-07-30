@@ -2931,3 +2931,47 @@ func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
 	r.NoError(err)
 	r.Nil(body, "a raw-blob subject must yield no ownership referrer")
 }
+
+// TestRepository_AddOwnership_OCIImageLayerSubjectSkipped covers the same no-op
+// contract for a layer access. A layer is a bare blob, so it can never be the
+// subject of a referrer, but resources carrying the type are routed here and
+// must not fail construction when they opt into an ownership policy.
+func TestRepository_AddOwnership_OCIImageLayerSubjectSkipped(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+	const (
+		component = "ocm.software/test-component"
+		version   = "1.0.0"
+	)
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	testdata := []byte("test layer content")
+	dig := digest.FromBytes(testdata)
+	layerStore, err := store.StoreForReference(ctx, "test-registry/test-layer")
+	r.NoError(err)
+	desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, testdata)
+	r.NoError(layerStore.Push(ctx, desc, bytes.NewReader(testdata)))
+
+	resource := &descriptor.Resource{
+		Relation:    descriptor.ExternalRelation,
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "chart", Version: version}},
+		Type:        "helmChart",
+		Access: &v1.OCIImageLayer{
+			Type:      runtime.NewVersionedType(v1.OCIImageLayerType, v1.Version),
+			Reference: "test-registry/test-layer@" + dig.String(),
+			MediaType: ociImageSpecV1.MediaTypeImageLayer,
+			Digest:    dig,
+			Size:      int64(len(testdata)),
+		},
+	}
+
+	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
+
+	_, body, err := pack.OwnershipReferrer(ctx, desc, resource, component, version)
+	r.NoError(err)
+	r.Nil(body, "a layer subject must yield no ownership referrer")
+}

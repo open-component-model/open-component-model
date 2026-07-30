@@ -288,30 +288,9 @@ func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descript
 	}
 }
 
-// validateOCIImageLayerAccess checks the parts of a layer access the repository relies on.
-// It parses the reference with looseref rather than calling OCIImageLayer.Validate, which
-// goes through registry.ParseReference and so rejects the scheme-prefixed references
-// (http://host/repo) this binding accepts everywhere else for plain-HTTP registries.
-func validateOCIImageLayerAccess(typed *accessv1.OCIImageLayer) error {
-	if typed.Reference == "" {
-		return fmt.Errorf("OCI image layer access has no reference set in field %q", "ref")
-	}
-	if err := typed.Digest.Validate(); err != nil {
-		return fmt.Errorf("invalid digest %q in OCI image layer access %q: %w", typed.Digest, typed.Reference, err)
-	}
-	ref, err := looseref.ParseReference(typed.Reference)
-	if err != nil {
-		return fmt.Errorf("error parsing layer reference %q: %w", typed.Reference, err)
-	}
-	if dig, err := ref.Digest(); err == nil && dig != typed.Digest {
-		return fmt.Errorf("digest field value %q does not match digest contained in reference %q", typed.Digest, typed.Reference)
-	}
-	return nil
-}
-
 func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImageLayer) (*descriptor.Resource, error) {
-	if err := validateOCIImageLayerAccess(typed); err != nil {
-		return nil, err
+	if err := typed.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid OCI image layer access: %w", err)
 	}
 
 	src, err := repo.resolver.StoreForReference(ctx, typed.Reference)
@@ -834,6 +813,23 @@ func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, 
 			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve subject %q for ownership referrer: %w", typed.ImageReference, err)
 		}
 		return store, subject, nil
+	case *accessv1.OCIImageLayer:
+		if err := typed.Validate(); err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid OCI image layer access: %w", err)
+		}
+		store, err := repo.resolver.StoreForReference(ctx, typed.Reference)
+		if err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, err
+		}
+		// The subject is the layer blob itself, whose descriptor the access already
+		// carries in full. buildAndPushOwnershipReferrer skips non-manifest subjects,
+		// so this degrades to a no-op rather than failing the construction: a referrer
+		// needs a manifest to point at and a bare blob is not one.
+		return store, ociImageSpecV1.Descriptor{
+			MediaType: typed.MediaType,
+			Digest:    typed.Digest,
+			Size:      typed.Size,
+		}, nil
 	default:
 		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported resource access type for ownership referrer: %T", typed)
 	}
@@ -1167,8 +1163,8 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			Tags:    tags,
 		}, nil
 	case *accessv1.OCIImageLayer:
-		if err := validateOCIImageLayerAccess(typed); err != nil {
-			return nil, err
+		if err := typed.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid OCI image layer access: %w", err)
 		}
 
 		src, err := repo.resolver.StoreForReference(ctx, typed.Reference)
