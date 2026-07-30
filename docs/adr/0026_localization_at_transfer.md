@@ -103,7 +103,17 @@ flexible and powerful tooling around localization.
 
 Justification:
 
-* Write this up.
+The wrapper implementation described in here has too many moving parts and some of them
+are difficult to discover and describe for users. Normally, users would have to worry
+about the wrapper, and we would provide tooling to get the wrapper and get the right
+OCI image reference URL for any installations. However, this means that it's
+difficult to debug if the wrapper fails to install and even more cumbersome to understand
+the architecture in case of failures by the user.
+
+In turn, Kro is well documented, has a lot of use cases and the RGD + CEL parsing
+makes for a nice visual guide to understand what is localized and what is not and
+how and where in the helm chart these things need to happen without us trying to be
+clever about it and figure it out. Explicit vs Implicit architecture.
 
 ### How the Wrapper Works
 
