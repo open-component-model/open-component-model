@@ -217,6 +217,7 @@ const CLI_DERIVED_MODULES = [
     `${MODULE_PREFIX}/bindings/go/constructor`,
     `${MODULE_PREFIX}/bindings/go/credentials`,
     `${MODULE_PREFIX}/bindings/go/descriptor/v2`,
+    `${MODULE_PREFIX}/bindings/go/github`,
     `${MODULE_PREFIX}/bindings/go/gpg`,
     `${MODULE_PREFIX}/bindings/go/helm`,
     `${MODULE_PREFIX}/bindings/go/http`,
@@ -235,6 +236,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
     const constructorVersion = deps?.[`${MODULE_PREFIX}/bindings/go/constructor`];
     const credentialsVersion = deps?.[`${MODULE_PREFIX}/bindings/go/credentials`];
     const descriptorVersion = deps?.[`${MODULE_PREFIX}/bindings/go/descriptor/v2`];
+    const githubVersion = deps?.[`${MODULE_PREFIX}/bindings/go/github`];
     const gpgVersion = deps?.[`${MODULE_PREFIX}/bindings/go/gpg`];
     const helmVersion = deps?.[`${MODULE_PREFIX}/bindings/go/helm`];
     const httpVersion = deps?.[`${MODULE_PREFIX}/bindings/go/http`];
@@ -316,6 +318,15 @@ function buildModuleBlocks(version, fullVersion, deps) {
             mounts: [{
                 source: 'spec/credentials/v1/schemas',
                 target: `static/${version}/schemas/bindings/go/credentials/helm/v1`,
+                sites: { matrix: { versions: [version] } }
+            }]
+        },
+        {
+            path: `${MODULE_PREFIX}/bindings/go/github`,
+            version: githubVersion,
+            mounts: [{
+                source: 'spec/credentials/v1/schemas',
+                target: `static/${version}/schemas/bindings/go/credentials/github/v1`,
                 sites: { matrix: { versions: [version] } }
             }]
         },
@@ -442,6 +453,8 @@ function updateImportTags(parsed, version, fullVersion, deps) {
             newTag = deps[`${MODULE_PREFIX}/bindings/go/oci`];
         } else if (deps && imp.path.endsWith('/bindings/go/helm')) {
             newTag = deps[`${MODULE_PREFIX}/bindings/go/helm`];
+        } else if (deps && imp.path.endsWith('/bindings/go/github')) {
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/github`];
         } else if (deps && imp.path.endsWith('/bindings/go/rsa')) {
             newTag = deps[`${MODULE_PREFIX}/bindings/go/rsa`];
         } else if (deps && imp.path.endsWith('/bindings/go/gpg')) {
