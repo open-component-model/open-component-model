@@ -1407,7 +1407,7 @@ func Test_Integration_TransferWgetResource_CopyModeAllResources(t *testing.T) {
 	// A wget resource is downloaded via the wget resource repository. In the CLI this is a dynamic
 	// registry dispatching by access type; here the transfer only involves a wget resource, so the
 	// wget repository is the concrete repo to provide (mirrors the OCI tests passing the OCI repo).
-	resourceRepo := wgetrepository.NewResourceRepository()
+	resourceRepo := wgetrepository.NewResourceRepository(nil)
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)

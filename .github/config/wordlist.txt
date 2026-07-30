@@ -149,6 +149,7 @@ contradictive
 contributability
 converthelmtooci
 crd
+cyclonedx
 crds
 creatable
 creationtime
@@ -636,6 +637,7 @@ reconcilers
 refcount
 referencesconfig
 referrs
+referrers
 reimplement
 rekor
 relativeocireference
@@ -737,6 +739,7 @@ socio
 sonatype
 sourceref
 spdx
+syft
 src
 srcrefs
 sre
@@ -775,6 +778,7 @@ suppresstitle
 svg
 tac
 taskfile
+trivy
 taskfiles
 tbd
 tcp
@@ -843,6 +847,7 @@ ux
 valuemergehandler
 valuemergehandlerdescriptor
 valueset
+vex
 valuesfrom
 valuessource
 variadic
