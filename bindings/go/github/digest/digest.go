@@ -73,6 +73,9 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		return nil, fmt.Errorf("invalid github access: %w", err)
 	}
 
+	// Everything below works on a copy; the caller's resource is never touched.
+	res = res.DeepCopy()
+
 	// A set Commit is authoritative and Ref is informational, so only an
 	// unpinned access resolves its ref — mirroring OCI tag->digest pinning.
 	// Re-resolving an already pinned commit would make the digest depend on
@@ -89,10 +92,14 @@ func (p *DigestProcessor) ProcessResourceDigest(
 			return nil, fmt.Errorf("error resolving github ref to commit: %w", err)
 		}
 		gitHub.Commit = resolved
-	}
 
-	res = res.DeepCopy()
-	res.Access = gitHub
+		// Hand the pinned access back in the raw form a constructor parsed.
+		pinned := &runtime.Raw{}
+		if err := access.Scheme.Convert(gitHub, pinned); err != nil {
+			return nil, fmt.Errorf("error encoding pinned github access: %w", err)
+		}
+		res.Access = pinned
+	}
 
 	// Download the pinned commit directly. The commit is authoritative now — we
 	// just resolved the ref, or the caller pinned it — so carrying the ref into
