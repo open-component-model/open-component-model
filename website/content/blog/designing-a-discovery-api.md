@@ -51,7 +51,7 @@ OCM (Open Component Model) already models this: components reference other compo
 
 ## The Idea: A Service Catalog as a Component Graph
 
-Instead of scattering artifact locations across controller configs, model your entire service catalog as an OCM component tree. An umbrella component references all available services and versions:
+Instead of scattering artifact locations across controller configs, model your entire service catalog as an OCM component tree. Conceptually, an umbrella component references all available services and versions (abbreviated for illustration, not a full component descriptor):
 
 ```yaml
 - name: ocm.software/service-catalog
@@ -83,7 +83,7 @@ Instead of scattering artifact locations across controller configs, model your e
       version: v0.9.2
 ```
 
-Each referenced component carries its actual artifacts:
+Each referenced component in turn carries its actual artifacts (again shown in abbreviated form):
 
 ```yaml
 - name: ocm.software/service-catalog/kro
