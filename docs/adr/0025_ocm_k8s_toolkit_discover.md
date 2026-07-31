@@ -204,10 +204,13 @@ query produces, enforced by CRD-level validation:
 In map modes (`byResources` / `byComponents`), a field expression that hits a missing attribute, field, or map
 key is treated as null and the field is dropped from that entry. This lets a single map span heterogeneous access
 types (e.g. some resources carry `access.imageReference`, others don't) without CEL `?` on every path, matching the
-tolerance selectors have for missing attributes (see [Selector shape](#selector-shape) above). Users who want
-strictness can guard accesses with `has(...)`. `expression` mode is strict,
-unguarded misses surface as `ExtractFailed`, because it produces the whole payload verbatim and silent drops
-would be a foot-gun there.
+tolerance selectors have for missing attributes (see [Selector shape](#selector-shape) above). To emit a
+placeholder instead of dropping, use `has(...)` with a conditional, e.g.
+`has(resource.access.imageReference) ? resource.access.imageReference : "n/a"`.
+
+`expression` mode has no per-field container to drop into: the whole payload is a single CEL expression, so an
+unguarded miss surfaces as `ExtractFailed`. Guard with `has(...)` or CEL optional access
+(`foo.?bar.orValue(...)`) if the expression may traverse fields that are not always present.
 
 `Extract` is optional. When absent, the raw v2 descriptor list is emitted, subject to the etcd soft limit.
 
