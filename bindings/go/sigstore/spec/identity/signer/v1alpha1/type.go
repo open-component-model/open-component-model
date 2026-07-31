@@ -18,8 +18,6 @@ var Type = runtime.NewUnversionedType(SigstoreSignerIdentityType)
 var VersionedType = runtime.NewVersionedType(SigstoreSignerIdentityType, Version)
 
 const (
-	// IdentityAttributeAlgorithm is the key for the signing algorithm in a credential consumer identity map.
-	IdentityAttributeAlgorithm = "algorithm"
 	// IdentityAttributeSignature is the key for the signature name in a credential consumer identity map.
 	IdentityAttributeSignature = "signature"
 	// IdentityAttributeIssuer is the key for the OIDC issuer URL in a signer credential consumer identity map.
@@ -36,8 +34,8 @@ const (
 // the [SigstoreCredentials] used during cosign sign-blob. All fields are optional
 // filters: omitting a field matches any value for that attribute.
 //
-// Each field corresponds to an identity attribute constant ([IdentityAttributeAlgorithm],
-// [IdentityAttributeSignature], [IdentityAttributeIssuer], [IdentityAttributeClientID])
+// Each field corresponds to an identity attribute constant ([IdentityAttributeSignature],
+// [IdentityAttributeIssuer], [IdentityAttributeClientID])
 // in the flat runtime.Identity map produced by GetSigningCredentialConsumerIdentity.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
@@ -48,10 +46,6 @@ type SigstoreSignerIdentity struct {
 	// +ocm:jsonschema-gen:enum=SigstoreSigner/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=SigstoreSigner
 	Type runtime.Type `json:"type"`
-	// Algorithm restricts this identity to a specific signing algorithm.
-	// Populated from SignConfig.GetSignatureAlgorithm(); the canonical value is
-	// "Sigstore/v1alpha1" (v1alpha1.AlgorithmSigstoreV1Alpha1). Omit to match all algorithms.
-	Algorithm string `json:"algorithm,omitempty"`
 	// Signature restricts this identity to a specific named signature within a component version.
 	// The value must match the signature name passed to GetSigningCredentialConsumerIdentity.
 	// Omit to match all signature names.
