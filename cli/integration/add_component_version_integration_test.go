@@ -18,6 +18,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -930,4 +931,123 @@ components:
 	r.Contains(out, componentName, "output should contain the component name")
 	r.Contains(out, "remote-blob", "output should contain the resource")
 	r.Contains(out, "wget/v1", "output should contain the wget access type")
+}
+
+// Test_Integration_AddComponentVersion_GitHubAccess verifies that a resource
+// declaring a GitHub access directly in the constructor can be added to an
+// OCI registry, and that the access is then resolved and downloaded via the
+// github resource repository and digest processor the CLI registers.
+//
+// This test talks to live github.com — the same repository the binding-level
+// integration test uses — so it needs network access and is subject to
+// GitHub's rate limits. Set GITHUB_TOKEN to lift the anonymous 60/hour cap.
+func Test_Integration_AddComponentVersion_GitHubAccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	t.Parallel()
+
+	r := require.New(t)
+	ctx := t.Context()
+
+	registry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+	cfgPath := internal.CreateOCMConfigForGitHub(t, registry)
+
+	// addResource adds a component version with one github resource, pinned by
+	// the given access field — "commit" or "ref" — and returns it as stored.
+	addResource := func(t *testing.T, componentName, pinField, pinValue string) descriptor.Resource {
+		t.Helper()
+		r := require.New(t)
+
+		constructor := fmt.Sprintf(`
+components:
+- name: %s
+  version: v1.0.0
+  provider:
+    name: ocm.software
+  resources:
+  - name: repo-archive
+    version: v1.0.0
+    type: blob
+    access:
+      type: GitHub/v1
+      repoUrl: %s
+      %s: %s
+`, componentName, internal.GitHubRepoURL, pinField, pinValue)
+		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+		r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+		// Generous timeout: adding runs the digest processor, which downloads
+		// the full repository archive purely to hash it.
+		addCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+		addCMD := cmd.New()
+		addCMD.SetArgs([]string{
+			"add", "component-version",
+			"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+			"--constructor", constructorPath,
+			"--config", cfgPath,
+		})
+		r.NoError(addCMD.ExecuteContext(addCtx), "add cv with github access should succeed")
+
+		desc, err := registry.Connect(t).GetComponentVersion(ctx, componentName, "v1.0.0")
+		r.NoError(err)
+		r.Len(desc.Component.Resources, 1)
+
+		res := desc.Component.Resources[0]
+		r.NotNil(res.Access, "resource should carry a github access spec")
+		r.Equal("GitHub/v1", res.Access.GetType().String())
+		r.NotNil(res.Digest, "github digest processor should have set a digest")
+		r.Equal("SHA-256", res.Digest.HashAlgorithm)
+		r.Equal("genericBlobDigest/v1", res.Digest.NormalisationAlgorithm)
+		return res
+	}
+
+	t.Run("commit-pinned access", func(t *testing.T) {
+		r := require.New(t)
+
+		const componentName = "ocm.software/github-access-component"
+		res := addResource(t, componentName, "commit", internal.GitHubCommit)
+
+		dlCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+		output := filepath.Join(t.TempDir(), "archive.tgz")
+		downloadCMD := cmd.New()
+		downloadCMD.SetArgs([]string{
+			"download", "resource",
+			fmt.Sprintf("http://%s//%s:v1.0.0", registry.RegistryAddress, componentName),
+			"--identity", "name=repo-archive,version=v1.0.0",
+			"--output", output,
+			"--config", cfgPath,
+		})
+		r.NoError(downloadCMD.ExecuteContext(dlCtx), "download resource should resolve the github access")
+
+		internal.AssertGitHubArchiveAtCommit(t, output)
+
+		// The recorded digest must be the digest of the exact bytes the download
+		// serves. Computed, not hardcoded: GitHub generates the archive.
+		archive, err := os.ReadFile(output)
+		r.NoError(err)
+		r.Equal(godigest.FromBytes(archive).Encoded(), res.Digest.Value,
+			"recorded digest must be the generic blob digest of the downloaded archive")
+	})
+
+	t.Run("ref-only access is pinned to a commit by the digest processor", func(t *testing.T) {
+		r := require.New(t)
+
+		res := addResource(t, "ocm.software/github-ref-component", "ref", internal.GitHubRef)
+
+		// Decode the stored access as plain fields rather than importing the
+		// github binding, keeping this test black-box like its wget sibling.
+		raw, err := json.Marshal(res.Access)
+		r.NoError(err)
+		var stored map[string]string
+		r.NoError(json.Unmarshal(raw, &stored))
+
+		r.Equal(internal.GitHubCommit, stored["commit"],
+			"the digest processor must resolve the ref and pin the commit it points at")
+		r.Equal(internal.GitHubRef, stored["ref"],
+			"the ref stays informational next to the pinned commit")
+	})
 }
