@@ -22,7 +22,6 @@ OCM offers two ways to do this, and they share one transport, credential, and do
 
 - A component version containing a resource fetched over HTTP or HTTPS, either embedded as a local blob or referenced
   by URL
-- Credentials for the origin server configured in `.ocmconfig` rather than in the resource specification
 - The resource downloaded back out of the component version to verify the round trip
 
 **Estimated time:** ~10 minutes
@@ -30,8 +29,11 @@ OCM offers two ways to do this, and they share one transport, credential, and do
 ## Prerequisites
 
 - [OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed
-- A `component-constructor.yaml` to add the resource to
-- The URL reachable from the machine running OCM, plus credentials if the server requires them
+- A working directory to create the constructor and the transport archive in
+
+The walkthrough fetches a public OCM release asset, so it runs end to end with no registry access and no credentials.
+[Authenticating against a protected server](#authenticating-against-a-protected-server) covers the case where the URL
+does require them.
 
 ## Steps
 
@@ -47,11 +49,13 @@ OCM offers two ways to do this, and they share one transport, credential, and do
 | The upstream URL may disappear or change content            | The artifact is large and should not be duplicated              |
 | You are building an air-gapped or self-contained repository | Consumers are expected to fetch directly from the origin server |
 
+Pick either one to follow this guide — the remaining steps show both.
+
 {{< callout context="caution" >}}
-The distinction only holds for as long as the component version stays where it was built. 
+The distinction only holds for as long as the component version stays where it was built.
 To transfer a `Wget/v1` resource, the `--copy-resources true` flag must be set on `ocm transfer cv`.
-Wget resources are transferred by value, so transferring a component version turns its `Wget/v1` access specifications into
-[`LocalBlob/v1`]({{< relref "docs/reference/input-and-access-types.md#localblobv1" >}}) entries in the target
+Wget resources are transferred by value, so transferring a component version turns its `Wget/v1` access specifications
+into [`LocalBlob/v1`]({{< relref "docs/reference/input-and-access-types.md#localblobv1" >}}) entries in the target
 repository.
 {{< /callout >}}
 
@@ -59,61 +63,59 @@ repository.
 
 {{< step >}}
 
-### Add the resource to your constructor
+### Create the component constructor
+
+Both spellings describe the same resource and accept the same fields; they differ only in whether the bytes are
+embedded now or fetched later. Write one of them to `component-constructor.yaml`:
 
 {{< tabs "wget-spec" >}}
 {{< tab "Input type" >}}
 
-```yaml
-resources:
-  - name: ocm-cli
-    type: blob
+```bash
+cat > component-constructor.yaml << 'EOF'
+components:
+  - name: github.com/acme.org/myapp
     version: 1.0.0
-    input:
-      type: Wget/v1
-      url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
-      mediaType: application/x-tar
+    provider:
+      name: acme.org
+    resources:
+      - name: ocm-cli
+        type: blob
+        version: 1.0.0
+        input:
+          type: Wget/v1
+          url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
+          mediaType: application/x-tar
+EOF
 ```
 
 {{< /tab >}}
 {{< tab "Access type" >}}
 
-```yaml
-resources:
-  - name: ocm-cli
-    type: blob
+```bash
+cat > component-constructor.yaml << 'EOF'
+components:
+  - name: github.com/acme.org/myapp
     version: 1.0.0
-    relation: external
-    access:
-      type: Wget/v1
-      url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
-      mediaType: application/x-tar
+    provider:
+      name: acme.org
+    resources:
+      - name: ocm-cli
+        type: blob
+        version: 1.0.0
+        relation: external
+        access:
+          type: Wget/v1
+          url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
+          mediaType: application/x-tar
+EOF
 ```
 
 {{< /tab >}}
 {{< /tabs >}}
 
-Both spellings accept the same fields. For a non-`GET` request, set `verb`, `header`, and `body`. Note that `body` is
-base64-encoded in YAML because the underlying field is a byte slice:
-
-```yaml
-resources:
-  - name: report
-    type: blob
-    version: 1.0.0
-    input:
-      type: Wget/v1
-      url: https://api.example.com/reports
-      verb: POST
-      mediaType: application/json
-      header:
-        Accept:
-          - application/json
-        X-Request-Source:
-          - ocm
-      # base64 of {"format":"json"}
-      body: eyJmb3JtYXQiOiJqc29uIn0=
-```
+`mediaType` is set explicitly because GitHub serves every release asset as `application/octet-stream`. See
+[Setting the media type](#setting-the-media-type) for the full resolution order.
 
 {{< callout context="caution" >}}
 **Never put credentials in `url`, `header`, or `body`.** That includes userinfo (`https://user:token@host/...`) and
@@ -123,14 +125,111 @@ An **access** specification is stored verbatim in the component descriptor: ever
 the component version, travels with it through every transfer, is covered by its signature, and is readable by anyone
 who can read the component version. An **input** specification is resolved at construction time and never reaches the
 descriptor, but it does live in your `component-constructor.yaml`, which is normally checked into version control.
-Configure authentication through the credential system instead, as described in the next step.
+Configure authentication through the credential system instead, as described in
+[Authenticating against a protected server](#authenticating-against-a-protected-server).
 {{< /callout >}}
 
 {{< /step >}}
 
 {{< step >}}
 
-### Set the media type explicitly
+### Build the component version
+
+```bash
+ocm add cv --repository ./transport-archive --constructor component-constructor.yaml
+```
+
+The asset is ~25 MB, so this takes a moment. You should see the component listed:
+
+```text
+ COMPONENT                 │ VERSION │ PROVIDER
+───────────────────────────┼─────────┼──────────
+ github.com/acme.org/myapp │ 1.0.0   │ acme.org
+```
+
+{{< /step >}}
+
+{{< step >}}
+
+### Inspect what landed in the descriptor
+
+```bash
+ocm get cv ./transport-archive//github.com/acme.org/myapp:1.0.0 -o yaml
+```
+
+An input-type resource resolves to a `LocalBlob/v1` access carrying the resolved media type:
+
+{{< details "Expected output" >}}
+
+```yaml
+    resources:
+    - access:
+        localReference: sha256:6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
+        mediaType: application/x-tar
+        type: LocalBlob/v1
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
+      name: ocm-cli
+      relation: local
+      type: blob
+      version: 1.0.0
+```
+
+{{< /details >}}
+
+An access-type resource keeps the `Wget/v1` specification verbatim, with the digest computed over the fetched bytes:
+
+{{< details "Expected output" >}}
+
+```yaml
+    resources:
+    - access:
+        mediaType: application/x-tar
+        type: Wget/v1
+        url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
+      name: ocm-cli
+      relation: external
+      type: blob
+      version: 1.0.0
+```
+
+{{< /details >}}
+
+Either way the resource carries the same digest, computed over the bytes that were fetched.
+
+{{< /step >}}
+
+{{< step >}}
+
+### Download the resource back
+
+Downloading proves the transport and, on a protected server, the credentials work end to end:
+
+```bash
+ocm download resource ./transport-archive//github.com/acme.org/myapp:1.0.0 \
+  --identity name=ocm-cli \
+  --output ./ocm-cli
+```
+
+You should see: `level=INFO msg="resource downloaded successfully" output=./ocm-cli`.
+
+{{< callout context="note" >}}
+When the media type is an archive format the CLI can unpack, `--output` is a **directory** holding the extracted
+contents. Other media types are written to a file at that path. `cli.tar` is a `.tar`, so `./ocm-cli` is a directory
+here; its contents happen to be an OCI image layout, because that is what this particular release asset packages.
+{{< /callout >}}
+
+{{< /step >}}
+
+{{< /steps >}}
+
+## Setting the media type
 
 The media type of the resulting blob is resolved in this order:
 
@@ -140,21 +239,19 @@ The media type of the resulting blob is resolved in this order:
 
 Set `mediaType` whenever the server does not send a useful `Content-Type`. Otherwise the resource ends up as
 `application/octet-stream`. GitHub release assets are a common case: they are served as `application/octet-stream`
-regardless of what they contain, which is why the example above sets `mediaType: application/x-tar` explicitly.
+regardless of what they contain, which is why the walkthrough sets `mediaType: application/x-tar` explicitly.
 
-{{< /step >}}
+## Authenticating against a protected server
 
-{{< step >}}
+The release asset above is public. As soon as the URL sits behind authentication — an artifact repository, or an asset
+in a private GitHub repository — credentials are resolved from the resource URL through a consumer identity of type
+`Wget`. The input type and the access type derive that identity identically, so a single entry covers construction and
+later downloads.
 
-### Configure credentials for the host
+Write the credential configuration to `.ocmconfig`:
 
-The release asset used above is public, so this step is not needed to follow along. It applies as soon as the URL sits
-behind authentication, which includes assets in a private GitHub repository.
-
-Credentials are resolved from the resource URL through a consumer identity of type `Wget`. The input type and the access
-type derive that identity identically, so a single entry in `.ocmconfig` covers construction and later downloads:
-
-```yaml
+```bash
+cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: credentials.config.ocm.software
@@ -167,6 +264,37 @@ configurations:
           - type: WgetCredentials/v1
             username: my-user
             password: my-password
+EOF
+```
+
+Point a constructor at that host:
+
+```bash
+cat > component-constructor.yaml << 'EOF'
+components:
+  - name: github.com/acme.org/myapp
+    version: 1.0.0
+    provider:
+      name: acme.org
+    resources:
+      - name: release-archive
+        type: blob
+        version: 1.0.0
+        relation: external
+        access:
+          type: Wget/v1
+          url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
+          mediaType: application/x-gzip
+EOF
+```
+
+Then pass the configuration explicitly, or leave it in one of the
+[well-known locations]({{< relref "docs/reference/ocm-cli/ocm.md" >}}) where the CLI picks it up automatically:
+
+```bash
+ocm --config .ocmconfig add cv \
+  --repository ./transport-archive \
+  --constructor component-constructor.yaml
 ```
 
 HTTP Basic Auth, bearer tokens, and mutual TLS are supported. Basic Auth and a bearer token both set the
@@ -178,144 +306,22 @@ the identity attributes and matching rules, and
 [Credential Types: WgetCredentials/v1]({{< relref "docs/reference/credential-types.md#wgetcredentialsv1" >}}) for the
 full field reference.
 
-{{< /step >}}
-
-{{< step >}}
-
-### Tune the download (optional)
-
-Only 2xx responses are accepted; any other status fails the operation. Redirects are followed by default. Set
-`noRedirect: true` to assert that a URL serves content directly rather than to fetch the redirect target. The request
-then stops at the first redirect response and fails, because a 3xx status is not a success status.
-
-Response bodies are streamed to a file on disk rather than buffered, so memory use stays flat regardless of artifact
-size. There is no size limit by default, so a download is bounded by free disk space. The file is created under the
-`tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration type, falling back to the operating
-system's temporary directory:
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: filesystem.config.ocm.software/v1alpha1
-    tempFolder: /var/tmp/ocm
-```
-
-Point `tempFolder` at a volume with enough free space when you reference large artifacts, and at an encrypted volume
-when the content is sensitive.
-
-Timeouts, retries, connection settings, and per-host overrides come from the `http.config.ocm.software/v1alpha1`
-configuration type and apply to every Wget request:
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: http.config.ocm.software/v1alpha1
-    timeout: 2m
-    retry:
-      maxRetries: 3
-    hosts:
-      github.com:
-        timeout: 5m
-```
-
-See [HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) for the full schema,
-defaults, and per-host merge semantics.
-
-{{< /step >}}
-
-{{< step >}}
-
-### Build the component version and verify
-
-```bash
-ocm add cv --repository ./transport-archive --constructor component-constructor.yaml
-```
-
-You should see the component listed:
-
-```text
- COMPONENT                 │ VERSION │ PROVIDER
-───────────────────────────┼─────────┼──────────
- github.com/acme.org/myapp │ 1.0.0   │ acme.org
-```
-
-Check that the resource landed with the media type you expect:
-
-```bash
-ocm get cv ./transport-archive//github.com/acme.org/myapp:1.0.0 -o yaml
-```
-
-An input-type resource resolves to a `LocalBlob/v1` access carrying the resolved media type:
-
-{{< details "Expected output" >}}
-
-```yaml
-    resources:
-      - access:
-          localReference: sha256:6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
-          mediaType: application/x-tar
-          type: LocalBlob/v1
-        digest:
-          hashAlgorithm: SHA-256
-          normalisationAlgorithm: genericBlobDigest/v1
-          value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
-        name: ocm-cli
-        relation: local
-        type: blob
-        version: 1.0.0
-```
-
-{{< /details >}}
-
-An access-type resource keeps the `Wget/v1` specification verbatim, with the digest computed over the fetched bytes:
-
-{{< details "Expected output" >}}
-
-```yaml
-    resources:
-      - access:
-          mediaType: application/x-tar
-          type: Wget/v1
-          url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
-        digest:
-          hashAlgorithm: SHA-256
-          normalisationAlgorithm: genericBlobDigest/v1
-          value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
-        name: ocm-cli
-        relation: external
-        type: blob
-        version: 1.0.0
-```
-
-{{< /details >}}
-
-Downloading the resource proves the transport and credentials work end to end:
-
-```bash
-ocm download resource ./transport-archive//github.com/acme.org/myapp:1.0.0 \
-  --identity name=ocm-cli \
-  --output ./ocm-cli
-```
-
-You should see: `level=INFO msg="resource downloaded successfully" output=./ocm-cli`.
-
-{{< callout context="note" >}}
-When the media type is an archive format the CLI can unpack, `--output` is a **directory** holding the extracted
-contents. Other media types are written to a file at that path.
-{{< /callout >}}
-
-{{< /step >}}
-
-{{< /steps >}}
-
 ## Pinning an expected digest
 
 Wget content comes from a server you do not control, so vet it before it enters the component version. Download the
 artifact and run whatever your process requires: a virus scan, a check against the vendor's published checksum, a
-manual review. Then hash the copy you trust and pin that value with `digest`. On the next `ocm add cv`, OCM hashes what
-it fetches and refuses to add the resource if the two values differ:
+manual review. Then hash the copy you trust:
 
-```yaml
+```bash
+sha256sum cli.tar     # Linux
+shasum -a 256 cli.tar # macOS
+```
+
+Pin that value with `digest`. On the next `ocm add cv`, OCM hashes what it fetches and refuses to add the resource if
+the two values differ:
+
+```bash
+cat > component-constructor.yaml << 'EOF'
 components:
   - name: github.com/acme.org/myapp
     version: 1.0.0
@@ -325,6 +331,7 @@ components:
       - name: ocm-cli
         type: blob
         version: 1.0.0
+        relation: external
         digest:
           hashAlgorithm: SHA-256
           normalisationAlgorithm: genericBlobDigest/v1
@@ -333,16 +340,10 @@ components:
           type: Wget/v1
           url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
           mediaType: application/x-tar
+EOF
 ```
 
 The field is optional and applies to both the input and the access type.
-
-Hash the copy you trust:
-
-```bash
-sha256sum cli.tar     # Linux
-shasum -a 256 cli.tar # macOS
-```
 
 {{< callout context="caution" >}}
 Write all three fields:
@@ -368,6 +369,71 @@ For the access type the check is not confined to construction. The bytes are fet
 referencing the URL is transferred, and verified against the same digest, so content that changes after publication
 makes the transfer fail rather than substituting different bytes. That transfer-time check is the input-type one, since
 the content is stored as a local blob in the target.
+
+## Sending a non-GET request
+
+For a request other than `GET`, set `verb`, `header`, and `body`. `body` is base64-encoded in YAML because the
+underlying field is a byte slice:
+
+```bash
+cat > component-constructor.yaml << 'EOF'
+components:
+  - name: github.com/acme.org/myapp
+    version: 1.0.0
+    provider:
+      name: acme.org
+    resources:
+      - name: report
+        type: blob
+        version: 1.0.0
+        input:
+          type: Wget/v1
+          url: https://api.example.com/reports
+          verb: POST
+          mediaType: application/json
+          header:
+            Accept:
+              - application/json
+            X-Request-Source:
+              - ocm
+          # base64 of {"format":"json"}
+          body: eyJmb3JtYXQiOiJqc29uIn0=
+EOF
+```
+
+## Tuning the download
+
+Only 2xx responses are accepted; any other status fails the operation. Redirects are followed by default. Set
+`noRedirect: true` to assert that a URL serves content directly rather than to fetch the redirect target. The request
+then stops at the first redirect response and fails, because a 3xx status is not a success status.
+
+Response bodies are streamed to a file on disk rather than buffered, so memory use stays flat regardless of artifact
+size. There is no size limit by default, so a download is bounded by free disk space. The file is created under the
+`tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration type, falling back to the operating
+system's temporary directory. Timeouts, retries, connection settings, and per-host overrides come from the
+`http.config.ocm.software/v1alpha1` configuration type and apply to every Wget request:
+
+```bash
+cat > .ocmconfig << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: filesystem.config.ocm.software/v1alpha1
+    tempFolder: /var/tmp/ocm
+  - type: http.config.ocm.software/v1alpha1
+    timeout: 2m
+    retry:
+      maxRetries: 3
+    hosts:
+      github.com:
+        timeout: 5m
+EOF
+```
+
+Point `tempFolder` at a volume with enough free space when you reference large artifacts, and at an encrypted volume
+when the content is sensitive.
+
+See [HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) for the full schema,
+defaults, and per-host merge semantics.
 
 ## Migrating from OCM v1
 
