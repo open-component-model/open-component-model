@@ -14,6 +14,7 @@ require (
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260803105756-854228e942e9
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
+	ocm.software/open-component-model/bindings/go/github v0.0.0-20260803105756-854228e942e9
 	ocm.software/open-component-model/bindings/go/oci v0.0.48
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
@@ -29,6 +30,8 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/buger/jsonparser v1.2.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -64,7 +67,10 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/google/cel-go v0.29.1 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
+	github.com/google/go-github/v89 v89.0.0 // indirect
+	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.19.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260627054121-477a66015f15 // indirect
@@ -82,6 +88,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nlepage/go-tarfs v1.2.1 // indirect
+	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
@@ -99,6 +106,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
@@ -123,10 +131,12 @@ require (
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260803112134-79492a1c0550 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.13 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260803105756-854228e942e9 // indirect
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260803105756-854228e942e9 // indirect
 	ocm.software/open-component-model/bindings/go/http v0.0.0-20260803105756-854228e942e9 // indirect
+	ocm.software/open-component-model/bindings/go/plugin v0.0.17 // indirect
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260803105756-854228e942e9 // indirect
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260803105756-854228e942e9 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
