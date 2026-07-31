@@ -63,13 +63,13 @@ repository.
 
 ```yaml
 resources:
-  - name: release-archive
+  - name: ocm-cli
     type: blob
     version: 1.0.0
     input:
       type: Wget/v1
-      url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
-      mediaType: application/x-tar+gzip
+      url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
+      mediaType: application/x-tar
 ```
 
 {{< /tab >}}
@@ -77,14 +77,14 @@ resources:
 
 ```yaml
 resources:
-  - name: release-archive
+  - name: ocm-cli
     type: blob
     version: 1.0.0
     relation: external
     access:
       type: Wget/v1
-      url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
-      mediaType: application/x-tar+gzip
+      url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
+      mediaType: application/x-tar
 ```
 
 {{< /tab >}}
@@ -136,13 +136,17 @@ The media type of the resulting blob is resolved in this order:
 3. `application/octet-stream`.
 
 Set `mediaType` whenever the server does not send a useful `Content-Type`. Otherwise the resource ends up as
-`application/octet-stream`.
+`application/octet-stream`. GitHub release assets are a common case: they are served as `application/octet-stream`
+regardless of what they contain, which is why the example above sets `mediaType: application/x-tar` explicitly.
 
 {{< /step >}}
 
 {{< step >}}
 
 ### Configure credentials for the host
+
+The release asset used above is public, so this step is not needed to follow along. It applies as soon as the URL sits
+behind authentication, which includes assets in a private GitHub repository.
 
 Credentials are resolved from the resource URL through a consumer identity of type `Wget`. The input type and the access
 type derive that identity identically, so a single entry in `.ocmconfig` covers construction and later downloads:
@@ -207,7 +211,7 @@ configurations:
     retry:
       maxRetries: 3
     hosts:
-      downloads.example.com:
+      github.com:
         timeout: 5m
 ```
 
@@ -244,18 +248,18 @@ An input-type resource resolves to a `LocalBlob/v1` access carrying the resolved
 
 ```yaml
     resources:
-      - access:
-          localReference: sha256:984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
-          mediaType: application/x-tar+gzip
-          type: LocalBlob/v1
-        digest:
-          hashAlgorithm: SHA-256
-          normalisationAlgorithm: genericBlobDigest/v1
-          value: 984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
-        name: release-archive
-        relation: local
-        type: blob
-        version: 1.0.0
+    - access:
+        localReference: sha256:6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
+        mediaType: application/x-tar
+        type: LocalBlob/v1
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
+      name: ocm-cli
+      relation: local
+      type: blob
+      version: 1.0.0
 ```
 
 {{< /details >}}
@@ -266,18 +270,18 @@ An access-type resource keeps the `Wget/v1` specification verbatim, with the dig
 
 ```yaml
     resources:
-      - access:
-          mediaType: application/x-tar+gzip
-          type: Wget/v1
-          url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
-        digest:
-          hashAlgorithm: SHA-256
-          normalisationAlgorithm: genericBlobDigest/v1
-          value: 984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
-        name: release-archive
-        relation: external
-        type: blob
-        version: 1.0.0
+    - access:
+        mediaType: application/x-tar
+        type: Wget/v1
+        url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
+      name: ocm-cli
+      relation: external
+      type: blob
+      version: 1.0.0
 ```
 
 {{< /details >}}
@@ -286,11 +290,11 @@ Downloading the resource proves the transport and credentials work end to end:
 
 ```bash
 ocm download resource ./transport-archive//github.com/acme.org/myapp:1.0.0 \
-  --identity name=release-archive \
-  --output ./release-archive
+  --identity name=ocm-cli \
+  --output ./ocm-cli
 ```
 
-You should see: `level=INFO msg="resource downloaded successfully" output=./release-archive`.
+You should see: `level=INFO msg="resource downloaded successfully" output=./ocm-cli`.
 
 {{< callout context="note" >}}
 When the media type is an archive format the CLI can unpack, `--output` is a **directory** holding the extracted
@@ -315,17 +319,17 @@ components:
     provider:
       name: acme.org
     resources:
-      - name: release-archive
+      - name: ocm-cli
         type: blob
         version: 1.0.0
         digest:
           hashAlgorithm: SHA-256
           normalisationAlgorithm: genericBlobDigest/v1
-          value: 984a4a1932d7b0eaa25976561cc777ba9891199e61c090ad6ad8f70e82ca6fce
+          value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
         access:
           type: Wget/v1
-          url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
-          mediaType: application/x-tar+gzip
+          url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
+          mediaType: application/x-tar
 ```
 
 The field is optional and applies to both the input and the access type.
@@ -333,8 +337,8 @@ The field is optional and applies to both the input and the access type.
 Hash the copy you trust:
 
 ```bash
-sha256sum myapp-linux-amd64.tar.gz     # Linux
-shasum -a 256 myapp-linux-amd64.tar.gz # macOS
+sha256sum cli.tar     # Linux
+shasum -a 256 cli.tar # macOS
 ```
 
 {{< callout context="caution" >}}
@@ -353,8 +357,8 @@ The two types report a mismatch differently, because the check happens in a diff
 while computing the digest; the input type verifies while storing the blob, and prefixes the computed value:
 
 ```text
-digest mismatch: expected 984a4a19…, got 3b1f0c72…                          # access type
-resource blob digest mismatch: resource 984a4a19… vs blob sha256:3b1f0c72…  # input type
+digest mismatch: expected 6e3205bb…, got 3b1f0c72…                          # access type
+resource blob digest mismatch: resource 6e3205bb… vs blob sha256:3b1f0c72…  # input type
 ```
 
 For the access type the check is not confined to construction. The bytes are fetched again whenever a component version
@@ -410,12 +414,37 @@ mechanisms.
 
 ### Symptom: `401 Unauthorized` from the origin server
 
-**Cause:** No consumer entry matched, so the request went out unauthenticated. The identity type is matched by exact
-string and is unversioned, so neither `Wget/v1` nor the lowercase `wget` used by OCM v1 will match.
-Another silent cause: an entry that sets only certificateAuthority without certificate. In OCM v2, certificateAuthority is only evaluated alongside a client certificate. It is not applied for server-side certificate verification on its own.
+**Cause:** Either the credentials that were sent are wrong, or no consumer entry matched the identity OCM derives from
+the resource URL and the request went out unauthenticated. The second case is the harder one to spot: a non-matching
+entry is not an error, so nothing is logged and the server's response is the first sign of it.
 
-**Fix:** Set `type: Wget` in the consumer identity, and drop `pathprefix`. `path` is matched with `path.Match`, whose
-`*` does not cross `/`, so it cannot express a prefix over nested paths. Omitting it matches every path on the host:
+**Fix:** Check the credentials themselves first, then check that the entry matches. `hostname` has to match the URL
+host; `scheme`, `port`, and `path` narrow the match further whenever they are set, so the entry that covers every
+download from a host is the one that omits all three:
+
+```yaml
+- identity:
+    type: Wget
+    hostname: downloads.example.com
+  credentials:
+    - type: WgetCredentials/v1
+      username: my-user
+      password: my-password
+```
+
+See [Credential Consumer Identities: Wget]({{< relref "docs/reference/credential-consumer-identities.md#wget" >}}) for
+how the identity is derived from a URL, and for the matching rules of each attribute.
+
+### Symptom: `401 Unauthorized` after migrating a consumer entry from OCM v1
+
+**Cause:** Two identity attributes were renamed, so an entry carried over unchanged matches nothing:
+
+- The type is `Wget`, matched by exact string and unversioned. The lowercase `wget` of OCM v1 does not match, and
+  neither does `Wget/v1`.
+- `pathprefix` no longer exists. OCM v2 uses `path`, matched with `path.Match`, whose `*` does not cross `/`, so it
+  cannot express a prefix spanning nested paths.
+
+**Fix:** Rename the type and drop `pathprefix`. Omitting `path` matches every path on the host:
 
 ```yaml
 - identity:
@@ -425,7 +454,8 @@ Another silent cause: an entry that sets only certificateAuthority without certi
 ```
 
 Set `path` only to pin one exact object (`path: my-org/app/1.0/app.tgz`), or a single segment (`path: my-org/*`, which
-matches `my-org/app.tgz` but not `my-org/app/1.0.tgz`).
+matches `my-org/app.tgz` but not `my-org/app/1.0.tgz`). See [Credential changes](#credential-changes) for the rest of
+the migration.
 
 ### Symptom: the resource has media type `application/octet-stream`
 
@@ -455,7 +485,7 @@ reports `invalid hash algorithm` and never checks the normalisation algorithm at
 digest:
   hashAlgorithm: SHA-256                       # not "sha256", not "SHA256"
   normalisationAlgorithm: genericBlobDigest/v1
-  value: 984a4a19…                             # bare hex, no "sha256:" prefix
+  value: 6e3205bb…                             # bare hex, no "sha256:" prefix
 ```
 
 ### Symptom: the operation fails reporting a 3xx status
