@@ -80,8 +80,10 @@ spec:
     name: releasechannel
 
   # Optional. Filters references. A component is kept if it is the target of
-  # at least one matching reference somewhere below the root. The root itself
-  # is not a reference target, so it is dropped when this selector is set.
+  # at least one matching reference somewhere below the root. The root has no
+  # incoming reference and is therefore dropped when this selector carries at
+  # least one predicate; an empty `{}` selector is treated the same as an
+  # omitted field and preserves the full graph including the root.
   referenceSelector:
     matchIdentity:
       componentName: ghcr.io/example/releasechannel/flux
@@ -89,7 +91,7 @@ spec:
 
   # Optional. Filters components by their own identity and labels. Applied to
   # whatever components survived referenceSelector; when referenceSelector is
-  # not set, that's the full graph including the root.
+  # unset (or empty), that's the full graph including the root.
   componentSelector:
     matchLabels:
       tier: platform
