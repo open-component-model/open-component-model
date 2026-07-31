@@ -11,14 +11,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 )
 
-// OCILayerResourceStream wraps a content.ReadOnlyGraphStorage and a single
-// layer descriptor. No network I/O occurs at construction time.
+// OCILayerResourceStream wraps a content.ReadOnlyGraphStorage and a single layer
+// descriptor. No network I/O occurs at construction time.
 //
-// A layer is a plain blob and not an OCI manifest, so it is the root of the
-// graph and has no successors of its own. Consequently Materialize yields the
-// layer content itself rather than the OCI layout tar OCIResourceStream
-// produces: a bare blob cannot be the subject of a layout index, and callers
-// asking for a layer want the bytes it addresses (a chart archive, a file, ...).
+// A layer is a plain blob, so it roots the graph with no successors of its own and
+// cannot be the subject of a layout index. Materialize therefore yields the layer
+// content itself rather than the OCI layout tar OCIResourceStream produces.
 type OCILayerResourceStream struct {
 	content.ReadOnlyGraphStorage
 	Descriptor ocispec.Descriptor
@@ -30,9 +28,8 @@ func (s *OCILayerResourceStream) Root() ocispec.Descriptor {
 	return s.Descriptor
 }
 
-// Materialize fetches the layer and buffers it into a blob. The descriptor's
-// digest is handed to the blob so the content is verified against it while it
-// is read.
+// Materialize fetches the layer and buffers it into a blob. Passing the descriptor's
+// digest along makes the blob verify the content against it as it is read.
 func (s *OCILayerResourceStream) Materialize(ctx context.Context) (blob.ReadOnlyBlob, error) {
 	data, err := s.Fetch(ctx, s.Descriptor)
 	if err != nil {

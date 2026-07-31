@@ -43,10 +43,8 @@ type OCIImageLayer struct {
 	Size int64 `json:"size"`
 }
 
-// Validate checks the access for internal consistency. The reference is parsed
-// with looseref rather than registry.ParseReference so that the scheme-prefixed
-// references (http://host/repo) the OCI binding accepts for plain-HTTP
-// registries are not rejected here.
+// Validate parses the reference with looseref so that the scheme-prefixed form
+// (http://host/repo) the binding accepts for plain-HTTP registries is not rejected.
 func (t *OCIImageLayer) Validate() error {
 	if err := t.Digest.Validate(); err != nil {
 		return fmt.Errorf("invalid digest %q: %w", t.Digest, err)
@@ -54,9 +52,6 @@ func (t *OCIImageLayer) Validate() error {
 	if t.Size < 0 {
 		return fmt.Errorf("size %d is invalid, must be greater than 0", t.Size)
 	}
-	// Unknown keys are dropped when the access is deserialized, so an access that
-	// spells the reference field wrong arrives here empty rather than failing to
-	// parse. Name the expected field so that is diagnosable.
 	if t.Reference == "" {
 		return fmt.Errorf("no reference set in field %q", "ref")
 	}
