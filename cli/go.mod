@@ -26,6 +26,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260729151447-3653a7d88979
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260729151447-3653a7d88979
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
+	ocm.software/open-component-model/bindings/go/github v0.0.0-20260730141140-0f23abe6c114
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260729151447-3653a7d88979
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260729151447-3653a7d88979
 	ocm.software/open-component-model/bindings/go/http v0.0.0-20260729151447-3653a7d88979
@@ -86,6 +87,8 @@ require (
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/cel-go v0.29.0 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
+	github.com/google/go-github/v89 v89.0.0 // indirect
+	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20260505044615-1ff4bf46051f // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
