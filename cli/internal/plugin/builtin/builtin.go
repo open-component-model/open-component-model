@@ -10,6 +10,7 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocicredentialplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/credentials/oci"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin/github"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/gpg"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/dir"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/file"
@@ -59,6 +60,13 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		httpConfig,
 		filesystemConfig); err != nil {
 		return fmt.Errorf("could not register wget inbuilt plugin: %w", err)
+	}
+
+	if err := github.Register(manager.ResourcePluginRegistry,
+		manager.DigestProcessorRegistry,
+		manager.CredentialRepositoryRegistry,
+		httpConfig); err != nil {
+		return fmt.Errorf("could not register github inbuilt plugin: %w", err)
 	}
 
 	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(
