@@ -255,8 +255,8 @@ payloads generically with the same code. The payload always lives on `status` (n
 
 Status payloads are subject to the etcd soft limit (~1.5 MiB). Discovery does not store descriptors outside etcd.
 Selectors and `Extract` let users shape the payload down. When the result still exceeds the limit, the API server
-rejects the status write; the controller drops the payload, retries with a `PayloadTooLarge` condition, and requeues,
-so the user sees `Ready=False` with the rejection message instead of a stale successful status.
+rejects the status write; the controller clears `status.discovery`, repatches a `Ready=False` /
+`PayloadTooLarge` condition carrying the API server's rejection message, and returns without requeueing.
 
 The large-descriptor navigation case is descoped. Out-of-status storage (encoded payload,
 sibling ConfigMap, artifact CR) is an additive path if a concrete need appears.
@@ -271,11 +271,9 @@ downstream consumers and generating unnecessary etcd writes.
 
 Discovery uses the shared condition types and reasons, plus Discovery-specific reasons:
 
-- **`ExtractFailed`**: a `spec.extract` projection failed to compile or evaluate. Fires on things like a syntax
-  error in a CEL expression, `expression` mode hitting a missing attribute (map modes tolerate this), or a runtime
-  error inside a CEL function (e.g. `semverCheck` on a malformed constraint). Distinct from resolution errors so
-  users can tell "the graph is fine, my projection is wrong" from "the graph didn't resolve".
-- **`NoReferencesMatched`** and **`NoComponentsMatched`**: emitted on `Ready=True` when a selector filters the
+- `SelectorFailed`: a `spec` selector failed to compile or evaluate.
+- `ExtractFailed`: a `spec.extract` projection failed to compile or evaluate.
+- `NoReferencesMatched` and `NoComponentsMatched`: emitted on `Ready=True` when a selector filters the
   descriptor set to empty. In that state `status.discovery` is set to an explicit empty JSON array (`[]`) so
   consumers can distinguish "query ran and matched nothing" from "payload never computed". Distinct reasons per
   stage so consumers can distinguish "no reference matched" from "reference matched but the component didn't".
