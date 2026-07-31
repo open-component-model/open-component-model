@@ -87,6 +87,8 @@ require (
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/cel-go v0.29.0 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
+	github.com/google/go-github/v89 v89.0.0 // indirect
+	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20260505044615-1ff4bf46051f // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -164,6 +166,7 @@ require (
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260729151447-3653a7d88979 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.11 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
+	ocm.software/open-component-model/bindings/go/github v0.0.0-20260730141140-0f23abe6c114 // indirect
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260729151447-3653a7d88979 // indirect
 	ocm.software/open-component-model/bindings/go/http v0.0.0-20260729151447-3653a7d88979 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4 // indirect
