@@ -68,7 +68,7 @@ components:
         version: "${VERSION}"
         labels:
           - name: downloadName
-            value: ocm
+            value: ocm.exe
         relation: external
         extraIdentity:
           os: windows
@@ -82,7 +82,7 @@ components:
         version: "${VERSION}"
         labels:
           - name: downloadName
-            value: ocm
+            value: ocm.exe
         relation: external
         extraIdentity:
           os: windows
