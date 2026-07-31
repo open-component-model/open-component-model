@@ -954,3 +954,5 @@ ifying
 Wget's
 presigned
 WgetCredentials
+downloadname
+exe

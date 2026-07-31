@@ -1455,6 +1455,74 @@ resources:
 	r.Equal("foobar", string(downloaded), "expected downloaded resource content to match test file content")
 }
 
+func Test_Download_Resource_DownloadName(t *testing.T) {
+	tmp := t.TempDir()
+
+	testFilePath := filepath.Join(tmp, "test-file.txt")
+	require.NoError(t, os.WriteFile(testFilePath, []byte("foobar"), 0o600))
+
+	// Component with a downloadName label on the resource.
+	constructorYAML := fmt.Sprintf(`
+name: ocm.software/download-name-test
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: my-file
+    type: blob
+    labels:
+      - name: downloadName
+        value: renamed-output.bin
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	require.NoError(t, os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	require.NoError(t, err, "could not construct component version")
+
+	ref := archiveFilePath + "//ocm.software/download-name-test:1.0.0"
+
+	t.Run("downloadName used as filename when --output is absent", func(t *testing.T) {
+		r := require.New(t)
+		workDir := t.TempDir()
+		t.Chdir(workDir)
+
+		_, err := test.OCM(t, test.WithArgs("download", "resource",
+			ref,
+			"--identity", "name=my-file,version=1.0.0",
+		))
+		r.NoError(err)
+
+		data, err := os.ReadFile(filepath.Join(workDir, "renamed-output.bin"))
+		r.NoError(err, "expected file to be saved as downloadName value")
+		r.Equal("foobar", string(data))
+	})
+
+	t.Run("--output wins over downloadName label", func(t *testing.T) {
+		r := require.New(t)
+		explicitTarget := filepath.Join(t.TempDir(), "explicit-output.bin")
+
+		_, err := test.OCM(t, test.WithArgs("download", "resource",
+			ref,
+			"--identity", "name=my-file,version=1.0.0",
+			"--output", explicitTarget,
+		))
+		r.NoError(err)
+
+		data, err := os.ReadFile(explicitTarget)
+		r.NoError(err, "expected file at explicit --output path, not at downloadName path")
+		r.Equal("foobar", string(data))
+	})
+}
+
 func Test_Sign_And_Verify_Component_Version(t *testing.T) {
 	r := require.New(t)
 	tmp := t.TempDir()
