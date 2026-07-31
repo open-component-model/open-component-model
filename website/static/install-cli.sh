@@ -21,12 +21,13 @@ Arguments:
   BIN_DIR    Installation directory (default: ~/.local/bin)
 
 Environment variables:
-  OCM_VERSION       Install a specific version (e.g., OCM_VERSION=1.0.0)
+  OCM_VERSION       Install a specific version (e.g., OCM_VERSION=1.0.0) or the latest version of a major.minor series (e.g., OCM_VERSION=0.9)
   OCM_SKIP_VERIFY   Skip attestation verification (set to "true")
 
 Examples:
   curl -sfL https://ocm.software/install-cli.sh | bash
   curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=1.0.0 bash
+  curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.9 bash
   curl -sfL https://ocm.software/install-cli.sh | bash -s -- /usr/local/bin
 EOF
     exit 0
@@ -147,9 +148,32 @@ extract_stable_version() {
         || true # grep returns non-zero when no lines match; prevent set -e from killing the subshell
 }
 
+# Extract the latest stable version matching a MAJOR.MINOR prefix from a releases JSON file.
+extract_stable_version_for_minor() {
+    local minor_prefix="$1"
+    grep '"tag_name":' "$2" \
+        | grep -E "\"v${minor_prefix}\.[0-9]+\"" \
+        | sed -E "s|.*\"v([^\"]+)\".*|\1|" \
+        | sort -V \
+        | tail -1 \
+        || true
+}
+
 # Find version from Github metadata
 get_release_version() {
-    if [[ -z "${OCM_VERSION:-}" ]]; then
+    if [[ -n "${OCM_VERSION:-}" ]]; then
+        # If OCM_VERSION is a partial minor (e.g. "0.9"), resolve to the latest patch release.
+        if [[ "${OCM_VERSION}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100"
+            info "Downloading metadata ${METADATA_URL}"
+            download "${TMP_METADATA}" "${METADATA_URL}"
+
+            local resolved
+            resolved=$(extract_stable_version_for_minor "${OCM_VERSION}" "${TMP_METADATA}")
+            [[ -n "${resolved}" ]] || fatal "No stable release found for ${OCM_VERSION}.x"
+            OCM_VERSION="${resolved}"
+        fi
+    else
         # Use the list endpoint so we can filter for the canonical CLI tag; /releases/latest
         # may point to a non-CLI release (e.g. a website or docs tag published more recently).
         METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100"

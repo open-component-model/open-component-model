@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -31,19 +30,6 @@ func TestImageReferenceFromAccess_WithBaseURL(t *testing.T) {
 	fn := imageReferenceFromAccess("getStep1")
 	result := fn("ghcr.io/org")
 	assert.Equal(t, "ghcr.io/org/${getStep1.output.resource.access.imageReference}", result)
-}
-
-func TestOciUploadAsLocalResource_OCI(t *testing.T) {
-	toSpec := &oci.Repository{
-		Type:    runtime.Type{Name: oci.Type, Version: "v1"},
-		BaseUrl: "ghcr.io",
-	}
-
-	transform, err := ociUploadAsLocalResource(toSpec, "comp", "1.0.0", "addRes1", "getRes1", staticReferenceName("my/image:v1"))
-	require.NoError(t, err)
-	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, transform.TransformationMeta.Type)
-	assert.Equal(t, "addRes1", transform.TransformationMeta.ID)
-	assert.NotNil(t, transform.Spec)
 }
 
 func TestOciUploadAsArtifact_WithSubPath(t *testing.T) {

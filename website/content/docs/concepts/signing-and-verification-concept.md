@@ -299,7 +299,7 @@ sovereign-cloud deployments where egress to public or on-premise infrastructure 
 
 ```yaml
 signature:
-  algorithm: sigstore
+  algorithm: Sigstore/v1alpha1
   mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
   value: <base64-encoded Sigstore bundle>
 ```

@@ -23,37 +23,59 @@ body = """
     {% endfor %}
 {% endfor %}
 
-### Quick installation and usage guide
+## Get This Release
 
-#### CLI
-
-Install the latest version of the OCM CLI:
+### Install the OCM CLI
 
 ```bash
-curl -sfL https://ocm.software/install-cli.sh | bash
+curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION={{ version | trim_start_matches(pat="v") }} bash
 ```
 
-(For more installation options, see the [installation guide](https://ocm.software/docs/getting-started/install-the-ocm-cli/).)
+For alternative installation options, see the [installation guide](https://ocm.software/docs/getting-started/install-the-ocm-cli/).
 
 You can also run the OCM CLI in a container without installing it:
 
 ```bash
-docker run --rm -t ghcr.io/open-component-model/cli:latest --help
+docker run --rm -t ghcr.io/open-component-model/cli:{{ version | trim_start_matches(pat="v") }} --help
 ```
 
 See the [container image guide](https://ocm.software/docs/how-to/how-to-use-the-ocm-cli-container-image/) for more details.
 
-#### Controller
+### Deploy the OCM Controller
 
-Install the latest version of the OCM Controllers into a Kubernetes cluster via Helm:
+Install into a Kubernetes cluster via Helm:
 
 ```bash
 helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart \\
+  --version {{ version | trim_start_matches(pat="v") }} \\
   --namespace ocm-k8s-toolkit-system \\
   --create-namespace
 ```
 
-See the [controller setup guide](https://ocm.software/docs/getting-started/set-up-controller-environments/) for more details.
+See the [controller setup guide](https://ocm.software/docs/getting-started/set-up-controller-environments/) for full configuration options.
+
+### OCM Component Distribution *(for existing OCM users)*
+
+Every OCM release is published as OCM component versions to `ghcr.io/open-component-model` - the same distribution mechanism OCM enables for your own software. Components in this release:
+
+| Component | Contents |
+|---|---|
+| `ocm.software/ocm:{{ version | trim_start_matches(pat="v") }}` | Product wrapper referencing CLI + controller |
+| `ocm.software/cli:{{ version | trim_start_matches(pat="v") }}` | CLI binaries and OCI image |
+| `ocm.software/kubernetes/controller:{{ version | trim_start_matches(pat="v") }}` | Controller image and Helm chart |
+
+Inspect the full product component:
+
+```bash
+ocm get component-version ghcr.io/open-component-model//ocm.software/ocm:{{ version | trim_start_matches(pat="v") }} -o yaml
+```
+
+Download a CLI binary directly via OCM (requires OCM CLI already installed; replace `os` and `architecture` as needed — e.g. `linux`/`amd64`, `darwin`/`arm64`):
+
+```bash
+ocm download resource ghcr.io/open-component-model//ocm.software/cli:{{ version | trim_start_matches(pat="v") }} \\
+  --identity os=linux,architecture=amd64
+```
 
 {% if github.contributors | length > 0 %}
 ### Community & Contributors

@@ -149,6 +149,7 @@ contradictive
 contributability
 converthelmtooci
 crd
+cyclonedx
 crds
 creatable
 creationtime
@@ -585,6 +586,7 @@ pcc
 pem
 pendingdeprecationwarning
 performant
+peribolos
 pflag
 philipp
 pipelinespec
@@ -635,6 +637,7 @@ reconcilers
 refcount
 referencesconfig
 referrs
+referrers
 reimplement
 rekor
 relativeocireference
@@ -736,6 +739,7 @@ socio
 sonatype
 sourceref
 spdx
+syft
 src
 srcrefs
 sre
@@ -774,6 +778,7 @@ suppresstitle
 svg
 tac
 taskfile
+trivy
 taskfiles
 tbd
 tcp
@@ -842,6 +847,7 @@ ux
 valuemergehandler
 valuemergehandlerdescriptor
 valueset
+vex
 valuesfrom
 valuessource
 variadic
@@ -931,3 +937,6 @@ CLA
 GardenLinux
 IronCore
 Neisener
+ilja
+iljaweis
+weis

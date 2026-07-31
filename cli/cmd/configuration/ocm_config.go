@@ -18,6 +18,7 @@ import (
 const (
 	OCMConfigDirectoryName   = ".ocm"
 	OCMConfigFileName        = OCMConfigDirectoryName + "/config"
+	XDGOCMConfigFileName     = "ocm/config"
 	NestedOCMConfigFileName  = ".ocmconfig"
 	OCMConfigEnvironmentKey  = "OCM_CONFIG"
 	OCMConfigCommandArgument = "config"
@@ -43,12 +44,13 @@ By default (without specifying custom locations with this flag), the file will b
 - $HOME/.ocm/config
 - $HOME/.ocmconfig
 3. The current working directory:
-- $PWD/ocm/config
+- $PWD/.ocm/config
 - $PWD/.ocmconfig
 4. The directory of the current executable:
-- $EXE_DIR/ocm/config
+- $EXE_DIR/.ocm/config
 - $EXE_DIR/.ocmconfig
 If multiple configuration files are found, they will be merged in the order they are discovered.
+Later entries have higher priority.
 Using the option, the specified configuration file(s) will be used instead of the lookup above.`)
 }
 
@@ -141,7 +143,7 @@ func GetConfigFromPath(path string) (_ *genericv1.Config, err error) {
 }
 
 // GetOCMConfigPaths searches for the OCM configuration file in the following locations (in order):
-// 1. The path specified in the OCM_CONFIG_PATH environment variable
+// 1. The path specified in the OCM_CONFIG environment variable
 // 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
 //   - $XDG_CONFIG_HOME/ocm/config
 //   - $XDG_CONFIG_HOME/.ocmconfig
@@ -151,11 +153,11 @@ func GetConfigFromPath(path string) (_ *genericv1.Config, err error) {
 //   - $HOME/.ocmconfig
 //
 // 3. The current working directory:
-//   - $PWD/ocm/config
+//   - $PWD/.ocm/config
 //   - $PWD/.ocmconfig
 //
 // 4. The directory of the current executable:
-//   - $EXE_DIR/ocm/config
+//   - $EXE_DIR/.ocm/config
 //   - $EXE_DIR/.ocmconfig
 //
 // Returns:
@@ -202,14 +204,13 @@ func getFromEnvironment(options OCMConfigOptions) string {
 func getFromXDGOrHomeDir(o OCMConfigOptions) []string {
 	paths := []string{}
 	if xdg := o.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		if subPaths := checkConfigPaths(o, xdg); len(subPaths) > 0 {
+		if subPaths := checkXDGConfigPaths(o, xdg); len(subPaths) > 0 {
 			paths = append(paths, subPaths...)
 		}
 	}
 
-	// Check default XDG home ($HOME/.config)
 	if home, err := o.UserHomeDir(); err == nil {
-		if subPaths := checkConfigPaths(o, filepath.Join(home, ".config")); len(subPaths) > 0 {
+		if subPaths := checkXDGConfigPaths(o, filepath.Join(home, ".config")); len(subPaths) > 0 {
 			paths = append(paths, subPaths...)
 		}
 		if subPaths := checkConfigPaths(o, home); len(subPaths) > 0 {
@@ -243,16 +244,24 @@ func getFromExecutableDir(o OCMConfigOptions) []string {
 	return []string{}
 }
 
-// checkConfigPaths searches for both config file variations in a given base directory.
-//
-// Parameters:
-//   - base (string): The directory to search in.
-//
-// Returns:
-//   - []string: A slice of valid config file paths found; otherwise, an empty slice.
+// checkConfigPaths searches for config file variations in a given base directory
+// using dotfile names (.ocm/config, .ocmconfig). This is used for directories where
+// hidden files are the convention (e.g. $HOME, $PWD, $EXE_DIR).
 func checkConfigPaths(o OCMConfigOptions, base string) []string {
+	return checkPaths(o, base, []string{OCMConfigFileName, NestedOCMConfigFileName})
+}
+
+// checkXDGConfigPaths searches for config file variations in a given XDG config
+// directory using non-dot names (ocm/config, .ocmconfig). This is used for directories
+// that are already config directories (e.g. $XDG_CONFIG_HOME, $HOME/.config) following the
+// convention of not prefixing with another '.'
+func checkXDGConfigPaths(o OCMConfigOptions, base string) []string {
+	return checkPaths(o, base, []string{XDGOCMConfigFileName, NestedOCMConfigFileName})
+}
+
+func checkPaths(o OCMConfigOptions, base string, names []string) []string {
 	paths := []string{}
-	for _, name := range []string{OCMConfigFileName, NestedOCMConfigFileName} {
+	for _, name := range names {
 		path := filepath.Clean(filepath.Join(base, name))
 		if _, err := o.Stat(path); err == nil {
 			paths = append(paths, path)
