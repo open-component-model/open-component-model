@@ -6,7 +6,7 @@ require (
 	github.com/ProtonMail/go-crypto v1.4.1
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260729151447-3653a7d88979
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260731075011-c25627972262
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 )
 
