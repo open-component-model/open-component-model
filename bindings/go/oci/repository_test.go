@@ -1646,9 +1646,9 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 	}
 }
 
-// TestRepository_DownloadResourceOCIImageLayer asserts that a layer access
-// yields the raw layer content rather than an OCI layout tar, because a bare
-// blob has no manifest that a layout could point at.
+// TestRepository_DownloadResourceOCIImageLayer asserts that a layer access yields
+// the raw content rather than an OCI layout tar: a bare blob has no manifest that
+// a layout could point at.
 func TestRepository_DownloadResourceOCIImageLayer(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
@@ -2933,9 +2933,8 @@ func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
 }
 
 // TestRepository_AddOwnership_OCIImageLayerSubjectSkipped covers the same no-op
-// contract for a layer access. A layer is a bare blob, so it can never be the
-// subject of a referrer, but resources carrying the type are routed here and
-// must not fail construction when they opt into an ownership policy.
+// contract for a layer access: a bare blob can never be the subject of a referrer,
+// but opting into an ownership policy must not fail the construction either.
 func TestRepository_AddOwnership_OCIImageLayerSubjectSkipped(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()

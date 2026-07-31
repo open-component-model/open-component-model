@@ -298,10 +298,8 @@ func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *des
 		return nil, err
 	}
 
-	// A layer is addressed by digest and carries no manifest, so there is nothing
-	// to resolve: unlike an OCI image reference it can never be tag-based. All the
-	// registry can tell us is whether the blob is there, which Exists answers via
-	// the blob endpoint. Resolve would query the manifest endpoint and 404.
+	// A layer is always addressed by digest, so its descriptor is fully known here.
+	// Exists checks the blob endpoint; Resolve would query the manifest one and 404.
 	desc := ociImageSpecV1.Descriptor{
 		MediaType: typed.MediaType,
 		Digest:    typed.Digest,
@@ -315,8 +313,6 @@ func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *des
 		return nil, fmt.Errorf("layer %q does not exist in %q", typed.Digest, typed.Reference)
 	}
 
-	// if the resource did not have a digest, we apply the one from the access
-	// if it did, we verify it against the access.
 	if res.Digest == nil {
 		res.Digest = &descriptor.Digest{}
 		if err := internaldigest.Apply(res.Digest, typed.Digest); err != nil {
@@ -821,10 +817,8 @@ func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, 
 		if err != nil {
 			return nil, ociImageSpecV1.Descriptor{}, err
 		}
-		// The subject is the layer blob itself, whose descriptor the access already
-		// carries in full. buildAndPushOwnershipReferrer skips non-manifest subjects,
-		// so this degrades to a no-op rather than failing the construction: a referrer
-		// needs a manifest to point at and a bare blob is not one.
+		// A referrer needs a manifest to point at and a bare blob is not one, so the
+		// subject returned here is deliberately skipped by buildAndPushOwnershipReferrer.
 		return store, ociImageSpecV1.Descriptor{
 			MediaType: typed.MediaType,
 			Digest:    typed.Digest,
@@ -1176,8 +1170,7 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 		if !ok {
 			return nil, fmt.Errorf("store %T does not support predecessor walks", src)
 		}
-		// The layer is addressed by digest, so its descriptor is fully known from
-		// the access alone and no resolution against the registry is needed.
+		// Addressed by digest, so unlike the OCIImage case above nothing needs resolving.
 		return &ocistream.OCILayerResourceStream{
 			ReadOnlyGraphStorage: graph,
 			Descriptor: ociImageSpecV1.Descriptor{

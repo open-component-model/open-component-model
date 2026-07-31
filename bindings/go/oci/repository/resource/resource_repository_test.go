@@ -72,8 +72,8 @@ func TestAddOwnership_RawAccessType(t *testing.T) {
 		"AddOwnership must convert *runtime.Raw access to typed and reach the inner repository")
 }
 
-// rawOCIImageLayer builds the *runtime.Raw access a resource carries when it is
-// read back from a component descriptor.
+// rawOCIImageLayer builds the *runtime.Raw access a resource carries when read
+// back from a component descriptor.
 func rawOCIImageLayer(t *testing.T, reference string) *runtime.Raw {
 	t.Helper()
 	raw := &runtime.Raw{}
@@ -99,8 +99,7 @@ func layerResource(t *testing.T, reference string) *descriptor.Resource {
 }
 
 // The repository registers OCIImageLayer in its scheme, so the plugin manager routes
-// such resources here. Every read path must therefore accept the type instead of
-// rejecting it as "expected OCI image".
+// such resources here and every read path has to accept the type.
 func TestOCIImageLayer_ReadPathsAccepted(t *testing.T) {
 	ref := "nonexistent.invalid/test@" + digest.FromString("layer").String()
 
@@ -121,8 +120,8 @@ func TestOCIImageLayer_ReadPathsAccepted(t *testing.T) {
 	t.Run("digest processing reaches the registry", func(t *testing.T) {
 		repo := NewResourceRepository(nil)
 		_, err := repo.ProcessResourceDigest(t.Context(), layerResource(t, ref), nil)
-		// Assert positively on the host so a reworded rejection cannot pass for the
-		// wrong reason: reaching DNS means the access type was accepted.
+		// Asserting on the host, not on the absence of a rejection: reaching DNS is
+		// what proves the access type was accepted.
 		require.ErrorContains(t, err, "nonexistent.invalid")
 	})
 
@@ -134,8 +133,7 @@ func TestOCIImageLayer_ReadPathsAccepted(t *testing.T) {
 }
 
 // A layer addresses one existing blob and cannot be an upload destination, so the
-// upload paths must reject it up front rather than failing deep inside the inner
-// repository on an empty OCIImage reference.
+// upload paths reject it up front rather than deep inside the inner repository.
 func TestOCIImageLayer_RejectedAsUploadTarget(t *testing.T) {
 	ref := "nonexistent.invalid/test@" + digest.FromString("layer").String()
 
@@ -147,8 +145,8 @@ func TestOCIImageLayer_RejectedAsUploadTarget(t *testing.T) {
 	require.ErrorContains(t, err, "as upload target")
 }
 
-// An access that spells the reference field wrong deserializes into an empty
-// reference, which must be reported against the field the type actually uses.
+// An access that spells the reference field wrong deserializes into an empty one,
+// which has to be reported against the field the type actually uses.
 func TestOCIImageLayer_MissingReferenceNamesField(t *testing.T) {
 	repo := NewResourceRepository(nil)
 	_, err := repo.ProcessResourceDigest(t.Context(), layerResource(t, ""), nil)

@@ -1806,11 +1806,6 @@ func assertOwnershipReferrerAnnotations(t *testing.T, ctx context.Context, resol
 		"referrer subject digest must match the resolved subject manifest digest")
 }
 
-// Test_Integration_OCIImageLayer covers ocm-project issue #2873. OCIImageLayer is
-// registered in the OCI access scheme, so the plugin manager routes resources carrying
-// it to this repository, but every read path used to reject it with "expected OCI image".
-// This runs against a real registry because the failure only surfaces once the access
-// actually has to be resolved, authenticated and fetched.
 func Test_Integration_OCIImageLayer(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -1847,8 +1842,8 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
 	r.NoError(err)
 
-	// Push a single layer image so the layer blob genuinely exists in the registry.
-	// An OCIImageLayer access then addresses that blob directly, bypassing the manifest.
+	// Push a single layer image so the blob genuinely exists, then address it
+	// directly with an OCIImageLayer access, bypassing the manifest.
 	layerData := []byte("layer content addressed directly by an OCIImageLayer access")
 	layerDigest := digest.FromBytes(layerData)
 	imageReference := fmt.Sprintf("%s/layer-test:v1.0.0", registryAddress)
@@ -1863,9 +1858,8 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 	}, inmemory.New(bytes.NewReader(layoutData)))
 	r.NoError(err)
 
-	// The plugin path derives the registry from the access itself, so it needs the
-	// scheme to know the test registry speaks plain HTTP. The direct repository already
-	// has a plain HTTP resolver and takes the reference without one.
+	// The plugin path derives the registry from the access, so the reference needs the
+	// scheme to say plain HTTP. The direct repository already has such a resolver.
 	layerReference := fmt.Sprintf("%s/layer-test@%s", registryAddress, layerDigest)
 	schemedLayerReference := fmt.Sprintf("http://%s", layerReference)
 
@@ -1955,8 +1949,7 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 		r := require.New(t)
 		resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
 
-		// This is the path `ocm add cv` takes and where issue #2873 failed with
-		// "unsupported access type OCIImageLayer/v1: expected OCI image".
+		// The path `ocm add cv` takes, where issue #2873 surfaced.
 		newRes, err := resourceRepo.ProcessResourceDigest(
 			ctx, layerResource(layerAccess(schemedLayerReference)), creds)
 		r.NoError(err)
@@ -1980,8 +1973,8 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 		r := require.New(t)
 		resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
 
-		// ociBlob/v1 is the name the old CLI wrote, registered as an alias of
-		// OCIImageLayer. Deserialize through the scheme so the alias is what gets routed.
+		// ociBlob/v1 is the name the old CLI wrote, an alias of OCIImageLayer.
+		// Deserialize through the scheme so the alias is what gets routed.
 		legacy := layerAccess(schemedLayerReference)
 		legacy.Type = ocmruntime.NewVersionedType(v1.LegacyOCIBlobAccessType, v1.LegacyOCIBlobAccessTypeVersion)
 		raw := &ocmruntime.Raw{}
