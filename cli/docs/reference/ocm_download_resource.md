@@ -23,6 +23,11 @@ the appropriate file extension will be added to the output file name if no outpu
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
 
+The output filename is determined by the first of these that applies:
+  1. --output, if explicitly provided
+  2. A "downloadName" label on the resource, if present
+  3. The resource identity, optionally extended with a media-type-derived file extension
+
 ```
 ocm download resource [flags]
 ```
@@ -50,7 +55,7 @@ ocm download resource [flags]
                                  (must be one of [auto disable]) (default auto)
   -h, --help                     help for resource
       --identity string          resource identity to download
-      --output string            output location to download to. If no transformer is specified, and no format was discovered that can be written to a directory, the resource will be written to a file.
+      --output string            output location to download to. If no transformer is specified, and no format was discovered that can be written to a directory, the resource will be written to a file. Takes precedence over a downloadName label on the resource.
       --transformer string       transformer to use for the output. If not specified, the resource will be written as is. 
 ```
 

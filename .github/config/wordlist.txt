@@ -951,3 +951,5 @@ OpenDeliveryGear
 linkable
 ification
 ifying
+downloadname
+exe

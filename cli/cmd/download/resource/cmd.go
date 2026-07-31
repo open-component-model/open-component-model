@@ -57,7 +57,12 @@ It supports optional transformation of the resource using a registered transform
 If no transformer is specified, the resource is written directly in its original format. If the media type is known,
 the appropriate file extension will be added to the output file name if no output location is given.
 
-Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
+Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
+
+The output filename is determined by the first of these that applies:
+  1. --output, if explicitly provided
+  2. A "downloadName" label on the resource, if present
+  3. The resource identity, optionally extended with a media-type-derived file extension`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
 
@@ -75,7 +80,8 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
 	cmd.Flags().String(FlagOutput, "", "output location to download to. If no transformer is specified, and no "+
-		"format was discovered that can be written to a directory, the resource will be written to a file.")
+		"format was discovered that can be written to a directory, the resource will be written to a file. "+
+		"Takes precedence over a downloadName label on the resource.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
 	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
 		"policy to apply when extracting a resource. "+
@@ -259,7 +265,12 @@ func isTar(mediaType string) bool {
 }
 
 func processResourceOutput(output string, resource *descriptor.Resource, data blob.ReadOnlyBlob, identity string, logger *slog.Logger) (string, error) {
-	// Check for downloadName label
+	if output != "" {
+		logger.Info("using explicit --output", slog.String("output", output))
+		return output, nil
+	}
+
+	// Check for downloadName label; used as default filename when --output is not set.
 	for _, label := range resource.Labels {
 		if label.Name == "downloadName" {
 			var downloadName string
@@ -269,7 +280,7 @@ func processResourceOutput(output string, resource *descriptor.Resource, data bl
 			if downloadName = filepath.Clean(downloadName); filepath.IsAbs(downloadName) {
 				return "", fmt.Errorf("downloadName label value %q must not be an absolute path for security reasons", downloadName)
 			}
-			logger.Info("using downloadName label for file download location", slog.String("output", downloadName))
+			logger.Info("using downloadName label for output filename", slog.String("output", downloadName))
 			return downloadName, nil
 		}
 	}
