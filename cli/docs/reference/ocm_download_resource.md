@@ -55,7 +55,7 @@ ocm download resource [flags]
                                  (must be one of [auto disable]) (default auto)
   -h, --help                     help for resource
       --identity string          resource identity to download
-      --output string            output location to download to. If no transformer is specified, and no format was discovered that can be written to a directory, the resource will be written to a file. Takes precedence over a downloadName label on the resource.
+      --output string            full output file path (directory + filename). Intermediate directories are created automatically. Takes precedence over a downloadName label on the resource.
       --transformer string       transformer to use for the output. If not specified, the resource will be written as is. 
 ```
 

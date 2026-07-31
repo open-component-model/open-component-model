@@ -79,8 +79,7 @@ The output filename is determined by the first of these that applies:
 	}
 
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
-	cmd.Flags().String(FlagOutput, "", "output location to download to. If no transformer is specified, and no "+
-		"format was discovered that can be written to a directory, the resource will be written to a file. "+
+	cmd.Flags().String(FlagOutput, "", "full output file path (directory + filename). Intermediate directories are created automatically. "+
 		"Takes precedence over a downloadName label on the resource.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
 	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
