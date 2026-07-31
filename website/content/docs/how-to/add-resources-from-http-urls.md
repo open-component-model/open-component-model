@@ -47,10 +47,13 @@ OCM offers two ways to do this, and they share one transport, credential, and do
 | The upstream URL may disappear or change content            | The artifact is large and should not be duplicated              |
 | You are building an air-gapped or self-contained repository | Consumers are expected to fetch directly from the origin server |
 
-The distinction only holds for as long as the component version stays where it was built. Wget resources are always
-transferred by value, so transferring a component version turns its `Wget/v1` access specifications into
+{{< callout context="caution" >}}
+The distinction only holds for as long as the component version stays where it was built. 
+To transfer a `Wget/v1` resource, the `--copy-resources true` flag must be set on `ocm transfer cv`.
+Wget resources are transferred by value, so transferring a component version turns its `Wget/v1` access specifications into
 [`LocalBlob/v1`]({{< relref "docs/reference/input-and-access-types.md#localblobv1" >}}) entries in the target
 repository.
+{{< /callout >}}
 
 {{< /step >}}
 
@@ -248,18 +251,18 @@ An input-type resource resolves to a `LocalBlob/v1` access carrying the resolved
 
 ```yaml
     resources:
-    - access:
-        localReference: sha256:6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
-        mediaType: application/x-tar
-        type: LocalBlob/v1
-      digest:
-        hashAlgorithm: SHA-256
-        normalisationAlgorithm: genericBlobDigest/v1
-        value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
-      name: ocm-cli
-      relation: local
-      type: blob
-      version: 1.0.0
+      - access:
+          localReference: sha256:6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
+          mediaType: application/x-tar
+          type: LocalBlob/v1
+        digest:
+          hashAlgorithm: SHA-256
+          normalisationAlgorithm: genericBlobDigest/v1
+          value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
+        name: ocm-cli
+        relation: local
+        type: blob
+        version: 1.0.0
 ```
 
 {{< /details >}}
@@ -270,18 +273,18 @@ An access-type resource keeps the `Wget/v1` specification verbatim, with the dig
 
 ```yaml
     resources:
-    - access:
-        mediaType: application/x-tar
-        type: Wget/v1
-        url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
-      digest:
-        hashAlgorithm: SHA-256
-        normalisationAlgorithm: genericBlobDigest/v1
-        value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
-      name: ocm-cli
-      relation: external
-      type: blob
-      version: 1.0.0
+      - access:
+          mediaType: application/x-tar
+          type: Wget/v1
+          url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
+        digest:
+          hashAlgorithm: SHA-256
+          normalisationAlgorithm: genericBlobDigest/v1
+          value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
+        name: ocm-cli
+        relation: external
+        type: blob
+        version: 1.0.0
 ```
 
 {{< /details >}}
@@ -497,7 +500,8 @@ status.
 
 ## Next Steps
 
-- [How-To: Download Resources from Component Versions]({{< relref "docs/how-to/download-resources-from-component-versions.md" >}}) -
+- [How-To: Download Resources from Component Versions]({{< relref "
+  docs/how-to/download-resources-from-component-versions.md" >}}) -
   Fetch the resource you just added
 - [How-To: Air-Gap Transfer]({{< relref "docs/how-to/air-gap-transfer.md" >}}) - Move component versions into
   disconnected environments
