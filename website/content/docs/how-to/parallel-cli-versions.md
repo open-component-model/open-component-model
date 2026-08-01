@@ -20,10 +20,12 @@ Install multiple OCM CLI versions side-by-side and switch between them, useful f
 ## Prerequisites
 
 Either:
+
 - An [OCM CLI already installed]({{< relref "ocm-cli-installation.md" >}}), or
 - Docker (to bootstrap without an existing installation; see the [Docker bootstrap]({{< relref "ocm-cli-installation.md" >}}) section in the install guide)
 
 And:
+
 - `~/.local/bin` on your PATH (the default location from the [install guide]({{< relref "ocm-cli-installation.md" >}}))
 - [direnv](https://direnv.net) if you want per-project version pinning (optional)
 
@@ -36,7 +38,8 @@ OCM distributes its own CLI as an OCM component. Any published version can be fe
 {{< tabs "download-methods" >}}
 {{< tab "Existing OCM CLI" >}}
 
-Use your current `ocm` installation to download any version:
+Use your current `ocm` installation to download any version.
+Replace `os` and `architecture` with your platform values (`linux/darwin`, `amd64/arm64`):
 
 ```shell
 ocm download resource \
@@ -49,9 +52,10 @@ chmod +x ~/.local/bin/ocm-v0.12.0
 Repeat for each version you need, substituting the tag and output filename.
 
 {{< /tab >}}
-{{< tab "Docker (no existing OCM)" >}}
+{{< tab "Docker (Linux/macOS)" >}}
 
-Use the container image as a one-time downloader. The same approach works whether you have `ocm` installed or not:
+Use the container image as a one-time downloader on Linux or macOS.
+Replace `os` and `architecture` with your platform values (`linux/darwin`, `amd64/arm64`):
 
 ```shell
 docker run --rm \
@@ -128,8 +132,12 @@ Add `.bin/` to your `.gitignore` to avoid committing the symlink.
 
 ```shell
 chmod +x ~/.local/bin/ocm-v0.12.0
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc
+# Bash:
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
+# Zsh:
+# echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+# source ~/.zshrc
 ```
 
 ### Symptom: `ocm` inside the project still resolves to the system binary

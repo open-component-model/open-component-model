@@ -940,3 +940,4 @@ Neisener
 ilja
 iljaweis
 weis
+direnv
