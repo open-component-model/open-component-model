@@ -8,7 +8,7 @@ toc: true
 
 ## Goal
 
-Install multiple OCM CLI versions side-by-side and switch between them — useful when testing against a release candidate, validating a migration, or reproducing version-specific behavior.
+Install multiple OCM CLI versions side-by-side and switch between them, useful for testing against a release candidate, validating a migration, or reproducing version-specific behavior.
 
 ## You'll end up with
 
@@ -21,7 +21,7 @@ Install multiple OCM CLI versions side-by-side and switch between them — usefu
 
 Either:
 - An [OCM CLI already installed]({{< relref "ocm-cli-installation.md" >}}), or
-- Docker (to bootstrap without an existing installation — see the [Docker bootstrap]({{< relref "ocm-cli-installation.md" >}}) section in the install guide)
+- Docker (to bootstrap without an existing installation; see the [Docker bootstrap]({{< relref "ocm-cli-installation.md" >}}) section in the install guide)
 
 And:
 - `~/.local/bin` on your PATH (the default location from the [install guide]({{< relref "ocm-cli-installation.md" >}}))
@@ -29,7 +29,7 @@ And:
 
 ## Download a specific version
 
-OCM distributes its own CLI as an OCM component. Any published version can be fetched directly — no package manager or version switcher tool needed.
+OCM distributes its own CLI as an OCM component. Any published version can be fetched directly, with no package manager or version switcher tool needed.
 
 `--output` is required here: without it the binary is saved as `ocm` (or `ocm.exe` on Windows), overwriting your current installation. Always include the full versioned filename in the output path.
 
@@ -144,5 +144,5 @@ direnv allow   # run from inside the project directory
 
 ## Next steps
 
-- [Install the OCM CLI]({{< relref "ocm-cli-installation.md" >}}) — full installation options including attestation verification
-- [Download resources from component versions]({{< relref "download-resources-from-component-versions.md" >}}) — the mechanism this guide is built on
+- [Install the OCM CLI]({{< relref "ocm-cli-installation.md" >}}): full installation options including attestation verification
+- [Download resources from component versions]({{< relref "download-resources-from-component-versions.md" >}}): the mechanism this guide is built on
