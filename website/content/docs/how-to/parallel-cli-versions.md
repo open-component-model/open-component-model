@@ -22,7 +22,7 @@ Install multiple OCM CLI versions side-by-side and switch between them, useful f
 Either:
 
 - An [OCM CLI already installed]({{< relref "ocm-cli-installation.md" >}}), or
-- Docker (to bootstrap without an existing installation; see the [Docker bootstrap]({{< relref "ocm-cli-installation.md" >}}) section in the install guide)
+- Docker (to bootstrap without an existing installation; see the [Docker bootstrap]({{< relref "ocm-cli-installation.md" >}}#docker-bootstrap) section in the install guide)
 
 And:
 
