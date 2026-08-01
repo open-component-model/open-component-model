@@ -33,7 +33,7 @@ And:
 
 OCM distributes its own CLI as an OCM component. Any published version can be fetched directly, with no package manager or version switcher tool needed.
 
-`--output` is required here: without it the binary is saved as `ocm` (or `ocm.exe` on Windows), overwriting your current installation. Always include the full versioned filename in the output path.
+`--output` sets the destination path including the filename. Without it the binary is written to the current working directory under the name from the `downloadName` label (`ocm` or `ocm.exe` on Windows), which would place an unversioned binary wherever you happen to run the command. Always include the full versioned filename in the output path.
 
 {{< tabs "download-methods" >}}
 {{< tab "Existing OCM CLI" >}}
