@@ -96,9 +96,13 @@ ocm-v0.11.0 version
 
 Each command should print its own version JSON, confirming both binaries are independent and functional.
 
-## Pin a version to a project directory
+## Pin a version to a project directory (macOS / Linux / WSL)
 
 To use a specific OCM version inside one directory without affecting anything else on your system, use [direnv](https://direnv.net).
+
+{{< callout title="Prerequisite" icon="outline/info-circle" >}}
+This section requires direnv to be installed **and** its shell hook configured in your shell profile. Add `eval "$(direnv hook bash)"` to `~/.bashrc` (Bash) or `eval "$(direnv hook zsh)"` to `~/.zshrc` (Zsh), then restart your shell. See the [direnv hook docs](https://direnv.net/docs/hook.html) for details.
+{{< /callout >}}
 
 Create a local `ocm` symlink pointing at the versioned binary, then tell direnv to prepend it to PATH:
 
@@ -130,14 +134,20 @@ Add `.bin/` to your `.gitignore` to avoid committing the symlink.
 
 **Fix:**
 
+Bash:
+
 ```shell
 chmod +x ~/.local/bin/ocm-v0.12.0
-# Bash:
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
-# Zsh:
-# echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-# source ~/.zshrc
+```
+
+Zsh:
+
+```shell
+chmod +x ~/.local/bin/ocm-v0.12.0
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 ### Symptom: `ocm` inside the project still resolves to the system binary
