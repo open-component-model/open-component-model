@@ -1,7 +1,7 @@
 # Component Graph Discovery in the OCM Kubernetes Controller Toolkit
 
 * **Status**: proposed
-* **Deciders**: @frewilhelm @fabianburth
+* **Deciders**: OCM Maintainer Team
 * **Date**: 2026-07-28
 
 Technical Story:
@@ -14,12 +14,12 @@ Technical Story:
 
 ## Context and Problem Statement
 
-The OCM Kubernetes Controller Toolkit currently exposes an address-based consumption model: a user creates a
+The OCM Kubernetes Controller Toolkit currently exposes an identity-based consumption model: a user creates a
 `Repository`, then a `Component` pinned to a single semver constraint, then one `Resource` per artifact they want to
 consume. Every level of that chain requires the caller to know the exact identity of what they are pulling:
 repository spec, component name, resource identity, and (for nested references) the full `referencePath`.
 
-Two external consumer projects asked for a query-based mode on top of that address-based baseline:
+Two external consumer projects asked for a query-based mode on top of that identity-based baseline:
 
 - OpenControlPlane (OCP): The [openmcp-project](https://github.com/openmcp-project) org, needs a single custom
   resource to span umbrella components with many nested references, match resources by selector, and project the
@@ -44,7 +44,7 @@ Neither workflow is expressible today. A caller who does not know the exact
   per resource; component descriptors can approach or exceed it on their own (e.g.
   `europe-docker.pkg.dev/gardener-project/releases//github.com/gardenlinux/gardenlinux:2150.6.0` is ~884 KB compact
   JSON).
-- Additive to the existing address-based CRDs: `Repository`, `Component`, and `Resource` are already consumed
+- Additive to the existing identity-based CRDs: `Repository`, `Component`, and `Resource` are already consumed
   by ArgoCD/FluxCD integrations. Discovery must not break the current API contract.
 - API contract first: Focus on API contract to enable OCP's use case and tackle performance later. 
 
