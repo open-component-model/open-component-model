@@ -14,10 +14,10 @@ one of, if not the best, locations that SAP has around the globe. SAP was so nic
 lovely set of people to work together with on interesting projects in the IPCEI-CIS initiative.
 
 The [IPCEI-CIS Initiative](https://www.8ra.com/) is a movement that brings sovereignty to Cloud Infrastructure and Services.
-To that end, parts of the [OCM team](https://github.com/orgs/open-component-model/teams/maintainers) arrived in Potsdam on Monday and started furiously hacking on
+To that end, parts of the OCM team arrived in Potsdam on Monday and started furiously hacking on
 projects from Tuesday to Thursday to then present them to a larger audience at the end of Thursday. The audience included people from all 
 around the globe joining in on an effort to bring independence to the people using Cloud services in Europe. We had some
-great fun, and it was quite relaxing to enjoy a bit of time off from meetings to just _hack_ on the projects that we feel
+great fun, and it was quite refreshing to enjoy a bit of time off from meetings to just _hack_ on the projects that we feel
 passionate about.
 
 Here you can meet the team.
@@ -51,7 +51,7 @@ You can read more about the fairy dust part in [Creating an OCM component for a 
 The component versions that we provide and use in Kubernetes clusters have information about dependencies,
 artifacts, locations, deployments, ownership, and other metadata.
 
-This information in the cluster, however, cannot be easily accessed since it's not displayed anywhere. If a user wants
+This information from within the cluster, however, cannot be easily accessed since it's not displayed anywhere. If a user wants
 to know where something is located, they need to use OCM as a library or the CLI to query this information from a
 Component Version in the cluster.
 
@@ -62,8 +62,8 @@ The new object `Discovery` provides this API. Its design is described in the [De
 
 ## Conclusion
 
-We had a blast bringing you these projects that we hope further help the IPCEI effort of providing independent cloud infrastructure
-for European citizens, and hope to see you soon again in Potsdam, or at another lovely SAP location.
+We had a blast bringing you these projects that we hope further help the IPCEI-CIS effort of providing independent cloud infrastructure
+for European citizens, and hope to see you soon again in Potsdam, or at another lovely location.
 
 And we weren't the only ones who had fun!
 
