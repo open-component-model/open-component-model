@@ -66,9 +66,10 @@ steps in a single kind.
 
 ## Decision Outcome
 
-Chosen option: **a dedicated `Discovery` CRD** with three selectors and a CEL projection. Targets
-OpenControlPlane's shape. Descopes the large-descriptor navigation case (see [etcd size](#etcd-size)) and leaves
-ODG's synchronous-access need out of scope.
+Chosen option: **a dedicated `Discovery` CRD** with three selectors that filter the transitively reachable
+descriptors and an optional `Extract` stage of CEL expressions that build the records in `status.discovery` from
+those descriptors and their resources. Targets OpenControlPlane's shape. Descopes the large-descriptor navigation case
+(see [etcd size](#etcd-size)) and leaves ODG's synchronous-access need out of scope.
 
 ### CRD shape
 
@@ -195,7 +196,7 @@ reasons:
 
 #### `Extract` and its three modes
 
-`Extract` is the projection stage: it runs *after* filtering, on the already-narrowed descriptor list, and produces
+`Extract` is the output-shaping stage: it runs *after* filtering, on the already-narrowed descriptor list, and produces
 the final payload landing in `status.discovery`. Three mutually exclusive modes cover the three join shapes a graph
 query produces, enforced by CRD-level validation:
 
@@ -204,8 +205,8 @@ query produces, enforced by CRD-level validation:
 - `byComponents: {field: expr}`: same shape, evaluated once per surviving component. Binding: `component`.
   Emits `[]object`.
 - `expression: <cel>`: single CEL expression whose return value is stored verbatim. Binding: `components`
-  (list of surviving descriptors). Emits any JSON type. Use when the map modes cannot express the projection
-  (cross-graph joins, custom shapes, computed fields).
+  (list of surviving descriptors). Emits any JSON type. Use when the map modes cannot express the desired output
+  shape (cross-graph joins, custom shapes, computed fields).
 
 In map modes (`byResources` / `byComponents`), a field expression that hits a missing attribute, field, or map
 key is treated as null and the field is dropped from that entry. This lets a single map span heterogeneous access
@@ -228,8 +229,9 @@ Discovery has no periodic reconcile. Re-reconciliation is driven by:
 - Change to the referenced Component's resolved version, effective OCM config, or readiness state, mapped through a
   field-indexed lookup back to every Discovery referencing that Component.
 
-Discovery is a projection of upstream state. There is no upstream state it should notice on a timer that its watches
-would not already surface. Adding an `Interval` would only paper over gaps in the event source.
+Discovery derives entirely from upstream state (the referenced Component and the repository it resolves). Every
+upstream change that could affect the output is already delivered by the existing watches, so an `Interval` would
+only paper over gaps in the event source.
 
 ### Status reasoning
 
@@ -250,11 +252,11 @@ Payload shape is a function of `spec`. Enumerating the shapes:
 - `componentSelector`: array of matched descriptors; runs after `referenceSelector` (if set), so it operates on
   whatever survived that stage.
 - `resourceSelector`: array of descriptors with `.component.resources` filtered in place.
-- `extract.byResources`: flat array of per-resource projections.
-- `extract.byComponents`: flat array of per-component projections.
+- `extract.byResources`: flat array of per-resource records.
+- `extract.byComponents`: flat array of per-component records.
 - `extract.expression`: verbatim return value of the CEL expression (any JSON type).
 
-The same schemaless pattern is used by the Resource CR for its CEL-projection output, consumers parse both status
+The same schemaless pattern is used by the Resource CR for its CEL-based output, consumers parse both status
 payloads generically with the same code. The payload always lives on `status` (not a child CR, ConfigMap, or artifact).
 
 #### etcd size
@@ -269,7 +271,7 @@ sibling ConfigMap, artifact CR) is an additive path if a concrete need appears.
 
 #### Deterministic ordering: `(name, version)` lexicographic
 
-Descriptors are sorted by `(component.name, component.version)` before projection. Without this, the map iteration
+Descriptors are sorted by `(component.name, component.version)` before `Extract` runs. Without this, the map iteration
 order of the underlying graph store would make `status.discovery` flap on every reconcile, causing watcher churn on
 downstream consumers and generating unnecessary etcd writes.
 
@@ -278,7 +280,7 @@ downstream consumers and generating unnecessary etcd writes.
 Discovery uses the shared condition types and reasons, plus Discovery-specific reasons:
 
 - `SelectorFailed`: a `spec` selector failed to compile or evaluate.
-- `ExtractFailed`: a `spec.extract` projection failed to compile or evaluate.
+- `ExtractFailed`: a `spec.extract` expression failed to compile or evaluate.
 - `NoReferencesMatched` and `NoComponentsMatched`: emitted on `Ready=True` when a selector filters the
   descriptor set to empty. In that state `status.discovery` is set to an explicit empty JSON array (`[]`) so
   consumers can distinguish "query ran and matched nothing" from "payload never computed". Distinct reasons per
@@ -300,7 +302,7 @@ as a fallback.
 
 Pros:
 
-- One CRD, three filter kinds, one projection language.
+- One CRD, three filter kinds, one expression language.
 - Uses CEL, already in the module.
 - Schemaless status matches the intrinsically-variable output shape.
 - Selector shape is reusable for `ResourceID.BySelector`.
