@@ -53,18 +53,18 @@ type Config struct {
 	Type runtime.Type `json:"type"`
 
 	// Signer is the signer specification used when signing a component version
-	// (for example via `ocm sign component-version`). Its runtime type selects
+	// (using `ocm sign component-version`). Its runtime type selects
 	// the signing handler plugin; the remaining fields configure that handler
 	// (algorithm, encoding, keyless backend, ...). It never carries
-	// credentials — keys are always resolved from the credentials
-	// configuration. If nil, consumers fall back to their built-in default
+	// credentials - keys are always resolved from the credentials
+	// configuration. If nil, consumers fall back to the default
 	// (RSASSA-PSS with Plain encoding).
 	Signer *runtime.Raw `json:"signer,omitempty"`
 
 	// Verifier is the verifier specification used when verifying a component
-	// version (for example via `ocm verify component-version`). Its runtime
+	// version (using `ocm verify component-version`). Its runtime
 	// type selects the verification handler plugin. If nil, consumers fall back
-	// to their built-in default (RSASSA-PSS).
+	// to the default (RSASSA-PSS).
 	Verifier *runtime.Raw `json:"verifier,omitempty"`
 }
 

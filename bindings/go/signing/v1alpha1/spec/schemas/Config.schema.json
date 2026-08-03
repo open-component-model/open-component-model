@@ -8,7 +8,7 @@
   "properties": {
     "signer": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
-      "description": "Signer is the signer specification used when signing a component version\n(for example via `ocm sign component-version`). Its runtime type selects\nthe signing handler plugin; the remaining fields configure that handler\n(algorithm, encoding, keyless backend, ...). It never carries\ncredentials — keys are always resolved from the credentials\nconfiguration. If nil, consumers fall back to their built-in default\n(RSASSA-PSS with Plain encoding)."
+      "description": "Signer is the signer specification used when signing a component version\n(using `ocm sign component-version`). Its runtime type selects\nthe signing handler plugin; the remaining fields configure that handler\n(algorithm, encoding, keyless backend, ...). It never carries\ncredentials - keys are always resolved from the credentials\nconfiguration. If nil, consumers fall back to the default\n(RSASSA-PSS with Plain encoding)."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
@@ -24,7 +24,7 @@
     },
     "verifier": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
-      "description": "Verifier is the verifier specification used when verifying a component\nversion (for example via `ocm verify component-version`). Its runtime\ntype selects the verification handler plugin. If nil, consumers fall back\nto their built-in default (RSASSA-PSS)."
+      "description": "Verifier is the verifier specification used when verifying a component\nversion (using `ocm verify component-version`). Its runtime\ntype selects the verification handler plugin. If nil, consumers fall back\nto the default (RSASSA-PSS)."
     }
   },
   "required": [
