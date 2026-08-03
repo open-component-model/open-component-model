@@ -1,7 +1,7 @@
 ---
 title: "We did a Hackathon!"
 description: "We recently partook in an adventure @ SAP Innovation Center in Potsdam where we got together and worked on several valuable project for the IPCEI-CIS initiative. Here is what we did."
-date: 2026-07-30T10:00:00+02:00
+date: 2026-08-03T10:00:00+02:00
 contributors: []
 tags: ["ocm", "thalamus", "sbom", "neonephos"]
 draft: false
@@ -21,7 +21,7 @@ great fun, and it was quite relaxing to enjoy a bit of time off from meetings to
 passionate about.
 
 Here you can meet the team.
-![The hackathon team at SAP Innovation Center Potsdam](https://ocm.software/images/ipcei-cis-potsdam-the-team.png)
+![The hackathon team at SAP Innovation Center Potsdam](/images/ipcei-cis-potsdam-the-team.png)
 
 We worked on several projects, but most notably, we worked on these three:
 
@@ -30,11 +30,11 @@ We worked on several projects, but most notably, we worked on these three:
 This is a proof of concept for transporting SBOMs together with your Component Version in order to make them more discoverable,
 linkable and help orchestrating SBOMs so the whole component could be scanned in one command. This was tied together with
 [OpenDeliveryGear (ODG)](https://open-component-model.github.io/open-delivery-gear/) and using VEX (Vulnerability Exploitability eXchange) statements inside the SBOM
-to show-case a pretty cool frontend.
+to showcase a pretty cool frontend.
 
 You can read more about this in our detailed blog post at [Shipping SBOMs with your component](https://ocm.software/blog/2026-07-28-shipping-sboms-with-your-components).
 
-### Thalamus project ocm-ification
+### Thalamus project OCM-ification
 
 OCM-ifying your application can be a daunting challenge. Especially if you have many moving parts and even more components
 that you need to transfer and then verify and then localize. Localization in the OCM world means that we update image references
@@ -48,17 +48,17 @@ You can read more about the Faire dust part in [Creating an OCM component for a 
 
 ### Component Discovery API
 
-The Component versions that we already provide and use in Kubernetes clusters, have a bunch of information about dependencies,
-artifacts, locations and a lot of more metadata information about deployments, ownership, etc.
+The component versions that we provide and use in Kubernetes clusters have information about dependencies,
+artifacts, locations, deployments, ownership, and other metadata.
 
-This information in the cluster, however, cannot be easily accessed since it's not displayed anywhere. If a user would like to
-know where something is located at, they need to use OCM as a library, or the CLI to query this information from a Component
-Version in the cluster.
+This information in the cluster, however, cannot be easily accessed since it's not displayed anywhere. If a user wants
+to know where something is located, they need to use OCM as a library or the CLI to query this information from a
+Component Version in the cluster.
 
 This is where a discovery API would be useful. Since you are already in the cluster, why not just create an object
 that uses our [ocm-k8s-toolkit](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller) to figure this out for you?
 
-Here is where the new object `Discovery` comes in handy which is detailed under [Designing a Discovery API](https://ocm.software/blog/designing-a-discovery-api/) blog post.
+The new object `Discovery` provides this API. Its design is described in the [Designing a Discovery API](https://ocm.software/blog/designing-a-discovery-api/) blog post.
 
 ## Conclusion
 
