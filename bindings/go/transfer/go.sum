@@ -108,6 +108,10 @@ github.com/google/gnostic-models v0.7.1 h1:SisTfuFKJSKM5CPZkffwi6coztzzeYUhc3v4y
 github.com/google/gnostic-models v0.7.1/go.mod h1:whL5G0m6dmc5cPxKc5bdKdEN3UjI7OUGxBlw57miDrQ=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
+github.com/google/go-github/v89 v89.0.0 h1:35bEK5XoEcF3PZrlVbl9XN63f5BcJRA/UGkxeC9xPg0=
+github.com/google/go-github/v89 v89.0.0/go.mod h1:QLcbU0ipeAqQuR5KSg8c2lql4Qk1EwJ2dWz/0rP4Nho=
+github.com/google/go-querystring v1.2.0 h1:yhqkPbu2/OH+V9BfpCVPZkNmUXhb2gBxJArfhIxNtP0=
+github.com/google/go-querystring v1.2.0/go.mod h1:8IFJqpSRITyJ8QhQ13bmbeMBDfmeEJZD5A0egEOmkqU=
 github.com/google/gofuzz v1.0.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
@@ -329,6 +333,8 @@ ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260803
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260803105756-854228e942e9/go.mod h1:qCvtgZRudK63wy1Dfkg6Xjagh2aRfE6cRyTPgZqT2Bk=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 h1:bTb7LgRFAAuhr5FGkkBVStU4YLtFZz3uhO9V4VFhW64=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3/go.mod h1:miNDxmNWsrYI9f3QNZIOBrK6jVmWnyFj0Z/ZGFjR5Qk=
+ocm.software/open-component-model/bindings/go/github v0.0.0-20260803105756-854228e942e9 h1:5N7SHTvucuC7AY420oYDnQuXaWlF6I9/EDDH7mkkvxE=
+ocm.software/open-component-model/bindings/go/github v0.0.0-20260803105756-854228e942e9/go.mod h1:Hk9Rinmwi1nMSwcqaLBgUgSUXsBpRZ5Jh3at3WP6tv0=
 ocm.software/open-component-model/bindings/go/helm v0.0.0-20260803105756-854228e942e9 h1:ZgFtqmoHlDqN93s4urRluB2o8nc+qnT9kM4ejLVgW5o=
 ocm.software/open-component-model/bindings/go/helm v0.0.0-20260803105756-854228e942e9/go.mod h1:wz57GGJ3ruNKX3BK262gK/CSUT/mw5R8srqX4sCTV6E=
 ocm.software/open-component-model/bindings/go/http v0.0.0-20260803105756-854228e942e9 h1:2zZBBsJvla8Il+Ny5QVCH2YRafL9tMUciGz229PCVhI=
