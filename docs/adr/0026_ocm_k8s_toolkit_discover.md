@@ -4,13 +4,11 @@
 * **Deciders**: OCM Maintainer Team
 * **Date**: 2026-07-28
 
-Technical Story:
-
-- EPIC: [ocm-project#1153](https://github.com/open-component-model/ocm-project/issues/1153)
-- Spike: [ocm-project#1154](https://github.com/open-component-model/ocm-project/issues/1154)
-- POC branch: [`feat-discovery`](https://github.com/frewilhelm/open-component-model/tree/feat-discovery)
-- Related upstream work: [PR #2833 (`feat(oci): blob and resolution cache`)](https://github.com/open-component-model/open-component-model/pull/2833),
-  [ocm-project#296 (`ResourceID.BySelector`)](https://github.com/open-component-model/ocm-project/issues/296)
+Technical Story: The OCM Kubernetes Controller Toolkit only supports identity-based consumption today: every
+`Repository` / `Component` / `Resource` CR must be pinned to an exact component name, version, and resource identity.
+Downstream consumers (OpenControlPlane, Open Delivery Gear) need a query-based mode that discovers a component
+version together with its references (if any) and projects a filtered subset of the discovered descriptors and
+resources into Kubernetes-visible state. This ADR decides the API surface for that mode.
 
 ## Context and Problem Statement
 
@@ -35,6 +33,14 @@ Neither workflow is expressible today. A caller who does not know the exact
 `(component, version, resource, referencePath)` tuple up front has no way to ask the controller
 "give me all versions of resource R across umbrella C's references" or
 "publish this component's descriptor so I can navigate it".
+
+Tracking issues and related work:
+
+- EPIC: [ocm-project#1153](https://github.com/open-component-model/ocm-project/issues/1153)
+- Spike: [ocm-project#1154](https://github.com/open-component-model/ocm-project/issues/1154)
+- POC branch: [`feat-discovery`](https://github.com/frewilhelm/open-component-model/tree/feat-discovery)
+- Related upstream work: [PR #2833 (`feat(oci): blob and resolution cache`)](https://github.com/open-component-model/open-component-model/pull/2833),
+  [ocm-project#296 (`ResourceID.BySelector`)](https://github.com/open-component-model/ocm-project/issues/296)
 
 ## Decision Drivers
 
