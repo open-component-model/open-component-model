@@ -874,6 +874,7 @@ wgs
 whitespace
 winget
 wingetcreate
+wni
 withocm
 wsl
 xdg
