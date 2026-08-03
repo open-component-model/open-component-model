@@ -1,5 +1,5 @@
 ---
-title: "Run multiple OCM CLI versions in parallel"
+title: "Install multiple OCM CLI versions in parallel"
 description: "Install and switch between specific OCM CLI versions for testing and migration."
 icon: "🔀"
 weight: 15
