@@ -156,6 +156,7 @@ creationtime
 credentialrequest
 credentialsspec
 creds
+crossplane
 crossplatform
 crs
 crypto
@@ -325,6 +326,7 @@ gzip
 gzipped
 handleoutput
 hardcoded
+hardcoding
 hashers
 hashicorp
 hashicorpvault
@@ -553,6 +555,7 @@ oncefunc
 oo
 openapi
 openbao
+opencontrolplane
 openfluxcd
 openid
 openmcp
@@ -621,6 +624,7 @@ publickey
 pubsub
 pullable
 pushable
+queryable
 qppj
 raci
 rbac
