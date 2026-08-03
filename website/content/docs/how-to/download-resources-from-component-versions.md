@@ -370,16 +370,16 @@ tar tvf helmchart-tgz/podinfo-6.8.0.tgz
 `ocm download resource` determines the output filename from the first of these that applies:
 
 1. `--output`, if explicitly provided on the command line
-2. A `downloadName` label on the resource, if the component author embedded one
-3. The resource identity, optionally extended with a media-type-derived file extension
+2. An `ocm.software/download-name` label on the resource, if the component author embedded one (the legacy `downloadName` label is still honored but deprecated)
+3. The resource name, with its extra identity attributes appended when present
 
-The `downloadName` label lets component authors ship a preferred filename as part of the component descriptor. A common use case is Windows executables, which must carry the `.exe` extension to be runnable:
+The `ocm.software/download-name` label lets component authors ship a preferred filename as part of the component descriptor. A common use case is Windows executables, which must carry the `.exe` extension to be runnable:
 
 ```yaml
 - name: cli
   type: executable
   labels:
-    - name: downloadName
+    - name: ocm.software/download-name
       value: ocm.exe
   extraIdentity:
     os: windows
@@ -393,10 +393,10 @@ The `downloadName` label lets component authors ship a preferred filename as par
 When no `--output` is given, `ocm download resource` against this resource saves the file as `ocm.exe` in the current working directory. Passing `--output` overrides that:
 
 ```shell
-# saved as ocm.exe (downloadName default)
+# saved as ocm.exe (download-name default)
 ocm download resource <repo>//<component>:<version> --identity name=cli,os=windows,architecture=amd64
 
-# saved to the specified path, downloadName is ignored
+# saved to the specified path, the download-name label is ignored
 ocm download resource <repo>//<component>:<version> --identity name=cli,os=windows,architecture=amd64 --output /tmp/ocm-windows.exe
 ```
 

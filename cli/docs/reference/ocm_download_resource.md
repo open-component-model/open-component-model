@@ -25,8 +25,9 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 
 The output filename is determined by the first of these that applies:
   1. --output, if explicitly provided
-  2. A "downloadName" label on the resource, if present
-  3. The resource identity, optionally extended with a media-type-derived file extension
+  2. An "ocm.software/download-name" label on the resource, if present
+     (the legacy "downloadName" label is still honored but deprecated)
+  3. The resource name, with its extra identity attributes appended when present
 
 ```
 ocm download resource [flags]
@@ -55,7 +56,7 @@ ocm download resource [flags]
                                  (must be one of [auto disable]) (default auto)
   -h, --help                     help for resource
       --identity string          resource identity to download
-      --output string            full output file path (directory + filename). Intermediate directories are created automatically. Takes precedence over a downloadName label on the resource.
+      --output string            full output file path (directory + filename). Intermediate directories are created automatically. Takes precedence over an ocm.software/download-name label on the resource.
       --transformer string       transformer to use for the output. If not specified, the resource will be written as is. 
 ```
 
