@@ -2,6 +2,7 @@ package internal
 
 import (
 	"archive/tar"
+	"cmp"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -29,11 +30,18 @@ const (
 const gitHubArchiveRoot = "open-component-model-open-component-model-"
 
 // CreateOCMConfigForGitHub writes an ocmconfig carrying the registry
-// credentials and, when GITHUB_TOKEN is set, a GitHubRepository consumer
-// holding the token. Unauthenticated GitHub allows only 60 requests per hour
+// credentials and, when a token is in the environment, a GitHubRepository
+// consumer holding it. Unauthenticated GitHub allows only 60 requests per hour
 // per IP, so on shared CI egress the token is what keeps the run from flaking
-// on rate limits. Without it the run stays anonymous, which the github access
+// on rate limits. Without one the run stays anonymous, which the github access
 // supports.
+// gitHubToken returns the GitHub token from the environment. GITHUB_TOKEN is
+// what a local run sets; the CI workflow passes the same token as GH_TOKEN, the
+// name the gh CLI uses, so a run there stays anonymous without this fallback.
+func gitHubToken() string {
+	return cmp.Or(os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN"))
+}
+
 func CreateOCMConfigForGitHub(t *testing.T, registry *OCIRegistry) string {
 	t.Helper()
 
@@ -55,7 +63,7 @@ configurations:
 `, registry.Host, registry.Port, registry.User, registry.Password)
 
 	// "token" is the only credential key the github access reads.
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+	if token := gitHubToken(); token != "" {
 		cfg += fmt.Sprintf(`  - identity:
       type: GitHubRepository
       hostname: github.com

@@ -62,8 +62,9 @@ func readLocalResource(t *testing.T, ctx context.Context, repo repository.Compon
 //
 // This test talks to live github.com — the same repository, ref and commit as
 // the binding-level integration test — so it needs network access and is
-// subject to GitHub's rate limits. Set GITHUB_TOKEN to lift the anonymous
-// 60/hour cap; the transfer downloads the full source archive.
+// subject to GitHub's rate limits. Set GITHUB_TOKEN — or GH_TOKEN, which CI
+// passes — to lift the anonymous 60/hour cap; the transfer downloads the full
+// source archive.
 func Test_Integration_Transfer_GitHub(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")

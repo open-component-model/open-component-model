@@ -165,7 +165,7 @@ require (
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260803112134-79492a1c0550 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.13 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/github v0.0.0-20260803105756-854228e942e9 // indirect
+	ocm.software/open-component-model/bindings/go/github v0.0.0-20260803121703-403dd2b14f66 // indirect
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260803105756-854228e942e9 // indirect
 	ocm.software/open-component-model/bindings/go/http v0.0.0-20260803105756-854228e942e9 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4 // indirect
@@ -174,8 +174,8 @@ require (
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17 // indirect
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260803105756-854228e942e9 // indirect
 	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260803105756-854228e942e9 // indirect
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260803105756-854228e942e9 // indirect
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260803105756-854228e942e9 // indirect
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260803121703-403dd2b14f66 // indirect
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260803121703-403dd2b14f66 // indirect
 	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260803105756-854228e942e9 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect

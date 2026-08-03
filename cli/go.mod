@@ -26,7 +26,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260803105756-854228e942e9
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260803105756-854228e942e9
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/github v0.0.0-20260803105756-854228e942e9
+	ocm.software/open-component-model/bindings/go/github v0.0.0-20260803121703-403dd2b14f66
 	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260803105756-854228e942e9
 	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260803105756-854228e942e9
 	ocm.software/open-component-model/bindings/go/http v0.0.0-20260803105756-854228e942e9
