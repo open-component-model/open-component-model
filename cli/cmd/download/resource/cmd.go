@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"maps"
-	"mime"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,7 +18,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
-	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -43,6 +41,18 @@ const (
 	ExtractionPolicyDisable = "disable"
 )
 
+const (
+	// LabelDownloadName is the predefined label that defines the default output
+	// filename for `download resource`. It follows the OCM label naming convention
+	// (DNS-prefixed name with a kebab-case local part).
+	LabelDownloadName = "ocm.software/download-name"
+	// LabelDownloadNameLegacy is the deprecated flat camelCase form of LabelDownloadName.
+	//
+	// Deprecated: use LabelDownloadName. The legacy name is still honored but will be
+	// removed after one to two releases.
+	LabelDownloadNameLegacy = "downloadName"
+)
+
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "resource",
@@ -61,8 +71,9 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 
 The output filename is determined by the first of these that applies:
   1. --output, if explicitly provided
-  2. A "downloadName" label on the resource, if present
-  3. The resource identity, optionally extended with a media-type-derived file extension`,
+  2. An "ocm.software/download-name" label on the resource, if present
+     (the legacy "downloadName" label is still honored but deprecated)
+  3. The resource name, with its extra identity attributes appended when present`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
 
@@ -80,7 +91,7 @@ The output filename is determined by the first of these that applies:
 
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
 	cmd.Flags().String(FlagOutput, "", "full output file path (directory + filename). Intermediate directories are created automatically. "+
-		"Takes precedence over a downloadName label on the resource.")
+		"Takes precedence over an ocm.software/download-name label on the resource.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
 	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
 		"policy to apply when extracting a resource. "+
@@ -88,15 +99,6 @@ The output filename is determined by the first of these that applies:
 			"If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.")
 
 	return cmd
-}
-
-func init() {
-	if err := errors.Join(
-		mime.AddExtensionType(".tar.gz", layout.MediaTypeOCIImageLayoutTarGzipV1),
-		mime.AddExtensionType(".tar", layout.MediaTypeOCIImageLayoutTarV1),
-	); err != nil {
-		panic(err)
-	}
 }
 
 func DownloadResource(cmd *cobra.Command, args []string) error {
@@ -169,7 +171,7 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
 	}
 
-	finalOutputPath, err := processResourceOutput(output, res, data, requestedIdentity.String(), logger)
+	finalOutputPath, err := processResourceOutput(output, res, logger)
 	if err != nil {
 		return err
 	}
@@ -263,39 +265,70 @@ func isTar(mediaType string) bool {
 	}, mediaType) || strings.HasSuffix(mediaType, "+tar")
 }
 
-func processResourceOutput(output string, resource *descriptor.Resource, data blob.ReadOnlyBlob, identity string, logger *slog.Logger) (string, error) {
+func processResourceOutput(output string, resource *descriptor.Resource, logger *slog.Logger) (string, error) {
 	if output != "" {
 		logger.Info("using explicit --output", slog.String("output", output))
 		return output, nil
 	}
 
-	// Check for downloadName label; used as default filename when --output is not set.
-	for _, label := range resource.Labels {
-		if label.Name == "downloadName" {
-			var downloadName string
-			if err := label.GetValue(&downloadName); err != nil {
-				return "", fmt.Errorf("interpreting downloadName label value failed: %w", err)
+	// download-name label: default filename chosen by the component author. Prefer the
+	// conventional name; the legacy name is still honored (with a warning) for now.
+	var label *descriptor.Label
+	for i := range resource.Labels {
+		switch resource.Labels[i].Name {
+		case LabelDownloadName:
+			label = &resource.Labels[i]
+		case LabelDownloadNameLegacy:
+			if label == nil {
+				label = &resource.Labels[i]
 			}
-			if downloadName = filepath.Clean(downloadName); filepath.IsAbs(downloadName) {
-				return "", fmt.Errorf("downloadName label value %q must not be an absolute path for security reasons", downloadName)
-			}
-			logger.Info("using downloadName label for output filename", slog.String("output", downloadName))
-			return downloadName, nil
 		}
+	}
+	if label != nil {
+		if label.Name == LabelDownloadNameLegacy {
+			logger.Warn("resource uses a deprecated label name",
+				slog.String("deprecated", LabelDownloadNameLegacy), slog.String("use", LabelDownloadName))
+		}
+		var downloadName string
+		if err := label.GetValue(&downloadName); err != nil {
+			return "", fmt.Errorf("interpreting %q label value failed: %w", label.Name, err)
+		}
+		if downloadName = filepath.Clean(downloadName); filepath.IsAbs(downloadName) || downloadName == ".." || strings.HasPrefix(downloadName, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("%q label value %q must be a relative path within the output directory", label.Name, downloadName)
+		}
+		logger.Info("using download-name label for output filename", slog.String("output", downloadName))
+		return downloadName, nil
 	}
 
-	if output == "" {
-		output = identity
-		// if we have media type aware data, we try to append the file extension based on the media type
-		if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
-			if mediaType, known := mediaTypeAware.MediaType(); known {
-				if extensions, err := mime.ExtensionsByType(mediaType); err == nil && len(extensions) > 0 {
-					output += extensions[0]
-				}
-			}
-		}
-		logger.Warn("no output location specified, using resource identity as output file name", slog.String("output", output))
-	}
+	// Fallback: resource name, with extra identity attributes appended when present.
+	output = fallbackFileName(resource)
+	logger.Warn("no output location specified, deriving output file name from the resource", slog.String("output", output))
 
 	return output, nil
+}
+
+// fallbackFileName derives a filesystem-safe filename from the resource name plus its
+// extra identity attribute values (sorted by key), so variants of the same name stay distinct.
+func fallbackFileName(resource *descriptor.Resource) string {
+	name := sanitizeFileName(resource.Name)
+	for _, key := range slices.Sorted(maps.Keys(resource.ExtraIdentity)) {
+		name += "-" + sanitizeFileName(resource.ExtraIdentity[key])
+	}
+	return name
+}
+
+// sanitizeFileName maps characters that are unsafe in a filename to '-'. Extra identity
+// values are unconstrained, so this stops a value such as "windows/amd64" from injecting a
+// path separator into the fallback name, which is written relative to the working directory.
+func sanitizeFileName(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			return r
+		case r == '-', r == '_', r == '.':
+			return r
+		default:
+			return '-'
+		}
+	}, s)
 }

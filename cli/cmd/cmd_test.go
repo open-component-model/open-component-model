@@ -1461,18 +1461,50 @@ func Test_Download_Resource_DownloadName(t *testing.T) {
 	testFilePath := filepath.Join(tmp, "test-file.txt")
 	require.NoError(t, os.WriteFile(testFilePath, []byte("foobar"), 0o600))
 
-	// Component with a downloadName label on the resource.
+	// Component carrying both the conventional and the legacy download-name label
+	// on separate resources, plus a resource without any label to exercise the
+	// resource-name fallback.
 	constructorYAML := fmt.Sprintf(`
 name: ocm.software/download-name-test
 version: 1.0.0
 provider:
   name: ocm.software
 resources:
-  - name: my-file
+  - name: labeled
+    type: blob
+    labels:
+      - name: ocm.software/download-name
+        value: renamed-output.bin
+    input:
+      type: file/v1
+      path: %[1]s
+  - name: legacy-labeled
     type: blob
     labels:
       - name: downloadName
-        value: renamed-output.bin
+        value: legacy-output.bin
+    input:
+      type: file/v1
+      path: %[1]s
+  - name: both-labeled
+    type: blob
+    labels:
+      - name: downloadName
+        value: legacy-wins.bin
+      - name: ocm.software/download-name
+        value: canonical-wins.bin
+    input:
+      type: file/v1
+      path: %[1]s
+  - name: plain
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+  - name: variant
+    type: blob
+    extraIdentity:
+      architecture: amd64
     input:
       type: file/v1
       path: %[1]s
@@ -1490,36 +1522,112 @@ resources:
 
 	ref := archiveFilePath + "//ocm.software/download-name-test:1.0.0"
 
-	t.Run("downloadName used as filename when --output is absent", func(t *testing.T) {
-		r := require.New(t)
-		workDir := t.TempDir()
-		t.Chdir(workDir)
+	for _, tc := range []struct {
+		name       string
+		identity   string
+		wantFile   string // file that must be created in the fresh working directory
+		absentFile string // optional filename that must not be created
+	}{
+		{
+			name:     "conventional download-name label sets the filename",
+			identity: "name=labeled",
+			wantFile: "renamed-output.bin",
+		},
+		{
+			name:     "legacy downloadName label is still honored",
+			identity: "name=legacy-labeled",
+			wantFile: "legacy-output.bin",
+		},
+		{
+			name:       "conventional label wins when both are present",
+			identity:   "name=both-labeled",
+			wantFile:   "canonical-wins.bin",
+			absentFile: "legacy-wins.bin",
+		},
+		{
+			name:     "fallback uses the resource name",
+			identity: "name=plain",
+			wantFile: "plain",
+		},
+		{
+			name:     "fallback appends extra identity values to disambiguate variants",
+			identity: "name=variant,architecture=amd64",
+			wantFile: "variant-amd64",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			workDir := t.TempDir()
+			t.Chdir(workDir)
 
-		_, err := test.OCM(t, test.WithArgs("download", "resource",
-			ref,
-			"--identity", "name=my-file,version=1.0.0",
-		))
-		r.NoError(err)
+			_, err := test.OCM(t, test.WithArgs("download", "resource", ref, "--identity", tc.identity))
+			r.NoError(err)
 
-		data, err := os.ReadFile(filepath.Join(workDir, "renamed-output.bin"))
-		r.NoError(err, "expected file to be saved as downloadName value")
-		r.Equal("foobar", string(data))
-	})
+			data, err := os.ReadFile(filepath.Join(workDir, tc.wantFile))
+			r.NoError(err, "expected output file %q", tc.wantFile)
+			r.Equal("foobar", string(data))
 
-	t.Run("--output wins over downloadName label", func(t *testing.T) {
+			if tc.absentFile != "" {
+				r.NoFileExists(filepath.Join(workDir, tc.absentFile))
+			}
+		})
+	}
+
+	t.Run("--output wins over download-name label", func(t *testing.T) {
 		r := require.New(t)
 		explicitTarget := filepath.Join(t.TempDir(), "explicit-output.bin")
 
 		_, err := test.OCM(t, test.WithArgs("download", "resource",
 			ref,
-			"--identity", "name=my-file,version=1.0.0",
+			"--identity", "name=labeled",
 			"--output", explicitTarget,
 		))
 		r.NoError(err)
 
 		data, err := os.ReadFile(explicitTarget)
-		r.NoError(err, "expected file at explicit --output path, not at downloadName path")
+		r.NoError(err, "expected file at explicit --output path, not at download-name path")
 		r.Equal("foobar", string(data))
+	})
+
+	t.Run("download-name label with path traversal is rejected", func(t *testing.T) {
+		r := require.New(t)
+
+		traversalYAML := fmt.Sprintf(`
+name: ocm.software/download-name-traversal
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: evil
+    type: blob
+    labels:
+      - name: ocm.software/download-name
+        value: ../escaped-outside.bin
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+		traversalCtorPath := filepath.Join(tmp, "traversal-constructor.yaml")
+		require.NoError(t, os.WriteFile(traversalCtorPath, []byte(traversalYAML), 0o600))
+		traversalArchive := filepath.Join(tmp, "traversal-archive")
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", traversalCtorPath,
+			"--repository", traversalArchive,
+		))
+		r.NoError(err)
+
+		parent := t.TempDir()
+		workDir := filepath.Join(parent, "cwd")
+		require.NoError(t, os.MkdirAll(workDir, 0o755))
+		t.Chdir(workDir)
+
+		_, err = test.OCM(t, test.WithArgs("download", "resource",
+			traversalArchive+"//ocm.software/download-name-traversal:1.0.0",
+			"--identity", "name=evil",
+		))
+		r.Error(err, "expected download to fail for a traversal download-name")
+		r.NoFileExists(filepath.Join(parent, "escaped-outside.bin"), "blob must not be written outside the working directory")
 	})
 }
 
