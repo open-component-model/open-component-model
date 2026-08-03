@@ -42,9 +42,9 @@ that point to location A to the transfer destination which points to location B.
 a private registry like Zot, you want all the images in your values.yaml to be fetched from Zot, including third-parties
 like postgres.
 
-This is achieved using Kro + RGD + CEL + Faire Dust from OCM.
+This is achieved using Kro + RGD + CEL + Fairy Dust from OCM.
 
-You can read more about the Faire dust part in [Creating an OCM component for a non-trivial application](https://ocm.software/blog/2026-07-30-ocmifying-thalamus) blog post.
+You can read more about the fairy dust part in [Creating an OCM component for a non-trivial application](https://ocm.software/blog/2026-07-30-ocmifying-thalamus) blog post.
 
 ### Component Discovery API
 
