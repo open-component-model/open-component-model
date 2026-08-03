@@ -13,9 +13,8 @@ Install multiple OCM CLI versions side-by-side and switch between them, useful f
 ## You'll end up with
 
 - Multiple versioned OCM CLI binaries (e.g. `ocm-v0.11.0`, `ocm-v0.12.0`) on your PATH
-- Optionally, a per-project version pin using `direnv`
 
-**Estimated time:** ~10 minutes
+**Estimated time:** ~5 minutes
 
 ## Prerequisites
 
@@ -27,7 +26,6 @@ Either:
 And:
 
 - `~/.local/bin` on your PATH (the default location from the [install guide]({{< relref "ocm-cli-installation.md" >}}))
-- [direnv](https://direnv.net) if you want per-project version pinning (optional)
 
 ## Download a specific version
 
@@ -96,32 +94,6 @@ ocm-v0.11.0 version
 
 Each command should print its own version JSON, confirming both binaries are independent and functional.
 
-## Pin a version to a project directory
-
-To use a specific OCM version inside one directory without affecting anything else on your system, use [direnv](https://direnv.net).
-
-Create a local `ocm` symlink pointing at the versioned binary, then tell direnv to prepend it to PATH:
-
-```shell
-mkdir -p .bin
-ln -sf ~/.local/bin/ocm-v0.12.0 .bin/ocm
-echo 'PATH_add .bin' >> .envrc
-direnv allow
-```
-
-When you enter the directory, `ocm` resolves to `v0.12.0`. Outside it, your default `ocm` is unchanged.
-
-Verify the pin is active:
-
-```shell
-which ocm    # should print .bin/ocm
-ocm version  # should print v0.12.0
-```
-
-{{< callout title="Note" icon="outline/info-circle" >}}
-Add `.bin/` to your `.gitignore` to avoid committing the symlink.
-{{< /callout >}}
-
 ## Troubleshooting
 
 ### Symptom: `command not found: ocm-v0.12.0`
@@ -138,16 +110,6 @@ source ~/.bashrc
 # Zsh:
 # echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 # source ~/.zshrc
-```
-
-### Symptom: `ocm` inside the project still resolves to the system binary
-
-**Cause:** direnv is not installed, or `.envrc` has not been allowed.
-
-**Fix:**
-
-```shell
-direnv allow   # run from inside the project directory
 ```
 
 ## Next steps
