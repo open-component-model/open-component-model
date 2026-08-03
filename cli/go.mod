@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/coreos/go-oidc/v3 v3.19.0
-	github.com/jedib0t/go-pretty/v6 v6.8.1
+	github.com/jedib0t/go-pretty/v6 v6.8.2
 	github.com/nlepage/go-tarfs v1.2.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
@@ -13,36 +13,36 @@ require (
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.22.0
-	golang.org/x/sys v0.46.0
+	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260731080221-7e70ca6efc7b
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260803112134-79492a1c0550
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16
 	ocm.software/open-component-model/bindings/go/constructor v0.0.13
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260730142302-1977a1090e81
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260731075011-c25627972262
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260803105756-854228e942e9
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260803105756-854228e942e9
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/github v0.0.0-20260731075011-c25627972262
-	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260731080221-7e70ca6efc7b
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260731075011-c25627972262
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260730142302-1977a1090e81
+	ocm.software/open-component-model/bindings/go/github v0.0.0-20260803105756-854228e942e9
+	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260803105756-854228e942e9
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260803105756-854228e942e9
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260803105756-854228e942e9
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260730142302-1977a1090e81
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260803105756-854228e942e9
 	ocm.software/open-component-model/bindings/go/oci v0.0.48
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260730142302-1977a1090e81
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260803105756-854228e942e9
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260730142302-1977a1090e81
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260730142302-1977a1090e81
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260731080221-7e70ca6efc7b
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260731075011-c25627972262
-	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260730142302-1977a1090e81
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260803105756-854228e942e9
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260803105756-854228e942e9
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260803105756-854228e942e9
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260803105756-854228e942e9
+	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260803105756-854228e942e9
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -68,24 +68,23 @@ require (
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
-	github.com/go-openapi/jsonpointer v0.23.2 // indirect
+	github.com/go-openapi/jsonpointer v0.24.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.6 // indirect
-	github.com/go-openapi/swag v0.26.1 // indirect
-	github.com/go-openapi/swag/cmdutils v0.26.1 // indirect
-	github.com/go-openapi/swag/conv v0.26.1 // indirect
-	github.com/go-openapi/swag/fileutils v0.26.1 // indirect
-	github.com/go-openapi/swag/jsonname v0.26.1 // indirect
-	github.com/go-openapi/swag/jsonutils v0.26.1 // indirect
-	github.com/go-openapi/swag/loading v0.26.1 // indirect
-	github.com/go-openapi/swag/mangling v0.26.1 // indirect
-	github.com/go-openapi/swag/netutils v0.26.1 // indirect
-	github.com/go-openapi/swag/stringutils v0.26.1 // indirect
-	github.com/go-openapi/swag/typeutils v0.26.1 // indirect
-	github.com/go-openapi/swag/yamlutils v0.26.1 // indirect
+	github.com/go-openapi/swag v0.27.0 // indirect
+	github.com/go-openapi/swag/cmdutils v0.27.0 // indirect
+	github.com/go-openapi/swag/conv v0.27.0 // indirect
+	github.com/go-openapi/swag/fileutils v0.27.0 // indirect
+	github.com/go-openapi/swag/jsonutils v0.27.0 // indirect
+	github.com/go-openapi/swag/loading v0.27.0 // indirect
+	github.com/go-openapi/swag/mangling v0.27.0 // indirect
+	github.com/go-openapi/swag/netutils v0.27.0 // indirect
+	github.com/go-openapi/swag/stringutils v0.27.0 // indirect
+	github.com/go-openapi/swag/typeutils v0.27.0 // indirect
+	github.com/go-openapi/swag/yamlutils v0.27.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.29.0 // indirect
+	github.com/google/cel-go v0.29.1 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-github/v89 v89.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
@@ -119,7 +118,7 @@ require (
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348 // indirect
