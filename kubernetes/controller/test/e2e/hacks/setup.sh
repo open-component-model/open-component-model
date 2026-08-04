@@ -106,36 +106,60 @@ if ! grep -q ${reg_name} /etc/hosts; then
   echo "127.0.0.1 ${reg_name}" | sudo tee -a /etc/hosts
 fi
 # Create private image registries in cluster
-kubectl apply -f "${image_registries}" || exit 1
-kubectl apply -f "${rbac}" || exit 1
-kubectl wait pod -l app=protected-registry1 --for condition=Ready --timeout 5m || exit 1
-kubectl wait pod -l app=protected-registry2 --for condition=Ready --timeout 5m || exit 1
+# Fan out the independent post-cluster installs (image registries + RBAC,
+# Flux, ArgoCD, KRO) as background jobs, then join on a single barrier so
+# any failure fails the script and dependent steps (adding the ArgoCD
+# Helm-OCI repo-creds secret) run only after their prerequisite completes.
+run_step() {
+  local label="$1"; shift
+  local log
+  log=$(mktemp)
+  if "$@" > "$log" 2>&1; then
+    echo "[OK] ${label}"
+    rm -f "${log}"
+  else
+    local ec=$?
+    echo "[FAIL] ${label} (exit ${ec})" >&2
+    sed 's/^/  | /' "${log}" >&2
+    rm -f "${log}"
+    return "${ec}"
+  fi
+}
 
-# Install flux operators
-flux install || exit 1
-# Install argo cd
-kubectl create namespace argocd
-kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml || exit 1
+install_registries() {
+  kubectl apply -f "${image_registries}" || return 1
+  kubectl apply -f "${rbac}" || return 1
+  kubectl wait pod -l app=protected-registry1 --for condition=Ready --timeout 5m || return 1
+  kubectl wait pod -l app=protected-registry2 --for condition=Ready --timeout 5m || return 1
+}
 
-kubectl wait -n argocd deployment \
-    argocd-server \
-    argocd-repo-server \
-    argocd-redis \
-    argocd-dex-server \
-    argocd-applicationset-controller \
-    argocd-notifications-controller \
-    --for=condition=Available --timeout=5m || exit 1
-    
-# Register the local OCI registry with ArgoCD as an insecure (plain HTTP) Helm OCI
-# credential template. Any Application whose repoURL starts with oci://ocm-e2e-image-registry:5000
-# inherits these settings. insecureOCIForceHttp is required because the local registry
-# serves plain HTTP; ArgoCD otherwise defaults to HTTPS and fails the chart pull.
-# IMPORTANT: the url must use "image-registry" (the docker network alias), not the
-# container name, because that is the hostname the OCM controller resolves and
-# surfaces in resource.status.additional.registry — which kro then copies verbatim
-# into the ArgoCD Application's repoURL. The credential template only matches when
-# the url prefix is identical to the Application's repoURL.
-kubectl apply -n argocd -f - <<EOF
+install_flux() {
+  flux install
+}
+
+install_argocd() {
+  kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f - || return 1
+  kubectl apply -n argocd --server-side --force-conflicts \
+    -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml || return 1
+  kubectl wait -n argocd deployment \
+      argocd-server \
+      argocd-repo-server \
+      argocd-redis \
+      argocd-dex-server \
+      argocd-applicationset-controller \
+      argocd-notifications-controller \
+      --for=condition=Available --timeout=5m || return 1
+
+  # Register the local OCI registry with ArgoCD as an insecure (plain HTTP) Helm OCI
+  # credential template. Any Application whose repoURL starts with oci://ocm-e2e-image-registry:5000
+  # inherits these settings. insecureOCIForceHttp is required because the local registry
+  # serves plain HTTP; ArgoCD otherwise defaults to HTTPS and fails the chart pull.
+  # IMPORTANT: the url must use "image-registry" (the docker network alias), not the
+  # container name, because that is the hostname the OCM controller resolves and
+  # surfaces in resource.status.additional.registry — which kro then copies verbatim
+  # into the ArgoCD Application's repoURL. The credential template only matches when
+  # the url prefix is identical to the Application's repoURL.
+  kubectl apply -n argocd -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
@@ -149,6 +173,23 @@ stringData:
   enableOCI: "true"
   insecureOCIForceHttp: "true"
 EOF
+}
 
-# Install kro operators
-helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.0 || exit 1
+install_kro() {
+  helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.0
+}
+
+pids=()
+run_step "image-registries"  install_registries & pids+=($!)
+run_step "flux"               install_flux       & pids+=($!)
+run_step "argocd"             install_argocd     & pids+=($!)
+run_step "kro"                install_kro        & pids+=($!)
+
+fail=0
+for pid in "${pids[@]}"; do
+  wait "${pid}" || fail=1
+done
+if [ "${fail}" -ne 0 ]; then
+  echo "one or more setup steps failed; see logs above" >&2
+  exit 1
+fi
