@@ -85,6 +85,22 @@ tasks:
         cd /tmp && ./setup-kind.sh
       - |
         curl -fLo /tmp/setup-scaffolding-from-release.sh "{{.SCAFFOLDING_URL}}/setup-scaffolding-from-release.sh"
+        # Patch the downloaded setup script to fix its Rekor v2 (tiles) path. Upstream ships
+        # that path but does not test it (their release CI still pins a Rekor v1 version), and
+        # it has two bugs that abort the script under `set -o errexit`. Patching via sed mirrors
+        # how sigstore's own actions/setup fixes this same script; drop it once upstream does.
+        #
+        #  1. The script applies Rekor twice. On tiles the first apply still carries the raw
+        #     <placeholder> Secret values, which fail base64 validation. Make it non-fatal --
+        #     the second apply, with the real keys substituted in, is the one that counts.
+        #  2. On tiles neither rekor nor ctlog creates a provisioning Job, so their
+        #     `wait ... jobs --all` calls error with "no matching resources found". Guard them
+        #     the same way the script already guards fulcio.
+        tmp=$(mktemp) && sed \
+          -e 's@kubectl apply -f "${REKOR}"@kubectl apply -f "${REKOR}" || true@' \
+          -e 's@kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@kubectl -n rekor-system get job 2>\&1 | grep '"'"'No resources found'"'"' || kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@' \
+          -e 's@kubectl wait --timeout 5m -n ctlog-system --for=condition=Complete jobs --all@kubectl -n ctlog-system get job 2>\&1 | grep '"'"'No resources found'"'"' || kubectl wait --timeout 5m -n ctlog-system --for=condition=Complete jobs --all@' \
+          /tmp/setup-scaffolding-from-release.sh > "$tmp" && mv "$tmp" /tmp/setup-scaffolding-from-release.sh
         chmod u+x /tmp/setup-scaffolding-from-release.sh
         cd /tmp && ./setup-scaffolding-from-release.sh --release-version {{.SCAFFOLDING_VERSION}}
       - |
