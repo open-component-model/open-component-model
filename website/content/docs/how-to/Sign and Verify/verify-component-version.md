@@ -472,8 +472,10 @@ The mechanism is the same; only the issuer URL and identity shape are provider-s
     | base64 -d | openssl x509 -inform DER -noout -text \
     | awk '
       /1.3.6.1.4.1.57264.1.1:/ {flag="issuer"; next}
-      /URI:/      {sub(/.*URI:[ \t]*/,"");   print "certificateIdentity:    " $0; next}
-      /^ *email:/ {sub(/^[ \t]*email:/,""); print "certificateIdentity:    " $0; next}
+      /^[[:space:]]*X509v3 /    {san=0}
+      /Subject Alternative Name/ {san=1}
+      san && /URI:/      {sub(/.*URI:[ \t]*/,"");   print "certificateIdentity:    " $0; next}
+      san && /^ *email:/ {sub(/^[ \t]*email:/,""); print "certificateIdentity:    " $0; next}
       flag=="issuer" {sub(/^[ \t]+/,""); print "certificateOIDCIssuer: " $0; flag=""}
     '
   ```
