@@ -19,8 +19,8 @@ if [[ -z "${_ARG}" ]] || [[ "${_ARG}" == */ ]] || [[ -d "${_ARG}" ]]; then
     fi
     BIN_FILE="ocm"
 else
-    BIN_DIR="$(dirname "${_ARG}")"
-    BIN_FILE="$(basename "${_ARG}")"
+    BIN_DIR="$(dirname -- "${_ARG}")"
+    BIN_FILE="$(basename -- "${_ARG}")"
 fi
 GITHUB_REPO="open-component-model/open-component-model"
 
