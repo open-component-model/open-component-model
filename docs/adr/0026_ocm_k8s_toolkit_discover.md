@@ -329,7 +329,8 @@ Cons:
   `.filter()` over a large graph) currently has no static bound on evaluation cost. `cel-go` exposes
   `cel.CostLimit(n)`, the same mechanism `x-kubernetes-validations` uses, which counts AST-cost units at
   evaluation time and aborts on overrun. Adding it makes worst-case eval time bounded and surfaces the error as
-  `Ready=False` with reason `ExtractFailed` (and, when non-retriable, also `Stalled=True`) instead of runaway CPU.
+  `Ready=False` with reason `SelectorFailed` (selector overrun) or `ExtractFailed` (extract overrun), and, when
+  non-retriable, also `Stalled=True`, instead of runaway CPU.
   Needs benchmark input to pick sensible defaults per binding scope.
 - Unify `Selector` with `ResourceID.BySelector`: Once
   [ocm-project#296](https://github.com/open-component-model/ocm-project/issues/296) lands, verify the same
