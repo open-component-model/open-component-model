@@ -54,11 +54,8 @@ func readLocalResource(t *testing.T, ctx context.Context, repo repository.Compon
 // GitHub access from a CTF to an OCI registry.
 //
 // A source archive has no OCI-artifact representation and no digest handler for
-// its media type, so — unlike a helm chart — it can only travel as a local
-// blob, and its digest is the digest of the exact archive bytes.
-//
-// The component version declares the same archive as an OCM source as well.
-// Sources have no copy mode and carry no digest, so they always stay remote.
+// its media type, so it can only travel as a local blob, and its digest
+// is the digest of the exact archive bytes.
 //
 // This test talks to live github.com — the same repository, ref and commit as
 // the binding-level integration test — so it needs network access and is
@@ -141,7 +138,7 @@ func Test_Integration_Transfer_GitHub(t *testing.T) {
 
 		dir := t.TempDir()
 		constructorPath := filepath.Join(dir, "constructor.yaml")
-		r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+		r.NoError(os.WriteFile(constructorPath, []byte(constructor), 0o600))
 
 		ctf = filepath.Join(dir, "source-ctf")
 		addCMD := cmd.New()
@@ -247,6 +244,9 @@ func Test_Integration_Transfer_GitHub(t *testing.T) {
 		// Sources carry no digest either, so nothing about them is verifiable.
 		r.Equal("GitHub/v1", desc.Component.Sources[0].Access.GetType().String(),
 			"--copy-resources must not embed a source")
+		var sourceLocalBlobAccess v2.LocalBlob
+		r.Error(v2.Scheme.Convert(desc.Component.Sources[0].Access, &sourceLocalBlobAccess),
+			"a github source access must not convert to a local blob")
 	})
 
 	t.Run("the default copy mode leaves the access external", func(t *testing.T) {
