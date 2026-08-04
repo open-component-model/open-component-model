@@ -96,7 +96,6 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           install -m 0755 ${{ env.LOCATION }}/tmp/cli/bin/ocm-linux-${ARCH} /usr/local/bin/ocm
-          ocm --version
 
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@dcc7def046cba2fe8d15d9737a4c250100f62fe0 # v2.9.0
