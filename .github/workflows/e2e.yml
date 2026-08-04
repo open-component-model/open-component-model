@@ -95,7 +95,7 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
         run: |
-          install -m 0755 ${{ env.LOCATION }}/tmp/cli/ocm-linux-${ARCH} /usr/local/bin/ocm
+          install -m 0755 ${{ env.LOCATION }}/tmp/cli/bin/ocm-linux-${ARCH} /usr/local/bin/ocm
           ocm --version
 
       - name: Setup Flux CLI
