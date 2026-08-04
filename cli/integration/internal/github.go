@@ -35,13 +35,6 @@ const gitHubArchiveRoot = "open-component-model-open-component-model-"
 // per IP, so on shared CI egress the token is what keeps the run from flaking
 // on rate limits. Without one the run stays anonymous, which the github access
 // supports.
-// gitHubToken returns the GitHub token from the environment. GITHUB_TOKEN is
-// what a local run sets; the CI workflow passes the same token as GH_TOKEN, the
-// name the gh CLI uses, so a run there stays anonymous without this fallback.
-func gitHubToken() string {
-	return cmp.Or(os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN"))
-}
-
 func CreateOCMConfigForGitHub(t *testing.T, registry *OCIRegistry) string {
 	t.Helper()
 
@@ -76,8 +69,12 @@ configurations:
 	}
 
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
-	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0o600)) //nolint:gosec // G703 false positive: cfgPath is built from t.TempDir(), not user input
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0o600))
 	return cfgPath
+}
+
+func gitHubToken() string {
+	return cmp.Or(os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN"))
 }
 
 // AssertGitHubArchiveAtCommit verifies the file at path is GitHub's gzipped
