@@ -224,7 +224,7 @@ add component-version --%[1]s ./archive --%[2]s %[3]s.yaml
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
 	enum.Var(cmd.Flags(), FlagExternalComponentVersionCopyPolicy, ExternalComponentVersionCopyPolicies(), "policy to apply when a component reference to a component version outside of the constructor or target repository is encountered")
-	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated, and any digest specified in the constructor will not be verified against the referenced content.")
+	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources . Any resource referenced via access type will not have their digest updated, and any digest specified in the constructor will not be verified against the referenced content.")
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the component descriptors")
 	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current construction state of the component graph`)
