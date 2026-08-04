@@ -14,7 +14,9 @@ DEFAULT_BIN_DIR="${HOME}/.local/bin"
 _ARG="${1:-}"
 if [[ -z "${_ARG}" ]] || [[ "${_ARG}" == */ ]] || [[ -d "${_ARG}" ]]; then
     BIN_DIR="${_ARG:-${DEFAULT_BIN_DIR}}"
-    BIN_DIR="${BIN_DIR%/}"
+    if [[ "${BIN_DIR}" != "/" ]]; then
+        BIN_DIR="${BIN_DIR%/}"
+    fi
     BIN_FILE="ocm"
 else
     BIN_DIR="$(dirname "${_ARG}")"
@@ -239,6 +241,8 @@ download_binary() {
 # Print manual verification instructions when automatic verification is unavailable
 print_verify_instructions() {
     local reason="$1"
+    local quoted_binary_path
+    printf -v quoted_binary_path '%q' "${BIN_DIR}/${BIN_FILE}"
 
     local hash_cmd="sha256sum"
     if ! command -v sha256sum &> /dev/null; then
@@ -259,12 +263,12 @@ print_verify_instructions() {
     warn "    1. Install gh: https://cli.github.com/"
     warn "    2. Authenticate against GitHub.com: gh auth login --hostname github.com"
     warn "    3. Verify the installed binary:"
-    warn "       gh attestation verify ${BIN_DIR}/${BIN_FILE} --repo ${GITHUB_REPO}"
+    warn "       gh attestation verify ${quoted_binary_path} --repo ${GITHUB_REPO}"
     warn ""
     warn "  Option B — Verify with cosign (no GitHub auth needed):"
     cat >&2 <<COSIGN_EOF
 
-    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/${BIN_FILE} | cut -d' ' -f1)"
+    DIGEST="sha256:\$(${hash_cmd} ${quoted_binary_path} | cut -d' ' -f1)"
     curl -sfL \\
       "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
       | jq -r '.attestations[0].bundle' > attestation.jsonl
@@ -275,19 +279,19 @@ print_verify_instructions() {
       --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
       --certificate-identity-regexp \\
         '^https://github\\.com/${GITHUB_REPO}/\\.github/workflows/cli\\.yml@refs/(heads/(main|releases/v[0-9]+\\.[0-9]+)|tags/cli/v[0-9]+\\.[0-9]+\\.[0-9]+)' \\
-      ${BIN_DIR}/${BIN_FILE}
+      ${quoted_binary_path}
 
 COSIGN_EOF
     warn ""
     warn "  Option C — Manual SHA-256 hash check (integrity only):"
     cat >&2 <<HASH_EOF
 
-    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/${BIN_FILE} | cut -d' ' -f1)"
+    DIGEST="sha256:\$(${hash_cmd} ${quoted_binary_path} | cut -d' ' -f1)"
     curl -sfL \\
       "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
       | jq -r '.attestations[0].bundle.dsseEnvelope.payload' \\
       | base64 --decode | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
-    # Compare the listed hash with: ${hash_cmd} ${BIN_DIR}/${BIN_FILE}
+    # Compare the listed hash with: ${hash_cmd} ${quoted_binary_path}
 
 HASH_EOF
     warn ""
