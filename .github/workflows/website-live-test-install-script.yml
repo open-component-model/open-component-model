@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   resolve:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     name: Resolve latest stable release
     outputs:
       version: ${{ steps.find.outputs.version }}
@@ -128,7 +128,7 @@ jobs:
   install-without-auth:
     needs: resolve
     name: Install without attestation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     env:
       EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
     steps:
@@ -177,7 +177,7 @@ jobs:
   install-to-filepath:
     needs: resolve
     name: Install to explicit filepath (custom name)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     env:
