@@ -202,7 +202,7 @@ resources:
     body: eyJmb3JtYXQiOiJqc29uIn0=
 ```
 
-See [How-To: Add Resources from HTTP URLs]({{< relref "docs/how-to/add-resources-from-http-urls.md" >}}) for media type
+See [Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}) for media type
 resolution, redirects, download tuning, and credential configuration.
 
 ## Access Types
@@ -337,7 +337,7 @@ is downloaded, when its digest is computed, and when the component version is tr
 
 Because the content is not under your control, the expected digest can be pinned on the resource itself, using the
 `digest` field alongside `access` rather than inside it. It is then verified on every fetch. See
-[How-To: Add Resources from HTTP URLs]({{< relref "docs/how-to/add-resources-from-http-urls.md" >}}#pinning-an-expected-digest).
+[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#pin-a-digest" >}}).
 
 Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical. The fields are identical
 to those of the [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input), so the same request can

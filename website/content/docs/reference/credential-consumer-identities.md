@@ -293,7 +293,7 @@ so the symptom is a `401` from the server rather than a configuration error.
 
 For migrating a Wget consumer entry from OCM v1, covering the renamed identity type, the `pathprefix` to `path`
 conversion, and the inverted authentication precedence, see
-[How-To: Add Resources from HTTP URLs]({{< relref "docs/how-to/add-resources-from-http-urls.md#credential-changes" >}}).
+[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#credential-changes" >}}).
 
 ---
 
