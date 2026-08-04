@@ -29,8 +29,8 @@ import (
 // Downloading the repository archive from github.com dominates both commands,
 // so they get a longer budget than a local registry alone would need.
 const (
-	gitHubAddTimeout      = 5 * time.Minute
-	gitHubTransferTimeout = 5 * time.Minute
+	gitHubAddTimeout      = time.Minute
+	gitHubTransferTimeout = time.Minute
 )
 
 // readLocalResource returns the bytes of a resource stored as a local blob.
