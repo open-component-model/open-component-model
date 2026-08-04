@@ -39,8 +39,8 @@ You can read more about this in our detailed blog post at [Shipping SBOMs with y
 OCM-ifying your application can be a daunting challenge. Especially if you have many moving parts and even more components
 that you need to transfer and then verify and then localize. Localization in the OCM world means that we update image references
 that point to location A to the transfer destination which points to location B. For example transferring from GHCR to
-a private registry like Zot, you want all the images in your values.yaml to be fetched from Zot, including third-parties
-like postgres.
+a private registry like Zot, you want all the images in your values.yaml to be fetched from Zot, including any third-party
+image sources (e.g. an image for PostgreSQL). 
 
 This is achieved using Kro + RGD + CEL + Fairy Dust from OCM.
 
