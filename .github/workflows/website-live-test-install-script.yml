@@ -202,15 +202,16 @@ jobs:
         env:
           INSTALL_DIR: ${{ runner.temp }}/ocm-bin
         run: |
+          test -x "${INSTALL_DIR}/ocm-custom"
           if [[ -e "${INSTALL_DIR}/ocm" ]]; then
             echo "::error::Unexpected default-named binary at ${INSTALL_DIR}/ocm; DEST basename was not honored"
             exit 1
           fi
-          version_json=$(ocm-custom version 2>/dev/null)
+          version_json=$("${INSTALL_DIR}/ocm-custom" version 2>/dev/null)
           actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
           if [[ "${actual}" != "${EXPECTED_VERSION}" ]]; then
             echo "::error::Version mismatch: expected ${EXPECTED_VERSION}, got ${actual}"
             exit 1
           fi
           echo "Custom-named binary ocm-custom reports ${actual}"
-          ocm-custom --help > /dev/null
+          "${INSTALL_DIR}/ocm-custom" --help > /dev/null
