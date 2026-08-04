@@ -245,7 +245,7 @@ In OCM v1 the body was an `io.Reader`, which has no YAML form. In OCM v2 it is a
 | Media type  | `mediaType` → `Content-Type` → **URL file extension** → `application/octet-stream` | `mediaType` → `Content-Type` → `application/octet-stream` |
 | Minimum TLS | TLS 1.3                                                                            | TLS 1.2                                                   |
 
-OCM v2 _dropped_ the file-extension guess, so a `.tar.gz` URL that used to resolve to `application/x-gzip` on its own now
+OCM v2 **dropped** the file-extension guess, so a `.tar.gz` URL that used to resolve to `application/x-gzip` on its own now
 needs an explicit `mediaType`.
 
 ### Credential changes {#credential-changes}
