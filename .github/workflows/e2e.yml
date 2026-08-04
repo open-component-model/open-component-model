@@ -64,7 +64,7 @@ jobs:
             ${{ env.LOCATION }}
             Taskfile.yml
             .env
-            website/static/install.sh
+            website/static/install-cli.sh
           persist-credentials: false
 
       - name: Setup Go
@@ -83,7 +83,7 @@ jobs:
         uses: docker/setup-docker-action@77e84dbf09b47d1e29270283c22f16145aa85ca1 # v5
 
       - name: Setup ocm
-        run: bash website/static/install.sh
+        run: bash website/static/install-cli.sh /usr/local/bin
 
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@dcc7def046cba2fe8d15d9737a4c250100f62fe0 # v2.9.0
