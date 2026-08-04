@@ -8,17 +8,32 @@ set -euo pipefail
 # Default install directory per the XDG Base Directory Specification:
 # https://specifications.freedesktop.org/basedir/latest/
 DEFAULT_BIN_DIR="${HOME}/.local/bin"
-BIN_DIR=${1:-"${DEFAULT_BIN_DIR}"}
+# Resolve the install directory and binary name from the optional positional argument:
+# empty, an existing directory, or a trailing '/' means "install as 'ocm' in this directory";
+# any other value is treated as the full output path (directory + binary name).
+_ARG="${1:-}"
+if [[ -z "${_ARG}" ]] || [[ "${_ARG}" == */ ]] || [[ -d "${_ARG}" ]]; then
+    BIN_DIR="${_ARG:-${DEFAULT_BIN_DIR}}"
+    BIN_DIR="${BIN_DIR%/}"
+    BIN_FILE="ocm"
+else
+    BIN_DIR="$(dirname "${_ARG}")"
+    BIN_FILE="$(basename "${_ARG}")"
+fi
 GITHUB_REPO="open-component-model/open-component-model"
 
 usage() {
     cat <<EOF
-Usage: install-cli.sh [BIN_DIR]
+Usage: install-cli.sh [DEST]
 
 Install the OCM CLI v2.
 
 Arguments:
-  BIN_DIR    Installation directory (default: ~/.local/bin)
+  DEST    Where to install the binary (default: ~/.local/bin/ocm).
+          - Omit, pass an existing directory, or end the path with '/':
+            installs as 'ocm' inside that directory.
+          - Pass any other path: installs the binary at exactly that path.
+            Use a versioned filename to keep multiple versions side by side.
 
 Environment variables:
   OCM_VERSION       Install a specific version (e.g., OCM_VERSION=1.0.0) or the latest version of a major.minor series (e.g., OCM_VERSION=0.9)
@@ -29,6 +44,7 @@ Examples:
   curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=1.0.0 bash
   curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.9 bash
   curl -sfL https://ocm.software/install-cli.sh | bash -s -- /usr/local/bin
+  curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.12 bash -s -- ~/.local/bin/ocm-v0.12
 EOF
     exit 0
 }
@@ -237,18 +253,18 @@ print_verify_instructions() {
     warn "  Reason: ${reason}"
     warn ""
     warn "  After installation completes, verify the binary at:"
-    warn "    ${BIN_DIR}/ocm"
+    warn "    ${BIN_DIR}/${BIN_FILE}"
     warn ""
     warn "  Option A — Verify with GitHub CLI (recommended):"
     warn "    1. Install gh: https://cli.github.com/"
     warn "    2. Authenticate against GitHub.com: gh auth login --hostname github.com"
     warn "    3. Verify the installed binary:"
-    warn "       gh attestation verify ${BIN_DIR}/ocm --repo ${GITHUB_REPO}"
+    warn "       gh attestation verify ${BIN_DIR}/${BIN_FILE} --repo ${GITHUB_REPO}"
     warn ""
     warn "  Option B — Verify with cosign (no GitHub auth needed):"
     cat >&2 <<COSIGN_EOF
 
-    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)"
+    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/${BIN_FILE} | cut -d' ' -f1)"
     curl -sfL \\
       "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
       | jq -r '.attestations[0].bundle' > attestation.jsonl
@@ -259,19 +275,19 @@ print_verify_instructions() {
       --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
       --certificate-identity-regexp \\
         '^https://github\\.com/${GITHUB_REPO}/\\.github/workflows/cli\\.yml@refs/(heads/(main|releases/v[0-9]+\\.[0-9]+)|tags/cli/v[0-9]+\\.[0-9]+\\.[0-9]+)' \\
-      ${BIN_DIR}/ocm
+      ${BIN_DIR}/${BIN_FILE}
 
 COSIGN_EOF
     warn ""
     warn "  Option C — Manual SHA-256 hash check (integrity only):"
     cat >&2 <<HASH_EOF
 
-    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)"
+    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/${BIN_FILE} | cut -d' ' -f1)"
     curl -sfL \\
       "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
       | jq -r '.attestations[0].bundle.dsseEnvelope.payload' \\
       | base64 --decode | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
-    # Compare the listed hash with: ${hash_cmd} ${BIN_DIR}/ocm
+    # Compare the listed hash with: ${hash_cmd} ${BIN_DIR}/${BIN_FILE}
 
 HASH_EOF
     warn ""
@@ -308,10 +324,10 @@ verify_binary() {
 
 # Setup permissions and move binary
 setup_binary() {
-    info "Installing ocm to ${BIN_DIR}/ocm"
+    info "Installing ocm to ${BIN_DIR}/${BIN_FILE}"
 
     if [[ -w "${BIN_DIR}" ]]; then
-        install -m 755 "${TMP_BIN}" "${BIN_DIR}/ocm"
+        install -m 755 "${TMP_BIN}" "${BIN_DIR}/${BIN_FILE}"
     else
         fatal "Cannot write to ${BIN_DIR}. Run with a writable directory: curl ... | bash -s -- ~/.local/bin"
     fi
@@ -330,5 +346,5 @@ setup_binary() {
     ensure_bin_dir
     setup_binary
     ensure_path
-    info "OCM CLI v${OCM_VERSION} installed successfully"
+    info "OCM CLI v${OCM_VERSION} installed to ${BIN_DIR}/${BIN_FILE}"
 }

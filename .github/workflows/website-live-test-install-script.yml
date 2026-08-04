@@ -101,7 +101,7 @@ jobs:
           INSTALL_DIR: ${{ runner.temp }}/ocm-bin
           INSTALL_LOG: ${{ runner.temp }}/install.log
         run: |
-          bash website/static/install-cli.sh "${INSTALL_DIR}" 2>&1 | tee "${INSTALL_LOG}"
+          bash website/static/install-cli.sh "${INSTALL_DIR}/" 2>&1 | tee "${INSTALL_LOG}"
           echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
 
       - name: Verify attestation was checked
@@ -145,7 +145,7 @@ jobs:
           GITHUB_TOKEN: ""
           GH_CONFIG_DIR: /nonexistent
         run: |
-          bash website/static/install-cli.sh "${INSTALL_DIR}" 2>&1 | tee "${INSTALL_LOG}"
+          bash website/static/install-cli.sh "${INSTALL_DIR}/" 2>&1 | tee "${INSTALL_LOG}"
           echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
 
       - name: Verify attestation was skipped
@@ -173,3 +173,44 @@ jobs:
           fi
           echo "Installed version ${actual} matches expected ${EXPECTED_VERSION}"
           ocm --help > /dev/null
+
+  install-to-filepath:
+    needs: resolve
+    name: Install to explicit filepath (custom name)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # DEST is a full output path, so the binary must land at exactly that path
+      # under the given name - not as 'ocm' inside a directory.
+      - name: Run install script with a versioned filename
+        env:
+          INSTALL_DIR: ${{ runner.temp }}/ocm-bin
+        run: |
+          bash website/static/install-cli.sh "${INSTALL_DIR}/ocm-custom"
+          echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
+
+      - name: Verify custom-named binary
+        env:
+          INSTALL_DIR: ${{ runner.temp }}/ocm-bin
+        run: |
+          if [[ -e "${INSTALL_DIR}/ocm" ]]; then
+            echo "::error::Unexpected default-named binary at ${INSTALL_DIR}/ocm; DEST basename was not honored"
+            exit 1
+          fi
+          version_json=$(ocm-custom version 2>/dev/null)
+          actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
+          if [[ "${actual}" != "${EXPECTED_VERSION}" ]]; then
+            echo "::error::Version mismatch: expected ${EXPECTED_VERSION}, got ${actual}"
+            exit 1
+          fi
+          echo "Custom-named binary ocm-custom reports ${actual}"
+          ocm-custom --help > /dev/null
