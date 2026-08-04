@@ -12,6 +12,22 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 )
 
+const (
+	componentNamePrefix = "ocm.software/ocm-k8s-toolkit/examples/"
+	// signingVersion is the version stamped on every signed fixture today. Sign
+	// requires an exact name:version reference; transfer does not.
+	signingVersion = "1.0.0"
+)
+
+// ocmBinary returns the ocm CLI executable. Override via OCM_CLI when running
+// against a non-standard binary path.
+func ocmBinary() string {
+	if v := os.Getenv("OCM_CLI"); v != "" {
+		return v
+	}
+	return "ocm"
+}
+
 // Run executes the provided command within this context.
 func Run(cmd *exec.Cmd) ([]byte, error) {
 	cmd.Dir = os.Getenv("PROJECT_DIR")
@@ -101,64 +117,77 @@ func WaitForResource(ctx context.Context, condition, timeout string, resource ..
 // PrepareOCMComponent creates an OCM component from a component-constructor file.
 // After creating the OCM component, the component is transferred to imageRegistry.
 func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, imageRegistry, signingKey string) error {
+	ocm := ocmBinary()
+
 	By("creating ocm component for " + name)
 	tmpDir := GinkgoT().TempDir()
-
 	ctfDir := filepath.Join(tmpDir, "ctf")
-	cmdArgs := []string{
-		"add",
-		"componentversions",
-		"--create",
-		"--file", ctfDir,
-		componentConstructorPath,
-	}
 
-	cmd := exec.CommandContext(ctx, "ocm", cmdArgs...)
-	_, err := Run(cmd)
-	if err != nil {
+	cmd := exec.CommandContext(ctx, ocm,
+		"add", "cv",
+		"--repository", ctfDir,
+		"--constructor", componentConstructorPath,
+	)
+	if _, err := Run(cmd); err != nil {
 		return fmt.Errorf("could not create ocm component: %w", err)
 	}
 
+	componentName := componentNamePrefix + filepath.Base(filepath.Dir(componentConstructorPath))
+	transferRef := fmt.Sprintf("ctf::%s//%s", ctfDir, componentName)
+
 	if signingKey != "" {
 		By("signing ocm component for " + name)
-		cmd = exec.CommandContext(ctx,
-			"ocm",
-			"sign",
-			"componentversions",
-			"--signature",
-			"ocm.software",
-			"--private-key",
-			signingKey,
-			ctfDir,
+		ocmConfigPath := filepath.Join(tmpDir, ".ocmconfig")
+		if err := writeSigningConfig(ocmConfigPath, signingKey, signingKey+".pub"); err != nil {
+			return fmt.Errorf("could not write signing ocmconfig: %w", err)
+		}
+
+		signRef := fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, signingVersion)
+		cmd = exec.CommandContext(ctx, ocm,
+			"sign", "cv",
+			signRef,
+			"--signature", "ocm.software",
+			"--config", ocmConfigPath,
 		)
-		_, err := Run(cmd)
-		if err != nil {
-			return fmt.Errorf("could not create ocm component: %w", err)
+		if _, err := Run(cmd); err != nil {
+			return fmt.Errorf("could not sign ocm component: %w", err)
 		}
 	}
 
 	By("transferring ocm component for " + name)
-	// Note: The option '--overwrite' is necessary, when a digest of a resource is changed or unknown (which is the case
-	// in our default test)
-	cmdArgs = []string{
-		"transfer",
-		"ctf",
-		"--overwrite",
-		"--enforce",
-		"--copy-resources",
-		"--omit-access-types",
-		"gitHub",
-		ctfDir,
+	cmd = exec.CommandContext(ctx, ocm,
+		"transfer", "cv",
+		transferRef,
 		imageRegistry,
-	}
-
-	cmd = exec.CommandContext(ctx, "ocm", cmdArgs...)
-	_, err = Run(cmd)
-	if err != nil {
+		"--copy-resources",
+		"--upload-as", "ociArtifact",
+		"--recursive",
+	)
+	if _, err := Run(cmd); err != nil {
 		return fmt.Errorf("could not transfer ocm component: %w", err)
 	}
 
 	return nil
+}
+
+// writeSigningConfig writes an .ocmconfig that resolves the RSA credential
+// for the "ocm.software" signature from a pair of PEM files.
+func writeSigningConfig(path, privateKeyPEM, publicKeyPEM string) error {
+	content := fmt.Sprintf(`type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: ocm.software
+        credentials:
+          - type: Credentials/v1
+            properties:
+              private_key_pem_file: %s
+              public_key_pem_file: %s
+`, privateKeyPEM, publicKeyPEM)
+	return os.WriteFile(path, []byte(content), 0o600)
 }
 
 // DumpLogs dumps pod logs and resource status for the given namespace and resource type.
