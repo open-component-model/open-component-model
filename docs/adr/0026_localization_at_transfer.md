@@ -1,7 +1,7 @@
 # Helm Localization at Transfer Time via Wrapper Charts
 
 * **Status**: proposed
-* **Deciders**: Gergely Brautigam, Fabian Burth, Jakob Moeller
+* **Deciders**: OCM Maintainer Team
 * **Date**: 2026-07-16
 
 Technical Story: After `ocm transfer` relocates the images referenced by a Helm
