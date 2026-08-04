@@ -64,7 +64,7 @@ task cli:install # installs to /usr/local/bin (requires sudo)
 
 The binary is installed to `~/.local/bin` by default (per the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/latest/)).
 The installer verifies binary integrity via [GitHub attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds) when the [GitHub CLI (`gh`)](https://cli.github.com/) is available.
-Set `OCM_VERSION` to install a specific version, and pass a path after `bash -s --` to control where the binary lands: a directory (or a path ending in `/`) installs it as `ocm` inside that directory, while any other path is used as the full binary location.
+Set `OCM_VERSION` to install a specific version, and pass a directory after `bash -s --` to control where the binary lands (default: `~/.local/bin`). Set `OCM_BIN_NAME` to install the binary under a custom name.
 Run `bash -s -- --help` after the pipe to see all options.
 
 <details>
@@ -100,14 +100,14 @@ curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.12 bash
 
 ### Side-by-side versions
 
-The first argument after `bash -s --` sets the output path. A directory (or a path ending in `/`) installs the binary as `ocm` inside it; any other path is treated as the full binary location. Pass a versioned filename to keep multiple versions side by side:
+Set `OCM_BIN_NAME` to install the binary under a custom name (default: `ocm`). Combine it with a version suffix to keep multiple versions side by side in the same directory:
 
 ```shell
-wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.12 bash -s -- ~/.local/bin/ocm-v0.12
-wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.11 bash -s -- ~/.local/bin/ocm-v0.11
+wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.12 OCM_BIN_NAME=ocm-v0.12 bash -s -- ~/.local/bin
+wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.11 OCM_BIN_NAME=ocm-v0.11 bash -s -- ~/.local/bin
 ```
 
-Each installs the binary directly at the path you give it. Run by name if `~/.local/bin` is on your `PATH`, or by full path otherwise:
+Each installs the binary under the name you give it. Run by name if `~/.local/bin` is on your `PATH`, or by full path otherwise:
 
 ```shell
 # Run a specific version by name (if ~/.local/bin is on PATH)
