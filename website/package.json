@@ -49,7 +49,7 @@
     "globals": "17.8.0",
     "hugo-extended": "0.164.0",
     "jiti": "2.7.0",
-    "js-yaml": "5.2.2",
+    "js-yaml": "5.2.3",
     "sass-embedded": "1.100.0",
     "shx": "0.4.0",
     "typescript-eslint": "8.65.0"
@@ -68,5 +68,5 @@
     "node": "^26.0.0",
     "npm": ">=12.0.0"
   },
-  "packageManager": "npm@12.0.1"
+  "packageManager": "npm@12.0.2"
 }
