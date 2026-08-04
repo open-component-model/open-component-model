@@ -8,37 +8,28 @@ set -euo pipefail
 # Default install directory per the XDG Base Directory Specification:
 # https://specifications.freedesktop.org/basedir/latest/
 DEFAULT_BIN_DIR="${HOME}/.local/bin"
-# Resolve the install directory and binary name from the optional positional argument:
-# empty, an existing directory, or a trailing '/' means "install as 'ocm' in this directory";
-# any other value is treated as the full output path (directory + binary name).
-_ARG="${1:-}"
-if [[ -z "${_ARG}" ]] || [[ "${_ARG}" == */ ]] || [[ -d "${_ARG}" ]]; then
-    BIN_DIR="${_ARG:-${DEFAULT_BIN_DIR}}"
-    if [[ "${BIN_DIR}" != "/" ]]; then
-        BIN_DIR="${BIN_DIR%/}"
-    fi
-    BIN_FILE="ocm"
-else
-    BIN_DIR="$(dirname -- "${_ARG}")"
-    BIN_FILE="$(basename -- "${_ARG}")"
+# The positional argument is always the install directory. The binary name defaults to
+# 'ocm' and can be overridden with OCM_BIN_NAME to keep multiple versions side by side.
+BIN_DIR="${1:-${DEFAULT_BIN_DIR}}"
+if [[ "${BIN_DIR}" != "/" ]]; then
+    BIN_DIR="${BIN_DIR%/}"
 fi
+BIN_FILE="${OCM_BIN_NAME:-ocm}"
 GITHUB_REPO="open-component-model/open-component-model"
 
 usage() {
     cat <<EOF
-Usage: install-cli.sh [DEST]
+Usage: install-cli.sh [BIN_DIR]
 
 Install the OCM CLI v2.
 
 Arguments:
-  DEST    Where to install the binary (default: ~/.local/bin/ocm).
-          - Omit, pass an existing directory, or end the path with '/':
-            installs as 'ocm' inside that directory.
-          - Pass any other path: installs the binary at exactly that path.
-            Use a versioned filename to keep multiple versions side by side.
+  BIN_DIR    Directory to install the binary into (default: ~/.local/bin).
 
 Environment variables:
   OCM_VERSION       Install a specific version (e.g., OCM_VERSION=1.0.0) or the latest version of a major.minor series (e.g., OCM_VERSION=0.9)
+  OCM_BIN_NAME      Install the binary under a custom name (default: ocm).
+                    Use a version suffix to keep multiple versions side by side.
   OCM_SKIP_VERIFY   Skip attestation verification (set to "true")
 
 Examples:
@@ -46,7 +37,7 @@ Examples:
   curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=1.0.0 bash
   curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.9 bash
   curl -sfL https://ocm.software/install-cli.sh | bash -s -- /usr/local/bin
-  curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.12 bash -s -- ~/.local/bin/ocm-v0.12
+  curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.12 OCM_BIN_NAME=ocm-v0.12 bash -s -- ~/.local/bin
 EOF
     exit 0
 }
