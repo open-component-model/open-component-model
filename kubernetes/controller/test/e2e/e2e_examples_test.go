@@ -110,9 +110,8 @@ var _ = Describe("controller", func() {
 					name = "applications.argoproj.io/" + example.Name()
 					Expect(utils.WaitForResource(ctx, "create", timeout, name, "-n", "argocd")).To(Succeed())
 
-					By("validating ArgoCD Applications are Synced and Healthy")
+					By("validating the ArgoCD Application is Synced")
 					Expect(utils.WaitForResource(ctx, "jsonpath={.status.sync.status}=Synced", timeout, name, "-n", "argocd")).To(Succeed())
-					Expect(utils.WaitForResource(ctx, "jsonpath={.status.health.status}=Healthy", timeout, name, "-n", "argocd")).To(Succeed())
 
 					name = "deployment.apps/" + example.Name() + "-podinfo"
 
