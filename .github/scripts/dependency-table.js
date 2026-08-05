@@ -58,7 +58,9 @@ export function computeLayers(deps) {
     /** @param {string} mod */
     function getLayer(mod, visiting = new Set()) {
         if (layers.has(mod)) return /** @type {number} */ (layers.get(mod));
-        if (visiting.has(mod)) return 0;
+        if (visiting.has(mod)) {
+            throw new Error(`Circular dependency detected: ${[...visiting, mod].join(" → ")}`);
+        }
         visiting.add(mod);
 
         const modDeps = deps.get(mod) ?? [];
@@ -66,7 +68,7 @@ export function computeLayers(deps) {
             layers.set(mod, 0);
             return 0;
         }
-        const maxDep = Math.max(...modDeps.map((d) => getLayer(d, visiting)));
+        const maxDep = Math.max(...modDeps.map((d) => getLayer(d, new Set(visiting))));
         const layer = maxDep + 1;
         layers.set(mod, layer);
         return layer;

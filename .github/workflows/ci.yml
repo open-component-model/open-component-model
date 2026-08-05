@@ -26,7 +26,7 @@ jobs:
       modules_json: ${{ steps.filtered.outputs.modules_json }}
       # lint_modules_json = all modules when lint config changed, else same as modules_json
       lint_modules_json: ${{ steps.filtered.outputs.lint_modules_json }}
-      lint_config_changed: ${{ steps.lint_config_changes.outputs.lint_config }}
+      dependency_table_changed: ${{ steps.lint_config_changes.outputs.dependency_table }}
       integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
       unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
     env:
@@ -48,6 +48,12 @@ jobs:
             lint_config:
               - '.env'
               - 'golangci.yml'
+            dependency_table:
+              - 'golangci.yml'
+              - '.github/scripts/dependency-table.js'
+              - '.github/scripts/package.json'
+              - '.github/scripts/package-lock.json'
+              - 'docs/dependency-table.md'
       # Detect CI workflow changes to rebuild/test all modules
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         id: ci_changes
@@ -254,7 +260,7 @@ jobs:
     name: "dependency-table-verify"
     needs: discover_modules
     runs-on: ubuntu-24.04-arm
-    if: ${{ needs.discover_modules.outputs.lint_config_changed == 'true' }}
+    if: ${{ needs.discover_modules.outputs.dependency_table_changed == 'true' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
