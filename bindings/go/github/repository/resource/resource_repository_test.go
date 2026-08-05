@@ -109,23 +109,6 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 		assert.ErrorContains(t, err, "access")
 	})
 
-	t.Run("resolves a ref-only resource to the commit its ref points at", func(t *testing.T) {
-		baseURL, payload := mockGitHub(t)
-		res := &descriptor.Resource{
-			ElementMeta: descriptor.ElementMeta{
-				ObjectMeta: descriptor.ObjectMeta{Name: "source", Version: "1.0.0"},
-			},
-			Access: &v1.GitHub{
-				Type:    runtime.NewVersionedType(v1.LegacyType, v1.Version),
-				RepoURL: baseURL + "/octocat/Hello-World",
-				Ref:     "main",
-			},
-		}
-		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
-		require.NoError(t, err)
-		assert.Equal(t, payload, readBlob(t, downloaded), "the archive of the resolved commit must be served")
-	})
-
 	t.Run("warns when the ref no longer points at the pinned commit and downloads the commit", func(t *testing.T) {
 		var logBuf bytes.Buffer
 		previous := slog.Default()
@@ -189,7 +172,30 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 		assert.Zero(t, requests, "an invalid access must be rejected before any request reaches the server")
 	})
 
-	t.Run("rejects a resource with neither commit nor ref", func(t *testing.T) {
+	t.Run("rejects a ref-only resource without reaching the server", func(t *testing.T) {
+		var requests int
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			requests++
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
+		}))
+		t.Cleanup(server.Close)
+
+		res := &descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: "source", Version: "1.0.0"},
+			},
+			Access: &v1.GitHub{
+				Type:    runtime.NewVersionedType(v1.LegacyType, v1.Version),
+				RepoURL: server.URL + "/octocat/Hello-World",
+				Ref:     "main",
+			},
+		}
+		_, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
+		assert.ErrorContains(t, err, "commit must not be empty")
+		assert.Zero(t, requests, "a ref must never stand in for a missing commit")
+	})
+
+	t.Run("rejects a resource without commit or ref", func(t *testing.T) {
 		res := &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{
 				ObjectMeta: descriptor.ObjectMeta{Name: "source", Version: "1.0.0"},
@@ -200,7 +206,7 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 			},
 		}
 		_, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
-		assert.ErrorContains(t, err, "either commit or ref")
+		assert.ErrorContains(t, err, "commit must not be empty")
 	})
 }
 

@@ -66,9 +66,10 @@ func NewResourceRepository(opts ...Option) *ResourceRepository {
 	return r
 }
 
-// ResolveCommit resolves the access's ref to the commit SHA it currently points
-// at, using this repository's HTTP client. The digest processor uses it to pin a
-// ref-only access before downloading. Nil credentials resolve anonymously.
+// ResolveCommit resolves the access's ref to the commit SHA it points at now,
+// using this repository's HTTP client.
+// DownloadResource uses it to warn about ref drift.
+// Nil credentials resolve anonymously.
 func (r *ResourceRepository) ResolveCommit(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials) (string, error) {
 	return download.ResolveCommit(ctx, gitHub, credentials, r.httpClient)
 }
@@ -90,12 +91,10 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 	return githubinternal.CredentialConsumerIdentity(gitHub.RepoURL)
 }
 
-// DownloadResource fetches the archive of the commit pinned in the resource's
-// GitHub access as a gzipped tar blob (application/x-tgz). A ref-only access is
-// resolved to the commit the ref points at now, so the download is a snapshot;
-// the digest processor is what pins it for reproducibility. When both are set the
-// commit wins, and the ref is re-resolved only to warn about drift — drift never
-// fails the download.
+// DownloadResource fetches the archive of the commit in the resource's GitHub
+// access as a gzipped tar blob (application/x-tgz). A ref, if set, is resolved
+// only to warn when it no longer points at that commit. Drift never fails the
+// download.
 //
 // The blob is buffered eagerly in memory and can be read any number of times;
 // it needs no cleanup and holds the whole archive until released.
@@ -114,14 +113,10 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("invalid GitHub access: %w", err)
 	}
 
-	switch {
-	case gitHub.Commit == "":
-		resolved, err := r.ResolveCommit(ctx, gitHub, gitHubCredentials)
-		if err != nil {
-			return nil, fmt.Errorf("error resolving GitHub ref to commit: %w", err)
-		}
-		gitHub.Commit = resolved
-	case gitHub.Ref != "":
+	// The commit is what gets downloaded, so a moved ref is only worth a
+	// warning: a branch that advances past the commit, or is deleted after a
+	// merge, leaves the component version unchanged.
+	if gitHub.Ref != "" {
 		if resolved, err := r.ResolveCommit(ctx, gitHub, gitHubCredentials); err != nil {
 			slog.DebugContext(ctx, "could not resolve GitHub ref to check the pinned commit", "ref", gitHub.Ref, "error", err)
 		} else if resolved != gitHub.Commit {

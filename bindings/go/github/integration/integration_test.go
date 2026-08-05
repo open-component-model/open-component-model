@@ -22,10 +22,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// This repository, pinned at a published release tag. The ref-only cases below
-// assert that resolving the ref yields exactly ocmCommit, so the ref must never
-// move: a release tag of a published version is the strongest such guarantee a
-// live repository offers (branches advance, release tags do not).
+// This repository, pinned at a published release tag. The ResolveCommit case
+// below asserts the ref resolves to exactly ocmCommit, so the ref must never
+// move — a release tag never does, a branch would.
 const (
 	ocmRepo   = "https://github.com/open-component-model/open-component-model"
 	ocmRef    = "refs/tags/v0.8.0"
@@ -45,6 +44,13 @@ func testCredentials() runtime.Typed {
 		Type:  runtime.NewVersionedType(credsv1.GitHubCredentialsType, credsv1.Version),
 		Token: token,
 	}
+}
+
+// testGitHubCredentials is testCredentials for the calls that take the concrete
+// type. The assertion yields nil for an anonymous run.
+func testGitHubCredentials() *credsv1.GitHubCredentials {
+	creds, _ := testCredentials().(*credsv1.GitHubCredentials)
+	return creds
 }
 
 // ocmAccess builds a github access; ref or commit may be empty to exercise the
@@ -197,32 +203,5 @@ func Test_Integration_GitHub(t *testing.T) {
 				assert.Equal(t, processed.Digest.Value, verified.Digest.Value)
 			})
 		})
-
-		t.Run("ref only", func(t *testing.T) {
-			t.Run("digest processing resolves the ref and pins the commit it points at", func(t *testing.T) {
-				res := ocmResource(ocmRef, "")
-				processed, err := processor.ProcessResourceDigest(t.Context(), res, testCredentials())
-				require.NoError(t, err)
-
-				pinned := pinnedAccess(t, processed)
-				// The ref is a published release tag, so the sha it resolves to
-				// is a stable assertion target.
-				assert.Equal(t, ocmCommit, pinned.Commit, "the ref must be resolved and pinned as a commit")
-				assert.Equal(t, ocmRef, pinned.Ref, "the ref stays informational next to the pinned commit")
-				require.NotNil(t, processed.Digest)
-
-				orig, ok := res.Access.(*v1.GitHub)
-				require.True(t, ok)
-				assert.Empty(t, orig.Commit, "input resource access must not be mutated")
-			})
-
-			t.Run("download resolves the ref and serves the archive of the commit it points at", func(t *testing.T) {
-				downloaded, err := resource.NewResourceRepository().DownloadResource(
-					t.Context(), ocmResource(ocmRef, ""), testCredentials())
-				require.NoError(t, err)
-				assertOCMArchive(t, downloaded)
-			})
-		})
 	})
-
 }

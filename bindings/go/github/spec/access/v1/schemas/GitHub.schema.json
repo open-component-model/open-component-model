@@ -12,11 +12,11 @@
     },
     "commit": {
       "type": "string",
-      "description": "Commit is the 40-hex-character SHA of the commit to access.\n\nThis access type is used for both resources and sources. A source requires\na commit. A resource may be authored with only a Ref and have its Commit\npinned later, which is why the field is omitempty. Validate() rejects a\nspec that sets neither Commit nor Ref; a set Commit takes precedence over\nRef."
+      "description": "Commit is the 40-hex-character SHA of the commit to access. Required, so\nthe content an access points at never changes."
     },
     "ref": {
       "type": "string",
-      "description": "Ref is a git reference (e.g. refs/heads/main). A resource may be authored\nwith only a Ref and have its Commit pinned later by the constructor's\ndigest processor; once a Commit is present it is authoritative and Ref is\ninformational."
+      "description": "Ref is the git reference (e.g. refs/heads/main) the Commit came from.\nOptional and informational."
     },
     "repoUrl": {
       "type": "string",
@@ -52,7 +52,8 @@
   },
   "required": [
     "type",
-    "repoUrl"
+    "repoUrl",
+    "commit"
   ],
   "additionalProperties": false,
   "$defs": {

@@ -4,16 +4,15 @@
 // It implements the "GitHub" access type: a resource whose bytes are a
 // repository's source archive at a pinned commit, described by a
 // [ocm.software/open-component-model/bindings/go/github/spec/access/v1.GitHub]
-// access spec. Besides the repository URL, the spec carries a Commit, a Ref,
-// and an optional APIHostname for GitHub Enterprise. A set Commit is
-// authoritative and a Ref is informational: once a commit is present it is
-// never re-resolved, mirroring OCI tag->digest pinning, so a component version
-// that has not changed keeps verifying even after the branch moves past the
-// commit or is deleted.
+// access spec. Besides the repository URL, the spec carries a required Commit,
+// an optional Ref, and an optional APIHostname for GitHub Enterprise. The
+// Commit is what gets fetched; the Ref only records where it came from and
+// never selects the content. Like OCI tag->digest pinning, this keeps an
+// unchanged component version verifying after the branch moves on or is
+// deleted.
 //
 // [ocm.software/open-component-model/bindings/go/github/repository/resource.ResourceRepository]
-// is the entry point. It resolves a ref-only access to the commit the ref
-// currently points at and downloads the commit archive via the GitHub REST API
+// is the entry point. It downloads the commit archive via the GitHub REST API
 // as a gzipped tar blob (application/x-tgz), buffered in memory:
 //
 //	repo := resource.NewResourceRepository()
@@ -29,7 +28,7 @@
 //
 // Credentials are optional. When supplied as
 // [ocm.software/open-component-model/bindings/go/github/spec/credentials/v1.GitHubCredentials]
-// the token authenticates both the ref resolution and the archive download; a
+// the token authenticates the archive download and any ref drift check; a
 // token-less credential falls back to an anonymous request against GitHub's
 // per-IP rate limit. The repository derives the credential consumer identity
 // (type GitHubRepository) from a resource's repository URL via
@@ -40,9 +39,8 @@
 // component construction records it verbatim without digesting or fetching
 // anything, so this module implements no source download.
 // [ocm.software/open-component-model/bindings/go/github/digest.DigestProcessor]
-// pins a ref-only access to the commit its ref resolves to and computes the
-// genericBlobDigest/v1 over the downloaded archive, so by-reference resources
-// carry a verifiable digest before transport.
+// computes the genericBlobDigest/v1 over the downloaded archive, so
+// by-reference resources carry a verifiable digest before transport.
 //
 // The wire types are registered in their package schemes for typed conversion.
 // The canonical type is "GitHub"; the lowercase "github" and camelCase

@@ -28,16 +28,12 @@ const MediaTypeTGZ = "application/x-tgz"
 // The returned blob is self-contained: it satisfies the full
 // [blob.ReadOnlyBlob] contract (any number of readers, each from the start),
 // needs no cleanup, and holds the whole archive in memory until released.
-// An access without a resolved commit is rejected: a bare ref is mutable and
-// cannot be materialized reproducibly.
+// Access without a commit is rejected.
 //
 // credentials and httpClient may be nil; see clientFor.
 func Download(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (blob.ReadOnlyBlob, error) {
 	if err := gitHub.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid GitHub access: %w", err)
-	}
-	if gitHub.Commit == "" {
-		return nil, fmt.Errorf("GitHub access requires a pinned commit to download; ref %q has no resolved commit", gitHub.Ref)
 	}
 
 	slog.DebugContext(ctx, "Downloading GitHub commit archive", "repoUrl", gitHub.RepoURL, "commit", gitHub.Commit)

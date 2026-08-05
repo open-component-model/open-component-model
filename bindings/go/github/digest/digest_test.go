@@ -148,29 +148,15 @@ func TestDigestProcessor(t *testing.T) {
 			assert.ErrorContains(t, err, "invalid github access")
 		})
 
-		t.Run("pins the resolved commit for a ref-only resource", func(t *testing.T) {
-			res := githubResourceRef(repoURL, "main", "")
-			processed, err := processor.ProcessResourceDigest(t.Context(), res, nil)
-			require.NoError(t, err)
-
-			pinned := pinnedAccess(t, processed)
-			assert.Equal(t, testCommit, pinned.Commit, "commit must be pinned to the resolved sha")
-			require.NotNil(t, processed.Digest)
-			assert.Equal(t, payloadDigest, processed.Digest.Value)
-
-			orig := res.Access.(*v1.GitHub)
-			assert.Empty(t, orig.Commit, "input resource access must not be mutated")
-		})
-
-		t.Run("resolves the ref once, not again for the download", func(t *testing.T) {
+		t.Run("rejects a ref-only resource", func(t *testing.T) {
+			// A digest for a ref would describe whatever it points at today.
 			var resolveCalls int
 			repoURL := mockGitHub(t, testCommit, &resolveCalls)
 
 			res := githubResourceRef(repoURL, "main", "")
 			_, err := processor.ProcessResourceDigest(t.Context(), res, nil)
-			require.NoError(t, err)
-
-			assert.Equal(t, 1, resolveCalls, "the ref must be resolved once to pin the commit, not again for the download")
+			assert.ErrorContains(t, err, "commit must not be empty")
+			assert.Zero(t, resolveCalls, "the ref must not be resolved to fill in a missing commit")
 		})
 
 		t.Run("a moved ref does not invalidate a pinned commit", func(t *testing.T) {

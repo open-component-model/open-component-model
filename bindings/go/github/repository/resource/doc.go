@@ -2,10 +2,10 @@
 // access type.
 //
 // The [ResourceRepository] downloads a GitHub repository's source archive at a
-// pinned commit via the GitHub REST API and returns it as a gzipped tar blob
-// (application/x-tgz). A resource may be pinned to a commit or carry only a ref,
-// which [ResourceRepository.ResolveCommit] resolves to the commit it currently
-// points at; when both are set the commit wins.
+// commit via the GitHub REST API and returns it as a gzipped tar blob
+// (application/x-tgz). The access must name the commit. A ref, if set, is
+// resolved by [ResourceRepository.ResolveCommit] only to warn when it has moved
+// away from that commit.
 //
 // # Usage
 //
@@ -17,7 +17,8 @@
 //		Access: &v1.GitHub{
 //			Type:    runtime.NewVersionedType(v1.Type, "v1"),
 //			RepoURL: "https://github.com/open-component-model/ocm",
-//			Ref:     "refs/heads/main",
+//			Commit:  "0123456789abcdef0123456789abcdef01234567", // required
+//			Ref:     "refs/heads/main", // optional, informational
 //		},
 //	}
 //

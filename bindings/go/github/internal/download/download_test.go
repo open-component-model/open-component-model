@@ -70,7 +70,7 @@ func TestDownload(t *testing.T) {
 			Ref:     "main",
 		}, nil, nil)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "pinned commit")
+		assert.Contains(t, err.Error(), "commit must not be empty", "a ref alone must not stand in for the commit")
 	})
 
 	t.Run("fails when the archive link cannot be resolved", func(t *testing.T) {

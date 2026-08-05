@@ -22,13 +22,6 @@ func TestGitHub_Validate(t *testing.T) {
 			},
 		},
 		{
-			name: "valid with ref only (resolved and pinned later)",
-			github: GitHub{
-				RepoURL: "https://github.com/open-component-model/ocm",
-				Ref:     "refs/heads/main",
-			},
-		},
-		{
 			name: "valid with both commit and ref",
 			github: GitHub{
 				RepoURL: "https://github.com/open-component-model/ocm",
@@ -57,11 +50,20 @@ func TestGitHub_Validate(t *testing.T) {
 			wantErr: "repoUrl",
 		},
 		{
-			name: "neither commit nor ref",
+			name: "missing commit",
 			github: GitHub{
 				RepoURL: "https://github.com/open-component-model/ocm",
 			},
-			wantErr: "either commit or ref",
+			wantErr: "commit must not be empty",
+		},
+		{
+			// Refs move, so a ref alone is not enough.
+			name: "ref only, without a commit",
+			github: GitHub{
+				RepoURL: "https://github.com/open-component-model/ocm",
+				Ref:     "refs/heads/main",
+			},
+			wantErr: "commit must not be empty",
 		},
 		{
 			name: "commit too short",
