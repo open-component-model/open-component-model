@@ -375,10 +375,7 @@ resources:
 ```
 
 {{< callout context="note" >}}
-Upload is not supported for this access type, because a plain HTTP endpoint has no standardized write API. Wget
-resources are **always transferred by value**: transferring a component version downloads the content and stores it as a
-[`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1) in the target repository, so the target no
-longer depends on the origin server.
+Upload is not supported for this access type: a plain HTTP endpoint has no standardized write API. A `Wget/v1` access therefore has no by-reference form in a target repository. It is copied only when resource copying is requested using `--copy-resources`, and then always by value.  The content is downloaded and stored as a [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1).
 {{< /callout >}}
 
 For guidance on choosing between the input and the access type, and for media type resolution, redirects, download
