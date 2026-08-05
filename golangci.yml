@@ -147,6 +147,15 @@ linters:
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"
               desc: "dag must not import bindings outside its allowed set"
+        generator:
+          list-mode: lax
+          files: ["**/bindings/go/generator/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/generator"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "generator must not import bindings outside its allowed set"
         descriptor-normalisation:
           list-mode: lax
           files: ["**/bindings/go/descriptor/normalisation/**"]
