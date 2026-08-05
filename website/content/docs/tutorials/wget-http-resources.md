@@ -1,5 +1,5 @@
 ---
-title: "Work with HTTP Resources"
+title: "Working with HTTP Resources"
 description: "Understand the Wget input and access types in depth: the input/access model, credentials, media types, digest pinning, download tuning, and migrating from OCM v1."
 icon: "🌐"
 weight: 62
@@ -17,7 +17,7 @@ engine underneath, with two front doors:
 They share the same download, credential, and configuration code, so the choice between them is about *where the bytes
 live*, not about what you can configure.
 
-If you just want the commands to add a file and download it back, start with the how-to
+If you just want the commands to add a file and download it back, start with the How-To guide 
 [Add Resources from HTTP URLs]({{< relref "docs/how-to/add-resources-from-http-urls.md" >}}). This tutorial explains
 the parts that guide leaves out: why you'd pick one type over the other, how credentials are matched, how the media
 type is decided, how digest pinning protects you, and what changed since OCM v1.
@@ -26,9 +26,9 @@ type is decided, how digest pinning protects you, and what changed since OCM v1.
 
 - When to embed a file (input type) and when to reference it by URL (access type)
 - What happens to a Wget resource when you transfer the component version
-- How OCM decides a resource's media type
+- How OCM resolves a resource's media type
 - How credentials are matched to a request, and how the three authentication methods interact
-- How to pin a digest so a changed file is rejected instead of silently accepted
+- How to pin a resource by digest so a changed file is rejected instead of silently accepted
 - How to send a non-GET request and tune timeouts, retries, and the download directory
 - What changed between OCM v1 and OCM v2, and how to migrate
 
@@ -40,7 +40,7 @@ type is decided, how digest pinning protects you, and what changed since OCM v1.
 
 ## Input or access: where the bytes live {#choosing-input-or-access}
 
-Both describe the same resource with the same fields. The only difference is *when* the file is fetched and
+Both types describe the same resource with the same fields. The only difference is *when* the file is fetched and
 *where* it ends up.
 
 - With the **input type**, OCM downloads the file the moment you run `ocm add cv` and stores it inside the component
@@ -63,25 +63,24 @@ both will end up as local blobs.
 
 This means:
 
-1. You MUST pass `--copy-resources true` to `ocm transfer cv`. Without it, the resource is skipped, because there is no
+1. You MUST pass the `--copy-resources` flag to `ocm transfer cv`. Without it, the resource is skipped, because there is no
    way to transfer it without copying the bytes.
 2. The bytes are fetched *again at transfer time* and checked against the resource's digest. If the file behind the URL
    changed since the component version was built, the transfer fails instead of copying different content. That
    check is what makes [digest pinning](#pin-a-digest) worth doing on an access-type resource.
 
-"Keep the bytes on the server" property of the access type is only true if the component version stays where it
-was built. During a transfer it will end up as an embedded blob.
+The file stays on the remote server only if the component version is never transferred. Transfer converts the `Wget/v1` reference into a `LocalBlob/v1`.
 
 ## Set the media type {#set-the-media-type}
 
-Every resource has a media type. For a Wget resource, OCM picks it in this order and stops at the first one it finds:
+Every resource has a media type. For a Wget resource, OCM picks it in the following order and stops at the first one it finds:
 
 1. The `mediaType` field in your specification, if you set it.
 2. The `Content-Type` header the server returns.
 3. `application/octet-stream`, as a last resort.
 
-Practical advice is: **set `mediaType` yourself whenever the server doesn't return a useful `Content-Type`.**
-The most common example is GitHub release assets. GitHub serves all of them as `application/octet-stream` no matter what
+**Practical advice**: set `mediaType` yourself whenever the server doesn't return a useful `Content-Type`.
+The most common examples are GitHub release assets. GitHub serves all of them as `application/octet-stream`, no matter what
 they actually are, so a `.tar` file would end up with a meaningless media type unless you set `mediaType:
 application/x-tar` explicitly.
 
@@ -92,7 +91,7 @@ OCM v2 does **not** guess the media type from the file extension in the URL. OCM
 
 ## Authentication {#authentication}
 
-Credentials are resolved through OCM's normal credential system. Never add authentication to a URL directly. OCM
+Credentials are resolved through OCM's normal [credential system]({{< relref "docs/concepts/credential-system.md" >}}). Never add authentication to a URL directly. OCM
 builds a [consumer identity]({{< relref "docs/reference/credential-consumer-identities.md#wget" >}}) of type `Wget` from
 the URL and uses the matching consumer entry's credentials for the request. Because the input type and the access type
 build that identity the same way, one entry will work for both, building the component version, and downloading the resource.
@@ -110,7 +109,7 @@ Wget's credential type is: `WgetCredentials/v1`.
 | Bearer token             | `identityToken`                                                  | `Authorization: Bearer …` |
 | Mutual TLS (client cert) | `certificate`, `privateKey`, and optional `certificateAuthority` | The TLS handshake         |
 
-- **Basic Auth and a bearer token both set the `Authorization` header, so they are mutually exclusive.** If you
+- Basic Auth and a bearer token both set the `Authorization` header, **so they are mutually exclusive.** If you
   configure both, the bearer token wins and OCM logs a warning.
 - **The client certificate is separate.** It is applied during the TLS handshake, not in a header, so it works independent 
   of the other two.
@@ -118,7 +117,7 @@ Wget's credential type is: `WgetCredentials/v1`.
 {{< callout context="caution" >}}
 Put secrets in your credential configuration, never in the specification. Anything you write into `url`, `header`, or
 `body` (including `https://user:token@host/...` and presigned query parameters) is stored with the component version
-(access type) or lives in your constructor file (input type). Both are places a secret should never be at.
+(access type) or lives in your constructor file (input type). Neither is a safe place for a secret.
 {{< /callout >}}
 
 For the full field reference, see
@@ -160,10 +159,10 @@ The `digest` block is optional and works on both the input and the access type. 
 - `normalisationAlgorithm` MUST be `genericBlobDigest/v1`, which means "hash the raw bytes, no normalisation".
 - `value` is the bare lowercase hex digest, with **no** `sha256:` prefix.
 
-### Why access-type pinning {#why-access-type-pinning
+### Why access-type pinning {#why-access-type-pinning}
 
 For the access type, the digest is checked again every time the component version is transferred, because the bytes are
-re-fetched at transfer time (see [How transfer works](#how-transfer-works)). So a file that changes *after* you publish
+re-fetched at transfer time (see [How transfer works](#how-transfer-works)). So, a file that changes *after* you publish
 the component version makes the next transfer fail, rather than silently swapping in different content.
 
 ```text
@@ -173,7 +172,7 @@ resource blob digest mismatch: resource 6e3205bb… vs blob sha256:3b1f0c72…  
 
 ## Send a non-GET request {#non-get-requests}
 
-By default, OCM sends a `GET`. To send something else, set `verb`, and optionally `header` and `body`. `body` is
+By default, OCM sends a `GET` request. To send something else, set `verb`, and optionally `header` and `body`. `body` is
 base64-encoded in YAML, because the underlying field is a byte slice:
 
 ```yaml
@@ -202,7 +201,7 @@ default. If you set `noRedirect: true`, the request fails.
 
 **Downloads are streamed to disk, not held in memory.** The response body is written straight to a temporary file, so
 memory use stays flat no matter how big the file is. There is no size limit by default. That temporary file is created
-under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration, falling back to the operating
+under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` attribute in the .ocmconfig configuration file, falling back to the operating
 system's temp directory if no configuration is provided.
 
 **Timeouts, retries, and per-host settings** come from the `http.config.ocm.software/v1alpha1` configuration and apply
@@ -227,8 +226,7 @@ defaults, and how per-host settings are merged.
 
 ## Migrate from OCM v1 {#migrating-from-ocm-v1}
 
-If you are bringing constructor files or credential config over from OCM v1, keep these in mind. The credential changes
-are the most important ones.
+Three things changed between OCM v1 and v2: credential matching, constructor syntax, and behavior. The credential changes are the most likely to break existing configurations.
 
 ### Constructor changes {#constructor-changes}
 
@@ -236,7 +234,7 @@ are the most important ones.
 |--------------|--------------|---------------------------|-----------------------------------------------|
 | Input `body` | Plain string | Base64-encoded byte slice | Base64-encode the body in the constructor.    |
 
-In OCM v1 the body was an `io.Reader`, which has no YAML form. In OCM v2 it is a byte slice, therefor it needs to be base64.
+In OCM v1 the body was an `io.Reader`, which has no YAML form. In OCM v2 it is a byte slice, therefore it needs to be base64.
 
 ### Behavior changes{#behavior-changes}
 
@@ -245,7 +243,7 @@ In OCM v1 the body was an `io.Reader`, which has no YAML form. In OCM v2 it is a
 | Media type  | `mediaType` → `Content-Type` → **URL file extension** → `application/octet-stream` | `mediaType` → `Content-Type` → `application/octet-stream` |
 | Minimum TLS | TLS 1.3                                                                            | TLS 1.2                                                   |
 
-OCM v2 **dropped** the file-extension guess, so a `.tar.gz` URL that used to resolve to `application/x-gzip` on its own now
+OCM v2 **dropped** the file-extension guess, so a `.tar.gz` URL that used to resolve to `application/x-gzip` on its own, now
 needs an explicit `mediaType`.
 
 ### Credential changes {#credential-changes}
@@ -269,8 +267,7 @@ Further matching changes:
 
 ### `401 Unauthorized` from the server
 
-**Why:** Either the credentials are wrong, or no consumer entry matched the identity OCM built from the URL. No matching
-entry is difficult to debug because there was no entry matched which assumes no credentials were provided.
+**Why:** Either the credentials are wrong, or no consumer entry matched the identity OCM built from the URL.  The second case is hard to spot: when nothing matches, OCM sends the request without credentials and the server returns the same 401 either way.
 
 **Fix:** Check the credentials first, then check that the entry matches. `hostname` must equal the URL host; `scheme`,
 `port`, and `path` narrow the match only when set, so the broadest entry is the one that sets only `hostname`. See
