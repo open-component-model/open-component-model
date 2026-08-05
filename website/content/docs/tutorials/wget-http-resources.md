@@ -66,8 +66,7 @@ This means:
 1. You MUST pass the `--copy-resources` flag to `ocm transfer cv`. Without it, the resource is skipped, because there is no
    way to transfer it without copying the bytes.
 2. The bytes are fetched *again at transfer time* and checked against the resource's digest. If the file behind the URL
-   changed since the component version was built, the transfer fails instead of copying different content. That
-   check is what makes [digest pinning](#pin-a-digest) worth doing on an access-type resource.
+   changed since the component version was built, the transfer fails instead of copying different content.
 
 The file stays on the remote server only if the component version is never transferred. Transfer converts the `Wget/v1` reference into a `LocalBlob/v1`.
 

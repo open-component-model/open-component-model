@@ -278,7 +278,7 @@ The `digest` block is optional and works on both the input and the access type. 
 ### Why access-type pinning {#why-access-type-pinning}
 
 For the access type, the digest is checked again every time the component version is transferred, because the bytes are
-re-fetched at transfer time (see [How transfer works](#how-transfer-works)). So, a file that changes *after* you publish
+re-fetched at transfer time (see [How transfer works]({{< relref "docs/tutorials/wget-http-resources.md" >}})). So, a file that changes *after* you publish
 the component version makes the next transfer fail, rather than silently swapping in different content.
 
 ```text
