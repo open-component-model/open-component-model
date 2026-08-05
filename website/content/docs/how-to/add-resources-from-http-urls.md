@@ -92,8 +92,7 @@ EOF
 {{< /tab >}}
 {{< /tabs >}}
 
-Set `mediaType` explicitly here because GitHub serves every release asset as `application/octet-stream`. If you leave
-it out, OCM falls back to the server's `Content-Type`, then to `application/octet-stream`. The full order is in
+Set `mediaType` explicitly here. Otherwise, OCM will default to the `Content-Type` served by GitHub, which for release assets is always `application/octet-stream`. The full `mediaType` defaulting mechanism of `Wget` is described in
 [Set the media type]({{< relref "docs/tutorials/wget-http-resources.md#set-the-media-type" >}}).
 
 {{< callout context="caution" >}}
