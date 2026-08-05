@@ -39,13 +39,14 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      # Detect .env changes so lint runs on all modules when the golangci-lint version changes
+      # Detect .env or golangci.yml changes so lint runs on all modules
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         id: env_changes
         with:
           filters: |
             env:
               - '.env'
+              - 'golangci.yml'
       # Detect CI workflow changes to rebuild/test all modules
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         id: ci_changes
