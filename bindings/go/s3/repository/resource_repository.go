@@ -107,6 +107,9 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S
 	if err := accessspec.Scheme.Convert(resource.Access, spec); err != nil {
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
+	if err := spec.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid s3 access spec: %w", err)
+	}
 
 	return spec, nil
 }
@@ -132,14 +135,13 @@ func (r *ResourceRepository) download(ctx context.Context, spec *v1.S3Bucket, cr
 	}
 
 	return download.Download(ctx, download.Request{
-		Region:                spec.Region,
-		BucketName:            spec.BucketName,
-		ObjectKey:             spec.ObjectKey,
-		MediaType:             spec.MediaType,
-		Version:               spec.Version,
-		Endpoint:              spec.Endpoint,
-		UsePathStyle:          spec.UsePathStyle,
-		InsecureSkipTLSVerify: spec.InsecureSkipTLSVerify,
+		Region:       spec.Region,
+		BucketName:   spec.BucketName,
+		ObjectKey:    spec.ObjectKey,
+		MediaType:    spec.MediaType,
+		Version:      spec.Version,
+		Endpoint:     spec.Endpoint,
+		UsePathStyle: spec.UsePathStyle,
 	}, opts...)
 }
 
@@ -182,10 +184,13 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		}
 	}()
 
-	raw, _ := result.Blob.Digest()
+	raw, ok := result.Blob.Digest()
+	if !ok {
+		return nil, fmt.Errorf("error computing digest of downloaded s3 object %s/%s", spec.BucketName, spec.ObjectKey)
+	}
 	resolved, err := godigest.Parse(raw)
 	if err != nil {
-		return nil, fmt.Errorf("downloaded s3 object does not carry a valid digest: %w", err)
+		return nil, fmt.Errorf("downloaded s3 object %s/%s has an unparsable digest %q: %w", spec.BucketName, spec.ObjectKey, raw, err)
 	}
 	resolvedValue := resolved.Encoded()
 

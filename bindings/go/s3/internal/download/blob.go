@@ -80,6 +80,14 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 	return &retainingReadCloser{ReadCloser: rc, blob: b}, nil
 }
 
+// Digest implements a digest to keepalive the file before an unlink to avoid
+// losing the file while calculating the digest.
+func (b *Blob) Digest() (string, bool) {
+	d, ok := b.Blob.Digest()
+	runtime.KeepAlive(b)
+	return d, ok
+}
+
 // retainingReadCloser keeps a reference to the blob it reads from so that the
 // blob stays reachable for as long as the reader is open.
 type retainingReadCloser struct {

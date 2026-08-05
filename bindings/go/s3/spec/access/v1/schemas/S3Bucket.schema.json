@@ -14,10 +14,6 @@
       "type": "string",
       "description": "Endpoint is the base endpoint of an S3Bucket-compatible store (e.g. MinIO, Ceph,\nR2). When empty, AWS S3Bucket is targeted."
     },
-    "insecureSkipTLSVerify": {
-      "type": "boolean",
-      "description": "InsecureSkipTLSVerify disables TLS certificate verification for the endpoint."
-    },
     "mediaType": {
       "type": "string",
       "description": "MediaType is the media type of the referenced object."

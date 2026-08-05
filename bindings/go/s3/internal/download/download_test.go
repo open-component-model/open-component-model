@@ -485,7 +485,7 @@ func TestDownload_CredentialConversionErrorIsWrapped(t *testing.T) {
 
 func TestHTTPConfig(t *testing.T) {
 	t.Run("nil config yields an empty config", func(t *testing.T) {
-		got := httpConfig(nil, false)
+		got := httpConfig(nil)
 		require.NotNil(t, got)
 		require.NotNil(t, got.Retry)
 		require.NotNil(t, got.Retry.MaxRetries)
@@ -498,7 +498,7 @@ func TestHTTPConfig(t *testing.T) {
 	t.Run("the caller's retry config is disabled for the transport", func(t *testing.T) {
 		callerRetries := 7
 		cfg := &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: &callerRetries}}
-		got := httpConfig(cfg, false)
+		got := httpConfig(cfg)
 		require.NotNil(t, got.Retry)
 		require.NotNil(t, got.Retry.MaxRetries)
 		assert.Equal(t, disableRetry, *got.Retry.MaxRetries)
@@ -513,7 +513,7 @@ func TestHTTPConfig(t *testing.T) {
 			Hosts: map[string]*httpv1alpha1.HostConfig{
 				"s3.amazonaws.com": {Retry: &httpv1alpha1.RetryConfig{MaxRetries: &hostRetries}},
 			},
-		}, false)
+		})
 
 		hc := got.Hosts["s3.amazonaws.com"]
 		require.NotNil(t, hc)
@@ -525,26 +525,37 @@ func TestHTTPConfig(t *testing.T) {
 	t.Run("a nil host entry is left alone", func(t *testing.T) {
 		got := httpConfig(&httpv1alpha1.Config{
 			Hosts: map[string]*httpv1alpha1.HostConfig{"s3.amazonaws.com": nil},
-		}, false)
+		})
 		assert.Nil(t, got.Hosts["s3.amazonaws.com"])
 	})
 
-	t.Run("insecureSkipTLSVerify is folded into the TLS config", func(t *testing.T) {
-		got := httpConfig(nil, true)
+	t.Run("the caller's own insecureSkipVerify is preserved", func(t *testing.T) {
+		skip := true
+		got := httpConfig(&httpv1alpha1.Config{
+			TLSConfig: httpv1alpha1.TLSConfig{InsecureSkipVerify: &skip},
+			Hosts: map[string]*httpv1alpha1.HostConfig{
+				"minio.internal": {TLSConfig: httpv1alpha1.TLSConfig{InsecureSkipVerify: &skip}},
+			},
+		})
+
 		require.NotNil(t, got.InsecureSkipVerify)
 		assert.True(t, *got.InsecureSkipVerify)
+		hc := got.Hosts["minio.internal"]
+		require.NotNil(t, hc)
+		require.NotNil(t, hc.InsecureSkipVerify)
+		assert.True(t, *hc.InsecureSkipVerify)
 	})
 
-	t.Run("verification stays enabled when not skipped", func(t *testing.T) {
-		got := httpConfig(&httpv1alpha1.Config{}, false)
-		assert.Nil(t, got.InsecureSkipVerify, "TLS verification must not be touched unless skipping is requested")
+	t.Run("verification stays enabled when the caller does not skip it", func(t *testing.T) {
+		got := httpConfig(&httpv1alpha1.Config{})
+		assert.Nil(t, got.InsecureSkipVerify, "TLS verification must not be touched unless the caller skips it")
 	})
 
 	t.Run("caller timeouts are preserved", func(t *testing.T) {
 		timeout := httpv1alpha1.NewTimeout(42)
 		got := httpConfig(&httpv1alpha1.Config{
 			TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout},
-		}, false)
+		})
 		require.NotNil(t, got.Timeout)
 		assert.Equal(t, *timeout, *got.Timeout)
 	})
@@ -554,7 +565,7 @@ func TestHTTPConfig(t *testing.T) {
 		cfg := &httpv1alpha1.Config{
 			Retry: &httpv1alpha1.RetryConfig{MaxRetries: &callerRetries},
 		}
-		got := httpConfig(cfg, true)
+		got := httpConfig(cfg)
 
 		assert.Nil(t, cfg.InsecureSkipVerify, "the caller's TLS config must be left alone")
 		assert.NotSame(t, cfg, got)
@@ -671,7 +682,7 @@ func TestNewClient(t *testing.T) {
 	})
 
 	t.Run("an HTTP client is always installed", func(t *testing.T) {
-		client, err := newClient(ctx, Request{InsecureSkipTLSVerify: true}, &option{})
+		client, err := newClient(ctx, Request{}, &option{})
 		require.NoError(t, err)
 		assert.NotNil(t, client.Options().HTTPClient, "the shared ocm HTTP client must back the s3 client")
 	})

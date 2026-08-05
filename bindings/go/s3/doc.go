@@ -66,26 +66,37 @@
 // new content works normally. Enable bucket versioning, or name a versionId, where
 // reproducibility matters.
 //
-// # HTTP client and retries
+// # HTTP client and TLS
 //
 // Downloads go through the shared ocm HTTP client, built from an
 // [ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1.Config]
-// (timeouts, TLS, per-host overrides, retry). The access spec's insecureSkipTLSVerify
-// is folded into its TLS settings. A client supplied with repository.WithHTTPClient
-// is used exactly as given and none of this applies to it.
+// (timeouts, TLS, per-host overrides). A client supplied with
+// repository.WithHTTPClient is used exactly as given and none of this applies to it.
+// TLS verification is governed by that configuration alone.
 //
-// Two retry layers compose, because they retry different failures. The transport
-// retries a single round trip and sees only connection errors and status codes; that
-// is the layer the ocm HTTP config describes. The aws-sdk-go-v2 client retries the
-// whole operation, re-signing every attempt and classifying S3's error codes
-// (throttling, SlowDown, clock skew); that layer keeps the SDK defaults and is
-// configured the AWS way, through AWS_MAX_ATTEMPTS and AWS_RETRY_MODE.
+// # Retries
 //
-// Since they compose, the worst case for one download is the product of both attempt
-// counts — 6 × 3 = 18 requests with the defaults — and the wall-clock ceiling is
-// roughly the SDK attempt count times the ocm timeout (30s by default), not the
-// timeout itself. Lower retry.maxRetries or AWS_MAX_ATTEMPTS when a tighter bound
-// matters. Neither layer covers a body that fails mid-stream: SDK retry ends once the
+// Retrying is done by the aws-sdk-go-v2 client alone. It retries the whole operation,
+// re-signing every attempt and classifying S3's error codes (throttling, SlowDown,
+// clock skew), which a transport retrying a single round trip cannot do, it sees only
+// connection errors and status codes. Retrying in both places would multiply the two
+// attempt counts, so transport retry is switched off for the client handed to the SDK,
+// globally and per host.
+//
+// The ocm retry configuration drives that one layer, so a single setting means a single
+// thing. retry.maxRetries counts the attempts after the first, the SDK counts the first
+// as well:
+//
+//	maxRetries: 3    // 4 attempts
+//	maxRetries: -1   // 1 attempt, no retrying
+//	maxRetries: 0    // infinite, bounded only by ctx and the SDK's retry quota
+//	(unset)          // the SDK's own default of 3 attempts, honouring
+//	                 // AWS_MAX_ATTEMPTS and AWS_RETRY_MODE
+//
+// The wall-clock ceiling for a download is roughly the attempt
+// count times the ocm timeout (30s by default), not the timeout itself.
+//
+// Retrying does not cover a body that fails mid-stream: SDK retry ends once the
 // response headers are deserialised, and the object is streamed after that.
 //
 // # Credential consumer identity

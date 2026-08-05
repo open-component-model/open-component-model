@@ -47,9 +47,6 @@ type S3Bucket struct {
 	// UsePathStyle enables path-style addressing (bucket in the path instead of the
 	// host). Required by most self-hosted S3Bucket-compatible stores.
 	UsePathStyle bool `json:"usePathStyle,omitempty"`
-
-	// InsecureSkipTLSVerify disables TLS certificate verification for the endpoint.
-	InsecureSkipTLSVerify bool `json:"insecureSkipTLSVerify,omitempty"`
 }
 
 // Validate verifies that the required fields of the S3Bucket access are set.
