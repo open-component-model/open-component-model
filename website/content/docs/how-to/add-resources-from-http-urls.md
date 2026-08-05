@@ -42,29 +42,9 @@ at a server that needs authentication, see [Authenticate against a protected ser
 
 {{< step >}}
 
-### Choose input or access type
-
-| Choose **input type** when                       | Choose **access type** when                       |
-|--------------------------------------------------|---------------------------------------------------|
-| The file must stay reproducible and work offline | The URL is the source of truth and should stay so |
-| The URL might disappear or change what it serves | The file is large and you don't want to copy it   |
-| You are building an air-gapped repository        | Consumers should fetch directly from the origin   |
-
-
-{{< callout context="caution" >}}
-A Wget resource is transferred **by value**. When you move the component version with `ocm transfer cv` and pass the 
-`--copy-resources` flag; the `Wget/v1` access is then replaced by a
-[`LocalBlob/v1`]({{< relref "docs/reference/input-and-access-types.md#localblobv1" >}}) in the target. See
-[Transfer behavior]({{< relref "docs/tutorials/wget-http-resources.md#how-transfer-works" >}}) for more details.
-{{< /callout >}}
-
-{{< /step >}}
-
-{{< step >}}
-
 ### Create the component constructor
 
-Both spellings below describe the same resource with the same fields. Write one of them to `component-constructor.yaml`:
+Both variants below describe the same resource with the same fields. Write one of them to `component-constructor.yaml`:
 
 {{< tabs "wget-spec" >}}
 {{< tab "Input type" >}}
@@ -253,9 +233,7 @@ Then pass `--config` when you build the component (or drop the file in one of th
 [well-known locations]({{< relref "docs/reference/ocm-cli/ocm.md" >}}) the CLI reads automatically):
 
 ```bash
-ocm --config .ocmconfig add cv \
-  --repository ./transport-archive \
-  --constructor component-constructor.yaml
+ocm --config .ocmconfig add cv
 ```
 
 HTTP Basic Auth, bearer tokens, and mutual TLS are all supported. For how the identity is matched and how the auth
