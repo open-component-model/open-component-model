@@ -85,17 +85,17 @@ tasks:
         cd /tmp && ./setup-kind.sh
       - |
         curl -fLo /tmp/setup-scaffolding-from-release.sh "{{.SCAFFOLDING_URL}}/setup-scaffolding-from-release.sh"
-        # Patch the downloaded setup script to fix its Rekor v2 (tiles) path. Upstream ships
-        # that path but does not test it (their release CI still pins a Rekor v1 version), and
-        # it has two bugs that abort the script under `set -o errexit`. Patching via sed mirrors
-        # how sigstore's own actions/setup fixes this same script; drop it once upstream does.
+        # Patch setup-scaffolding-from-release.sh for its untested Rekor v2 (tiles) path. Upstream
+        # ships it but pins Rekor v1 in CI, so these bugs never fire there. Same sed-patching
+        # technique as upstream's own actions/setup:
+        # https://github.com/sigstore/scaffolding/blob/main/actions/setup/action.yml#L114-L116
+        # Remove once upstream fixes the script.
         #
-        #  1. The script applies Rekor twice. On tiles the first apply still carries the raw
-        #     <placeholder> Secret values, which fail base64 validation. Make it non-fatal --
-        #     the second apply, with the real keys substituted in, is the one that counts.
-        #  2. On tiles neither rekor nor ctlog creates a provisioning Job, so their
-        #     `wait ... jobs --all` calls error with "no matching resources found". Guard them
-        #     the same way the script already guards fulcio.
+        # 1. First Rekor apply carries raw <placeholder> Secret values; base64 validation fails
+        #    under set -e. Make it non-fatal (the second apply, with real keys, is the one that counts).
+        # 2. rekor-system has no provisioning Job on tiles; `wait jobs --all` errors "no matching
+        #    resources". Guard with a no-job check (upstream added this guard only for fulcio).
+        # 3. Same guard for ctlog-system.
         tmp=$(mktemp) && sed \
           -e 's@kubectl apply -f "${REKOR}"@kubectl apply -f "${REKOR}" || true@' \
           -e 's@kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@kubectl -n rekor-system get job 2>\&1 | grep '"'"'No resources found'"'"' || kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@' \
