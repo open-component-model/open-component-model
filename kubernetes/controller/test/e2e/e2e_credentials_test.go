@@ -87,13 +87,14 @@ var _ = Describe("Credentials E2E Tests", func() {
 })
 
 func prepareOCMwithCredentials(ctx SpecContext, testName string, testdata string, privateRegistry string) {
-	tmpDir := GinkgoT().TempDir()
 	By("Creating a component version for " + testName)
+	ocm := utils.OCMBinary()
+	tmpDir := GinkgoT().TempDir()
 	ctfDir := filepath.Join(tmpDir, "ctf-"+testName)
 	constructor := filepath.Join(testdata, testName, "component-constructor.yaml")
 	ocmConfig := filepath.Join(testdata, testName, ".ocmconfig")
 
-	cmd := exec.CommandContext(ctx, "ocm",
+	cmd := exec.CommandContext(ctx, ocm,
 		"add", "cv",
 		"--repository", ctfDir,
 		"--constructor", constructor,
@@ -102,7 +103,7 @@ func prepareOCMwithCredentials(ctx SpecContext, testName string, testdata string
 	Expect(err).NotTo(HaveOccurred())
 
 	ctfRef := "ctf::" + ctfDir + "//ocm.software/ocm-k8s-toolkit/" + testName
-	cmd = exec.CommandContext(ctx, "ocm",
+	cmd = exec.CommandContext(ctx, ocm,
 		"transfer", "cv",
 		ctfRef,
 		privateRegistry,
