@@ -104,7 +104,6 @@ linters:
           - funlen
           - gocyclo
           - gosec
-          - scopelint
         path: _test\.go
       - path: (.+)\.go$
         text: composites
