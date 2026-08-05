@@ -44,11 +44,11 @@ at a server that needs authentication, see [Authenticate against a protected ser
 
 ### Choose input or access type
 
-| Choose **input type** when                     | Choose **access type** when                    |
-|----------------------------------------------------|----------------------------------------------------|
-| The file must stay reproducible and work offline   | The URL is the source of truth and should stay so  |
-| The URL might disappear or change what it serves   | The file is large and you don't want to copy it    |
-| You are building an air-gapped repository          | Consumers should fetch directly from the origin    |
+| Choose **input type** when                       | Choose **access type** when                       |
+|--------------------------------------------------|---------------------------------------------------|
+| The file must stay reproducible and work offline | The URL is the source of truth and should stay so |
+| The URL might disappear or change what it serves | The file is large and you don't want to copy it   |
+| You are building an air-gapped repository        | Consumers should fetch directly from the origin   |
 
 
 {{< callout context="caution" >}}
