@@ -239,6 +239,53 @@ HTTP Basic Auth, bearer tokens, and mutual TLS are all supported. For how the id
 methods interact, see the [Authentication]({{< relref "docs/tutorials/wget-http-resources.md#authentication" >}}) section in the
 tutorial.
 
+## Pin a digest {#pin-a-digest}
+
+A Wget resource comes from a server you don't control, so it's good practice to check the content before you trust it
+and then pin what you checked. Download the file, run whatever your process requires and hash the copy after:
+
+```bash
+sha256sum cli.tar     # Linux
+shasum -a 256 cli.tar # macOS
+```
+
+Add that value as a `digest` on the resource. From then on, OCM hashes whatever it fetches and refuses to add the
+resource if the hashes differ:
+
+```yaml
+resources:
+  - name: ocm-cli
+    type: blob
+    version: 1.0.0
+    relation: external
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: genericBlobDigest/v1
+      value: 6e3205bbad194f902ee8bdc5a712c47f7a5443fabfd066ef1e95088c837fe0ae
+    access:
+      type: Wget/v1
+      url: https://github.com/open-component-model/open-component-model/releases/download/v0.12.0/cli.tar
+      mediaType: application/x-tar
+```
+
+The `digest` block is optional and works on both the input and the access type. If set, these are the exact fields:
+
+- `hashAlgorithm` MUST be `SHA-256`. It is the only algorithm the Wget resource repository computes. `sha256` and
+  `SHA256` do not match.
+- `normalisationAlgorithm` MUST be `genericBlobDigest/v1`, which means "hash the raw bytes, no normalisation".
+- `value` is the bare lowercase hex digest, with **no** `sha256:` prefix.
+
+### Why access-type pinning {#why-access-type-pinning}
+
+For the access type, the digest is checked again every time the component version is transferred, because the bytes are
+re-fetched at transfer time (see [How transfer works](#how-transfer-works)). So, a file that changes *after* you publish
+the component version makes the next transfer fail, rather than silently swapping in different content.
+
+```text
+digest mismatch: expected 6e3205bb…, got 3b1f0c72…                          # access type
+resource blob digest mismatch: resource 6e3205bb… vs blob sha256:3b1f0c72…  # input type
+```
+
 ## Next Steps
 
 - [How-To: Download Resources from Component Versions]({{< relref "docs/how-to/download-resources-from-component-versions.md" >}}) -
