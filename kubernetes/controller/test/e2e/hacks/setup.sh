@@ -160,6 +160,15 @@ install_argocd() {
       argocd-notifications-controller \
       --for=condition=Available --timeout=5m || return 1
 
+  # Widen argocd-repo-server's OCI layer mediaType allowlist to include
+  # flux-native artifacts (application/vnd.cncf.flux.content.v1.tar+gzip),
+  # used by ghcr.io/stefanprodan/manifests/podinfo in the
+  # kustomize-configuration-localization example. Defaults reproduced from
+  # argocd's cmd/argocd-repo-server/commands/argocd_repo_server.go.
+  kubectl -n argocd set env deploy/argocd-repo-server \
+      ARGOCD_REPO_SERVER_OCI_LAYER_MEDIA_TYPES="application/vnd.oci.image.layer.v1.tar,application/vnd.oci.image.layer.v1.tar+gzip,application/vnd.cncf.helm.chart.content.v1.tar+gzip,application/vnd.cncf.flux.content.v1.tar+gzip" || return 1
+  kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=2m || return 1
+
   # Register the local OCI registry with ArgoCD as an insecure (plain HTTP) Helm OCI
   # credential template. Any Application whose repoURL starts with oci://ocm-e2e-image-registry:5000
   # inherits these settings. insecureOCIForceHttp is required because the local registry
