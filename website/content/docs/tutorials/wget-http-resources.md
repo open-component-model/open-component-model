@@ -228,6 +228,23 @@ defaults, and how per-host settings are merged.
 
 Three things changed between OCM v1 and v2: credential matching, constructor syntax, and behavior. The credential changes are the most likely to break existing configurations.
 
+### Credential changes {#credential-changes}
+
+Identity matching has been updated.
+
+| Field             | OCM v1                             | OCM v2             | What to do                                                                                 |
+|-------------------|------------------------------------|--------------------|--------------------------------------------------------------------------------------------|
+| Consumer identity | `type: wget`                       | `type: Wget`       | Rename the type.                                                                           |
+| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute. `*` matches one path segment; omit `path` to match the whole host.   |
+
+Further matching changes:
+
+| Area            | OCM v1                                          | OCM v2                                                          |
+|-----------------|-------------------------------------------------|-----------------------------------------------------------------|
+| Auth precedence | Basic Auth wins; the bearer token is a fallback | Bearer token wins; Basic Auth is used only when no token is set |
+| Basic Auth      | Needs both `username` and `password`            | Sent as soon as `username` is set                               |
+| Custom CA       | Root CAs from credentials always applied        | `certificateAuthority` applied only alongside `certificate`     |
+
 ### Constructor changes {#constructor-changes}
 
 | Field        | OCM v1       | OCM v2                    | What to do                                    |
@@ -245,23 +262,6 @@ In OCM v1 the body was an `io.Reader`, which has no YAML form. In OCM v2 it is a
 
 OCM v2 **dropped** the file-extension guess, so a `.tar.gz` URL that used to resolve to `application/x-gzip` on its own, now
 needs an explicit `mediaType`.
-
-### Credential changes {#credential-changes}
-
-Identity matching has been updated.
-
-| Field             | OCM v1                             | OCM v2             | What to do                                                                                 |
-|-------------------|------------------------------------|--------------------|--------------------------------------------------------------------------------------------|
-| Consumer identity | `type: wget`                       | `type: Wget`       | Rename the type.                                                                           |
-| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute. `*` matches one path segment; omit `path` to match the whole host.   |
-
-Further matching changes:
-
-| Area            | OCM v1                                          | OCM v2                                                          |
-|-----------------|-------------------------------------------------|-----------------------------------------------------------------|
-| Auth precedence | Basic Auth wins; the bearer token is a fallback | Bearer token wins; Basic Auth is used only when no token is set |
-| Basic Auth      | Needs both `username` and `password`            | Sent as soon as `username` is set                               |
-| Custom CA       | Root CAs from credentials always applied        | `certificateAuthority` applied only alongside `certificate`     |
 
 ## Troubleshooting {#troubleshooting}
 
