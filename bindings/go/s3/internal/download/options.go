@@ -58,17 +58,15 @@ func WithTempDir(dir string) Option {
 	return func(o *option) { o.TempDir = dir }
 }
 
-// WithHTTPConfig sets the HTTP configuration used to build the S3 client's
-// underlying HTTP client. Ignored when a client is supplied via [WithHTTPClient].
-// When nil, the shared client's defaults apply.
+// WithHTTPConfig sets the HTTP configuration used to build the S3 client's underlying
+// HTTP client. When nil, the shared client's defaults apply.
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 	return func(o *option) { o.HTTPConfig = cfg }
 }
 
 // WithHTTPClient sets the HTTP client the S3 client sends its requests through.
-// It is used exactly as given, so [WithHTTPConfig] and the request's
-// InsecureSkipTLSVerify do not apply to it. When unset, a client is built from the
-// HTTP config instead.
+// It is used exactly as given, so the transport settings of [WithHTTPConfig] do not
+// apply to it. When unset, a client is built from the HTTP config instead.
 func WithHTTPClient(c *http.Client) Option {
 	return func(o *option) { o.HTTPClient = c }
 }

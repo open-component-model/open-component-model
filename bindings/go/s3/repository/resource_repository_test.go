@@ -68,11 +68,9 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	require.Equal(t, "my-bucket/path/to/blob", id[runtime.IdentityAttributePath])
 	require.Equal(t, accessspec.S3BucketConsumerType, id[runtime.IdentityAttributeType])
 
-	id, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
+	_, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
 		s3Resource(&v1.S3Bucket{BucketName: "my-bucket"}))
-	require.NoError(t, err)
-	require.Empty(t, id[runtime.IdentityAttributeHostname])
-	require.Equal(t, "my-bucket", id[runtime.IdentityAttributePath])
+	require.ErrorContains(t, err, "objectKey is required")
 
 	id, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
 		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "obj", Endpoint: "https://minio.internal:9000"}))

@@ -208,6 +208,14 @@ func TestIdentityFromObject(t *testing.T) {
 			},
 		},
 		{
+			name:       "a bucket on its own is a valid location",
+			bucketName: "my-bucket",
+			want: runtime.Identity{
+				runtime.IdentityAttributeType: Type.String(),
+				runtime.IdentityAttributePath: "my-bucket",
+			},
+		},
+		{
 			name:       "custom endpoint adds the url attributes",
 			bucketName: "my-bucket",
 			objectKey:  "path/to/object.tar.gz",

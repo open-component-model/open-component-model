@@ -61,8 +61,6 @@ type Request struct {
 	Endpoint string
 	// UsePathStyle enables path-style addressing.
 	UsePathStyle bool
-	// InsecureSkipTLSVerify disables TLS verification for the endpoint.
-	InsecureSkipTLSVerify bool
 }
 
 // Download fetches the object described by req and returns its body as a blob
@@ -182,14 +180,10 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 // count of retries after the initial request.
 const disableRetry = -1
 
-func httpConfig(cfg *httpv1alpha1.Config, insecureSkipTLSVerify bool) *httpv1alpha1.Config {
+func httpConfig(cfg *httpv1alpha1.Config) *httpv1alpha1.Config {
 	out := cfg.DeepCopy()
 	if out == nil {
 		out = &httpv1alpha1.Config{}
-	}
-
-	if insecureSkipTLSVerify {
-		out.InsecureSkipVerify = new(insecureSkipTLSVerify)
 	}
 
 	// Retrying is left to the SDK, which retries the whole operation, re-signs every
@@ -209,8 +203,6 @@ func httpConfig(cfg *httpv1alpha1.Config, insecureSkipTLSVerify bool) *httpv1alp
 }
 
 // sdkRetryAttempts translates the ocm retry configuration into the SDK's attempt count.
-// The SDK counts the initial request, maxRetries counts only what follows it. Zero means
-// the configuration expressed no opinion, leaving the SDK on its own default.
 func sdkRetryAttempts(cfg *httpv1alpha1.Config) int {
 	if cfg == nil || cfg.Retry == nil || cfg.Retry.MaxRetries == nil {
 		return 0
@@ -254,7 +246,7 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 
 	httpClient := o.HTTPClient
 	if httpClient == nil {
-		httpClient = ocmhttp.New(ocmhttp.WithConfig(httpConfig(o.HTTPConfig, req.InsecureSkipTLSVerify)))
+		httpClient = ocmhttp.New(ocmhttp.WithConfig(httpConfig(o.HTTPConfig)))
 	}
 
 	// Retrying happens in the SDK alone; see [httpConfig]. The ocm retry configuration

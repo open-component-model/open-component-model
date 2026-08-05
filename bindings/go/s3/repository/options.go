@@ -17,8 +17,9 @@ type Options struct {
 	// MaxDownloadSize caps the number of bytes read from an object. Nil uses the
 	// default (unlimited).
 	MaxDownloadSize *int64
-	// HTTPConfig configures the HTTP client used to reach S3. Ignored when
-	// HTTPClient is set. Nil uses the shared client's defaults.
+	// HTTPConfig configures the HTTP client used to reach S3, and its retry section
+	// additionally drives the SDK's attempt count even when HTTPClient is set. Nil
+	// uses the shared client's defaults.
 	HTTPConfig *httpv1alpha1.Config
 	// HTTPClient is the HTTP client object downloads are sent through. Nil builds
 	// one per download from HTTPConfig.
@@ -40,7 +41,8 @@ func WithMaxDownloadSize(size int64) Option {
 // WithHTTPConfig sets the HTTP client configuration used for object downloads.
 // The repository builds its client from cfg on each download. Accepts the
 // serialisable config type so that external plugins can round-trip it over the
-// wire and reconstruct an equivalent client. Ignored when [WithHTTPClient] is used.
+// wire and reconstruct an equivalent client. Its transport settings are ignored when
+// [WithHTTPClient] is used; its retry section drives the SDK either way.
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 	return func(o *Options) {
 		o.HTTPConfig = cfg
@@ -51,9 +53,9 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 // client, it carries no bucket, region or endpoint of its own, so one client serves
 // every resource correctly.
 //
-// It is used exactly as given, so neither [WithHTTPConfig] nor the access spec's
-// insecureSkipTLSVerify applies to it. Build one with ocmhttp.New to get the shared
-// ocm client with custom settings.
+// It is used exactly as given, so the transport settings of [WithHTTPConfig] do not
+// apply to it. Build one with ocmhttp.New to get the shared ocm client with custom
+// settings.
 func WithHTTPClient(client *http.Client) Option {
 	return func(o *Options) {
 		o.HTTPClient = client
