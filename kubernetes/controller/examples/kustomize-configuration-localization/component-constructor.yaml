@@ -5,7 +5,7 @@ components:
       name: ocm.software
     resources:
       - name: kustomize-resource
-        type: kustomize
+        type: kustomization
         version: "1.0.0"
         access:
           type: ociArtifact
