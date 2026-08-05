@@ -138,9 +138,19 @@ install_flux() {
 }
 
 install_argocd() {
-  kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f - || return 1
-  kubectl apply -n argocd --server-side --force-conflicts \
-    -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml || return 1
+  # Install argo cd
+  # Pinned instead of tracking "stable", because the kustomize examples deploy podinfo's
+  # HPA and this cluster has no metrics-server, so the HPA sits at
+  # ScalingActive=False/FailedGetResourceMetric. Up to v3.4.x ArgoCD reported that HPA as
+  # Healthy (AbleToScale=True is matched first), while v3.5.0 checks all conditions for a
+  # degraded state before any healthy one and reports Degraded, which makes the Application
+  # never reach Healthy and the example tests time out. Install a metrics-server (or ignore
+  # HPA health via argocd-cm) before moving to v3.5.x.
+  argocd_version="${ARGOCD_VERSION:-v3.4.6}"
+
+  kubectl create namespace argocd
+  kubectl apply -n argocd --server-side --force-conflicts -f "https://raw.githubusercontent.com/argoproj/argo-cd/${argocd_version}/manifests/install.yaml" || return 1
+
   kubectl wait -n argocd deployment \
       argocd-server \
       argocd-repo-server \
