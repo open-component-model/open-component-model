@@ -19,7 +19,7 @@ const (
 	signingVersion = "1.0.0"
 )
 
-// ocmBinary returns the ocm CLI executable. Override via OCM_CLI when running
+// OCMBinary returns the ocm CLI executable. Override via OCM_CLI when running
 // against a non-standard binary path.
 func OCMBinary() string {
 	if v := os.Getenv("OCM_CLI"); v != "" {
