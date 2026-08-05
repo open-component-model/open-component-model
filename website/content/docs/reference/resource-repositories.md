@@ -147,7 +147,7 @@ Handles resources served over plain HTTP or HTTPS.
 | Digest Processing | Yes       |
 
 {{< callout context="note" >}}
-Upload is not supported because a plain HTTP endpoint has no standardized write API. Wget resources are therefore always
+Upload is not supported because a plain HTTP endpoint has no standardized write API. `Wget` resources are therefore always
 transferred by value: the transfer downloads the content and stores it as a
 [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1) in the target repository, regardless of the
 requested upload type.

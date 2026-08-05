@@ -11,20 +11,19 @@ toc: true
 Add a file served over plain HTTP or HTTPS (a release archive, a checksum, a signed binary) to a component version
 using the `Wget/v1` type.
 
-OCM has two options where the difference is only the end location:
+OCM provides two types for HTTP resources. They differ in when the file is fetched and where the bytes end up:
 
 - The [**input type**]({{< relref "docs/reference/input-and-access-types.md#wgetv1-input" >}}) downloads the file while
   the component version is built and stores it as a localBlob in the component version.
 - The [**access type**]({{< relref "docs/reference/input-and-access-types.md#wgetv1-access" >}}) stores only the
   **URL** and leaves the file on the remote server.
 
-Both use the same download and credential code, so everything below applies to either one. For the reasoning behind
-each option and the full set of variable, see the tutorial
+Both types share the same download and credential code, so the rest of this guide applies to either one. For the full set of options and the reasoning behind them, see the tutorial 
 [Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}).
 
 ## You'll end up with
 
-- A component version containing a resource fetched over HTTP or HTTPS, either embedded as a local blob or referenced by URL
+- A component version containing a resource fetched over HTTP or HTTPS, either embedded as a local blob or referenced by URL.
 - That same resource downloaded back out, to confirm the round trip works
 
 **Estimated time:** ~10 minutes
@@ -43,19 +42,18 @@ at a server that needs authentication, see [Authenticate against a protected ser
 
 {{< step >}}
 
-### Choose the input type or the access type
+### Choose input or access type
 
-| Choose the **input type** when                     | Choose the **access type** when                    |
+| Choose **input type** when                     | Choose **access type** when                    |
 |----------------------------------------------------|----------------------------------------------------|
 | The file must stay reproducible and work offline   | The URL is the source of truth and should stay so  |
 | The URL might disappear or change what it serves   | The file is large and you don't want to copy it    |
 | You are building an air-gapped repository          | Consumers should fetch directly from the origin    |
 
-Pick either one to follow this guide.
 
 {{< callout context="caution" >}}
-A Wget resource is transferred **by value**. When you move the component version with `ocm transfer cv`, pass
-`--copy-resources true`; the `Wget/v1` access is then replaced by a
+A Wget resource is transferred **by value**. When you move the component version with `ocm transfer cv` and pass the 
+`--copy-resources` flag; the `Wget/v1` access is then replaced by a
 [`LocalBlob/v1`]({{< relref "docs/reference/input-and-access-types.md#localblobv1" >}}) in the target. See
 [Transfer behavior]({{< relref "docs/tutorials/wget-http-resources.md#how-transfer-works" >}}) for more details.
 {{< /callout >}}
@@ -66,7 +64,7 @@ A Wget resource is transferred **by value**. When you move the component version
 
 ### Create the component constructor
 
-Both spellings describe the same resource with the same fields. Write one of them to `component-constructor.yaml`:
+Both spellings below describe the same resource with the same fields. Write one of them to `component-constructor.yaml`:
 
 {{< tabs "wget-spec" >}}
 {{< tab "Input type" >}}
@@ -119,10 +117,10 @@ it out, OCM falls back to the server's `Content-Type`, then to `application/octe
 [Set the media type]({{< relref "docs/tutorials/wget-http-resources.md#set-the-media-type" >}}).
 
 {{< callout context="caution" >}}
-**Never put credentials in `url`, `header`, or `body`.** That includes userinfo (`https://user:token@host/...`) and
-presigned query parameters. An access specification is stored in the component descriptor, signed, and is included in
+**Never put credentials in `url`, `header`, or `body`.** That includes user info (`https://user:token@host/...`) and
+presigned query parameters. An access specification is stored in the component descriptor then signed and finally included in
 the transfer. An input specification lives in your constructor file, which is usually checked into version control.
-Either way the secret leaks. Use the credential system instead, as shown in
+Either way the secret leaks. Use the [credential system]({{< relref "docs/concepts/credential-system.md" >}}) instead, as shown in
 [Authenticate against a protected server](#authenticate-against-a-protected-server).
 {{< /callout >}}
 
@@ -206,7 +204,7 @@ In both cases, the resource has the same digest, computed over the bytes that we
 
 ### Download the resource back
 
-This proves the transport (and, on a protected server, the credentials) work end to end:
+This proves the transport (and, on a protected server, the credentials) work end-to-end:
 
 ```bash
 ocm download resource ./transport-archive//github.com/acme.org/myapp:1.0.0 \
@@ -227,9 +225,10 @@ Other media types are written to a file at that path. `cli.tar` is a `.tar`, so 
 
 ## Authenticate against a protected server
 
-The release asset above is public. When the URL is behind authentication (an artifact repository, or a private
-GitHub asset), configure the credentials instead of putting them in the specification. OCM matches them to the request
+The release asset above is public. When accessing the URL requires authentication (an artifact repository, or a private
+GitHub asset), [configure credentials]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) of type `WgetCredentials` instead of putting them in the specification. OCM matches them to the request
 by a consumer identity of type `Wget` derived from the URL.
+Another silent cause: an entry that sets only certificateAuthority without certificate. In OCM v2, certificateAuthority is only evaluated alongside a client certificate. It is not applied for server-side certificate verification on its own.
 
 Write the credentials to `.ocmconfig`:
 
@@ -250,7 +249,7 @@ configurations:
 EOF
 ```
 
-Then pass `--config` when you build (or drop the file in one of the
+Then pass `--config` when you build the component (or drop the file in one of the
 [well-known locations]({{< relref "docs/reference/ocm-cli/ocm.md" >}}) the CLI reads automatically):
 
 ```bash
@@ -260,7 +259,7 @@ ocm --config .ocmconfig add cv \
 ```
 
 HTTP Basic Auth, bearer tokens, and mutual TLS are all supported. For how the identity is matched and how the auth
-methods interact, see [Authentication]({{< relref "docs/tutorials/wget-http-resources.md#authentication" >}}) in the
+methods interact, see the [Authentication]({{< relref "docs/tutorials/wget-http-resources.md#authentication" >}}) section in the
 tutorial.
 
 ## Next Steps
