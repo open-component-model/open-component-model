@@ -20,8 +20,6 @@ linters:
     - err113
     - errcheck
     - exhaustive
-    # depguard is intentionally NOT disabled: it enforces bindings/go layering
-    # (see linters.settings.depguard.rules).
     - exhaustruct
     - forcetypeassert
     - funcorder
