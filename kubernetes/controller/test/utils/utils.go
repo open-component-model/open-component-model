@@ -21,7 +21,7 @@ const (
 
 // ocmBinary returns the ocm CLI executable. Override via OCM_CLI when running
 // against a non-standard binary path.
-func ocmBinary() string {
+func OCMBinary() string {
 	if v := os.Getenv("OCM_CLI"); v != "" {
 		return v
 	}
@@ -117,7 +117,7 @@ func WaitForResource(ctx context.Context, condition, timeout string, resource ..
 // PrepareOCMComponent creates an OCM component from a component-constructor file.
 // After creating the OCM component, the component is transferred to imageRegistry.
 func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, imageRegistry, signingKey string) error {
-	ocm := ocmBinary()
+	ocm := OCMBinary()
 
 	By("creating ocm component for " + name)
 	tmpDir := GinkgoT().TempDir()
