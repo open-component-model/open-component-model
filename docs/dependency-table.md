@@ -1,3 +1,5 @@
+# Binding Dependency Layers
+
 | Layer | Module | Direct dependencies |
 |-------|--------|---------------------|
 | 0 | `cel`, `dag`, `runtime` | — |

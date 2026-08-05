@@ -90,6 +90,8 @@ export function generateTable(deps, layers) {
     const maxLayer = Math.max(...layers.values());
 
     const lines = [
+        "# Binding Dependency Layers",
+        "",
         "| Layer | Module | Direct dependencies |",
         "|-------|--------|---------------------|",
     ];
