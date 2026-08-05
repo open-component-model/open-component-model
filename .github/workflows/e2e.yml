@@ -146,8 +146,8 @@ jobs:
           kubectl -n ocm-k8s-toolkit-system get pods -o wide
           echo "::endgroup::"
 
-          echo "::group::Controller logs (last 80 lines)"
-          kubectl -n ocm-k8s-toolkit-system logs deploy/ocm-k8s-toolkit-controller-manager --tail=80 --all-containers || true
+          echo "::group::Controller logs (last 300 lines)"
+          kubectl -n ocm-k8s-toolkit-system logs deploy/ocm-k8s-toolkit-controller-manager --tail=300 --all-containers || true
           echo "::endgroup::"
 
           echo "::group::Namespace events"

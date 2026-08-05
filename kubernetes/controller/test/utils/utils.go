@@ -155,14 +155,19 @@ func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, im
 	}
 
 	By("transferring ocm component for " + name)
-	cmd = exec.CommandContext(ctx, ocm,
-		"transfer", "cv",
-		transferRef,
-		imageRegistry,
-		"--copy-resources",
-		"--upload-as", "ociArtifact",
-		"--recursive",
-	)
+	cmd = exec.CommandContext(ctx, ocm, "transfer", "cv", transferRef, imageRegistry)
+
+	// Add options depending on example name
+	// This is required because we cannot 'copy-resources' by default as this breaks the gitHub access which is
+	// converted to a localblob.
+	if strings.Contains(name, "nested") {
+		cmd.Args = append(cmd.Args, "--recursive")
+	}
+
+	if strings.Contains(name, "localization") {
+		cmd.Args = append(cmd.Args, "--copy-resources", "--upload-as", "ociArtifact")
+	}
+
 	if _, err := Run(cmd); err != nil {
 		return fmt.Errorf("could not transfer ocm component: %w", err)
 	}

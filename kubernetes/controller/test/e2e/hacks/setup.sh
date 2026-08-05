@@ -186,7 +186,7 @@ EOF
 }
 
 install_kro() {
-  helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.0
+  helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.2
 }
 
 pids=()
