@@ -190,7 +190,7 @@ install_kro() {
 }
 
 pids=()
-run_step "image-registries"  install_registries & pids+=($!)
+run_step "image-registries"   install_registries & pids+=($!)
 run_step "flux"               install_flux       & pids+=($!)
 run_step "argocd"             install_argocd     & pids+=($!)
 run_step "kro"                install_kro        & pids+=($!)
