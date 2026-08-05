@@ -33,7 +33,7 @@ Both types share the same download and credential code, so the rest of this guid
 - [OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed
 - A working directory for the constructor and the transport archive
 
-This guide fetches a public OCM release asset, so it runs end to end with no registry and no credentials. To point it
+This guide fetches a public OCM release asset, so it runs end-to-end with no registry and no credentials. To point it
 at a server that needs authentication, see [Authenticate against a protected server](#authenticate-against-a-protected-server).
 
 ## Steps
@@ -131,7 +131,7 @@ Either way the secret leaks. Use the [credential system]({{< relref "docs/concep
 ### Build the component version
 
 ```bash
-ocm add cv --repository ./transport-archive --constructor component-constructor.yaml
+ocm add cv
 ```
 
 The asset is ~25 MB, so this takes a moment. You should see the component listed:
