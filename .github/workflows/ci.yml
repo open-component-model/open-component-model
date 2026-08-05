@@ -24,8 +24,9 @@ jobs:
     outputs:
       # modules_json = all modules on push or when CI workflow changed, else changed modules only
       modules_json: ${{ steps.filtered.outputs.modules_json }}
-      # lint_modules_json = all modules when .env changed (lint version bump), else same as modules_json
+      # lint_modules_json = all modules when lint config changed, else same as modules_json
       lint_modules_json: ${{ steps.filtered.outputs.lint_modules_json }}
+      lint_config_changed: ${{ steps.lint_config_changes.outputs.lint_config }}
       integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
       unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
     env:
@@ -248,6 +249,32 @@ jobs:
       - name: Verify the golangci-lint config
         run:
           task tools:golangci-lint/verify
+
+  dependency_table_verify:
+    name: "dependency-table-verify"
+    needs: discover_modules
+    runs-on: ubuntu-24.04-arm
+    if: ${{ needs.discover_modules.outputs.lint_config_changed == 'true' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          sparse-checkout: |
+            golangci.yml
+            docs/dependency-table.md
+            .github/scripts/dependency-table.js
+            .github/scripts/package.json
+            .github/scripts/package-lock.json
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --prefix .github/scripts
+      - name: Verify dependency table is in sync
+        run: |
+          node .github/scripts/dependency-table.js generate | diff - docs/dependency-table.md || {
+            echo "::error::docs/dependency-table.md is out of sync. Run 'task tools:dependency-table/generate' and commit the result."
+            exit 1
+          }
 
   golangci_lint:
     name: "golangci-lint"
