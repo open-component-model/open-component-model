@@ -107,9 +107,6 @@ func prepareOCMwithCredentials(ctx SpecContext, testName string, testdata string
 		"transfer", "cv",
 		ctfRef,
 		privateRegistry,
-		"--copy-resources",
-		"--upload-as", "ociArtifact",
-		"--recursive",
 		"--config", ocmConfig,
 	)
 	_, err = utils.Run(cmd)
