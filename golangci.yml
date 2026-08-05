@@ -7,6 +7,29 @@ run:
   issues-exit-code: 2
   tests: false
   allow-parallel-runners: true
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - blank
+        - dot
+        - default
+        - prefix(ocm.software/open-component-model)
+      custom-order: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 linters:
   default: all
   disable:
@@ -63,7 +86,74 @@ linters:
     - wrapcheck
     - wsl
     - wsl_v5
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - lll
+        source: https://
+      - linters:
+          - dupl
+          - err113
+          - errcheck
+          - funlen
+          - gocyclo
+          - gosec
+          - scopelint
+        path: _test\.go
+      - path: (.+)\.go$
+        text: composites
+      - linters:
+          - cyclop
+        path: (.+)_test\.go
+      - linters:
+          - staticcheck
+        path: (.+)repository/ocm/fallback.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
   settings:
+    cyclop:
+      max-complexity: 15
+    funlen:
+      lines: 110
+      statements: 60
+    gocritic:
+      disabled-checks:
+        - elseif
+    lll:
+      line-length: 120
+    nolintlint:
+      require-explanation: true
+      require-specific: false
+      allow-unused: false
+    recvcheck:
+      disable-builtin: true
+      exclusions:
+        - "*.MarshalJSON"
+        - "*.UnmarshalJSON"
+        - "*.JSONSchema"
+        - "*.SetType"
+        - "*.GetType"
+        - "*.DeepCopy"
+        - "*.DeepCopyInto"
+        - "*.DeepCopyTyped"
+        - '*.String'
+    varnamelen:
+      ignore-names:
+        - err
+        - wg
+        - id
+    staticcheck:
+      dot-import-whitelist:
+        - "github.com/onsi/ginkgo/v2"
+        - "github.com/onsi/gomega"
     # depguard: enforce the bindings/go layering that the per-module go.mod files
     # encoded in the pre monolithic bindings state. Each rule uses `list-mode: lax` so that:
     #   - stdlib and third-party imports pass (they don't match the deny prefix)
@@ -460,93 +550,3 @@ linters:
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"
               desc: "wget must not import bindings outside its allowed set"
-    cyclop:
-      max-complexity: 15
-    funlen:
-      lines: 110
-      statements: 60
-    gocritic:
-      disabled-checks:
-        - elseif
-    lll:
-      line-length: 120
-    nolintlint:
-      require-explanation: true
-      require-specific: false
-      allow-unused: false
-    recvcheck:
-      disable-builtin: true
-      exclusions:
-        - "*.MarshalJSON"
-        - "*.UnmarshalJSON"
-        - "*.JSONSchema"
-        - "*.SetType"
-        - "*.GetType"
-        - "*.DeepCopy"
-        - "*.DeepCopyInto"
-        - "*.DeepCopyTyped"
-        - '*.String'
-    varnamelen:
-      ignore-names:
-        - err
-        - wg
-        - id
-    staticcheck:
-      dot-import-whitelist:
-        - "github.com/onsi/ginkgo/v2"
-        - "github.com/onsi/gomega"
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    rules:
-      - linters:
-          - lll
-        source: https://
-      - linters:
-          - dupl
-          - err113
-          - errcheck
-          - funlen
-          - gocyclo
-          - gosec
-          - scopelint
-        path: _test\.go
-      - path: (.+)\.go$
-        text: composites
-      - linters:
-          - cyclop
-        path: (.+)_test\.go
-      - linters:
-          - staticcheck
-        path: (.+)repository/ocm/fallback.go
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
-formatters:
-  enable:
-    - gci
-    - gofmt
-    - gofumpt
-  settings:
-    gci:
-      sections:
-        - standard
-        - blank
-        - dot
-        - default
-        - prefix(ocm.software/open-component-model)
-      custom-order: true
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
