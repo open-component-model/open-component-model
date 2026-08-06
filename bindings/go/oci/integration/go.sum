@@ -163,12 +163,12 @@ ocm.software/open-component-model/bindings/go/ctf v0.4.1 h1:rzSzKGuUkO6ykPLd49Z4
 ocm.software/open-component-model/bindings/go/ctf v0.4.1/go.mod h1:5EoiS3GHkAWBCSyx2i06Prg0sBays8v3tc8Qzq8DguM=
 ocm.software/open-component-model/bindings/go/dag v0.0.6 h1:To76QJAmFD88C101oB/HgYvtomp8mm0270ewDLcVncw=
 ocm.software/open-component-model/bindings/go/dag v0.0.6/go.mod h1:mQbO95zYvX59VXNJGer4+wGsKY0BVI4FKwlR5BlPugM=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260805084928-95f6549e09c3 h1:vmqdehEDBnFsURJkSAE7G4xwnSjj9n6TIMKlZot5N0I=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260805084928-95f6549e09c3/go.mod h1:qCvtgZRudK63wy1Dfkg6Xjagh2aRfE6cRyTPgZqT2Bk=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260805144409-fed2455a7e3e h1:0Frige5NKnsP4QpbVwXP9mlE2U0ZdDp9Zdd59383DCA=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260805144409-fed2455a7e3e/go.mod h1:qCvtgZRudK63wy1Dfkg6Xjagh2aRfE6cRyTPgZqT2Bk=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 h1:bTb7LgRFAAuhr5FGkkBVStU4YLtFZz3uhO9V4VFhW64=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3/go.mod h1:miNDxmNWsrYI9f3QNZIOBrK6jVmWnyFj0Z/ZGFjR5Qk=
-ocm.software/open-component-model/bindings/go/http v0.0.0-20260805084928-95f6549e09c3 h1:SbtemzmIBVA7o92gy58r7CR7KoiUixSPgxSP/DvpqvA=
-ocm.software/open-component-model/bindings/go/http v0.0.0-20260805084928-95f6549e09c3/go.mod h1:WpJ9opdZPjexXzVb0jLLOFQ16ol3ZTdzOZLA1gKZfhM=
+ocm.software/open-component-model/bindings/go/http v0.0.0-20260805144409-fed2455a7e3e h1:8hO85AM7jg8yZo7n/38V2mYsvNLDw2JjTuUHcJi/TRg=
+ocm.software/open-component-model/bindings/go/http v0.0.0-20260805144409-fed2455a7e3e/go.mod h1:WpJ9opdZPjexXzVb0jLLOFQ16ol3ZTdzOZLA1gKZfhM=
 ocm.software/open-component-model/bindings/go/repository v0.0.10 h1:0SoP3zB/B5w1AK1xXJHQYrmiCLyvj9UEeSWBT5MQWbI=
 ocm.software/open-component-model/bindings/go/repository v0.0.10/go.mod h1:O8oHfL2KT7S3Om8aE1dbeca+oex5fsLCcBxpZc0XoiY=
 ocm.software/open-component-model/bindings/go/runtime v0.0.8 h1:NIN8smq0Fs64N10UCSx7RrysIB/u8ukVF/GeT76uQRE=
