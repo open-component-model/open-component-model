@@ -532,7 +532,7 @@ func Test_Integration_DownloadResource_HelmAccess(t *testing.T) {
 		"component-version",
 		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
 		"--constructor", constructorPath,
-		"--skip-reference-digest-processing",
+		"--skip-resource-digest-processing",
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "add component-version should succeed")
 

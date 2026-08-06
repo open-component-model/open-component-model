@@ -150,7 +150,7 @@ configurations:
 		"component-version",
 		"--repository", fmt.Sprintf("ctf::%s", sourceCTF),
 		"--constructor", constructorPath,
-		"--skip-reference-digest-processing",
+		"--skip-resource-digest-processing",
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "creation of component version should succeed")
 
@@ -497,7 +497,7 @@ configurations:
 		"component-version",
 		"--repository", fmt.Sprintf("ctf::%s", sourceCTF),
 		"--constructor", constructorPath,
-		"--skip-reference-digest-processing",
+		"--skip-resource-digest-processing",
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "creation of component version should succeed")
 

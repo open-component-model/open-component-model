@@ -774,7 +774,7 @@ configurations:
 		"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
 		"--constructor", constructorPath,
 		"--config", cfgPath,
-		"--skip-reference-digest-processing",
+		"--skip-resource-digest-processing",
 	})
 
 	addCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
