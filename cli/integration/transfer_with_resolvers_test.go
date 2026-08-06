@@ -94,7 +94,7 @@ configurations:
 		"add", "component-version",
 		"--repository", fmt.Sprintf("ctf::%s", ctfA),
 		"--constructor", constructorParentPath,
-		"--skip-resource-digest-processing",
+		"--skip-reference-digest-processing",
 		"--external-component-version-copy-policy", "skip",
 		"--config", resolverCfgPath,
 	})

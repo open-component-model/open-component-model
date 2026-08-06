@@ -128,7 +128,7 @@ add component-version --repository ./archive --constructor component-constructor
   -o, --output enum                                   output format of the component descriptors
                                                       (must be one of [json ndjson table tree yaml]) (default table)
   -r, --repository string                             repository ref (default "transport-archive")
-      --skip-resource-digest-processing               skip digest processing for resources. Any resource referenced via access type will not have its digest updated, and any digest specified in the constructor will not be verified against the referenced content.
+      --skip-reference-digest-processing              skip digest processing for resources. A resource referenced via an access type will not have its digest computed, and any digest declared in the constructor is recorded without being verified against the referenced content.
 ```
 
 ### Options inherited from parent commands

@@ -136,7 +136,7 @@ components:
 		"--constructor", constructorPathA,
 		"--config", resolverCfgPath,
 		"--external-component-version-copy-policy", "skip",
-		"--skip-resource-digest-processing",
+		"--skip-reference-digest-processing",
 	})
 	r.NoError(addA.ExecuteContext(t.Context()))
 

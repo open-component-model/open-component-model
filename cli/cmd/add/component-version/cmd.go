@@ -49,7 +49,6 @@ const (
 	FlagBlobCacheDirectory                 = "blob-cache-directory"
 	FlagComponentVersionConflictPolicy     = "component-version-conflict-policy"
 	FlagExternalComponentVersionCopyPolicy = "external-component-version-copy-policy"
-	FlagSkipResourceDigestProcessing       = "skip-resource-digest-processing"
 	FlagSkipReferenceDigestProcessing      = "skip-reference-digest-processing"
 	FlagOutput                             = "output"
 	FlagDisplayMode                        = "display-mode"
@@ -225,9 +224,7 @@ add component-version --%[1]s ./archive --%[2]s %[3]s.yaml
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
 	enum.Var(cmd.Flags(), FlagExternalComponentVersionCopyPolicy, ExternalComponentVersionCopyPolicies(), "policy to apply when a component reference to a component version outside of the constructor or target repository is encountered")
-	cmd.Flags().Bool(FlagSkipResourceDigestProcessing, false, "skip digest processing for resources. Any resource referenced via access type will not have its digest updated, and any digest specified in the constructor will not be verified against the referenced content.")
-	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "")
-	_ = cmd.Flags().MarkDeprecated(FlagSkipReferenceDigestProcessing, "use --skip-resource-digest-processing instead")
+	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources. A resource referenced via an access type will not have its digest computed, and any digest declared in the constructor is recorded without being verified against the referenced content.")
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the component descriptors")
 	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current construction state of the component graph`)
@@ -284,15 +281,10 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting concurrency-limit flag failed: %w", err)
 	}
 
-	skipDigestProcessing, err := cmd.Flags().GetBool(FlagSkipResourceDigestProcessing)
-	if err != nil {
-		return fmt.Errorf("getting skip-resource-digest-processing flag failed: %w", err)
-	}
-	skipLegacy, err := cmd.Flags().GetBool(FlagSkipReferenceDigestProcessing)
+	skipReferenceDigestProcessing, err := cmd.Flags().GetBool(FlagSkipReferenceDigestProcessing)
 	if err != nil {
 		return fmt.Errorf("getting skip-reference-digest-processing flag failed: %w", err)
 	}
-	skipDigestProcessing = skipDigestProcessing || skipLegacy
 
 	cvConflictPolicy, err := enum.Get(cmd.Flags(), FlagComponentVersionConflictPolicy)
 	if err != nil {
@@ -322,6 +314,15 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	constructorSpec, err := GetComponentConstructor(constructorFile)
 	if err != nil {
 		return fmt.Errorf("getting component constructor failed: %w", err)
+	}
+
+	if skipReferenceDigestProcessing {
+		if declaring := resourcesWithDeclaredDigest(constructorSpec); len(declaring) > 0 {
+			slog.WarnContext(cmd.Context(),
+				"digest processing is skipped, but resources declare a digest in the constructor; these digests are recorded into the component descriptor without being verified against the referenced content",
+				"resources", strings.Join(declaring, ", "),
+			)
+		}
 	}
 
 	output, err := enum.Get(cmd.Flags(), FlagOutput)
@@ -373,7 +374,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		ComponentVersionConflictPolicy:      ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 		ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicy(evCopyPolicy).ToConstructorPolicy(),
 	}
-	if !skipDigestProcessing {
+	if !skipReferenceDigestProcessing {
 		opts.ResourceDigestProcessorProvider = instance
 	}
 
@@ -411,6 +412,22 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	}
 
 	return typed, nil
+}
+
+// resourcesWithDeclaredDigest returns the identities of constructor resources that
+// declare a digest. Declared resource digests are only verified against the referenced
+// content when digest processing runs; when it is skipped they are recorded into the
+// descriptor unverified, so the caller warns about this contradiction.
+func resourcesWithDeclaredDigest(spec *constructorruntime.ComponentConstructor) []string {
+	var identities []string
+	for _, component := range spec.Components {
+		for _, resource := range component.Resources {
+			if resource.Digest != nil {
+				identities = append(identities, resource.ToIdentity().String())
+			}
+		}
+	}
+	return identities
 }
 
 func GetComponentConstructor(file *file.Flag) (*constructorruntime.ComponentConstructor, error) {
