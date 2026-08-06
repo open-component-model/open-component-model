@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	// AutoConfigEnvVar disables the first-startup auto configuration when set to a truthy value.
+	// AutoConfigEnvVar disables the first-startup auto configuration when not empty and set to a non-falsy value
 	AutoConfigEnvVar = "OCM_DISABLE_AUTO_CONFIG"
 	// dockerConfigEnvVar is the standard docker environment variable pointing at the docker config directory.
 	dockerConfigEnvVar   = "DOCKER_CONFIG"
@@ -116,9 +116,9 @@ func detectDockerConfig(s *ocmctx.Syscalls) (string, bool) {
 	return candidate, true
 }
 
-// defaultConfigWritePath returns the location the generated config is written to. It mirrors the
-// discovery logic so the file is found on subsequent runs: $XDG_CONFIG_HOME/ocm/config if
-// XDG_CONFIG_HOME is set, otherwise $HOME/.ocm/config.
+// defaultConfigWritePath returns the location the generated config is written to. It mirrors
+// parts of the discovery logic so that the file is found on subsequent runs:
+// $XDG_CONFIG_HOME/ocm/config if XDG_CONFIG_HOME is set, otherwise $HOME/.ocm/config.
 func defaultConfigWritePath(s *ocmctx.Syscalls) (string, error) {
 	if xdg := s.Getenv(xdgConfigHomeEnvVar); xdg != "" {
 		return filepath.Join(xdg, configuration.XDGOCMConfigFileName), nil
