@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -41,18 +40,6 @@ const (
 	ExtractionPolicyDisable = "disable"
 )
 
-const (
-	// LabelDownloadName is the predefined label that defines the default output
-	// filename for `download resource`. It follows the OCM label naming convention
-	// (DNS-prefixed name with a kebab-case local part).
-	LabelDownloadName = "ocm.software/download-name"
-	// LabelDownloadNameLegacy is the deprecated flat camelCase form of LabelDownloadName.
-	//
-	// Deprecated: use LabelDownloadName. The legacy name is still honored but will be
-	// removed after one to two releases.
-	LabelDownloadNameLegacy = "downloadName"
-)
-
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "resource",
@@ -64,16 +51,11 @@ func New() *cobra.Command {
 This command fetches a specific resource from the given OCM component version reference and stores it at the specified output location. 
 It supports optional transformation of the resource using a registered transformer plugin.
 
-If no transformer is specified, the resource is written directly in its original format. If the media type is known,
-the appropriate file extension will be added to the output file name if no output location is given.
+If no transformer is specified, the resource is written directly in its original format.
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
 
-The output filename is determined by the first of these that applies:
-  1. --output, if explicitly provided
-  2. An "ocm.software/download-name" label on the resource, if present
-     (the legacy "downloadName" label is still honored but deprecated)
-  3. The resource name, with its extra identity attributes appended when present`,
+When --output is not provided, the output filename is derived from the resource name with any extra identity attribute values appended as a hyphen-separated suffix.`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
 
@@ -90,8 +72,7 @@ The output filename is determined by the first of these that applies:
 	}
 
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
-	cmd.Flags().String(FlagOutput, "", "full output file path (directory + filename). Intermediate directories are created automatically. "+
-		"Takes precedence over an ocm.software/download-name label on the resource.")
+	cmd.Flags().String(FlagOutput, "", "full output file path (directory + filename). Intermediate directories are created automatically.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
 	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
 		"policy to apply when extracting a resource. "+
@@ -269,35 +250,6 @@ func processResourceOutput(output string, resource *descriptor.Resource, logger 
 	if output != "" {
 		logger.Info("using explicit --output", slog.String("output", output))
 		return output, nil
-	}
-
-	// download-name label: default filename chosen by the component author. Prefer the
-	// conventional name; the legacy name is still honored (with a warning) for now.
-	var label *descriptor.Label
-	for i := range resource.Labels {
-		switch resource.Labels[i].Name {
-		case LabelDownloadName:
-			label = &resource.Labels[i]
-		case LabelDownloadNameLegacy:
-			if label == nil {
-				label = &resource.Labels[i]
-			}
-		}
-	}
-	if label != nil {
-		if label.Name == LabelDownloadNameLegacy {
-			logger.Warn("resource uses a deprecated label name",
-				slog.String("deprecated", LabelDownloadNameLegacy), slog.String("use", LabelDownloadName))
-		}
-		var downloadName string
-		if err := label.GetValue(&downloadName); err != nil {
-			return "", fmt.Errorf("interpreting %q label value failed: %w", label.Name, err)
-		}
-		if downloadName = filepath.Clean(downloadName); filepath.IsAbs(downloadName) || downloadName == ".." || strings.HasPrefix(downloadName, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("%q label value %q must be a relative path within the output directory", label.Name, downloadName)
-		}
-		logger.Info("using download-name label for output filename", slog.String("output", downloadName))
-		return downloadName, nil
 	}
 
 	// Fallback: resource name, with extra identity attributes appended when present.
