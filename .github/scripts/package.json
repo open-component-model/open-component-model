@@ -14,10 +14,10 @@
   "devDependencies": {
     "@actions/github-script": "github:actions/github-script",
     "@eslint/js": "10.0.1",
-    "@octokit/graphql": "9.0.3",
-    "@types/node": "26.1.1",
-    "eslint": "10.7.0",
-    "globals": "17.7.0"
+    "@octokit/graphql": "9.0.4",
+    "@types/node": "26.1.2",
+    "eslint": "10.8.0",
+    "globals": "17.9.0"
   },
   "overrides": {
     "@actions/http-client": {

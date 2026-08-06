@@ -4,12 +4,8 @@
   "$id": "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1alpha1/schemas/SigstoreVerifierIdentity.schema.json",
   "title": "SigstoreVerifierIdentity",
   "type": "object",
-  "description": "SigstoreVerifierIdentity is the typed consumer identity for Sigstore verification handlers.\n\nThe credential system matches this identity against configured credentials to resolve\nthe [SigstoreCredentials] used during cosign verify-blob. Both fields are optional\nfilters: omitting a field matches any value for that attribute.\n\nAlgorithm and Signature correspond to the identity attributes [IdentityAttributeAlgorithm]\nand [IdentityAttributeSignature] in the flat runtime.Identity map produced by\nGetVerifyingCredentialConsumerIdentity.",
+  "description": "SigstoreVerifierIdentity is the typed consumer identity for Sigstore verification handlers.\n\nThe credential system matches this identity against configured credentials to resolve\nthe [SigstoreCredentials] used during cosign verify-blob. The Signature field is an optional\nfilter: omitting it matches any value for that attribute.\n\nSignature corresponds to the identity attribute [IdentityAttributeSignature] in the flat\nruntime.Identity map produced by GetVerifyingCredentialConsumerIdentity.",
   "properties": {
-    "algorithm": {
-      "type": "string",
-      "description": "Algorithm restricts this identity to a specific signing algorithm.\nPopulated from the signature's Algorithm: typically \"Sigstore/v1alpha1\"\n(v1alpha1.AlgorithmSigstoreV1Alpha1), or \"sigstore\" (v1alpha1.AlgorithmSigstoreLegacy)\nfor legacy signatures. Omit to match all algorithms."
-    },
     "signature": {
       "type": "string",
       "description": "Signature restricts this identity to a specific named signature within a component version.\nThe value must match the signature name passed to GetVerifyingCredentialConsumerIdentity\n(i.e. the Name field of the descruntime.Signature being verified).\nOmit to match all signature names."

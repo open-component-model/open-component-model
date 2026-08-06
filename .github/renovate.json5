@@ -324,4 +324,13 @@
     ],
     executionMode: 'branch',
   },
+  // Prevent a transient npm registry hiccup from aborting the whole run.
+  // See renovatebot/renovate#26196.
+  hostRules: [
+    {
+      matchHost: 'registry.npmjs.org',
+      timeout: 120000,
+      abortOnError: false,
+    },
+  ],
 }

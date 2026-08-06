@@ -149,12 +149,14 @@ contradictive
 contributability
 converthelmtooci
 crd
+cyclonedx
 crds
 creatable
 creationtime
 credentialrequest
 credentialsspec
 creds
+crossplane
 crossplatform
 crs
 crypto
@@ -324,6 +326,7 @@ gzip
 gzipped
 handleoutput
 hardcoded
+hardcoding
 hashers
 hashicorp
 hashicorpvault
@@ -552,6 +555,7 @@ oncefunc
 oo
 openapi
 openbao
+opencontrolplane
 openfluxcd
 openid
 openmcp
@@ -620,6 +624,7 @@ publickey
 pubsub
 pullable
 pushable
+queryable
 qppj
 raci
 rbac
@@ -636,6 +641,7 @@ reconcilers
 refcount
 referencesconfig
 referrs
+referrers
 reimplement
 rekor
 relativeocireference
@@ -737,6 +743,7 @@ socio
 sonatype
 sourceref
 spdx
+syft
 src
 srcrefs
 sre
@@ -775,6 +782,7 @@ suppresstitle
 svg
 tac
 taskfile
+trivy
 taskfiles
 tbd
 tcp
@@ -843,6 +851,7 @@ ux
 valuemergehandler
 valuemergehandlerdescriptor
 valueset
+vex
 valuesfrom
 valuessource
 variadic
@@ -865,6 +874,7 @@ wgs
 whitespace
 winget
 wingetcreate
+wni
 withocm
 wsl
 xdg
@@ -935,3 +945,9 @@ Neisener
 ilja
 iljaweis
 weis
+Hackathon
+Exploitability
+OpenDeliveryGear
+linkable
+ification
+ifying
