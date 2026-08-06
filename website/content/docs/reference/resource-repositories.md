@@ -147,8 +147,7 @@ Handles resources served over plain HTTP or HTTPS.
 
 {{< callout context="note" >}}
 Upload is not supported because a plain HTTP endpoint has no standardized write API. The transfer downloads the content
-and stores it as a [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1) in the target repository, regardless of the
-requested upload type.
+and stores it as a [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1) in the target repository, regardless of the requested upload type.
 {{< /callout >}}
 
 ### Credential Resolution
