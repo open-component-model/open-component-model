@@ -98,13 +98,14 @@ spec:
               target:
                 kind: Deployment
                 name: .*
+            # Delete podinfo's HPA. The e2e cluster has no metrics-server, so the HPA can never
+            # become healthy.
             - patch: |
-                - op: replace
-                  path: /spec/minReplicas
-                  value: 1
-                - op: replace
-                  path: /spec/maxReplicas
-                  value: 1
+                apiVersion: autoscaling/v2
+                kind: HorizontalPodAutoscaler
+                metadata:
+                  name: podinfo
+                $patch: delete
               target:
                 kind: HorizontalPodAutoscaler
                 name: .*
@@ -147,13 +148,14 @@ spec:
                   target:
                     kind: Deployment
                     name: podinfo
+                # Delete podinfo's HPA. The e2e cluster has no metrics-server, so the HPA can never
+                # become healthy.
                 - patch: |
-                    - op: replace
-                      path: /spec/minReplicas
-                      value: 1
-                    - op: replace
-                      path: /spec/maxReplicas
-                      value: 1
+                    apiVersion: autoscaling/v2
+                    kind: HorizontalPodAutoscaler
+                    metadata:
+                      name: podinfo
+                    $patch: delete
                   target:
                     kind: HorizontalPodAutoscaler
                     name: podinfo
