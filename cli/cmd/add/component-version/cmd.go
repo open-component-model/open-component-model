@@ -324,10 +324,6 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
-	if skipDigestProcessing && hasExplicitResourceDigest(constructorSpec) {
-		slog.WarnContext(cmd.Context(), "digest processing is skipped; digests specified in the constructor will not be verified against the referenced content")
-	}
-
 	output, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
@@ -415,17 +411,6 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	}
 
 	return typed, nil
-}
-
-func hasExplicitResourceDigest(spec *constructorruntime.ComponentConstructor) bool {
-	for _, component := range spec.Components {
-		for _, resource := range component.Resources {
-			if resource.Digest != nil {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func GetComponentConstructor(file *file.Flag) (*constructorruntime.ComponentConstructor, error) {
