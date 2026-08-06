@@ -6,7 +6,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/constructor v0.0.13
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260805144409-fed2455a7e3e
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260806061938-9a58bfdb01b2
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	ocm.software/open-component-model/bindings/go/wget v0.0.0-00010101000000-000000000000
@@ -26,9 +26,9 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260805144409-fed2455a7e3e // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260806061938-9a58bfdb01b2 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 // indirect
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260805144409-fed2455a7e3e // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260806060845-c76dd0f2a0f9 // indirect
 )
 
 replace ocm.software/open-component-model/bindings/go/wget => ../
