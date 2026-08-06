@@ -140,10 +140,10 @@ var _ = Describe("controller", func() {
 				// Check for configuration and localization
 				if strings.HasSuffix(example.Name(), "-configuration-localization") {
 					By("validating the fluxcd localization")
-					Expect(utils.CompareResourceField(ctx,
+					Expect(utils.CompareResourceFieldHasPrefix(ctx,
 						"pod -l app.kubernetes.io/name="+example.Name()+"-podinfo",
 						"'{.items[0].spec.containers[0].image}'",
-						strings.TrimLeft(imageRegistry, "http://")+"/stefanprodan/podinfo:6.9.1",
+						strings.TrimLeft(imageRegistry, "http://")+"/stefanprodan/podinfo",
 					)).To(Succeed())
 
 					By("validating the FluxCD configuration (ui.message)")
@@ -154,10 +154,10 @@ var _ = Describe("controller", func() {
 					)).To(Succeed())
 
 					By("validating the ArgoCD localization")
-					Expect(utils.CompareResourceField(ctx,
+					Expect(utils.CompareResourceFieldHasPrefix(ctx,
 						"pod -l app.kubernetes.io/name="+example.Name()+"-podinfo -n default-argocd",
 						"'{.items[0].spec.containers[0].image}'",
-						strings.TrimLeft(imageRegistry, "http://")+"/stefanprodan/podinfo:6.9.1",
+						strings.TrimLeft(imageRegistry, "http://")+"/stefanprodan/podinfo",
 					)).To(Succeed())
 
 					By("validating the ArgoCD configuration (ui.message)")

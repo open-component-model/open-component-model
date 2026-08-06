@@ -257,3 +257,27 @@ func CompareResourceField(ctx context.Context, resource, fieldSelector, expected
 
 	return nil
 }
+
+// CompareResourceFieldHasPrefix behaves like CompareResourceField but asserts
+// that the field value starts with the given prefix instead of requiring an
+// exact match. Useful when part of the value is not known ahead of time
+// (e.g. a digest computed at transfer time).
+func CompareResourceFieldHasPrefix(ctx context.Context, resource, fieldSelector, prefix string) error {
+	args := []string{"get"}
+	args = append(args, strings.Split(resource, " ")...)
+	args = append(args, "-o", "jsonpath="+fieldSelector)
+	cmd := exec.CommandContext(ctx, "kubectl", args...)
+	output, err := Run(cmd)
+	if err != nil {
+		return err
+	}
+
+	result := strings.TrimSpace(string(output))
+	result = strings.ReplaceAll(result, "'", "")
+
+	if !strings.HasPrefix(result, prefix) {
+		return fmt.Errorf("expected value with prefix %q, got %q", prefix, result)
+	}
+
+	return nil
+}

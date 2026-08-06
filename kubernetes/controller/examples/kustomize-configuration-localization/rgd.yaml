@@ -28,7 +28,6 @@ spec:
             registry: resource.access.toOCI().registry
             repository: resource.access.toOCI().repository
             digest: resource.access.toOCI().digest
-            tag: resource.access.toOCI().tag
     - id: resourceImage
       template:
         apiVersion: delivery.ocm.software/v1alpha1
@@ -45,7 +44,7 @@ spec:
           additionalStatusFields:
             registry: resource.access.toOCI().registry
             repository: resource.access.toOCI().repository
-            tag: resource.access.toOCI().tag
+            digest: resource.access.toOCI().digest
     # Deployment using FluxCD (OCI source)
     - id: ocirepository
       template:
@@ -78,7 +77,7 @@ spec:
             - patch: |
                 - op: replace
                   path: /spec/template/spec/containers/0/image
-                  value: ${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}:${resourceImage.status.additional.tag}
+                  value: ${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}@${resourceImage.status.additional.digest}
               target:
                 kind: Deployment
                 name: .*
@@ -127,12 +126,12 @@ spec:
           project: default
           source:
             repoURL: oci://${resourceKustomization.status.additional.registry}/${resourceKustomization.status.additional.repository}
-            targetRevision: ${resourceKustomization.status.additional.tag}
+            targetRevision: ${resourceKustomization.status.additional.digest}
             path: "./"
             kustomize:
               patches:
                 # Localization
-                - patch: '[{"op":"replace","path":"/spec/template/spec/containers/0/image","value":"${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}:${resourceImage.status.additional.tag}"}]'
+                - patch: '[{"op":"replace","path":"/spec/template/spec/containers/0/image","value":"${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}@${resourceImage.status.additional.digest}"}]'
                   target:
                     kind: Deployment
                     name: podinfo
