@@ -238,46 +238,31 @@ func DumpLogs(namespace, resourceType string) {
 // Returns:
 // - An error if the field value does not match the expected value or if the command fails.
 func CompareResourceField(ctx context.Context, resource, fieldSelector, expected string) error {
-	args := []string{"get"}
-	args = append(args, strings.Split(resource, " ")...)
-	args = append(args, "-o", "jsonpath="+fieldSelector)
-	cmd := exec.CommandContext(ctx, "kubectl", args...)
-	output, err := Run(cmd)
+	result, err := GetResourceField(ctx, resource, fieldSelector)
 	if err != nil {
 		return err
 	}
 
-	// Sanitize output
-	result := strings.TrimSpace(string(output))
-	result = strings.ReplaceAll(result, "'", "")
-
-	if strings.TrimSpace(result) != expected {
-		return fmt.Errorf("expected %s, got %s", expected, string(output))
+	if result != expected {
+		return fmt.Errorf("expected %s, got %s", expected, result)
 	}
 
 	return nil
 }
 
-// CompareResourceFieldHasPrefix behaves like CompareResourceField but asserts
-// that the field value starts with the given prefix instead of requiring an
-// exact match. Useful when part of the value is not known ahead of time
-// (e.g. a digest computed at transfer time).
-func CompareResourceFieldHasPrefix(ctx context.Context, resource, fieldSelector, prefix string) error {
+// GetResourceField returns the value of a resource field selected by a JSONPath expression.
+// Wrapping single quotes emitted by kubectl are stripped.
+func GetResourceField(ctx context.Context, resource, fieldSelector string) (string, error) {
 	args := []string{"get"}
 	args = append(args, strings.Split(resource, " ")...)
 	args = append(args, "-o", "jsonpath="+fieldSelector)
 	cmd := exec.CommandContext(ctx, "kubectl", args...)
 	output, err := Run(cmd)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	result := strings.TrimSpace(string(output))
 	result = strings.ReplaceAll(result, "'", "")
-
-	if !strings.HasPrefix(result, prefix) {
-		return fmt.Errorf("expected value with prefix %q, got %q", prefix, result)
-	}
-
-	return nil
+	return result, nil
 }

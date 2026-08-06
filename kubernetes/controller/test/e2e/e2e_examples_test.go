@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/kubernetes/controller/test/utils"
 )
 
@@ -139,12 +140,20 @@ var _ = Describe("controller", func() {
 
 				// Check for configuration and localization
 				if strings.HasSuffix(example.Name(), "-configuration-localization") {
+					expectedRef, err := looseref.ParseReference(imageRegistry + "/stefanprodan/podinfo")
+					Expect(err).NotTo(HaveOccurred())
+
+					assertLocalizedImage := func(resource string) {
+						image, err := utils.GetResourceField(ctx, resource, "'{.items[0].spec.containers[0].image}'")
+						Expect(err).NotTo(HaveOccurred())
+						ref, err := looseref.ParseReference(image)
+						Expect(err).NotTo(HaveOccurred(), "container image %q is not a valid OCI reference", image)
+						Expect(ref.Registry).To(Equal(expectedRef.Registry))
+						Expect(ref.Repository).To(Equal(expectedRef.Repository))
+					}
+
 					By("validating the fluxcd localization")
-					Expect(utils.CompareResourceFieldHasPrefix(ctx,
-						"pod -l app.kubernetes.io/name="+example.Name()+"-podinfo",
-						"'{.items[0].spec.containers[0].image}'",
-						strings.TrimLeft(imageRegistry, "http://")+"/stefanprodan/podinfo",
-					)).To(Succeed())
+					assertLocalizedImage("pod -l app.kubernetes.io/name=" + example.Name() + "-podinfo")
 
 					By("validating the FluxCD configuration (ui.message)")
 					Expect(utils.CompareResourceField(ctx,
@@ -154,11 +163,7 @@ var _ = Describe("controller", func() {
 					)).To(Succeed())
 
 					By("validating the ArgoCD localization")
-					Expect(utils.CompareResourceFieldHasPrefix(ctx,
-						"pod -l app.kubernetes.io/name="+example.Name()+"-podinfo -n default-argocd",
-						"'{.items[0].spec.containers[0].image}'",
-						strings.TrimLeft(imageRegistry, "http://")+"/stefanprodan/podinfo",
-					)).To(Succeed())
+					assertLocalizedImage("pod -l app.kubernetes.io/name=" + example.Name() + "-podinfo -n default-argocd")
 
 					By("validating the ArgoCD configuration (ui.message)")
 					Expect(utils.CompareResourceField(ctx,
