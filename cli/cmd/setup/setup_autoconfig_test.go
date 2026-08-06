@@ -154,3 +154,36 @@ func TestAutoConfigure_SkipsWhenConfigFlagSet(t *testing.T) {
 	_, err := os.Stat(filepath.Join(home, configuration.OCMConfigFileName))
 	r.True(os.IsNotExist(err))
 }
+
+func TestAutoConfigure_ConcurrentWriteIsRejected(t *testing.T) {
+	r := require.New(t)
+	home := t.TempDir()
+	dockerPath := writeDockerConfig(t, filepath.Join(home, ".docker"))
+
+	target := filepath.Join(home, ".ocm", "config")
+
+	cfg, _ := buildDockerConfigOCMConfig(dockerPath)
+
+	errs := make(chan error, 2)
+	for range 2 {
+		go func() {
+			errs <- writeConfig(target, cfg)
+		}()
+	}
+
+	err1, err2 := <-errs, <-errs
+
+	// Exactly one must succeed, the other must fail with "file exists".
+	switch {
+	case err1 == nil && err2 != nil:
+		r.ErrorContains(err2, "could not create config file")
+	case err2 == nil && err1 != nil:
+		r.ErrorContains(err1, "could not create config file")
+	default:
+		t.Fatalf("expected exactly one success and one failure, got err1=%v, err2=%v", err1, err2)
+	}
+
+	// The file written by the winner must be valid.
+	_, err := configuration.GetConfigFromPath(target)
+	r.NoError(err)
+}

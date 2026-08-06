@@ -170,7 +170,7 @@ func toRaw(obj runtime.Typed) (*runtime.Raw, error) {
 
 // writeConfig serializes the configuration as YAML and writes it to path, creating parent
 // directories as needed.
-func writeConfig(path string, cfg *genericv1.Config) error {
+func writeConfig(path string, cfg *genericv1.Config) (retErr error) {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("could not marshal configuration: %w", err)
@@ -178,7 +178,17 @@ func writeConfig(path string, cfg *genericv1.Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("could not create config directory: %w", err)
 	}
-	return os.WriteFile(path, data, 0o600)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("could not create config file: %w", err)
+	}
+	defer func() {
+		if cErr := file.Close(); retErr == nil && cErr != nil {
+			retErr = fmt.Errorf("could not close config file: %w", cErr)
+		}
+	}()
+	_, err = file.Write(data)
+	return err
 }
 
 // autoConfigDisabled parses a boolean opt-out value. Unrecognized non-empty values are treated
