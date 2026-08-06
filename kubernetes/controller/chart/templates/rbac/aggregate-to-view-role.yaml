@@ -1,0 +1,39 @@
+{{- if .Values.rbacHelpers.aggregateToDefaultRoles }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+    labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        rbac.authorization.k8s.io/aggregate-to-admin: "true"
+        rbac.authorization.k8s.io/aggregate-to-edit: "true"
+        rbac.authorization.k8s.io/aggregate-to-view: "true"
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "aggregate-to-view" "context" $) }}
+rules:
+    - apiGroups:
+        - delivery.ocm.software
+      resources:
+        - components
+        - deployers
+        - replications
+        - repositories
+        - resources
+      verbs:
+        - get
+        - list
+        - watch
+    - apiGroups:
+        - delivery.ocm.software
+      resources:
+        - components/status
+        - deployers/status
+        - replications/status
+        - repositories/status
+        - resources/status
+      verbs:
+        - get
+        - list
+        - watch
+{{- end }}
