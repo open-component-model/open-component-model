@@ -17,7 +17,7 @@
     "@octokit/graphql": "9.0.4",
     "@types/node": "26.1.2",
     "eslint": "10.8.0",
-    "globals": "17.8.0"
+    "globals": "17.9.0"
   },
   "overrides": {
     "@actions/http-client": {
