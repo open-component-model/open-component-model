@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260804082019-17e89e2b0f87
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260806061938-9a58bfdb01b2
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 )
 
