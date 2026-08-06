@@ -81,7 +81,7 @@ func TestAutoConfigure_RespectsXDGConfigHome(t *testing.T) {
 	cmd := newTestCommand(t, home, map[string]string{xdgConfigHomeEnvVar: xdg})
 	r.NoError(AutoConfigure(cmd))
 
-	target := filepath.Join(xdg, configuration.OCMConfigFileName)
+	target := filepath.Join(xdg, configuration.XDGOCMConfigFileName)
 	_, err := os.Stat(target)
 	r.NoError(err)
 }

@@ -117,11 +117,11 @@ func detectDockerConfig(s *ocmctx.Syscalls) (string, bool) {
 }
 
 // defaultConfigWritePath returns the location the generated config is written to. It mirrors the
-// discovery logic so the file is found on subsequent runs: $XDG_CONFIG_HOME/.ocm/config if
+// discovery logic so the file is found on subsequent runs: $XDG_CONFIG_HOME/ocm/config if
 // XDG_CONFIG_HOME is set, otherwise $HOME/.ocm/config.
 func defaultConfigWritePath(s *ocmctx.Syscalls) (string, error) {
 	if xdg := s.Getenv(xdgConfigHomeEnvVar); xdg != "" {
-		return filepath.Join(xdg, configuration.OCMConfigFileName), nil
+		return filepath.Join(xdg, configuration.XDGOCMConfigFileName), nil
 	}
 	home, err := s.UserHomeDir()
 	if err != nil {
