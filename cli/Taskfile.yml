@@ -122,9 +122,6 @@ tasks:
         - name: cli
           type: executable
           version: {{ .VERSION }}
-          labels:
-            - name: downloadName
-              value: ocm
           extraIdentity:
             os: {{ .GOOS }}
             architecture: {{ .GOARCH }}
