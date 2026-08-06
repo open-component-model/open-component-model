@@ -7,6 +7,29 @@ run:
   issues-exit-code: 2
   tests: false
   allow-parallel-runners: true
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - blank
+        - dot
+        - default
+        - prefix(ocm.software/open-component-model)
+      custom-order: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 linters:
   default: all
   disable:
@@ -14,7 +37,6 @@ linters:
     - containedctx
     - contextcheck
     - cyclop
-    - depguard
     - dogsled
     - dupl
     - embeddedstructfieldcheck
@@ -64,6 +86,37 @@ linters:
     - wrapcheck
     - wsl
     - wsl_v5
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - lll
+        source: https://
+      - linters:
+          - dupl
+          - err113
+          - errcheck
+          - funlen
+          - gocyclo
+          - gosec
+        path: _test\.go
+      - path: (.+)\.go$
+        text: composites
+      - linters:
+          - cyclop
+        path: (.+)_test\.go
+      - linters:
+          - staticcheck
+        path: (.+)repository/ocm/fallback.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
   settings:
     cyclop:
       max-complexity: 15
@@ -100,58 +153,354 @@ linters:
       dot-import-whitelist:
         - "github.com/onsi/ginkgo/v2"
         - "github.com/onsi/gomega"
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    rules:
-      - linters:
-          - lll
-        source: https://
-      - linters:
-          - dupl
-          - err113
-          - errcheck
-          - funlen
-          - gocyclo
-          - gosec
-          - scopelint
-        path: _test\.go
-      - path: (.+)\.go$
-        text: composites
-      - linters:
-          - cyclop
-        path: (.+)_test\.go
-      - linters:
-          - staticcheck
-        path: (.+)repository/ocm/fallback.go
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
-formatters:
-  enable:
-    - gci
-    - gofmt
-    - gofumpt
-  settings:
-    gci:
-      sections:
-        - standard
-        - blank
-        - dot
-        - default
-        - prefix(ocm.software/open-component-model)
-      custom-order: true
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+    # depguard: enforce the bindings/go layering that the per-module go.mod files
+    # encoded in the pre monolithic bindings state. Each rule uses `list-mode: lax` so that:
+    #   - stdlib and third-party imports pass (they don't match the deny prefix)
+    #   - allowed sibling bindings pass (more specific than the deny prefix)
+    #   - internal sub-packages pass (parent allow is more specific than deny)
+    #   - disallowed sibling bindings are caught (deny catches any binding not specifically allowed)
+    #   - new bindings are denied by default until explicitly added to an allow list
+    depguard:
+      rules:
+        blob:
+          list-mode: lax
+          files: ["**/bindings/go/blob/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "blob must not import bindings outside its allowed set"
+        cel:
+          list-mode: lax
+          files: ["**/bindings/go/cel/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/cel"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "cel must not import bindings outside its allowed set"
+        configuration:
+          list-mode: lax
+          files: ["**/bindings/go/configuration/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/configuration"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "configuration must not import bindings outside its allowed set"
+        constructor:
+          list-mode: lax
+          files: ["**/bindings/go/constructor/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/constructor"
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/ctf"
+            - "ocm.software/open-component-model/bindings/go/dag"
+            - "ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/oci"
+            - "ocm.software/open-component-model/bindings/go/repository"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "constructor must not import bindings outside its allowed set"
+        credentials:
+          list-mode: lax
+          files: ["**/bindings/go/credentials/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/configuration"
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/dag"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "credentials must not import bindings outside its allowed set"
+        ctf:
+          list-mode: lax
+          files: ["**/bindings/go/ctf/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/ctf"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "ctf must not import bindings outside its allowed set"
+        dag:
+          list-mode: lax
+          files: ["**/bindings/go/dag/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/dag"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "dag must not import bindings outside its allowed set"
+        generator:
+          list-mode: lax
+          files: ["**/bindings/go/generator/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/generator"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "generator must not import bindings outside its allowed set"
+        descriptor-normalisation:
+          list-mode: lax
+          files: ["**/bindings/go/descriptor/normalisation/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "descriptor/normalisation must not import bindings outside its allowed set"
+        descriptor-runtime:
+          list-mode: lax
+          files: ["**/bindings/go/descriptor/runtime/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "descriptor/runtime must not import bindings outside its allowed set"
+        descriptor-v2:
+          list-mode: lax
+          files: ["**/bindings/go/descriptor/v2/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "descriptor/v2 must not import bindings outside its allowed set"
+        github:
+          list-mode: lax
+          files: ["**/bindings/go/github/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/github"
+            - "ocm.software/open-component-model/bindings/go/http"
+            - "ocm.software/open-component-model/bindings/go/plugin"
+            - "ocm.software/open-component-model/bindings/go/repository"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "github must not import bindings outside its allowed set"
+        gpg:
+          list-mode: lax
+          files: ["**/bindings/go/gpg/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/gpg"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "gpg must not import bindings outside its allowed set"
+        helm:
+          list-mode: lax
+          files: ["**/bindings/go/helm/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/configuration"
+            - "ocm.software/open-component-model/bindings/go/constructor"
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/helm"
+            - "ocm.software/open-component-model/bindings/go/http"
+            - "ocm.software/open-component-model/bindings/go/oci"
+            - "ocm.software/open-component-model/bindings/go/plugin"
+            - "ocm.software/open-component-model/bindings/go/repository"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "helm must not import bindings outside its allowed set"
+        http:
+          list-mode: lax
+          files: ["**/bindings/go/http/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/configuration"
+            - "ocm.software/open-component-model/bindings/go/http"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "http must not import bindings outside its allowed set"
+        input-dir:
+          list-mode: lax
+          files: ["**/bindings/go/input/dir/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/constructor"
+            - "ocm.software/open-component-model/bindings/go/input/dir"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "input/dir must not import bindings outside its allowed set"
+        input-file:
+          list-mode: lax
+          files: ["**/bindings/go/input/file/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/constructor"
+            - "ocm.software/open-component-model/bindings/go/input/file"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "input/file must not import bindings outside its allowed set"
+        input-utf8:
+          list-mode: lax
+          files: ["**/bindings/go/input/utf8/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/constructor"
+            - "ocm.software/open-component-model/bindings/go/input/utf8"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "input/utf8 must not import bindings outside its allowed set"
+        oci:
+          list-mode: lax
+          files: ["**/bindings/go/oci/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/configuration"
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/ctf"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/http"
+            - "ocm.software/open-component-model/bindings/go/oci"
+            - "ocm.software/open-component-model/bindings/go/repository"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "oci must not import bindings outside its allowed set"
+        plugin:
+          list-mode: lax
+          files: ["**/bindings/go/plugin/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/configuration"
+            - "ocm.software/open-component-model/bindings/go/constructor"
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/plugin"
+            - "ocm.software/open-component-model/bindings/go/repository"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+            - "ocm.software/open-component-model/bindings/go/signing"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "plugin must not import bindings outside its allowed set"
+        repository:
+          list-mode: lax
+          files: ["**/bindings/go/repository/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/configuration"
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/repository"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "repository must not import bindings outside its allowed set"
+        rsa:
+          list-mode: lax
+          files: ["**/bindings/go/rsa/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/rsa"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "rsa must not import bindings outside its allowed set"
+        runtime:
+          list-mode: lax
+          files: ["**/bindings/go/runtime/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "runtime must not import bindings outside its allowed set"
+        signing:
+          list-mode: lax
+          files: ["**/bindings/go/signing/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/configuration"
+            - "ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+            - "ocm.software/open-component-model/bindings/go/signing"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "signing must not import bindings outside its allowed set"
+        sigstore:
+          list-mode: lax
+          files: ["**/bindings/go/sigstore/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+            - "ocm.software/open-component-model/bindings/go/signing"
+            - "ocm.software/open-component-model/bindings/go/sigstore"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "sigstore must not import bindings outside its allowed set"
+        transfer:
+          list-mode: lax
+          files: ["**/bindings/go/transfer/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/configuration"
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/ctf"
+            - "ocm.software/open-component-model/bindings/go/dag"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/github"
+            - "ocm.software/open-component-model/bindings/go/helm"
+            - "ocm.software/open-component-model/bindings/go/oci"
+            - "ocm.software/open-component-model/bindings/go/repository"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+            - "ocm.software/open-component-model/bindings/go/signing"
+            - "ocm.software/open-component-model/bindings/go/transfer"
+            - "ocm.software/open-component-model/bindings/go/transform"
+            - "ocm.software/open-component-model/bindings/go/wget"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "transfer must not import bindings outside its allowed set"
+        transform:
+          list-mode: lax
+          files: ["**/bindings/go/transform/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/cel"
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/dag"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+            - "ocm.software/open-component-model/bindings/go/transform"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "transform must not import bindings outside its allowed set"
+        wget:
+          list-mode: lax
+          files: ["**/bindings/go/wget/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/configuration"
+            - "ocm.software/open-component-model/bindings/go/constructor"
+            - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/http"
+            - "ocm.software/open-component-model/bindings/go/repository"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+            - "ocm.software/open-component-model/bindings/go/wget"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "wget must not import bindings outside its allowed set"
