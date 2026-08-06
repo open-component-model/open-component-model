@@ -1,4 +1,4 @@
-# SIG Runtime — Charter
+# SIG Runtime — Overview
 
 **Status:** Proposed  
 **Last updated:** 2025-10-16
