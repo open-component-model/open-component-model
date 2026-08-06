@@ -6,8 +6,9 @@
 // [ocm.software/open-component-model/bindings/go/s3/spec/access/v1.S3Bucket]
 // access spec. Besides the bucket and object key, the spec carries optional details:
 // region, media type, a pinned object version (versionId), and — for S3-compatible
-// stores such as MinIO, Ceph or R2 — a custom endpoint, path-style addressing, and a
-// switch to skip TLS verification. It references one object; it is not a
+// stores such as MinIO, Ceph or R2 — a custom endpoint and path-style addressing. It
+// carries nothing that weakens transport security; see "HTTP client and TLS" below.
+// It references one object; it is not a
 // component-version storage backend. It is named for what it addresses rather than
 // for the AWS service, and is deliberately not the ocmv1 "s3" access type; see
 // "Wire types" below.
@@ -72,7 +73,11 @@
 // [ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1.Config]
 // (timeouts, TLS, per-host overrides). A client supplied with
 // repository.WithHTTPClient is used exactly as given and none of this applies to it.
-// TLS verification is governed by that configuration alone.
+//
+// TLS verification is therefore governed by one of those two and nothing else: the
+// access spec has no switch to weaken it, so a descriptor cannot ask for a laxer
+// connection than the configuration allows, and a client supplied with
+// repository.WithHTTPClient brings its own TLS settings.
 //
 // # Retries
 //
@@ -92,6 +97,23 @@
 //	maxRetries: 0    // infinite, bounded only by ctx and the SDK's retry quota
 //	(unset)          // the SDK's own default of 3 attempts, honouring
 //	                 // AWS_MAX_ATTEMPTS and AWS_RETRY_MODE
+//
+// A per-host entry for the endpoint overrides the global setting, merged over it field
+// by field and matched on host:port before the bare hostname — the same policy, and the
+// same matching, the ocm HTTP client would have applied to its own transport. So this
+// configuration gives a MinIO download 11 attempts and every other download 4:
+//
+//	retry:
+//	  maxRetries: 3
+//	hosts:
+//	  "minio.internal:9000":
+//	    retry:
+//	      maxRetries: 10
+//
+// On AWS there is no endpoint to match against: the request host is derived by the SDK's
+// endpoint resolver from bucket, region, addressing style and partition, and is not known
+// when the client is built. A per-host entry therefore does not reach the SDK there and
+// the global setting stands.
 //
 // The wall-clock ceiling for a download is roughly the attempt
 // count times the ocm timeout (30s by default), not the timeout itself.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/url"
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -202,13 +203,52 @@ func httpConfig(cfg *httpv1alpha1.Config) *httpv1alpha1.Config {
 	return out
 }
 
-// sdkRetryAttempts translates the ocm retry configuration into the SDK's attempt count.
-func sdkRetryAttempts(cfg *httpv1alpha1.Config) int {
-	if cfg == nil || cfg.Retry == nil || cfg.Retry.MaxRetries == nil {
+// hostKeys returns the per-host configuration keys to try for endpoint, most specific
+// first. It mirrors the host matching of the ocm HTTP client, where an entry keyed by
+// host:port wins over one keyed by the bare hostname.
+//
+// TODO: drop this once http config exposes per-host resolution. Until then, this duplicates
+// that behavior here.
+func hostKeys(endpoint string) []string {
+	if endpoint == "" {
+		return nil
+	}
+
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	if name := u.Hostname(); name != u.Host {
+		return []string{u.Host, name}
+	}
+
+	return []string{u.Host}
+}
+
+// effectiveRetry manually resolve and merge related host retry configuration.
+func effectiveRetry(cfg *httpv1alpha1.Config, endpoint string) *httpv1alpha1.RetryConfig {
+	if cfg == nil {
+		return nil
+	}
+
+	for _, key := range hostKeys(endpoint) {
+		if hostCfg := cfg.Hosts[key]; hostCfg != nil {
+			return httpv1alpha1.MergeRetryConfig(cfg.Retry, hostCfg.Retry)
+		}
+	}
+
+	return cfg.Retry
+}
+
+// sdkRetryAttempts translates the ocm retry configuration that applies to endpoint into
+// the SDK's attempt count.
+func sdkRetryAttempts(cfg *httpv1alpha1.Config, endpoint string) int {
+	retryCfg := effectiveRetry(cfg, endpoint)
+	if retryCfg == nil || retryCfg.MaxRetries == nil {
 		return 0
 	}
 
-	switch n := *cfg.Retry.MaxRetries; n {
+	switch n := *retryCfg.MaxRetries; n {
 	case disableRetry:
 		return 1
 	case 0:
@@ -256,7 +296,7 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 		config.WithRegion(region),
 		config.WithHTTPClient(httpClient),
 	}
-	if attempts := sdkRetryAttempts(o.HTTPConfig); attempts > 0 {
+	if attempts := sdkRetryAttempts(o.HTTPConfig, req.Endpoint); attempts > 0 {
 		loadOpts = append(loadOpts, config.WithRetryMaxAttempts(attempts))
 	}
 
