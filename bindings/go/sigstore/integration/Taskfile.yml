@@ -62,6 +62,8 @@ tasks:
     requires:
       vars: [SCAFFOLDING_VERSION]
     preconditions:
+      - sh: sed --version 2>&1 | grep -q 'GNU sed'
+        msg: "GNU sed is required (macOS ships BSD sed). Install it: brew install gnu-sed, then add $(brew --prefix gnu-sed)/libexec/gnubin to PATH"
       - sh: '! docker ps -a --format "{{`{{.Names}}`}}" 2>/dev/null | grep -q "^registry.local$" || kind get clusters 2>/dev/null | grep -q "^kind$"'
         msg: |
           Orphaned 'registry.local' container found without a cluster. Clean up first:
