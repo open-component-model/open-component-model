@@ -726,6 +726,137 @@ func TestNewClient(t *testing.T) {
 		}
 	})
 
+	// A per-host retry entries that should merge with global ones.
+	t.Run("a per-host retry overrides the global one", func(t *testing.T) {
+		retryCfg := func(maxRetries int) *httpv1alpha1.RetryConfig {
+			return &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}
+		}
+
+		for _, tt := range []struct {
+			name     string
+			endpoint string
+			cfg      *httpv1alpha1.Config
+			want     int
+		}{
+			{
+				name:     "the host:port entry applies",
+				endpoint: "https://minio.internal:9000",
+				cfg: &httpv1alpha1.Config{
+					Retry: retryCfg(3),
+					Hosts: map[string]*httpv1alpha1.HostConfig{
+						"minio.internal:9000": {Retry: retryCfg(10)},
+					},
+				},
+				want: 11,
+			},
+			{
+				name:     "a bare hostname entry applies to an endpoint with a port",
+				endpoint: "https://minio.internal:9000",
+				cfg: &httpv1alpha1.Config{
+					Retry: retryCfg(3),
+					Hosts: map[string]*httpv1alpha1.HostConfig{
+						"minio.internal": {Retry: retryCfg(10)},
+					},
+				},
+				want: 11,
+			},
+			{
+				name:     "the host:port entry wins over the bare hostname",
+				endpoint: "https://minio.internal:9000",
+				cfg: &httpv1alpha1.Config{
+					Retry: retryCfg(3),
+					Hosts: map[string]*httpv1alpha1.HostConfig{
+						"minio.internal:9000": {Retry: retryCfg(10)},
+						"minio.internal":      {Retry: retryCfg(7)},
+					},
+				},
+				want: 11,
+			},
+			{
+				name:     "a disabled per-host retry is a single attempt",
+				endpoint: "https://minio.internal:9000",
+				cfg: &httpv1alpha1.Config{
+					Retry: retryCfg(3),
+					Hosts: map[string]*httpv1alpha1.HostConfig{
+						"minio.internal:9000": {Retry: retryCfg(disableRetry)},
+					},
+				},
+				want: 1,
+			},
+			{
+				name:     "an entry for another host does not apply",
+				endpoint: "https://minio.internal:9000",
+				cfg: &httpv1alpha1.Config{
+					Retry: retryCfg(3),
+					Hosts: map[string]*httpv1alpha1.HostConfig{
+						"ceph.internal": {Retry: retryCfg(10)},
+					},
+				},
+				want: 4,
+			},
+			{
+				name:     "an entry without a retry section inherits the global one",
+				endpoint: "https://minio.internal:9000",
+				cfg: &httpv1alpha1.Config{
+					Retry: retryCfg(3),
+					Hosts: map[string]*httpv1alpha1.HostConfig{
+						"minio.internal:9000": {},
+					},
+				},
+				want: 4,
+			},
+			{
+				name:     "a nil entry inherits the global one",
+				endpoint: "https://minio.internal:9000",
+				cfg: &httpv1alpha1.Config{
+					Retry: retryCfg(3),
+					Hosts: map[string]*httpv1alpha1.HostConfig{"minio.internal:9000": nil},
+				},
+				want: 4,
+			},
+			{
+				name:     "a per-host entry applies without a global retry",
+				endpoint: "https://minio.internal:9000",
+				cfg: &httpv1alpha1.Config{
+					Hosts: map[string]*httpv1alpha1.HostConfig{
+						"minio.internal:9000": {Retry: retryCfg(10)},
+					},
+				},
+				want: 11,
+			},
+			// AWS resolves the request host in the SDK's endpoint resolver, so there is
+			// nothing to match a per-host entry against and the global setting stands.
+			{
+				name:     "no endpoint keeps the global setting",
+				endpoint: "",
+				cfg: &httpv1alpha1.Config{
+					Retry: retryCfg(3),
+					Hosts: map[string]*httpv1alpha1.HostConfig{
+						"minio.internal:9000": {Retry: retryCfg(10)},
+					},
+				},
+				want: 4,
+			},
+			{
+				name:     "an endpoint with no parsable host keeps the global setting",
+				endpoint: "minio.internal:9000",
+				cfg: &httpv1alpha1.Config{
+					Retry: retryCfg(3),
+					Hosts: map[string]*httpv1alpha1.HostConfig{
+						"minio.internal:9000": {Retry: retryCfg(10)},
+					},
+				},
+				want: 4,
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				client, err := newClient(ctx, Request{Endpoint: tt.endpoint}, &option{HTTPConfig: tt.cfg})
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, client.Options().RetryMaxAttempts)
+			})
+		}
+	})
+
 	t.Run("an unconfigured retry leaves the SDK on its own default", func(t *testing.T) {
 		for _, tt := range []struct {
 			name string

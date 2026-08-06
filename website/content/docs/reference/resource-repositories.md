@@ -119,7 +119,7 @@ tar archive and returned as an in-memory blob.
 The `helmChart` and `helmRepository` fields from the access specification are combined to construct the full chart
 reference used for download.
 
-### Digest Processing
+### Digest Processing 
 
 The Helm digest processor resolves chart digests from the remote repository. For HTTP/HTTPS repositories it downloads
 the `index.yaml` and extracts the digest for the specified chart and version. For OCI-based Helm repositories it
