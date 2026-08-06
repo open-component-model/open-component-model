@@ -171,7 +171,7 @@ SLAs, supports assisted rescoring, and provides a Delivery Dashboard UI for both
 teams. It is designed for public and sovereign cloud scenarios where trust-but-verify assurance is required.
 
 {{< card-grid >}}
-{{< link-card title="ODG Documentation" href="https://open-component-model.github.io/delivery-service/" description="Getting started, data model, extensions, and HTTP API reference." >}}
+{{< link-card title="ODG Documentation" href="https://open-component-model.github.io/open-delivery-gear/" description="Getting started, data model, extensions, and HTTP API reference." >}}
 {{< /card-grid >}}
 
 <!-- markdownlint-enable MD034 -->

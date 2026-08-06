@@ -112,3 +112,12 @@ tasks:
     cmd: |
       npx markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
         {{ .CLI_ARGS }} '{{ .ROOT_DIR }}/**/*.md'
+
+  dependency-table/generate:
+    desc: "Regenerate docs/dependency-table.md from golangci.yml depguard rules"
+    cmd: node {{ .ROOT_DIR }}/.github/scripts/dependency-table.js generate > {{ .ROOT_DIR }}/docs/dependency-table.md
+
+  dependency-table/verify:
+    desc: "Verify docs/dependency-table.md is in sync with golangci.yml depguard rules"
+    cmd: |
+      node {{ .ROOT_DIR }}/.github/scripts/dependency-table.js generate | diff - {{ .ROOT_DIR }}/docs/dependency-table.md
