@@ -316,13 +316,10 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
-	if skipReferenceDigestProcessing {
-		if declaring := resourcesWithDeclaredDigest(constructorSpec); len(declaring) > 0 {
-			slog.WarnContext(cmd.Context(),
-				"digest processing is skipped, but resources declare a digest in the constructor; these digests are recorded into the component descriptor without being verified against the referenced content",
-				"resources", strings.Join(declaring, ", "),
-			)
-		}
+	if skipReferenceDigestProcessing && constructorDeclaresResourceDigest(constructorSpec) {
+		slog.WarnContext(cmd.Context(),
+			"digest processing is skipped, but the constructor declares one or more resource digests; these digests are recorded into the component descriptor without being verified against the referenced content",
+		)
 	}
 
 	output, err := enum.Get(cmd.Flags(), FlagOutput)
@@ -414,20 +411,19 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	return typed, nil
 }
 
-// resourcesWithDeclaredDigest returns the identities of constructor resources that
-// declare a digest. Declared resource digests are only verified against the referenced
-// content when digest processing runs; when it is skipped they are recorded into the
-// descriptor unverified, so the caller warns about this contradiction.
-func resourcesWithDeclaredDigest(spec *constructorruntime.ComponentConstructor) []string {
-	var identities []string
+// constructorDeclaresResourceDigest reports whether any constructor resource declares a
+// digest. Declared resource digests are only verified against the referenced content when
+// digest processing runs; when it is skipped they are recorded into the descriptor
+// unverified, so the caller warns about this contradiction.
+func constructorDeclaresResourceDigest(spec *constructorruntime.ComponentConstructor) bool {
 	for _, component := range spec.Components {
 		for _, resource := range component.Resources {
 			if resource.Digest != nil {
-				identities = append(identities, resource.ToIdentity().String())
+				return true
 			}
 		}
 	}
-	return identities
+	return false
 }
 
 func GetComponentConstructor(file *file.Flag) (*constructorruntime.ComponentConstructor, error) {
