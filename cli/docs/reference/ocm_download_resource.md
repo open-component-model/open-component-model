@@ -22,7 +22,7 @@ If no transformer is specified, the resource is written directly in its original
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
 
-When --output is not provided, the output filename is derived from the resource name with any extra identity attribute values appended as a hyphen-separated suffix.
+When --output is not provided, the output filename is derived from the resource name with any extra identity attribute values appended as a hyphen-separated suffix, if present.
 
 ```
 ocm download resource [flags]
