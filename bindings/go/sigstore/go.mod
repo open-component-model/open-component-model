@@ -6,9 +6,9 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260731075011-c25627972262
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260807084407-f42ff650923b
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260730142302-1977a1090e81
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260807084407-f42ff650923b
 )
 
 require (
@@ -17,9 +17,9 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260730142302-1977a1090e81 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260807084407-f42ff650923b // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )

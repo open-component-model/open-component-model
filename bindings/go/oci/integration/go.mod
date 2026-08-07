@@ -14,9 +14,9 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260731075011-c25627972262
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260807084407-f42ff650923b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/oci v0.0.48
+	ocm.software/open-component-model/bindings/go/oci v0.0.49
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
 	oras.land/oras-go/v2 v2.6.2
@@ -49,7 +49,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/klauspost/compress v1.18.6 // indirect
+	github.com/klauspost/compress v1.19.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260627054121-477a66015f15 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
@@ -77,10 +77,10 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260730142302-1977a1090e81 // indirect
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260807084407-f42ff650923b // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )

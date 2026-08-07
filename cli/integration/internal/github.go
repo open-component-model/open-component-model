@@ -2,6 +2,7 @@ package internal
 
 import (
 	"archive/tar"
+	"cmp"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -29,10 +30,10 @@ const (
 const gitHubArchiveRoot = "open-component-model-open-component-model-"
 
 // CreateOCMConfigForGitHub writes an ocmconfig carrying the registry
-// credentials and, when GITHUB_TOKEN is set, a GitHubRepository consumer
-// holding the token. Unauthenticated GitHub allows only 60 requests per hour
+// credentials and, when a token is in the environment, a GitHubRepository
+// consumer holding it. Unauthenticated GitHub allows only 60 requests per hour
 // per IP, so on shared CI egress the token is what keeps the run from flaking
-// on rate limits. Without it the run stays anonymous, which the github access
+// on rate limits. Without one the run stays anonymous, which the github access
 // supports.
 func CreateOCMConfigForGitHub(t *testing.T, registry *OCIRegistry) string {
 	t.Helper()
@@ -55,7 +56,7 @@ configurations:
 `, registry.Host, registry.Port, registry.User, registry.Password)
 
 	// "token" is the only credential key the github access reads.
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+	if token := gitHubToken(); token != "" {
 		cfg += fmt.Sprintf(`  - identity:
       type: GitHubRepository
       hostname: github.com
@@ -68,8 +69,12 @@ configurations:
 	}
 
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
-	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0o600)) //nolint:gosec // G703 false positive: cfgPath is built from t.TempDir(), not user input
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0o600))
 	return cfgPath
+}
+
+func gitHubToken() string {
+	return cmp.Or(os.Getenv("GITHUB_TOKEN"), os.Getenv("GH_TOKEN"))
 }
 
 // AssertGitHubArchiveAtCommit verifies the file at path is GitHub's gzipped
