@@ -1,0 +1,172 @@
+# This is the monolithic release flow described in ADR 25
+name: Release Go Bindings
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Bump Mode (major, minor, patch, none)"
+        required: false
+        type: string
+        default: "patch"
+        #options: [patch, minor, major, none] # temporary guard, remove when confident in the release process
+        options: [patch]
+      suffix:
+        description: "optional suffix for the tag (e.g. alpha1 can lead to v0.0.0-alpha1)"
+        required: false
+        type: string
+      dry_run:
+        description: "Perform a dry run without pushing tags"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      new_tag: ${{ steps.version.outputs.new_tag }}
+      changelog_b64: ${{ steps.changelog.outputs.changelog_b64 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          prefix="bindings/go/v"
+          latest=$(git tag --list "${prefix}[0-9]*" | sort -V | tail -n1)
+          if [ -z "$latest" ]; then
+            # Only necessary for the very first release
+            latest_commit=$(git rev-list --max-parents=0 HEAD)
+            version="0.0.0"
+          else
+            latest_commit=$(git rev-list -n 1 "$latest")
+            version=${latest#${prefix}}
+          fi
+
+          echo "latest_commit=$latest_commit" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate new version
+        id: version
+        env:
+          PREV_VERSION: ${{ steps.get_tag.outputs.version }}
+          INPUT_BUMP: ${{ github.event.inputs.bump }}
+          INPUT_SUFFIX: ${{ github.event.inputs.suffix }}
+        run: |
+          version="${PREV_VERSION}"
+          bump="${INPUT_BUMP}"
+          clean_version=$(echo "$version" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')
+          major=$(echo "$clean_version" | cut -d. -f1)
+          minor=$(echo "$clean_version" | cut -d. -f2)
+          patch=$(echo "$clean_version" | cut -d. -f3)
+
+          major=${major:-0}
+          minor=${minor:-0}
+          patch=${patch:-0}
+
+          case "$bump" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+            none) ;;
+            *) echo "Invalid bump: $bump"; exit 1 ;;
+          esac
+
+          new_tag="bindings/go/v${major}.${minor}.${patch}"
+
+          if [ -n "${INPUT_SUFFIX}" ]; then
+            new_tag="${new_tag}-${INPUT_SUFFIX}"
+          fi
+
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build changelog
+        id: changelog
+        env:
+          FROM_COMMIT: ${{ steps.get_tag.outputs.latest_commit }}
+          NEW_TAG: ${{ steps.version.outputs.new_tag }}
+        run: |
+          from="${FROM_COMMIT}"
+          to=HEAD
+
+          log=$(git log --pretty=format:"- %s (%h)" "$from".."$to" -- bindings/go/|| true)
+
+          if [ -z "$log" ]; then
+            log="No changes"
+          fi
+
+          msg="Release ${NEW_TAG}"$'\n\n'"$log"
+
+          encoded=$(printf "%s" "$msg" | base64 -w0)
+          echo "changelog_b64=$encoded" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize
+        env:
+          NEW_TAG: ${{ steps.version.outputs.new_tag }}
+          CHANGELOG_B64: ${{ steps.changelog.outputs.changelog_b64 }}
+        run: |
+          echo "## Dry run – would create tag:" >> "$GITHUB_STEP_SUMMARY"
+          echo "${NEW_TAG}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Changelog" >> "$GITHUB_STEP_SUMMARY"
+          echo "${CHANGELOG_B64}" | base64 -d >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guard version ceiling
+        env:
+          VERSION: ${{ steps.version.outputs.new_tag }}
+        run: |
+          major=$(echo "$VERSION" | cut -d. -f1)
+          minor=$(echo "$VERSION" | cut -d. -f2)
+          if [ "$major" -ne 0 ] || [ "$minor" -ne 0 ]; then
+            echo "::error::Version $VERSION exceeds 0.0.x ceiling — remove this guard when ready for 0.1.0"
+            exit 1
+          fi
+
+  release:
+    if: ${{ inputs.dry_run == false }}
+    needs: version
+    environment:
+      name: go-modules
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Generate token
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the tag.
+          permission-contents: write
+      - name: Setup git config
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and Push Tag
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+          NEW_TAG: ${{ needs.version.outputs.new_tag }}
+          CHANGELOG_B64: ${{ needs.version.outputs.changelog_b64 }}
+        run: |
+          tag="${NEW_TAG}"
+          msg=$(echo "${CHANGELOG_B64}" | base64 -d)
+
+          printf "%s\n" "$msg" > .tagmsg
+          git tag -a "$tag" -F .tagmsg
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin "$tag"
