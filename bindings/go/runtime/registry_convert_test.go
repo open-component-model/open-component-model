@@ -191,6 +191,152 @@ func TestConvert_Errors(t *testing.T) {
 	})
 }
 
+// newUnstructured builds an Unstructured with the given type string and foo value.
+func newUnstructured(typ, foo string) *runtime.Unstructured {
+	u := runtime.NewUnstructured()
+	u.Data["type"] = typ
+	u.Data["foo"] = foo
+	return &u
+}
+
+func TestConvert_UnstructuredToTyped(t *testing.T) {
+	proto := &TestType{}
+	scheme := runtime.NewScheme()
+	scheme.MustRegister(proto, "v1")
+	typ := scheme.MustTypeForPrototype(proto)
+
+	from := newUnstructured("TestType/v1", "bar")
+	into := &TestType{}
+
+	require.NoError(t, scheme.Convert(from, into))
+	assert.Equal(t, "bar", into.Foo)
+	assert.Equal(t, typ, into.Type)
+}
+
+func TestConvert_TypedToUnstructured(t *testing.T) {
+	proto := &TestType{}
+	scheme := runtime.NewScheme()
+	scheme.MustRegister(proto, "v1")
+	typ := scheme.MustTypeForPrototype(proto)
+
+	from := &TestType{Type: typ, Foo: "bar"}
+	into := runtime.NewUnstructured()
+
+	require.NoError(t, scheme.Convert(from, &into))
+	assert.Equal(t, "bar", into.Data["foo"])
+	assert.Equal(t, typ, into.GetType())
+}
+
+func TestConvert_TypedToUnstructured_NilData(t *testing.T) {
+	proto := &TestType{}
+	scheme := runtime.NewScheme()
+	scheme.MustRegister(proto, "v1")
+	typ := scheme.MustTypeForPrototype(proto)
+
+	from := &TestType{Type: typ, Foo: "bar"}
+	// zero-value Unstructured has a nil Data map; Convert must allocate it.
+	into := &runtime.Unstructured{}
+
+	require.NoError(t, scheme.Convert(from, into))
+	require.NotNil(t, into.Data)
+	assert.Equal(t, "bar", into.Data["foo"])
+}
+
+func TestConvert_UnstructuredToUnstructured(t *testing.T) {
+	scheme := runtime.NewScheme()
+	scheme.MustRegister(&TestType{}, "v1")
+
+	from := newUnstructured("TestType/v1", "bar")
+	into := runtime.NewUnstructured()
+
+	require.NoError(t, scheme.Convert(from, &into))
+	assert.Equal(t, from.Data, into.Data)
+	// deep copy: mutating the source map must not affect the target.
+	from.Data["foo"] = "mutated"
+	assert.Equal(t, "bar", into.Data["foo"])
+}
+
+func TestConvert_UnstructuredToRaw(t *testing.T) {
+	proto := &TestType{}
+	scheme := runtime.NewScheme()
+	scheme.MustRegister(proto, "v1")
+	typ := scheme.MustTypeForPrototype(proto)
+
+	from := newUnstructured("TestType/v1", "bar")
+	into := &runtime.Raw{}
+
+	require.NoError(t, scheme.Convert(from, into))
+	assert.Equal(t, typ, into.Type)
+	assert.JSONEq(t, `{"type":"TestType/v1","foo":"bar"}`, string(into.Data))
+}
+
+func TestConvert_RawToUnstructured(t *testing.T) {
+	proto := &TestType{}
+	scheme := runtime.NewScheme()
+	scheme.MustRegister(proto, "v1")
+	typ := scheme.MustTypeForPrototype(proto)
+
+	from := &runtime.Raw{Type: typ, Data: []byte(`{"type":"TestType/v1","foo":"bar"}`)}
+	into := runtime.NewUnstructured()
+
+	require.NoError(t, scheme.Convert(from, &into))
+	assert.Equal(t, "bar", into.Data["foo"])
+	assert.Equal(t, typ, into.GetType())
+}
+
+// TestConvert_Unstructured_RoundTrip verifies Typed → Unstructured → Typed is lossless.
+func TestConvert_Unstructured_RoundTrip(t *testing.T) {
+	proto := &TestType{}
+	scheme := runtime.NewScheme()
+	scheme.MustRegister(proto, "v1")
+	typ := scheme.MustTypeForPrototype(proto)
+
+	original := &TestType{Type: typ, Foo: "bar"}
+
+	u := runtime.NewUnstructured()
+	require.NoError(t, scheme.Convert(original, &u))
+
+	roundTripped := &TestType{}
+	require.NoError(t, scheme.Convert(&u, roundTripped))
+
+	assert.Equal(t, original, roundTripped)
+}
+
+func TestConvert_UnstructuredErrors(t *testing.T) {
+	t.Run("unstructured → typed unregistered type", func(t *testing.T) {
+		scheme := runtime.NewScheme()
+		from := newUnstructured("TestType/v1", "bar")
+		err := scheme.Convert(from, &TestType{})
+		assert.Error(t, err)
+	})
+
+	t.Run("typed → unstructured unregistered type", func(t *testing.T) {
+		scheme := runtime.NewScheme()
+		typ := runtime.NewVersionedType("TestType", "v1")
+		into := runtime.NewUnstructured()
+		err := scheme.Convert(&TestType{Type: typ, Foo: "bar"}, &into)
+		assert.Error(t, err)
+	})
+}
+
+func TestConvert_Unstructured_AllowUnknown(t *testing.T) {
+	t.Run("unstructured → typed", func(t *testing.T) {
+		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+		from := newUnstructured("TestType/v1", "bar")
+		into := &TestType{}
+		require.NoError(t, scheme.Convert(from, into))
+		assert.Equal(t, "bar", into.Foo)
+	})
+
+	t.Run("typed → unstructured", func(t *testing.T) {
+		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+		typ := runtime.NewVersionedType("TestType", "v1")
+		into := runtime.NewUnstructured()
+		require.NoError(t, scheme.Convert(&TestType{Type: typ, Foo: "bar"}, &into))
+		assert.Equal(t, "bar", into.Data["foo"])
+	})
+}
+
 func TestConvert_AllowUnknown(t *testing.T) {
 	typ := runtime.NewVersionedType("TestType", "v1")
 	raw := &runtime.Raw{
