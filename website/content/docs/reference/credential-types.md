@@ -29,6 +29,7 @@ OCM ships with the following built-in credential types:
 |------------------------------------------------------------|------------------------------------------|-----------------------------------------------------------------|
 | [`OCICredentials/v1`](#ocicredentialsv1)                   | `OCIRegistry` consumers                  | OCI registry username/password and token auth                   |
 | [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1)         | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs                  |
+| [`WgetCredentials/v1`](#wgetcredentialsv1)                 | `Wget` consumers                         | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
 | [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
 | [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
 | [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers      | OIDC token for Sigstore keyless signing via Fulcio              |
@@ -139,6 +140,79 @@ consumers:
 
 [`HelmChartRepository`]({{< relref "credential-consumer-identities.md#helmchartrepository" >}}) consumer identities that
 use HTTP/S transport. For OCI-based Helm repositories, use `OCICredentials/v1` instead.
+
+---
+
+## WgetCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/wget/v1/WgetCredentials.schema.json" >}}
+
+### Example
+
+HTTP Basic Auth:
+
+```yaml
+consumers:
+  - identity:
+      type: Wget
+      hostname: downloads.example.com
+      scheme: https
+    credentials:
+      - type: WgetCredentials/v1
+        username: my-user
+        password: my-password
+```
+
+Bearer token:
+
+```yaml
+consumers:
+  - identity:
+      type: Wget
+      hostname: api.example.com
+      scheme: https
+      path: artifacts/*
+    credentials:
+      - type: WgetCredentials/v1
+        identityToken: eyJhbGciOi...
+```
+
+Mutual TLS with a private CA:
+
+```yaml
+consumers:
+  - identity:
+      type: Wget
+      hostname: artifacts.internal
+      scheme: https
+    credentials:
+      - type: WgetCredentials/v1
+        certificate: |
+          -----BEGIN CERTIFICATE-----
+          MIIDdzCCAl+gAwIBAgIEbGVnYWw...
+          -----END CERTIFICATE-----
+        privateKey: |
+          -----BEGIN PRIVATE KEY-----
+          MIIEvQIBADANBgkqhkiG9w0BAQ...
+          -----END PRIVATE KEY-----
+        certificateAuthority: |
+          -----BEGIN CERTIFICATE-----
+          MIIDQTCCAimgAwIBAgITBmyf...
+          -----END CERTIFICATE-----
+```
+
+{{< callout context="note" >}}
+`username`/`password` and `identityToken` both set the `Authorization` header and are mutually exclusive. When both are
+present, the bearer token is used and a warning is logged. The mutual TLS pair (`certificate` + `privateKey`) is a
+transport-layer credential and can be combined with either. `certificateAuthority` is only evaluated when `certificate`
+is set, and a client certificate has no effect on a plain `http://` URL.
+{{< /callout >}}
+
+### Used With
+
+[`Wget`]({{< relref "credential-consumer-identities.md#wget" >}}) consumer identities, covering both the
+[`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
+[`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}).
 
 ---
 
