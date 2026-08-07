@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/opencontainers/go-digest"
-	"oras.land/oras-go/v2/registry"
 
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,17 +43,19 @@ type OCIImageLayer struct {
 	Size int64 `json:"size"`
 }
 
+// Validate parses the reference with looseref so that the scheme-prefixed form
+// (http://host/repo) the binding accepts for plain-HTTP registries is not rejected.
 func (t *OCIImageLayer) Validate() error {
 	if err := t.Digest.Validate(); err != nil {
-		return err
+		return fmt.Errorf("invalid digest %q: %w", t.Digest, err)
 	}
 	if t.Size < 0 {
 		return fmt.Errorf("size %d is invalid, must be greater than 0", t.Size)
 	}
 	if t.Reference == "" {
-		return fmt.Errorf("reference is empty")
+		return fmt.Errorf("no reference set in field %q", "ref")
 	}
-	ref, err := registry.ParseReference(t.Reference)
+	ref, err := looseref.ParseReference(t.Reference)
 	if err != nil {
 		return fmt.Errorf("invalid reference %q: %w", t.Reference, err)
 	}

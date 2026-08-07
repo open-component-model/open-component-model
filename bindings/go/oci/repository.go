@@ -281,9 +281,50 @@ func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descript
 		return repo.ProcessResourceDigest(ctx, res)
 	case *accessv1.OCIImage:
 		return repo.processOCIImageDigest(ctx, res, typed)
+	case *accessv1.OCIImageLayer:
+		return repo.processOCIImageLayerDigest(ctx, res, typed)
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
+}
+
+func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImageLayer) (*descriptor.Resource, error) {
+	if err := typed.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid OCI image layer access: %w", err)
+	}
+
+	src, err := repo.resolver.StoreForReference(ctx, typed.Reference)
+	if err != nil {
+		return nil, err
+	}
+
+	// A layer is always addressed by digest, so its descriptor is fully known here.
+	// Exists checks the blob endpoint; Resolve would query the manifest one and 404.
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: typed.MediaType,
+		Digest:    typed.Digest,
+		Size:      typed.Size,
+	}
+	exists, err := src.Exists(ctx, desc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify existence of layer %q in %q: %w", typed.Digest, typed.Reference, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("layer %q does not exist in %q", typed.Digest, typed.Reference)
+	}
+
+	if res.Digest == nil {
+		res.Digest = &descriptor.Digest{}
+		if err := internaldigest.Apply(res.Digest, typed.Digest); err != nil {
+			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		}
+	} else if err := internaldigest.Verify(res.Digest, typed.Digest); err != nil {
+		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+	}
+
+	res.Access = typed
+
+	return res, nil
 }
 
 func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImage) (*descriptor.Resource, error) {
@@ -768,6 +809,21 @@ func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, 
 			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve subject %q for ownership referrer: %w", typed.ImageReference, err)
 		}
 		return store, subject, nil
+	case *accessv1.OCIImageLayer:
+		if err := typed.Validate(); err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid OCI image layer access: %w", err)
+		}
+		store, err := repo.resolver.StoreForReference(ctx, typed.Reference)
+		if err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, err
+		}
+		// A referrer needs a manifest to point at and a bare blob is not one, so the
+		// subject returned here is deliberately skipped by buildAndPushOwnershipReferrer.
+		return store, ociImageSpecV1.Descriptor{
+			MediaType: typed.MediaType,
+			Digest:    typed.Digest,
+			Size:      typed.Size,
+		}, nil
 	default:
 		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported resource access type for ownership referrer: %T", typed)
 	}
@@ -1099,6 +1155,29 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			},
 			TempDir: repo.tempDir,
 			Tags:    tags,
+		}, nil
+	case *accessv1.OCIImageLayer:
+		if err := typed.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid OCI image layer access: %w", err)
+		}
+
+		src, err := repo.resolver.StoreForReference(ctx, typed.Reference)
+		if err != nil {
+			return nil, err
+		}
+
+		graph, ok := src.(content.ReadOnlyGraphStorage)
+		if !ok {
+			return nil, fmt.Errorf("store %T does not support predecessor walks", src)
+		}
+		// Addressed by digest, so unlike the OCIImage case above nothing needs resolving.
+		return &ocistream.OCILayerResourceStream{
+			ReadOnlyGraphStorage: graph,
+			Descriptor: ociImageSpecV1.Descriptor{
+				MediaType: typed.MediaType,
+				Digest:    typed.Digest,
+				Size:      typed.Size,
+			},
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
