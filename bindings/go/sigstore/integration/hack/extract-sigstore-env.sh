@@ -89,9 +89,12 @@ cosign signing-config create \
 # scaffolding CA chain without network access to the public TUF mirror.
 TUF_MIRROR=$(kubectl -n tuf-system get ksvc tuf -ojsonpath='{.status.url}')
 require_nonempty TUF_MIRROR "$TUF_MIRROR"
+# Compute the mirror URL once so `cosign initialize` and the cache-path
+# derivation below refer to the exact same mirror.
+TUF_MIRROR_URL=$(bridge_url "$TUF_MIRROR")
 kubectl -n tuf-system get secrets tuf-root -ojsonpath='{.data.root}' | base64 -d > "$WORK_DIR/tuf-root.json"
 require_nonempty "tuf-root.json" "$(cat "$WORK_DIR/tuf-root.json")"
-cosign initialize --mirror "$(bridge_url "$TUF_MIRROR")" --root "$WORK_DIR/tuf-root.json" >&2
+cosign initialize --mirror "$TUF_MIRROR_URL" --root "$WORK_DIR/tuf-root.json" >&2
 
 # Fix the Rekor tlog entry in our hand-built trusted root.
 #
@@ -101,11 +104,28 @@ cosign initialize --mirror "$(bridge_url "$TUF_MIRROR")" --root "$WORK_DIR/tuf-r
 # with "not enough verified log entries" -- the key is right, only the logId is off.
 #
 # The scaffolding's TUF mirror publishes a trusted_root.json with the correct logId, so copy
-# its tlogs entry over ours (Fulcio, CTLog and TSA stay as they are). `cosign initialize`
-# above cached that file under ~/.sigstore/root/<mirror>/targets/; the find below searches
-# only there, not the sibling ~/.sigstore/root.local-backup-* dirs.
-TUF_TRUSTED_ROOT=$(find "${HOME}/.sigstore/root" -path '*/targets/trusted_root.json' 2>/dev/null | head -1)
-require_nonempty "TUF_TRUSTED_ROOT" "${TUF_TRUSTED_ROOT}"
+# its tlogs entry over ours (Fulcio, CTLog and TSA stay as they are).
+#
+# cosign caches the mirror under ~/.sigstore/root/<dir>/targets/, where <dir> is the mirror
+# URL transformed by sigstore-go's URLToPath(): drop the scheme, replace "/" and ":" with
+# "-", then lowercase. We reproduce that transform so we read trusted_root.json from the
+# exact mirror we just initialized -- not whatever unrelated ~/.sigstore/root entry (e.g. a
+# cached public-good root, or a stale run with a different bridge port) happens to sort first.
+# Ref: https://github.com/sigstore/sigstore-go/blob/main/pkg/tuf/client.go (URLToPath)
+mirror_cache_dirname() {
+  local url="$1"
+  url="${url#http://}"          # strip scheme
+  url="${url#https://}"
+  url="${url//\//-}"            # "/" -> "-"
+  url="${url//:/-}"             # ":" -> "-"
+  printf '%s' "$url" | tr '[:upper:]' '[:lower:]'
+}
+TUF_TRUSTED_ROOT="${HOME}/.sigstore/root/$(mirror_cache_dirname "$TUF_MIRROR_URL")/targets/trusted_root.json"
+if [[ ! -f "$TUF_TRUSTED_ROOT" ]]; then
+  echo "extract-sigstore-env: cosign TUF cache missing at $TUF_TRUSTED_ROOT" >&2
+  echo "  (did 'cosign initialize --mirror $TUF_MIRROR_URL' run against this mirror?)" >&2
+  exit 1
+fi
 jq --slurpfile tuf "${TUF_TRUSTED_ROOT}" '.tlogs = $tuf[0].tlogs' \
   "${WORK_DIR}/trusted_root.json" > "${WORK_DIR}/trusted_root.spliced.json"
 mv "${WORK_DIR}/trusted_root.spliced.json" "${WORK_DIR}/trusted_root.json"
