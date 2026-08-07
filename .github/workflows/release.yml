@@ -276,6 +276,7 @@ jobs:
       contents: read
       packages: write
       actions: read
+      id-token: write # forwarded to publish-components.yml for keyless Sigstore signing
     uses: ./.github/workflows/publish-components.yml
     with:
       version: ${{ needs.prepare.outputs.new_version }}
@@ -532,7 +533,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.2
+          version: v4.2.3
 
       - name: Re-package final chart
         working-directory: ${{ env.CONTROLLER_PATH }}
@@ -671,6 +672,7 @@ jobs:
       contents: read
       packages: write
       actions: read
+      id-token: write # forwarded to publish-components.yml for keyless Sigstore signing
     uses: ./.github/workflows/publish-components.yml
     with:
       version: ${{ needs.prepare.outputs.base_version }}

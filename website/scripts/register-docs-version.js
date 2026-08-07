@@ -223,6 +223,7 @@ const CLI_DERIVED_MODULES = [
     `${MODULE_PREFIX}/bindings/go/oci`,
     `${MODULE_PREFIX}/bindings/go/rsa`,
     `${MODULE_PREFIX}/bindings/go/sigstore`,
+    `${MODULE_PREFIX}/bindings/go/wget`,
 ];
 
 // Build import blocks for a given version (pure when deps are passed, testable).
@@ -240,6 +241,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
     const ociVersion = deps?.[`${MODULE_PREFIX}/bindings/go/oci`];
     const rsaVersion = deps?.[`${MODULE_PREFIX}/bindings/go/rsa`];
     const sigstoreVersion = deps?.[`${MODULE_PREFIX}/bindings/go/sigstore`];
+    const wgetVersion = deps?.[`${MODULE_PREFIX}/bindings/go/wget`];
 
     // Hugo passes `version:` verbatim to `go mod download <path>@<version>`,
     // which expects a Go module version (e.g. v0.9.0), not the git tag form
@@ -361,6 +363,15 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
+            path: `${MODULE_PREFIX}/bindings/go/wget`,
+            version: wgetVersion,
+            mounts: [{
+                source: 'spec/credentials/v1/schemas',
+                target: `static/${version}/schemas/bindings/go/credentials/wget/v1`,
+                sites: { matrix: { versions: [version] } }
+            }]
+        },
+        {
             path: `${MODULE_PREFIX}/kubernetes/controller`,
             version: `v${fullVersion}`,
             mounts: [{
@@ -439,6 +450,8 @@ function updateImportTags(parsed, version, fullVersion, deps) {
             newTag = deps[`${MODULE_PREFIX}/bindings/go/sigstore`];
         } else if (deps && imp.path.endsWith('/bindings/go/credentials')) {
             newTag = deps[`${MODULE_PREFIX}/bindings/go/credentials`];
+        } else if (deps && imp.path.endsWith('/bindings/go/wget')) {
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/wget`];
         }
 
         if (newTag && imp.version !== newTag) {

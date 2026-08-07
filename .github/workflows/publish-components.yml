@@ -1,15 +1,8 @@
 name: Publish OCM components
 
-# Publishes ocm.software/{cli,kubernetes/controller,ocm} component-versions to
-# GHCR. The `ocm` CLI is run from the multi-arch CLI OCI image this release just
-# built. Its ENTRYPOINT is `/ocm`, so `docker run <image>
-# add component-version ...` invokes the CLI directly. Running from the image
-# avoids deriving a binary name from the runner architecture.
-#
-# The CLI binaries referenced by the constructor are pulled by the CLI on demand
-# from their GitHub release download URLs (using wget access type); the image and chart are
-# pinned by digest. All three components are defined in a single constructor file
-# and pushed in one call; the OCM CLI resolves dependency order automatically.
+# Publishes and signs ocm.software/{cli,kubernetes/controller,ocm} component versions to GHCR.
+# Runs the OCM CLI from the multi-arch CLI image (ENTRYPOINT /ocm) to avoid architecture-specific binary names.
+# After publishing, signs each component-version keyless with Sigstore using the GHA OIDC token.
 
 on:
   workflow_call:
@@ -53,11 +46,15 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # we use the GitHub Actions OIDC token as the Sigstore signing identity
     steps:
       - name: Checkout component constructor
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          sparse-checkout: .github/components
+          # use same .env file as in bindings to determine cosign version
+          sparse-checkout: |
+            .github/components
+            bindings/go/sigstore/signing/handler/internal/.env
           persist-credentials: 'false'
 
       - name: Compute image refs
@@ -77,6 +74,9 @@ jobs:
             echo "CONTROLLER_IMAGE_REF=$REGISTRY/$OWNER/kubernetes/controller:${VERSION}@${CONTROLLER_IMAGE_DIGEST}"
             echo "CONTROLLER_CHART_REF=$REGISTRY/$OWNER/kubernetes/controller/chart:${VERSION}@${CONTROLLER_CHART_DIGEST}"
             echo "CLI_DOWNLOAD_URL=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
+            echo "OCM_COMPONENT_REF=$REGISTRY/$OWNER//ocm.software/ocm:${VERSION}"
+            echo "CLI_COMPONENT_REF=$REGISTRY/$OWNER//ocm.software/cli:${VERSION}"
+            echo "CONTROLLER_COMPONENT_REF=$REGISTRY/$OWNER//ocm.software/kubernetes/controller:${VERSION}"
           } >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
@@ -89,7 +89,6 @@ jobs:
       - name: Write OCM config
         run: |
           set -euo pipefail
-          # Path is the in-container mount target, not the runner path.
           cat > "$HOME/.ocmconfig" <<'EOF'
           type: generic.config.ocm.software/v1
           configurations:
@@ -101,9 +100,7 @@ jobs:
                     propagateConsumerIdentity: true
           EOF
 
-      # The CLI image ENTRYPOINT is `/ocm`, so the args after the image name are
-      # passed straight to the CLI. The constructor's ${VAR} placeholders are
-      # expanded by the CLI (os.Expand) from the -e vars passed into the container.
+      # The CLI image ENTRYPOINT is `/ocm`; args after the image name go straight to the CLI.
       - name: Publish component-versions
         env:
           VERSION: ${{ inputs.version }}
@@ -129,3 +126,51 @@ jobs:
               --repository "$REPO_ROOT" \
               --constructor "$CONSTRUCTOR" \
               --component-version-conflict-policy "$CONFLICT_POLICY"
+
+      # cosign is not in the scratch CLI image; install on runner and bind-mount in.
+      # Version is the single source of truth from bindings/go/sigstore/signing/handler/internal/.env,
+      # tracked by Renovate.
+      - name: Read cosign version from .env
+        run: |
+          set -euo pipefail
+          . bindings/go/sigstore/signing/handler/internal/.env
+          echo "COSIGN_VERSION=${COSIGN_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      # scratch image has no /tmp or $HOME: mount tmpfs and forward GHA OIDC vars explicitly.
+      - name: Sign component-versions (keyless Sigstore)
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          # Write a minimal SigstoreSigningConfiguration to a file for the CLI to read.
+          echo 'type: SigstoreSigningConfiguration/v1alpha1' > "${WORKSPACE}/sigstore-sign.yaml"
+          # readlink -f required: cosign-installer may expose a symlink; bind-mount needs a real path.
+          COSIGN_BIN="$(readlink -f "$(command -v cosign)")"
+
+          for ref in "$OCM_COMPONENT_REF" "$CLI_COMPONENT_REF" "$CONTROLLER_COMPONENT_REF"; do
+            echo "::group::Signing ${ref}"
+            docker run --rm \
+              --tmpfs /tmp:rw,exec \
+              -e HOME=/tmp \
+              -e TMPDIR=/tmp \
+              -e PATH=/usr/local/bin:/usr/bin:/bin \
+              -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+              -e ACTIONS_ID_TOKEN_REQUEST_URL \
+              -v "${COSIGN_BIN}:/usr/local/bin/cosign:ro" \
+              -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
+              -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
+              -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
+              -v "${WORKSPACE}:${WORKSPACE}:ro" \
+              -w "${WORKSPACE}" \
+              "$CLI_IMAGE_REF" \
+                sign component-version \
+                --config "/.ocmconfig" \
+                --signer-spec "${WORKSPACE}/sigstore-sign.yaml" \
+                "$ref"
+            echo "::endgroup::"
+          done

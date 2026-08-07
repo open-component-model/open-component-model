@@ -61,13 +61,14 @@ spec:
               target:
                 kind: Deployment
                 name: .*
+            # Drop podinfo's HPA: the e2e cluster has no metrics-server, so the HPA can never
+            # become healthy and only adds noise to the deployment validation.
             - patch: |
-                - op: replace
-                  path: /spec/minReplicas
-                  value: 1
-                - op: replace
-                  path: /spec/maxReplicas
-                  value: 1
+                apiVersion: autoscaling/v2
+                kind: HorizontalPodAutoscaler
+                metadata:
+                  name: podinfo
+                $patch: delete
               target:
                 kind: HorizontalPodAutoscaler
                 name: .*
@@ -99,13 +100,14 @@ spec:
                   target:
                     kind: Deployment
                     name: podinfo
+                # Drop podinfo's HPA: the e2e cluster has no metrics-server, so the HPA reports
+                # ScalingActive=False and ArgoCD (>= v3.5.0) marks the Application Degraded.
                 - patch: |
-                    - op: replace
-                      path: /spec/minReplicas
-                      value: 1
-                    - op: replace
-                      path: /spec/maxReplicas
-                      value: 1
+                    apiVersion: autoscaling/v2
+                    kind: HorizontalPodAutoscaler
+                    metadata:
+                      name: podinfo
+                    $patch: delete
                   target:
                     kind: HorizontalPodAutoscaler
                     name: podinfo
