@@ -331,7 +331,7 @@ jobs:
     # Runner override map — add entries to run specific modules on a different runner.
     # Modules not listed here use the default: ubuntu-24.04-arm.
     # Example: '{"some/module/integration":"ubuntu-latest","other":"ubuntu-22.04"}'
-    runs-on: ${{ fromJSON('{"bindings/go/sigstore/integration":"ubuntu-latest"}')[matrix.module] || 'ubuntu-24.04-arm' }}
+    runs-on: ${{ fromJSON('{}')[matrix.module] || 'ubuntu-24.04-arm' }}
     if: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
