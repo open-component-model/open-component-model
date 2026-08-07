@@ -322,6 +322,30 @@ On public Sigstore (`oauth2.sigstore.dev`), the issuer recorded in the signing c
 Both `certificateOIDCIssuer` and `certificateIdentity` are required. They're what *makes* the signature meaningful — without them you'd be accepting any Sigstore signature from anyone.
 {{< /callout >}}
 
+{{< details "Read the identity from an existing signature" >}}
+
+Already have a signed component version and want the exact identity to paste into your spec? Decode the Fulcio certificate. The OIDC issuer is recorded under the Sigstore-defined OID `1.3.6.1.4.1.57264.1.1`; for interactive (browser) logins the identity is the `email:` entry in the Subject Alternative Name. The cert is buried two base64 layers deep:
+
+```bash
+REF=ctf::./ctf//github.com/acme.org/helloworld:1.0.0
+
+ocm get cv "$REF" -o yaml \
+  | yq '.[].signatures[]? | select(.signature.algorithm == "Sigstore/v1alpha1") | .signature.value' \
+  | head -1 | base64 -d | jq -r '.verificationMaterial.certificate.rawBytes' \
+  | base64 -d | openssl x509 -inform DER -noout -text \
+  | awk '
+    /1.3.6.1.4.1.57264.1.1:/ {flag="issuer"; next}
+    /^[[:space:]]*X509v3 /    {san=0}
+    /Subject Alternative Name/ {san=1}
+    san && /^ *email:/ {sub(/^[ \t]*email:/,""); print "certificateIdentity:    " $0; next}
+    flag=="issuer" {sub(/^[ \t]+/,""); print "certificateOIDCIssuer: " $0; flag=""}
+  '
+```
+
+Output is two lines you can paste straight into your verifier spec. (CI/workload signatures use a `URI:` SAN instead — see the Sigstore (CI) tab.)
+
+{{< /details >}}
+
 {{< /step >}}
 
 {{< step >}}
@@ -405,7 +429,7 @@ stderr: Error: failed to verify certificate identity: no matching CertificateIde
 ```
 
 <!-- TODO(#2588): once the Sigstore tutorial lands on main, restore the relref to docs/tutorials/signing/sigstore.md around "Tutorial: Sigstore (Keyless) — Inspect the signature" -->
-**Fix:** Update `certificateIdentity` / `certificateOIDCIssuer` in your verifier spec to match the identity actually recorded in the signature. Watch for trailing slashes and capitalization. To read the actual identity stored in the signature, see Tutorial: Sigstore (Keyless) — Inspect the signature.
+**Fix:** Update `certificateIdentity` / `certificateOIDCIssuer` in your verifier spec to match the identity actually recorded in the signature. Watch for trailing slashes and capitalization. To read the actual identity recorded in the signature, use the decode recipe in Step 1 (or see Tutorial: Sigstore (Keyless) — Inspect the signature).
 
 ### Symptom: "keyless verification requires both an issuer constraint ... and an identity constraint"
 
@@ -472,7 +496,9 @@ The mechanism is the same; only the issuer URL and identity shape are provider-s
     | base64 -d | openssl x509 -inform DER -noout -text \
     | awk '
       /1.3.6.1.4.1.57264.1.1:/ {flag="issuer"; next}
-      /URI:/ {sub(/.*URI:[ \t]*/,""); print "certificateIdentity:    " $0; next}
+      /^[[:space:]]*X509v3 /    {san=0}
+      /Subject Alternative Name/ {san=1}
+      san && /URI:/ {sub(/.*URI:[ \t]*/,""); print "certificateIdentity:    " $0; next}
       flag=="issuer" {sub(/^[ \t]+/,""); print "certificateOIDCIssuer: " $0; flag=""}
     '
   ```
