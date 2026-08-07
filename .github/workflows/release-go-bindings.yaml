@@ -44,7 +44,7 @@ jobs:
           latest=$(git tag --list "${prefix}[0-9]*" | sort -V | tail -n1)
           if [ -z "$latest" ]; then
             # Only necessary for the very first release
-            latest_commit=$(git rev-list --max-parents=0 HEAD)
+            latest_commit=$(git rev-list -n 1 HEAD)
             version="0.0.0"
           else
             latest_commit=$(git rev-list -n 1 "$latest")
@@ -99,10 +99,11 @@ jobs:
 
           log=$(git log --pretty=format:"- %s (%h)" "$from".."$to" -- bindings/go/|| true)
 
-          if [ -z "$log" ]; then
+          if [ -z "$log" ] && [[ "${NEW_TAG}" == bindings/go/v0.0.1* ]]; then
+            log="Initial monolithic release"
+          elif [ -z "$log" ]; then
             log="No changes"
           fi
-
           msg="Release ${NEW_TAG}"$'\n\n'"$log"
 
           encoded=$(printf "%s" "$msg" | base64 -w0)
