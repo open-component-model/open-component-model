@@ -365,6 +365,23 @@ tar tvf helmchart-tgz/podinfo-6.8.0.tgz
 
 {{< /details >}}
 
+## Controlling the Output Filename
+
+When `--output` is not provided, `ocm download resource` derives the filename from the resource name. If the resource has extra identity attributes, their values are appended as a hyphen-separated suffix to keep variants distinct:
+
+```shell
+# resource name=cli, extraIdentity os=linux,architecture=amd64 → file: cli-amd64-linux
+ocm download resource <repo>//<component>:<version> --identity name=cli,os=linux,architecture=amd64
+```
+
+Use `--output` to override the filename explicitly. This is required whenever the default name is unsuitable — for example, Windows executables must carry a `.exe` extension to be runnable:
+
+```shell
+ocm download resource <repo>//<component>:<version> \
+  --identity name=cli,os=windows,architecture=amd64 \
+  --output /tmp/ocm.exe
+```
+
 ## Specifying Resource Identity
 
 If multiple resources share the same name, use additional identity attributes:

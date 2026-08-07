@@ -951,6 +951,7 @@ OpenDeliveryGear
 linkable
 ification
 ifying
+exe
 Wget's
 presigned
 WgetCredentials
