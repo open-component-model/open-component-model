@@ -128,6 +128,7 @@ task cli:install # installs to /usr/local/bin (requires sudo)
 
 The binary is installed to `~/.local/bin` by default (per the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/latest/)).
 The installer verifies binary integrity via [GitHub attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds) when the [GitHub CLI (`gh`)](https://cli.github.com/) is available.
+Set `OCM_VERSION` to install a specific version, and pass a directory after `bash -s --` to control where the binary lands (default: `~/.local/bin`). Set `OCM_BIN_NAME` to install the binary under a custom name.
 Run `bash -s -- --help` after the pipe to see all options.
 
 <details>
@@ -150,6 +151,41 @@ If you encounter a Windows-specific issue, please report it at
 [github.com/open-component-model/open-component-model/issues](https://github.com/open-component-model/open-component-model/issues).
 
 </details>
+
+## Install a specific version
+
+By default the script installs the latest stable release. Set `OCM_VERSION` to pin to a specific version. Use `MAJOR.MINOR` for the latest patch on that series, or `MAJOR.MINOR.PATCH` for an exact release:
+
+```shell
+wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.12 bash
+# or with curl:
+curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.12 bash
+```
+
+### Side-by-side versions
+
+Set `OCM_BIN_NAME` to install the binary under a custom name (default: `ocm`). Combine it with a version suffix to keep multiple versions side by side in the same directory:
+
+```shell
+wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.12 OCM_BIN_NAME=ocm-v0.12 bash -s -- ~/.local/bin
+wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.11 OCM_BIN_NAME=ocm-v0.11 bash -s -- ~/.local/bin
+```
+
+Each installs the binary under the name you give it. Run by name if `~/.local/bin` is on your `PATH`, or by full path otherwise:
+
+```shell
+# Run a specific version by name (if ~/.local/bin is on PATH)
+ocm-v0.12 version
+
+# Or by full path
+~/.local/bin/ocm-v0.12 version
+
+# Switch which version is active in your shell session
+ln -sf ~/.local/bin/ocm-v0.12 ~/.local/bin/ocm
+ocm version
+```
+
+This is useful for running v1 and v2 side by side during a migration, testing a release candidate, or reproducing version-specific behavior when debugging.
 
 ## Verify Installation
 
@@ -194,7 +230,7 @@ gh attestation verify $(which ocm) --repo open-component-model/open-component-mo
 {{< tab "Cosign (no GitHub auth)" >}}
 
 Uses [Sigstore cosign](https://docs.sigstore.dev/cosign/signing/overview/) to cryptographically verify the binary's provenance.
-No GitHub authentication required: the attestation API is public.
+No GitHub authentication required. The attestation API is public.
 
 ```shell
 # Compute the binary's SHA-256 digest
