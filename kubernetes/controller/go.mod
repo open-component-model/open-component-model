@@ -28,6 +28,8 @@ require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/docker/cli v29.6.1+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
+	github.com/opencontainers/go-digest v1.0.0
+	github.com/opencontainers/image-spec v1.1.1
 	golang.org/x/time v0.15.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16
@@ -45,6 +47,7 @@ require (
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260806060845-c76dd0f2a0f9
 	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260806060845-c76dd0f2a0f9
 	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260806061938-9a58bfdb01b2
+	oras.land/oras-go/v2 v2.6.2
 	sigs.k8s.io/release-utils v0.12.4
 )
 
@@ -106,8 +109,6 @@ require (
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nlepage/go-tarfs v1.2.1 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -156,7 +157,6 @@ require (
 	ocm.software/open-component-model/bindings/go/github v0.0.0-20260806060845-c76dd0f2a0f9 // indirect
 	ocm.software/open-component-model/bindings/go/http v0.0.0-20260806060845-c76dd0f2a0f9 // indirect
 	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260806060845-c76dd0f2a0f9 // indirect
-	oras.land/oras-go/v2 v2.6.2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect

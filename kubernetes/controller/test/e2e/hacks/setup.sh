@@ -157,7 +157,7 @@ install_argocd() {
 
   # Widen argocd-repo-server's OCI layer mediaType allowlist to include
   # flux-native artifacts (application/vnd.cncf.flux.content.v1.tar+gzip),
-  # used by ghcr.io/stefanprodan/manifests/podinfo in the
+  # produced from ./kustomize by test/utils.buildKustomizeOCILayout for the
   # kustomize-configuration-localization example. Defaults reproduced from
   # argocd's cmd/argocd-repo-server/commands/argocd_repo_server.go.
   kubectl -n argocd set env deploy/argocd-repo-server \

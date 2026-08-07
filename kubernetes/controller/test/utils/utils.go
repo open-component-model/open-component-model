@@ -1,8 +1,13 @@
 package utils
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +15,11 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2"
+	ocistore "oras.land/oras-go/v2/content/oci"
 )
 
 const (
@@ -30,7 +40,9 @@ func OCMBinary() string {
 
 // Run executes the provided command within this context.
 func Run(cmd *exec.Cmd) ([]byte, error) {
-	cmd.Dir = os.Getenv("PROJECT_DIR")
+	if cmd.Dir == "" {
+		cmd.Dir = os.Getenv("PROJECT_DIR")
+	}
 
 	cmd.Env = append(cmd.Env, os.Environ()...)
 	cmd.Env = append(cmd.Env, "GO110MODULE=on")
@@ -123,11 +135,21 @@ func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, im
 	tmpDir := GinkgoT().TempDir()
 	ctfDir := filepath.Join(tmpDir, "ctf")
 
+	exampleDir := filepath.Dir(componentConstructorPath)
+	if _, err := os.Stat(filepath.Join(exampleDir, "kustomize")); err == nil {
+		if err := buildKustomizeOCILayout(ctx, exampleDir); err != nil {
+			return fmt.Errorf("could not build kustomize oci layout: %w", err)
+		}
+	}
+
 	cmd := exec.CommandContext(ctx, ocm,
 		"add", "cv",
 		"--repository", ctfDir,
 		"--constructor", componentConstructorPath,
 	)
+	// OCM's dir/v1 input resolves paths relative to the process CWD (not the
+	// constructor's working directory), so run add cv from the example dir.
+	cmd.Dir = exampleDir
 	if _, err := Run(cmd); err != nil {
 		return fmt.Errorf("could not create ocm component: %w", err)
 	}
@@ -157,9 +179,6 @@ func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, im
 	By("transferring ocm component for " + name)
 	cmd = exec.CommandContext(ctx, ocm, "transfer", "cv", transferRef, imageRegistry)
 
-	// Add options depending on example name
-	// This is required because we cannot 'copy-resources' by default as this breaks the gitHub access which is
-	// converted to a localblob.
 	if strings.Contains(name, "nested") {
 		cmd.Args = append(cmd.Args, "--recursive")
 	}
@@ -173,6 +192,98 @@ func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, im
 	}
 
 	return nil
+}
+
+// buildKustomizeOCILayout packages exampleDir/kustomize into an OCI image
+// layout at exampleDir/oci-layout so the constructor's dir/v1 input can embed
+// it as a native OCI manifest. The layer carries the flux content media type
+// so a Flux OCIRepository can consume the artifact after transfer.
+func buildKustomizeOCILayout(ctx context.Context, exampleDir string) error {
+	layoutDir := filepath.Join(exampleDir, "oci-layout")
+	if err := os.RemoveAll(layoutDir); err != nil {
+		return fmt.Errorf("clean layout dir: %w", err)
+	}
+	if err := os.MkdirAll(layoutDir, 0o755); err != nil {
+		return fmt.Errorf("create layout dir: %w", err)
+	}
+
+	store, err := ocistore.New(layoutDir)
+	if err != nil {
+		return fmt.Errorf("open oci store: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tarGzipDir(&buf, filepath.Join(exampleDir, "kustomize")); err != nil {
+		return fmt.Errorf("tar kustomize: %w", err)
+	}
+
+	layerDesc := ocispec.Descriptor{
+		MediaType: "application/vnd.cncf.flux.content.v1.tar+gzip",
+		Digest:    digest.FromBytes(buf.Bytes()),
+		Size:      int64(buf.Len()),
+	}
+	if err := store.Push(ctx, layerDesc, bytes.NewReader(buf.Bytes())); err != nil {
+		return fmt.Errorf("push layer: %w", err)
+	}
+
+	manifestDesc, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1,
+		"application/vnd.cncf.flux.config.v1+json",
+		oras.PackManifestOptions{Layers: []ocispec.Descriptor{layerDesc}},
+	)
+	if err != nil {
+		return fmt.Errorf("pack manifest: %w", err)
+	}
+	if err := store.Tag(ctx, manifestDesc, "latest"); err != nil {
+		return fmt.Errorf("tag manifest: %w", err)
+	}
+	return nil
+}
+
+// tarGzipDir writes a gzip'd tar of dir's contents (paths relative to dir) to w.
+func tarGzipDir(w io.Writer, dir string) error {
+	gw := gzip.NewWriter(w)
+	tw := tar.NewWriter(gw)
+	walkErr := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		hdr, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		hdr.Name = filepath.ToSlash(rel)
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = io.Copy(tw, f)
+		return err
+	})
+	if cerr := tw.Close(); walkErr == nil {
+		walkErr = cerr
+	}
+	if cerr := gw.Close(); walkErr == nil {
+		walkErr = cerr
+	}
+	return walkErr
 }
 
 // writeSigningConfig writes an .ocmconfig that resolves the RSA credential

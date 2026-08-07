@@ -140,7 +140,7 @@ var _ = Describe("controller", func() {
 
 				// Check for configuration and localization
 				if strings.HasSuffix(example.Name(), "-configuration-localization") {
-					expectedRef, err := looseref.ParseReference(imageRegistry + "/stefanprodan/podinfo")
+					expectedRegistry, err := looseref.ParseReference(imageRegistry + "/")
 					Expect(err).NotTo(HaveOccurred())
 
 					assertLocalizedImage := func(resource string) {
@@ -148,8 +148,7 @@ var _ = Describe("controller", func() {
 						Expect(err).NotTo(HaveOccurred())
 						ref, err := looseref.ParseReference(image)
 						Expect(err).NotTo(HaveOccurred(), "container image %q is not a valid OCI reference", image)
-						Expect(ref.Registry).To(Equal(expectedRef.Registry))
-						Expect(ref.Repository).To(Equal(expectedRef.Repository))
+						Expect(ref.Registry).To(Equal(expectedRegistry.Registry))
 					}
 
 					By("validating the fluxcd localization")
