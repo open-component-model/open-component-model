@@ -72,7 +72,7 @@ When --output is not provided, the output filename is derived from the resource 
 	}
 
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
-	cmd.Flags().String(FlagOutput, "", "full output file path (directory + filename). Intermediate directories are created automatically.")
+	cmd.Flags().String(FlagOutput, "", "output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name with extra identity values appended as a hyphen-separated suffix.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
 	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
 		"policy to apply when extracting a resource. "+
