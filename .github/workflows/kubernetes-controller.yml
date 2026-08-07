@@ -65,7 +65,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.2
+          version: v4.2.3
 
       - name: Validate chart (generators + lint + template + drift check)
         working-directory: ${{ env.LOCATION }}
@@ -119,7 +119,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.2
+          version: v4.2.3
 
       - name: Compute VERSION
         id: version
