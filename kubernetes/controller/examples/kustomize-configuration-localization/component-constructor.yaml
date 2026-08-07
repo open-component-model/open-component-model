@@ -5,14 +5,14 @@ components:
       name: ocm.software
     resources:
       - name: kustomize-resource
-        type: kustomization
+        type: ociArtifact
         version: "1.0.0"
-        access:
-          type: ociArtifact
-          # stefanprodan publishes the podinfo kustomize manifests as a flux-native
-          # OCI artifact; using it directly avoids maintaining our own snapshot and
-          # transfers cleanly (streaming path) into the target OCI registry.
-          imageReference: "ghcr.io/stefanprodan/manifests/podinfo:6.9.1"
+        input:
+          # ./oci-layout must be built from ./kustomize before running
+          # `ocm add cv`. See README.md for more info.
+          type: dir/v1
+          path: ./oci-layout
+          mediaType: application/vnd.ocm.software.oci.layout.v1+tar
       - name: image-resource
         type: ociArtifact
         version: "1.0.0"
