@@ -111,6 +111,8 @@ manager:
 rbacHelpers:
   # -- Install convenience admin/editor/viewer roles for CRDs
   enable: false
+  # -- Install ClusterRoles that aggregate OCM resource permissions into the built-in `admin`, `edit` and `view` cluster roles
+  aggregateToDefaultRoles: true
 ## Custom Resource Definitions
 crd:
   # -- Install CRDs with the chart
