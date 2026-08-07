@@ -8,7 +8,7 @@ const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildMo
 
 // Resolved CLI-derived versions for tests that need every binding import emitted.
 // buildModuleBlocks now drops bindings whose version is undefined (filter at the
-// end), so tests asserting "all 12 imports" / "all schema targets" must pass deps.
+// end), so tests asserting "all 13 imports" / "all schema targets" must pass deps.
 const ALL_DEPS = {
     'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.7',
     'ocm.software/open-component-model/bindings/go/credentials': 'v0.0.13',
@@ -19,6 +19,7 @@ const ALL_DEPS = {
     'ocm.software/open-component-model/bindings/go/oci': 'v0.0.46',
     'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.1',
     'ocm.software/open-component-model/bindings/go/sigstore': 'v0.0.1',
+    'ocm.software/open-component-model/bindings/go/wget': 'v0.0.1',
 };
 
 // --- parseArguments ---
@@ -120,9 +121,9 @@ test('hasAllImportsForVersion: returns true when the full import set (built with
 
 // --- buildModuleBlocks ---
 
-test('buildModuleBlocks: returns 12 imports (website + CLI + 9 bindings + controller)', () => {
+test('buildModuleBlocks: returns 13 imports (website + CLI + 10 bindings + controller)', () => {
     const { imports } = buildModuleBlocks('0.3', '0.3.0', ALL_DEPS);
-    assert.equal(imports.length, 12);
+    assert.equal(imports.length, 13);
 });
 
 test('buildModuleBlocks: does not return a mount field', () => {
@@ -227,6 +228,7 @@ test('buildModuleBlocks: schema imports have correct targets with version prefix
         'static/2.0/schemas/bindings/go/credentials/rsa/v1',
         'static/2.0/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1',
         'static/2.0/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1',
+        'static/2.0/schemas/bindings/go/credentials/wget/v1',
         'static/2.0/schemas/bindings/go/descriptor/v2',
         'static/2.0/schemas/bindings/go/http',
         'static/2.0/schemas/kubernetes/controller',
@@ -244,6 +246,7 @@ test('buildModuleBlocks: schema imports have correct sources', () => {
         'spec/config/v1alpha1/schemas',
         'spec/credentials/oidcidentitytoken/v1alpha1/schemas',
         'spec/credentials/trustedroot/v1alpha1/schemas',
+        'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',
@@ -490,6 +493,7 @@ test('updateImportTags: updates versioned tags for matching version', () => {
         'ocm.software/open-component-model/bindings/go/oci': 'v0.0.47',
         'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/sigstore': 'v0.0.2',
+        'ocm.software/open-component-model/bindings/go/wget': 'v0.0.2',
     };
     const parsed = {
         imports: [
@@ -549,6 +553,11 @@ test('updateImportTags: updates versioned tags for matching version', () => {
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
             },
             {
+                path: 'ocm.software/open-component-model/bindings/go/wget',
+                version: 'bindings/go/wget/v0.0.1',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+            {
                 path: 'ocm.software/open-component-model/kubernetes/controller',
                 version: 'kubernetes/controller/v0.3.0',
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
@@ -570,6 +579,7 @@ test('updateImportTags: updates versioned tags for matching version', () => {
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/oci'], 'v0.0.47');
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/rsa'], 'v0.0.2');
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/sigstore'], 'v0.0.2');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/wget'], 'v0.0.2');
     assert.equal(byPath['ocm.software/open-component-model/kubernetes/controller'], 'v0.3.1');
 });
 
@@ -650,6 +660,7 @@ test('updateImportTags: patching freshly-built blocks equals building directly w
         'ocm.software/open-component-model/bindings/go/oci': 'v0.0.47',
         'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/sigstore': 'v0.0.2',
+        'ocm.software/open-component-model/bindings/go/wget': 'v0.0.2',
     };
 
     // Path A: build at 0.3.0 with old deps, then patch to 0.3.1 with new deps
