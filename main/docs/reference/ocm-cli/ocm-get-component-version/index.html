@@ -68,20 +68,20 @@ For the current release, see the
 [type::]{repository}/[valid-prefix]/{component}[:version]</p><p>For valid prefixes {component-descriptors|none} are available. If <none>is used, it defaults to &ldquo;component-descriptors&rdquo;. This is because by default,
 OCM components are stored within a specific sub-repository.</p><p>For known types, currently only {OCIRepository|CommonTransportFormat} are supported, which can be shortened to {OCI|oci|CTF|ctf} respectively for convenience.</p><p>If no type is given, the repository path is interpreted based on introspection and heuristics.</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>ocm get component-version {reference} [flags]</code></pre></figure></div><h3 id=examples>Examples<a href=#examples class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>Getting a single component version:
 
-get component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
-get cv ./path/to/ctf//ocm.software/ocmcli:0.23.0
-get cv ./path/to/ctf/component-descriptors/ocm.software/ocmcli:0.23.0
+get component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
+get cv ./path/to/ctf//ocm.software/cli:0.12.0
+get cv ./path/to/ctf/component-descriptors/ocm.software/cli:0.12.0
 
 Listing many component versions:
 
-get component-versions ghcr.io/open-component-model/ocm//ocm.software/ocmcli
-get cvs ghcr.io/open-component-model/ocm//ocm.software/ocmcli --output json
-get cvs ghcr.io/open-component-model/ocm//ocm.software/ocmcli -oyaml
+get component-versions ghcr.io/open-component-model//ocm.software/cli
+get cvs ghcr.io/open-component-model//ocm.software/cli --output json
+get cvs ghcr.io/open-component-model//ocm.software/cli -oyaml
 
 Specifying types and schemes:
 
-get cv ctf::github.com/locally-checked-out-repo//ocm.software/ocmcli:0.23.0
-get cvs oci::http://localhost:8080//ocm.software/ocmcli</code></pre></figure></div><h3 id=options>Options<a href=#options class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>      --display-mode enum          display mode can be used in combination with --recursive
+get cv ctf::github.com/locally-checked-out-repo//ocm.software/cli:0.12.0
+get cvs oci::http://localhost:8080//ocm.software/cli</code></pre></figure></div><h3 id=options>Options<a href=#options class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>      --display-mode enum          display mode can be used in combination with --recursive
                                      static: print the output once the complete component graph is discovered
                                      live (experimental): continuously updates the output to represent the current discovery state of the component graph
                                    (must be one of [live static]) (default static)

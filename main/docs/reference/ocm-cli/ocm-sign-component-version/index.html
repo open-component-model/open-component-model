@@ -66,7 +66,7 @@ This version tracks the latest commit and may be unstable.
 For the current release, see the
 <a class=version-warning-link href=/>latest version (0.12)</a>.</div><h1>ocm sign component-version</h1><nav class="toc-mobile d-xl-none" aria-label="Quaternary navigation"><details><summary>On this page</summary><div class=page-links><nav id=TableOfContents><ul><li><a href=#ocm-sign-component-version>ocm sign component-version</a><ul><li><a href=#synopsis>Synopsis</a></li></ul></li><li><a href=#reference-format>Reference Format</a></li><li><a href=#ocm-signing-explained-in-simple-steps>OCM Signing explained in simple steps</a></li><li><a href=#behavior>Behavior</a><ul><li><a href=#examples>Examples</a></li><li><a href=#options>Options</a></li><li><a href=#options-inherited-from-parent-commands>Options inherited from parent commands</a></li><li><a href=#see-also>SEE ALSO</a></li></ul></li></ul></nav></div></details></nav><div style=margin-bottom:2rem></div><h2 id=ocm-sign-component-version>ocm sign component-version<a href=#ocm-sign-component-version class=anchor aria-hidden=true>#</a></h2><p>Sign component version(s) inside an OCM repository</p><h3 id=synopsis>Synopsis<a href=#synopsis class=anchor aria-hidden=true>#</a></h3><p>Creates or update cryptographic signatures on component descriptors.</p><h2 id=reference-format>Reference Format<a href=#reference-format class=anchor aria-hidden=true>#</a></h2><pre><code>[type::]{repository}/[valid-prefix]/{component}[:version]
 </code></pre><ul><li>Prefixes: {component-descriptors|none} (default: &ldquo;component-descriptors&rdquo;)</li><li>Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})</li></ul><h2 id=ocm-signing-explained-in-simple-steps>OCM Signing explained in simple steps<a href=#ocm-signing-explained-in-simple-steps class=anchor aria-hidden=true>#</a></h2><ul><li>Resolve OCM repository</li><li>Fetch component version</li><li>Verify digests (&ndash;verify-digest-consistency)</li><li>Normalise descriptor (&ndash;normalisation)</li><li>Hash normalised descriptor (&ndash;hash)</li><li>Sign hash (&ndash;signer-spec)</li></ul><h2 id=behavior>Behavior<a href=#behavior class=anchor aria-hidden=true>#</a></h2><ul><li>Conflicting signatures cause failure unless &ndash;force is set (then overwrite)</li><li>&ndash;dry-run: compute only, do not persist signature</li><li>Default signature name: default</li><li>Default signer: RSASSA-PSS plugin (needs private key)</li><li>For Sigstore keyless signing (no keys needed), pass &ndash;signer-spec with a SigstoreSigningConfiguration/v1alpha1 config</li></ul><p>Use this command to establish provenance of component versions.</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>ocm sign component-version {reference} [flags]</code></pre></figure></div><h3 id=examples>Examples<a href=#examples class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code># Sign a component version with default algorithms
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 
 ## Example Credential Config (.ocmconfig) — Plain encoding (default)
 #
@@ -173,19 +173,19 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 # OCM also stores this value in signatures[].signature.issuer for convenience.
 
 # Sign with Sigstore (requires sigstore signer spec):
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./sigstore-sign.yaml
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signer-spec ./sigstore-sign.yaml
 
 # Sign with custom signature name
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
 
 # Use a signer specification file to override algorithm defaults
-sign component-version ./repo/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./rsassa-pss.yaml
+sign component-version ./repo//ocm.software/cli:0.12.0 --signer-spec ./rsassa-pss.yaml
 
 # Dry-run signing
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature test --dry-run
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature test --dry-run
 
 # Force overwrite an existing signature
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature --force</code></pre></figure></div><h3 id=options>Options<a href=#options class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>      --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature --force</code></pre></figure></div><h3 id=options>Options<a href=#options class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>      --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
       --dry-run                 compute signature but do not persist it to the repository
       --force                   overwrite existing signatures under the same name
       --hash string             hash algorithm to use (SHA256, SHA512) (default &#34;SHA-256&#34;)
