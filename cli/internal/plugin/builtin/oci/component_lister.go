@@ -28,7 +28,7 @@ func (l *CTFComponentListerPlugin) GetComponentVersionRepositoryScheme() *runtim
 
 // GetComponentLister returns a component lister for the given CTF repository specification.
 // If the provided specification is not of type *ctfv1.Repository, an error is returned.
-func (l *CTFComponentListerPlugin) GetComponentLister(ctx context.Context, repositorySpecification runtime.Typed, _ map[string]string) (repository.ComponentLister, error) {
+func (l *CTFComponentListerPlugin) GetComponentLister(ctx context.Context, repositorySpecification runtime.Typed, _ runtime.Typed) (repository.ComponentLister, error) {
 	ctfRepoSpec, ok := repositorySpecification.(*ctfv1.Repository)
 	if !ok {
 		return nil, errors.Join(ErrWrongUsage, fmt.Errorf("not a CTF repository type: %T", repositorySpecification))

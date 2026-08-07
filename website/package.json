@@ -1,0 +1,72 @@
+{
+  "name": "ocm-website",
+  "version": "0.18.0",
+  "description": "OCM website",
+  "author": "open-component-model",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo --minify --gc",
+    "clean:build": "shx rm -rf public resources .hugo_build.lock",
+    "clean:install": "shx rm -rf node_modules package-lock.json yarn.lock pnpm-lock.yaml",
+    "clean:lint": "shx rm -rf .eslintcache .stylelintcache",
+    "clean": "npm run clean:build && npm run clean:lint && npm run clean:install",
+    "create": "./node_modules/.bin/hugo new",
+    "register-docs-version": "node scripts/register-docs-version.js",
+    "dev:drafts": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --baseURL=http://localhost --noHTTPCache --buildDrafts",
+    "dev": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --noHTTPCache",
+    "hugo": "./node_modules/.bin/hugo",
+    "info": "npm list",
+    "lint:markdown": "markdownlint-cli2 --config ../.github/config/website.markdownlint-cli2.yaml \"**/*.md\" \"!node_modules/**\" \"!content_versioned/version-legacy/**\"",
+    "lint:scripts": "eslint --cache assets/js scripts",
+    "lint:styles": "stylelint --cache \"assets/scss/**/*.{css,sass,scss}\"",
+    "lint": "npm run lint:scripts && npm run lint:styles && npm run lint:markdown",
+    "lint:scripts:fix": "eslint --cache --fix assets/js scripts",
+    "mod:clean": "npm run hugo -- mod clean",
+    "mod:tidy": "npm run hugo -- mod tidy",
+    "mod:get": "npm run hugo -- mod get",
+    "postinfo": "./node_modules/.bin/hugo version",
+    "preinfo": "npm version",
+    "preview": "http-server --gzip --brotli --ext=html --cors",
+    "postinstall": "node scripts/link-dart-sass.js",
+    "test": "node --test scripts/register-docs-version.test.js"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/quicksand": "^5.2.10",
+    "@tabler/icons": "^3.41.0",
+    "@thulite/doks-core": "^1.9.3",
+    "@thulite/images": "^3.3.4",
+    "@thulite/inline-svg": "^1.2.2",
+    "@thulite/seo": "^2.4.3",
+    "mermaid": "^11.16.1",
+    "preact": "^10.29.0",
+    "thulite": "^2.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "25.9.5",
+    "eslint": "10.8.0",
+    "globals": "17.9.0",
+    "hugo-extended": "0.164.0",
+    "jiti": "2.7.0",
+    "js-yaml": "5.2.3",
+    "sass-embedded": "1.100.0",
+    "shx": "0.4.0",
+    "typescript-eslint": "8.66.0"
+  },
+  "overrides": {
+    "adm-zip": "0.6.0",
+    "semver": "^7.5.4",
+    "brace-expansion": "^5.0.8",
+    "eslint-config-developit": {
+      "eslint-plugin-compat": {
+        "eslint": "$eslint"
+      }
+    }
+  },
+  "engines": {
+    "node": "^26.0.0",
+    "npm": ">=12.0.0"
+  },
+  "packageManager": "npm@12.0.2"
+}

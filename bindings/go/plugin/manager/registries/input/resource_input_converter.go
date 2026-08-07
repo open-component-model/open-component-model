@@ -35,7 +35,7 @@ func (r *resourceInputPluginConverter) GetResourceCredentialConsumerIdentity(ctx
 	return result.Identity, nil
 }
 
-func (r *resourceInputPluginConverter) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials map[string]string) (*constructor.ResourceInputMethodResult, error) {
+func (r *resourceInputPluginConverter) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	convert, err := constructorruntime.ConvertToV1Resource(resource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert resource: %w", err)

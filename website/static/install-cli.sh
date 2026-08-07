@@ -1,0 +1,333 @@
+#!/usr/bin/env bash
+
+# This is a script to install the OCM CLI v2 by downloading the latest release from GitHub.
+# https://github.com/open-component-model/open-component-model/releases
+
+set -euo pipefail
+
+# Default install directory per the XDG Base Directory Specification:
+# https://specifications.freedesktop.org/basedir/latest/
+DEFAULT_BIN_DIR="${HOME}/.local/bin"
+BIN_DIR=${1:-"${DEFAULT_BIN_DIR}"}
+GITHUB_REPO="open-component-model/open-component-model"
+
+usage() {
+    cat <<EOF
+Usage: install-cli.sh [BIN_DIR]
+
+Install the OCM CLI v2.
+
+Arguments:
+  BIN_DIR    Installation directory (default: ~/.local/bin)
+
+Environment variables:
+  OCM_VERSION       Install a specific version (e.g., OCM_VERSION=1.0.0) or the latest version of a major.minor series (e.g., OCM_VERSION=0.9)
+  OCM_SKIP_VERIFY   Skip attestation verification (set to "true")
+
+Examples:
+  curl -sfL https://ocm.software/install-cli.sh | bash
+  curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=1.0.0 bash
+  curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.9 bash
+  curl -sfL https://ocm.software/install-cli.sh | bash -s -- /usr/local/bin
+EOF
+    exit 0
+}
+
+# Helper functions for logs
+info() {
+    echo '[INFO] ' "$@"
+}
+
+warn() {
+    echo '[WARN] ' "$@" >&2
+}
+
+fatal() {
+    echo '[ERROR] ' "$@" >&2
+    exit 1
+}
+
+# Set os, fatal if operating system not supported
+setup_verify_os() {
+    if [[ -z "${OS:-}" ]]; then
+        OS=$(uname)
+    fi
+    case ${OS} in
+        Darwin)
+            OS=darwin
+            ;;
+        Linux)
+            OS=linux
+            ;;
+        *)
+            fatal "Unsupported operating system ${OS}"
+    esac
+}
+
+# Set arch, fatal if architecture not supported
+setup_verify_arch() {
+    if [[ -z "${ARCH:-}" ]]; then
+        ARCH=$(uname -m)
+    fi
+    case ${ARCH} in
+        arm|armv6l|armv7l)
+            ARCH=arm
+            ;;
+        arm64|aarch64|armv8l)
+            ARCH=arm64
+            ;;
+        amd64)
+            ARCH=amd64
+            ;;
+        x86_64)
+            ARCH=amd64
+            ;;
+        *)
+            fatal "Unsupported architecture ${ARCH}"
+    esac
+}
+
+# Ensure the target bin directory exists
+ensure_bin_dir() {
+    if ! mkdir -p "${BIN_DIR}" 2>/dev/null; then
+        fatal "Cannot create ${BIN_DIR}. Run with a writable directory: curl ... | bash -s -- ~/.local/bin"
+    fi
+}
+
+# Check if BIN_DIR is on PATH and warn if not
+ensure_path() {
+    case ":${PATH}:" in
+        *:"${BIN_DIR}":*)
+            return 0
+            ;;
+    esac
+
+    warn "${BIN_DIR} is not in your PATH."
+    warn "Add it by running:"
+    warn ""
+    warn '  echo "export PATH=${BIN_DIR}:$PATH" >> ~/.profile && source ~/.profile'
+    warn ""
+}
+
+# Verify existence of downloader executable
+verify_downloader() {
+    # Return failure if it doesn't exist or is no executable
+    command -v "$1" > /dev/null 2>&1 || return 1
+    DOWNLOADER=$1
+    return 0
+}
+
+# Create temporary directory and cleanup when done
+setup_tmp() {
+    TMP_DIR=$(mktemp -d -t ocm-install.XXXXXXXXXX)
+    TMP_METADATA="${TMP_DIR}/ocm.json"
+    TMP_BIN="${TMP_DIR}/ocm"
+    cleanup() {
+        local code=$?
+        set +e
+        trap - EXIT
+        rm -r "${TMP_DIR}"
+        exit ${code}
+    }
+    trap cleanup INT EXIT
+}
+
+# Extract a stable CLI version from a releases JSON file.
+# Returns the version string (e.g. "0.3.0") or empty if none found.
+# The trailing `"` in the regex anchors the match to the JSON quote, so it
+# implicitly excludes pre-releases like `"v0.8.0-rc.1"`. We then `sort -V` and
+# pick the highest semver rather than relying on GitHub's API order, which is
+# created_at-desc and would mis-rank a back-patched release on an older minor
+# (e.g. a v0.7.1 hotfix created after v0.8.0 has shipped).
+extract_stable_version() {
+    grep '"tag_name":' "$1" \
+        | grep -E "\"v[0-9]+\.[0-9]+\.[0-9]+\"" \
+        | sed -E "s|.*\"v([^\"]+)\".*|\1|" \
+        | sort -V \
+        | tail -1 \
+        || true # grep returns non-zero when no lines match; prevent set -e from killing the subshell
+}
+
+# Extract the latest stable version matching a MAJOR.MINOR prefix from a releases JSON file.
+extract_stable_version_for_minor() {
+    local minor_prefix="$1"
+    grep '"tag_name":' "$2" \
+        | grep -E "\"v${minor_prefix}\.[0-9]+\"" \
+        | sed -E "s|.*\"v([^\"]+)\".*|\1|" \
+        | sort -V \
+        | tail -1 \
+        || true
+}
+
+# Find version from Github metadata
+get_release_version() {
+    if [[ -n "${OCM_VERSION:-}" ]]; then
+        # If OCM_VERSION is a partial minor (e.g. "0.9"), resolve to the latest patch release.
+        if [[ "${OCM_VERSION}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100"
+            info "Downloading metadata ${METADATA_URL}"
+            download "${TMP_METADATA}" "${METADATA_URL}"
+
+            local resolved
+            resolved=$(extract_stable_version_for_minor "${OCM_VERSION}" "${TMP_METADATA}")
+            [[ -n "${resolved}" ]] || fatal "No stable release found for ${OCM_VERSION}.x"
+            OCM_VERSION="${resolved}"
+        fi
+    else
+        # Use the list endpoint so we can filter for the canonical CLI tag; /releases/latest
+        # may point to a non-CLI release (e.g. a website or docs tag published more recently).
+        METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100"
+        info "Downloading metadata ${METADATA_URL}"
+        download "${TMP_METADATA}" "${METADATA_URL}"
+
+        OCM_VERSION=$(extract_stable_version "${TMP_METADATA}")
+    fi
+
+    [[ -n "${OCM_VERSION}" ]] || fatal "Unable to determine release version"
+    info "Using ${OCM_VERSION} as release"
+}
+
+# Download file from URL
+download() {
+    [[ $# -eq 2 ]] || fatal 'download needs exactly 2 arguments'
+
+    case $DOWNLOADER in
+        curl)
+            curl -o "$1" -sfL --proto '=https' --tlsv1.2 "$2" || fatal "Download with curl failed: RC $?"
+            ;;
+        wget)
+            wget -qO "$1" --secure-protocol=TLSv1_2 "$2" || fatal "Download with wget failed: RC $?"
+            ;;
+        *)
+            fatal "Incorrect executable '${DOWNLOADER}'"
+            ;;
+    esac
+}
+
+# Download binary from Github URL
+# Assets follow the naming scheme: ocm-{OS}-{ARCH} (no version, no archive).
+# The `cli/` tag prefix was dropped in v0.8.0; older versions still live under it.
+# Legacy iff major==0 AND minor<8 - any 1.x+ release uses the modern bare tag.
+download_binary() {
+    local major minor tag_prefix=''
+    IFS='.' read -r major minor _ <<< "${OCM_VERSION}"
+    if (( major == 0 && minor < 8 )); then
+        tag_prefix='cli/'
+    fi
+    BIN_URL="https://github.com/${GITHUB_REPO}/releases/download/${tag_prefix}v${OCM_VERSION}/ocm-${OS}-${ARCH}"
+    info "Downloading binary ${BIN_URL}"
+    download "${TMP_BIN}" "${BIN_URL}"
+}
+
+# Print manual verification instructions when automatic verification is unavailable
+print_verify_instructions() {
+    local reason="$1"
+
+    local hash_cmd="sha256sum"
+    if ! command -v sha256sum &> /dev/null; then
+        hash_cmd="shasum -a 256"
+    fi
+
+    warn ""
+    warn "══════════════════════════════════════════════════════════════════════"
+    warn "  BINARY NOT CRYPTOGRAPHICALLY VERIFIED"
+    warn "══════════════════════════════════════════════════════════════════════"
+    warn ""
+    warn "  Reason: ${reason}"
+    warn ""
+    warn "  After installation completes, verify the binary at:"
+    warn "    ${BIN_DIR}/ocm"
+    warn ""
+    warn "  Option A — Verify with GitHub CLI (recommended):"
+    warn "    1. Install gh: https://cli.github.com/"
+    warn "    2. Authenticate against GitHub.com: gh auth login --hostname github.com"
+    warn "    3. Verify the installed binary:"
+    warn "       gh attestation verify ${BIN_DIR}/ocm --repo ${GITHUB_REPO}"
+    warn ""
+    warn "  Option B — Verify with cosign (no GitHub auth needed):"
+    cat >&2 <<COSIGN_EOF
+
+    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)"
+    curl -sfL \\
+      "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
+      | jq -r '.attestations[0].bundle' > attestation.jsonl
+    cosign verify-blob-attestation \\
+      --bundle attestation.jsonl \\
+      --new-bundle-format \\
+      --type slsaprovenance1 \\
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
+      --certificate-identity-regexp \\
+        '^https://github\\.com/${GITHUB_REPO}/\\.github/workflows/cli\\.yml@refs/(heads/(main|releases/v[0-9]+\\.[0-9]+)|tags/cli/v[0-9]+\\.[0-9]+\\.[0-9]+)' \\
+      ${BIN_DIR}/ocm
+
+COSIGN_EOF
+    warn ""
+    warn "  Option C — Manual SHA-256 hash check (integrity only):"
+    cat >&2 <<HASH_EOF
+
+    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)"
+    curl -sfL \\
+      "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
+      | jq -r '.attestations[0].bundle.dsseEnvelope.payload' \\
+      | base64 --decode | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
+    # Compare the listed hash with: ${hash_cmd} ${BIN_DIR}/ocm
+
+HASH_EOF
+    warn ""
+    warn "  To suppress this warning: OCM_SKIP_VERIFY=true"
+    warn "══════════════════════════════════════════════════════════════════════"
+    warn ""
+}
+
+# Verify the downloaded binary using GitHub attestations.
+# Falls back to detailed manual verification instructions when gh is unavailable.
+verify_binary() {
+    if [[ "${OCM_SKIP_VERIFY:-}" == "true" ]]; then
+        warn "Skipping attestation verification (OCM_SKIP_VERIFY=true)"
+        return 0
+    fi
+
+    if ! command -v gh &> /dev/null; then
+        print_verify_instructions "GitHub CLI (gh) not found"
+        return 0
+    fi
+
+    if ! gh auth status --hostname github.com &> /dev/null; then
+        print_verify_instructions "GitHub CLI is not authenticated"
+        return 0
+    fi
+
+    info "Verifying binary attestation..."
+    if gh attestation verify "${TMP_BIN}" --repo "${GITHUB_REPO}" 2>/dev/null; then
+        info "Attestation verification successful"
+    else
+        fatal "Attestation verification failed. The binary may have been tampered with."
+    fi
+}
+
+# Setup permissions and move binary
+setup_binary() {
+    info "Installing ocm to ${BIN_DIR}/ocm"
+
+    if [[ -w "${BIN_DIR}" ]]; then
+        install -m 755 "${TMP_BIN}" "${BIN_DIR}/ocm"
+    else
+        fatal "Cannot write to ${BIN_DIR}. Run with a writable directory: curl ... | bash -s -- ~/.local/bin"
+    fi
+}
+
+# Run the install process
+{
+    case "${1:-}" in -h|--help) usage ;; esac
+    setup_verify_os
+    setup_verify_arch
+    verify_downloader curl || verify_downloader wget || fatal 'Can not find curl or wget for downloading files'
+    setup_tmp
+    get_release_version
+    download_binary
+    verify_binary
+    ensure_bin_dir
+    setup_binary
+    ensure_path
+    info "OCM CLI v${OCM_VERSION} installed successfully"
+}

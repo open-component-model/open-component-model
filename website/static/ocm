@@ -1,0 +1,10 @@
+<html><head>
+  <meta name="go-import"
+        content="ocm.software/ocm
+                 git https://github.com/open-component-model/ocm">
+  <meta name="go-source"
+        content="ocm.software/ocm
+                 https://github.com/open-component-model/ocm
+                 https://github.com/open-component-model/ocm/tree/master{/dir}
+                 https://github.com/mopen-component-model/ocm/blob/master{/dir}/{file}#L{line}">
+</head></html>

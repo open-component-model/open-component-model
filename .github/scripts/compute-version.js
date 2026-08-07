@@ -49,7 +49,7 @@ export function computeVersion(ref, tagPrefix, options = {}) {
     } else {
         // Convert ref to semver-safe pseudo version
         // Replace slashes and other problematic chars with hyphens
-        const sanitized = ref.replace(/[\/+#?_^%$]/g, "-").toLocaleLowerCase();
+        const sanitized = ref.replace(/[/+#?_^%$]/g, "-").toLocaleLowerCase();
         const version = `0.0.0-${sanitized}`;
 
         if (Number.isInteger(maxLength) && maxLength > 0 && version.length > maxLength) {

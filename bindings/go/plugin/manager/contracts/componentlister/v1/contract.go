@@ -21,5 +21,5 @@ type ComponentListerPluginContract[T runtime.Typed] interface {
 
 	// ListComponents is a single call to an implementing plugin.
 	// If pagination is supported, a single page of component names is returned.
-	ListComponents(ctx context.Context, request *ListComponentsRequest[T], credentials map[string]string) (*ListComponentsResponse, error)
+	ListComponents(ctx context.Context, request *ListComponentsRequest[T], credentials runtime.Typed) (*ListComponentsResponse, error)
 }

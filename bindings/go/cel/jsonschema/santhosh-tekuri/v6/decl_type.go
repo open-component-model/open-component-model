@@ -10,6 +10,41 @@ import (
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl"
 )
 
+func declTypeForStringSchema(s *Schema) *DeclType {
+	switch s.Format() {
+	case "byte":
+		t := decl.NewSimpleTypeWithMinSize("bytes", cel.BytesType, types.Bytes([]byte{}), decl.MinStringSize)
+		if s.MaxLength() != nil {
+			t.MaxElements = *s.MaxLength()
+		} else {
+			t.MaxElements = estimateMaxStringLengthPerRequest(s)
+		}
+		return declTypeForSchema(t, s)
+	case "duration":
+		t := decl.NewSimpleTypeWithMinSize("duration", cel.DurationType, types.Duration{Duration: time.Duration(0)}, uint64(decl.MinDurationSizeJSON))
+		t.MaxElements = estimateMaxStringLengthPerRequest(s)
+		return declTypeForSchema(t, s)
+	case "date":
+		t := decl.NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, uint64(decl.JSONDateSize))
+		t.MaxElements = estimateMaxStringLengthPerRequest(s)
+		return declTypeForSchema(t, s)
+	case "date-time":
+		t := decl.NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, uint64(decl.MinDatetimeSizeJSON))
+		t.MaxElements = estimateMaxStringLengthPerRequest(s)
+		return declTypeForSchema(t, s)
+	}
+	str := decl.NewSimpleTypeWithMinSize("string", cel.StringType, types.String(""), decl.MinStringSize)
+	switch {
+	case s.MaxLength() != nil:
+		str.MaxElements = *s.MaxLength()
+	case len(s.Enum()) > 0:
+		str.MaxElements = estimateMaxStringEnumLength(s)
+	default:
+		str.MaxElements = estimateMaxStringLengthPerRequest(s)
+	}
+	return declTypeForSchema(str, s)
+}
+
 // DeclType represents a JSON Schema Declaration Type backed by an actual Schema.
 type DeclType struct {
 	*decl.Type
@@ -155,44 +190,7 @@ func NewDeclType(s *Schema) *DeclType {
 		}
 		return base
 	case StringType:
-		switch s.Format() {
-		case "byte":
-			t := decl.NewSimpleTypeWithMinSize("bytes", cel.BytesType, types.Bytes([]byte{}), decl.MinStringSize)
-			if s.MaxLength() != nil {
-				t.MaxElements = *s.MaxLength()
-			} else {
-				t.MaxElements = estimateMaxStringLengthPerRequest(s)
-			}
-			return declTypeForSchema(t, s)
-
-		case "duration":
-			t := decl.NewSimpleTypeWithMinSize("duration", cel.DurationType, types.Duration{Duration: time.Duration(0)}, uint64(decl.MinDurationSizeJSON))
-			t.MaxElements = estimateMaxStringLengthPerRequest(s)
-			return declTypeForSchema(t, s)
-
-		case "date":
-			t := decl.NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, uint64(decl.JSONDateSize))
-			t.MaxElements = estimateMaxStringLengthPerRequest(s)
-			return declTypeForSchema(t, s)
-
-		case "date-time":
-			t := decl.NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, uint64(decl.MinDatetimeSizeJSON))
-			t.MaxElements = estimateMaxStringLengthPerRequest(s)
-			return declTypeForSchema(t, s)
-		}
-
-		str := decl.NewSimpleTypeWithMinSize("string", cel.StringType, types.String(""), decl.MinStringSize)
-
-		switch {
-		case s.MaxLength() != nil:
-			str.MaxElements = *s.MaxLength()
-		case len(s.Enum()) > 0:
-			str.MaxElements = estimateMaxStringEnumLength(s)
-		default:
-			str.MaxElements = estimateMaxStringLengthPerRequest(s)
-		}
-
-		return declTypeForSchema(str, s)
+		return declTypeForStringSchema(s)
 	case BooleanType:
 		return declTypeForSchema(decl.BoolType, s)
 	case NumType:
@@ -215,11 +213,24 @@ func NewDeclType(s *Schema) *DeclType {
 			return NewDeclType(s.OneOf()[0])
 		}
 		// special case: optional type wrapping based on oneOf [null, X]
-		if declType, ok := declTypeAsOptionalSchema(s); ok {
+		if declType, ok := declTypeAsOptionalSchema(s.OneOf()); ok {
 			return declType
 		}
 		// in the future we can think of offering a parameterized union type for all branches of oneOf
 		// for now, we treat as dyn and defer evaluation to the runtime.
+		return declTypeForSchema(decl.DynType, s)
+	}
+
+	if anyOf := s.AnyOf(); len(anyOf) > 0 {
+		if len(anyOf) == 1 {
+			// special case: single-branch anyOf is equivalent to the branch itself
+			return NewDeclType(anyOf[0])
+		}
+		// special case: optional type wrapping based on anyOf [null, X]
+		if declType, ok := declTypeAsOptionalSchema(anyOf); ok {
+			return declType
+		}
+		// treat multi-branch anyOf as dyn, defer evaluation to the runtime.
 		return declTypeForSchema(decl.DynType, s)
 	}
 
@@ -231,13 +242,13 @@ func NewDeclType(s *Schema) *DeclType {
 	return nil
 }
 
-func declTypeAsOptionalSchema(s *Schema) (*DeclType, bool) {
-	if len(s.OneOf()) != 2 {
+func declTypeAsOptionalSchema(branches []*Schema) (*DeclType, bool) {
+	if len(branches) != 2 {
 		return nil, false
 	}
 	nonNullIdx := -1
 	hasNull := false
-	for i, br := range s.OneOf() {
+	for i, br := range branches {
 		if br.Type() == NullType {
 			hasNull = true
 		} else {
@@ -245,7 +256,7 @@ func declTypeAsOptionalSchema(s *Schema) (*DeclType, bool) {
 		}
 	}
 	if hasNull {
-		schema := s.OneOf()[nonNullIdx]
+		schema := branches[nonNullIdx]
 		declType := NewDeclType(schema)
 		declType.SetOptional()
 		return declType, true
@@ -301,13 +312,13 @@ func estimateMaxAdditionalPropertiesFromMinSize(minSize uint64) uint64 {
 }
 
 // collectEnumAndConstValues extracts a deduplicated list of literal values
-// from enum[], const, and from oneOf branches where a branch defines a const.
+// from enum[], const, and from oneOf/anyOf branches where a branch defines a const.
 //
 // Rules:
 // 1. If schema.Const is non-nil -> return only that single value.
 // 2. enum[] always contributes literal values.
-// 3. oneOf[n].Const contributes only that literal.
-// 4. If oneOf[n] contains no const, ignore it – it may define a type but not literals.
+// 3. oneOf[n].Const or anyOf[n].Const contributes only that literal.
+// 4. If oneOf[n]/anyOf[n] contains no const, ignore it – it may define a type but not literals.
 // 5. If schema has no values but the $ref does, return those.
 // 6. Values are deduplicated while preserving original order.
 func collectEnumAndConstValues(s *Schema) []interface{} {
@@ -340,15 +351,21 @@ func collectEnumAndConstValues(s *Schema) []interface{} {
 		}
 	}
 
-	// Rule 3: oneOf const branches
-	if s.OneOf() != nil {
-		for _, br := range s.OneOf() {
-			if br == nil {
-				continue
-			}
-			if c := br.Const(); c != nil {
-				add(c)
-			}
+	// Rule 3: oneOf/anyOf const branches
+	for _, br := range s.OneOf() {
+		if br == nil {
+			continue
+		}
+		if c := br.Const(); c != nil {
+			add(c)
+		}
+	}
+	for _, br := range s.AnyOf() {
+		if br == nil {
+			continue
+		}
+		if c := br.Const(); c != nil {
+			add(c)
 		}
 	}
 

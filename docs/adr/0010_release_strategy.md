@@ -31,7 +31,6 @@ The team already operates GitHub‑based release workflows for OCM v1. We consid
 
 ### Out of scope (for this ADR)
 
-* **Root ocm component** Not implemented in this ADR; later, it will share **X.Y** and **patch in tandem** when any sub‑component patches are created.
 * **Emergency patches:** Any special treatment/definition of emergency patches; we define the process only for "normal" patches.
 * **Support policy details beyond y‑2:** We set **y‑2** support (≈3 months) now; exact branch retirement/EOL steps will be defined later.
 * **Testing strategy expansion:** Beyond current component‑specific tests; additional integration/system/conformance testing is excluded from this ADR.
@@ -160,11 +159,40 @@ git describe --tags --match "cli/v[0-9]*"
 * Promotion without rebuild: final tags point to the same digest (OCI images) and the same binary checksums; no new build occurs.
 * Provenance/Signatures: RCs are signed/attested (using [actions/attest-build-provenance](https://github.com/actions/attest-build-provenance)); promotion adds a final attestation referencing the same subject digest.
 
+#### GPG-signed tags
+
+All release tags (RC and final) are GPG-signed (`git tag -s`) to satisfy the OpenSSF Best Practices `version_tags_signed` criterion. The release workflows import a GPG key from org-level secrets (`GPG_PRIVATE_KEY_FOR_SIGNING`, `GPG_PASSPHRASE`) using [crazy-max/ghaction-import-gpg](https://github.com/crazy-max/ghaction-import-gpg) before creating any tag.
+
+The corresponding public key is stored at `website/static/gpg/OCM-RELEASES-PUBLIC-CURRENT.gpg` and can be used to verify tags locally:
+
+```bash
+gpg --import website/static/gpg/OCM-RELEASES-PUBLIC-CURRENT.gpg
+git tag -v <tag>
+```
+
+> **TODO:** Consider removing the key expiry (currently 2028-11-10) and relying on a stored revocation certificate instead. For smaller projects like OCM, a non-expiring key with a revocation certificate is simpler operationally and avoids user-facing breakage — e.g., Kubernetes' Nov 2024 incident where an expired package-signing key broke apt/yum installs for all users worldwide. The revocation certificate and private key are stored in the team password vault.
+
 ### Rollback & Immutability Policy
 
 * Tags are immutable. Never delete or overwrite a published annotated tag.
 * If a final release has a defect, ship a corrective patch (vX.Y.Z+1) and mark the previous final as superseded in the notes.
 * RC defects found after promotion follow the same corrective-patch route.
+
+### OCM components produced
+
+Every release publishes three OCM component-versions to `ghcr.io/open-component-model`:
+
+* **`ocm.software/cli`** — six executables (linux/darwin/windows × amd64/arm64) referenced by GitHub release download URL via `wget` access, plus the multi-arch CLI image by digest.
+* **`ocm.software/kubernetes/controller`** — controller image and Helm chart, both by digest.
+* **`ocm.software/ocm`** — product wrapper; pure `componentReferences` to the two above.
+
+All three carry the same bare semver as the GitHub release, and are published on both RC and final phases so consumers can validate the shape against an RC first.
+
+**Conflict policy:** both phases use `--component-version-conflict-policy replace`, so reruns after a transient failure are idempotent. The `concurrency` group and `create-tag.js` tag-existence checks prevent diverging runs for the same version, so `replace` cannot overwrite a different commit's artifact.
+
+**Resource form:** OCI artefacts (images, chart) are pinned by digest via `access.ociArtifact`. CLI binaries use `wget` access (`relation: external`) pointing at the release download URLs.
+
+See also [RELEASE_PROCESS.md § OCM components produced](../../RELEASE_PROCESS.md#ocm-components-produced).
 
 ### Roles and Responsibilities
 

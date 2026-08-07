@@ -169,6 +169,20 @@ func (s *Schema) OneOf() []*Schema {
 	return res
 }
 
+func (s *Schema) AnyOf() []*Schema {
+	if s.Schema == nil || s.Schema.AnyOf == nil {
+		return nil
+	}
+	res := make([]*Schema, 0, len(s.Schema.AnyOf))
+	for _, sch := range s.Schema.AnyOf {
+		if sch == nil {
+			continue
+		}
+		res = append(res, &Schema{Schema: sch})
+	}
+	return res
+}
+
 func safeIntToInt(u *int) uint64 {
 	if u == nil {
 		return 0

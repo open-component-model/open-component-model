@@ -16,7 +16,7 @@ Provide a consistent, pluggable way to sign and verify component descriptors bas
 To verify the integrity of a component version, users run:
 
 ```shell
-ocm verify componentversion --signature mysig --verifier rsapss ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+ocm verify componentversion --signature mysig --verifier-spec ./rsapss.yaml ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 ```
 
 This does:
@@ -43,7 +43,7 @@ This does:
 Signing uses the analogous command:
 
 ```shell
-ocm sign componentversion --signature mysig --signer rsapss ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+ocm sign componentversion --signature mysig --signer-spec ./rsapss.yaml ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 ```
 
 This downloads, normalizes, signs, and re-uploads the descriptor. This ADR will only cover the signing part.
@@ -73,7 +73,7 @@ but no actual signature value.
 This can then be used to sign the descriptor against a pinned signature:
 
 ```shell
-ocm sign componentversion ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0 --signature default@cf08abae08bb874597630bc0573d941b1becc92b4916cbe3bef9aa0e89aec3f6 --signer rsapss
+ocm sign componentversion ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0 --signature default@cf08abae08bb874597630bc0573d941b1becc92b4916cbe3bef9aa0e89aec3f6 --signer-spec ./rsapss.yaml
 ```
 
 This will cause the descriptor to be downloaded, and the digest will be searched by the matching signature hash
@@ -99,7 +99,7 @@ sequenceDiagram
     CLI-->>U: Digest field added to descriptor
 
     Note over U,CLI: Step 2: Sign Pinned Digest
-    U->>CLI: ocm sign componentversion --signature default@<digest> --signer rsapss
+    U->>CLI: ocm sign componentversion --signature default@<digest> --signer-spec ./rsapss.yaml
     CLI->>Repo: Download Descriptor (with digest field)
     Repo-->>CLI: Component Descriptor
     CLI->>CLI: Locate matching digest by signature name
@@ -256,8 +256,8 @@ type ComponentSignatureVerifier interface {
 
 RSASSA-PSS is our default handler that works as is:
 
-- Signing/Verification Handler with `RSASSA-PSS/v1alpha1`
-  - This handler can request credentials of type `PEM/v1alpha1` to use for signing and/or for verification
+- Signing/Verification Handler with `RSASigningConfiguration/v1alpha1`
+  - This handler requests credentials with consumer identity type `RSA/v1alpha1` for signing and/or verification
 - This handler is configured by default
 
 ### Flow
@@ -271,7 +271,7 @@ sequenceDiagram
     participant Creds as Credentials Store
 
     Note over U,CLI: Signing
-    U->>CLI: ocm sign componentversion --signer rsapss
+    U->>CLI: ocm sign componentversion --signer-spec ./rsapss.yaml
     CLI->>Repo: Download Component Descriptor
     Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Compute Digest
@@ -284,7 +284,7 @@ sequenceDiagram
     CLI->>Repo: Upload Descriptor with Signature
 
     Note over U,CLI: Verification
-    U->>CLI: ocm verify componentversion --verifier rsapss
+    U->>CLI: ocm verify componentversion --verifier-spec ./rsapss.yaml
     CLI->>Repo: Download Component Descriptor
     Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Recompute Digest
@@ -304,8 +304,9 @@ sequenceDiagram
 - type: credentials.config.ocm.software
   consumers:
   - identity:
-      type: PEM/v1alpha1
-      name: "rsapss"
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: mysig
     credentials:
     - type: Credentials/v1
       properties:
@@ -316,7 +317,7 @@ sequenceDiagram
 ### Signing via `--signer-spec`
 
 ```yaml ./rsapss.yaml
-type: RSASSA-PSS/v1alpha1
+type: RSASigningConfiguration/v1alpha1
 ```
 
 ```shell
@@ -326,7 +327,7 @@ ocm sign componentversion --signature mysig --signer-spec ./rsapss.yaml ghcr.io/
 ### Verification via `--verifier-spec`
 
 ```yaml ./rsapss.yaml
-type: RSASSA-PSS/v1alpha1
+type: RSASigningConfiguration/v1alpha1
 ```
 
 ```shell
@@ -339,8 +340,9 @@ Generated Credential Consumer Identity for `GetSigningCredentialConsumerIdentity
 `GetVerifyingCredentialConsumerIdentity`:
 
 ```yaml
-type: RSASSA-PSS/v1alpha1
-name: "rsapss"
+type: RSA/v1alpha1
+algorithm: RSASSA-PSS
+signature: mysig
 ```
 
 Returned Credentials from `credentials.config.ocm.software`:
@@ -357,12 +359,12 @@ verifying.
 
 Sigstore requires a special external plugin that works as:
 
-- Signing Handler with `sign.sigstore.dev/v1alpha1`
-  - This handler can request credentials of type `OIDCIdentityToken/v1alpha1` to use for signing.
-- Verification Handler with `verify.sigstore.dev/v1alpha1`
-  - This handler can request credentials of type `PEM/v1alpha1` to use for offline verification.
+- Signing Handler with `SigstoreSigningConfiguration/v1alpha1`
+  - This handler requests credentials with consumer identity type `SigstoreSigner/v1alpha1` for signing.
+- Verification Handler with `SigstoreVerificationConfiguration/v1alpha1`
+  - This handler requests credentials with consumer identity type `SigstoreVerifier/v1alpha1` for offline verification.
 - Credential Graph Plugin
-  - This plugin can resolve credentials of type `SigstoreOIDC/v1` to use for signing.
+  - This plugin (`OIDCIdentityTokenProvider/v1alpha1`) can resolve credentials of type `OIDCIdentityToken/v1alpha1` for signing via an interactive OIDC flow.
 
 ### Flow
 
@@ -379,14 +381,14 @@ sequenceDiagram
     participant Rekor as Rekor Transparency Log
 
     Note over U,CLI: Signing
-    U->>CLI: ocm sign componentversion --signer sigstore
+    U->>CLI: ocm sign componentversion --signer-spec ./sigstore-sign.yaml
     CLI->>Repo: Download Component Descriptor
     Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Compute Digest
     CLI->>Plugin: GetSigningCredentialConsumerIdentity(config)
-    Plugin-->>CLI: Credential Identity (OIDCIdentityToken/v1alpha1)
+    Plugin-->>CLI: Credential Identity (SigstoreSigner/v1alpha1)
     CLI->>Creds: Resolve credentials for identity
-    Creds->>Plugin: Trigger SigstoreOIDC flow
+    Creds->>Plugin: Trigger OIDCIdentityTokenProvider flow
     Plugin->>Browser: Open auth URL (with PKCE)
     U->>Browser: Authenticate + Consent
     Browser->>Plugin: Redirect to localhost callback with auth code. Forward auth code to plugin callback server
@@ -404,14 +406,14 @@ sequenceDiagram
     CLI->>Repo: Upload Descriptor with Signature
 
     Note over U,CLI: Verification
-    U->>CLI: ocm verify componentversion --verifier sigstore
+    U->>CLI: ocm verify componentversion --verifier-spec ./sigstore-verify.yaml
     CLI->>Repo: Download Component Descriptor
     Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Recompute Digest
     CLI->>Plugin: GetVerifyingCredentialConsumerIdentity(config)
-    Plugin-->>CLI: Credential Identity (PEM/v1alpha1)
+    Plugin-->>CLI: Credential Identity (SigstoreVerifier/v1alpha1)
     CLI->>Creds: Resolve credentials for identity
-    Creds-->>CLI: public_key_pem_file
+    Creds-->>CLI: trusted_root_json_file
     CLI->>Plugin: Verify(signature, config, credentials)
     Plugin->>Rekor: Lookup Signature Entry
     Rekor-->>Plugin: Rekor Verification Result
@@ -426,43 +428,57 @@ sequenceDiagram
 - type: credentials.config.ocm.software
   consumers:
     - identity:
-        # use this identity token to authenticate for signing
-        type: OIDCIdentityToken/v1alpha1
-        name: "sigstore"
+        # consumer identity for signing: identifies a sigstore signer
+        type: SigstoreSigner/v1alpha1
+        signature: mysig
       credentials:
-      # resolve credentials for this identity token via the SigstoreOIDC credential plugin.
-      - type: SigstoreOIDC/v1alpha1
-        flow: normal # request an auth code with PKCE, use for token exchange with id token, stores auth code in local cache for reuse, equivalent to authorization_code in OIDC terms but name kept as in sigstore
+        # resolve credentials via the OIDCIdentityTokenProvider credential plugin (interactive browser flow).
+        # Uses sigstore public-good defaults (oauth2.sigstore.dev/auth, clientID: sigstore).
+        - type: OIDCIdentityTokenProvider/v1alpha1
     - identity:
-        # use this identity token to provide a fallback public key for offline verification
-        type: PEM/v1alpha1
-        name: "sigstore"
+        # consumer identity for signing with a pre-obtained token (e.g. CI)
+        type: SigstoreSigner/v1alpha1
+        signature: mysig-ci
       credentials:
         - type: Credentials/v1
           properties:
-            public_key_pem_file: "/path/to/mypublickey.pem"
+            token: "eyJhbGciOi..."
+    - identity:
+        # consumer identity for signing targeting private OIDC infrastructure
+        type: SigstoreSigner/v1alpha1
+        signature: mysig-private
+      credentials:
+        - type: OIDCIdentityTokenProvider/v1alpha1
+          issuer: https://dex.my-company.internal
+          clientID: my-sigstore-client
+    - identity:
+        # consumer identity for verification: identifies a sigstore verifier
+        type: SigstoreVerifier/v1alpha1
+        signature: mysig
+      credentials:
+        - type: Credentials/v1
+          properties:
+            trusted_root_json_file: "/path/to/trusted_root.json"
 ```
 
 ### Signing via `--signer-spec`
 
-```yaml ./sigstore.yaml
-type: sign.sigstore.dev/v1alpha1
+```yaml ./sigstore-sign.yaml
+type: SigstoreSigningConfiguration/v1alpha1
 fulcioURL: https://fulcio.sigstore.dev
 rekorURL: https://rekor.sigstore.dev
-OIDCIssuerURL: https://oauth2.sigstore.dev/auth
-OIDCClientID: "sigstore"
 ```
 
 ```shell
-ocm sign componentversion --signature mysig --signer-spec ./sigstore.yaml ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+ocm sign componentversion --signature mysig --signer-spec ./sigstore-sign.yaml ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 ```
 
 ### Verification via `--verifier-spec`
 
 ```yaml ./sigstore-verify.yaml
-type: verify.sigstore.dev/v1alpha1
-rekor:
-  publicKeyLookupPolicy: Default
+type: SigstoreVerificationConfiguration/v1alpha1
+certificateOIDCIssuer: https://accounts.google.com
+certificateIdentity: user@example.com
 ```
 
 ```shell
@@ -474,25 +490,23 @@ ocm verify componentversion --signature mysig --verifier-spec ./sigstore-verify.
 Generated Credential Consumer Identity for `GetSigningCredentialConsumerIdentity`:
 
 ```yaml
-type: OIDCIdentityToken/v1alpha1
-name: "sigstore"
+type: SigstoreSigner/v1alpha1
+signature: mysig
 ```
 
-Returned Credentials from `SigstoreOIDC/v1alpha1` after a successful normal / implicit OIDC flow:
+Returned Credentials from `OIDCIdentityTokenProvider/v1alpha1` after a successful interactive OIDC flow:
 
 ```yaml
-token: <base64 id token that contains email and openid scope => id token>
+token: <OIDC identity token containing email and openid scope>
 ```
 
-These credentials are retrieved via the plugin by using the [interactive OIDC flow from Sigstores OIDC implementation](https://github.com/sigstore/sigstore/blob/main/pkg/oauthflow/interactive.go#L48) via plugin.
-
-Because OIDC allows to open a browser with a redirect, the plugin can dynamically open a browser window to authenticate the user and redirect back to its own small webserver retrieving the auth code. This works across binary boundaries, because the webserver is running in the same process as the plugin. Potentially, even if the server is not running on the same machine, the browser can still open a window when the client_credentials flow is used (not realized in this ADR, but possible).
+These credentials are retrieved via the credential plugin by using an interactive OIDC authorization code flow with PKCE. The plugin opens a browser window to authenticate the user and receives the auth code via a localhost callback. Alternatively, a direct `Credentials/v1` entry with a `token` property can be used (e.g. in CI environments where a token is pre-obtained via `SIGSTORE_ID_TOKEN`).
 
 Generated Credential Consumer Identity for `GetVerifyingCredentialConsumerIdentity`:
 
 ```yaml
-type: PEM/v1alpha1
-name: "sigstore"
+type: SigstoreVerifier/v1alpha1
+signature: mysig
 ```
 
 Returned Credentials from `credentials.config.ocm.software`:
@@ -500,7 +514,7 @@ Returned Credentials from `credentials.config.ocm.software`:
 ```yaml
 type: Credentials/v1
 properties:
-  public_key_pem_file: "/path/to/mypublickey.pem"
+  trusted_root_json_file: "/path/to/trusted_root.json"
 ```
 
 These credentials can be used for offline verification in case the Rekor public key log or the TUF root is not available.

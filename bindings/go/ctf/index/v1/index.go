@@ -2,6 +2,7 @@ package v1
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -13,7 +14,10 @@ const (
 	ArtifactIndexFileName = "artifact-index.json"
 )
 
-var ErrSchemaVersionMismatch = fmt.Errorf("schema version mismatch, only %v is supported", SchemaVersion)
+var (
+	ErrSchemaVersionMismatch = fmt.Errorf("schema version mismatch, only %v is supported", SchemaVersion)
+	ErrArtifactNotFound      = errors.New("artifact not found in index")
+)
 
 // Index is a collection of artifacts that can be serialized to disk.
 // It is used to store metadata about the artifacts in a CTF and used for discovery purposes
@@ -21,13 +25,21 @@ var ErrSchemaVersionMismatch = fmt.Errorf("schema version mismatch, only %v is s
 type Index interface {
 	// AddArtifact adds an ArtifactMetadata to the index.
 	//
-	// If an artifact with the same digest already exists, its tag is updated (if provided).
+	// Like OCI Image Layout, multiple entries with the same digest but different tags are allowed.
 	// If a tag already exists in the same repository but points to a different digest, it is cleared ("retag" scenario).
-	// If no artifact with the same digest exists, the artifact is added to the index.
+	// If an exact duplicate (same repository, tag, and digest) exists, the add is skipped.
+	//
+	// Note: AddArtifact performs no garbage collection. When a tag is cleared during retag, the index
+	// entry persists with an empty tag, and unreferenced blobs persist in the CTF.
 	AddArtifact(a ArtifactMetadata)
 	// GetArtifacts returns a slice of ArtifactMetadata that are stored in the index at the time of the call.
 	// It is not guaranteed to be consistent with later calls as it is a snapshot of the current state.
 	GetArtifacts() []ArtifactMetadata
+	// RemoveTag removes the index entry with the given tag from the given repository.
+	// Returns ErrArtifactNotFound if no matching entry exists.
+	// No blobs are deleted: the manifest and all blobs it references (layers, config)
+	// remain in the CTF until an explicit GC pass compacts the archive.
+	RemoveTag(repository, tag string) error
 }
 
 type index struct {
@@ -38,14 +50,13 @@ type index struct {
 
 // ArtifactMetadata is a struct that contains metadata about an artifact stored in a CTF.
 // Since CTFs are registry-like, the metadata is similar to that of a container repository.
-// A common mapping is to have an artifact metadata mapping to an OCI Image Layout with its own index containing
-// exactly one tag.
-// In the future it might become common to have multiple tags per artifact, but this is not expected in most cases.
+// Each entry points to an OCI manifest or index blob by digest, with blobs stored flat in the CTF.
+// Like OCI Image Layout, multiple entries with the same digest but different tags can coexist,
+// allowing multiple tags (e.g., "v1.0.0", "latest") to point to the same artifact.
 type ArtifactMetadata struct {
 	// The Repository Name of the artifact. Relative Name of the artifact, no FQDN
 	Repository string `json:"repository"`
 	// The Tag of the artifact. This is the tag that is used to reference the artifact.
-	// Only relevant if artifact contains exactly one version.
 	Tag string `json:"tag,omitempty"`
 	// The Digest of the artifact. This is the digest that is used to reference the artifact.
 	// Points to the blob in the CTF that contains the artifact.
@@ -92,34 +103,54 @@ func (i *index) AddArtifact(a ArtifactMetadata) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	newArtifact := true
-	// If we have a tag, lets compare it with existing artifacts in our index.
+	var foundUntaggedMatch bool
 	for idx, art := range i.Artifacts {
+		// Only consider artifacts in the same repository
 		if art.Repository != a.Repository {
 			continue
 		}
-		if art.Tag == a.Tag && art.Digest != a.Digest {
-			// "retag" scenario to new digest: tag exists with different digest → clear old tag
+
+		// Case 1: Exact duplicate (same repo+tag+digest) → skip, don't add
+		if art.Tag == a.Tag && art.Digest == a.Digest {
+			return
+		}
+
+		// Case 2: Retag scenario - same tag but different digest → clear old tag
+		if a.Tag != "" && art.Tag == a.Tag && art.Digest != a.Digest {
 			i.Artifacts[idx].Tag = ""
 		}
-		if art.Digest == a.Digest {
-			//  "same digest" scenario: artifact already exists with same digest.
-			newArtifact = false
-			if a.Tag != "" {
-				// "tag" scenario: digest is equivalent but there is now a tag.
-				i.Artifacts[idx].Tag = a.Tag
-			}
+
+		// Case 3: Tag an untagged entry - same digest but currently untagged → tag it
+		if a.Tag != "" && art.Tag == "" && art.Digest == a.Digest {
+			i.Artifacts[idx].Tag = a.Tag
+			foundUntaggedMatch = true
 		}
 	}
 
-	if newArtifact {
-		// Add new artifact
-		i.Artifacts = append(i.Artifacts, a)
+	// If we tagged an existing untagged entry, don't add a new entry
+	if foundUntaggedMatch {
+		return
 	}
+
+	// No matching artifact found, add as new entry
+	i.Artifacts = append(i.Artifacts, a)
 }
 
 func (i *index) GetArtifacts() []ArtifactMetadata {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 	return slices.Clone(i.Artifacts)
+}
+
+func (i *index) RemoveTag(repository, tag string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	idx := slices.IndexFunc(i.Artifacts, func(a ArtifactMetadata) bool {
+		return a.Repository == repository && a.Tag == tag
+	})
+	if idx == -1 {
+		return ErrArtifactNotFound
+	}
+	i.Artifacts = slices.Delete(i.Artifacts, idx, idx+1)
+	return nil
 }

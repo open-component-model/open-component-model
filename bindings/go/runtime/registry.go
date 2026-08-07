@@ -274,6 +274,23 @@ func (r *Scheme) IsRegistered(typ Type) bool {
 	return exists
 }
 
+// ResolveCanonicalType returns the canonical (default) type for the given type.
+// If typ is a default type, it is returned as-is with ok=true.
+// If typ is an alias, the default type it aliases is returned with ok=true.
+// If typ is not registered, it is returned unchanged with ok=false.
+func (r *Scheme) ResolveCanonicalType(typ Type) (canonical Type, ok bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if _, exists := r.defaults.GetLeft(typ); exists {
+		return typ, true
+	}
+	if def, isAlias := r.aliases[typ]; isAlias {
+		return def, true
+	}
+	return typ, false
+}
+
 func (r *Scheme) MustRegisterWithAlias(prototype Typed, types ...Type) {
 	if err := r.RegisterWithAlias(prototype, types...); err != nil {
 		panic(err)
@@ -420,12 +437,12 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 
 	// Case 3: Generic Typed -> Typed conversion using reflection.
 	intoVal := reflect.ValueOf(into)
-	if intoVal.Kind() != reflect.Ptr || intoVal.IsNil() {
+	if intoVal.Kind() != reflect.Pointer || intoVal.IsNil() {
 		return fmt.Errorf("'into' must be a non-nil pointer")
 	}
 	copied := from.DeepCopyTyped()
 	copiedVal := reflect.ValueOf(copied)
-	if copiedVal.Kind() == reflect.Ptr {
+	if copiedVal.Kind() == reflect.Pointer {
 		copiedVal = copiedVal.Elem()
 	}
 	intoElem := intoVal.Elem()

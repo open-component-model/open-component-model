@@ -83,7 +83,7 @@ func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request ocmrepositoryv1.PostComponentVersionRequest[runtime.Typed], credentials map[string]string) error {
+func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request ocmrepositoryv1.PostComponentVersionRequest[runtime.Typed], credentials runtime.Typed) error {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
@@ -101,7 +101,7 @@ func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request ocmr
 	return nil
 }
 
-func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request ocmrepositoryv1.GetComponentVersionRequest[runtime.Typed], credentials map[string]string) (*descriptor.Descriptor, error) {
+func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request ocmrepositoryv1.GetComponentVersionRequest[runtime.Typed], credentials runtime.Typed) (*descriptor.Descriptor, error) {
 	var params []plugins.KV
 	addParam := func(k, v string) {
 		params = append(params, plugins.KV{Key: k, Value: v})
@@ -132,7 +132,7 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request ocmr
 	return desc, nil
 }
 
-func (r *RepositoryPlugin) ListComponentVersions(ctx context.Context, request ocmrepositoryv1.ListComponentVersionsRequest[runtime.Typed], credentials map[string]string) ([]string, error) {
+func (r *RepositoryPlugin) ListComponentVersions(ctx context.Context, request ocmrepositoryv1.ListComponentVersionsRequest[runtime.Typed], credentials runtime.Typed) ([]string, error) {
 	var params []plugins.KV
 	addParam := func(k, v string) {
 		params = append(params, plugins.KV{Key: k, Value: v})
@@ -157,7 +157,7 @@ func (r *RepositoryPlugin) ListComponentVersions(ctx context.Context, request oc
 	return result, nil
 }
 
-func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request ocmrepositoryv1.PostLocalResourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Resource, error) {
+func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request ocmrepositoryv1.PostLocalResourceRequest[runtime.Typed], credentials runtime.Typed) (*descriptor.Resource, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
@@ -181,7 +181,7 @@ func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request ocmrepo
 	return &resources[0], nil
 }
 
-func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request ocmrepositoryv1.GetLocalResourceRequest[runtime.Typed], credentials map[string]string) (ocmrepositoryv1.GetLocalResourceResponse, error) {
+func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request ocmrepositoryv1.GetLocalResourceRequest[runtime.Typed], credentials runtime.Typed) (ocmrepositoryv1.GetLocalResourceResponse, error) {
 	var params []plugins.KV
 	addParam := func(k, v string) {
 		params = append(params, plugins.KV{Key: k, Value: v})
@@ -213,7 +213,7 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request ocmrepo
 	return response, nil
 }
 
-func (r *RepositoryPlugin) AddLocalSource(ctx context.Context, request ocmrepositoryv1.PostLocalSourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Source, error) {
+func (r *RepositoryPlugin) AddLocalSource(ctx context.Context, request ocmrepositoryv1.PostLocalSourceRequest[runtime.Typed], credentials runtime.Typed) (*descriptor.Source, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
@@ -237,7 +237,7 @@ func (r *RepositoryPlugin) AddLocalSource(ctx context.Context, request ocmreposi
 	return &sources[0], nil
 }
 
-func (r *RepositoryPlugin) GetLocalSource(ctx context.Context, request ocmrepositoryv1.GetLocalSourceRequest[runtime.Typed], credentials map[string]string) (ocmrepositoryv1.GetLocalSourceResponse, error) {
+func (r *RepositoryPlugin) GetLocalSource(ctx context.Context, request ocmrepositoryv1.GetLocalSourceRequest[runtime.Typed], credentials runtime.Typed) (ocmrepositoryv1.GetLocalSourceResponse, error) {
 	var params []plugins.KV
 	addParam := func(k, v string) {
 		params = append(params, plugins.KV{Key: k, Value: v})
@@ -282,7 +282,7 @@ func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *ocmreposito
 	return &identity, nil
 }
 
-func (r *RepositoryPlugin) CheckHealth(ctx context.Context, request ocmrepositoryv1.PostCheckHealthRequest[runtime.Typed], credentials map[string]string) error {
+func (r *RepositoryPlugin) CheckHealth(ctx context.Context, request ocmrepositoryv1.PostCheckHealthRequest[runtime.Typed], credentials runtime.Typed) error {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
@@ -323,7 +323,10 @@ func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
 	return nil
 }
 
-func toCredentials(credentials map[string]string) (plugins.KV, error) {
+func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
+	if credentials == nil {
+		return plugins.KV{Key: "Authorization", Value: "{}"}, nil
+	}
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
 		return plugins.KV{}, err

@@ -19,7 +19,7 @@ import (
 
 type CredentialPlugin struct {
 	ConsumerIdentityTypeAttributes map[runtime.Type]map[string]func(v any) (string, string)
-	CredentialFunc                 func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error)
+	CredentialFunc                 func(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error)
 }
 
 func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.Typed) (runtime.Identity, error) {
@@ -50,7 +50,7 @@ func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.T
 	return identity, nil
 }
 
-func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	if p.CredentialFunc == nil {
 		return nil, fmt.Errorf("no credential function for %v", identity)
 	}
@@ -59,7 +59,7 @@ func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity
 
 type RepositoryPlugin struct {
 	RepositoryIdentityFunc func(config runtime.Typed) (runtime.Identity, error)
-	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
+	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error)
 }
 
 func (s RepositoryPlugin) GetCredentialRepositoryScheme() *runtime.Scheme {
@@ -70,8 +70,8 @@ func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config ru
 	return s.RepositoryIdentityFunc(config)
 }
 
-func (s RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
-	return s.ResolveFunc(ctx, config, identity, credentials)
+func (s RepositoryPlugin) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
+	return s.ResolveFunc(ctx, cfg, identity, credentials)
 }
 
 const testYAML = `
@@ -184,12 +184,15 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 						"dockerConfigFile":            file.(string),
 					}, nil
 				},
-				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
+				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 					switch identity["hostname"] {
 					case "quay.io":
-						return map[string]string{
-							"username": "test1",
-							"password": "bar",
+						return &v1.DirectCredentials{
+							Type: runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+							Properties: map[string]string{
+								"username": "test1",
+								"password": "bar",
+							},
 						}, nil
 					case "notfound.io":
 						return nil, nil
@@ -205,7 +208,7 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 						runtime.IdentityAttributeType: "ErrorRegistry",
 					}, nil
 				},
-				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
+				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 					return nil, fmt.Errorf("some internal plugin error")
 				},
 			}, nil
@@ -229,19 +232,23 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 						runtime.IdentityAttributeHostname: purl.Hostname(),
 					}, nil
 				},
-				ResolveFunc: func(_ context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
+				ResolveFunc: func(_ context.Context, config runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 					var mm map[string]interface{}
 					_ = json.Unmarshal(config.(*runtime.Raw).Data, &mm)
 
-					if credentials["role_id"] != "repository.vault.com-role" || credentials["secret_id"] != "repository.vault.com-secret" {
+					dc, _ := credentials.(*v1.DirectCredentials)
+					if dc == nil || dc.Properties["role_id"] != "repository.vault.com-role" || dc.Properties["secret_id"] != "repository.vault.com-secret" {
 						return nil, fmt.Errorf("failed access")
 					}
 					if identity["hostname"] != "some-hostname.com" {
 						return nil, fmt.Errorf("failed access")
 					}
 
-					return map[string]string{
-						"something-from-vault-repo": "some-value-from-vault",
+					return &v1.DirectCredentials{
+						Type: runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+						Properties: map[string]string{
+							"something-from-vault-repo": "some-value-from-vault",
+						},
 					}, nil
 				},
 			}, nil
@@ -271,53 +278,88 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 						},
 					},
 				},
-				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
-					if identity["secretId"] != "vault-access-creds" {
+				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
+					if identity[runtime.IdentityAttributeHostname] != "myvault.example.com" {
+						return nil, fmt.Errorf("no secret for consumer: %v", identity)
+					}
+					dc, _ := credentials.(*v1.DirectCredentials)
+					if dc == nil || dc.Properties["roleid"] != "my-role-id" {
 						return nil, fmt.Errorf("failed access")
 					}
-					if credentials["roleid"] != "my-role-id" {
-						return nil, fmt.Errorf("failed access")
-					}
-					return map[string]string{
-						"role_id":   "myvault.example.com-role",
-						"secret_id": "myvault.example.com-secret",
+					return &v1.DirectCredentials{
+						Type: runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+						Properties: map[string]string{
+							"role_id":   "myvault.example.com-role",
+							"secret_id": "myvault.example.com-secret",
+						},
 					}, nil
 				},
 			}, nil
 		case runtime.NewUnversionedType("HashiCorpVault"):
+			// Extract vault host from the typed credential.
+			// During resolution this is a runtime.Identity with "hostname" field.
+			// During ingestion this is a *runtime.Raw with "serverURL" field.
+			var vaultHost string
+			if id, ok := repoType.(runtime.Identity); ok {
+				vaultHost = id[runtime.IdentityAttributeHostname]
+			} else {
+				data, _ := json.Marshal(repoType)
+				var mm map[string]any
+				_ = json.Unmarshal(data, &mm)
+				if surl, ok := mm["serverURL"].(string); ok {
+					parsedURL, _ := url.Parse(surl)
+					vaultHost = parsedURL.Hostname()
+				}
+			}
+
 			return CredentialPlugin{
 				ConsumerIdentityTypeAttributes: map[runtime.Type]map[string]func(v any) (string, string){
 					runtime.NewUnversionedType("HashiCorpVault"): {
 						"serverURL": func(v any) (string, string) {
-							url, _ := url.Parse(v.(string))
-							return runtime.IdentityAttributeHostname, url.Hostname()
+							parsedURL, _ := url.Parse(v.(string))
+							return runtime.IdentityAttributeHostname, parsedURL.Hostname()
 						},
 					},
 				},
-				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
-					switch identity["hostname"] {
+				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
+					credsType := runtime.NewVersionedType(v1.CredentialsType, v1.Version)
+					dc, _ := credentials.(*v1.DirectCredentials)
+					switch vaultHost {
 					case "myvault.example.com":
-						roleid, secret := credentials["role_id"], credentials["secret_id"]
-						if roleid != "myvault.example.com-role" || secret != "myvault.example.com-secret" {
+						if dc == nil || dc.Properties["role_id"] != "myvault.example.com-role" || dc.Properties["secret_id"] != "myvault.example.com-secret" {
 							return nil, fmt.Errorf("failed access")
 						}
-						return map[string]string{
-							"role_id":   "other.vault.com-role",
-							"secret_id": "other.vault.com-secret",
+						if identity[runtime.IdentityAttributeHostname] != "other.vault.com" {
+							return nil, fmt.Errorf("no secret for consumer: %v", identity)
+						}
+						return &v1.DirectCredentials{
+							Type: credsType,
+							Properties: map[string]string{
+								"role_id":   "other.vault.com-role",
+								"secret_id": "other.vault.com-secret",
+							},
 						}, nil
 					case "other.vault.com":
-						roleid, secret := credentials["role_id"], credentials["secret_id"]
-						if roleid != "other.vault.com-role" || secret != "other.vault.com-secret" {
+						if dc == nil || dc.Properties["role_id"] != "other.vault.com-role" || dc.Properties["secret_id"] != "other.vault.com-secret" {
 							return nil, fmt.Errorf("failed access")
 						}
-						return map[string]string{
-							"username": "foo",
-							"password": "bar",
+						if identity[runtime.IdentityAttributeHostname] != "docker.io" {
+							return nil, fmt.Errorf("no secret for consumer: %v", identity)
+						}
+						return &v1.DirectCredentials{
+							Type: credsType,
+							Properties: map[string]string{
+								"username": "foo",
+								"password": "bar",
+							},
 						}, nil
 					}
 
-					return map[string]string{
-						"vaultSecret": "vault-secret-for-https://" + identity["hostname"] + "/",
+					return &v1.DirectCredentials{
+						Type: credsType,
+						Properties: map[string]string{
+							"vaultSecret": "vault-secret-for-https://" + identity["hostname"] + "/",
+						},
 					}, nil
 				},
 			}, nil
@@ -437,12 +479,77 @@ func TestResolveCredentials(t *testing.T) {
 			r := require.New(t)
 			graph, err := GetGraph(t, tc.yaml)
 			r.NoError(err)
-			credsByIdentity, err := graph.Resolve(t.Context(), tc.identity)
+			typed, err := graph.Resolve(t.Context(), tc.identity)
 			tc.expectedErr(t, err)
 			if err != nil {
 				return
 			}
-			r.Equal(tc.expected, credsByIdentity)
+			dc, ok := typed.(*v1.DirectCredentials)
+			r.True(ok, "expected *v1.DirectCredentials, got %T", typed)
+			r.Equal(tc.expected, dc.Properties)
+		})
+	}
+}
+
+func TestResolveTypedCredentials(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		yaml        string
+		identity    runtime.Identity
+		expectedErr require.ErrorAssertionFunc
+		validate    func(t *testing.T, typed runtime.Typed)
+	}{
+		{
+			name: "returns DirectCredentials with properties",
+			yaml: testYAML,
+			identity: runtime.Identity{
+				"type":     "OCIRegistry",
+				"hostname": "docker.io",
+			},
+			expectedErr: require.NoError,
+			validate: func(t *testing.T, typed runtime.Typed) {
+				direct, ok := typed.(*v1.DirectCredentials)
+				require.True(t, ok, "expected *v1.DirectCredentials, got %T", typed)
+				require.Equal(t, "foo", direct.Properties["username"])
+				require.Equal(t, "bar", direct.Properties["password"])
+			},
+		},
+		{
+			name: "not found returns error",
+			yaml: testYAML,
+			identity: runtime.Identity{
+				"type":     "OCIRegistry",
+				"hostname": "notfound.io",
+				"path":     "another-owner/another-repo",
+			},
+			expectedErr: func(t require.TestingT, err error, i ...interface{}) {
+				require.Error(t, err)
+				require.ErrorIs(t, err, credentials.ErrNotFound)
+			},
+			validate: func(t *testing.T, typed runtime.Typed) {},
+		},
+		{
+			name: "missing identity type returns error",
+			yaml: testYAML,
+			identity: runtime.Identity{
+				"hostname": "docker.io",
+			},
+			expectedErr: func(t require.TestingT, err error, i ...interface{}) {
+				require.Error(t, err)
+				require.ErrorIs(t, err, credentials.ErrUnknown)
+			},
+			validate: func(t *testing.T, typed runtime.Typed) {},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			graph, err := GetGraph(t, tc.yaml)
+			require.NoError(t, err)
+			typed, err := graph.Resolve(t.Context(), tc.identity)
+			tc.expectedErr(t, err)
+			if err != nil {
+				return
+			}
+			tc.validate(t, typed)
 		})
 	}
 }

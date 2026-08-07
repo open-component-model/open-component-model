@@ -10,10 +10,10 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/helm/access"
-	v1 "ocm.software/open-component-model/bindings/go/helm/access/spec/v1"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
+	"ocm.software/open-component-model/bindings/go/helm/spec/access"
+	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"

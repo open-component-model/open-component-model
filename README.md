@@ -73,10 +73,10 @@ docker run -t ghcr.io/open-component-model/cli:latest --help
 See the [guide](https://ocm.software/docs/how-to/how-to-use-the-ocm-cli-container-image/) on using the OCM CLI
 container image for more details.
 
-### [OCM K8s Toolkit](kubernetes/controller)
+### [OCM Kubernetes Controller Toolkit](kubernetes/controller)
 
-The OCM K8s Toolkit provides a Kubernetes operator to deploy OCM resources into a Kubernetes cluster. You can install
-the operator using the provided [Helm chart](kubernetes/controller/chart):
+The OCM Kubernetes Controller Toolkit provides a Kubernetes operator to deploy OCM resources into a Kubernetes
+cluster. You can install the operator using the provided [Helm chart](kubernetes/controller/chart):
 
 ```bash
 helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart \
@@ -84,7 +84,8 @@ helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/contr
     --create-namespace
 ```
 
-While the OCM K8s Toolkit can be used standalone to deploy manifests from OCM resources, its full potential is unlocked
+While the OCM Kubernetes Controller Toolkit can be used standalone to deploy manifests from OCM resources, its full
+potential is unlocked
 when combined with [kro](https://kro.run/docs/getting-started/Installation/) and a deployer such as
 [FluxCD](https://fluxcd.io/docs/installation/). Together, they enable deploying Helm charts or Kustomizations from OCM
 resources, including configuration and localization at deploy time.
@@ -94,7 +95,9 @@ Check out the [guides](https://ocm.software/docs/getting-started/) for more deta
 
 Language bindings are provided for:
 
-- [Go](bindings/go). These bindings are also used by the OCM CLI and are the primary focus.
+- [Go](bindings/go). These bindings are also used by the OCM CLI and are our primary focus.
+- Looking for usage examples? Check out the [tested examples](bindings/go/examples/) covering blobs, descriptors,
+  credentials, signing, and repository operations.
 
 > We are open to discussing and implementing bindings for other languages. If you are interested in a specific language,
 > please open an issue or contact us directly. Contributions are always welcome!
@@ -105,7 +108,7 @@ Code contributions, feature requests, bug reports, and help requests are very we
 [Contributing Guide in the Community repository](https://github.com/open-component-model/.github/blob/main/CONTRIBUTING.md)
 for more information on how to contribute to OCM.
 
-OCM follows the [NeoNephos Code of Conduct](https://github.com/neonephos/.github/blob/main/CODE_OF_CONDUCT.md).
+OCM follows the [Linux Foundation EU Code of Conduct](https://linuxfoundation.eu/policies/code-of-conduct).
 
 ## Licensing
 

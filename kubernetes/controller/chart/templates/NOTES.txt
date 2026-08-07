@@ -1,0 +1,16 @@
+{{- if and .Values.webhook.enable (not .Values.certManager.enable) }}
+WARNING: Conversion webhook is enabled without cert-manager.
+You must provide a TLS certificate for the webhook server:
+
+  1. Create a TLS secret with a CA-signed certificate for the webhook service:
+     {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "webhook-service" "context" $) }}.{{ .Release.Namespace }}.svc
+
+  2. Either set webhook.certSecret to the name of your secret,
+     or create it with the default name:
+     {{ .Values.webhook.certSecret | default (include "ocm-k8s-toolkit.resourceName" (dict "suffix" "webhook-server-cert" "context" $)) }}
+
+  3. Patch each CRD with the CA bundle:
+     kubectl patch crd <name>.delivery.ocm.software --type=json \
+       -p='[{"op":"add","path":"/spec/conversion/webhook/clientConfig/caBundle","value":"<base64-ca>"}]'
+
+{{- end }}

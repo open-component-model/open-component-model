@@ -50,4 +50,11 @@ type OCIAddLocalResourceSpec struct {
 	Resource *v2.Resource `json:"resource"`
 	// File is the access specification to the file that should be added
 	File v1alpha1.File `json:"file"`
+	// GlobalAccessPolicy controls whether global access references are added to local blobs.
+	// If not set (empty), global access is never added to discourage reliance on global access references.
+	// Set to "auto" to auto-detect based on the storage backend.
+	//
+	// Experimental: This policy is carried over from OCM v1 for backwards compatibility.
+	// Its future availability is being evaluated by the community.
+	GlobalAccessPolicy oci.GlobalAccessPolicy `json:"globalAccessPolicy,omitempty"`
 }

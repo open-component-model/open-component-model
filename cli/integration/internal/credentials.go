@@ -61,7 +61,6 @@ const distributionRegistryImage = "registry:3.0.0"
 
 func StartDockerContainerRegistry(t *testing.T, container, htpasswd string) string {
 	t.Helper()
-	// Start containerized registry
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
 	registryContainer, err := registry.Run(t.Context(), distributionRegistryImage,
 		WithHtpasswd(htpasswd),

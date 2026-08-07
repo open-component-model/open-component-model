@@ -1,8 +1,8 @@
 # ADR Template
 
-* Status: proposed
-* Deciders: <Committer IDs of Decision Makers>
-* Date: YYYY.MM.DD
+* **Status**: proposed
+* **Deciders**: <Committer IDs of Decision Makers>
+* **Date**: YYYY-MM-DD
 
 Technical Story: <Brief description of the technical context and need for the decision>
 

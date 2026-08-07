@@ -46,7 +46,12 @@ const jsonArrayData = `{
         {
           "name": "example-reference",
           "version": "v1.0.0",
-          "componentName": "github.com/example/other-component"
+          "componentName": "github.com/example/other-component",
+          "digest": {
+            "hashAlgorithm": "SHA-256",
+            "normalisationAlgorithm": "jsonNormalisation/v4alpha1",
+            "value": "abc123def456"
+          }
         }
       ]
     }
@@ -86,7 +91,12 @@ const jsonSingleData = `{
     {
       "name": "example-reference",
       "version": "v1.0.0",
-      "componentName": "github.com/example/other-component"
+      "componentName": "github.com/example/other-component",
+      "digest": {
+        "hashAlgorithm": "SHA-256",
+        "normalisationAlgorithm": "jsonNormalisation/v4alpha1",
+        "value": "abc123def456"
+      }
     }
   ]
 }`
@@ -438,21 +448,49 @@ func TestSource_Struct(t *testing.T) {
 }
 
 func TestReference_Struct(t *testing.T) {
-	reference := v1.Reference{
-		ElementMeta: v1.ElementMeta{
-			ObjectMeta: v1.ObjectMeta{
-				Name:    "test-reference",
-				Version: "1.0.0",
+	t.Run("without digest", func(t *testing.T) {
+		reference := v1.Reference{
+			ElementMeta: v1.ElementMeta{
+				ObjectMeta: v1.ObjectMeta{
+					Name:    "test-reference",
+					Version: "1.0.0",
+				},
 			},
-		},
-		Component: "referenced-component",
-	}
+			Component: "referenced-component",
+		}
 
-	jsonData, err := json.Marshal(reference)
-	require.NoError(t, err)
-	assert.Contains(t, string(jsonData), `"name":"test-reference"`)
-	assert.Contains(t, string(jsonData), `"version":"1.0.0"`)
-	assert.Contains(t, string(jsonData), `"componentName":"referenced-component"`)
+		jsonData, err := json.Marshal(reference)
+		require.NoError(t, err)
+		assert.Contains(t, string(jsonData), `"name":"test-reference"`)
+		assert.Contains(t, string(jsonData), `"version":"1.0.0"`)
+		assert.Contains(t, string(jsonData), `"componentName":"referenced-component"`)
+		assert.NotContains(t, string(jsonData), `"digest"`)
+	})
+
+	t.Run("with digest", func(t *testing.T) {
+		reference := v1.Reference{
+			ElementMeta: v1.ElementMeta{
+				ObjectMeta: v1.ObjectMeta{
+					Name:    "test-reference",
+					Version: "1.0.0",
+				},
+			},
+			Component: "referenced-component",
+			Digest: &v1.Digest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: "jsonNormalisation/v4alpha1",
+				Value:                  "abc123def456",
+			},
+		}
+
+		jsonData, err := json.Marshal(reference)
+		require.NoError(t, err)
+		assert.Contains(t, string(jsonData), `"componentName":"referenced-component"`)
+		assert.Contains(t, string(jsonData), `"digest"`)
+		assert.Contains(t, string(jsonData), `"hashAlgorithm":"SHA-256"`)
+		assert.Contains(t, string(jsonData), `"normalisationAlgorithm":"jsonNormalisation/v4alpha1"`)
+		assert.Contains(t, string(jsonData), `"value":"abc123def456"`)
+	})
 }
 
 func TestProvider_Struct(t *testing.T) {

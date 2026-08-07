@@ -33,7 +33,7 @@ func (r *resourcePluginConverter) GetResourceCredentialConsumerIdentity(ctx cont
 	return result.Identity, nil
 }
 
-func (r *resourcePluginConverter) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (content blob.ReadOnlyBlob, err error) {
+func (r *resourcePluginConverter) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (content blob.ReadOnlyBlob, err error) {
 	resources, err := descriptor.ConvertToV2Resources(r.scheme, []descriptor.Resource{*resource})
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert resource: %w", err)
@@ -55,7 +55,7 @@ func (r *resourcePluginConverter) DownloadResource(ctx context.Context, resource
 	return rBlob, nil
 }
 
-func (r *resourcePluginConverter) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (result *descriptor.Resource, err error) {
+func (r *resourcePluginConverter) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (result *descriptor.Resource, err error) {
 	resources, err := descriptor.ConvertToV2Resources(r.scheme, []descriptor.Resource{*resource})
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert resource: %w", err)

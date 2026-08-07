@@ -62,3 +62,21 @@ type Repository struct {
 func (spec *Repository) String() string {
 	return spec.BaseUrl
 }
+
+// GlobalAccessPolicy defines how global access references are handled when adding local blobs.
+// The zero value (empty string) maps to never adding global access, discouraging reliance on
+// global access references.
+type GlobalAccessPolicy string
+
+const (
+	// GlobalAccessPolicyNever suppresses global access on all local blobs, even when the storage
+	// backend is globally reachable. This is the default (zero value) to discourage reliance on
+	// global access references.
+	GlobalAccessPolicyNever GlobalAccessPolicy = ""
+	// GlobalAccessPolicyAuto auto-detects based on the storage backend. Global access is only
+	// added when the storage backend is globally reachable (e.g. a remote OCI registry).
+	//
+	// Experimental: This policy is carried over from OCM v1 for backwards compatibility.
+	// Its future availability is being evaluated by the community.
+	GlobalAccessPolicyAuto GlobalAccessPolicy = "auto"
+)

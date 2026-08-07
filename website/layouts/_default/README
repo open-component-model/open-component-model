@@ -1,0 +1,8 @@
+These two base files were copied from under:
+```
+cp node_modules/@hyas/doks-core/layouts/_default/baseof.html layouts/_default
+cp node_modules/@hyas/doks-core/layouts/_default/single.html layouts/_default/list.html
+```
+
+Notice that the single.html is now list.html. This is deliberate so index pages are
+rendered like single pages. Index pages are normally counted as list pages.

@@ -32,7 +32,7 @@ import (
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
@@ -51,13 +51,14 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	k8sClient  client.Client
-	k8sManager ctrl.Manager
-	testEnv    *envtest.Environment
-	recorder   record.EventRecorder
-	ctx        context.Context
-	cancel     context.CancelFunc
-	pm         *manager.PluginManager
+	k8sClient     client.Client
+	k8sManager    ctrl.Manager
+	testEnv       *envtest.Environment
+	recorder      record.EventRecorder
+	ctx           context.Context
+	cancel        context.CancelFunc
+	pm            *manager.PluginManager
+	downloadCache *cache.MemoryDigestObjectCache[string, []*unstructured.Unstructured]
 )
 
 func TestControllers(t *testing.T) {
@@ -93,10 +94,10 @@ var _ = BeforeSuite(func() {
 		CRDs: []*apiextensionsv1.CustomResourceDefinition{rgdCRD},
 
 		// The BinaryAssetsDirectory is only required if you want to run the tests directly
-		// without call the makefile target test. If not informed it will look for the
+		// without calling `task test`. If not informed it will look for the
 		// default path defined in controller-runtime which is /usr/local/kubebuilder/.
 		// Note that you must have the required binaries setup under the bin directory to perform
-		// the tests directly. When we run make test it will be setup and used automatically.
+		// the tests directly. When we run `task test` it will be setup and used automatically.
 		BinaryAssetsDirectory: filepath.Join("..", "..", "..", "bin", "k8s",
 			fmt.Sprintf("%s-%s-%s", os.Getenv("ENVTEST_K8S_VERSION"), runtime.GOOS, runtime.GOARCH)),
 	}
@@ -174,7 +175,11 @@ var _ = BeforeSuite(func() {
 	Expect(k8sManager.Add(workerPool)).To(Succeed())
 
 	resolutionLogger := logf.Log.WithName("resolution")
-	resolver := resolution.NewResolver(k8sClient, &resolutionLogger, workerPool, pm)
+	resolver := resolution.NewResolver(&resolutionLogger, workerPool, pm)
+
+	downloadCache = cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_test_object_cache", 1_000, func(k string, v []*unstructured.Unstructured) {
+		GinkgoLogr.Info("DownloadCache eviction", "key", k, "value", fmt.Sprintf("%d objects", len(v)))
+	})
 
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
@@ -182,11 +187,9 @@ var _ = BeforeSuite(func() {
 			Scheme:        testEnv.Scheme,
 			EventRecorder: recorder,
 		},
-		DownloadCache: cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_test_object_cache", 1_000, func(k string, v []*unstructured.Unstructured) {
-			GinkgoLogr.Info("DownloadCache eviction", "key", k, "value", fmt.Sprintf("%d objects", len(v)))
-		}),
-		Resolver:           resolver,
-		PluginManager:      pm,
+		DownloadCache:        downloadCache,
+		Resolver:             resolver,
+		PluginManager:        pm,
 		MaxResourceSizeBytes: 2 * 1024 * 1024,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 

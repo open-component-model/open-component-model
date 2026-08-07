@@ -1,9 +1,0 @@
-# Adds namespace to all resources.
-namespace: ocm-k8s-toolkit-system
-
-# Value of this field is prepended to the names of all resources.
-namePrefix: ocm-k8s-toolkit-
-
-resources:
-- ../crd
-- ../rbac

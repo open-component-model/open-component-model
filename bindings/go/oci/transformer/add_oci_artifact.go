@@ -44,12 +44,13 @@ func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	// Convert resource to internal format
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
 
-	// Resolve credentials if credential provider is available
-	var creds map[string]string
+	var creds runtime.Typed
 	if t.CredentialProvider != nil {
 		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil && !errors.Is(err, credentials.ErrNotFound) {
-				return nil, fmt.Errorf("failed resolving credentials: %w", err)
+			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
+				if !errors.Is(err, credentials.ErrNotFound) {
+					return nil, fmt.Errorf("failed resolving credentials: %w", err)
+				}
 			}
 		}
 	}

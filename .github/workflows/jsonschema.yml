@@ -19,17 +19,21 @@ permissions:
 jobs:
   lint:
     name: Lint
+    # sourcemeta/jsonschema install script uses uname -m (returns aarch64 on Linux ARM64)
+    # but release assets are named arm64, causing a download 404.
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      with:
+        persist-credentials: false
     - name: Setup JSON Schema
-      uses: sourcemeta/jsonschema@cfd763b5bf08f819f2ab1667717c14568bd48935 # v13.6.0
+      uses: sourcemeta/jsonschema@9b94c30305ecf30aa29e708667945ab63280ddb6 # v16.1.0
     - name: Lint JSON Schemas
       run: |
-        jsonschema lint $(git ls-files '**/schemas/*.schema.json') \
+        jsonschema lint $(git ls-files '**/schemas/*.schema.json' | grep -v 'testutils') \
           --verbose \
-          --exclude additional_properties_default \
+          --exclude orphan_definitions \
           --exclude enum_with_type \
           --exclude description_trailing_period \
           --exclude top_level_examples

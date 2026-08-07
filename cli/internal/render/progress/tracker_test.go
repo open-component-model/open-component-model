@@ -3,7 +3,7 @@ package progress
 import (
 	"bytes"
 	"context"
-	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -11,162 +11,183 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// --- Test Helpers ---
+func noopFactory(_ io.Writer, _ int) Visualizer[any] { return &noopVisualizer{} }
 
-// testContent simulates transformation data with an identity.
-type testContent struct {
-	identity runtime.Identity
+func testFactory(vis Visualizer[any]) VisualizerFactory[any] {
+	return func(_ io.Writer, _ int) Visualizer[any] { return vis }
 }
 
-func (c testContent) GetIdentity() runtime.Identity { return c.identity }
+// --- test helpers ---
 
-// testRawEvent simulates a raw event from a progress source.
-type testRawEvent struct {
-	content testContent
-	state   State
-	err     error
+type recordingVisualizer struct {
+	begins []string
+	events []Event[any]
+	ends   []error
 }
 
-// mockVisualizer collects events for verification.
-type mockVisualizer struct {
-	events []Event[testContent]
+func (v *recordingVisualizer) Begin(name string)            { v.begins = append(v.begins, name) }
+func (v *recordingVisualizer) HandleEvent(event Event[any]) { v.events = append(v.events, event) }
+func (v *recordingVisualizer) End(err error)                { v.ends = append(v.ends, err) }
+
+type noopVisualizer struct{}
+
+func (n *noopVisualizer) Begin(string)           {}
+func (n *noopVisualizer) HandleEvent(Event[any]) {}
+func (n *noopVisualizer) End(error)              {}
+
+type logBufferAwareVisualizer struct {
+	noopVisualizer
+	buf *SyncBuffer
 }
 
-func (m *mockVisualizer) HandleEvent(e Event[testContent]) {
-	m.events = append(m.events, e)
+func (v *logBufferAwareVisualizer) SetLogBuffer(buf *SyncBuffer) {
+	v.buf = buf
 }
 
-func (m *mockVisualizer) Summary(_ error) {}
-
-// mockLogBufferVisualizer implements both Visualizer and LogBufferAware.
-type mockLogBufferVisualizer struct {
-	mockVisualizer
-	logBuffer *bytes.Buffer
-}
-
-func (m *mockLogBufferVisualizer) SetLogBuffer(buf *bytes.Buffer) {
-	m.logBuffer = buf
-}
-
-// newEvent creates a test event with the given state.
-func newEvent(name string, state State, err error) testRawEvent {
-	return testRawEvent{
-		content: testContent{identity: runtime.Identity{"name": name}},
-		state:   state,
-		err:     err,
-	}
-}
-
-// mapEvent converts raw events to progress events.
-func mapEvent(e testRawEvent) Event[testContent] {
-	return Event[testContent]{Data: e.content, State: e.state, Err: e.err}
-}
-
-// newTestTracker creates a tracker with a mock visualizer for testing.
-func newTestTracker(events chan testRawEvent, vis *mockVisualizer) *Tracker[testContent, testRawEvent] {
-	return NewTracker(
-		WithEvents(events, mapEvent),
-		WithVisualizer[testContent, testRawEvent](func(_ io.Writer, _ int) Visualizer[testContent] { return vis }),
-	)
-}
-
-// --- Tests ---
-
-func TestTracker_PreservesErrorInFailedEvents(t *testing.T) {
-	// Failed events should preserve the error for display.
-	events := make(chan testRawEvent, 10)
-	vis := &mockVisualizer{}
-	tracker := newTestTracker(events, vis)
-
-	go tracker.Start(t.Context())
-
-	testErr := errors.New("connection timeout")
-	events <- newEvent("failing-task", Failed, testErr)
-	close(events)
-	tracker.Summary(nil)
-
-	require.Len(t, vis.events, 1, "should receive 1 event")
-	assert.Equal(t, Failed, vis.events[0].State, "event should be Failed")
-	assert.Equal(t, testErr, vis.events[0].Err, "error should be preserved")
-}
-
-func TestTracker_ContextCancelledChangesStateToCancelled(t *testing.T) {
-	// Events with context.Canceled error should have state changed to Cancelled.
-	events := make(chan testRawEvent, 10)
-	vis := &mockVisualizer{}
-	tracker := newTestTracker(events, vis)
-
-	go tracker.Start(t.Context())
-
-	events <- newEvent("cancelled-task", Running, context.Canceled)
-	close(events)
-	tracker.Summary(nil)
-
-	require.Len(t, vis.events, 1, "should receive 1 event")
-	assert.Equal(t, Cancelled, vis.events[0].State, "state should be changed to Cancelled")
-	assert.Nil(t, vis.events[0].Err, "error should be cleared")
-}
-
-func TestTracker_SlogInterception(t *testing.T) {
-	t.Run("redirects slog to buffer", func(t *testing.T) {
-		events := make(chan testRawEvent, 10)
-		vis := &mockLogBufferVisualizer{}
-		tracker := NewTracker(
-			WithEvents(events, mapEvent),
-			WithVisualizer[testContent, testRawEvent](func(_ io.Writer, _ int) Visualizer[testContent] { return vis }),
-		)
-
-		go tracker.Start(t.Context())
-
-		events <- newEvent("task", Running, nil)
-		slog.Info("intercepted message")
-
-		close(events)
-		tracker.Summary(nil)
-
-		require.NotNil(t, vis.logBuffer, "log buffer should be set on LogBufferAware visualizer")
-	})
-
-	t.Run("restores previous logger after summary", func(t *testing.T) {
-		originalLogger := slog.Default()
-		defer slog.SetDefault(originalLogger)
-
-		events := make(chan testRawEvent, 10)
-		vis := &mockLogBufferVisualizer{}
-		tracker := NewTracker(
-			WithEvents(events, mapEvent),
-			WithVisualizer[testContent, testRawEvent](func(_ io.Writer, _ int) Visualizer[testContent] { return vis }),
-		)
-
-		go tracker.Start(t.Context())
-		close(events)
-		tracker.Summary(nil)
-
-		assert.Equal(t, originalLogger, slog.Default(), "Summary should restore the original logger")
-	})
-}
+// --- Tracker tests ---
 
 func TestIsTerminal(t *testing.T) {
-	t.Run("returns false for buffer", func(t *testing.T) {
-		buf := &bytes.Buffer{}
-		assert.False(t, IsTerminal(buf), "bytes.Buffer is not a terminal")
-	})
+	tracker := NewTracker[any](t.Context(), &bytes.Buffer{}, noopFactory)
+	assert.False(t, tracker.isTerminal)
+	tracker.Stop()
 
-	t.Run("returns false for regular file", func(t *testing.T) {
-		f, err := os.CreateTemp(t.TempDir(), "test")
-		require.NoError(t, err)
-		defer f.Close()
-		assert.False(t, IsTerminal(f), "regular file is not a terminal")
-	})
+	f, err := os.CreateTemp(t.TempDir(), "test")
+	require.NoError(t, err)
+	defer f.Close()
+	tracker = NewTracker[any](t.Context(), f, noopFactory)
+	assert.False(t, tracker.isTerminal)
+	tracker.Stop()
+}
 
-	t.Run("returns true for real terminal", func(t *testing.T) {
-		if !IsTerminal(os.Stdout) {
-			t.Skip("stdout is not a terminal (e.g., CI environment)")
-		}
-		assert.True(t, IsTerminal(os.Stdout))
-	})
+func TestTracker_NonTerminal_NoSlogRedirect(t *testing.T) {
+	originalLogger := slog.Default()
+	defer slog.SetDefault(originalLogger)
+
+	tracker := NewTracker[any](t.Context(), &bytes.Buffer{}, noopFactory)
+	defer tracker.Stop()
+
+	assert.Equal(t, originalLogger, slog.Default())
+}
+
+func TestTracker_StopIsIdempotent(t *testing.T) {
+	originalLogger := slog.Default()
+	defer slog.SetDefault(originalLogger)
+
+	tracker := NewTracker[any](t.Context(), os.Stdout, noopFactory)
+	tracker.Stop()
+	tracker.Stop()
+}
+
+func TestTracker_LogBufferInjection(t *testing.T) {
+	if !NewTracker[any](t.Context(), os.Stdout, noopFactory).isTerminal {
+		t.Skip("stdout is not a terminal")
+	}
+	originalLogger := slog.Default()
+	defer slog.SetDefault(originalLogger)
+
+	vis := &logBufferAwareVisualizer{}
+	tracker := NewTracker[any](t.Context(), os.Stdout, testFactory(vis))
+	defer tracker.Stop()
+
+	_ = tracker.StartOperation("test")
+
+	assert.NotNil(t, vis.buf)
+}
+
+// --- Operation tests ---
+
+func TestOperation_Finish_Success(t *testing.T) {
+	vis := &recordingVisualizer{}
+	tracker := &Tracker[any]{out: &bytes.Buffer{}, isTerminal: true, factory: testFactory(vis)}
+
+	op := tracker.StartOperation("Resolving")
+	op.Finish(nil)
+
+	require.Len(t, vis.begins, 1)
+	assert.Equal(t, "Resolving", vis.begins[0])
+	require.Len(t, vis.ends, 1)
+	assert.NoError(t, vis.ends[0])
+}
+
+func TestOperation_Finish_Error(t *testing.T) {
+	vis := &recordingVisualizer{}
+	tracker := &Tracker[any]{out: &bytes.Buffer{}, isTerminal: true, factory: testFactory(vis)}
+
+	testErr := fmt.Errorf("resolve failed")
+	op := tracker.StartOperation("Resolving")
+	op.Finish(testErr)
+
+	require.Len(t, vis.ends, 1)
+	assert.Equal(t, testErr, vis.ends[0])
+}
+
+func TestOperation_WithEvents(t *testing.T) {
+	vis := &recordingVisualizer{}
+	tracker := &Tracker[any]{out: &bytes.Buffer{}, isTerminal: true, factory: testFactory(vis)}
+
+	events := make(chan string, 3)
+	mapper := func(s string) Event[any] {
+		return Event[any]{ID: s, Name: "display-" + s, State: Running}
+	}
+
+	op := tracker.StartOperation("Transferring",
+		WithEvents(events, mapper, 3))
+	events <- "item1"
+	events <- "item2"
+	events <- "item3"
+	close(events)
+	op.Finish(nil)
+
+	require.Len(t, vis.begins, 1)
+	assert.Equal(t, "Transferring", vis.begins[0])
+	require.Len(t, vis.events, 3)
+	assert.Equal(t, "display-item1", vis.events[0].Name)
+	require.Len(t, vis.ends, 1)
+	assert.NoError(t, vis.ends[0])
+}
+
+func TestOperation_WithEvents_CancelledContext(t *testing.T) {
+	vis := &recordingVisualizer{}
+	tracker := &Tracker[any]{out: &bytes.Buffer{}, isTerminal: true, factory: testFactory(vis)}
+
+	events := make(chan string, 1)
+	mapper := func(s string) Event[any] {
+		return Event[any]{ID: s, Name: s, State: Failed, Err: context.Canceled}
+	}
+
+	op := tracker.StartOperation("Transferring",
+		WithEvents(events, mapper, 1))
+	events <- "item1"
+	close(events)
+	op.Finish(nil)
+
+	require.Len(t, vis.events, 1)
+	assert.Equal(t, Cancelled, vis.events[0].State)
+	assert.Nil(t, vis.events[0].Err)
+}
+
+func TestOperation_NonTerminal(t *testing.T) {
+	tracker := NewTracker[any](t.Context(), &bytes.Buffer{}, noopFactory)
+	defer tracker.Stop()
+
+	op := tracker.StartOperation("Test")
+	op.Finish(nil)
+}
+
+func TestOperation_NonTerminal_WithEvents(t *testing.T) {
+	tracker := NewTracker[any](t.Context(), &bytes.Buffer{}, noopFactory)
+	defer tracker.Stop()
+
+	events := make(chan string, 1)
+	mapper := func(s string) Event[any] {
+		return Event[any]{ID: s, Name: s, State: Running}
+	}
+
+	op := tracker.StartOperation("Test",
+		WithEvents(events, mapper, 1))
+	events <- "item1"
+	close(events)
+	op.Finish(nil)
 }

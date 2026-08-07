@@ -29,6 +29,7 @@ func TestDescribeTypesListSubsystems(t *testing.T) {
 	assert.Contains(t, output, "input")
 	assert.Contains(t, output, "ocm-repository")
 	assert.Contains(t, output, "signing")
+	assert.Contains(t, output, "access")
 }
 
 func TestDescribeTypesListTypes(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
@@ -22,16 +23,18 @@ type Options struct {
 	RepositoryPluginProvider
 	CredentialPluginProvider
 	CredentialRepositoryTypeScheme *runtime.Scheme
+	// CredentialTypeSchemeProvider provides access to known credential types (e.g. HelmHTTPCredentials/v1).
+	CredentialTypeSchemeProvider CredentialTypeSchemeProvider
 }
 
 // ToGraph creates a new credential graph from the provided configuration and options.
 // It initializes the graph structure and ingests the configuration into the graph.
-// Returns an error if the configuration cannot be properly ingested.
-func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (Resolver, error) {
+func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (*Graph, error) {
 	g := &Graph{
-		syncedDag:                newSyncedDag(),
-		credentialPluginProvider: opts.CredentialPluginProvider,
-		repositoryPluginProvider: opts.RepositoryPluginProvider,
+		syncedDag:                    newSyncedDag(),
+		credentialPluginProvider:     opts.CredentialPluginProvider,
+		repositoryPluginProvider:     opts.RepositoryPluginProvider,
+		credentialTypeSchemeProvider: opts.CredentialTypeSchemeProvider,
 	}
 
 	if err := ingest(ctx, g, config, opts.CredentialRepositoryTypeScheme); err != nil {
@@ -43,21 +46,40 @@ func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (Reso
 
 // Graph represents a credential resolution graph that manages repository configurations
 // and provides functionality to resolve credentials for given identities.
-// It supports both direct credential resolution and plugin-based resolution.
+// It supports both direct credential resolution (map) and typed credential resolution.
 type Graph struct {
 	repositoryConfigurationsMu sync.RWMutex    // Mutex to protect access to repository configurations
 	repositoryConfigurations   []runtime.Typed // List of repository configurations parsed
 
 	*syncedDag // The underlying DAG structure for managing dependencies
 
-	repositoryPluginProvider RepositoryPluginProvider // injection for resolving custom repository types
-	credentialPluginProvider CredentialPluginProvider // injection for resolving custom credential types
+	repositoryPluginProvider     RepositoryPluginProvider     // injection for resolving custom repository types
+	credentialPluginProvider     CredentialPluginProvider     // injection for resolving custom credential types
+	credentialTypeSchemeProvider CredentialTypeSchemeProvider // optional: enables typed credential ingestion
 }
 
-// Resolve attempts to resolve credentials for the given identity.
-// It first tries direct resolution through the DAG, and if that fails,
-// falls back to indirect resolution through plugins.
-func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+// credentialTypeScheme returns the underlying scheme from the credential type
+// provider, or nil if no provider is configured.
+func (g *Graph) credentialTypeScheme() *runtime.Scheme {
+	if g.credentialTypeSchemeProvider == nil {
+		slog.Warn("no credential type scheme provider configured, typed credential ingestion will fallback to DirectCredentials")
+		return nil
+	}
+	credentialTypeScheme := g.credentialTypeSchemeProvider.GetCredentialTypeScheme()
+	if credentialTypeScheme == nil {
+		slog.Warn("credential type scheme provider returned nil, typed credential ingestion will fallback to DirectCredentials")
+	}
+	return credentialTypeScheme
+}
+
+// Compile-time interface check.
+var _ Resolver = (*Graph)(nil)
+
+// Resolve resolves credentials for the given identity and returns them as a runtime.Typed.
+// The returned type depends on what was configured: a registered typed credential
+// (e.g. *HelmHTTPCredentials) when a CredentialTypeSchemeProvider is configured and the
+// config uses a known typed credential, otherwise *v1.DirectCredentials.
+func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	if _, err := identity.ParseType(); err != nil {
 		err = errors.Join(ErrUnknown, err)
 		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", err)
@@ -74,13 +96,16 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 
 	if err != nil {
 		if errors.Is(err, ErrNoDirectCredentials) || errors.Is(err, ErrNoIndirectCredentials) {
-			// not found err
 			err = errors.Join(ErrNotFound, err)
 			return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
 		}
 
 		err = errors.Join(ErrUnknown, err)
 		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
+	}
+
+	if _, ok := creds.(*v1.DirectCredentials); ok {
+		slog.Warn("resolved credentials for identity using direct credential resolution, consider configuring a CredentialTypeSchemeProvider", "identity", identity.String())
 	}
 
 	return creds, nil

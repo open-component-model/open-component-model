@@ -41,7 +41,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="((!has(self.apiVersion) || self.apiVersion == \"\" || self.apiVersion == \"v1\") && (self.kind == \"Secret\" || self.kind == \"ConfigMap\")) || (self.apiVersion == \"delivery.ocm.software/v1alpha1\" && (self.kind == \"Repository\" || self.kind == \"Component\" || self.kind == \"Resource\" || self.kind == \"Replication\"))",message="apiVersion must be one of \"v1\" with kind \"Secret\" or \"ConfigMap\" or \"delivery.ocm.software/v1alpha1\" with the kind of an OCM kubernetes object"
 type OCMConfiguration struct {
 	// Ref reference config maps or secrets containing arbitrary
-	// ocm config data (in the ocm config file format), or other configurable
+	// ocm config data (in the ocm config file or .dockerconfigjson format), or other configurable
 	// ocm api objects (Repository, Component, Resource) to
 	// reuse their propagated configuration.
 	NamespacedObjectKindReference `json:",inline"`

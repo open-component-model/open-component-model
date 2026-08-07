@@ -4,7 +4,7 @@ This conformance scenario validates one of our core value statements: **modeling
 
 ## Overview
 
-Implements the reference scenario defined in [ADR-0013](../../../docs/adr/0013_sovereign_cloud_reference_scenario.md) to demonstrate:
+Implements the reference scenario defined in [ADR-0015](../../../docs/adr/0015_sovereign_cloud_reference_scenario.md) to demonstrate:
 
 - Real multi-service application with genuine dependencies
 - Component modeling and construction
@@ -79,7 +79,7 @@ This scenario uses kro because it solves four problems at once:
 - **Self-management.** The RGD includes the same Repository / Component / Resource / Deployer CRs that delivered it. After bootstrap, kro reconciles these idempotently, so the system manages its own delivery pipeline.
 - **Bridge between controllers.** kro translates OCM Resource status fields (registry, repository, digest) into FluxCD inputs (OCIRepository URLs, HelmRelease chart refs, image tags) via CEL expressions. Neither the OCM Controller nor FluxCD needs to know about the other.
 
-In practice, the flow works like this: the OCM Deployer CR installs the RGD into the cluster. kro registers the `SovereignProduct` CRD. When a `SovereignProduct` CR is created, kro creates all 15 resources in dependency order, interpolating CEL expressions like `${postgresChartResource.status.additional.registry}` to wire OCM outputs into FluxCD inputs.
+In practice, the flow works like this: the OCM Deployer CR installs the RGD into the cluster. kro registers the `SovereignProduct` CRD. When a `SovereignProduct` CR is created, kro creates all 15 resources in dependency order, interpolating CEL expressions like `${postgresChartResource.status.additional.oci.registry}` to wire OCM outputs into FluxCD inputs.
 
 ### Controller Reconciliation Chain
 
@@ -153,7 +153,7 @@ task verify:deployment
 
 ## Directory Structure
 
-```
+```text
 sovereign-scenario/
 ├── README.md                    # This file
 ├── Taskfile.yml                 # Build and deployment automation

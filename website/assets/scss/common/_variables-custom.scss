@@ -1,0 +1,160 @@
+/*
+ * CSS Custom Properties (Theme Variables)
+ *
+ * Features:
+ * - Color system (backgrounds, text, borders)
+ * - OCM brand colors (blue/cyan palette)
+ * - Glassmorphism effects
+ * - Button styles
+ * - Hero section gradients
+ * - Light/dark theme support
+ */
+
+/* ============================================
+   Dark Theme (Default)
+   ============================================ */
+:root {
+  --lp-c-white: #ffffff;
+  --lp-c-black: #000000;
+  --lp-c-gray-1: #515c67;
+  --lp-c-gray-2: #414853;
+  --lp-c-gray-3: #32363f;
+  --lp-c-gray-soft: rgba(101, 117, 133, 0.16);
+  --lp-highlight-bg: #f3f38d;
+  --lp-highlight-text: #000000;
+  --lp-c-bg: #1b1b1f;
+  --lp-c-bg-alt: #161618;
+  --lp-c-bg-elv: #202127;
+  --lp-c-bg-soft: #202127;
+  --lp-c-border: #3c3f44;
+  --lp-c-divider: #2e2e32;
+  --lp-c-gutter: #000000;
+  --lp-c-text-1: #dfdfd6;
+  --lp-c-text-2: #98989f;
+  --lp-c-text-3: #6a6a71;
+
+  /* Glassmorphism / Blur */
+  --glass-bg: rgba(27, 27, 31, 0.8);
+  --glass-blur: blur(12px) saturate(140%);
+  --glass-border: var(--lp-c-border);
+  /* OCM Brand Colors (Canonical) */
+  --brand-blue-dark: #257ddc;
+  /* Logo Dark */
+  --brand-blue-mid: #1d65b4;
+  /* Logo Light/Mid */
+  --brand-cyan: #4cc9f0;
+  /* Header Cyan */
+  --brand-gradient: linear-gradient(to right, var(--brand-cyan), #4361ee);
+
+  /* Mapping to LP Variables (Replacing Green with Blue) */
+  --lp-c-green-1: var(--brand-blue-dark);
+  --lp-c-green-2: var(--brand-blue-mid);
+  --lp-c-green-3: var(--brand-cyan);
+  --lp-c-green-soft: rgba(59, 114, 199, 0.16);
+  /* Blue-ish soft bg */
+
+  --lp-c-brand-1: var(--lp-c-green-1);
+  --lp-c-brand-2: var(--lp-c-green-2);
+  --lp-c-brand-3: var(--lp-c-green-3);
+  --lp-c-brand-soft: var(--lp-c-green-soft);
+
+  --lp-button-brand-bg: var(--brand-blue-mid);
+  --lp-button-brand-border: transparent;
+  --lp-button-brand-text: var(--lp-c-white);
+  --lp-button-brand-hover-bg: #1d65b4;
+  /* Slightly darker than mid blue */
+
+  --lp-button-alt-bg: var(--lp-c-gray-3);
+  --lp-button-alt-text: var(--lp-c-text-1);
+  --lp-button-alt-hover-bg: var(--lp-c-gray-2);
+
+  --lp-home-hero-name-color: transparent;
+  --lp-home-hero-name-background: var(--brand-gradient);
+  --lp-home-hero-image-background-image: linear-gradient(-45deg, var(--brand-blue-dark) 50%, var(--brand-cyan) 50%);
+  --lp-home-hero-image-filter: blur(88px);
+
+  --c-accent: var(--brand-cyan);
+  --shadow-md: 0 10px 30px rgba(4, 13, 18, 0.14);
+  --container: 1200px;
+  --nav-pad-x: 24px;
+
+  /* Navigation */
+  --nav-height: 56px;
+  --nav-gap: clamp(18px, 2.6vw, 32px);
+  --nav-link-size: 0.875rem;
+  --fw-nav: 400;
+  --fw-nav-hover: 400;
+  --fw-nav-active: 500;
+  --nav-border-scrolled: var(--lp-c-border);
+
+  /* Card System */
+  --ocm-card-bg: var(--lp-c-bg-soft);
+  --ocm-card-bg-dark: var(--lp-c-bg-elv);
+  --ocm-card-border: var(--lp-c-divider);
+  --ocm-card-border-radius: 12px;
+  --ocm-card-title-color: var(--lp-c-text-1);
+  --ocm-card-desc-color: var(--lp-c-text-2);
+  --ocm-card-icon-color: var(--brand-blue-dark);
+  --ocm-card-icon-stroke-width: 1;
+  --ocm-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --ocm-card-glow-color: rgba(46, 227, 255, 0.15);
+
+  /* Sidebar */
+  --sidebar-active-color: #ffffff;
+  --sidebar-hover-color: #233284;
+
+  /* TOC Box */
+  --toc-box-bg: #f8f9fa;
+  --toc-box-border: #ececec;
+  --toc-box-bg-dark: #242538;
+  --toc-box-border-dark: rgba(255, 255, 255, 0.07);
+
+  /* Description Box */
+  --desc-box-bg: #f6f7fa;
+  --desc-box-border: #ececec;
+  --desc-box-text: #232336;
+  --desc-box-bg-dark: #5a5c60;
+  --desc-box-text-dark: #f6f7fa;
+  --desc-box-border-dark: rgba(255, 255, 255, 0.07);
+
+  /* Version Warning Banner */
+  --warning-bg: #fffbe6;
+  --warning-text: #232336;
+  --warning-border: #ffe066;
+  --warning-link: #111111;
+  --warning-bg-dark: #fff3cd;
+
+  /* Branding */
+  --brand-logo-light: #ffffff;
+  --brand-logo-dark: #111111;
+  --brand-font-logo-dark: #ffffff;
+  --brand-font-logo-light: #111111;
+
+  /* Defaults for Dark Mode (ORD default) */
+  --c-text-strong: #f4f7f8;
+}
+
+[data-bs-theme="light"] {
+  --lp-c-bg: #ffffff;
+  --lp-c-bg-alt: #f9fbfc;
+  --lp-c-bg-elv: #f6f8f9;
+  --lp-c-bg-soft: #fbfbfc;
+  --lp-c-border: #e7ecef;
+  --lp-c-text-1: #0a0f12;
+  --lp-c-text-2: #1b242a;
+  --lp-c-text-3: #5a6a73;
+  --lp-c-divider: #e2e2de;
+  --c-accent: var(--brand-blue-mid);
+  --lp-button-brand-text: #ffffff;
+  --lp-button-brand-hover-bg: var(--brand-blue-dark);
+  --lp-button-alt-bg: #eef3f6;
+  --lp-button-alt-text: var(--lp-c-text-1);
+  --lp-button-alt-hover-bg: #e6edf3;
+
+  /* Sidebar */
+  --sidebar-active-color: #111111;
+  --sidebar-hover-color: #233284;
+
+  /* Light Mode Overrides */
+  --c-text-strong: #0a0f12;
+}

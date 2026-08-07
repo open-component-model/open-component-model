@@ -21,11 +21,11 @@ func (r *TypeToUntypedPlugin[T]) Ping(ctx context.Context) error {
 	return r.base.Ping(ctx)
 }
 
-func (r *TypeToUntypedPlugin[T]) CheckHealth(ctx context.Context, request v1.PostCheckHealthRequest[T], credentials map[string]string) error {
+func (r *TypeToUntypedPlugin[T]) CheckHealth(ctx context.Context, request v1.PostCheckHealthRequest[T], credentials runtime.Typed) error {
 	return r.base.CheckHealth(ctx, request, credentials)
 }
 
-func (r *TypeToUntypedPlugin[T]) GetLocalResource(ctx context.Context, request v1.GetLocalResourceRequest[runtime.Typed], credentials map[string]string) (v1.GetLocalResourceResponse, error) {
+func (r *TypeToUntypedPlugin[T]) GetLocalResource(ctx context.Context, request v1.GetLocalResourceRequest[runtime.Typed], credentials runtime.Typed) (v1.GetLocalResourceResponse, error) {
 	return r.base.GetLocalResource(ctx, v1.GetLocalResourceRequest[T]{
 		Repository: request.Repository.(T),
 		Name:       request.Name,
@@ -34,7 +34,7 @@ func (r *TypeToUntypedPlugin[T]) GetLocalResource(ctx context.Context, request v
 	}, credentials)
 }
 
-func (r *TypeToUntypedPlugin[T]) AddLocalResource(ctx context.Context, request v1.PostLocalResourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Resource, error) {
+func (r *TypeToUntypedPlugin[T]) AddLocalResource(ctx context.Context, request v1.PostLocalResourceRequest[runtime.Typed], credentials runtime.Typed) (*descriptor.Resource, error) {
 	return r.base.AddLocalResource(ctx, v1.PostLocalResourceRequest[T]{
 		Repository:       request.Repository.(T),
 		Name:             request.Name,
@@ -44,7 +44,7 @@ func (r *TypeToUntypedPlugin[T]) AddLocalResource(ctx context.Context, request v
 	}, credentials)
 }
 
-func (r *TypeToUntypedPlugin[T]) GetLocalSource(ctx context.Context, request v1.GetLocalSourceRequest[runtime.Typed], credentials map[string]string) (v1.GetLocalSourceResponse, error) {
+func (r *TypeToUntypedPlugin[T]) GetLocalSource(ctx context.Context, request v1.GetLocalSourceRequest[runtime.Typed], credentials runtime.Typed) (v1.GetLocalSourceResponse, error) {
 	return r.base.GetLocalSource(ctx, v1.GetLocalSourceRequest[T]{
 		Repository: request.Repository.(T),
 		Name:       request.Name,
@@ -53,7 +53,7 @@ func (r *TypeToUntypedPlugin[T]) GetLocalSource(ctx context.Context, request v1.
 	}, credentials)
 }
 
-func (r *TypeToUntypedPlugin[T]) AddLocalSource(ctx context.Context, request v1.PostLocalSourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Source, error) {
+func (r *TypeToUntypedPlugin[T]) AddLocalSource(ctx context.Context, request v1.PostLocalSourceRequest[runtime.Typed], credentials runtime.Typed) (*descriptor.Source, error) {
 	return r.base.AddLocalSource(ctx, v1.PostLocalSourceRequest[T]{
 		Repository:     request.Repository.(T),
 		Name:           request.Name,
@@ -63,14 +63,14 @@ func (r *TypeToUntypedPlugin[T]) AddLocalSource(ctx context.Context, request v1.
 	}, credentials)
 }
 
-func (r *TypeToUntypedPlugin[T]) AddComponentVersion(ctx context.Context, request v1.PostComponentVersionRequest[runtime.Typed], credentials map[string]string) error {
+func (r *TypeToUntypedPlugin[T]) AddComponentVersion(ctx context.Context, request v1.PostComponentVersionRequest[runtime.Typed], credentials runtime.Typed) error {
 	return r.base.AddComponentVersion(ctx, v1.PostComponentVersionRequest[T]{
 		Repository: request.Repository.(T),
 		Descriptor: request.Descriptor,
 	}, credentials)
 }
 
-func (r *TypeToUntypedPlugin[T]) GetComponentVersion(ctx context.Context, request v1.GetComponentVersionRequest[runtime.Typed], credentials map[string]string) (*descriptor.Descriptor, error) {
+func (r *TypeToUntypedPlugin[T]) GetComponentVersion(ctx context.Context, request v1.GetComponentVersionRequest[runtime.Typed], credentials runtime.Typed) (*descriptor.Descriptor, error) {
 	req := v1.GetComponentVersionRequest[T]{
 		Repository: request.Repository.(T),
 		Name:       request.Name,
@@ -79,7 +79,7 @@ func (r *TypeToUntypedPlugin[T]) GetComponentVersion(ctx context.Context, reques
 	return r.base.GetComponentVersion(ctx, req, credentials)
 }
 
-func (r *TypeToUntypedPlugin[T]) ListComponentVersions(ctx context.Context, request v1.ListComponentVersionsRequest[runtime.Typed], credentials map[string]string) ([]string, error) {
+func (r *TypeToUntypedPlugin[T]) ListComponentVersions(ctx context.Context, request v1.ListComponentVersionsRequest[runtime.Typed], credentials runtime.Typed) ([]string, error) {
 	req := v1.ListComponentVersionsRequest[T]{
 		Repository: request.Repository.(T),
 		Name:       request.Name,

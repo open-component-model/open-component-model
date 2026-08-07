@@ -1,0 +1,14 @@
+.DS_Store
+.clinerules
+.clineignore
+.eslintcache
+.hugo_build.lock
+.idea/
+.project
+_vendor/
+hugo.direct.sum
+hugo_stats.json
+node_modules/
+public/
+resources/_gen/
+tmp/*

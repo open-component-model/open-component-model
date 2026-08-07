@@ -8,15 +8,19 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/go-logr/logr"
+	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -36,6 +40,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 // Reconciler reconciles a Component object.
@@ -150,6 +155,12 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 					}},
 				}
 			})).
+		WithOptions(controller.Options{
+			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
+				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
+				&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(10, 100)},
+			),
+		}).
 		Complete(r)
 }
 
@@ -223,7 +234,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	logger.Info("reconciling component")
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), component, repo)
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
@@ -249,12 +260,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
 	}
 
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, component.GetNamespace(), configs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:    repoSpec,
-		OCMConfigurations: configs,
-		Namespace:         component.GetNamespace(),
-		SigningRegistry:   r.PluginManager.SigningRegistry,
-		Verifications:     verifications,
+		RepositorySpec:  repoSpec,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		Verifications:   verifications,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: types.NamespacedName{
@@ -289,7 +306,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 		// Ignore error, but log event
-		event.New(r.EventRecorder, component, nil, v1alpha1.EventSeverityError, err.Error())
+		event.New(r.EventRecorder, component, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
@@ -374,6 +391,13 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Co
 func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, component *v1alpha1.Component,
 	repo repository.ComponentVersionRepository,
 ) (string, error) {
+	// Fast path: if Spec.Semver is a single version (not a constraint),
+	// skip the ListComponentVersions call. Any not-found error will be
+	// surfaced by the subsequent GetComponentVersion call.
+	if pinned, err := semver.NewVersion(component.Spec.Semver); err == nil {
+		return ocm.ApplyDowngradePolicy(component, pinned)
+	}
+
 	versions, err := repo.ListComponentVersions(ctx, component.Spec.Component)
 	if err != nil {
 		return "", fmt.Errorf("failed to list versions: %w", err)
@@ -390,27 +414,5 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 		return "", reconcile.TerminalError(fmt.Errorf("failed to get valid latest version: %w", err))
 	}
 
-	// we didn't yet reconcile anything, return whatever the retrieved version is.
-	if component.Status.Component.Version == "" {
-		return latestSemver.Original(), nil
-	}
-
-	currentSemver, err := semver.NewVersion(component.Status.Component.Version)
-	if err != nil {
-		return "", reconcile.TerminalError(fmt.Errorf("failed to check reconciled version: %w", err))
-	}
-
-	if latestSemver.GreaterThanEqual(currentSemver) {
-		return latestSemver.Original(), nil
-	}
-
-	switch component.Spec.DowngradePolicy {
-	case v1alpha1.DowngradePolicyDeny:
-		return "", reconcile.TerminalError(fmt.Errorf("component version cannot be downgraded from version %s "+
-			"to version %s", currentSemver.Original(), latestSemver.Original()))
-	case v1alpha1.DowngradePolicyAllow:
-		return latestSemver.Original(), nil
-	default:
-		return "", reconcile.TerminalError(errors.New("unknown downgrade policy: " + string(component.Spec.DowngradePolicy)))
-	}
+	return ocm.ApplyDowngradePolicy(component, latestSemver)
 }

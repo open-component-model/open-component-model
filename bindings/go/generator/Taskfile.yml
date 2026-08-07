@@ -44,9 +44,16 @@ tasks:
     cmds:
       - cmd: 'go run {{ .TASKFILE_DIR }}/ocmtypegen/... {{ .TASKFILE_DIR }}/ocmtypegen/test'
 
+  jsonschemagen/install:
+    desc: "Build jsonschemagen into tmp ({{ .ROOT_DIR }}/tmp/bin)"
+    cmds:
+      - mkdir -p {{ .ROOT_DIR }}/tmp/bin
+      - go build -o {{ .ROOT_DIR }}/tmp/bin/jsonschemagen {{ .TASKFILE_DIR }}/jsonschemagen/cmd/main.go
+
   jsonschemagen/generate:
+    deps: ["jsonschemagen/install"]
     desc: "Run Type OCM JSON Schema Generation in the Project"
-    cmd: 'go run {{ .TASKFILE_DIR }}/jsonschemagen/cmd/main.go {{ .CLI_ARGS }} {{ .ROOT_DIR }}'
+    cmd: '{{ .ROOT_DIR }}/tmp/bin/jsonschemagen {{ .CLI_ARGS }} {{ .ROOT_DIR }}'
 
   jsonschemagen/test:
     desc: "Run OCM JSON Schema Generation test"

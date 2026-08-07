@@ -91,6 +91,16 @@ const (
 	ExternalRelation ResourceRelation = "external"
 )
 
+// OwnershipPolicy controls whether ownership is attached to a resource during construction.
+type OwnershipPolicy string
+
+const (
+	// OwnershipPolicyNever is the default: no ownership is recorded.
+	OwnershipPolicyNever OwnershipPolicy = "Never"
+	// OwnershipPolicyAlways records ownership for the resource.
+	OwnershipPolicyAlways OwnershipPolicy = "Always"
+)
+
 // A Resource is a delivery artifact, intended for deployment into a runtime environment, or describing additional content,
 // relevant for a deployment mechanism.
 //
@@ -107,41 +117,32 @@ type Resource struct {
 	// SourceRefs defines a list of source names.
 	// These entries reference the sources defined in the
 	// component.sources.
-	SourceRefs []SourceRef `json:"sourceRefs,omitempty"`
+	SourceRefs []SourceRef `json:"srcRefs,omitempty"`
 	// Type describes the type of the object.
 	Type string `json:"type"`
 	// Relation describes the relation of the resource to the component.
 	// Can be a local or external resource.
-	Relation ResourceRelation `json:"relation"`
+	Relation ResourceRelation `json:"relation,omitempty"`
+	// Options bundles optional, construction-time directives for the resource
+	// It is omitted entirely when no options are set.
+	Options *ResourceOptions `json:"options,omitempty"`
+	// Digest optionally pins the expected digest of the resource.
+	// If set, it is verified against the resource content during construction.
+	Digest *Digest `json:"digest,omitempty"`
 
 	AccessOrInput `json:",inline"`
-
-	ConstructorAttributes `json:",inline"`
 }
 
-// ConstructorAttributes defines additional attributes used in a component constructor context.
+// ResourceOptions bundles optional, construction-time directives for a resource.
+// These options influence how the resource is handled during construction
+// but are not themselves persisted to the component descriptor.
 // +k8s:deepcopy-gen=true
-type ConstructorAttributes struct {
-	CopyPolicy `json:"copyPolicy,omitempty"`
+type ResourceOptions struct {
+	// OwnershipPolicy controls whether ownership information (i.e. component
+	// name and version) are attached to this resource during construction.
+	// Defaults to "Never" when unset.
+	OwnershipPolicy OwnershipPolicy `json:"ownershipPolicy,omitempty"`
 }
-
-// CopyPolicy defines how the given object should be added during the component construction.
-// If set to "reference", the object is copied by reference, otherwise it is copied by value.
-// Note that an object that is copied by reference may still have its access type modified.
-// This can happen when the access is pinned at the point of the component construction.
-//
-//   - A typical example of "by value" copying is an image that should be stored in the component version,
-//     and not in the original registry.
-//   - A typical example of "by reference" copying is an image that is already stored in the correct registry
-//     and should be referenced by the component version.
-type CopyPolicy string
-
-const (
-	// CopyPolicyByReference defines that the resource is copied by reference. See CopyPolicy for details.
-	CopyPolicyByReference CopyPolicy = "byReference"
-	// CopyPolicyByValue defines that the resource is copied by value. See CopyPolicy for details.
-	CopyPolicyByValue CopyPolicy = "byValue"
-)
 
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.
 // Source elements do not have specific additional formal attributes.
@@ -158,8 +159,6 @@ type Source struct {
 	Type        string `json:"type"`
 
 	AccessOrInput `json:",inline"`
-
-	ConstructorAttributes `json:",inline"`
 }
 
 // AccessOrInput describes the access or input information of a resource or source.
@@ -204,6 +203,9 @@ type Reference struct {
 	ElementMeta `json:",inline"`
 	// Component describes the remote name of the referenced object.
 	Component string `json:"componentName"`
+	// Digest is the optional digest of the referenced component.
+	// If provided, it will be verified against the calculated digest during construction.
+	Digest *Digest `json:"digest,omitempty"`
 }
 
 // SourceRef defines a reference to a source.

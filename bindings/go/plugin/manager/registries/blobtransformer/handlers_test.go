@@ -32,7 +32,7 @@ func TestTransformBlobHandlerFunc(t *testing.T) {
 		{
 			name: "TransformBlobHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := TransformBlobHandlerFunc(func(ctx context.Context, request *v1.TransformBlobRequest[*dummyv1.Repository], credentials map[string]string) (*v1.TransformBlobResponse, error) {
+				handler := TransformBlobHandlerFunc(func(ctx context.Context, request *v1.TransformBlobRequest[*dummyv1.Repository], credentials runtime.Typed) (*v1.TransformBlobResponse, error) {
 					return &v1.TransformBlobResponse{}, nil
 				})
 				return handler
@@ -44,17 +44,20 @@ func TestTransformBlobHandlerFunc(t *testing.T) {
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
+				header := http.Header{}
+				header.Add("Authorization", "not-json")
 				parse, _ := url.Parse(base)
 				return &http.Request{
 					Method: "POST",
 					URL:    parse,
+					Header: header,
 				}
 			},
 		},
 		{
 			name: "TransformBlobHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := TransformBlobHandlerFunc(func(ctx context.Context, request *v1.TransformBlobRequest[*dummyv1.Repository], credentials map[string]string) (*v1.TransformBlobResponse, error) {
+				handler := TransformBlobHandlerFunc(func(ctx context.Context, request *v1.TransformBlobRequest[*dummyv1.Repository], credentials runtime.Typed) (*v1.TransformBlobResponse, error) {
 					require.Equal(t, "DummyRepository/v1", request.Specification.Type.String())
 					return &v1.TransformBlobResponse{
 						Location: types.Location{

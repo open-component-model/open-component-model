@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg version="1.1" viewBox="0 0 2979 967.18" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+ <defs>
+  <style type="text/css">
+    text, tspan {
+    font-family: 'Quicksand', sans-serif;
+    }
+  </style>
+  <clipPath id="clipPath1">
+   <path transform="matrix(1 0 0 -1 -68.258 541.86)" d="m0 0h2234.2v725.38h-2234.2z" clip-rule="evenodd"/>
+  </clipPath>
+  <clipPath id="clipPath2">
+   <path transform="matrix(1 0 0 -1 -61.526 254)" d="m0 0h2234.2v725.38h-2234.2z" clip-rule="evenodd"/>
+  </clipPath>
+  <clipPath id="clipPath3">
+   <path transform="matrix(1.0022 0 0 -.99781 -1572.6 68.795)" d="m0 0h2234.2v725.38h-2234.2z" clip-rule="evenodd"/>
+  </clipPath>
+ </defs>
+ <g fill="currentColor">
+  <text transform="matrix(1.3333 0 0 1.3333 91.011 244.7)" clip-path="url(#clipPath1)" xml:space="preserve"><tspan x="0" y="0" dx="0 3.6024599 3.6024599 3.6024599" fill="currentColor" font-family="Quicksand" font-size="180.12px" font-weight="200">OPEN</tspan></text>
+  <text transform="matrix(1.3333 0 0 1.3333 82.035 628.52)" clip-path="url(#clipPath2)" xml:space="preserve"><tspan x="0" y="0" dx="0 6.8541799 6.8541799 6.8541799 6.8541799 6.8541799 6.8541799 6.8541799 6.8541799" fill="currentColor" font-family="Quicksand" font-size="342.71px" font-weight="200">COMPONENT</tspan></text>
+  <text transform="matrix(1.3304 0 0 1.3363 2092.2 875.25)" clip-path="url(#clipPath3)" xml:space="preserve"><tspan x="0" y="0" dx="0 3.9049001 3.9049001 3.9049001 3.9049001" fill="currentColor" font-family="Quicksand" font-size="195.24px" font-weight="200">MODEL</tspan></text>
+ </g>
+</svg>

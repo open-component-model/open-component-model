@@ -52,7 +52,7 @@ func TestGetGlobalResource(t *testing.T) {
 				Data: []byte(`{ "foo": "bar" }`),
 			},
 		},
-	}, map[string]string{})
+	}, nil)
 	require.NoError(t, err)
 }
 
@@ -93,7 +93,7 @@ func TestAddGlobalResource(t *testing.T) {
 				Data: []byte(`{ "foo": "bar" }`),
 			},
 		},
-	}, map[string]string{})
+	}, nil)
 	require.NoError(t, err)
 }
 

@@ -1,0 +1,44 @@
+name: "Website: Verify Scripts"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - website/**
+    paths:
+      - '.github/workflows/website-verify-scripts.yml'
+      - 'website/assets/js/**'
+      - 'website/scripts/**'
+      - 'website/eslint.config.*'
+      - 'website/package.json'
+      - 'website/package-lock.json'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04-arm
+    name: Lint & Test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: website/package.json
+
+      - name: Install dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Lint scripts
+        working-directory: website
+        run: npm run lint:scripts
+
+      - name: Run scripts tests
+        working-directory: website
+        run: npm test

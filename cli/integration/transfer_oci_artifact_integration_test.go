@@ -16,6 +16,7 @@ import (
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+
 	blobfs "ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -32,6 +33,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -400,7 +402,7 @@ components:
 }
 
 func createRepo(ctx context.Context, repoProvider *provider.CachingComponentVersionRepositoryProvider, credentialResolver credentials.Resolver, targetSpec ocmruntime.Typed) (repository.ComponentVersionRepository, error) {
-	var creds map[string]string
+	var creds ocmruntime.Typed
 	id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, targetSpec)
 	if err == nil {
 		creds, err = credentialResolver.Resolve(ctx, id)
@@ -479,9 +481,10 @@ configurations:
 	resource.Access = targetAccess
 
 	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
-	newRes, err := resourceRepo.UploadResource(ctx, &resource, inmemory.New(bytes.NewReader(data)), map[string]string{
-		"username": sourceRegistry.User,
-		"password": sourceRegistry.Password,
+	newRes, err := resourceRepo.UploadResource(ctx, &resource, inmemory.New(bytes.NewReader(data)), &ocicredsv1.OCICredentials{
+		Type:     ocicredsv1.OCICredentialsVersionedType,
+		Username: sourceRegistry.User,
+		Password: sourceRegistry.Password,
 	})
 	r.NoError(err)
 	resource = *newRes

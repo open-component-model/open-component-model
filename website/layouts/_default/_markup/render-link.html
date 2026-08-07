@@ -1,0 +1,14 @@
+{{- /* Process links to handle OCM CLI documentation markdown links */ -}}
+{{- $link := .Destination -}}
+{{- $isRemote := strings.HasPrefix $link "http" -}}
+{{- if not $isRemote -}}
+  {{- if strings.HasSuffix $link ".md" -}}
+    {{- $link = strings.TrimSuffix ".md" $link -}}
+    {{- $link = strings.Replace $link "_" "-" -1 -}}
+    {{- if and (strings.HasPrefix $link "ocm-") (not (strings.Contains $link "/")) -}}
+      {{- $sectionURL := .Page.CurrentSection.RelPermalink -}}
+      {{- $link = printf "%s%s" $sectionURL $link -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+<a href="{{ $link | safeURL }}"{{ with .Title}} title="{{ . }}"{{ end }}{{ if $isRemote }} target="_blank" rel="noopener"{{ end }}>{{ .Text | safeHTML }}</a>

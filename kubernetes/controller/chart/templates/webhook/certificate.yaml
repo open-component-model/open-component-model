@@ -1,0 +1,23 @@
+{{- if and .Values.webhook.enable .Values.certManager.enable }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "selfsigned-issuer" "context" $) }}
+    namespace: {{ .Release.Namespace }}
+spec:
+    selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "serving-cert" "context" $) }}
+    namespace: {{ .Release.Namespace }}
+spec:
+    dnsNames:
+        - {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "webhook-service" "context" $) }}.{{ .Release.Namespace }}.svc
+        - {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "webhook-service" "context" $) }}.{{ .Release.Namespace }}.svc.cluster.local
+    issuerRef:
+        kind: Issuer
+        name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "selfsigned-issuer" "context" $) }}
+    secretName: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "webhook-server-cert" "context" $) }}
+{{- end }}

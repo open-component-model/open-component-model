@@ -20,6 +20,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
 )
@@ -95,6 +97,9 @@ type PoolOptions struct {
 	WorkerCount int
 	// QueueSize is the size of the work queue buffer.
 	QueueSize int
+	// SubscriberBufferSize is the buffer size for each subscriber's event channel.
+	// A larger buffer reduces the probability of dropped events under load.
+	SubscriberBufferSize int
 	// Logger for the worker pool.
 	Logger *logr.Logger
 	// Client for Kubernetes API access.
@@ -126,7 +131,11 @@ func NewWorkerPool(opts PoolOptions) *WorkerPool {
 	}
 
 	if opts.QueueSize <= 0 {
-		opts.QueueSize = 100
+		opts.QueueSize = 1000
+	}
+
+	if opts.SubscriberBufferSize <= 0 {
+		opts.SubscriberBufferSize = 100
 	}
 
 	return &WorkerPool{
@@ -146,7 +155,7 @@ func (wp *WorkerPool) Subscribe() <-chan []RequesterInfo {
 	wp.subscribersMu.Lock()
 	defer wp.subscribersMu.Unlock()
 
-	ch := make(chan []RequesterInfo, 10)
+	ch := make(chan []RequesterInfo, wp.SubscriberBufferSize)
 	wp.subscribers = append(wp.subscribers, ch)
 	return ch
 }
@@ -154,7 +163,7 @@ func (wp *WorkerPool) Subscribe() <-chan []RequesterInfo {
 // Start begins the worker pool.
 // This method blocks until the context is canceled to implement graceful shutdown.
 func (wp *WorkerPool) Start(ctx context.Context) error {
-	wp.Logger.Info("starting worker pool", "workers", wp.WorkerCount, "queueSize", wp.QueueSize)
+	wp.Logger.Info("starting worker pool", "workers", wp.WorkerCount, "queueSize", wp.QueueSize, "subscriberBufferSize", wp.SubscriberBufferSize)
 
 	for i := range wp.WorkerCount {
 		wp.workersDone.Add(1)
@@ -459,21 +468,24 @@ func verifySignatures(ctx context.Context, desc *descriptor.Descriptor, verifica
 		}
 
 		if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, *descSig, slog.New(logr.ToSlogHandler(logger))); err != nil {
-			return nil, fmt.Errorf("digest v failed for signature %q: %w", descSig.Name, err)
+			return nil, fmt.Errorf("digest verification failed for signature %q: %w", descSig.Name, err)
 		}
 
 		// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
 		//       reliable currently. This will probably change, when typed credentials are supported.
-		credentials := map[string]string{}
+		var credentials runtime.Typed
 		switch signingv1alpha1.SignatureAlgorithm(descSig.Signature.Algorithm) {
 		case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
-			credentials["public_key_pem"] = string(v.PublicKey)
+			credentials = &rsacredentialsv1.RSACredentials{
+				Type:         rsacredentialsv1.VersionedType,
+				PublicKeyPEM: string(v.PublicKey),
+			}
 		default:
 			return nil, fmt.Errorf("unsupported signature algorithm: %q", descSig.Signature.Algorithm)
 		}
 
 		if err := signingHandler.Verify(ctx, *descSig, &signingv1alpha1.Config{}, credentials); err != nil {
-			return nil, fmt.Errorf("signature v failed for signature %s: %w", v.Signature, err)
+			return nil, fmt.Errorf("signature verification failed for signature %s: %w", v.Signature, err)
 		}
 	}
 

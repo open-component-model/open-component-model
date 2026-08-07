@@ -26,6 +26,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 )
@@ -130,9 +131,10 @@ func SignComponent(ctx context.Context, signatureName string, signAlgo signingv1
 
 	pubKey := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}))
 
-	credentials := map[string]string{
-		"public_key_pem":  pubKey,
-		"private_key_pem": string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)})),
+	credentials := &rsacredentialsv1.RSACredentials{
+		Type:          rsacredentialsv1.VersionedType,
+		PublicKeyPEM:  pubKey,
+		PrivateKeyPEM: string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)})),
 	}
 
 	sigBytes, err := handler.Sign(ctx, *unsignedDigest, cfg, credentials)

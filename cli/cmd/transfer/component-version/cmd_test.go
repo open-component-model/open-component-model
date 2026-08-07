@@ -82,6 +82,176 @@ func addReference(t *testing.T, parent, child *descriptor.Descriptor, refName st
 	})
 }
 
+// setupSourceRef creates a test CTF repository with a simple component and returns the source reference string.
+func setupSourceRef(t *testing.T, componentName, componentVersion string) string {
+	t.Helper()
+	fromDesc := createTestDescriptor(componentName, componentVersion)
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, fromDesc)
+	require.NoError(t, err)
+	ref := &compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: fromPath},
+		Component:  componentName,
+		Version:    componentVersion,
+	}
+	return ref.String()
+}
+
+// dryRunTransferSpec generates a transfer spec YAML via --dry-run.
+func dryRunTransferSpec(t *testing.T, sourceRef, targetArg string) string {
+	t.Helper()
+	specOutput := new(bytes.Buffer)
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", sourceRef, targetArg, "--dry-run", "-o", "yaml"),
+		test.WithOutput(specOutput),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, specOutput.Bytes(), "dry-run should produce output")
+	return specOutput.String()
+}
+
+// writeSpecFile writes spec content to a temp file and returns the path.
+func writeSpecFile(t *testing.T, spec string) string {
+	t.Helper()
+	specFile := t.TempDir() + "/spec.yaml"
+	require.NoError(t, os.WriteFile(specFile, []byte(spec), 0o644))
+	return specFile
+}
+
+// executeTransferSpec runs the transfer command with --transfer-spec.
+func executeTransferSpec(t *testing.T, specFile string) {
+	t.Helper()
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", specFile),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+}
+
+// openCTFRepo opens a CTF repository at the given path for verification.
+func openCTFRepo(t *testing.T, path string) *oci.Repository {
+	t.Helper()
+	fs, err := filesystem.NewFS(path, os.O_RDWR)
+	require.NoError(t, err)
+	archive := ctf.NewFileSystemCTF(fs)
+	repo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	require.NoError(t, err)
+	return repo
+}
+
+func TestTransferComponentVersionWithTransferSpec(t *testing.T) {
+	componentName := "ocm.software/spec-test-component"
+	componentVersion := "0.0.1"
+	toPath := t.TempDir()
+
+	sourceRef := setupSourceRef(t, componentName, componentVersion)
+	spec := dryRunTransferSpec(t, sourceRef, fmt.Sprintf("ctf::%s", toPath))
+	executeTransferSpec(t, writeSpecFile(t, spec))
+
+	repo := openCTFRepo(t, toPath)
+	desc, err := repo.GetComponentVersion(t.Context(), componentName, componentVersion)
+	require.NoError(t, err)
+	require.Equal(t, componentName, desc.Component.Name)
+	require.Equal(t, componentVersion, desc.Component.Version)
+}
+
+func TestTransferComponentVersionWithTransferSpecDryRun(t *testing.T) {
+	sourceRef := setupSourceRef(t, "ocm.software/dryrun-spec-test", "0.0.1")
+	originalSpec := dryRunTransferSpec(t, sourceRef, fmt.Sprintf("ctf::%s", t.TempDir()))
+
+	// Re-render via --transfer-spec --dry-run — should produce identical output
+	reRendered := new(bytes.Buffer)
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", writeSpecFile(t, originalSpec), "--dry-run", "-o", "yaml"),
+		test.WithOutput(reRendered),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+	require.Equal(t, originalSpec, reRendered.String(), "re-rendered spec should match original")
+}
+
+func TestTransferComponentVersionWithTransferSpecRejectsArgs(t *testing.T) {
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", writeSpecFile(t, "{}"), "some-arg", "another-arg"),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "positional arguments are not allowed")
+}
+
+func TestTransferComponentVersionWithTransferSpecModifiedTarget(t *testing.T) {
+	componentName := "ocm.software/modified-target-test"
+	componentVersion := "0.0.1"
+	originalTarget := t.TempDir()
+	modifiedTarget := t.TempDir()
+
+	sourceRef := setupSourceRef(t, componentName, componentVersion)
+	spec := dryRunTransferSpec(t, sourceRef, fmt.Sprintf("ctf::%s", originalTarget))
+
+	// Replace the target path in the spec
+	modifiedSpec := strings.ReplaceAll(spec, originalTarget, modifiedTarget)
+	require.NotEqual(t, spec, modifiedSpec, "spec should have been modified")
+
+	executeTransferSpec(t, writeSpecFile(t, modifiedSpec))
+
+	// Verify the component landed in the modified target
+	repo := openCTFRepo(t, modifiedTarget)
+	desc, err := repo.GetComponentVersion(t.Context(), componentName, componentVersion)
+	require.NoError(t, err)
+	require.Equal(t, componentName, desc.Component.Name)
+
+	// Verify the original target is empty
+	_, err = openCTFRepo(t, originalTarget).GetComponentVersion(t.Context(), componentName, componentVersion)
+	require.Error(t, err, "original target should not contain the component")
+}
+
+func TestTransferComponentVersionWithTransferSpecStdin(t *testing.T) {
+	componentName := "ocm.software/stdin-spec-test"
+	componentVersion := "0.0.1"
+	toPath := t.TempDir()
+
+	sourceRef := setupSourceRef(t, componentName, componentVersion)
+	spec := dryRunTransferSpec(t, sourceRef, fmt.Sprintf("ctf::%s", toPath))
+
+	// Execute via stdin using --transfer-spec -
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+		test.WithInput(bytes.NewBufferString(spec)),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	repo := openCTFRepo(t, toPath)
+	desc, err := repo.GetComponentVersion(t.Context(), componentName, componentVersion)
+	require.NoError(t, err)
+	require.Equal(t, componentName, desc.Component.Name)
+	require.Equal(t, componentVersion, desc.Component.Version)
+}
+
+func TestTransferComponentVersionWithTransferSpecStdinInvalid(t *testing.T) {
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+		test.WithInput(bytes.NewBufferString("not: [valid: yaml: {")),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "parsing transfer spec")
+}
+
+func TestTransferComponentVersionWithTransferSpecFileNotFound(t *testing.T) {
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "/nonexistent/path/spec.yaml"),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "reading transfer spec file")
+}
+
 func TestTransferComponentVersion(t *testing.T) {
 	fromDesc := createTestDescriptor("ocm.software/test-component", "0.0.1")
 	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, fromDesc)
@@ -306,4 +476,132 @@ func TestTransferComponentVersionPreservesSignatures(t *testing.T) {
 	// Verify resource was also transferred
 	r.Len(targetDesc.Component.Resources, 1, "transferred descriptor should have 1 resource")
 	r.Equal("test-blob", targetDesc.Component.Resources[0].Name)
+}
+
+// setupMultiVersionSourceRef builds a CTF with multiple versions of the same component and returns
+// a reference without a version (for multi-version transfer).
+func setupMultiVersionSourceRef(t *testing.T, componentName string, versions ...string) (string, string) {
+	t.Helper()
+	descs := make([]*descriptor.Descriptor, len(versions))
+	for i, v := range versions {
+		descs[i] = createTestDescriptor(componentName, v)
+	}
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, descs...)
+	require.NoError(t, err)
+	// Reference without version triggers multi-version discovery.
+	ref := &compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: fromPath},
+		Component:  componentName,
+	}
+	return ref.String(), fromPath
+}
+
+func TestTransferComponentVersion_AllVersions(t *testing.T) {
+	componentName := "ocm.software/multi-version-component"
+	versions := []string{"1.0.0", "1.1.0", "2.0.0"}
+	sourceRef, _ := setupMultiVersionSourceRef(t, componentName, versions...)
+	toPath := t.TempDir()
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", sourceRef, targetArg),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+	for _, v := range versions {
+		desc, err := targetRepo.GetComponentVersion(ctx, componentName, v)
+		require.NoError(t, err, "version %s should be in target", v)
+		require.Equal(t, v, desc.Component.Version)
+	}
+}
+
+func TestTransferComponentVersion_SemverConstraint(t *testing.T) {
+	componentName := "ocm.software/semver-filter-component"
+	sourceRef, _ := setupMultiVersionSourceRef(t, componentName, "1.0.0", "1.1.0", "2.0.0")
+	toPath := t.TempDir()
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", sourceRef, targetArg, "--semver-constraint", "< 2.0.0"),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+
+	for _, v := range []string{"1.0.0", "1.1.0"} {
+		desc, err := targetRepo.GetComponentVersion(ctx, componentName, v)
+		require.NoError(t, err, "version %s should be in target", v)
+		require.Equal(t, v, desc.Component.Version)
+	}
+
+	_, err = targetRepo.GetComponentVersion(ctx, componentName, "2.0.0")
+	require.Error(t, err, "version 2.0.0 should NOT be in target")
+}
+
+func TestTransferComponentVersion_LatestOnly(t *testing.T) {
+	componentName := "ocm.software/latest-only-component"
+	sourceRef, _ := setupMultiVersionSourceRef(t, componentName, "1.0.0", "1.1.0", "2.0.0")
+	toPath := t.TempDir()
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", sourceRef, targetArg, "--latest"),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+
+	desc, err := targetRepo.GetComponentVersion(ctx, componentName, "2.0.0")
+	require.NoError(t, err, "latest version 2.0.0 should be in target")
+	require.Equal(t, "2.0.0", desc.Component.Version)
+
+	for _, v := range []string{"1.0.0", "1.1.0"} {
+		_, err = targetRepo.GetComponentVersion(ctx, componentName, v)
+		require.Error(t, err, "version %s should NOT be in target when --latest is set", v)
+	}
+}
+
+func TestTransferComponentVersion_ExactVersionIgnoresConstraintFlags(t *testing.T) {
+	componentName := "ocm.software/exact-version-component"
+	versions := []string{"1.0.0", "1.1.0", "2.0.0"}
+	sourceRef, _ := setupMultiVersionSourceRef(t, componentName, versions...)
+
+	// Build a ref with an exact version — semver-constraint and --latest should be warned/ignored.
+	exactRef := &compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: strings.TrimPrefix(strings.Split(sourceRef, "//")[0], "ctf::")},
+		Component:  componentName,
+		Version:    "1.0.0",
+	}
+	toPath := t.TempDir()
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", exactRef.String(), targetArg, "--semver-constraint", "< 2.0.0", "--latest"),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err, "command should succeed even when both flags are set with exact version")
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+
+	// Only the exact version should have been transferred.
+	desc, err := targetRepo.GetComponentVersion(ctx, componentName, "1.0.0")
+	require.NoError(t, err, "exact version 1.0.0 should be in target")
+	require.Equal(t, "1.0.0", desc.Component.Version)
+
+	for _, v := range []string{"1.1.0", "2.0.0"} {
+		_, err = targetRepo.GetComponentVersion(ctx, componentName, v)
+		require.Error(t, err, "version %s should NOT be in target", v)
+	}
 }

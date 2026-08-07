@@ -15,7 +15,7 @@ var _ repository.ComponentLister = (*componentListerPluginConverter)(nil)
 type componentListerPluginConverter struct {
 	externalPlugin          v1.ComponentListerPluginContract[runtime.Typed]
 	repositorySpecification runtime.Typed
-	credentials             map[string]string
+	credentials             runtime.Typed
 	scheme                  *runtime.Scheme
 }
 
@@ -61,7 +61,7 @@ func (r *componentListerPluginConverter) ListComponents(ctx context.Context, las
 func (r *ComponentListerRegistry) externalToComponentListerPluginConverter(plugin v1.ComponentListerPluginContract[runtime.Typed],
 	scheme *runtime.Scheme,
 	repositorySpecification runtime.Typed,
-	credentials map[string]string,
+	credentials runtime.Typed,
 ) *componentListerPluginConverter {
 	return &componentListerPluginConverter{
 		externalPlugin:          plugin,

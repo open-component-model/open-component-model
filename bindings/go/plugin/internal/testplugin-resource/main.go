@@ -21,7 +21,7 @@ import (
 
 type TestPlugin struct{}
 
-func (m *TestPlugin) GetGlobalResource(ctx context.Context, request *v1.GetGlobalResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
+func (m *TestPlugin) GetGlobalResource(ctx context.Context, request *v1.GetGlobalResourceRequest, credentials runtime.Typed) (*v1.GetGlobalResourceResponse, error) {
 	file, err := os.CreateTemp("", "test-resource-file")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temp file: %w", err)
@@ -37,7 +37,7 @@ func (m *TestPlugin) GetGlobalResource(ctx context.Context, request *v1.GetGloba
 	}, nil
 }
 
-func (m *TestPlugin) AddGlobalResource(ctx context.Context, request *v1.AddGlobalResourceRequest, credentials map[string]string) (*v1.AddGlobalResourceResponse, error) {
+func (m *TestPlugin) AddGlobalResource(ctx context.Context, request *v1.AddGlobalResourceRequest, credentials runtime.Typed) (*v1.AddGlobalResourceResponse, error) {
 	return &v1.AddGlobalResourceResponse{
 		Resource: &descriptorv2.Resource{
 			ElementMeta: descriptorv2.ElementMeta{

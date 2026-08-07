@@ -8,29 +8,32 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
 	remotecredentials "oras.land/oras-go/v2/registry/remote/credentials"
 
-	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// CredentialKey constants define the standard keys used in credential maps.
-// These keys are used to store and retrieve different types of credentials.
-const (
-	// CredentialKeyUsername is the key for storing username credentials
-	CredentialKeyUsername = "username"
-	// CredentialKeyPassword is the key for storing password credentials
-	CredentialKeyPassword = "password"
-	// CredentialKeyAccessToken is the key for storing access token credentials
-	CredentialKeyAccessToken = "accessToken"
-	// CredentialKeyRefreshToken is the key for storing refresh token credentials
-	CredentialKeyRefreshToken = "refreshToken"
-)
+// MapCredentials converts a [credentialsv1.OCICredentials] to an auth.Credential.
+// A nil input yields an empty [auth.Credential].
+func MapCredentials(credentials *v1.OCICredentials) auth.Credential {
+	if credentials == nil {
+		return auth.Credential{}
+	}
+	cred := auth.Credential{}
+	cred.Username = credentials.Username
+	cred.Password = credentials.Password
+	cred.AccessToken = credentials.AccessToken
+	cred.RefreshToken = credentials.RefreshToken
+	return cred
+}
 
 // CredentialFunc creates a function that returns credentials based on host and port matching.
-// It takes an identity map and a credentials map as input and returns a function that can be
+// It takes an identity map and [credentialsv1.OCICredentials] as input and returns a function that can be
 // used with the ORAS client for authentication.
 //
 // The returned function will:
@@ -40,35 +43,23 @@ const (
 //
 // Example:
 //
-//	identity := runtime.Identity{
-//		runtime.IdentityAttributeHostname: "example.com",
-//		runtime.IdentityAttributePort:     "443",
+//	identity := &identityv1.OCIRegistryIdentity{
+//		Hostname: "example.com",
+//		Port:     "443",
 //	}
-//	credentials := map[string]string{
-//		CredentialKeyUsername: "user",
-//		CredentialKeyPassword: "pass",
+//	credentials := &credentialsv1.OCICredentials{
+//		Username: "user",
+//		Password: "pass",
 //	}
-//	credFunc := CredentialFunc(identity, credentials)
+//	credFunc := CredentialFuncTyped(identity, credentials)
 //
 // This will create a function that checks if the host and port match "example.com:443",
 // and returns the provided credentials if they do. If the host and port don't match,
 // it will return empty credentials.
-func CredentialFunc(identity runtime.Identity, credentials map[string]string) auth.CredentialFunc {
-	credential := auth.Credential{}
-	if v, ok := credentials[CredentialKeyUsername]; ok {
-		credential.Username = v
-	}
-	if v, ok := credentials[CredentialKeyPassword]; ok {
-		credential.Password = v
-	}
-	if v, ok := credentials[CredentialKeyAccessToken]; ok {
-		credential.AccessToken = v
-	}
-	if v, ok := credentials[CredentialKeyRefreshToken]; ok {
-		credential.RefreshToken = v
-	}
-	registeredHostname, hostInIdentity := identity[runtime.IdentityAttributeHostname]
-	registeredPort, portInIdentity := identity[runtime.IdentityAttributePort]
+func CredentialFunc(identity *identityv1.OCIRegistryIdentity, credentials *v1.OCICredentials) auth.CredentialFunc {
+	credential := MapCredentials(credentials)
+	hasHost := identity != nil && identity.Hostname != ""
+	hasPort := identity != nil && identity.Port != ""
 
 	return func(ctx context.Context, hostport string) (auth.Credential, error) {
 		actualHost, actualPort, err := net.SplitHostPort(hostport)
@@ -81,8 +72,8 @@ func CredentialFunc(identity runtime.Identity, credentials map[string]string) au
 			}
 			actualHost = hostport
 		}
-		hostMismatch := hostInIdentity && registeredHostname != actualHost
-		portMismatch := portInIdentity && registeredPort != actualPort
+		hostMismatch := hasHost && identity.Hostname != actualHost
+		portMismatch := hasPort && identity.Port != actualPort
 		if hostMismatch || portMismatch {
 			return auth.EmptyCredential, nil
 		}
@@ -90,26 +81,33 @@ func CredentialFunc(identity runtime.Identity, credentials map[string]string) au
 	}
 }
 
+// Resolving of credentials is an expensive operation and we might receive many requests from different
+// graph transformers or nodes requesting access to a registry at once. In this case it is advisable to
+// deduplicate the requests as most credential helpers do not deal well with multiple concurrent calls due
+// to the protocol relying on binary execution on many operating systems.
+var storeConcurrencyMu sync.Mutex
+
 // ResolveV1DockerConfigCredentials resolves credentials from a Docker configuration
 // for a given identity. It supports both file-based and in-memory Docker configurations.
 //
 // The function will:
 //   - Load credentials from the specified Docker config source
 //   - Match the credentials against the provided identity
-//   - Return a map of credential key-value pairs
-func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credentialsv1.DockerConfig, identity runtime.Identity) (map[string]string, error) {
+//   - Return [v1.OCICredentials] if a match is found, or nil if no credentials are found
+func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig v1.DockerConfig, identity runtime.Identity) (*v1.OCICredentials, error) {
 	credStore, err := getStore(ctx, dockerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve credentials store: %w", err)
 	}
 
-	hostname := identity[runtime.IdentityAttributeHostname]
-	if hostname == "" {
+	oci := identityv1.FromIdentity(identity)
+	if oci == nil || oci.Hostname == "" {
 		slog.DebugContext(ctx, "no hostname provided, skipping credential resolution, since docker configs"+
 			"cannot resolve without hostname", "identity", identity)
 		return nil, nil
 	}
 
+	hostname := oci.Hostname
 	// this is a special case
 	// The Docker CLI expects that the credentials of
 	// the registry 'docker.io' will be added under the key "https://index.docker.io/v1/".
@@ -118,45 +116,40 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		hostname = "index.docker.io"
 	}
 
+	logger := slog.With("hostname", hostname, "identity", identity.String())
+	storeConcurrencyMu.Lock()
+	defer storeConcurrencyMu.Unlock()
+	logger.DebugContext(ctx, "getting credentials")
 	cred, err := credStore.Get(ctx, hostname)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get credentials for %q: %w", hostname, err)
 	}
-	if cred == auth.EmptyCredential {
+	if cred == auth.EmptyCredential && oci.Port != "" {
 		// because ORAS stores docker credentials including its port if defined, we'll try
 		// once more including the port with the hostname. (For ghcr.io no port is there, but we
 		// default the port to 443 so trying it with that in the first time would fail that's why
 		// this is a fallback try).
-		if port, ok := identity[runtime.IdentityAttributePort]; ok {
-			hostname = fmt.Sprintf("%s:%s", hostname, port)
-			cred, err = credStore.Get(ctx, hostname)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get credentials for %q with port: %w", hostname, err)
-			}
-			if cred == auth.EmptyCredential {
-				return nil, nil
-			}
-		} else {
-			// no port, we have no creds
-			return nil, nil
+		hostname = fmt.Sprintf("%s:%s", hostname, oci.Port)
+		logger.DebugContext(ctx, "attempting secondary credentials lookup via hostname:port")
+		cred, err = credStore.Get(ctx, hostname)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get credentials for %q with port: %w", hostname, err)
 		}
 	}
-
-	credentialMap := map[string]string{}
-	if v := cred.Username; v != "" {
-		credentialMap[CredentialKeyUsername] = v
-	}
-	if v := cred.Password; v != "" {
-		credentialMap[CredentialKeyPassword] = v
-	}
-	if v := cred.AccessToken; v != "" {
-		credentialMap[CredentialKeyAccessToken] = v
-	}
-	if v := cred.RefreshToken; v != "" {
-		credentialMap[CredentialKeyRefreshToken] = v
+	if cred == auth.EmptyCredential {
+		logger.DebugContext(ctx, "no credentials found")
+		return nil, nil
 	}
 
-	return credentialMap, nil
+	logger.DebugContext(ctx, "credentials found", "username", cred.Username)
+
+	return &v1.OCICredentials{
+		Type:         runtime.NewVersionedType(v1.OCICredentialsType, v1.Version),
+		Username:     cred.Username,
+		Password:     cred.Password,
+		AccessToken:  cred.AccessToken,
+		RefreshToken: cred.RefreshToken,
+	}, nil
 }
 
 // getStore creates a credential store based on the provided Docker configuration.
@@ -169,7 +162,7 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 //   - Shell expansion for file paths (e.g., ~ for home directory)
 //   - Temporary file creation for inline configurations
 //   - Integration with the native host credential store
-func getStore(ctx context.Context, dockerConfig credentialsv1.DockerConfig) (remotecredentials.Store, error) {
+func getStore(ctx context.Context, dockerConfig v1.DockerConfig) (remotecredentials.Store, error) {
 	// Determine which store creation strategy to use based on the provided configuration
 	switch {
 	case dockerConfig.DockerConfigFile == "" && dockerConfig.DockerConfig == "":
@@ -193,7 +186,7 @@ func createDefaultStore(ctx context.Context) (remotecredentials.Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create default docker config store: %w", err)
 	}
-	return wrapWithLogging(store, slog.Default()), nil
+	return store, nil
 }
 
 // createInlineConfigStore creates a credential store from an inline JSON configuration.
@@ -205,7 +198,7 @@ func createInlineConfigStore(ctx context.Context, config string) (remotecredenti
 	if err != nil {
 		return nil, fmt.Errorf("failed to create inline config store: %w", err)
 	}
-	return wrapWithLogging(store, slog.Default()), nil
+	return store, nil
 }
 
 // createFileBasedStore creates a credential store from a specified Docker config file.
@@ -230,7 +223,7 @@ func createFileBasedStore(ctx context.Context, configPath string) (remotecredent
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file-based config store: %w", err)
 	}
-	return wrapWithLogging(store, slog.Default()), nil
+	return store, nil
 }
 
 // expandConfigPath handles shell expansion for the config file path.

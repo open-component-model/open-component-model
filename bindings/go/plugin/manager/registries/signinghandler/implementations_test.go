@@ -203,7 +203,7 @@ func TestSign(t *testing.T) {
 	tests := []struct {
 		name        string
 		request     *v1.SignRequest[runtime.Typed]
-		credentials map[string]string
+		credentials runtime.Typed
 		setupMock   func() *httptest.Server
 		expectErr   bool
 	}{
@@ -213,7 +213,7 @@ func TestSign(t *testing.T) {
 				Digest: &v2.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: "abc"},
 				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"k":"v"}`)},
 			},
-			credentials: map[string]string{"key": "value"},
+			credentials: runtime.Identity{"key": "value"},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == Sign {
@@ -228,7 +228,7 @@ func TestSign(t *testing.T) {
 		{
 			name:        "invalid_credentials",
 			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
-			credentials: map[string]string{"invalid": "creds"},
+			credentials: runtime.Identity{"invalid": "creds"},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusForbidden)
@@ -239,7 +239,7 @@ func TestSign(t *testing.T) {
 		{
 			name:        "call_failed",
 			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
-			credentials: map[string]string{"key": "value"},
+			credentials: runtime.Identity{"key": "value"},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -274,7 +274,7 @@ func TestVerify(t *testing.T) {
 	tests := []struct {
 		name        string
 		request     *v1.VerifyRequest[runtime.Typed]
-		credentials map[string]string
+		credentials runtime.Typed
 		setupMock   func() *httptest.Server
 		expectErr   bool
 	}{
@@ -284,7 +284,7 @@ func TestVerify(t *testing.T) {
 				Signature: &v2.Signature{Signature: v2.SignatureInfo{Algorithm: "rsa", Value: "sig"}},
 				Config:    &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 			},
-			credentials: map[string]string{"key": "value"},
+			credentials: runtime.Identity{"key": "value"},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)

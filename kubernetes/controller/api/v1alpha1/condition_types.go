@@ -8,6 +8,8 @@ const (
 	ReconcilingCondition = "Reconciling"
 	// StalledCondition indicates the resource has stalled and will not be retried.
 	StalledCondition = "Stalled"
+	// TransferInProgressCondition indicates a Replication transfer is in flight.
+	TransferInProgressCondition = "TransferInProgress"
 )
 
 // Generic condition reasons.
@@ -27,8 +29,8 @@ const (
 )
 
 const (
-	// ConfigureContextFailedReason is used when the controller failed to create an authenticated context.
-	ConfigureContextFailedReason = "ConfigureContextFailed"
+	// GetConfigurationFailedReason is used when the controller failed to get the OCM configuration.
+	GetConfigurationFailedReason = "GetConfigurationFailed"
 
 	// CheckVersionFailedReason is used when the controller failed to check for new versions.
 	CheckVersionFailedReason = "CheckVersionFailed"
@@ -74,4 +76,10 @@ const (
 
 	// ComponentDriftResolutionInProgress the component and the deployer are catching up.
 	ComponentDriftResolutionInProgress = "ComponentDriftResolutionInProgress"
+
+	// TransferInProgressReason is used when a Replication transfer is in flight.
+	TransferInProgressReason = "TransferInProgress"
+
+	// TransferCompleteReason is used when no Replication transfer is done.
+	TransferCompleteReason = "TransferComplete"
 )

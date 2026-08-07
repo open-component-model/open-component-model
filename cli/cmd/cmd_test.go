@@ -30,6 +30,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	componentversion "ocm.software/open-component-model/cli/cmd/add/component-version"
+	"ocm.software/open-component-model/cli/cmd/configuration"
 	"ocm.software/open-component-model/cli/cmd/internal/test"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
@@ -826,7 +827,7 @@ resources:
 		r.Equal("my-file", desc.Component.Resources[0].Name, "expected resource name to match")
 		r.Equal("blob", desc.Component.Resources[0].Type, "expected resource type to match")
 		r.NotNil(desc.Component.Resources[0].Access, "expected resource access to be set")
-		r.Equal("localBlob/v1", desc.Component.Resources[0].Access.GetType().String(), "expected resource access type to match")
+		r.Equal("LocalBlob/v1", desc.Component.Resources[0].Access.GetType().String(), "expected resource access type to match")
 
 		blb, _, err := helperRepo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, desc.Component.Resources[0].ToIdentity())
 		r.NoError(err, "could not retrieve local resource from test repository")
@@ -1237,7 +1238,7 @@ func Test_Add_Component_Version_Formats(t *testing.T) {
     - access:
         localReference: sha256:c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2
         mediaType: text/plain; charset=utf-8
-        type: localBlob/v1
+        type: LocalBlob/v1
       digest:
         hashAlgorithm: SHA-256
         normalisationAlgorithm: genericBlobDigest/v1
@@ -1350,7 +1351,7 @@ resources:
 									"value":                  "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2",
 								},
 								"access": map[string]any{
-									"type":           "localBlob/v1",
+									"type":           "LocalBlob/v1",
 									"mediaType":      "text/plain; charset=utf-8",
 									"localReference": "sha256:c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2",
 								},
@@ -1531,6 +1532,51 @@ configurations:
 		test.WithOutput(logs),
 	)
 	r.NoError(err, "failed to verify component version")
+}
+
+func Test_Sign_With_Sigstore_Spec_Selects_Cosign_Handler(t *testing.T) {
+	t.Setenv("SIGSTORE_ID_TOKEN", "")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/sigstore-wiring", "1.0.0"
+	constructorYAML := fmt.Sprintf(`
+name: %[1]s
+version: %[2]s
+provider:
+  name: ocm.software
+resources:
+  - name: my-resource
+    type: blob
+    input:
+      type: utf8/v1
+      text: "wiring test"
+`, name, version)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	r.NoError(err, "could not construct component version")
+
+	signerSpecFilePath := filepath.Join(tmp, "sigstore-signer-spec.yaml")
+	r.NoError(os.WriteFile(signerSpecFilePath,
+		[]byte("type: SigstoreSigningConfiguration/v1alpha1\n"), 0o600))
+
+	reference := archiveFilePath + "//" + name + ":" + version
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", "sigstore-wiring-test",
+		"--signer-spec", signerSpecFilePath,
+	))
+	r.Error(err)
+	r.Contains(err.Error(), "OIDC identity token required")
 }
 
 // Test_Add_Component_Version_Docker_Credentials tests the use of docker credentials in the add cv command
@@ -1774,7 +1820,7 @@ resources:
 	sourceDesc, err := sourceRepo.GetComponentVersion(t.Context(), componentName, componentVersion)
 	r.NoError(err, "could not retrieve component version from source repository")
 	r.Len(sourceDesc.Component.Resources, 1, "expected one resource in source component version")
-	r.Equal("localBlob/v1", sourceDesc.Component.Resources[0].Access.GetType().String(), "expected local blob access type")
+	r.Equal("LocalBlob/v1", sourceDesc.Component.Resources[0].Access.GetType().String(), "expected local blob access type")
 
 	// Transfer component version to target repository
 	targetArchivePath := filepath.Join(tmp, "target-archive")
@@ -1814,7 +1860,7 @@ resources:
 	r.Len(targetDesc.Component.Resources, 1, "expected one resource in target component version")
 	r.Equal(resourceName, targetDesc.Component.Resources[0].Name, "expected resource name to match")
 	r.Equal("blob", targetDesc.Component.Resources[0].Type, "expected resource type to match")
-	r.Equal("localBlob/v1", targetDesc.Component.Resources[0].Access.GetType().String(), "expected resource access type to match")
+	r.Equal("LocalBlob/v1", targetDesc.Component.Resources[0].Access.GetType().String(), "expected resource access type to match")
 
 	// Verify local blob resource content is accessible from target repository
 	resourceIdentity := targetDesc.Component.Resources[0].ToIdentity()
@@ -1824,4 +1870,447 @@ resources:
 	var targetContent bytes.Buffer
 	r.NoError(blob.Copy(&targetContent, targetBlob))
 	r.Equal(testContent, targetContent.String(), "expected local blob content to match original test file content")
+}
+
+// Test_Add_Component_Version_With_Reference_Digest tests adding a component version
+// with a reference that includes a digest for verification.
+func Test_Add_Component_Version_With_Reference_Digest(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	// First, create the referenced component to get its calculated digest
+	referencedConstructorYAML := `
+name: ocm.software/referenced
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+- name: my-resource
+  type: blob
+  input:
+    type: utf8/v1
+    text: "I am a referenced component!"
+`
+	referencedConstructorYAMLFilePath := filepath.Join(tmp, "referenced-constructor.yaml")
+	r.NoError(os.WriteFile(referencedConstructorYAMLFilePath, []byte(referencedConstructorYAML), 0o600))
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+
+	logs := test.NewJSONLogReader()
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", referencedConstructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	), test.WithErrorOutput(logs))
+	r.NoError(err, "could not construct referenced component version")
+
+	// Get the calculated digest from the referenced component
+	fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
+	r.NoError(err, "could not create test filesystem")
+	archive := ctf.NewFileSystemCTF(fs)
+	helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err, "could not create helper test repository")
+
+	referencedDesc, err := helperRepo.GetComponentVersion(t.Context(), "ocm.software/referenced", "1.0.0")
+	r.NoError(err, "could not retrieve referenced component version")
+
+	// Now create a component with a reference that includes the correct digest
+	t.Run("construction with matching reference digest succeeds", func(t *testing.T) {
+		r := require.New(t)
+		// We need to calculate the digest - the referenced component doesn't have it stored.
+		// Create a component referencing it and let it calculate the digest.
+		constructorYAML := fmt.Sprintf(`
+name: ocm.software/referencing-no-digest
+version: 1.0.0
+provider:
+  name: ocm.software
+componentReferences:
+  - name: referenced
+    version: 1.0.0
+    componentName: ocm.software/referenced
+resources:
+- name: my-resource
+  type: blob
+  input:
+    type: utf8/v1
+    text: "I reference another component"
+`)
+		constructorYAMLFilePath := filepath.Join(tmp, "referencing-no-digest-constructor.yaml")
+		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+		logs := test.NewJSONLogReader()
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorYAMLFilePath,
+			"--repository", archiveFilePath,
+		), test.WithErrorOutput(logs))
+		r.NoError(err, "could not construct component version with reference")
+
+		// Get the digest from the constructed reference
+		fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
+		r.NoError(err, "could not create test filesystem")
+		archive := ctf.NewFileSystemCTF(fs)
+		helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+		r.NoError(err, "could not create helper test repository")
+
+		referencingDesc, err := helperRepo.GetComponentVersion(t.Context(), "ocm.software/referencing-no-digest", "1.0.0")
+		r.NoError(err, "could not retrieve referencing component version")
+		r.Len(referencingDesc.Component.References, 1, "expected one reference")
+		calculatedDigest := referencingDesc.Component.References[0].Digest
+		r.NotEmpty(calculatedDigest.Value, "expected digest to be calculated")
+
+		// Now create another component with the digest explicitly specified
+		constructorWithDigestYAML := fmt.Sprintf(`
+name: ocm.software/referencing-with-digest
+version: 1.0.0
+provider:
+  name: ocm.software
+componentReferences:
+  - name: referenced
+    version: 1.0.0
+    componentName: ocm.software/referenced
+    digest:
+      hashAlgorithm: %s
+      normalisationAlgorithm: %s
+      value: %s
+resources:
+- name: my-resource
+  type: blob
+  input:
+    type: utf8/v1
+    text: "I reference another component with explicit digest"
+`, calculatedDigest.HashAlgorithm, calculatedDigest.NormalisationAlgorithm, calculatedDigest.Value)
+		constructorWithDigestYAMLFilePath := filepath.Join(tmp, "referencing-with-digest-constructor.yaml")
+		r.NoError(os.WriteFile(constructorWithDigestYAMLFilePath, []byte(constructorWithDigestYAML), 0o600))
+
+		logs = test.NewJSONLogReader()
+		_, err = test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorWithDigestYAMLFilePath,
+			"--repository", archiveFilePath,
+		), test.WithErrorOutput(logs))
+		r.NoError(err, "could not construct component version with explicit digest")
+
+		// Verify the digest was preserved
+		referencingWithDigestDesc, err := helperRepo.GetComponentVersion(t.Context(), "ocm.software/referencing-with-digest", "1.0.0")
+		r.NoError(err, "could not retrieve component version with explicit digest")
+		r.Len(referencingWithDigestDesc.Component.References, 1, "expected one reference")
+		r.Equal(calculatedDigest.Value, referencingWithDigestDesc.Component.References[0].Digest.Value, "expected digest to match")
+	})
+
+	t.Run("construction with mismatched reference digest fails", func(t *testing.T) {
+		r := require.New(t)
+		constructorYAML := `
+name: ocm.software/referencing-wrong-digest
+version: 1.0.0
+provider:
+  name: ocm.software
+componentReferences:
+  - name: referenced
+    version: 1.0.0
+    componentName: ocm.software/referenced
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v4alpha1
+      value: wrong-digest-value-that-will-not-match
+resources:
+- name: my-resource
+  type: blob
+  input:
+    type: utf8/v1
+    text: "I reference with wrong digest"
+`
+		constructorYAMLFilePath := filepath.Join(tmp, "referencing-wrong-digest-constructor.yaml")
+		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+		logs := test.NewJSONLogReader()
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorYAMLFilePath,
+			"--repository", archiveFilePath,
+		), test.WithErrorOutput(logs))
+		r.Error(err, "expected error for mismatched digest")
+		r.Contains(err.Error(), "digest mismatch", "expected digest mismatch error")
+	})
+
+	// Verify referenced component is still accessible
+	_ = referencedDesc
+}
+
+func Test_Get_Config(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		configsYAML    []string
+		expectedOutput string
+		expectedError  bool
+	}{
+		{
+			name: "no config - only default temp folder is output",
+			args: []string{"get", "config"},
+			expectedOutput: fmt.Sprintf(`configurations:
+- tempFolder: %s
+  type: filesystem.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
+`, os.TempDir()),
+		},
+		{
+			name: "filesystem config - yaml output",
+			args: []string{"get", "config"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /work
+type: generic.config.ocm.software/v1
+`,
+		},
+		{
+			name: "filesystem config - merge multiple files",
+			args: []string{"get", "config"},
+			// Config file combination covers: a value that gets overriden, a value that is preserved, and a value that is added from the second file
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/overridden
+  workingDirectory: /work
+- type: http.config.ocm.software/v1alpha1
+  timeout: 60s
+`, `
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /work
+- timeout: 1m0s
+  type: http.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
+`,
+		},
+		{
+			name: "filesystem config - json output",
+			args: []string{"get", "config", "--output=json"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `{
+  "type": "generic.config.ocm.software/v1",
+  "configurations": [
+    {
+      "type": "filesystem.config.ocm.software/v1alpha1",
+      "tempFolder": "/tmp/custom",
+      "workingDirectory": "/work"
+    }
+  ]
+}`,
+		},
+		{
+			name: "filesystem config - ndjson output",
+			args: []string{"get", "config", "--output=ndjson"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `{"type":"generic.config.ocm.software/v1","configurations":[{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/tmp/custom","workingDirectory":"/work"}]}`,
+		},
+		{
+			name: "multiple config types",
+			args: []string{"get", "config"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/test
+- type: http.config.ocm.software/v1alpha1
+  timeout: 60s`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/test
+  type: filesystem.config.ocm.software/v1alpha1
+- timeout: 1m0s
+  type: http.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
+`,
+		},
+		{
+			name: "all config types populated",
+			args: []string{"get", "config"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /workspace
+- type: http.config.ocm.software/v1alpha1
+  timeout: 45s
+- type: resolvers.config.ocm.software/v1alpha1
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      filePath: /some/archive
+    componentNamePattern: "ocm.software/*"
+    versionConstraint: ">=1.0.0"
+- type: extract.oci.artifact.ocm.software/v1alpha1
+  rules:
+  - filename: output.tar
+    layerSelectors:
+    - matchProperties:
+        layer.mediaType: application/vnd.oci.image.layer.v1.tar+gzip
+      matchExpressions:
+      - key: layer.index
+        operator: In
+        values: ["0"]
+- type: ocm.config.ocm.software/v1
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      filePath: /legacy/archive
+    prefix: ocm.software/legacy
+- type: transfer.config.ocm.software/v1alpha1
+  recursive: -1
+  copyMode: allResources
+  uploadType: ociArtifact
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry/v1
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: user
+        password: pass
+`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /workspace
+- timeout: 45s
+  type: http.config.ocm.software/v1alpha1
+- resolvers:
+  - prefix: ocm.software/legacy
+    repository:
+      filePath: /legacy/archive
+      type: CommonTransportFormat/v1
+  type: ocm.config.ocm.software/v1
+- resolvers:
+  - componentNamePattern: ocm.software/*
+    repository:
+      filePath: /some/archive
+      type: CommonTransportFormat/v1
+    versionConstraint: '>=1.0.0'
+  type: resolvers.config.ocm.software/v1alpha1
+- copyMode: allResources
+  recursive: -1
+  type: transfer.config.ocm.software/v1alpha1
+  uploadType: ociArtifact
+- rules:
+  - filename: output.tar
+    layerSelectors:
+    - matchExpressions:
+      - key: layer.index
+        operator: In
+        values:
+        - "0"
+      matchProperties:
+        layer.mediaType: application/vnd.oci.image.layer.v1.tar+gzip
+  type: extract.oci.artifact.ocm.software/v1alpha1
+- consumers:
+  - credentials:
+    - properties:
+        password: pass
+        username: user
+      type: Credentials/v1
+    identities:
+    - hostname: ghcr.io
+      type: OCIRegistry/v1
+  type: credentials.config.ocm.software
+type: generic.config.ocm.software/v1`,
+		},
+
+		{
+			name:          "invalid output format",
+			args:          []string{"get", "config", "--output=invalid"},
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			args := tt.args
+
+			tmp := t.TempDir()
+			if len(tt.configsYAML) > 0 {
+				for i, configYAML := range tt.configsYAML {
+					configFilePath := filepath.Join(tmp, fmt.Sprintf("config%d.yaml", i))
+					r.NoError(os.WriteFile(configFilePath, []byte(configYAML), 0o600))
+					args = append(args, "--config", configFilePath)
+				}
+			}
+
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err := test.OCM(t, test.WithArgs(args...), test.WithOutput(result), test.WithErrorOutput(logs))
+
+			if tt.expectedError {
+				r.Error(err, "expected error but got none")
+				return
+			}
+
+			r.NoError(err, "failed to run command")
+
+			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()))
+		})
+	}
+}
+
+func TestGetOCMConfigForCommand(t *testing.T) {
+	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
+		r := require.New(t)
+		path := filepath.Join(t.TempDir(), "nonexistent", "path", "config.yaml")
+		_, err := test.OCM(t, test.WithArgs([]string{"--" + configuration.OCMConfigCommandArgument, path}...))
+		r.Error(err, "expected error but got none")
+		r.Contains(err.Error(), path)
+	})
+
+	t.Run("explicit config flag with existing file succeeds", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t, test.WithArgs([]string{"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-1"}...))
+		r.NoError(err)
+		cfg, err := configuration.GetOCMConfigForCommand(cmd)
+		r.NoError(err)
+		r.NotNil(cfg)
+	})
+
+	t.Run("no config flag uses default discovery", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t)
+		r.NoError(err)
+		_, err = configuration.GetOCMConfigForCommand(cmd)
+		r.Error(err, "expected error but got none")
+		r.Contains(err.Error(), "config not found in any known locations, see --help for details on how to supply configuration files")
+	})
+
+	t.Run("multiple config flags merges configurations", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t, test.WithArgs([]string{
+			"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-1",
+			"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-2",
+		}...))
+		r.NoError(err)
+		cfg, err := configuration.GetOCMConfigForCommand(cmd)
+		r.NoError(err)
+		// .ocmconfig-1 has 5 configurations, .ocmconfig-2 has 1
+		r.Len(cfg.Configurations, 6)
+	})
 }

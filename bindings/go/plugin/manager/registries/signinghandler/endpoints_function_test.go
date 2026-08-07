@@ -22,7 +22,7 @@ func (m *mockSigningPlugin) GetSignerIdentity(ctx context.Context, req *v1.GetSi
 	panic("not implemented")
 }
 
-func (m *mockSigningPlugin) Sign(ctx context.Context, request *v1.SignRequest[runtime.Typed], credentials map[string]string) (*v1.SignResponse, error) {
+func (m *mockSigningPlugin) Sign(ctx context.Context, request *v1.SignRequest[runtime.Typed], credentials runtime.Typed) (*v1.SignResponse, error) {
 	// not called in registration tests
 	panic("not implemented")
 }
@@ -32,7 +32,7 @@ func (m *mockSigningPlugin) GetVerifierIdentity(ctx context.Context, req *v1.Get
 	panic("not implemented")
 }
 
-func (m *mockSigningPlugin) Verify(ctx context.Context, request *v1.VerifyRequest[runtime.Typed], credentials map[string]string) (*v1.VerifyResponse, error) {
+func (m *mockSigningPlugin) Verify(ctx context.Context, request *v1.VerifyRequest[runtime.Typed], credentials runtime.Typed) (*v1.VerifyResponse, error) {
 	// not called in registration tests
 	panic("not implemented")
 }

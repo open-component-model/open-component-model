@@ -113,6 +113,14 @@ func ConvertFromDescriptorResource(resource *descriptor.Resource) *Resource {
 		target.SourceRefs = ConvertFromDescriptorSourceRefs(resource.SourceRefs)
 	}
 
+	if resource.Digest != nil {
+		target.Digest = &Digest{
+			HashAlgorithm:          resource.Digest.HashAlgorithm,
+			NormalisationAlgorithm: resource.Digest.NormalisationAlgorithm,
+			Value:                  resource.Digest.Value,
+		}
+	}
+
 	target.AccessOrInput = ConvertAccessFromDescriptor(resource.Access)
 	return target
 }
@@ -131,6 +139,14 @@ func ConvertToDescriptorResource(resource *Resource) *descriptor.Resource {
 
 	if resource.SourceRefs != nil {
 		target.SourceRefs = ConvertToDescriptorSourceRefs(resource.SourceRefs)
+	}
+
+	if resource.Digest != nil {
+		target.Digest = &descriptor.Digest{
+			HashAlgorithm:          resource.Digest.HashAlgorithm,
+			NormalisationAlgorithm: resource.Digest.NormalisationAlgorithm,
+			Value:                  resource.Digest.Value,
+		}
 	}
 
 	target.Access = ConvertAccessToDescriptor(resource.AccessOrInput)
@@ -165,6 +181,13 @@ func ConvertToDescriptorReference(reference *Reference) *descriptor.Reference {
 		ElementMeta: ConvertElementMetaToDescriptor(reference.ElementMeta),
 		Component:   reference.Component,
 	}
+	if reference.Digest != nil {
+		target.Digest = descriptor.Digest{
+			HashAlgorithm:          reference.Digest.HashAlgorithm,
+			NormalisationAlgorithm: reference.Digest.NormalisationAlgorithm,
+			Value:                  reference.Digest.Value,
+		}
+	}
 	return target
 }
 
@@ -195,6 +218,13 @@ func ConvertFromDescriptorReference(reference *descriptor.Reference) *Reference 
 	target := &Reference{
 		ElementMeta: ConvertElementMetaFromDescriptor(reference.ElementMeta),
 		Component:   reference.Component,
+	}
+	if reference.Digest.HashAlgorithm != "" || reference.Digest.NormalisationAlgorithm != "" || reference.Digest.Value != "" {
+		target.Digest = &Digest{
+			HashAlgorithm:          reference.Digest.HashAlgorithm,
+			NormalisationAlgorithm: reference.Digest.NormalisationAlgorithm,
+			Value:                  reference.Digest.Value,
+		}
 	}
 	return target
 }

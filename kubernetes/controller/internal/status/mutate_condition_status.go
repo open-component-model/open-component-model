@@ -19,7 +19,7 @@ func MarkNotReady(recorder kuberecorder.EventRecorder, obj IdentifiableClientObj
 		Reason:  reason,
 		Message: msg,
 	})
-	event.New(recorder, obj, nil, v1alpha1.EventSeverityError, msg)
+	event.New(recorder, obj, nil, v1alpha1.EventSeverityError, "%s", msg)
 }
 
 // MarkAsStalled sets the condition status of an Object to `Stalled`.
@@ -37,7 +37,7 @@ func MarkAsStalled(recorder kuberecorder.EventRecorder, obj IdentifiableClientOb
 		Reason:  reason,
 		Message: msg,
 	})
-	event.New(recorder, obj, nil, v1alpha1.EventSeverityError, msg)
+	event.New(recorder, obj, nil, v1alpha1.EventSeverityError, "%s", msg)
 }
 
 // MarkReady sets the condition status of an Object to `Ready`.

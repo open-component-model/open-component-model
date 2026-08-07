@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
 // discoveryValue holds the result of resolving a single component version during DAG discovery.
@@ -133,7 +134,7 @@ func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValu
 // Thread safety: all map mutations are guarded by mu since the DAG discoverer runs concurrently.
 type discoverer struct {
 	mu        sync.Mutex
-	recursive bool
+	recursive transferv1alpha1.Recursive
 
 	// discoveredDigests stores expected digests from component references.
 	// When a parent references a child with a pinned digest, the digest is recorded here
@@ -157,9 +158,9 @@ type discoverer struct {
 //  2. Propagates the parent's target repositories to the child (union merge).
 //  3. Propagates the parent's resolver to the child. If the child is already claimed by
 //     another parent with a different resolver, an error is returned — the ambiguity must
-//     be resolved by the caller via an explicit WithTransfer mapping for that component.
+//     be resolved by the caller via an explicit Mapping for that component.
 func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]string, error) {
-	if !d.recursive {
+	if d.recursive == transferv1alpha1.RecursiveNone {
 		return nil, nil
 	}
 

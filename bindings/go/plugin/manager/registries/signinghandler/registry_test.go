@@ -205,7 +205,7 @@ func (m *mockSigningHandler) GetSigningCredentialConsumerIdentity(ctx context.Co
 	return runtime.Identity{"id": "x"}, nil
 }
 
-func (m *mockSigningHandler) Sign(ctx context.Context, unsigned descruntime.Digest, config runtime.Typed, credentials map[string]string) (descruntime.SignatureInfo, error) {
+func (m *mockSigningHandler) Sign(ctx context.Context, unsigned descruntime.Digest, config runtime.Typed, credentials runtime.Typed) (descruntime.SignatureInfo, error) {
 	m.called = true
 	return descruntime.SignatureInfo{}, nil
 }
@@ -215,7 +215,7 @@ func (m *mockSigningHandler) GetVerifyingCredentialConsumerIdentity(ctx context.
 	return runtime.Identity{"id": "y"}, nil
 }
 
-func (m *mockSigningHandler) Verify(ctx context.Context, signed descruntime.Signature, config runtime.Typed, credentials map[string]string) error {
+func (m *mockSigningHandler) Verify(ctx context.Context, signed descruntime.Signature, config runtime.Typed, credentials runtime.Typed) error {
 	m.called = true
 	return nil
 }

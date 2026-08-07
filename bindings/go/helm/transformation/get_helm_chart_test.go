@@ -1,9 +1,7 @@
 package transformation_test
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,9 +14,9 @@ import (
 	"helm.sh/helm/v4/pkg/chart/loader"
 
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/helm/access"
+	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
+	"ocm.software/open-component-model/bindings/go/helm/spec/access"
 	"ocm.software/open-component-model/bindings/go/helm/transformation"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -34,14 +32,6 @@ func newChartRepoServer(t *testing.T, dir string) *httptest.Server {
 	srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
 	t.Cleanup(srv.Close)
 	return srv
-}
-
-// stubIdentityProvider is a no-op ResourceConsumerIdentityProvider since
-// the test charts don't require credentials.
-type stubIdentityProvider struct{}
-
-func (s *stubIdentityProvider) GetResourceCredentialConsumerIdentity(_ context.Context, _ *descriptor.Resource) (runtime.Identity, error) {
-	return nil, fmt.Errorf("no credentials configured")
 }
 
 func newTestScheme() *runtime.Scheme {
@@ -69,12 +59,13 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			ctx := t.Context()
 
 			transform := &transformation.GetHelmChart{
-				Scheme:                           scheme,
-				ResourceConsumerIdentityProvider: &stubIdentityProvider{},
+				Scheme:             scheme,
+				ResourceRepository: helmresource.NewResourceRepository(nil),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
-				"helmRepository": fmt.Sprintf("%s/mychart-0.1.0.tgz", srv.URL),
+				"helmRepository": srv.URL,
+				"helmChart":      "mychart-0.1.0.tgz",
 			})
 			r.NoError(err)
 
@@ -136,8 +127,8 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			ctx := t.Context()
 
 			transform := &transformation.GetHelmChart{
-				Scheme:                           scheme,
-				ResourceConsumerIdentityProvider: &stubIdentityProvider{},
+				Scheme:             scheme,
+				ResourceRepository: helmresource.NewResourceRepository(nil),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
@@ -206,12 +197,13 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			outputDir := t.TempDir()
 
 			transform := &transformation.GetHelmChart{
-				Scheme:                           scheme,
-				ResourceConsumerIdentityProvider: &stubIdentityProvider{},
+				Scheme:             scheme,
+				ResourceRepository: helmresource.NewResourceRepository(nil),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
-				"helmRepository": fmt.Sprintf("%s/mychart-0.1.0.tgz", srv.URL),
+				"helmRepository": srv.URL,
+				"helmChart":      "mychart-0.1.0.tgz",
 			})
 			r.NoError(err)
 
@@ -264,12 +256,13 @@ func TestGetHelmChart_Transform(t *testing.T) {
 		ctx := t.Context()
 
 		transform := &transformation.GetHelmChart{
-			Scheme:                           scheme,
-			ResourceConsumerIdentityProvider: &stubIdentityProvider{},
+			Scheme:             scheme,
+			ResourceRepository: helmresource.NewResourceRepository(nil),
 		}
 
 		helmAccessData, err := json.Marshal(map[string]string{
-			"helmRepository": fmt.Sprintf("%s/mychart-0.1.0.tgz", srv.URL),
+			"helmRepository": srv.URL,
+			"helmChart":      "mychart-0.1.0.tgz",
 		})
 		r.NoError(err)
 
@@ -330,8 +323,8 @@ func TestGetHelmChart_Transform(t *testing.T) {
 		ctx := t.Context()
 
 		transform := &transformation.GetHelmChart{
-			Scheme:                           scheme,
-			ResourceConsumerIdentityProvider: &stubIdentityProvider{},
+			Scheme:             scheme,
+			ResourceRepository: helmresource.NewResourceRepository(nil),
 		}
 
 		spec := &v1alpha1.GetHelmChart{

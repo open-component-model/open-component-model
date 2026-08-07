@@ -29,11 +29,20 @@ func (s *stubSigningPlugin[T]) GetVerifierIdentity(ctx context.Context, req *v1.
 	return &v1.IdentityResponse{Identity: map[string]string{"id": "verifier"}}, nil
 }
 
-func (s *stubSigningPlugin[T]) Sign(ctx context.Context, request *v1.SignRequest[T], credentials map[string]string) (*v1.SignResponse, error) {
-	return &v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: credentials["test"]}}, nil
+func (s *stubSigningPlugin[T]) Sign(ctx context.Context, request *v1.SignRequest[T], credentials runtime.Typed) (*v1.SignResponse, error) {
+	value := ""
+	switch c := credentials.(type) {
+	case runtime.Identity:
+		value = c["test"]
+	case *runtime.Raw:
+		var m map[string]string
+		_ = json.Unmarshal(c.Data, &m)
+		value = m["test"]
+	}
+	return &v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: value}}, nil
 }
 
-func (s *stubSigningPlugin[T]) Verify(ctx context.Context, request *v1.VerifyRequest[T], credentials map[string]string) (*v1.VerifyResponse, error) {
+func (s *stubSigningPlugin[T]) Verify(ctx context.Context, request *v1.VerifyRequest[T], credentials runtime.Typed) (*v1.VerifyResponse, error) {
 	return &v1.VerifyResponse{}, nil
 }
 

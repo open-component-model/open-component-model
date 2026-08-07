@@ -12,10 +12,10 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 var ErrPluginNotFound = errors.New("digest processor plugin not found")
@@ -33,7 +33,7 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 		return resource, errors.Join(ErrPluginNotFound, err)
 	}
 
-	var creds map[string]string
+	var creds runtime.Typed
 	if cfg != nil {
 		id, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, resource)
 		if err != nil {

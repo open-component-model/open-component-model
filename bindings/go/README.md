@@ -26,6 +26,8 @@ Go bindings for the Open Component Model.
 | **helm**                     | Helm chart resource handling                             |
 | **input**                    | Input sources (file, directory, utf8)                    |
 | **generator**                | Code generation tools                                    |
+| **wget**                     | Wget resource handling                                   |
+| **github**                   | GitHub commit archive resource handling                  |
 
 ## Usage
 
@@ -36,6 +38,25 @@ import (
     "ocm.software/open-component-model/bindings/go/oci"
     "ocm.software/open-component-model/bindings/go/descriptor/v2"
 )
+```
+
+## Examples
+
+The [`examples/`](examples/) directory contains runnable, tested examples for the most common OCM operations:
+
+- **Blobs** — creating in-memory and filesystem blobs, copying with digest verification
+- **Descriptors** — building component descriptors with resources, sources, references, and labels
+- **Credentials** — resolving credentials by identity using the static resolver
+- **Signing** — generating and verifying digests, RSA signing (plain and PEM), tamper detection
+- **Repository** — creating CTF-backed repositories, storing and retrieving component versions, resources, and sources
+- **OCI Registry** — full round-trip against a real OCI registry using testcontainers (skipped with `-short`)
+- **Transfer** — transferring component versions between CTF repositories using the transfer graph API
+
+All examples are self-contained and run as part of CI, except **OCI Registry** which requires a real OCI registry via
+testcontainers and is skipped with `-short`:
+
+```bash
+task bindings/go/examples:test
 ```
 
 ## Testing

@@ -11,14 +11,10 @@
       "description": "Compress indicates whether the file should be compressed with gzip."
     },
     "formattedJson": {
-      "type": "object",
-      "description": "FormattedJSON is a JSON object, raw encoded via UTF-8, with default indentation applied.",
-      "additionalProperties": true
+      "description": "FormattedJSON is a JSON value, raw encoded via UTF-8, with default indentation applied."
     },
     "json": {
-      "type": "object",
-      "description": "JSON is a JSON object, raw encoded via UTF-8.",
-      "additionalProperties": true
+      "description": "JSON is a JSON value, raw encoded via UTF-8."
     },
     "text": {
       "type": "string",
@@ -44,9 +40,7 @@
       ]
     },
     "yaml": {
-      "type": "object",
-      "description": "YAML is a YAML object, raw encoded via UTF-8.",
-      "additionalProperties": true
+      "description": "YAML is a YAML value, raw encoded via UTF-8."
     }
   },
   "required": [

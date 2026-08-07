@@ -19,7 +19,7 @@ type IdentityProvider[T runtime.Typed] interface {
 type ResourceInputPluginContract interface {
 	contracts.PluginBase
 	IdentityProvider[runtime.Typed]
-	ProcessResource(ctx context.Context, request *ProcessResourceInputRequest, credentials map[string]string) (*ProcessResourceInputResponse, error)
+	ProcessResource(ctx context.Context, request *ProcessResourceInputRequest, credentials runtime.Typed) (*ProcessResourceInputResponse, error)
 }
 
 // SourceInputPluginContract is a REST wrapper around the constructor.ProcessSource interface for communicating
@@ -27,7 +27,7 @@ type ResourceInputPluginContract interface {
 type SourceInputPluginContract interface {
 	contracts.PluginBase
 	IdentityProvider[runtime.Typed]
-	ProcessSource(ctx context.Context, request *ProcessSourceInputRequest, credentials map[string]string) (*ProcessSourceInputResponse, error)
+	ProcessSource(ctx context.Context, request *ProcessSourceInputRequest, credentials runtime.Typed) (*ProcessSourceInputResponse, error)
 }
 
 // InputPluginContract is used by the input registry to bundle together plugins of type ResourceInput and SourceInput.

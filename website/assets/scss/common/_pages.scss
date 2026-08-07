@@ -1,0 +1,211 @@
+/*
+ * PAGE-SPECIFIC STYLES
+ * ===================
+ * Custom styling for specific page types and sections
+ */
+
+/* Single page (docs) content styling */
+.list.section.docs .content {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* --------------------------------------------
+   Docs content compact spacing (tables/lists/hr)
+   (moved from _components.scss — page-scoped concerns)
+   -------------------------------------------- */
+.docs-content table td,
+.docs-content table th {
+  padding: 0.5rem;
+}
+
+.docs-content ul,
+.docs-content ol {
+  margin-block: 0.75rem;
+}
+
+.docs-content hr {
+  margin-block: 0.5rem;
+}
+
+/* Align the first content heading with TOC start:
+   Default for pages without a desktop TOC (e.g., section/list pages): slightly lower than header */
+.docs-content > h1:first-of-type {
+  margin-top: 0.5rem;
+}
+
+/* Section pages: reduce container padding and title margin to align with single/article pages */
+.ocm-section-page {
+  padding-top: calc(var(--nav-height) - 1.75rem) !important;
+}
+
+/* Add spacing from sidebar on larger screens (only when sidebar is present) */
+@media (min-width: 1200px) {
+  .row.flex-xl-nowrap > .docs-sidebar + .ocm-section-page {
+    padding-left: 3.8rem;
+  }
+}
+
+/* Docs article pages: when a desktop TOC column is present, keep the same top gap
+   so the content title baseline aligns with the TOC heading start. */
+@media (min-width: 1200px) {
+  .row.flex-xl-nowrap .docs-toc + .docs-content > h1:first-of-type {
+    margin-top: 1.75rem;
+  }
+}
+
+
+/* Schema Reference Pages — wide layout for the interactive table. */
+body:has(.sr-root) {
+  .docs-toc {
+    display: none !important;
+  }
+
+  .docs-content {
+    flex: 1 1 0 !important;
+    max-width: 100% !important;
+    padding: 1.25rem 0.5rem 1rem !important;
+  }
+
+  @media (max-width: 768px) {
+    .docs-content {
+      flex: 1 1 0 !important;
+      max-width: 100% !important;
+      padding: 1.25rem 0.25rem 1rem !important;
+    }
+
+    .row.flex-xl-nowrap {
+      position: relative;
+      margin: 0;
+      padding: 0;
+    }
+  }
+
+}
+
+/* Section-specific overrides for large screens */
+@media (min-width: 1200px) {
+  /* Community Page */
+  body.section-community {
+    .docs-sidebar {
+      display: none !important;
+    }
+
+    .docs-content {
+      flex: 0 0 100% !important;
+      max-width: 100% !important;
+      margin: 0 1rem !important;
+      padding: 1rem !important;
+    }
+  }
+
+  /* Roadmap Page */
+  body.section-roadmap {
+    .docs-sidebar,
+    .docs-toc {
+      display: none !important;
+    }
+
+    .docs-content {
+      flex: 0 0 90% !important;
+      max-width: 90% !important;
+      margin: 0 auto !important;
+      padding: 1rem !important;
+    }
+  }
+}
+
+/* Mobile layout adjustments for special pages */
+@media (max-width: 768px) {
+  body.section-community,
+  body.section-roadmap {
+    .docs-content {
+      flex: 0 0 100% !important;
+      max-width: 100% !important;
+      margin: 0 auto !important;
+      padding: 1rem !important;
+    }
+  }
+
+  body.section-community .docs-toc {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+    margin: 1rem 0 !important;
+    padding: 0 !important;
+  }
+}
+
+/* ============================================
+   Docs Typography (scoped to docs-content)
+   Rationale:
+   - Make body text lighter (400) and maintain 1rem size with relaxed line-height for readability.
+   - Compact but clear heading scale, inspired by index.css values.
+   - Keep scope local to docs-content to avoid impacting landing/home.
+   ============================================ */
+.docs-content {
+  /* Body text */
+  p,
+  li {
+    font-size: 1rem;         /* 16px */
+    font-weight: 400;        /* normal weight for better readability */
+    line-height: 1.7;        /* relaxed line-height for long-form content */
+  }
+
+  /* Headings scale */
+  h1 {
+    font-size: 2.5rem;       /* ~40px */
+    font-weight: 600;
+    line-height: 1.15;
+  }
+
+  h2 {
+    font-size: 1.8rem;       /* ~29px */
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  h3 {
+    font-size: 1.45rem;      /* ~23px */
+    font-weight: 600;
+    line-height: 1.25;
+  }
+
+  h4 {
+    font-size: 1.2rem;       /* ~19px */
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  h5 {
+    font-size: 1.1rem;       /* ~17.6px */
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  h6 {
+    font-size: 1rem;         /* 16px */
+    font-weight: 600;
+    line-height: 1.4;
+  }
+}
+
+/* ============================================
+   Docs ToC (right column) compact sizing
+   ============================================ */
+.docs-toc {
+  .nav-link {
+    font-size: 0.95rem;   /* subtle reduction for top-level */
+    line-height: 1.4;
+    padding: 0.25rem 0;   /* tighten vertical rhythm a bit */
+  }
+
+  /* Second level */
+  .nav .nav .nav-link {
+    font-size: 0.9rem;
+  }
+
+  /* Third level and deeper */
+  .nav .nav .nav .nav-link {
+    font-size: 0.875rem;
+  }
+}

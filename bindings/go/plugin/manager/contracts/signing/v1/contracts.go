@@ -10,13 +10,13 @@ import (
 type SignerPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
 	GetSignerIdentity(ctx context.Context, typ *GetSignerIdentityRequest[T]) (*IdentityResponse, error)
-	Sign(ctx context.Context, request *SignRequest[T], credentials map[string]string) (*SignResponse, error)
+	Sign(ctx context.Context, request *SignRequest[T], credentials runtime.Typed) (*SignResponse, error)
 }
 
 type VerifierPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
 	GetVerifierIdentity(ctx context.Context, typ *GetVerifierIdentityRequest[T]) (*IdentityResponse, error)
-	Verify(ctx context.Context, request *VerifyRequest[T], credentials map[string]string) (*VerifyResponse, error)
+	Verify(ctx context.Context, request *VerifyRequest[T], credentials runtime.Typed) (*VerifyResponse, error)
 }
 
 type SignatureHandlerContract[T runtime.Typed] interface {

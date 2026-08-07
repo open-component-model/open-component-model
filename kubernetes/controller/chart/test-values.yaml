@@ -8,7 +8,7 @@ manager:
     resource: 10
   resolver:
     workerCount: 10
-    workerQueueLength: 100
+    workerQueueLength: 1000
   logging:
     level: "debug"
     development: true

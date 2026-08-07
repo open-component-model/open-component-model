@@ -3,7 +3,6 @@ package component_version
 import (
 	"bytes"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,39 +10,27 @@ import (
 
 	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 	"ocm.software/open-component-model/cli/internal/render/progress"
+	"ocm.software/open-component-model/cli/internal/render/progress/bar"
 )
 
-func TestSelectVisualizerUsesSimpleForNonTerminal(t *testing.T) {
-	out := &bytes.Buffer{}
-
-	visualiser := selectVisualizer(out)
-	require.NotNil(t, visualiser, "visualizer factory should not be nil")
-
-	vis := visualiser(out, 1)
-	require.NotNil(t, vis, "visualizer should not be nil")
-
-	actualType := fmt.Sprintf("%T", vis)
-	assert.True(t, strings.Contains(actualType, "*simple.simpleVisualizer"),
-		"non-terminal output should use simple visualizer, got %q", actualType)
+func TestNewProgressTracker(t *testing.T) {
+	tracker := progress.NewTracker(t.Context(), &bytes.Buffer{}, bar.NewVisualizer[any])
+	defer tracker.Stop()
+	require.NotNil(t, tracker)
 }
 
-func TestVisualizerHandlesEvents(t *testing.T) {
+func TestSimplePhaseLifecycle(t *testing.T) {
 	out := &bytes.Buffer{}
+	tracker := progress.NewTracker(t.Context(), out, bar.NewVisualizer[any])
+	defer tracker.Stop()
 
-	visualiser := selectVisualizer(out)
-	vis := visualiser(out, 1)
-
-	event := progress.Event[*graphPkg.Transformation]{
-		ID:    "test-event",
-		State: progress.Running,
-	}
-	vis.HandleEvent(event)
-
-	event.State = progress.Completed
-	vis.HandleEvent(event)
-
-	vis.Summary(nil)
+	op := tracker.StartOperation("Test phase")
+	op.Finish(nil)
 }
 
 func TestMapEvent(t *testing.T) {
@@ -58,29 +45,50 @@ func TestMapEvent(t *testing.T) {
 		{
 			name: "running state",
 			input: graphRuntime.ProgressEvent{
-				Transformation: &graphPkg.Transformation{},
-				State:          graphRuntime.Running,
+				Transformation: &graphPkg.Transformation{
+					GenericTransformation: v1alpha1.GenericTransformation{
+						TransformationMeta: meta.TransformationMeta{
+							Type: runtime.Type{Name: "GetLocalResource"},
+							ID:   "transform1",
+						},
+					},
+				},
+				State: graphRuntime.Running,
 			},
-			expectedID:    "",
+			expectedID:    "transform1",
 			expectedState: progress.Running,
 		},
 		{
 			name: "completed state",
 			input: graphRuntime.ProgressEvent{
-				Transformation: &graphPkg.Transformation{},
-				State:          graphRuntime.Completed,
+				Transformation: &graphPkg.Transformation{
+					GenericTransformation: v1alpha1.GenericTransformation{
+						TransformationMeta: meta.TransformationMeta{
+							Type: runtime.Type{Name: "AddComponentVersion"},
+							ID:   "transform2",
+						},
+					},
+				},
+				State: graphRuntime.Completed,
 			},
-			expectedID:    "",
+			expectedID:    "transform2",
 			expectedState: progress.Completed,
 		},
 		{
 			name: "failed state with error",
 			input: graphRuntime.ProgressEvent{
-				Transformation: &graphPkg.Transformation{},
-				State:          graphRuntime.Failed,
-				Err:            testErr,
+				Transformation: &graphPkg.Transformation{
+					GenericTransformation: v1alpha1.GenericTransformation{
+						TransformationMeta: meta.TransformationMeta{
+							Type: runtime.Type{Name: "AddOCIArtifact"},
+							ID:   "transform3",
+						},
+					},
+				},
+				State: graphRuntime.Failed,
+				Err:   testErr,
 			},
-			expectedID:    "",
+			expectedID:    "transform3",
 			expectedState: progress.Failed,
 			expectedErr:   testErr,
 		},
@@ -92,8 +100,25 @@ func TestMapEvent(t *testing.T) {
 
 			assert.Equal(t, tt.expectedID, result.ID)
 			assert.Equal(t, tt.expectedState, result.State)
-			assert.Equal(t, tt.input.Transformation, result.Data)
 			assert.Equal(t, tt.expectedErr, result.Err)
+			assert.Contains(t, result.Name, tt.expectedID)
 		})
 	}
+}
+
+func TestMapEvent_NameFormattedAsIDAndType(t *testing.T) {
+	input := graphRuntime.ProgressEvent{
+		Transformation: &graphPkg.Transformation{
+			GenericTransformation: v1alpha1.GenericTransformation{
+				TransformationMeta: meta.TransformationMeta{
+					Type: runtime.Type{Name: "AddComponentVersion"},
+					ID:   "myTransform",
+				},
+			},
+		},
+		State: graphRuntime.Running,
+	}
+
+	result := mapEvent(input)
+	assert.Equal(t, "myTransform [AddComponentVersion]", result.Name)
 }

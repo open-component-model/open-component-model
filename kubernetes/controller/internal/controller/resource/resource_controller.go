@@ -9,10 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/time/rate"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,7 +29,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
@@ -35,6 +36,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/kubernetes/controller/internal/verification"
+	"ocm.software/open-component-model/kubernetes/controller/pkg/configuration"
 )
 
 type Reconciler struct {
@@ -158,6 +160,10 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 			})).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: concurrency,
+			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
+				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
+				&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(10, 100)},
+			),
 		}).
 		Complete(r)
 }
@@ -177,7 +183,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	old := resource.DeepCopy()
 	defer func(ctx context.Context) {
-		status.UpdateBeforePatch(resource, r.EventRecorder, resource.GetRequeueAfter(), err)
+		status.UpdateBeforePatch(resource, r.EventRecorder, 0, err)
 		if !equality.Semantic.DeepEqual(resource.Status, old.Status) {
 			err = errors.Join(err, r.GetClient().Status().Patch(ctx, resource, client.MergeFrom(old)))
 		}
@@ -273,7 +279,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	logger.Info("reconciling resource")
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), resource, component)
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), resource, v1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.GetEventRecorder(), resource, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to configure context: %w", err)
 	}
@@ -302,12 +308,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
 	}
 
+	cfg, err := configuration.LoadConfigurations(ctx, r.Client, resource.GetNamespace(), configs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:    repoSpec,
-		OCMConfigurations: configs,
-		Namespace:         resource.GetNamespace(),
-		SigningRegistry:   r.PluginManager.SigningRegistry,
-		Verifications:     verifications,
+		RepositorySpec:  repoSpec,
+		Configuration:   cfg,
+		SigningRegistry: r.PluginManager.SigningRegistry,
+		Verifications:   verifications,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -337,7 +349,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 		// Ignore error, but log event
-		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, err.Error())
+		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
@@ -354,10 +366,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		referencedDescriptor,
 		resource.Spec.Resource.ByReference.ReferencePath,
 		&resolution.RepositoryOptions{
-			RepositorySpec:    repoSpec,
-			OCMConfigurations: configs,
-			Namespace:         resource.GetNamespace(),
-			SigningRegistry:   r.PluginManager.SigningRegistry,
+			RepositorySpec:  repoSpec,
+			Configuration:   cfg,
+			SigningRegistry: r.PluginManager.SigningRegistry,
 			RequesterFunc: func() workerpool.RequesterInfo {
 				return workerpool.RequesterInfo{
 					NamespacedName: k8stypes.NamespacedName{
@@ -377,7 +388,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
 		// Ignore error, but log event
-		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, err.Error())
+		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
@@ -406,13 +417,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	if resource.Spec.VerificationPolicy != v1alpha1.VerificationPolicyNever {
 		logger.V(1).Info("verifying resource")
-
-		cfg, err := configuration.LoadConfigurations(ctx, r.Client, resource.GetNamespace(), configs)
-		if err != nil {
-			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
-
-			return ctrl.Result{}, fmt.Errorf("failed getting configs: %w", err)
-		}
 
 		matchedResource, err = ocm.VerifyResource(ctx, r.PluginManager, matchedResource, cfg)
 		if err != nil {
@@ -452,7 +456,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	status.MarkReady(r.EventRecorder, resource, "Applied version %s", matchedResource.Version)
 
-	return status.RequeueResult(resource, resource.GetRequeueAfter()), nil
+	return ctrl.Result{}, nil
 }
 
 // setResourceStatus updates the resource status with all required information.

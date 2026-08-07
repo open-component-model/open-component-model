@@ -81,6 +81,26 @@ func ConvertToV1ElementMeta(meta ElementMeta) v1.ElementMeta {
 
 // Resource conversion
 
+// ConvertFromV1ResourceOptions maps the optional v1 resource options block to
+// the runtime resource options. An absent options block yields the zero value.
+func ConvertFromV1ResourceOptions(opts *v1.ResourceOptions) ResourceOptions {
+	if opts == nil {
+		return ResourceOptions{}
+	}
+	return ResourceOptions{OwnershipPolicy: OwnershipPolicy(opts.OwnershipPolicy)}
+}
+
+// ConvertToV1ResourceOptions builds the optional v1 resource options block from
+// the runtime resource options. The zero value yields nil so the options block
+// is omitted from the spec rather than emitting an empty object on every
+// resource; any explicitly set policy (including "Never") is preserved.
+func ConvertToV1ResourceOptions(o ResourceOptions) *v1.ResourceOptions {
+	if o == (ResourceOptions{}) {
+		return nil
+	}
+	return &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicy(o.OwnershipPolicy)}
+}
+
 // ConvertFromV1Resource converts a v1 Resource to runtime Resource.
 // Returns an empty Resource if the input is nil.
 func ConvertFromV1Resource(resource *v1.Resource) Resource {
@@ -92,9 +112,8 @@ func ConvertFromV1Resource(resource *v1.Resource) Resource {
 		ElementMeta: ConvertFromV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    ResourceRelation(resource.Relation),
-		ConstructorAttributes: ConstructorAttributes{
-			CopyPolicy: CopyPolicy(resource.CopyPolicy),
-		},
+		Options:     ConvertFromV1ResourceOptions(resource.Options),
+		Digest:      ConvertFromV1Digest(resource.Digest),
 	}
 
 	if resource.SourceRefs != nil {
@@ -128,9 +147,8 @@ func ConvertToV1Resource(resource *Resource) (*v1.Resource, error) {
 		ElementMeta: ConvertToV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    v1.ResourceRelation(resource.Relation),
-		ConstructorAttributes: v1.ConstructorAttributes{
-			CopyPolicy: v1.CopyPolicy(resource.CopyPolicy),
-		},
+		Options:     ConvertToV1ResourceOptions(resource.Options),
+		Digest:      ConvertToV1Digest(resource.Digest),
 	}
 
 	if resource.SourceRefs != nil {
@@ -172,9 +190,6 @@ func ConvertFromV1Source(source *v1.Source) Source {
 	target := Source{
 		ElementMeta: ConvertFromV1ElementMeta(source.ElementMeta),
 		Type:        source.Type,
-		ConstructorAttributes: ConstructorAttributes{
-			CopyPolicy: CopyPolicy(source.CopyPolicy),
-		},
 	}
 
 	if source.Access != nil {
@@ -197,9 +212,6 @@ func ConvertToV1Source(source *Source) (*v1.Source, error) {
 	target := v1.Source{
 		ElementMeta: ConvertToV1ElementMeta(source.ElementMeta),
 		Type:        source.Type,
-		ConstructorAttributes: v1.ConstructorAttributes{
-			CopyPolicy: v1.CopyPolicy(source.CopyPolicy),
-		},
 	}
 
 	if source.HasInput() {
@@ -221,9 +233,21 @@ func ConvertToV1Source(source *Source) (*v1.Source, error) {
 
 // Reference conversion
 
+// ConvertFromV1Digest converts a v1 Digest pointer to runtime Digest pointer.
+// Returns nil if the input is nil.
+func ConvertFromV1Digest(digest *v1.Digest) *Digest {
+	if digest == nil {
+		return nil
+	}
+	return &Digest{
+		HashAlgorithm:          digest.HashAlgorithm,
+		NormalisationAlgorithm: digest.NormalisationAlgorithm,
+		Value:                  digest.Value,
+	}
+}
+
 // ConvertToRuntimeReference converts a v1 Reference to runtime Reference.
 // Returns an empty Reference if the input is nil.
-// Note: This conversion is lossy as it does not include the digest field.
 func ConvertToRuntimeReference(reference *v1.Reference) Reference {
 	if reference == nil {
 		return Reference{}
@@ -232,6 +256,7 @@ func ConvertToRuntimeReference(reference *v1.Reference) Reference {
 	return Reference{
 		ElementMeta: ConvertFromV1ElementMeta(reference.ElementMeta),
 		Component:   reference.Component,
+		Digest:      ConvertFromV1Digest(reference.Digest),
 	}
 }
 
@@ -292,9 +317,8 @@ func ConvertToRuntimeConstructorResource(resource v1.Resource) Resource {
 		ElementMeta: ConvertFromV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    ResourceRelation(resource.Relation),
-		ConstructorAttributes: ConstructorAttributes{
-			CopyPolicy: CopyPolicy(resource.CopyPolicy),
-		},
+		Options:     ConvertFromV1ResourceOptions(resource.Options),
+		Digest:      ConvertFromV1Digest(resource.Digest),
 	}
 
 	if resource.HasInput() {
@@ -312,9 +336,6 @@ func ConvertToRuntimeConstructorSource(source v1.Source) Source {
 	target := Source{
 		ElementMeta: ConvertFromV1ElementMeta(source.ElementMeta),
 		Type:        source.Type,
-		ConstructorAttributes: ConstructorAttributes{
-			CopyPolicy: CopyPolicy(source.CopyPolicy),
-		},
 	}
 
 	if source.HasInput() {
@@ -332,6 +353,7 @@ func ConvertToRuntimeConstructorReference(reference v1.Reference) Reference {
 	return Reference{
 		ElementMeta: ConvertFromV1ElementMeta(reference.ElementMeta),
 		Component:   reference.Component,
+		Digest:      ConvertFromV1Digest(reference.Digest),
 	}
 }
 
@@ -349,7 +371,7 @@ func ConvertToRuntimeConstructor(constructor *v1.ComponentConstructor) *Componen
 	for i, component := range constructor.Components {
 		target.Components[i] = Component{
 			ComponentMeta: ComponentMeta{
-				ObjectMeta:   ObjectMeta{Name: component.Name, Version: component.Version},
+				ObjectMeta:   ObjectMeta{Name: component.Name, Version: component.Version, Labels: ConvertFromV1Labels(component.Labels)},
 				CreationTime: component.CreationTime,
 			},
 			Provider: Provider{
@@ -440,6 +462,19 @@ func ConvertToV1Component(component *Component) (*v1.Component, error) {
 	return &target, nil
 }
 
+// ConvertToV1Digest converts a runtime Digest pointer to v1 Digest pointer.
+// Returns nil if the input is nil.
+func ConvertToV1Digest(digest *Digest) *v1.Digest {
+	if digest == nil {
+		return nil
+	}
+	return &v1.Digest{
+		HashAlgorithm:          digest.HashAlgorithm,
+		NormalisationAlgorithm: digest.NormalisationAlgorithm,
+		Value:                  digest.Value,
+	}
+}
+
 // ConvertToV1Reference converts a runtime Reference to v1 Reference.
 // Returns nil if the input is nil.
 func ConvertToV1Reference(reference *Reference) (*v1.Reference, error) {
@@ -447,10 +482,9 @@ func ConvertToV1Reference(reference *Reference) (*v1.Reference, error) {
 		return nil, nil
 	}
 
-	target := v1.Reference{
+	return &v1.Reference{
 		ElementMeta: ConvertToV1ElementMeta(reference.ElementMeta),
 		Component:   reference.Component,
-	}
-
-	return &target, nil
+		Digest:      ConvertToV1Digest(reference.Digest),
+	}, nil
 }

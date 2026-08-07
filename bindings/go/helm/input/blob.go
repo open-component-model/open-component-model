@@ -11,10 +11,13 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	dlinternal "ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/helm/internal/oci"
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
 const (
@@ -33,22 +36,31 @@ type ReadOnlyChart struct {
 type Option func(options *Options)
 
 // WithCredentials sets the credentials to use for the remote repository.
-// The credentials could contain the following keys:
-// - "username": for basic authentication
-// - "password": for basic authentication
-// - "certFile": for TLS client certificate
-// - "keyFile": for TLS client private key
-// - "keyring": for keyring name to use
-// - "caCert": for CA certificate
-// - "caCertFile": for CA certificate file
-func WithCredentials(credentials map[string]string) Option {
+func WithCredentials(credentials *helmcredsv1.HelmHTTPCredentials) Option {
 	return func(options *Options) {
 		options.Credentials = credentials
 	}
 }
 
+// WithOCICredentials sets the credentials to use for an oci registry.
+func WithOCICredentials(credentials *ocicredsv1.OCICredentials) Option {
+	return func(options *Options) {
+		options.OCICredentials = credentials
+	}
+}
+
+// WithHTTPConfig sets the HTTP client configuration used for chart downloads and OCI registry access.
+// The download layer builds its internal client from cfg. When nil, the default Helm client is used.
+func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+	return func(options *Options) {
+		options.HTTPConfig = cfg
+	}
+}
+
 type Options struct {
-	Credentials map[string]string
+	Credentials    *helmcredsv1.HelmHTTPCredentials
+	OCICredentials *ocicredsv1.OCICredentials
+	HTTPConfig     *httpv1alpha1.Config
 }
 
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
@@ -75,7 +87,7 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 			return nil, nil, fmt.Errorf("error loading local helm chart %q: %w", helmSpec.Path, err)
 		}
 	case helmSpec.HelmRepository != "":
-		chart, err = newReadOnlyChartFromRemote(ctx, helmSpec, tmpDir, options.Credentials)
+		chart, err = newReadOnlyChartFromRemote(ctx, helmSpec, tmpDir, options.Credentials, options.OCICredentials, options.HTTPConfig)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error loading remote helm chart from %q: %w", helmSpec.HelmRepository, err)
 		}
@@ -161,15 +173,26 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 
 // newReadOnlyChartFromRemote downloads a chart from a remote Helm repository
 // and creates a ReadOnlyChart from it.
-func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials map[string]string) (result *ReadOnlyChart, err error) {
+func newReadOnlyChartFromRemote(
+	ctx context.Context,
+	helmSpec v1.Helm,
+	tmpDirBase string,
+	credentials *helmcredsv1.HelmHTTPCredentials,
+	ociCredentials *ocicredsv1.OCICredentials,
+	httpConfig *httpv1alpha1.Config,
+) (result *ReadOnlyChart, err error) {
 	opts := []dlinternal.Option{
 		dlinternal.WithCredentials(credentials),
+		dlinternal.WithOCICredentials(ociCredentials),
 		//nolint:staticcheck // downward compatibility for helm input
 		dlinternal.WithVersion(helmSpec.Version),
 		//nolint:staticcheck // downward compatibility for helm input
 		dlinternal.WithCACert(helmSpec.CACert),
 		//nolint:staticcheck // downward compatibility for helm input
 		dlinternal.WithCACertFile(helmSpec.CACertFile),
+	}
+	if httpConfig != nil {
+		opts = append(opts, dlinternal.WithHTTPConfig(httpConfig))
 	}
 	resultChart, err := dlinternal.NewReadOnlyChartFromRemote(ctx, helmSpec.HelmRepository, tmpDirBase, opts...)
 	if err != nil {

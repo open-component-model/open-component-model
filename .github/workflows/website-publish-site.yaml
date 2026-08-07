@@ -1,0 +1,87 @@
+name: "Website: Publish Site"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'website/**'
+    paths:
+      - 'website/**'
+      - '.github/workflows/website-publish-site.yaml'
+      # Paths that are relevant for tracking changes on `main` version.
+      # CRDs are generated from api/v1alpha1 at build time via controller-gen.
+      - 'cli/docs/reference/**'
+      - 'bindings/go/constructor/spec/v1/resources/**'
+      - 'bindings/go/credentials/spec/config/v1/schemas/**'
+      - 'bindings/go/descriptor/v2/resources/**'
+      - 'bindings/go/gpg/spec/credentials/v1alpha1/schemas/**'
+      - 'bindings/go/helm/spec/credentials/v1/schemas/**'
+      - 'bindings/go/http/spec/config/v1alpha1/schemas/**'
+      - 'bindings/go/oci/spec/credentials/v1/schemas/**'
+      - 'bindings/go/rsa/spec/credentials/v1/schemas/**'
+      - 'bindings/go/sigstore/spec/credentials/**'
+      - 'kubernetes/controller/api/v1alpha1/**'
+
+permissions:
+  contents: read
+
+env:
+  OUTPUT_DIR: site-docs/
+
+jobs:
+  publish-site:
+    name: Publish Site
+    # peaceiris/actions-hugo v3 produces wrong filename casing for Hugo >= v0.103.0 on ARM64.
+    runs-on: ubuntu-latest
+    environment:
+      name: automation
+      deployment: false
+
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Get OCMBot installation token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push the built site to the gh-pages branch.
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: website/package.json
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@2752ce1d29631191ea3f27c23495fa06139a5b78 # v3
+        with:
+          hugo-version: '0.160.0'
+          extended: true
+
+      - name: Install deps and Build
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish as GitHub Pages
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        with:
+          github_token: ${{ steps.generate_token.outputs.token }}
+          publish_dir: ./website/public
+          commit_message: ${{ env.COMMIT_MSG }}
+          user_name: 'GitHub Actions Bot'
+          user_email: '<41898282+github-actions[bot]@users.noreply.github.com>'

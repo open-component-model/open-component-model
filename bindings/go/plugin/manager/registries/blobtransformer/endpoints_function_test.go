@@ -20,7 +20,7 @@ type mockPlugin struct {
 	contracts.EmptyBasePlugin
 }
 
-func (m *mockPlugin) TransformBlob(_ context.Context, _ *v1.TransformBlobRequest[*dummyv1.Repository], _ map[string]string) (*v1.TransformBlobResponse, error) {
+func (m *mockPlugin) TransformBlob(_ context.Context, _ *v1.TransformBlobRequest[*dummyv1.Repository], _ runtime.Typed) (*v1.TransformBlobResponse, error) {
 	return &v1.TransformBlobResponse{}, nil
 }
 

@@ -1,0 +1,27 @@
+{{- with site.GetPage "section" "blog" -}}
+  {{- with .OutputFormats.Get "rss" -}}
+    <link rel="alternate" type="application/rss+xml" title="OCM Blog" href="{{ .Permalink }}">
+  {{- end -}}
+{{- end -}}
+<!--
+  No-JS fallback for Bootstrap tabs ({{/* tabs shortcode */}}): without
+  JavaScript the tab buttons are dead and only the first pane is visible.
+  Stack all panes as labeled sections instead, so every anchor inside any
+  tab is reachable with native browser navigation.
+-->
+<noscript>
+  <style>
+    .nav-tabs {
+      display: none;
+    }
+
+    .tab-content > .tab-pane {
+      display: block;
+      opacity: 1;
+    }
+
+    .tab-pane > .tab-pane-label {
+      display: block;
+    }
+  </style>
+</noscript>

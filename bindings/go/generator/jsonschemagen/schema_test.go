@@ -3,6 +3,7 @@ package jsonschemagen_test
 import (
 	"encoding/json"
 	"go/ast"
+	"go/token"
 	"go/types"
 	"testing"
 
@@ -81,6 +82,67 @@ func TestGenerate_ArrayAliasItems(t *testing.T) {
 	require.Equal(t, "array", s.Type)
 	require.NotNil(t, s.Items)
 	require.Equal(t, "integer", s.Items.Type)
+}
+
+func TestGenerate_ByteSliceAliasIsBase64String(t *testing.T) {
+	// encoding/json marshals a []byte slice as a base64 string, not an array
+	// of integers, so the schema must be {"type":"string"} with base64 encoding.
+	for _, elem := range []string{"byte", "uint8"} {
+		t.Run(elem, func(t *testing.T) {
+			u := universe.New()
+			root := mkTypeInfo("example.com/pkg", "Body", &ast.ArrayType{Elt: &ast.Ident{Name: elem}}, nil)
+			u.Types[root.Key] = root
+
+			g := jsonschemagen.New(u)
+			s := g.GenerateJSONSchemaDraft202012(root)
+
+			require.Equal(t, "string", s.Type)
+			require.Equal(t, "base64", s.ContentEncoding)
+			require.Nil(t, s.Items)
+		})
+	}
+}
+
+func TestGenerate_ByteSliceFieldIsBase64String(t *testing.T) {
+	u := universe.New()
+	field := &ast.Field{
+		Names: []*ast.Ident{{Name: "Body"}},
+		Type:  &ast.ArrayType{Elt: &ast.Ident{Name: "byte"}},
+		Tag:   &ast.BasicLit{Value: "`json:\"body,omitempty\"`"},
+	}
+	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{field}}}
+	root := mkTypeInfo("example.com/pkg", "WithBody", nil, st)
+	u.Types[root.Key] = root
+
+	g := jsonschemagen.New(u)
+	s := g.GenerateJSONSchemaDraft202012(root)
+
+	prop, ok := s.Properties["body"]
+	require.True(t, ok)
+	require.NotNil(t, prop.Schema)
+	require.Equal(t, "string", prop.Schema.Type)
+	require.Equal(t, "base64", prop.Schema.ContentEncoding)
+	require.Nil(t, prop.Schema.Items)
+}
+
+func TestGenerate_FixedByteArrayRemainsIntegerArray(t *testing.T) {
+	// A fixed-size [N]byte array marshals as a JSON array of integers, unlike a
+	// byte slice, so it must keep the array-of-integers schema.
+	u := universe.New()
+	arr := &ast.ArrayType{
+		Len: &ast.BasicLit{Kind: token.INT, Value: "3"},
+		Elt: &ast.Ident{Name: "byte"},
+	}
+	root := mkTypeInfo("example.com/pkg", "FixedBody", arr, nil)
+	u.Types[root.Key] = root
+
+	g := jsonschemagen.New(u)
+	s := g.GenerateJSONSchemaDraft202012(root)
+
+	require.Equal(t, "array", s.Type)
+	require.NotNil(t, s.Items)
+	require.Equal(t, "integer", s.Items.Type)
+	require.Empty(t, s.ContentEncoding)
 }
 
 func TestGenerate_MapAliasAdditionalProperties(t *testing.T) {
@@ -445,4 +507,35 @@ func TestGenerate_StructInlineAndExplicitFieldSameName_ExplicitWinsWhenLater(t *
 	require.Contains(t, s.Properties, "A")
 	// Explicit field should override inline-provided one if it appears later.
 	require.Equal(t, "integer", s.Properties["A"].Schema.Type)
+}
+
+func TestGenerate_JSONRawMessageFieldIsUnconstrained(t *testing.T) {
+	u := universe.New()
+
+	// Simulate the real scenario: encoding/json.RawMessage is NOT in the universe
+	// (encoding/json is not loaded as a schema target), but types.Info.Uses maps
+	// the selector ident to the real types.TypeName from the Go type checker.
+	jsonPkg := types.NewPackage("encoding/json", "json")
+	rawMsgObj := types.NewTypeName(0, jsonPkg, "RawMessage", nil)
+
+	selIdent := &ast.Ident{Name: "RawMessage"}
+	uses := map[*ast.Ident]types.Object{selIdent: rawMsgObj}
+
+	valueField := &ast.Field{
+		Names: []*ast.Ident{{Name: "Value"}},
+		Type:  &ast.SelectorExpr{X: &ast.Ident{Name: "json"}, Sel: selIdent},
+	}
+	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{valueField}}}
+	root := mkTypeInfo("example.com/pkg", "Label", nil, st)
+	root.Pkg.TypesInfo = &types.Info{Uses: uses}
+	u.Types[root.Key] = root
+
+	g := jsonschemagen.New(u)
+	s := g.GenerateJSONSchemaDraft202012(root)
+
+	prop, ok := s.Properties["Value"]
+	require.True(t, ok)
+	// Must be unconstrained: no type, no additionalProperties.
+	require.Empty(t, prop.Schema.Type)
+	require.Nil(t, prop.Schema.AdditionalProperties)
 }

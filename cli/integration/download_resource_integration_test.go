@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,6 +26,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -343,6 +346,71 @@ configurations:
 			})
 		}
 	})
+
+	t.Run("download resource sourced from wget input", func(t *testing.T) {
+		r := require.New(t)
+
+		content := []byte("hello from wget download")
+		fileSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(content)
+		}))
+		t.Cleanup(fileSrv.Close)
+
+		name, version := "ocm.software/wget-download-component", "v1.0.0"
+
+		// The wget input downloads the resource from the HTTP server at add time and stores
+		// it as a local blob, which `download resource` then retrieves.
+		constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: remote-blob
+    version: v1.0.0
+    type: blob
+    input:
+      type: wget
+      url: %s/artifact.bin
+      mediaType: application/octet-stream
+`, name, version, fileSrv.URL)
+
+		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+		r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+		addCMD := cmd.New()
+		addCMD.SetArgs([]string{
+			"add",
+			"component-version",
+			"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+			"--constructor", constructorPath,
+			"--config", cfgPath,
+		})
+		r.NoError(addCMD.ExecuteContext(t.Context()), "add component-version with wget input should succeed")
+
+		output := filepath.Join(t.TempDir(), "downloaded-blob")
+		downloadCMD := cmd.New()
+		downloadCMD.SetArgs([]string{
+			"download",
+			"resource",
+			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
+			"--identity", "name=remote-blob,version=v1.0.0",
+			"--output", output,
+			"--config", cfgPath,
+		})
+		r.NoError(downloadCMD.ExecuteContext(t.Context()), "download resource sourced from wget input should succeed")
+
+		outputBlob, err := filesystem.GetBlobFromOSPath(output)
+		r.NoError(err)
+		dataStream, err := outputBlob.ReadCloser()
+		r.NoError(err)
+		t.Cleanup(func() { r.NoError(dataStream.Close()) })
+		data, err := io.ReadAll(dataStream)
+		r.NoError(err)
+		r.Equal(content, data, "downloaded resource should match the wget-sourced content")
+	})
 }
 
 func Test_Integration_HelmTransformer(t *testing.T) {
@@ -418,6 +486,114 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 		r.Equal("mychart", chart.Name(), "the chart name should match the resource name")
 		r.Equal("0.1.0", chart.Metadata.Version, "the chart version should match the resource version")
 	})
+}
+
+// Test_Integration_DownloadResource_HelmAccess verifies that a resource with helm access
+// can be downloaded from a CTF. The download triggers the Helm ResourceRepository to
+// fetch the chart from the remote helm repository and return it as a blob.
+func Test_Integration_DownloadResource_HelmAccess(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	root := getRepoRootBasedOnGit(t)
+	chartDir := filepath.Join(root, "bindings/go/helm/testdata/provenance")
+
+	srv := httptest.NewServer(http.FileServer(http.Dir(chartDir)))
+	t.Cleanup(srv.Close)
+
+	componentName := "ocm.software/helm-access-download"
+	componentVersion := "v1.0.0"
+
+	constructor := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mychart
+    version: 0.1.0
+    type: helmChart
+    access:
+      type: helm/v1
+      helmRepository: %s
+      helmChart: mychart-0.1.0.tgz
+`, componentName, componentVersion, srv.URL)
+
+	tempDir := t.TempDir()
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+	ctfDir := filepath.Join(tempDir, "ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+		"--constructor", constructorPath,
+		"--skip-reference-digest-processing",
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "add component-version should succeed")
+
+	output := filepath.Join(t.TempDir(), "downloaded-chart")
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"resource",
+		fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, componentVersion),
+		"--identity", "name=mychart,version=0.1.0",
+		"--output", output,
+		"--extraction-policy", "disable",
+	})
+	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource with helm access should succeed")
+
+	// The ResourceRepository returns a tar archive containing the chart .tgz and .prov files.
+	chartPath := filepath.Join(chartDir, "mychart-0.1.0.tgz")
+	provPath := filepath.Join(chartDir, "mychart-0.1.0.tgz.prov")
+	assertHelmChartTar(t, output, chartPath, provPath)
+}
+
+// assertHelmChartTar verifies that a tar file contains the expected chart and
+// optional provenance file by comparing their contents byte-for-byte against
+// the originals. This is useful for verifying raw downloads from the Helm
+// ResourceRepository, which returns a tar archive (not an OCI layout).
+func assertHelmChartTar(t *testing.T, tarPath, originalChartPath, originalProvPath string) {
+	t.Helper()
+	r := require.New(t)
+
+	expectedChart, err := os.ReadFile(originalChartPath)
+	r.NoError(err, "should read original chart")
+
+	tarBlob, err := filesystem.GetBlobFromOSPath(tarPath)
+	r.NoError(err, "should open downloaded tar")
+
+	chartBlob := helmblob.NewChartBlob(tarBlob)
+
+	chartArchive, err := chartBlob.ChartArchive()
+	r.NoError(err, "tar should contain the chart .tgz")
+	r.Equal(expectedChart, readAllFromBlob(t, chartArchive), "downloaded chart should match the original")
+
+	provFile, err := chartBlob.ProvFile()
+	r.NoError(err, "reading prov file from chart blob should succeed")
+	if originalProvPath != "" {
+		r.NotNil(provFile, "tar should contain the .prov file")
+		expectedProv, err := os.ReadFile(originalProvPath)
+		r.NoError(err, "should read original prov file")
+		r.Equal(expectedProv, readAllFromBlob(t, provFile), "downloaded prov file should match the original")
+	}
+}
+
+// readAllFromBlob reads the full content of a read-only blob, failing the test on error.
+func readAllFromBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
+	t.Helper()
+	r := require.New(t)
+	rc, err := b.ReadCloser()
+	r.NoError(err, "should open blob reader")
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(rc)
+	r.NoError(err, "should read blob content")
+	return data
 }
 
 func Test_Integration_ConstructorCompress(t *testing.T) {

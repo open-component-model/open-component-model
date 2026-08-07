@@ -119,3 +119,21 @@ func TestFramedText(t *testing.T) {
 		})
 	}
 }
+
+// --- SidebarText tests ---
+
+func TestSidebarText(t *testing.T) {
+	t.Run("with title and content", func(t *testing.T) {
+		result := SidebarText("Error:", "line one\nline two", Red)
+		assert.Contains(t, result, "│")
+		assert.Contains(t, result, "Error:")
+		assert.Contains(t, result, "line one")
+		assert.Contains(t, result, "line two")
+	})
+
+	t.Run("without title", func(t *testing.T) {
+		result := SidebarText("", "content", Blue)
+		assert.Contains(t, result, "│")
+		assert.Contains(t, result, "content")
+	})
+}

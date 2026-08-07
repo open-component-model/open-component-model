@@ -16,9 +16,9 @@ type Repository interface {
 	// UploadResource uploads a [descriptor.Resource] to the repository.
 	// Returns the updated resource with repository-specific access information.
 	// The credentials map must contain necessary authentication information to access the resource.
-	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error)
+	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error)
 	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
-	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error)
+	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error)
 }
 
 // The BuiltinResourceRepository has the primary purpose to allow plugin

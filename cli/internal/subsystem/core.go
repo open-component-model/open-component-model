@@ -21,8 +21,8 @@ func NewRegistryFromPluginManager(pm *manager.PluginManager) (*Registry, error) 
 		"Listers for listing OCM component repositories. Can be seen as repository of versioned repositories",
 	)
 	ocmResourceRepository := NewSubsystem(
-		"ocm-resource-repository",
-		"Repositories for storing and managing OCM resources.",
+		"access",
+		"Access methods define how OCM resources are accessed and retrieved from their origin.",
 	)
 	input := NewSubsystem(
 		"input",
@@ -36,6 +36,10 @@ func NewRegistryFromPluginManager(pm *manager.PluginManager) (*Registry, error) 
 		"signing",
 		"Signing handlers are responsible for signing and verification of component versions.",
 	)
+	credentials := NewSubsystem(
+		"credentials",
+		"Available credential types registered in OCM. Each type represents a structured set of credentials that can be referenced under 'credentials:' in the OCM configuration.",
+	)
 
 	// Register plugin manager schemes
 	if err := errors.Join(
@@ -45,6 +49,7 @@ func NewRegistryFromPluginManager(pm *manager.PluginManager) (*Registry, error) 
 		input.Scheme.RegisterScheme(pm.InputRegistry.InputRepositoryScheme()),
 		credentialRepository.Scheme.RegisterScheme(pm.CredentialRepositoryRegistry.RepositoryScheme()),
 		signingHandler.Scheme.RegisterScheme(pm.SigningRegistry.ResourceScheme()),
+		credentials.Scheme.RegisterScheme(pm.CredentialRepositoryRegistry.GetCredentialTypeScheme()),
 	); err != nil {
 		return nil, err
 	}
@@ -56,6 +61,7 @@ func NewRegistryFromPluginManager(pm *manager.PluginManager) (*Registry, error) 
 	registry.Register(input)
 	registry.Register(credentialRepository)
 	registry.Register(signingHandler)
+	registry.Register(credentials)
 
 	return registry, nil
 }

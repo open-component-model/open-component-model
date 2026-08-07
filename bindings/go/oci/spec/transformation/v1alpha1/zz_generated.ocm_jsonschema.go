@@ -99,6 +99,15 @@ var schemaOCIGetLocalResourceOutput []byte
 //go:embed schemas/OCIGetLocalResourceSpec.schema.json
 var schemaOCIGetLocalResourceSpec []byte
 
+//go:embed schemas/TransferOCIArtifact.schema.json
+var schemaTransferOCIArtifact []byte
+
+//go:embed schemas/TransferOCIArtifactOutput.schema.json
+var schemaTransferOCIArtifactOutput []byte
+
+//go:embed schemas/TransferOCIArtifactSpec.schema.json
+var schemaTransferOCIArtifactSpec []byte
+
 // JSONSchema returns the JSON Schema for AddOCIArtifact.
 func (AddOCIArtifact) JSONSchema() []byte {
 	return schemaAddOCIArtifact
@@ -247,4 +256,19 @@ func (OCIGetLocalResourceOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for OCIGetLocalResourceSpec.
 func (OCIGetLocalResourceSpec) JSONSchema() []byte {
 	return schemaOCIGetLocalResourceSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferOCIArtifact.
+func (TransferOCIArtifact) JSONSchema() []byte {
+	return schemaTransferOCIArtifact
+}
+
+// JSONSchema returns the JSON Schema for TransferOCIArtifactOutput.
+func (TransferOCIArtifactOutput) JSONSchema() []byte {
+	return schemaTransferOCIArtifactOutput
+}
+
+// JSONSchema returns the JSON Schema for TransferOCIArtifactSpec.
+func (TransferOCIArtifactSpec) JSONSchema() []byte {
+	return schemaTransferOCIArtifactSpec
 }

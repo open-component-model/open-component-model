@@ -47,16 +47,16 @@ func (g *syncedDag) getIdentity(id string) (runtime.Identity, bool) {
 	return identity, ok
 }
 
-func (g *syncedDag) getCredentials(id string) (map[string]string, bool) {
+func (g *syncedDag) getCredentials(id string) (runtime.Typed, bool) {
 	v, ok := g.getVertex(id)
 	if !ok {
 		return nil, false
 	}
-	credentials, ok := v.Attributes[attributeCredentials].(map[string]string)
+	credentials, ok := v.Attributes[attributeCredentials].(runtime.Typed)
 	return credentials, ok
 }
 
-func (g *syncedDag) setCredentials(id string, credentials map[string]string) {
+func (g *syncedDag) setCredentials(id string, credentials runtime.Typed) {
 	g.dagMu.Lock()
 	defer g.dagMu.Unlock()
 	v, ok := g.dag.Vertices[id]
@@ -84,7 +84,10 @@ func (g *syncedDag) matchAnyNode(identity runtime.Identity) (*dag.Vertex[string]
 		return vertex, nil
 	}
 	for _, vertex := range g.dag.Vertices {
-		existing := vertex.Attributes[attributeIdentity].(runtime.Identity)
+		existing, ok := vertex.Attributes[attributeIdentity].(runtime.Identity)
+		if !ok {
+			continue
+		}
 		if identity.Match(existing) {
 			return vertex, nil
 		}
@@ -111,7 +114,10 @@ func (g *syncedDag) addIdentity(identity runtime.Identity) error {
 		if vertex.ID == node {
 			continue
 		}
-		existing := vertex.Attributes[attributeIdentity].(runtime.Identity)
+		existing, ok := vertex.Attributes[attributeIdentity].(runtime.Identity)
+		if !ok {
+			continue
+		}
 		if identity.Match(existing) {
 			if err := g.dag.AddEdge(vertex.ID, node, map[string]any{
 				"kind": "cyclic-only",

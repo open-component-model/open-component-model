@@ -12,7 +12,7 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest@sha256:fda4ed33f3e07d7467cdb033c0198d6653449f07d64f2839acbc4cc055d43a59
+    tag: latest@sha256:0c5d4b7397a00e640ec6a412a59a8b22a33bad61d9e9f915c380960228f8643c
     # -- Image pull policy
     pullPolicy: IfNotPresent
   ## Controller concurrency settings
@@ -24,13 +24,13 @@ manager:
     # -- Number of active resolver workers
     workerCount: 10
     # -- Maximum work items in queue for component version resolution
-    workerQueueLength: 100
+    workerQueueLength: 1000
+    # -- Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric.
+    subscriberBufferSize: 100
+    # -- The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.
+    cacheTTL: 30
   ## Cache settings
   cache:
-    # -- Maximum number of active OCM contexts kept alive
-    ocmContextSize: 100
-    # -- Maximum number of active OCM sessions kept alive
-    ocmSessionSize: 100
     # -- Maximum size of the deployer download object LRU cache
     deployerDownloadSize: 1000
     # -- Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit.
@@ -117,12 +117,12 @@ crd:
   enable: true
   # -- Keep CRDs when uninstalling
   keep: true
-## Controller metrics endpoint
-metrics:
-  # -- Enable metrics endpoint with RBAC protection
+## Webhook configuration
+webhook:
+  # -- Enable conversion webhook for CRD version conversion
   enable: false
-  # -- Metrics server port
-  port: 8443
+  # -- Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually)
+  certSecret: ""
 ## Cert-manager integration
 certManager:
   # -- Enable cert-manager for TLS certificates

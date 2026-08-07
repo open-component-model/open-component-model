@@ -26,6 +26,16 @@ func TestIsManifest(t *testing.T) {
 			expected:  true,
 		},
 		{
+			name:      "docker manifest v2",
+			mediaType: introspection.MediaTypeDockerManifest,
+			expected:  true,
+		},
+		{
+			name:      "docker manifest list",
+			mediaType: introspection.MediaTypeDockerManifestList,
+			expected:  true,
+		},
+		{
 			name:      "non-manifest media type",
 			mediaType: "application/octet-stream",
 			expected:  false,

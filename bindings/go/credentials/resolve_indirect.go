@@ -17,8 +17,10 @@ var ErrNoIndirectCredentials = errors.New("no indirect credentials found in grap
 
 // resolveFromRepository is invoked when the DAG does not yield direct credentials.
 // The method ensures that successful resolutions are cached for subsequent calls.
-func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
-	if credentials, cached := g.getCredentials(identity.String()); cached {
+func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
+	node := identity.String()
+
+	if credentials, cached := g.getCredentials(node); cached {
 		return credentials, nil
 	}
 
@@ -27,10 +29,10 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 		// in case of an error, we try to resolve the credentials using the AnyConsumerIdentityType
 		// this is a fallback resolution mechanism intended for plugins that do not mind which
 		// consumer identity type is used.
-		identity := identity.DeepCopy()
-		identity.SetType(AnyConsumerIdentityType)
+		fallback := identity.DeepCopy()
+		fallback.SetType(AnyConsumerIdentityType)
 		var anyErr error
-		plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity)
+		plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, fallback)
 		// Independently of the actual error, we return ErrNoIndirectCredentials because, in fact, we cannot provide
 		// indirect credentials. The caller should decide how to handle the error.
 		if anyErr != nil {
@@ -42,7 +44,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 	var (
 		wg       sync.WaitGroup
 		mu       sync.Mutex
-		resolved map[string]string
+		resolved runtime.Typed
 		errs     []error
 	)
 
@@ -53,14 +55,16 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 	resolve := func(plugin RepositoryPlugin, cfg runtime.Typed) {
 		defer wg.Done()
 
-		var credentials map[string]string
+		var credentials runtime.Typed
 		// Obtain the consumer identity for the repository configuration.
-		if identity, err := plugin.ConsumerIdentityForConfig(ctx, cfg); err == nil {
+		if cfgIdentity, err := plugin.ConsumerIdentityForConfig(ctx, cfg); err == nil {
 			// Attempt to resolve direct credentials from the graph.
 			// NOTE: This explicitly does not allow recursing from repository to another repository.
 			// This is because the usage of repository credentials resolved by other repository credentials
 			// would require dynamic recursion detection via stack and would make the code significantly more complex.
-			credentials, _ = g.resolveFromGraph(ctx, identity)
+			if typed, err := g.resolveFromGraph(ctx, cfgIdentity); err == nil {
+				credentials = typed
+			}
 		}
 		slog.DebugContext(ctx, "Resolving credentials via repository", "identity", identity, "config", cfg)
 		credentials, err := plugin.Resolve(ctx, cfg, identity, credentials)
@@ -93,16 +97,15 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 	if resolved == nil {
 		if len(errs) > 0 {
 			// If we have errors and no resolved credentials, we have to assume that the credential lookup failed due errors in the plugins.
-			return nil, errors.Join(ErrUnknown, fmt.Errorf("an error occurred in one or multiple repositories while trying to resolve credentials for identity ... %q: %w", identity.String(), errors.Join(errs...)))
+			return nil, errors.Join(ErrUnknown, fmt.Errorf("an error occurred in one or multiple repositories while trying to resolve credentials for identity ... %q: %w", node, errors.Join(errs...)))
 		}
 
 		// If we get here, then all repository plugins failed to resolve credentials.
 		// This is not an error, but rather a signal that the identity could not be resolved indirectly.
-		return nil, errors.Join(ErrNoIndirectCredentials, fmt.Errorf("no repository plugin could resolve credentials for identity %q", identity.String()))
+		return nil, errors.Join(ErrNoIndirectCredentials, fmt.Errorf("no repository plugin could resolve credentials for identity %q", node))
 	}
 
-	// Cache the resolved credentials for future use.
-	g.setCredentials(identity.String(), resolved)
+	g.setCredentials(node, resolved)
 
 	return resolved, nil
 }

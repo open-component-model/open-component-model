@@ -17,5 +17,5 @@ type IdentityProvider[T runtime.Typed] interface {
 type BlobTransformerPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
 	IdentityProvider[T]
-	TransformBlob(ctx context.Context, request *TransformBlobRequest[T], credentials map[string]string) (*TransformBlobResponse, error)
+	TransformBlob(ctx context.Context, request *TransformBlobRequest[T], credentials runtime.Typed) (*TransformBlobResponse, error)
 }

@@ -30,6 +30,9 @@ import (
 // e.g. because the component version already exists in the target repository.
 var ErrShouldSkipConstruction = errors.New("should skip construction")
 
+// ErrDigestMismatch is returned when a provided digest does not match the calculated digest.
+var ErrDigestMismatch = errors.New("digest mismatch")
+
 const AttributeDescriptor string = "constructor/descriptor"
 
 type Constructor interface {
@@ -219,6 +222,10 @@ func (c *DefaultConstructor) constructComponent(ctx context.Context, component *
 		return nil, err
 	}
 
+	if err := descriptor.Validate(desc); err != nil {
+		return nil, fmt.Errorf("component %q failed validation: %w", component.Name, err)
+	}
+
 	if err := repo.AddComponentVersion(ctx, desc); err != nil {
 		return nil, fmt.Errorf("error adding component version to target: %w", err)
 	}
@@ -307,6 +314,14 @@ func (c *DefaultConstructor) processDescriptor(
 		})
 	}
 
+	if len(component.Sources) > 0 {
+		// Sources carry no digest in the component descriptor, so unlike
+		// resources their content is never validated during construction and
+		// cannot be verified afterwards. The limitation is the same for every
+		// source, so one warning per component version is enough.
+		logger.Warn("source content is recorded without a digest and is not verifiable; declare the artifact as a resource if content validation is needed")
+	}
+
 	for i, source := range component.Sources {
 		sourceLogger := logger.With("source", source.ToIdentity())
 		sourceLogger.Debug("processing source")
@@ -347,12 +362,12 @@ func (c *DefaultConstructor) processDescriptor(
 			referencedComponent := referencedComponents[reference.ToIdentity().String()]
 			ref, err := c.processReference(egctx, &reference, referencedComponent)
 			if c.opts.OnEndReferenceConstruct != nil {
-				if err := c.opts.OnEndReferenceConstruct(egctx, ref, err); err != nil {
-					return fmt.Errorf("error ending reference construction for %q: %w", ref.ToIdentity(), err)
+				if hookErr := c.opts.OnEndReferenceConstruct(egctx, ref, err); hookErr != nil {
+					return fmt.Errorf("error ending reference construction for %q: %w", reference.ToIdentity(), errors.Join(hookErr, err))
 				}
 			}
 			if err != nil {
-				return fmt.Errorf("error processing reference %q at index %d: %w", ref.ToIdentity(), i, err)
+				return fmt.Errorf("error processing reference %q at index %d: %w", reference.ToIdentity(), i, err)
 			}
 			descLock.Lock()
 			defer descLock.Unlock()
@@ -381,15 +396,17 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 	)
 	logger.Debug("processing resource")
 
+	if c.opts.ComponentVersionConflictPolicy == ComponentVersionConflictReplace &&
+		resource.Options.OwnershipPolicy != constructor.OwnershipPolicyAlways {
+		logger.WarnContext(ctx, "replace requested with ownership policy other than Always; any pre-existing ownership referrer attached to this resource by a prior add will remain",
+			"ownership_policy", resource.Options.OwnershipPolicy)
+	}
+
 	var res *descriptor.Resource
 	var err error
 
 	switch {
 	case resource.HasInput():
-		if resource.CopyPolicy != "" && resource.CopyPolicy != constructor.CopyPolicyByValue {
-			return nil, fmt.Errorf("invalid copy policy %q for resource %q, "+
-				"due to an input specification an empty policy or %q is expected", resource.CopyPolicy, resource.ToIdentity(), constructor.CopyPolicyByValue)
-		}
 		logger.Debug("processing resource with input method")
 		res, err = c.processResourceWithInput(ctx, targetRepo, resource, component, version)
 	case resource.HasAccess():
@@ -401,31 +418,54 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 			logger.Debug("defaulting resource version to component version as no resource version was set")
 			resource.Version = version
 		}
-		if byValue := resource.CopyPolicy == constructor.CopyPolicyByValue; byValue {
-			logger.Debug("processing resource by value")
-			res, err = c.processResourceByValue(ctx, targetRepo, resource, component, version)
-		} else {
-			logger.Debug("processing resource with existing access")
-			res = constructor.ConvertToDescriptorResource(resource)
+		logger.Debug("processing resource with existing access")
+		res = constructor.ConvertToDescriptorResource(resource)
 
-			if c.opts.ResourceDigestProcessorProvider != nil {
-				var digestProcessor ResourceDigestProcessor
-				if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
-					logger.Debug("processing resource digest")
-					var creds map[string]string
-					if c.opts.Resolver != nil {
-						if identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res); err == nil {
-							if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
-								return nil, fmt.Errorf("error resolving credentials for resource digest processor: %w", err)
-							}
-						} else {
-							logger.Debug("no credential consumer identity found for resource digest processor, skipping credential resolution")
+		if c.opts.ResourceDigestProcessorProvider != nil {
+			var digestProcessor ResourceDigestProcessor
+			if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
+				logger.Debug("processing resource digest")
+				var creds ocmruntime.Typed
+				if c.opts.Resolver != nil {
+					if identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res); err == nil {
+						if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
+							return nil, fmt.Errorf("error resolving credentials for resource digest processor: %w", err)
 						}
-					}
-					if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
-						return nil, fmt.Errorf("error processing resource %q with digest processor: %w", resource.ToIdentity(), err)
+					} else {
+						logger.Debug("no credential consumer identity found for resource digest processor, skipping credential resolution")
 					}
 				}
+				if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
+					return nil, fmt.Errorf("error processing resource %q with digest processor: %w", resource.ToIdentity(), err)
+				}
+			}
+		}
+
+		if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
+			if c.opts.ResourceRepositoryProvider == nil {
+				return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but no resource repository provider is configured", resource.ToIdentity(), resource.Options.OwnershipPolicy)
+			}
+			repo, err := c.opts.GetResourceRepository(ctx, resource)
+			if err != nil {
+				return nil, fmt.Errorf("error getting resource repository for ownership of %q: %w", resource.ToIdentity(), err)
+			}
+
+			ownershipAwareRepository, ok := repo.(repository.OwnershipAwareRepository)
+			if !ok {
+				return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
+			}
+			var creds ocmruntime.Typed
+			if c.opts.Resolver != nil {
+				if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+					if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
+						return nil, fmt.Errorf("error resolving credentials for resource ownership: %w", err)
+					}
+				} else {
+					logger.Debug("no credential consumer identity found for resource ownership, skipping credential resolution")
+				}
+			}
+			if err := ownershipAwareRepository.AddOwnership(ctx, component, version, res, creds); err != nil {
+				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
 			}
 		}
 	default:
@@ -443,30 +483,6 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 	logger.Debug("resource processed successfully")
 
 	return res, nil
-}
-
-func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetRepo TargetRepository, resource *constructor.Resource, component, version string) (*descriptor.Resource, error) {
-	repo, err := c.opts.GetResourceRepository(ctx, resource)
-	if err != nil {
-		return nil, err
-	}
-
-	converted := constructor.ConvertToDescriptorResource(resource)
-
-	// best effort to resolve credentials for by value resource download.
-	// if no identity is resolved, we assume resolution is simply skipped.
-	var creds map[string]string
-	if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
-		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
-			return nil, fmt.Errorf("error resolving credentials for resource by-value processing %w", err)
-		}
-	}
-
-	data, err := repo.DownloadResource(ctx, converted, creds)
-	if err != nil {
-		return nil, fmt.Errorf("error downloading resource: %w", err)
-	}
-	return addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, data)
 }
 
 func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo TargetRepository, src *constructor.Source, component, version string) (*descriptor.Source, error) {
@@ -511,7 +527,7 @@ func (c *DefaultConstructor) processSourceWithInput(ctx context.Context, targetR
 
 	// best effort to resolve credentials for the input method.
 	// if no identity is resolved, we assume resolution is simply skipped.
-	var creds map[string]string
+	var creds ocmruntime.Typed
 	if identity, err := method.GetSourceCredentialConsumerIdentity(ctx, src); err == nil {
 		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for source input method: %w", err)
@@ -552,7 +568,7 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 
 	// best effort to resolve credentials for the input method.
 	// if no identity is resolved, we assume resolution is simply skipped.
-	var creds map[string]string
+	var creds ocmruntime.Typed
 	if identity, err := method.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
 		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for resource input method: %w", err)
@@ -569,6 +585,16 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	if result.ProcessedBlobData != nil {
 		processedResource, err = addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, result.ProcessedBlobData)
 	} else if result.ProcessedResource != nil {
+		// TODO(fabianburth): https://github.com/open-component-model/ocm-project/issues/1167
+		//   this cannot handle ownership attachement
+		//   input either needs an AddOwnership method OR we need to change
+		//   the architecture of input to no longer allow it to upload immediately
+		//   and instead return a blob.
+		//   I believe this is currently dead code anyway, as the helm input method
+		//   also sets ProcessedBlobData and thus, hits the path above.
+		if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
+			return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but input method returned a pre-processed resource which does not support ownership attachment", resource.ToIdentity(), resource.Options.OwnershipPolicy)
+		}
 		processedResource = result.ProcessedResource
 	}
 
@@ -589,12 +615,36 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 	)
 	logger.Debug("processing reference")
 
-	referencedComponentDigest, err := c.getComponentDigest(ctx, reference.ToIdentity().String(), referencedComponent)
+	referencedComponentDigest, err := c.getComponentDigest(ctx, reference.ToComponentIdentity().String(), referencedComponent)
 	if err != nil {
 		return nil, fmt.Errorf("error getting digest for referenced component %q: %w", reference.ToIdentity(), err)
 	}
 
 	ref := constructor.ConvertToDescriptorReference(reference)
+
+	// If digest is specified in the constructor reference, verify it matches the calculated digest
+	if reference.Digest != nil {
+		if reference.Digest.HashAlgorithm == "" || reference.Digest.NormalisationAlgorithm == "" || reference.Digest.Value == "" {
+			return nil, fmt.Errorf("reference %q has an incomplete digest: all of hashAlgorithm, normalisationAlgorithm, and value must be set", reference.ToIdentity())
+		}
+		if reference.Digest.HashAlgorithm != referencedComponentDigest.HashAlgorithm ||
+			reference.Digest.NormalisationAlgorithm != referencedComponentDigest.NormalisationAlgorithm ||
+			reference.Digest.Value != referencedComponentDigest.Value {
+			return nil, fmt.Errorf("%w: reference %q has digest (hashAlgorithm=%s, normalisationAlgorithm=%s, value=%s) but calculated digest is (hashAlgorithm=%s, normalisationAlgorithm=%s, value=%s)",
+				ErrDigestMismatch,
+				reference.ToIdentity(),
+				reference.Digest.HashAlgorithm,
+				reference.Digest.NormalisationAlgorithm,
+				reference.Digest.Value,
+				referencedComponentDigest.HashAlgorithm,
+				referencedComponentDigest.NormalisationAlgorithm,
+				referencedComponentDigest.Value)
+		}
+		logger.Debug("digest verification successful",
+			"expected", reference.Digest.Value,
+			"calculated", referencedComponentDigest.Value)
+	}
+
 	ref.Digest = *referencedComponentDigest
 
 	logger.Debug("reference processed successfully")
@@ -687,6 +737,18 @@ func addColocatedResourceLocalBlob(
 		return nil, fmt.Errorf("error adding local resource %q based on input type %q as local resource to component %q : %w", resource.ToIdentity(), resource.Input.GetType(), component, err)
 	}
 
+	if resource.Options.OwnershipPolicy == constructor.OwnershipPolicyAlways {
+		if ownershipAwareRepo, ok := repo.(repository.OwnershipAwareRepository); ok {
+			// repo is a component version repository on the local-blob path;
+			// it is already authenticated, so no per-call credentials are passed.
+			if err := ownershipAwareRepo.AddOwnership(ctx, component, version, uploaded, nil); err != nil {
+				return nil, fmt.Errorf("error attaching ownership for resource %q: %w", resource.ToIdentity(), err)
+			}
+		} else {
+			return nil, fmt.Errorf("resource %q opts into ownership (policy %q) but its repository %T cannot record it", resource.ToIdentity(), resource.Options.OwnershipPolicy, repo)
+		}
+	}
+
 	return uploaded, nil
 }
 
@@ -739,7 +801,7 @@ func newConcurrencyGroup(ctx context.Context, limit int) (*errgroup.Group, conte
 // resolveCredentials attempts to resolve credentials for a given credential consumerIdentity.
 // It returns the resolved credentials and any error that occurred during resolution.
 // If no credentials are needed or available, it returns nil credentials and no error.
-func resolveCredentials(ctx context.Context, provider credentials.Resolver, consumerIdentity ocmruntime.Identity) (map[string]string, error) {
+func resolveCredentials(ctx context.Context, provider credentials.Resolver, consumerIdentity ocmruntime.Identity) (ocmruntime.Typed, error) {
 	logger := log.Base().With("identity", consumerIdentity)
 
 	if provider == nil {

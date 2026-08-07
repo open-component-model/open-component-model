@@ -1,0 +1,27 @@
+package access
+
+import (
+	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+const (
+	LegacyHelmChartConsumerType = "HelmChartRepository"
+	HelmRepositoryType          = "helmChart"
+)
+
+var Scheme = runtime.NewScheme()
+
+func init() {
+	MustAddToScheme(Scheme)
+}
+
+func MustAddToScheme(scheme *runtime.Scheme) {
+	helm := &v1.Helm{}
+	scheme.MustRegisterWithAlias(helm,
+		runtime.NewVersionedType(v1.Type, v1.Version),
+		runtime.NewUnversionedType(v1.Type),
+		runtime.NewVersionedType(v1.LegacyType, v1.LegacyTypeVersion),
+		runtime.NewUnversionedType(v1.LegacyType),
+	)
+}

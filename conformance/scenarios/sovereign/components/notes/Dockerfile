@@ -1,5 +1,7 @@
 # Multi-stage build for sovereign-notes application
-FROM golang:1.26-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039 AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS builder
+ARG TARGETOS
+ARG TARGETARCH
 
 # Set working directory
 WORKDIR /app
@@ -18,12 +20,12 @@ COPY . .
 # v1.1.0+ builds from cmd/sovereign-notes (migration-based schema evolution).
 ARG VERSION=1.0.0
 RUN CMD_DIR=$(if [ "${VERSION}" = "1.0.0" ]; then echo "sovereign-notes-v1"; else echo "sovereign-notes"; fi) && \
-    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -installsuffix cgo \
     -ldflags="-X main.version=${VERSION}" \
     -o sovereign-notes ./cmd/${CMD_DIR}
 
 # Final stage
-FROM alpine:3.23@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 # Install CA certificates and create non-root user
 RUN apk --no-cache add ca-certificates \

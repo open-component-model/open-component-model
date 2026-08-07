@@ -1,0 +1,7 @@
+en:
+  label: English
+  contentDir: content
+  weight: 10
+  params:
+    languageISO: en
+    languageTag: en-US

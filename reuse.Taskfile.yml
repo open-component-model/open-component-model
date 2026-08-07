@@ -14,8 +14,7 @@ tasks:
       - >-
         go test 
         {{if .SKIP_PATTERN}}-skip "{{.SKIP_PATTERN}}"{{end}} 
-        {{.GO_TEST_FLAGS}} 
-        -v 
+        {{.GO_TEST_FLAGS}}
         -coverprofile={{.COVERAGE_DIR}}/{{.COVERAGE_PROFILE}} 
         {{.PACKAGES}} 
         {{.CLI_ARGS}}

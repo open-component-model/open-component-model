@@ -55,6 +55,7 @@ func (t *Dir) String() string {
 }
 
 const (
-	Version = "v1"
-	Type    = "dir"
+	Version    = "v1"
+	Type       = "Dir"
+	LegacyType = "dir"
 )

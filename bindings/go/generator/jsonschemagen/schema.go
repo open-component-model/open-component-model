@@ -25,6 +25,8 @@ type JSONSchemaDraft202012 struct {
 	Description string `json:"description,omitempty"`
 	Format      string `json:"format,omitempty"`
 
+	ContentEncoding string `json:"contentEncoding,omitempty"`
+
 	Const any `json:"const,omitempty"`
 
 	Minimum          *float64 `json:"minimum,omitempty"`
@@ -49,6 +51,7 @@ type JSONSchemaDraft202012 struct {
 	AdditionalProperties *SchemaOrBool `json:"additionalProperties,omitempty"`
 
 	OneOf []*JSONSchemaDraft202012          `json:"oneOf,omitempty"`
+	AnyOf []*JSONSchemaDraft202012          `json:"anyOf,omitempty"`
 	Defs  map[string]*JSONSchemaDraft202012 `json:"$defs,omitempty"`
 
 	Items    *JSONSchemaDraft202012 `json:"items,omitempty"`
@@ -128,9 +131,13 @@ func (g *generation) buildAliasSchema(ti *universe.TypeInfo) *JSONSchemaDraft202
 			sch = prim
 		}
 	case *ast.ArrayType:
-		sch = &JSONSchemaDraft202012{
-			Type:  "array",
-			Items: g.schemaForExpr(t.Elt, ti, nil),
+		if isByteSlice(t) {
+			sch = byteSliceSchema()
+		} else {
+			sch = &JSONSchemaDraft202012{
+				Type:  "array",
+				Items: g.schemaForExpr(t.Elt, ti, nil),
+			}
 		}
 	case *ast.MapType:
 		sch = &JSONSchemaDraft202012{
@@ -164,13 +171,37 @@ func (g *generation) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field 
 		return sch
 	}
 
+	// Types not registered in the universe (e.g. encoding/json.RawMessage) need direct
+	// resolution via types.Info to detect well-known external types.
+	if key, ok := universe.ResolveExprToTypeKey(ctx.Pkg.TypesInfo, expr); ok {
+		if universe.IsJSONRawMessageKey(key) {
+			return anySchema()
+		}
+	}
+
 	switch t := expr.(type) {
 	case *ast.StarExpr:
 		return g.schemaForExpr(t.X, ctx, field)
 	case *ast.ArrayType:
+		// encoding/json marshals a []byte slice as a base64 string, not an
+		// array of integers. Fixed-size [N]byte arrays are excluded because
+		// they marshal as an integer array.
+		if isByteSlice(t) {
+			return byteSliceSchema()
+		}
+		itemSchema := g.schemaForExpr(t.Elt, ctx, field)
+		// Pointer element types (e.g. []*File) allow null items in JSON.
+		if _, isPtr := t.Elt.(*ast.StarExpr); isPtr {
+			itemSchema = &JSONSchemaDraft202012{
+				AnyOf: []*JSONSchemaDraft202012{
+					itemSchema,
+					{Type: "null"},
+				},
+			}
+		}
 		return &JSONSchemaDraft202012{
 			Type:  "array",
-			Items: g.schemaForExpr(t.Elt, ctx, field),
+			Items: itemSchema,
 		}
 	case *ast.MapType:
 		return &JSONSchemaDraft202012{
@@ -410,11 +441,40 @@ func (g *generation) schemaID(ti *universe.TypeInfo) string {
 	return ti.Key.PkgPath + "/schemas/" + ti.Key.TypeName + ".schema.json"
 }
 
+// isByteSlice reports whether t is a literal []byte (or []uint8) slice, which
+// encoding/json marshals as a base64 string rather than an array of integers.
+//
+// Detection is intentionally limited to the built-in element identifiers.
+// Fixed-size arrays ([N]byte) are excluded because they marshal as an integer
+// array. Slices of a named byte-kind element (e.g. type MyByte byte; []MyByte)
+// are also excluded: such a type is expected to define its own JSON marshaling,
+// so the generator does not infer base64 encoding for it.
+func isByteSlice(t *ast.ArrayType) bool {
+	if t.Len != nil {
+		return false
+	}
+	ident, ok := t.Elt.(*ast.Ident)
+	return ok && (ident.Name == "byte" || ident.Name == "uint8")
+}
+
+// byteSliceSchema returns the schema for a []byte, matching encoding/json's
+// base64-string wire format.
+func byteSliceSchema() *JSONSchemaDraft202012 {
+	return &JSONSchemaDraft202012{
+		Type:            "string",
+		ContentEncoding: "base64",
+	}
+}
+
 func anyObjectSchema() *JSONSchemaDraft202012 {
 	return &JSONSchemaDraft202012{
 		Type:                 "object",
 		AdditionalProperties: &SchemaOrBool{Bool: Ptr(true)},
 	}
+}
+
+func anySchema() *JSONSchemaDraft202012 {
+	return &JSONSchemaDraft202012{}
 }
 
 func Ptr[T any](v T) *T { return &v }

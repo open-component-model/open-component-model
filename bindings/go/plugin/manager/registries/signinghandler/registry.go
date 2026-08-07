@@ -82,7 +82,11 @@ func (r *SigningRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (si
 	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalPlugins[typ]
 		if !ok {
-			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
+			registered := make([]runtime.Type, 0, len(r.internalPlugins))
+			for t := range r.internalPlugins {
+				registered = append(registered, t)
+			}
+			return nil, fmt.Errorf("no signing handler registered for type %q (registered: %v)", typ, registered)
 		}
 
 		return p, nil
@@ -101,7 +105,7 @@ func (r *SigningRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (si
 func (r *SigningRegistry) getPlugin(ctx context.Context, spec runtime.Type) (signingv1.SignatureHandlerContract[runtime.Typed], error) {
 	plugin, ok := r.registry[spec]
 	if !ok {
-		return nil, fmt.Errorf("failed to get plugin for typ %q", spec)
+		return nil, fmt.Errorf("no signing handler plugin registered for type %q", spec)
 	}
 
 	if existingPlugin, ok := r.constructedPlugins[plugin.ID]; ok {

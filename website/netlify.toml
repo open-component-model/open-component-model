@@ -1,0 +1,19 @@
+[build.environment]
+  NODE_VERSION = "26.5.0"
+  NPM_VERSION = "12.0.1"
+  GO_VERSION = "1.26.3"
+
+[build]
+  # rebuild when paths mounted by the "main" site version change.
+  # CRDs are generated from api/v1alpha1 by `task manifests` and committed
+  # under kubernetes/controller/config/crd/bases. The trigger follows the
+  # Go source of truth so a forgotten regeneration still rebuilds the site.
+  ignore = "git diff --quiet origin/main HEAD -- . ../cli/docs/reference ../bindings/go/constructor/spec/v1/resources ../bindings/go/descriptor/v2/resources ../kubernetes/controller/api/v1alpha1"
+
+[context.deploy-preview]
+  command = "npm ci && npm run build -- --baseURL=$DEPLOY_PRIME_URL --buildDrafts --buildFuture"
+  publish = "public"
+
+[context.production]
+  command = "npm ci && npm run build"
+  publish = "public"

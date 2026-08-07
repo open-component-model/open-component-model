@@ -106,6 +106,8 @@ func (in *Deployer) GetEffectiveOCMConfig() []OCMConfiguration {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the Deployer is Ready",priority=1
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Deployer"
 
 // Deployer is the Schema for the deployers API.
 type Deployer struct {

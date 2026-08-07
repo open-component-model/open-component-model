@@ -46,7 +46,6 @@ spec:
     byReference:
       resource:
         name: kro-rgd
-  interval: 10m
   ocmConfig:
     - kind: Secret
       name: docker-config-json

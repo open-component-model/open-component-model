@@ -11,13 +11,16 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
-	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -44,7 +47,10 @@ type ResourceRepository struct {
 }
 
 // make sure that ResourceRepository implements the oci ResourceRepository interface
-var _ repository.ResourceRepository = (*ResourceRepository)(nil)
+var (
+	_ repository.ResourceRepository       = (*ResourceRepository)(nil)
+	_ repository.OwnershipAwareRepository = (*ResourceRepository)(nil)
+)
 
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	options := &Options{}
@@ -90,7 +96,13 @@ func (p *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return p.getIdentity(obj)
 }
 
-func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
+func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	if err != nil {
+		return nil, err
+	}
+	resource = resource.DeepCopy()
+	// Convert resource.Access from *runtime.Raw to the typed access spec so the inner repository's type-switch can match it.
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
@@ -99,32 +111,12 @@ func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
 		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
 	}
-	switch access := obj.(type) {
-	case *v1.OCIImage:
-		baseURL, err := ociImageAccessToBaseURL(access)
-		if err != nil {
-			return nil, fmt.Errorf("error creating oci image access: %w", err)
-		}
-
-		repo, err := p.getRepository(&ociv1.Repository{
-			BaseUrl: baseURL,
-		}, credentials)
-		if err != nil {
-			return nil, fmt.Errorf("error creating repository: %w", err)
-		}
-
-		resource = resource.DeepCopy()
-		resource.Access = access
-
-		resource, err := repo.ProcessResourceDigest(ctx, resource)
-		if err != nil {
-			return nil, fmt.Errorf("error downloading resource: %w", err)
-		}
-
-		return resource, nil
-	default:
-		return nil, fmt.Errorf("unsupported type %s for downloading the resource", t)
+	resource.Access = obj
+	resource, err = repo.ProcessResourceDigest(ctx, resource)
+	if err != nil {
+		return nil, fmt.Errorf("error processing resource digest: %w", err)
 	}
+	return resource, nil
 }
 
 func (p *ResourceRepository) getIdentity(obj runtime.Typed) (runtime.Identity, error) {
@@ -145,76 +137,58 @@ func (p *ResourceRepository) getIdentity(obj runtime.Typed) (runtime.Identity, e
 	}
 }
 
-func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	if err != nil {
+		return nil, err
+	}
+	b, err := repo.DownloadResource(ctx, resource)
+	if err != nil {
+		return nil, fmt.Errorf("error downloading resource: %w", err)
+	}
+	return b, nil
+}
+
+// AddOwnership attaches ownership information (i.e. the
+// component name and version) to a resource. The ownership is attached as a
+// referrer manifest pointing at the resource.
+// Caution: EXPERIMENTAL
+func (p *ResourceRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	if err != nil {
+		return err
+	}
+	resource = resource.DeepCopy()
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
-		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+		return fmt.Errorf("error creating new object for type %s: %w", t, err)
 	}
 	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
-		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+		return fmt.Errorf("error converting access to object of type %s: %w", t, err)
 	}
-	switch access := obj.(type) {
-	case *v1.OCIImage:
-		baseURL, err := ociImageAccessToBaseURL(access)
-		if err != nil {
-			return nil, fmt.Errorf("error creating oci image access: %w", err)
-		}
+	resource.Access = obj
 
-		repo, err := p.getRepository(&ociv1.Repository{
-			BaseUrl: baseURL,
-		}, credentials)
-		if err != nil {
-			return nil, fmt.Errorf("error creating repository: %w", err)
-		}
-
-		b, err := repo.DownloadResource(ctx, resource)
-		if err != nil {
-			return nil, fmt.Errorf("error downloading resource: %w", err)
-		}
-
-		return b, nil
-	default:
-		return nil, fmt.Errorf("unsupported type %s for downloading the resource", t)
+	if err := repo.AddOwnership(ctx, component, version, resource, credentials); err != nil {
+		return fmt.Errorf("error attaching ownership referrer: %w", err)
 	}
+	return nil
 }
 
-func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
-	t := resource.Access.GetType()
-	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {
-		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+		return nil, err
 	}
-	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
-		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	b, err := repo.UploadResource(ctx, resource, content)
+	if err != nil {
+		return nil, fmt.Errorf("error uploading resource: %w", err)
 	}
-	switch access := obj.(type) {
-	case *v1.OCIImage:
-		baseURL, err := ociImageAccessToBaseURL(access)
-		if err != nil {
-			return nil, fmt.Errorf("error creating oci image access: %w", err)
-		}
-
-		repo, err := p.getRepository(&ociv1.Repository{
-			BaseUrl: baseURL,
-		}, credentials)
-		if err != nil {
-			return nil, fmt.Errorf("error creating repository: %w", err)
-		}
-
-		b, err := repo.UploadResource(ctx, resource, content)
-		if err != nil {
-			return nil, fmt.Errorf("error uploading resource: %w", err)
-		}
-
-		return b, nil
-	default:
-		return nil, fmt.Errorf("unsupported type %s for uploading the resource", t)
-	}
+	return b, nil
 }
 
-func (p *ResourceRepository) getRepository(spec *ociv1.Repository, creds map[string]string) (*oci.Repository, error) {
-	repo, err := createRepository(spec, creds, p.filesystemConfig, p.userAgent)
+func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *ocicredsv1.OCICredentials) (*oci.Repository, error) {
+	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -233,7 +207,7 @@ func ociImageAccessToBaseURL(access *v1.OCIImage) (string, error) {
 
 func createRepository(
 	spec *ociv1.Repository,
-	credentials map[string]string,
+	credentials *ocicredsv1.OCICredentials,
 	filesystemConfig *filesystemv1alpha1.Config,
 	userAgent string,
 ) (*oci.Repository, error) {
@@ -250,7 +224,7 @@ func createRepository(
 			Header: map[string][]string{
 				"User-Agent": {userAgent},
 			},
-			Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
+			Credential: auth.StaticCredential(url.Host, ocicredentials.MapCredentials(credentials)),
 		}))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create URL resolver: %w", err)
@@ -269,19 +243,58 @@ func createRepository(
 	return repo, err
 }
 
-func clientCredentials(credentials map[string]string) auth.Credential {
-	cred := auth.Credential{}
-	if username, ok := credentials["username"]; ok {
-		cred.Username = username
+var _ ocistream.ResourceRepository = (*ResourceRepository)(nil)
+
+// resolveOCIImageRepo resolves the inner *oci.Repository for the given resource access and credentials.
+// Returns an error if the access type is not *v1.OCIImage.
+func (p *ResourceRepository) resolveOCIImageRepo(resource *descriptor.Resource, credentials runtime.Typed) (*oci.Repository, error) {
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
 	}
-	if password, ok := credentials["password"]; ok {
-		cred.Password = password
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
 	}
-	if refreshToken, ok := credentials["refresh_token"]; ok {
-		cred.RefreshToken = refreshToken
+	access, ok := obj.(*v1.OCIImage)
+	if !ok {
+		return nil, fmt.Errorf("unsupported access type %s: expected OCI image", t)
 	}
-	if accessToken, ok := credentials["access_token"]; ok {
-		cred.AccessToken = accessToken
+	baseURL, err := ociImageAccessToBaseURL(access)
+	if err != nil {
+		return nil, fmt.Errorf("error creating oci image access: %w", err)
 	}
-	return cred
+
+	var ociCredentials *ocicredsv1.OCICredentials
+	if credentials != nil {
+		ociCredentials, err = ocicredsv1.ConvertToOCICredentials(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error converting credentials: %w", err)
+		}
+	}
+	return p.getRepository(&ociv1.Repository{BaseUrl: baseURL}, ociCredentials)
+}
+
+func (p *ResourceRepository) DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (ocistream.ResourceStream, error) {
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	if err != nil {
+		return nil, err
+	}
+	stream, err := repo.DownloadResourceStream(ctx, resource)
+	if err != nil {
+		return nil, fmt.Errorf("error creating resource stream: %w", err)
+	}
+	return stream, nil
+}
+
+func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource *descriptor.Resource, stream ocistream.ResourceStream, credentials runtime.Typed) (*descriptor.Resource, error) {
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	if err != nil {
+		return nil, err
+	}
+	res, err := repo.UploadResourceStream(ctx, resource, stream)
+	if err != nil {
+		return nil, fmt.Errorf("error streaming resource upload: %w", err)
+	}
+	return res, nil
 }

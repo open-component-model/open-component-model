@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -77,6 +76,7 @@ func New() *cobra.Command {
 - --dry-run: compute only, do not persist signature
 - Default signature name: default
 - Default signer: RSASSA-PSS plugin (needs private key)
+- For Sigstore keyless signing (no keys needed), pass --signer-spec with a SigstoreSigningConfiguration/v1alpha1 config
 
 Use this command to establish provenance of component versions.`,
 			compref.DefaultPrefix,
@@ -85,9 +85,9 @@ Use this command to establish provenance of component versions.`,
 		),
 		Example: strings.TrimSpace(`
 # Sign a component version with default algorithms
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 
-## Example Credential Config (.ocmconfig)
+## Example Credential Config (.ocmconfig) — Plain encoding (default)
 #
 # Credentials (private/public keys) are always resolved via .ocmconfig.
 # The "signature" field must match the --signature flag (default: "default").
@@ -104,6 +104,28 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
         - type: Credentials/v1
           properties:
             private_key_pem: <PEM>
+
+## Example Credential Config (.ocmconfig) — PEM encoding with certificate chain
+#
+# Required when signatureEncodingPolicy: PEM is set in the signer spec.
+# private_key_pem_file: leaf private key (PKCS#1 or PKCS#8)
+# public_key_pem_file:  PEM file containing [leaf, intermediate] certificates
+#                       Do NOT include the root CA here — it must not be embedded
+#                       in the signature (the verifier rejects self-signed embedded certs).
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+        - type: Credentials/v1
+          properties:
+            private_key_pem_file: /path/to/leaf.key
+            public_key_pem_file: /path/to/leaf-and-intermediate-chain.pem
 
 ## Example Signer Spec File (--signer-spec)
 #
@@ -125,17 +147,64 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
     signatureAlgorithm: RSASSA-PSS
     signatureEncodingPolicy: Plain
 
+# Example signer spec for PEM encoding (requires certificate chain in credentials):
+
+    type: RSASigningConfiguration/v1alpha1
+    signatureAlgorithm: RSASSA-PSS
+    signatureEncodingPolicy: PEM
+
+## Example Signer Spec File — Sigstore keyless (SigstoreSigningConfiguration/v1alpha1)
+#
+# Use when signing without private keys via Sigstore/Fulcio OIDC.
+# Endpoint discovery precedence:
+#   1. signingConfig — local signing_config.json (--signing-config)
+#   2. Not set — public-good Sigstore TUF (default)
+
+    type: SigstoreSigningConfiguration/v1alpha1
+
+# With a local signing config file (private infrastructure):
+
+    type: SigstoreSigningConfiguration/v1alpha1
+    signingConfig: /path/to/signing_config.json
+
+## Example Credential Config (.ocmconfig) — Sigstore OIDC token
+#
+# The OIDCIdentityTokenProvider plugin acquires an OIDC token via an interactive browser flow.
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: SigstoreSigner/v1alpha1
+          signature: default
+        credentials:
+        - type: OIDCIdentityTokenProvider/v1alpha1
+
+## Note on the OIDC issuer recorded in the Fulcio certificate
+#
+# On public Sigstore (Dex federation), Fulcio passes the upstream IdP issuer through
+# into the certificate (OID 1.3.6.1.4.1.57264.1.8) — NOT the Dex URL:
+#   - Google login   -> https://accounts.google.com
+#   - GitHub login   -> https://github.com/login/oauth
+#   - Microsoft login -> https://login.microsoftonline.com
+# Verifiers must use the upstream issuer in certificateOIDCIssuer.
+# OCM also stores this value in signatures[].signature.issuer for convenience.
+
+# Sign with Sigstore (requires sigstore signer spec):
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signer-spec ./sigstore-sign.yaml
+
 # Sign with custom signature name
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
 
 # Use a signer specification file to override algorithm defaults
-sign component-version ./repo/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./rsassa-pss.yaml
+sign component-version ./repo//ocm.software/cli:0.12.0 --signer-spec ./rsassa-pss.yaml
 
 # Dry-run signing
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature test --dry-run
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature test --dry-run
 
 # Force overwrite an existing signature
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature --force`),
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature --force`),
 		RunE:              SignComponentVersion,
 		DisableAutoGenTag: true,
 	}
@@ -251,11 +320,11 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// credentials
-	credMap := map[string]string{}
+	var foundCreds runtime.Typed
 	if consumerID, err := handler.GetSigningCredentialConsumerIdentity(ctx, signatureName, *unsignedDigest, signerSpec); err == nil {
 		if creds, err := credentialGraph.Resolve(ctx, consumerID); err == nil {
-			credMap = creds
-			logger.DebugContext(ctx, "using discovered credentials", "attributes", slices.Collect(maps.Keys(credMap)))
+			foundCreds = creds
+			logger.DebugContext(ctx, "using discovered credentials", "type", foundCreds.GetType())
 		} else {
 			if errors.Is(err, credentials.ErrNotFound) {
 				logger.DebugContext(ctx, "could not resolve credentials", "error", err.Error())
@@ -266,7 +335,7 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// sign
-	sigBytes, err := handler.Sign(ctx, *unsignedDigest, signerSpec, credMap)
+	sigBytes, err := handler.Sign(ctx, *unsignedDigest, signerSpec, foundCreds)
 	if err != nil {
 		return fmt.Errorf("signing failed: %w", err)
 	}

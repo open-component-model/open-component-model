@@ -27,6 +27,8 @@ func init() {
 	Scheme.MustRegisterWithAlias(&v1.File{},
 		runtime.NewVersionedType(v1.Type, v1.Version),
 		runtime.NewUnversionedType(v1.Type),
+		runtime.NewVersionedType(v1.LegacyType, v1.Version),
+		runtime.NewUnversionedType(v1.LegacyType),
 	)
 }
 
@@ -85,7 +87,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, _
 //  1. Converts the resource input to v1.File specification
 //  2. Calls GetV1FileBlob to read and process the file
 //  3. Returns the processed blob data wrapped in a ResourceInputMethodResult
-func (i *InputMethod) ProcessResource(_ context.Context, resource *constructorruntime.Resource, _ map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
+func (i *InputMethod) ProcessResource(_ context.Context, resource *constructorruntime.Resource, _ runtime.Typed) (result *constructor.ResourceInputMethodResult, err error) {
 	file := v1.File{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &file); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
@@ -117,7 +119,7 @@ func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, _ *
 //  1. Converts the source input to v1.File specification
 //  2. Calls GetV1FileBlob to read and process the file
 //  3. Returns the processed blob data wrapped in a SourceInputMethodResult
-func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.Source, _ map[string]string) (result *constructor.SourceInputMethodResult, err error) {
+func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.Source, _ runtime.Typed) (result *constructor.SourceInputMethodResult, err error) {
 	file := v1.File{}
 	if err := i.GetInputMethodScheme().Convert(src.Input, &file); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)

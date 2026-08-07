@@ -116,10 +116,15 @@ func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseR
 		return nil, nil
 	}
 
+	specProvider, err := pathmatcher.NewSpecProvider(ctx, finalResolvers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create spec provider: %w", err)
+	}
+
 	provider := &pathMatcherResolver{
 		repoProvider: opts.RepoProvider,
 		graph:        opts.CredentialGraph,
-		specProvider: pathmatcher.NewSpecProvider(ctx, finalResolvers),
+		specProvider: specProvider,
 		repoCache:    make(map[string]repository.ComponentVersionRepository),
 	}
 

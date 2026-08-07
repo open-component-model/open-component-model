@@ -3,13 +3,14 @@ on:
   schedule:
     - cron: '7 1 * * *'
   workflow_dispatch:
-    inputs:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
+
 jobs:
   stale:  # call reusable workflow from central '.github' repo
-    uses: open-component-model/.github/.github/workflows/stale.yml@e2feabd944a76de399805ecc5414ad22e449ee56 # main
-    secrets: inherit
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
+    uses: open-component-model/.github/.github/workflows/stale.yml@main # zizmor: ignore[unpinned-uses] intentional: trusted internal org workflow, tracked on main to avoid per-commit digest bumps

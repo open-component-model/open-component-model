@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="{{ .Site.Language.Locale | default "en" }}" data-bs-theme="{{ site.Params.doks.colorMode | default "auto" }}">
+{{ partial "head/head" . }}
+{{ partial "head/body-class" . }}
+
+<body class='{{ delimit (.Scratch.Get " class" | default (slice)) " " }}'{{ if eq site.Params.doks.scrollSpy true }} data-bs-spy="scroll" data-bs-target="#toc" data-bs-root-margin="0px 0px -60%" data-bs-smooth-scroll="true" tabindex="0" {{ end }}>
+{{ partial "header/custom-header" . }} <!-- Main content container -->
+{{ if .IsHome }}
+<div class="content">
+  {{ block "main" . }}{{ end }}
+</div>
+{{ else }}
+<div class='wrap container-{{ site.Params.doks.containerBreakpoint | default "lg" }}' role="document">
+  <div class="content">
+    {{ block "main" . }}{{ end }}
+  </div>
+</div>
+{{ end }}
+
+{{ block "sidebar-prefooter" . }}{{ end }}
+{{ block "sidebar-footer" . }}{{ end }}
+
+<!-- Footer partial (rendered only on Home/Landing page) -->
+{{ if .IsHome }}
+{{ partial "footer/footer" . }}
+{{ end }}
+
+{{ partial "footer/script-footer" . }}
+
+
+{{ if .Store.Get "hasMermaid" }}
+{{- $asset := resources.Get "js/mermaid-init.js" -}}
+{{- if not $asset -}}{{ errorf "baseof: mermaid entry asset 'js/mermaid-init.js' not found" }}{{ end -}}
+{{- $opts := dict
+  "minify" (not hugo.IsDevelopment)
+  "sourceMap" (cond hugo.IsDevelopment "inline" "none")
+  "target" "es2020"
+-}}
+{{- $built := $asset | js.Build $opts -}}
+{{- if not $built -}}{{ errorf "baseof: js.Build produced no output for 'js/mermaid-init.js'" }}{{ end -}}
+<script type="module" src="{{ $built.RelPermalink }}"></script>
+{{ end }}
+
+{{ if eq site.Params.doks.toTopButton true -}}
+{{ partial "footer/to-top" . }}
+{{ end }}
+</body>
+
+</html>
