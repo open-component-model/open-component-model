@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"slices"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -84,17 +85,12 @@ func (cfg *Config) Validate() error {
 		return fmt.Errorf("recursive depth %d is not implemented yet (use -1 for infinite recursion or 0 for none)", cfg.Recursive)
 	}
 
-	switch cfg.CopyMode {
-	case "", CopyModeLocalBlobResources, CopyModeAllResources:
-	default:
+	if cfg.UploadType != "" && !slices.Contains(AllUploadTypes, cfg.UploadType) {
+		return fmt.Errorf("invalid uploadType %q (must be one of %q)", cfg.UploadType, AllUploadTypes)
+	}
+	if cfg.CopyMode != "" && !slices.Contains([]CopyMode{CopyModeLocalBlobResources, CopyModeAllResources}, cfg.CopyMode) {
 		return fmt.Errorf("invalid copyMode %q (must be one of %q, %q)",
 			cfg.CopyMode, CopyModeLocalBlobResources, CopyModeAllResources)
-	}
-	switch cfg.UploadType {
-	case "", UploadAsLocalBlob, UploadAsOciArtifact:
-	default:
-		return fmt.Errorf("invalid uploadType %q (must be one of %q, %q)",
-			cfg.UploadType, UploadAsLocalBlob, UploadAsOciArtifact)
 	}
 	return nil
 }
