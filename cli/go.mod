@@ -7,7 +7,6 @@ require (
 	github.com/coreos/go-oidc/v3 v3.19.0
 	github.com/jedib0t/go-pretty/v6 v6.8.2
 	github.com/nlepage/go-tarfs v1.2.1
-	github.com/opencontainers/image-spec v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -18,33 +17,32 @@ require (
 	golang.org/x/term v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260806060845-c76dd0f2a0f9
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260807084407-f42ff650923b
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16
 	ocm.software/open-component-model/bindings/go/constructor v0.0.13
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260806061938-9a58bfdb01b2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260806061938-9a58bfdb01b2
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260807084407-f42ff650923b
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260807084407-f42ff650923b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/github v0.0.0-20260806060845-c76dd0f2a0f9
-	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260806060845-c76dd0f2a0f9
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260806060845-c76dd0f2a0f9
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260806060845-c76dd0f2a0f9
+	ocm.software/open-component-model/bindings/go/github v0.0.0-20260807084407-f42ff650923b
+	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260807084407-f42ff650923b
+	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260807084407-f42ff650923b
+	ocm.software/open-component-model/bindings/go/http v0.0.0-20260807084407-f42ff650923b
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
 	ocm.software/open-component-model/bindings/go/input/file v0.0.5
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260806060845-c76dd0f2a0f9
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260807084407-f42ff650923b
 	ocm.software/open-component-model/bindings/go/oci v0.0.49
 	ocm.software/open-component-model/bindings/go/plugin v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.10
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260806060845-c76dd0f2a0f9
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260807084407-f42ff650923b
 	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260806060845-c76dd0f2a0f9
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260806060845-c76dd0f2a0f9
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260806060845-c76dd0f2a0f9
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260806061938-9a58bfdb01b2
-	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260806060845-c76dd0f2a0f9
-	oras.land/oras-go/v2 v2.6.2
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260807084407-f42ff650923b
+	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260807084407-f42ff650923b
+	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260807084407-f42ff650923b
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260807084407-f42ff650923b
+	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260807084407-f42ff650923b
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -103,6 +101,7 @@ require (
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -135,6 +134,7 @@ require (
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
+	oras.land/oras-go/v2 v2.6.2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
