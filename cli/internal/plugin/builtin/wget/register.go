@@ -24,6 +24,7 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	filesystemConfig *filesystemv1alpha1.Config,
 ) error {
 	method := &wgetinput.InputMethod{
+		TempFolder: filesystemConfig.TempFolder,
 		HTTPConfig: httpConfig,
 	}
 

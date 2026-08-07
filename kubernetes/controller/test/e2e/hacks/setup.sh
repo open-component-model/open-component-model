@@ -114,8 +114,11 @@ kubectl wait pod -l app=protected-registry2 --for condition=Ready --timeout 5m |
 # Install flux operators
 flux install || exit 1
 # Install argo cd
+# If needed, overwrite the ARGOCD_VERSION. We install stable to make sure that our deployment
+# always works with the latest argo installation.
+argocd_version="${ARGOCD_VERSION:-stable}"
 kubectl create namespace argocd
-kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml || exit 1
+kubectl apply -n argocd --server-side --force-conflicts -f "https://raw.githubusercontent.com/argoproj/argo-cd/${argocd_version}/manifests/install.yaml" || exit 1
 
 kubectl wait -n argocd deployment \
     argocd-server \

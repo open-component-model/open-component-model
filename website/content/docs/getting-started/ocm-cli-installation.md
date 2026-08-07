@@ -36,6 +36,70 @@ curl -sfL https://ocm.software/install-cli.sh | {{< site-version "env" >}}bash
 ```
 
 {{< /tab >}}
+{{< tab "OCM Component" >}}
+
+OCM distributes its own CLI as an OCM component version, the same mechanism it enables
+for your software.
+
+{{< callout title="Requires an existing OCM installation" icon="outline/info-circle" >}}
+This method needs `ocm` already on your PATH. For a first install, use the `wget` or `curl`
+tab instead. If you have Docker but no `ocm`, see the [Docker bootstrap](#docker-bootstrap)
+section below.
+{{< /callout >}}
+
+Download the CLI binary for your platform. Replace `os` and `architecture` as needed
+(`linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`, `windows/arm64`).
+The binary will be downloaded to the current working directory (specify `--output` to set the full output path, including filename):
+
+```shell
+ocm download resource \
+  ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}} \
+  --identity os=linux,architecture=amd64
+```
+
+Then make the downloaded binary executable and move it to your PATH:
+
+```shell
+chmod +x ./ocm
+mkdir -p $HOME/.local/bin
+mv ./ocm $HOME/.local/bin/ocm
+```
+
+{{< callout title="Windows" icon="outline/info-circle" >}}
+The resource is downloaded as `ocm.exe` for Windows platform if not specified otherwise using the `--output` option.
+Make sure to add the directory containing `ocm.exe` to your PATH.
+{{< /callout >}}
+
+To inspect the full component version before downloading:
+
+```shell
+ocm get cv ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}} -o yaml
+```
+
+<details id="docker-bootstrap">
+<summary>Docker bootstrap (no existing OCM installation)</summary>
+
+Use the official OCM container image as a one-time downloader. The image contains the
+`ocm` binary and writes the downloaded resource to its working directory, which you can
+map to a local path via a volume mount:
+
+```shell
+mkdir -p "$HOME/.local/bin"
+docker run --rm \
+  -v "$HOME/.local/bin:/workspace" \
+  -w /workspace \
+  ghcr.io/open-component-model/cli:{{< site-version "semver" >}} \
+  download resource \
+  ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}} \
+  --identity os=linux,architecture=amd64
+chmod +x "$HOME/.local/bin/ocm"
+```
+
+Replace `os` and `architecture` with your platform. This approach works on Linux and macOS.
+
+</details>
+
+{{< /tab >}}
 {{< tab "Build from Source" >}}
 
 {{< callout title="Note" icon="outline/info-circle" >}}
@@ -137,6 +201,15 @@ Expected output:
 {"major":"0","minor":"1","patch":"0","gitVersion":"0.1.0","goVersion":"go1.26.0","compiler":"gc","platform":"darwin/arm64"}
 ```
 
+{{< callout title="If the output looks different" icon="outline/info-circle" >}}
+If the field names are **capitalised** (`Major`, `Minor`, `Patch`), you are running the legacy v1
+CLI, not v2. A previous v1 installation is shadowing the new binary. Run `which ocm` (Linux/macOS)
+or `where.exe ocm` (Windows) to see which binary is active — then either move `~/.local/bin` earlier
+in your PATH or remove the v1 binary. Common v1 install locations are `/opt/homebrew/bin`
+(Homebrew), `/usr/local/bin` (old install script), `~/go/bin` (built from source), and the Nix
+profile store.
+{{< /callout >}}
+
 ## Verify Binary Authenticity
 
 The install script automatically verifies binaries using [GitHub attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds) when the [GitHub CLI](https://cli.github.com/) is authenticated.
@@ -146,7 +219,7 @@ If automatic verification is unavailable, you can verify manually using one of t
 
 {{< tab "GitHub CLI" >}}
 
-The simplest method. Requires the [GitHub CLI](https://cli.github.com/) with authentication.
+The simplest method: requires the [GitHub CLI](https://cli.github.com/) with authentication.
 
 ```shell
 gh auth login --hostname github.com
