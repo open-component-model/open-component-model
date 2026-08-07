@@ -240,18 +240,21 @@ func buildKustomizeOCILayout(ctx context.Context, exampleDir string) error {
 }
 
 // tarGzipDir writes a gzip'd tar of dir's contents (paths relative to dir) to w.
+// Uses os.Root to avoid symlink TOCTOU.
 func tarGzipDir(w io.Writer, dir string) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
 	gw := gzip.NewWriter(w)
 	tw := tar.NewWriter(gw)
-	walkErr := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	walkErr := fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		if rel == "." {
+		if path == "." {
 			return nil
 		}
 		info, err := d.Info()
@@ -262,14 +265,14 @@ func tarGzipDir(w io.Writer, dir string) error {
 		if err != nil {
 			return err
 		}
-		hdr.Name = filepath.ToSlash(rel)
+		hdr.Name = filepath.ToSlash(path)
 		if err := tw.WriteHeader(hdr); err != nil {
 			return err
 		}
 		if d.IsDir() {
 			return nil
 		}
-		f, err := os.Open(path)
+		f, err := root.Open(path)
 		if err != nil {
 			return err
 		}
@@ -373,7 +376,6 @@ func GetResourceField(ctx context.Context, resource, fieldSelector string) (stri
 		return "", err
 	}
 
-	result := strings.TrimSpace(string(output))
-	result = strings.ReplaceAll(result, "'", "")
+	result := strings.Trim(strings.TrimSpace(string(output)), "'")
 	return result, nil
 }
