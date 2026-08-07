@@ -121,12 +121,13 @@ jobs:
 
       - name: Guard version ceiling
         env:
-          VERSION: ${{ steps.version.outputs.new_tag }}
+          NEW_TAG: ${{ steps.version.outputs.new_tag }}
         run: |
-          major=$(echo "$VERSION" | cut -d. -f1)
-          minor=$(echo "$VERSION" | cut -d. -f2)
+          version="${NEW_TAG#bindings/go/v}"
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
           if [ "$major" -ne 0 ] || [ "$minor" -ne 0 ]; then
-            echo "::error::Version $VERSION exceeds 0.0.x ceiling — remove this guard when ready for 0.1.0"
+            echo "::error::Version $version exceeds 0.0.x ceiling — remove this guard when ready for 0.1.0"
             exit 1
           fi
 
