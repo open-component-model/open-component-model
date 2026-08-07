@@ -8,6 +8,7 @@ import (
 
 	"ocm.software/open-component-model/cli/cmd/add"
 	"ocm.software/open-component-model/cli/cmd/configuration"
+	deletecmd "ocm.software/open-component-model/cli/cmd/delete"
 	"ocm.software/open-component-model/cli/cmd/describe"
 	"ocm.software/open-component-model/cli/cmd/download"
 	"ocm.software/open-component-model/cli/cmd/generate"
@@ -59,6 +60,7 @@ func New() *cobra.Command {
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())
 	cmd.AddCommand(add.New())
+	cmd.AddCommand(deletecmd.New())
 	cmd.AddCommand(version.New())
 	cmd.AddCommand(download.New())
 	cmd.AddCommand(verify.New())

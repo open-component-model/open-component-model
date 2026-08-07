@@ -170,6 +170,30 @@ type HealthCheckable interface {
 	CheckHealth(ctx context.Context) error
 }
 
+// ComponentVersionDeleter is an optional capability of a
+// ComponentVersionRepository. It removes a component version and the
+// content it exclusively owns from the underlying store.
+//
+// Implementations MUST NOT remove content that is still referenced by another
+// surviving component version in the same store. Reclamation of unreferenced
+// blobs MAY be delegated to the backend's own garbage collector (e.g. an OCI
+// registry) or performed explicitly (e.g. a CTF archive prune).
+type ComponentVersionDeleter interface {
+	// DeleteComponentVersion removes the given component version from the
+	// repository. It untags the version, drops any referrer bookkeeping, and
+	// removes the version's top-level manifest/index. Blobs owned exclusively by
+	// this version are reclaimed according to the backend's capabilities.
+	//
+	// Returns ErrNotFound (joined with the backend error) if the
+	// version does not exist. Returns ErrDeleteUnsupported if the backing store
+	// cannot delete (e.g. a registry with tag/manifest deletion disabled, or a
+	// read-only store).
+	DeleteComponentVersion(ctx context.Context, component, version string) error
+}
+
+// ErrDeleteUnsupported indicates the backing store does not permit deletion.
+var ErrDeleteUnsupported = errors.New("component version deletion not supported by store")
+
 // ComponentVersionRepositorySpecProvider defines the interface for resolving repository specifications
 // based on a given component identity.
 type ComponentVersionRepositorySpecProvider interface {
