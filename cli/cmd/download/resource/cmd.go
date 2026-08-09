@@ -269,9 +269,7 @@ func fallbackFileName(resource *descriptor.Resource) string {
 	return name
 }
 
-// sanitizeFileName maps characters that are unsafe in a filename to '-'. Extra identity
-// values are unconstrained, so this stops a value such as "windows/amd64" from injecting a
-// path separator into the fallback name, which is written relative to the working directory.
+// sanitizeFileName replaces characters unsafe in a filename (e.g. '/' in "windows/amd64") with '-'.
 func sanitizeFileName(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
