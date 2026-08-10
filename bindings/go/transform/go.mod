@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/google/cel-go v0.29.1
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260807165644-f53677f7cbb9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
