@@ -214,6 +214,9 @@ is set, and a client certificate has no effect on a plain `http://` URL.
 [`Wget`]({{< relref "credential-consumer-identities.md#wget" >}}) consumer identities, covering both the
 [`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
 [`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}).
+
+---
+
 ## GitHubCredentials/v1
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/github/v1/GitHubCredentials.schema.json" >}}

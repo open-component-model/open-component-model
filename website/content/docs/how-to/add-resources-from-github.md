@@ -126,8 +126,8 @@ EOF
 
 {{< callout context="note" >}}
 The `ref` is resolved and replaced by the commit it points at while the component version is built, so this ends up
-identical to the pinned-commit variant in the descriptor. Which one to write is a question of what you want to happen
-at build time — see [Pin to a commit](#pin-to-a-commit).
+identical to the pinned-commit variant in the descriptor. Which one to write is a question of what you want pinned at
+build time: a commit you already know, or whatever the branch or tag points at right now.
 {{< /callout >}}
 
 {{< /tab >}}

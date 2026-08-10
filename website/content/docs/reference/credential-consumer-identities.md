@@ -42,13 +42,8 @@ The following types are defined by the core OCM modules:
 | [`OCIRegistry`](#ociregistry)                 | Authenticating against OCI registries           |
 | [`HelmChartRepository`](#helmchartrepository) | Authenticating against Helm chart repositories  |
 | [`Wget`](#wget)                               | Authenticating against plain HTTP/HTTPS servers |
+| [`GitHubRepository`](#githubrepository)       | Authenticating against the GitHub REST API      |
 | [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys         |
-| Identity Type                                 | Used For                                       |
-|-----------------------------------------------|------------------------------------------------|
-| [`OCIRegistry`](#ociregistry)                 | Authenticating against OCI registries          |
-| [`HelmChartRepository`](#helmchartrepository) | Authenticating against Helm chart repositories |
-| [`GitHubRepository`](#githubrepository)       | Authenticating against the GitHub REST API     |
-| [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys        |
 
 ---
 
@@ -300,6 +295,9 @@ so the symptom is a `401` from the server rather than a configuration error.
 For migrating a Wget consumer entry from OCM v1, covering the renamed identity type, the `pathprefix` to `path`
 conversion, and the inverted authentication precedence, see
 [Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#credential-changes" >}}).
+
+---
+
 ## GitHubRepository
 
 Used when OCM resolves or downloads a resource with a `GitHub/v1` access — resolving a ref to a commit or fetching a
