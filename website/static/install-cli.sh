@@ -102,10 +102,17 @@ ensure_path() {
             ;;
     esac
 
+    local shell_rc
+    if [[ "${OS}" == "darwin" ]]; then
+        shell_rc="${HOME}/.zshrc"
+    else
+        shell_rc="${HOME}/.profile"
+    fi
+
     warn "${BIN_DIR} is not in your PATH."
     warn "Add it by running:"
     warn ""
-    warn '  echo "export PATH=${BIN_DIR}:$PATH" >> ~/.profile && source ~/.profile'
+    warn "  echo 'export PATH=\"\$PATH:${BIN_DIR}\"' >> ${shell_rc} && source ${shell_rc}"
     warn ""
 }
 
