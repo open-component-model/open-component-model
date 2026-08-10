@@ -68,7 +68,7 @@ Use to validate component versions before promotion, deployment, or further usag
 		),
 		Example: strings.TrimSpace(`
 # Verify all component version signatures found in a component version
-verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
+verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 
 ## Example Credential Config (Plain encoding — bare public key)
 #
@@ -159,13 +159,13 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
             trusted_root_json_file: /path/to/trusted_root.json
 
 # Verify with Sigstore verifier spec:
-verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./sigstore-verify.yaml
+verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --verifier-spec ./sigstore-verify.yaml
 
 # Verify a specific signature
-verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
 
 # Use a verifier specification file
-verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./rsassa-pss.yaml
+verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --verifier-spec ./rsassa-pss.yaml
 `),
 		RunE:              VerifyComponentVersion,
 		DisableAutoGenTag: true,

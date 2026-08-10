@@ -85,7 +85,7 @@ Use this command to establish provenance of component versions.`,
 		),
 		Example: strings.TrimSpace(`
 # Sign a component version with default algorithms
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 
 ## Example Credential Config (.ocmconfig) — Plain encoding (default)
 #
@@ -192,19 +192,19 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 # OCM also stores this value in signatures[].signature.issuer for convenience.
 
 # Sign with Sigstore (requires sigstore signer spec):
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./sigstore-sign.yaml
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signer-spec ./sigstore-sign.yaml
 
 # Sign with custom signature name
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
 
 # Use a signer specification file to override algorithm defaults
-sign component-version ./repo/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./rsassa-pss.yaml
+sign component-version ./repo//ocm.software/cli:0.12.0 --signer-spec ./rsassa-pss.yaml
 
 # Dry-run signing
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature test --dry-run
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature test --dry-run
 
 # Force overwrite an existing signature
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature --force`),
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature --force`),
 		RunE:              SignComponentVersion,
 		DisableAutoGenTag: true,
 	}
