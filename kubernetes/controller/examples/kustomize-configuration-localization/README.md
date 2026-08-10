@@ -21,7 +21,7 @@ oras push --oci-layout ./oci-layout:latest \
 ```
 
 The layer's `application/vnd.cncf.flux.content.v1.tar+gzip` media type is
-what Flux `OCIRepository` and ArgoCD expect. ArgoCD additionally requires
+what Flux's `OCIRepository` and ArgoCD expect. ArgoCD additionally requires
 this media type in its `ARGOCD_REPO_SERVER_OCI_LAYER_MEDIA_TYPES` allowlist.
 
 `ocm add cv` recognizes the OCM layout media type, unpacks the layout, and
