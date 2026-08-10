@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/transfer
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/opencontainers/image-spec v1.1.1
