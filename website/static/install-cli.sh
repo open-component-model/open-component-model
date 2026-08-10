@@ -112,7 +112,7 @@ ensure_path() {
     warn "${BIN_DIR} is not in your PATH."
     warn "Add it by running:"
     warn ""
-    warn "  echo 'export PATH=\"\$PATH:${BIN_DIR}\"' >> ${shell_rc} && source ${shell_rc}"
+    warn "  echo 'export PATH=\"\$PATH:${BIN_DIR}\"' >> \"${shell_rc}\" && source \"${shell_rc}\""
     warn ""
 }
 
