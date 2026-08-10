@@ -28,7 +28,7 @@ this media type in its `ARGOCD_REPO_SERVER_OCI_LAYER_MEDIA_TYPES` allowlist.
 stores the contained manifest as a native OCI artifact. After
 `ocm transfer cv`, `resource.access.toOCI()` returns
 `<registry>/<subPath>/component-descriptors/<component>@<digest>`, which the
-RGD feeds into the `OCIRepository` and ArgoCD `Application`.
+RGD feeds into the `OCIRepository` and an ArgoCD `Application`.
 
 ## Editing the kustomize manifests
 
