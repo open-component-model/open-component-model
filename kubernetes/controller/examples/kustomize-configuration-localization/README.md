@@ -32,7 +32,7 @@ RGD feeds into the `OCIRepository` and an ArgoCD `Application`.
 
 ## Editing the kustomize manifests
 
-Edit files under `./kustomize/`. Rebuild `./oci-layout/` afterwards; do not
+Edit the files under `./kustomize/`, rebuild `./oci-layout/` afterwards. Do not
 commit it.
 
 References:
