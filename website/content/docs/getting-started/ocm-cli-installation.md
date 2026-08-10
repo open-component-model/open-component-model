@@ -223,7 +223,9 @@ The simplest method. Requires the [GitHub CLI](https://cli.github.com/) with aut
 
 ```shell
 gh auth login --hostname github.com
-gh attestation verify $(which ocm) --repo open-component-model/open-component-model
+# Set this to the binary you installed (adjust the path if you used a custom name or directory).
+binary="${HOME}/.local/bin/ocm"
+gh attestation verify "$binary" --repo open-component-model/open-component-model
 ```
 
 {{< /tab >}}
@@ -233,9 +235,12 @@ Uses [Sigstore cosign](https://docs.sigstore.dev/cosign/signing/overview/) to cr
 No GitHub authentication required. The attestation API is public.
 
 ```shell
+# Set this to the binary you installed (adjust the path if you used a custom name or directory).
+binary="${HOME}/.local/bin/ocm"
+
 # Compute the binary's SHA-256 digest
-DIGEST="sha256:$(sha256sum $(which ocm) | cut -d' ' -f1)"
-# On macOS, use: DIGEST="sha256:$(shasum -a 256 $(which ocm) | cut -d' ' -f1)"
+DIGEST="sha256:$(sha256sum "$binary" | cut -d' ' -f1)"
+# On macOS, use: DIGEST="sha256:$(shasum -a 256 "$binary" | cut -d' ' -f1)"
 
 # Download the Sigstore attestation bundle from the public GitHub API
 curl -sfL \
@@ -250,7 +255,7 @@ cosign verify-blob-attestation \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
     '^https://github\.com/open-component-model/open-component-model/\.github/workflows/cli\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v[0-9]+\.[0-9]+\.[0-9]+)' \
-  $(which ocm)
+  "$binary"
 ```
 
 A successful verification proves the binary was built by the project's GitHub Actions workflow and signed via Sigstore OIDC.
@@ -261,9 +266,12 @@ A successful verification proves the binary was built by the project's GitHub Ac
 Verify integrity by comparing your binary's hash against the digests recorded in the attestation (no extra tools needed beyond `curl` and `jq`).
 
 ```shell
+# Set this to the binary you installed (adjust the path if you used a custom name or directory).
+binary="${HOME}/.local/bin/ocm"
+
 # Compute the binary's SHA-256 digest
-DIGEST="sha256:$(sha256sum $(which ocm) | cut -d' ' -f1)"
-# On macOS, use: DIGEST="sha256:$(shasum -a 256 $(which ocm) | cut -d' ' -f1)"
+DIGEST="sha256:$(sha256sum "$binary" | cut -d' ' -f1)"
+# On macOS, use: DIGEST="sha256:$(shasum -a 256 "$binary" | cut -d' ' -f1)"
 
 # Fetch expected digests from the attestation
 curl -sfL \

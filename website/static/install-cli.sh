@@ -15,6 +15,10 @@ if [[ "${BIN_DIR}" != "/" ]]; then
     BIN_DIR="${BIN_DIR%/}"
 fi
 BIN_FILE="${OCM_BIN_NAME:-ocm}"
+if [[ "${BIN_FILE}" == */* || "${BIN_FILE}" == "." || "${BIN_FILE}" == ".." ]]; then
+    printf 'OCM_BIN_NAME must be a filename without path separators\n' >&2
+    exit 1
+fi
 GITHUB_REPO="open-component-model/open-component-model"
 
 usage() {
