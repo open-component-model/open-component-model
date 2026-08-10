@@ -125,9 +125,9 @@ EOF
 ```
 
 {{< callout context="note" >}}
-The `ref` is resolved and replaced by the commit it points at while the component version is built, so this ends up
-identical to the pinned-commit variant in the descriptor. Which one to write is a question of what you want pinned at
-build time: a commit you already know, or whatever the branch or tag points at right now.
+The `ref` is resolved to a commit while the component version is built, and that commit is added to the access. The `ref`
+itself stays for provenance. Which one to write is a question of what you want pinned at build time: 
+a commit you already know, or whatever the branch or tag points at right now.
 {{< /callout >}}
 
 {{< /tab >}}
@@ -284,7 +284,7 @@ The output is the gzipped tar archive GitHub serves, written as a single file. U
   Fetch the resource you just added
 - [How-To: Air-Gap Transfer]({{< relref "docs/how-to/air-gap-transfer.md" >}}) - Move component versions into
   disconnected environments
-- [How-To: Sign and Verify]({{< relref "docs/how-to/sign-and-verify.md" >}}) - Cover the digest you just recorded with
+- [How-To: Sign a Component Version]({{< relref "sign-component-version.md" >}}) - Cover the digest you just recorded with
   a signature
 
 ## Related Documentation

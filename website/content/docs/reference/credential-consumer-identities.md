@@ -307,13 +307,13 @@ optional; see the note on anonymous access under
 
 ### Identity Attributes
 
-| Attribute  | Required | Description                                                                        |
-|------------|----------|------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `GitHubRepository`                                                         |
-| `hostname` | Yes      | Repository hostname (e.g. `github.com`, a GitHub Enterprise host)                  |
-| `path`     | No       | Repository path (e.g. `open-component-model/ocm`). If omitted, matches any path.   |
-| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme.                      |
-| `port`     | No       | Port number as string. If omitted, matches any port.                               |
+| Attribute  | Required | Description                                                                                        |
+|------------|----------|----------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `GitHubRepository`                                                                         |
+| `hostname` | Yes      | Repository hostname (e.g. `github.com`, a GitHub Enterprise host)                                  |
+| `path`     | No       | Repository path (e.g. `open-component-model/ocm`). If omitted, matches any path.                   |
+| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme.                                      |
+| `port`     | No       | Port number as string. When `scheme` is set, default ports apply (`https` → `443`, `http` → `80`). |
 
 ### Credential Properties
 

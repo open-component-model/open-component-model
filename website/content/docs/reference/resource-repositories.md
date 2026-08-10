@@ -231,9 +231,15 @@ The credential consumer identity is derived from the `repoUrl` field in the acce
 | `scheme`   | `https`                     |
 | `path`     | `open-component-model/ocm`  |
 
-This identity works the same way for GitHub Enterprise hosts. Credentials are optional: without them requests are
-anonymous, subject to GitHub's per-IP rate limit, and private repositories answer 404. When credentials resolve, their
-`token` property (a GitHub or GitHub Enterprise access token) authenticates against the GitHub REST API.
+The identity is derived from `repoUrl` on GitHub Enterprise hosts too. Credentials are optional: without them requests
+are anonymous, subject to GitHub's per-IP rate limit, and private repositories answer 404. When credentials resolve,
+their `token` property (a GitHub or GitHub Enterprise access token) authenticates against the GitHub REST API.
+
+{{< callout context="caution" >}}
+`apiHostname` does not change the consumer identity. When the REST API lives on a host other than the repository, the
+identity still carries the `repoUrl` host, so configure the consumer for that host rather than for `apiHostname`. The
+resolved token is then sent to the `apiHostname` host.
+{{< /callout >}}
 
 See [Credential Consumer Identities: GitHubRepository]({{< relref "credential-consumer-identities.md" >}}#githubrepository)
 for matching rules.
