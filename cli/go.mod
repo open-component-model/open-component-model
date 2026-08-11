@@ -117,7 +117,7 @@ require (
 	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
