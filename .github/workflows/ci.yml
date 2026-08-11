@@ -80,7 +80,9 @@ jobs:
             ).split('\n').filter(Boolean);
 
             // Replace the single "bindings/go" entry with individual binding dirs
-            const modules = goModModules.concat(bindingTaskfiles);
+            const modules = goModModules
+              .filter(m => m !== 'bindings/go')
+              .concat(bindingTaskfiles);
 
             // Generate filters for paths-filter
             const filters = modules.map(module => {
