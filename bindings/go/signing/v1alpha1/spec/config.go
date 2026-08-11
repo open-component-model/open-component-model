@@ -53,8 +53,8 @@ type Config struct {
 	// +ocm:jsonschema-gen:enum:deprecated=signing.config.ocm.software
 	Type runtime.Type `json:"type"`
 
-	// Signature is the name of the signature this entry applies to, the same
-	// name that defines the credentials used to produce it. If empty, the entry
+	// Signature is the name of the signature this config applies to, the same
+	// name that defines the credentials used to produce it. If empty, the config
 	// applies to every signature.
 	Signature string `json:"signature,omitempty"`
 
@@ -123,7 +123,7 @@ func LookupConfigForSignature(cfg *genericv1.Config, signature string) (*Config,
 		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
 
-	// we need configurations first that are without signature and then those that are with
+	// we first need the configurations without a signature, then those which have a
 	// signature.
 	noSignatureConfigurations := make([]*Config, 0, len(filtered.Configurations))
 	withSignatureConfigurations := make([]*Config, 0, len(filtered.Configurations))

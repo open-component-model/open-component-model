@@ -8,7 +8,7 @@
   "properties": {
     "signature": {
       "type": "string",
-      "description": "Signature is the name of the signature this entry applies to, the same\nname that defines the credentials used to produce it. If empty, the entry\napplies to every signature."
+      "description": "Signature is the name of the signature this config applies to, the same\nname that defines the credentials used to produce it. If empty, the config\napplies to every signature."
     },
     "signer": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
