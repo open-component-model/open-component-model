@@ -40,6 +40,7 @@ func init() {
 //	      type: RSASigningConfiguration/v1alpha1
 //	      signatureAlgorithm: RSASSA-PSS
 //	      signatureEncodingPolicy: Plain
+//	      signature: release
 //	    verifier:
 //	      type: RSASigningConfiguration/v1alpha1
 //
@@ -51,6 +52,11 @@ type Config struct {
 	// +ocm:jsonschema-gen:enum=signing.config.ocm.software/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=signing.config.ocm.software
 	Type runtime.Type `json:"type"`
+
+	// Signature is the name of the signature this entry applies to, the same
+	// name that defines the credentials used to produce it. If empty, the entry
+	// applies to every signature.
+	Signature string `json:"signature,omitempty"`
 
 	// Signer is the signer specification used when signing a component version
 	// (using `ocm sign component-version`). Its runtime type selects
@@ -93,10 +99,17 @@ func (cfg *Config) Validate() error {
 	return nil
 }
 
-// LookupConfig extracts the signing configuration from a central generic
-// config. All entries of type [ConfigType] are decoded, validated, and merged
-// via [Merge]. Returns nil if cfg is nil or contains no signing entries.
+// LookupConfig extracts the signing configuration that applies to every
+// signature. Entries scoped to a signature are ignored.
 func LookupConfig(cfg *genericv1.Config) (*Config, error) {
+	return LookupConfigForSignature(cfg, "")
+}
+
+// LookupConfigForSignature extracts the signing configuration for the given
+// signature name. Entries applying to every signature are merged first, then
+// the ones scoped to that name, so a scoped entry wins regardless of file
+// order. Returns nil if no entry applies.
+func LookupConfigForSignature(cfg *genericv1.Config, signature string) (*Config, error) {
 	if cfg == nil {
 		return nil, nil
 	}
@@ -109,7 +122,11 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
-	cfgs := make([]*Config, 0, len(filtered.Configurations))
+
+	// we need configurations first that are without signature and then those that are with
+	// signature.
+	noSignatureConfigurations := make([]*Config, 0, len(filtered.Configurations))
+	withSignatureConfigurations := make([]*Config, 0, len(filtered.Configurations))
 	for _, entry := range filtered.Configurations {
 		var config Config
 		if err := Scheme.Convert(entry, &config); err != nil {
@@ -118,14 +135,20 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 		if err := config.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid signing config: %w", err)
 		}
-		cfgs = append(cfgs, &config)
+		switch config.Signature {
+		case "":
+			noSignatureConfigurations = append(noSignatureConfigurations, &config)
+		case signature:
+			withSignatureConfigurations = append(withSignatureConfigurations, &config)
+		}
 	}
-	return Merge(cfgs...), nil
+	// preserve overwrite ordering.
+	return Merge(append(noSignatureConfigurations, withSignatureConfigurations...)...), nil
 }
 
 // Merge merges the provided configs into a single config. Later entries win: a
-// non-nil Signer or Verifier overrides whatever earlier entries set. Returns
-// nil if no configs are provided.
+// non-nil Signer or Verifier and a non-empty Signature override whatever
+// earlier entries set. Returns nil if no configs are provided.
 func Merge(configs ...*Config) *Config {
 	if len(configs) == 0 {
 		return nil
@@ -136,6 +159,9 @@ func Merge(configs ...*Config) *Config {
 	for _, cfg := range configs {
 		if cfg == nil {
 			continue
+		}
+		if cfg.Signature != "" {
+			merged.Signature = cfg.Signature
 		}
 		if cfg.Signer != nil {
 			merged.Signer = cfg.Signer
