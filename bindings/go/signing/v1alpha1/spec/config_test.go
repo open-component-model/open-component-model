@@ -102,6 +102,23 @@ configurations:
 	}
 }
 
+func TestConfig_ParseYAML_Signature(t *testing.T) {
+	yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: signing.config.ocm.software/v1alpha1
+    signature: release
+    signer:
+      type: SigstoreSigningConfiguration/v1alpha1
+`
+	var generic genericv1.Config
+	require.NoError(t, genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+
+	var cfg spec.Config
+	require.NoError(t, spec.Scheme.Convert(generic.Configurations[0], &cfg))
+	assert.Equal(t, "release", cfg.Signature)
+}
+
 func TestConfig_ParseYAML_PreservesSignerFields(t *testing.T) {
 	yaml := `
 type: generic.config.ocm.software/v1
@@ -184,6 +201,16 @@ func TestMerge(t *testing.T) {
 		require.NotNil(t, merged)
 		assert.Equal(t, rsaSignerType(), merged.Signer.GetType())
 	})
+
+	t.Run("later non-empty signature wins", func(t *testing.T) {
+		a := &spec.Config{Signature: "release", Signer: rsa}
+		b := &spec.Config{Signer: sigstore}
+
+		merged := spec.Merge(a, b)
+		require.NotNil(t, merged)
+		assert.Equal(t, "release", merged.Signature)
+		assert.Equal(t, sigstoreSignerType(), merged.Signer.GetType())
+	})
 }
 
 func TestLookupConfig(t *testing.T) {
@@ -257,6 +284,118 @@ configurations:
 `)
 		_, err := spec.LookupConfig(generic)
 		require.ErrorContains(t, err, "signer specification must have a type")
+	})
+
+	t.Run("scoped entries are ignored without a signature", func(t *testing.T) {
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: signing.config.ocm.software/v1alpha1
+    signature: release
+    signer:
+      type: SigstoreSigningConfiguration/v1alpha1
+`)
+		cfg, err := spec.LookupConfig(generic)
+		require.NoError(t, err)
+		assert.Nil(t, cfg)
+	})
+}
+
+func TestLookupConfigForSignature(t *testing.T) {
+	decode := func(t *testing.T, yaml string) *genericv1.Config {
+		t.Helper()
+		var generic genericv1.Config
+		require.NoError(t, genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+		return &generic
+	}
+
+	perSignature := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: signing.config.ocm.software/v1alpha1
+    signature: release
+    signer:
+      type: SigstoreSigningConfiguration/v1alpha1
+  - type: signing.config.ocm.software/v1alpha1
+    signer:
+      type: RSASigningConfiguration/v1alpha1
+      signatureAlgorithm: RSASSA-PSS
+`
+
+	t.Run("nil config", func(t *testing.T) {
+		cfg, err := spec.LookupConfigForSignature(nil, "release")
+		require.NoError(t, err)
+		assert.Nil(t, cfg)
+	})
+
+	t.Run("scoped entry wins over the unscoped fallback", func(t *testing.T) {
+		cfg, err := spec.LookupConfigForSignature(decode(t, perSignature), "release")
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		require.NotNil(t, cfg.Signer)
+		assert.Equal(t, sigstoreSignerType(), cfg.Signer.GetType())
+		assert.Equal(t, "release", cfg.Signature)
+	})
+
+	t.Run("signature without an entry falls back to the unscoped entry", func(t *testing.T) {
+		cfg, err := spec.LookupConfigForSignature(decode(t, perSignature), "default")
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		require.NotNil(t, cfg.Signer)
+		assert.Equal(t, rsaSignerType(), cfg.Signer.GetType())
+		assert.Empty(t, cfg.Signature)
+	})
+
+	t.Run("entries of other signatures are ignored", func(t *testing.T) {
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: signing.config.ocm.software/v1alpha1
+    signature: release
+    signer:
+      type: SigstoreSigningConfiguration/v1alpha1
+`)
+		cfg, err := spec.LookupConfigForSignature(generic, "internal")
+		require.NoError(t, err)
+		assert.Nil(t, cfg)
+	})
+
+	t.Run("unscoped verifier falls through to a scoped entry", func(t *testing.T) {
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: signing.config.ocm.software/v1alpha1
+    verifier:
+      type: RSASigningConfiguration/v1alpha1
+  - type: signing.config.ocm.software/v1alpha1
+    signature: release
+    signer:
+      type: SigstoreSigningConfiguration/v1alpha1
+`)
+		cfg, err := spec.LookupConfigForSignature(generic, "release")
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, sigstoreSignerType(), cfg.Signer.GetType())
+		assert.Equal(t, rsaSignerType(), cfg.Verifier.GetType())
+	})
+
+	t.Run("last scoped entry wins", func(t *testing.T) {
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: signing.config.ocm.software/v1alpha1
+    signature: release
+    signer:
+      type: RSASigningConfiguration/v1alpha1
+  - type: signing.config.ocm.software/v1alpha1
+    signature: release
+    signer:
+      type: SigstoreSigningConfiguration/v1alpha1
+`)
+		cfg, err := spec.LookupConfigForSignature(generic, "release")
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, sigstoreSignerType(), cfg.Signer.GetType())
 	})
 }
 
