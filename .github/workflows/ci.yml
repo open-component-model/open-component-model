@@ -68,21 +68,9 @@ jobs:
           script: |
             const { execSync } = require('child_process');
 
-            // Get go.mod-based modules (cli, kubernetes/controller, etc.)
+            // Get all Go modules using task
             const modulesOutput = execSync('task go_modules --output interleaved', { encoding: 'utf-8' });
-            const goModModules = modulesOutput.split('\n').filter(Boolean);
-
-            // For bindings/go, discover per-binding Taskfile directories instead of using
-            // the single go.mod entry. This preserves per-binding parallelism in CI.
-            const bindingTaskfiles = execSync(
-              "find bindings/go -maxdepth 3 -name Taskfile.yml -exec dirname {} \\;",
-              { encoding: 'utf-8' }
-            ).split('\n').filter(Boolean);
-
-            // Replace the single "bindings/go" entry with individual binding dirs
-            const modules = goModModules
-              .filter(m => m !== 'bindings/go')
-              .concat(bindingTaskfiles);
+            const modules = modulesOutput.split('\n').filter(Boolean);
 
             // Generate filters for paths-filter
             const filters = modules.map(module => {
@@ -96,12 +84,6 @@ jobs:
                 lines.push(` - "${parentModule}/**"`);
                 console.log(`🔍 Detected integration test module: ${module}`);
                 console.log(`   └─ Linked to parent module: ${parentModule}`);
-              }
-
-              // Any binding sub-module also triggers on shared files (go.mod, go.sum)
-              if (module.startsWith('bindings/go/')) {
-                lines.push(` - "bindings/go/go.mod"`);
-                lines.push(` - "bindings/go/go.sum"`);
               }
 
               return lines.join('\n');
@@ -321,15 +303,15 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           sparse-checkout: |
-            ${{ startsWith(matrix.module, 'bindings/go/') && 'bindings/go' || matrix.module }}
+            ${{ matrix.module }}
             golangci.yml
             .env
           persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version-file: '${{ github.workspace }}/${{ startsWith(matrix.module, ''bindings/go/'') && ''bindings/go'' || matrix.module }}/go.mod'
-          cache-dependency-path: '${{ github.workspace }}/${{ startsWith(matrix.module, ''bindings/go/'') && ''bindings/go'' || matrix.module }}/go.sum'
+          go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
       - name: Read tool versions
         id: versions
         run: |
@@ -368,8 +350,8 @@ jobs:
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version-file: '${{ github.workspace }}/${{ startsWith(matrix.module, ''bindings/go/'') && ''bindings/go'' || matrix.module }}/go.mod'
-          cache-dependency-path: '${{ github.workspace }}/${{ startsWith(matrix.module, ''bindings/go/'') && ''bindings/go'' || matrix.module }}/go.sum'
+          go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
       - name: Create Docker network for running Testcontainers
         run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
       - name: Run Tests
@@ -396,14 +378,14 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           sparse-checkout: |
-            ${{ startsWith(matrix.module, 'bindings/go/') && 'bindings/go' || matrix.module }}
+            ${{ matrix.module }}
             reuse.Taskfile.yml
           persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version-file: '${{ github.workspace }}/${{ startsWith(matrix.module, ''bindings/go/'') && ''bindings/go'' || matrix.module }}/go.mod'
-          cache-dependency-path: '${{ github.workspace }}/${{ startsWith(matrix.module, ''bindings/go/'') && ''bindings/go'' || matrix.module }}/go.sum'
+          go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
       - name: Run Tests
         env:
           MODULE: ${{ matrix.module }}
