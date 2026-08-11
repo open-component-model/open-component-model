@@ -2,9 +2,9 @@
 
 Go bindings for the Open Component Model.
 
-## Modules
+## Packages
 
-| Module                       | Purpose                                                  |
+| Package                      | Purpose                                                  |
 |------------------------------|----------------------------------------------------------|
 | **runtime**                  | Core type system, JSON/YAML encoding, type registration  |
 | **dag**                      | Directed acyclic graph utilities for dependency handling |
@@ -31,7 +31,7 @@ Go bindings for the Open Component Model.
 
 ## Usage
 
-Import the modules you need:
+Import the packages you need:
 
 ```go
 import (
