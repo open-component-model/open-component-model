@@ -20,4 +20,4 @@ tasks:
 
   test/integration:
     cmds:
-      - go test -run "Integration" -count=1 ./...
+      - go test -run "Integration" -count=1 $(go list ./... | grep -v /sigstore/integration)

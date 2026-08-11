@@ -9,8 +9,9 @@ includes:
   tools:
     taskfile: ./tools.Taskfile.yml
   # bindings/go is a single Go module. Unit tests are run via `bindings/go:test`.
-  # Integration tests are kept as separate includes because they require external
-  # systems (Docker, credentials) and are run individually via `<name>:test/integration`.
+  # Integration tests that only need Docker are run via `bindings/go:test/integration`.
+  # Sigstore integration requires a dedicated scaffolding cluster and runs as a
+  # separate CI job. The other integration includes are for local convenience.
   # The generator include provides code generation tasks used by `task generate`.
   bindings/go:
     optional: true

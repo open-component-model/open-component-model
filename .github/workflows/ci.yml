@@ -72,6 +72,12 @@ jobs:
             const modulesOutput = execSync('task go_modules --output interleaved', { encoding: 'utf-8' });
             const modules = modulesOutput.split('\n').filter(Boolean);
 
+            // Integration test suites that need their own CI job due to special
+            // environment requirements (e.g. sigstore needs a scaffolding cluster).
+            // These are not discovered via go.mod but have their own Taskfile.
+            const standaloneIntegration = ['bindings/go/sigstore/integration'];
+            modules.push(...standaloneIntegration);
+
             // Generate filters for paths-filter
             const filters = modules.map(module => {
               const lines = [`${module}:`];
@@ -350,8 +356,8 @@ jobs:
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
-          cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
+          go-version-file: '${{ github.workspace }}/${{ startsWith(matrix.module, ''bindings/go/'') && ''bindings/go'' || matrix.module }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ startsWith(matrix.module, ''bindings/go/'') && ''bindings/go'' || matrix.module }}/go.sum'
       - name: Create Docker network for running Testcontainers
         run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
       - name: Run Tests
