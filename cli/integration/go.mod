@@ -161,7 +161,7 @@ require (
 	k8s.io/client-go v0.36.2 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
-	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
+	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260807165644-f53677f7cbb9 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.13 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
@@ -181,6 +181,6 @@ require (
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
