@@ -3,6 +3,8 @@ version: '3'
 includes:
   reuse: ../../../reuse.Taskfile.yml
 
+vars:
+  INTEGRATION_TEST_IDENTIFIER: 'Integration'
 
 tasks:
   test:
@@ -10,3 +12,4 @@ tasks:
       - task: reuse:run-go-test
         vars:
           GO_TEST_FLAGS: -race
+          SKIP_PATTERN: '{{ .INTEGRATION_TEST_IDENTIFIER }}'
