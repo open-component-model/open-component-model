@@ -5,25 +5,24 @@ This guide covers development on the OCM Go library in `bindings/go/`. For the g
 
 ## Module Structure
 
-The library is a single Go module (`ocm.software/open-component-model/bindings/go`) split into logical packages, each
-with its own directory and `Taskfile.yml`. For the full list of packages and their purpose, see the
-[package table in the README](README.md#packages).
+The library is a single Go module (`ocm.software/open-component-model/bindings/go`) split into logical packages. For
+the full list of packages and their purpose, see the [package table in the README](README.md#packages).
 
 Modularity is enforced by `depguard` rules in `golangci.yml` — each package declares which sibling packages it may
 import, matching the dependency layers from [ADR 25](../../docs/adr/0025_bindings_ci_and_release_strategy.md). To reason
 about the internal dependency graph between the packages, consult the [dependency table](../../docs/dependency-table.md).
 
-Each package can be developed and tested independently. To work on a specific package:
+Each package can be developed and tested independently:
 
 ```bash
-cd bindings/go/oci
+# Run all binding unit tests
+task bindings/go:test
+
+# Run tests for a specific package
+cd bindings/go && go test ./oci/...
+
+# Run all tests from the repository root
 task test
-```
-
-Or run from the repository root:
-
-```bash
-task bindings/go/oci:test
 ```
 
 ## Breaking API Changes
@@ -47,14 +46,14 @@ All modules use Go's standard `testing` package with [testify](https://github.co
 ### Running Unit Tests
 
 ```bash
-# Run tests for a specific package
-task bindings/go/oci:test
+# Run all binding unit tests
+task bindings/go:test
 
 # Run all library tests from the repository root
 task test
 
 # Run a specific test
-task bindings/go/oci:test -- -run TestResourceRepository
+cd bindings/go && go test ./oci/... -run TestResourceRepository
 ```
 
 ### Running Integration Tests
@@ -99,10 +98,8 @@ Generated files follow the naming convention `zz_generated.deepcopy.go`.
 ## Adding a New Package
 
 1. Create a directory under `bindings/go/<package-name>/`.
-2. Create a `Taskfile.yml` that includes the shared test runner. See `bindings/go/oci/Taskfile.yml` for an example.
-3. Register the package in the root `Taskfile.yml` under `includes:`.
-4. Add `depguard` rules in `golangci.yml` to enforce which sibling packages may be imported.
-5. Update `bindings/go/README.md` with the new package.
+2. Add `depguard` rules in `golangci.yml` to enforce which sibling packages may be imported.
+3. Update `bindings/go/README.md` with the new package.
 
 ## Releasing
 
