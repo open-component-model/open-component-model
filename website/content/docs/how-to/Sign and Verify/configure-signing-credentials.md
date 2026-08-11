@@ -1,6 +1,6 @@
 ---
 title: "Configure Credentials for Signing"
-description: "Configure OCM signing and verification keys using .ocmconfig or signer specification files."
+description: "Configure OCM signing and verification keys using .ocmconfig."
 icon: "🔑"
 weight: 5
 toc: true
@@ -174,7 +174,7 @@ configurations:
 For passphrase-protected private keys, add a top-level `passphrase: <secret>` field next to `privateKeyPGPFile`. OCM decrypts the key in memory only; the passphrase is never written back to disk.
 {{< /callout >}}
 
-If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer spec (set in the [sign how-to]({{< relref "sign-component-version.md" >}})), not in `.ocmconfig`.
+If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer (set in the [sign how-to]({{< relref "sign-component-version.md" >}})), next to the handler type rather than in the credentials.
 
 {{< /tab >}}
 {{< /tabs >}}
@@ -188,7 +188,7 @@ The dry run signs in memory without persisting the signature, so it's a quick wa
 
 {{< tabs "signing-algorithm" >}}
 {{< tab "RSA" >}}
-**RSA** (uses the default RSA handler — no `--signer-spec` needed):
+**RSA** (uses the default RSA handler — no signing configuration needed):
 
 ```bash
 ocm sign cv --dry-run /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
@@ -199,7 +199,7 @@ If configured correctly, the dry run completes without "no private key found" er
 {{< details "Expected output" >}}
 
 ```text
-time=2026-03-12T17:05:46.428+01:00 level=INFO msg="no signer spec file provided, using default" algorithm=RSASSA-PSS encodingPolicy=Plain
+time=2026-03-12T17:05:46.428+01:00 level=INFO msg="no signer configured, using default" algorithm=RSASSA-PSS encodingPolicy=Plain
 digest:
   hashAlgorithm: SHA-256
   normalisationAlgorithm: jsonNormalisation/v4alpha1
@@ -217,12 +217,10 @@ time=2026-03-12T17:05:46.437+01:00 level=INFO msg="dry run: signature not persis
 {{< /tab >}}
 
 {{< tab "GPG" >}}
-**GPG** (requires `--signer-spec` pointing at a `GPGSigningConfiguration/v1alpha1` file — see the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}) for the spec format):
+**GPG** (requires a `GPGSigningConfiguration/v1alpha1` signer in `.ocmconfig` — see the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}) for the entry):
 
 ```bash
-ocm sign cv --dry-run \
-  --signer-spec ./signer-spec.yaml \
-  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+ocm sign cv --dry-run /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
 If configured correctly, the dry run completes without "no private key found" errors.

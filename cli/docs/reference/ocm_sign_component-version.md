@@ -29,7 +29,7 @@ Creates or update cryptographic signatures on component descriptors.
 - Verify digests (--verify-digest-consistency)
 - Normalise descriptor (--normalisation)
 - Hash normalised descriptor (--hash)
-- Sign hash (--signer-spec)
+- Sign hash (signer from the OCM configuration)
 
 ## Behavior
 
@@ -37,7 +37,9 @@ Creates or update cryptographic signatures on component descriptors.
 - --dry-run: compute only, do not persist signature
 - Default signature name: default
 - Default signer: RSASSA-PSS plugin (needs private key)
-- For Sigstore keyless signing (no keys needed), pass --signer-spec with a SigstoreSigningConfiguration/v1alpha1 config
+- The signer is configured in the OCM configuration (signing.config.ocm.software/v1alpha1), not on the command line
+- An entry with a "signature" field only applies to that signature, one without applies to all
+- --signer-spec is no longer supported and fails with an error
 
 Use this command to establish provenance of component versions.
 
@@ -91,45 +93,79 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
             private_key_pem_file: /path/to/leaf.key
             public_key_pem_file: /path/to/leaf-and-intermediate-chain.pem
 
-## Example Signer Spec File (--signer-spec)
+## Example Signer Config (.ocmconfig)
 #
-# A signer spec configures the signing algorithm and encoding policy.
-# It does NOT contain credentials — keys are always resolved via .ocmconfig.
+# The signer configures the signing algorithm and encoding policy.
+# It does NOT contain credentials - keys are always resolved via .ocmconfig.
 # If omitted, defaults to RSASSA-PSS with Plain encoding.
+# Add a "signature" field to scope an entry to the signature of that name
+# (see the per-signature example below); without it the entry applies to all.
 #
-# Supported fields:
+# Supported signer fields:
 #   type:                    RSASigningConfiguration/v1alpha1
 #   signatureAlgorithm:      RSASSA-PSS (default) | RSASSA-PKCS1-V1_5
 #   signatureEncodingPolicy: Plain (default) | PEM
 #
 # signatureEncodingPolicy controls the *signature output* format:
-#   Plain — signature stored as hex string; verification needs an external public key
-#   PEM   — signature wrapped in a PEM SIGNATURE block with embedded certificate chain
+#   Plain - signature stored as hex string; verification needs an external public key
+#   PEM   - signature wrapped in a PEM SIGNATURE block with embedded certificate chain
 #           (experimental; credentials must provide certificates, not bare public keys)
 
-    type: RSASigningConfiguration/v1alpha1
-    signatureAlgorithm: RSASSA-PSS
-    signatureEncodingPolicy: Plain
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: signing.config.ocm.software/v1alpha1
+      signer:
+        type: RSASigningConfiguration/v1alpha1
+        signatureAlgorithm: RSASSA-PSS
+        signatureEncodingPolicy: Plain
 
-# Example signer spec for PEM encoding (requires certificate chain in credentials):
+# Example signer for PEM encoding (requires certificate chain in credentials):
 
-    type: RSASigningConfiguration/v1alpha1
-    signatureAlgorithm: RSASSA-PSS
-    signatureEncodingPolicy: PEM
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: signing.config.ocm.software/v1alpha1
+      signer:
+        type: RSASigningConfiguration/v1alpha1
+        signatureAlgorithm: RSASSA-PSS
+        signatureEncodingPolicy: PEM
 
-## Example Signer Spec File — Sigstore keyless (SigstoreSigningConfiguration/v1alpha1)
+## Example Signer Config - one signer per signature
+#
+# The entry whose "signature" matches --signature wins; the entry without one
+# is the fallback for every other signature. The credentials for each signature
+# are matched the same way, by the "signature" field of the consumer identity.
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: signing.config.ocm.software/v1alpha1
+      signature: release
+      signer:
+        type: SigstoreSigningConfiguration/v1alpha1
+    - type: signing.config.ocm.software/v1alpha1
+      signer:
+        type: RSASigningConfiguration/v1alpha1
+
+## Example Signer Config - Sigstore keyless (SigstoreSigningConfiguration/v1alpha1)
 #
 # Use when signing without private keys via Sigstore/Fulcio OIDC.
 # Endpoint discovery precedence:
-#   1. signingConfig — local signing_config.json (--signing-config)
-#   2. Not set — public-good Sigstore TUF (default)
+#   1. signingConfig - local signing_config.json
+#   2. Not set - public-good Sigstore TUF (default)
 
-    type: SigstoreSigningConfiguration/v1alpha1
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: signing.config.ocm.software/v1alpha1
+      signer:
+        type: SigstoreSigningConfiguration/v1alpha1
 
 # With a local signing config file (private infrastructure):
 
-    type: SigstoreSigningConfiguration/v1alpha1
-    signingConfig: /path/to/signing_config.json
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: signing.config.ocm.software/v1alpha1
+      signer:
+        type: SigstoreSigningConfiguration/v1alpha1
+        signingConfig: /path/to/signing_config.json
 
 ## Example Credential Config (.ocmconfig) — Sigstore OIDC token
 #
@@ -155,14 +191,14 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 # Verifiers must use the upstream issuer in certificateOIDCIssuer.
 # OCM also stores this value in signatures[].signature.issuer for convenience.
 
-# Sign with Sigstore (requires sigstore signer spec):
-sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signer-spec ./sigstore-sign.yaml
+# Sign with Sigstore (requires a sigstore signer in the config)
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --config ./sigstore.ocmconfig
 
 # Sign with custom signature name
 sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
 
-# Use a signer specification file to override algorithm defaults
-sign component-version ./repo//ocm.software/cli:0.12.0 --signer-spec ./rsassa-pss.yaml
+# Use a config file to override the signer defaults
+sign component-version ./repo//ocm.software/cli:0.12.0 --config ./rsassa-pss.ocmconfig
 
 # Dry-run signing
 sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature test --dry-run
@@ -183,7 +219,7 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
   -o, --output enum             output format of the resulting signature
                                 (must be one of [json yaml]) (default yaml)
       --signature string        name of the signature to create or update. defaults to "default" (default "default")
-      --signer-spec string      path to a signer specification file (configures algorithm and encoding, not credentials). If empty, defaults to RSASSA-PSS with Plain encoding.
+      --signer-spec string      DEPRECATED: no longer supported, configure the signer in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "signer")
 ```
 
 ### Options inherited from parent commands
