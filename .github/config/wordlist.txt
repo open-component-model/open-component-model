@@ -881,6 +881,7 @@ wgs
 whitespace
 winget
 wingetcreate
+wni
 withocm
 wsl
 xdg
@@ -951,3 +952,12 @@ Neisener
 ilja
 iljaweis
 weis
+Hackathon
+Exploitability
+OpenDeliveryGear
+linkable
+ification
+ifying
+Wget's
+presigned
+WgetCredentials
