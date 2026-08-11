@@ -329,7 +329,9 @@ jobs:
         working-directory: ${{ github.workspace }}/${{ matrix.module }}
         run: |
           count=$(go list ./... | wc -l)
-          echo "## Linted package count (${{ matrix.module }}): ${count}" >> $GITHUB_STEP_SUMMARY
+          msg="## Linted package count (${{ matrix.module }}): ${count}"
+          echo "$msg"
+          echo "$msg" >> $GITHUB_STEP_SUMMARY
 
   run_integration_tests:
     name: "Integration Tests"
@@ -371,7 +373,9 @@ jobs:
         working-directory: ${{ github.workspace }}/${{ matrix.module }}
         run: |
           count=$(go test ./... -list '.*Integration.*' 2>/dev/null | grep -c '^Test' || echo 0)
-          echo "## Integration test count (${{ matrix.module }}): ${count}" >> $GITHUB_STEP_SUMMARY
+          msg="## Integration test count (${{ matrix.module }}): ${count}"
+          echo "$msg"
+          echo "$msg" >> $GITHUB_STEP_SUMMARY
 
   run_unit_tests:
     name: "Unit Tests"
@@ -409,7 +413,9 @@ jobs:
           count=$(go test ./... -list '.*' 2>/dev/null | grep -c '^Test\|^Example' || echo 0)
           integration=$(go test ./... -list '.*Integration.*' 2>/dev/null | grep -c '^Test' || echo 0)
           unit=$((count - integration))
-          echo "## Unit test count (${{ matrix.module }}): ${unit} (total: ${count}, skipped integration: ${integration})" >> $GITHUB_STEP_SUMMARY
+          msg="## Unit test count (${{ matrix.module }}): ${unit} (total: ${count}, skipped integration: ${integration})"
+          echo "$msg"
+          echo "$msg" >> $GITHUB_STEP_SUMMARY
 
   generate:
     runs-on: ubuntu-24.04-arm
