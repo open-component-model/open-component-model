@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/google/cel-go v0.29.2
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/stretchr/testify v1.11.1
 )
 
