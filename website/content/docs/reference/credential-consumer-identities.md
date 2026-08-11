@@ -329,7 +329,7 @@ optional; see the note on anonymous access under
 - identity:
     type: GitHubRepository
     hostname: github.com
-    path: open-component-model/ocm
+    path: open-component-model/open-component-model
   credentials:
     - type: GitHubCredentials/v1
       token: ghp_example_token
