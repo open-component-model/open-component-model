@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1@sha256:87999aa3d42bdc6bea60565083ee17e86d1f3339802f543c0d03998580f9cb89
 # Build the manager binary
-FROM --platform=${BUILDPLATFORM} golang:1.26.4@sha256:f96cc555eb8db430159a3aa6797cd5bae561945b7b0fe7d0e284c63a3b291609 AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26.5@sha256:7caba5286b4c3613a337b709c573047d8ae62ee76106647313b61e72b99f20af AS builder
 ARG TARGETOS
 ARG TARGETARCH
 

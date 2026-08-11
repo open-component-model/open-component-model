@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/cli
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
@@ -84,7 +84,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.29.1 // indirect
+	github.com/google/cel-go v0.29.2 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-github/v89 v89.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
@@ -117,7 +117,7 @@ require (
 	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
