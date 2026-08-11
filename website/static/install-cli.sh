@@ -8,9 +8,10 @@ set -euo pipefail
 # Default install directory per the XDG Base Directory Specification:
 # https://specifications.freedesktop.org/basedir/latest/
 DEFAULT_BIN_DIR="${HOME}/.local/bin"
-# The positional argument is always the install directory. The binary name defaults to
-# 'ocm' and can be overridden with OCM_BIN_NAME to keep multiple versions side by side.
-BIN_DIR="${1:-${DEFAULT_BIN_DIR}}"
+# The install directory is taken from the positional argument, then OCM_BIN_DIR (env),
+# then the default. The binary name defaults to 'ocm' and can be overridden with
+# OCM_BIN_NAME to keep multiple versions side by side.
+BIN_DIR="${1:-${OCM_BIN_DIR:-${DEFAULT_BIN_DIR}}}"
 if [[ "${BIN_DIR}" != "/" ]]; then
     BIN_DIR="${BIN_DIR%/}"
 fi
@@ -32,6 +33,8 @@ Arguments:
 
 Environment variables:
   OCM_VERSION       Install a specific version (e.g., OCM_VERSION=1.0.0) or the latest version of a major.minor series (e.g., OCM_VERSION=0.9)
+  OCM_BIN_DIR       Directory to install the binary into (default: ~/.local/bin).
+                    Overridden by the positional argument when both are set.
   OCM_BIN_NAME      Install the binary under a custom name (default: ocm).
                     Use a version suffix to keep multiple versions side by side.
   OCM_SKIP_VERIFY   Skip attestation verification (set to "true")
@@ -40,8 +43,8 @@ Examples:
   curl -sfL https://ocm.software/install-cli.sh | bash
   curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=1.0.0 bash
   curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.9 bash
-  curl -sfL https://ocm.software/install-cli.sh | bash -s -- /usr/local/bin
-  curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.12 OCM_BIN_NAME=ocm-v0.12 bash -s -- ~/.local/bin
+  curl -sfL https://ocm.software/install-cli.sh | OCM_BIN_DIR=/usr/local/bin bash
+  curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.12 OCM_BIN_NAME=ocm-v0.12 OCM_BIN_DIR=~/.local/bin bash
 EOF
     exit 0
 }

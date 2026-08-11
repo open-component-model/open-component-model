@@ -128,7 +128,7 @@ task cli:install # installs to /usr/local/bin (requires sudo)
 
 The binary is installed to `~/.local/bin` by default (per the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/latest/)).
 The installer verifies binary integrity via [GitHub attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds) when the [GitHub CLI (`gh`)](https://cli.github.com/) is available.
-Set `OCM_VERSION` to install a specific version, and pass a directory after `bash -s --` to control where the binary lands (default: `~/.local/bin`). Set `OCM_BIN_NAME` to install the binary under a custom name.
+Set `OCM_VERSION` to install a specific version, `OCM_BIN_DIR` to control where the binary lands (default: `~/.local/bin`), and `OCM_BIN_NAME` to install the binary under a custom name.
 Run `bash -s -- --help` after the pipe to see all options.
 
 <details>
@@ -164,11 +164,11 @@ curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.12 bash
 
 ### Side-by-side versions
 
-Set `OCM_BIN_NAME` to install the binary under a custom name (default: `ocm`). Combine it with a version suffix to keep multiple versions side by side in the same directory:
+Set `OCM_BIN_NAME` to install the binary under a custom name (default: `ocm`), and `OCM_BIN_DIR` to set the install directory. Combine both with a version suffix to keep multiple versions side by side in the same directory:
 
 ```shell
-wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.12 OCM_BIN_NAME=ocm-v0.12 bash -s -- ~/.local/bin
-wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.11 OCM_BIN_NAME=ocm-v0.11 bash -s -- ~/.local/bin
+wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.12 OCM_BIN_NAME=ocm-v0.12 OCM_BIN_DIR=~/.local/bin bash
+wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.11 OCM_BIN_NAME=ocm-v0.11 OCM_BIN_DIR=~/.local/bin bash
 ```
 
 Each installs the binary under the name you give it. Run by name if `~/.local/bin` is on your `PATH`, or by full path otherwise:

@@ -189,15 +189,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # OCM_BIN_NAME overrides the installed filename, so the binary must land as
-      # 'ocm-custom' in the target directory - not under the default 'ocm' name.
+      # OCM_BIN_NAME overrides the installed filename; OCM_BIN_DIR sets the install directory.
+      # The binary must land as 'ocm-custom' in the target directory - not under the default 'ocm' name.
       - name: Run install script with a custom binary name
         env:
-          INSTALL_DIR: ${{ runner.temp }}/ocm-bin
+          OCM_BIN_DIR: ${{ runner.temp }}/ocm-bin
           OCM_BIN_NAME: ocm-custom
         run: |
-          bash website/static/install-cli.sh "${INSTALL_DIR}"
-          echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
+          bash website/static/install-cli.sh
+          echo "${{ runner.temp }}/ocm-bin" >> "$GITHUB_PATH"
 
       - name: Verify custom-named binary
         env:
