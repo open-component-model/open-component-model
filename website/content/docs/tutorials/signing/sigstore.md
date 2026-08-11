@@ -166,7 +166,7 @@ EOF
 That's the full signer for public Sigstore. With no other fields, the handler uses the public-good Fulcio (`fulcio.sigstore.dev`) and Rekor (`rekor.sigstore.dev`) endpoints, with trust roots discovered automatically via TUF.
 
 {{< callout context="note" title="Signer and credential work as a pair" icon="outline/info-circle" >}}
-The signer picks **how** to sign (which handler, which endpoints). The consumer identity provides the credential **the handler asks for** (the OIDC token, in this case). Both must be present for signing to succeed — the signer on its own has no token, the credential on its own has no handler. Linking them is the consumer-identity `type` and `signature` fields. To use Sigstore for one signature only, add `signature: <name>` next to the signer.
+The signer picks **how** to sign (which handler, which endpoints). The consumer identity provides the credential **the handler asks for** (the OIDC token, in this case). Both must be present for signing to succeed: the signer on its own has no token, the credential on its own has no handler. Linking them is the consumer-identity `type` and `signature` fields. To use Sigstore for one signature only, add `signature: <name>` next to the signer.
 {{< /callout >}}
 
 {{< /step >}}

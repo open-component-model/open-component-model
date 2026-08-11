@@ -37,6 +37,13 @@ the credential configuration to your existing file.
 touch .ocmconfig
 ```
 
+{{< callout context="caution" title="`--config` replaces the default lookup" >}}
+Without `--config`, OCM reads the well known locations (`$OCM_CONFIG`, `$XDG_CONFIG_HOME/ocm/config`, `$HOME/.ocmconfig`,
+`$PWD/.ocmconfig`, ...) and merges them. Passing `--config` skips that lookup and uses only the files you name.
+Therefore, each command needs every entry it depends on including credentials **and** signer config. The flag can be
+repeated (`--config ./signer.yaml --config ~/.ocmconfig`), and later files win field by field.
+{{< /callout >}}
+
 {{< /step >}}
 
 {{< step >}}
@@ -188,7 +195,7 @@ The dry run signs in memory without persisting the signature, so it's a quick wa
 
 {{< tabs "signing-algorithm" >}}
 {{< tab "RSA" >}}
-**RSA** (uses the default RSA handler — no signing configuration needed):
+**RSA** (uses the default RSA handler, no signing configuration needed):
 
 ```bash
 ocm sign cv --dry-run /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
@@ -217,7 +224,7 @@ time=2026-03-12T17:05:46.437+01:00 level=INFO msg="dry run: signature not persis
 {{< /tab >}}
 
 {{< tab "GPG" >}}
-**GPG** (requires a `GPGSigningConfiguration/v1alpha1` signer in `.ocmconfig` — see the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}) for the entry):
+**GPG** (requires a `GPGSigningConfiguration/v1alpha1` signer in `.ocmconfig`, see the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}) for the entry):
 
 ```bash
 ocm sign cv --dry-run /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
@@ -260,7 +267,7 @@ time=2026-06-16T19:31:54.138+02:00 level=INFO msg="dry run: signature not persis
 ### Configure multiple signing identities
 
 For different environments (e.g., dev and prod) you can create different key pairs and
-add multiple consumer blocks to your `.ocmconfig` with different `signature` names:
+give the credentials entry one consumer block per `signature` name. This replaces the single-consumer entry shown above rather than being added next to it:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -284,6 +291,8 @@ configurations:
             privateKeyPEMFile: /tmp/keys/prod/private-key.pem
             publicKeyPEMFile: /tmp/keys/prod/public-key.pem
 ```
+
+The same name also selects the signer: a `signing.config.ocm.software/v1alpha1` entry with `signature: prod` applies to `prod` only, and an entry without a `signature` applies wherever no scoped entry matches. See [How-To: Sign Component Versions]({{< relref "sign-component-version.md" >}}).
 
 Specify the signature name when signing:
 

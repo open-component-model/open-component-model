@@ -223,13 +223,13 @@ EOF
 
 > 👉 The `signature: default` name is used when you don't specify `--signature` on the command line.
 
-To pin a specific key when the keyring contains multiple keys, add `keyFingerprint` to the signer:
+To pin a specific key when the keyring contains multiple keys, add one line _keyFingerprint_ in the above config.
 
 ```yaml
   - type: signing.config.ocm.software/v1alpha1
     signer:
       type: GPGSigningConfiguration/v1alpha1
-      keyFingerprint: AABBCCDDEEFF00112233445566778899AABBCCDD
+      keyFingerprint: AABBCCDDEEFF00112233445566778899AABBCCDD   # added
 ```
 
 For more details, see [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}).
@@ -327,7 +327,7 @@ Now that you understand the workflow, here are key practices for production envi
 - **Rotate keys periodically** — OCM supports multiple signatures per component version to ease key transitions.
 - **Distribute public keys securely** — Publish your public key to a key server (e.g. `keys.openpgp.org`) or share via a trusted channel.
 - **Verify before deployment** — Make signature verification a mandatory step in your deployment pipeline.
-- **Pin key fingerprints** — Use `keyFingerprint` on the signer to prevent accidentally signing or verifying with a different key from a shared keyring.
+- **Pin key fingerprints**: use `keyFingerprint` on the signer to constrain signing. Set it in `verifier-spec.yaml` to constrain verification.
 
 ## Check Your Understanding
 

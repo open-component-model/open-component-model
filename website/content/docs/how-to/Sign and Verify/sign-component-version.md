@@ -123,11 +123,9 @@ signatures:
 
 By default, OCM uses **Plain encoding** -- the raw signature bytes are hex-encoded and stored directly. No extra configuration is needed.
 
-To use **PEM encoding** (embeds the signer's X.509 certificate chain in the signature), add a signer to your `.ocmconfig`:
+To use **PEM encoding** (embeds the signer's X.509 certificate chain in the signature), append a signer entry to the `configurations` list in your `.ocmconfig`, leaving the credentials entry untouched:
 
 ```yaml
-type: generic.config.ocm.software/v1
-configurations:
 - type: signing.config.ocm.software/v1alpha1
   signer:
     type: RSASigningConfiguration/v1alpha1
@@ -202,35 +200,54 @@ For the end-to-end learning walkthrough including key rotation and best practice
 
 ### Configure the GPG signer
 
-Add a signing entry to your `.ocmconfig` that selects the GPG signing handler. RSA is the default when no signer is configured, so this entry is what tells `ocm sign` to use GPG:
+Add a signing entry to your `.ocmconfig` that selects the GPG signing handler. RSA is the default when no signer is configured, so this entry is what tells `ocm sign` to use GPG. Append it to the `configurations` list that already holds your GPG credentials:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
+```
+
+With the credentials from the prerequisites, the complete `.ocmconfig` is:
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: GPG/v1alpha1
+      signature: default
+    credentials:
+    - type: GPGCredentials/v1alpha1
+      privateKeyPGPFile: /path/to/signing-key.asc
+      publicKeyPGPFile: /path/to/verify-key.asc
 - type: signing.config.ocm.software/v1alpha1
   signer:
     type: GPGSigningConfiguration/v1alpha1
 ```
 
-If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint`:
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-- type: signing.config.ocm.software/v1alpha1
-  signer:
-    type: GPGSigningConfiguration/v1alpha1
-    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
-```
-
-To use GPG for one signature only and keep RSA elsewhere, scope the entry with a `signature` field:
+If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the signer by adding one extra line:
 
 ```yaml
 - type: signing.config.ocm.software/v1alpha1
-  signature: gpg-release
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
+    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4   # added
+```
+
+To use GPG for one signature only and keep RSA elsewhere, add `signature` to that same entry. GPG then applies to `ocm sign cv --signature gpg-release`, and everything else falls back to the default RSA signer:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signature: gpg-release                                       # added
   signer:
     type: GPGSigningConfiguration/v1alpha1
 ```
+
+{{< callout context="caution" >}}
+These are in the same file. Just append this signature in that relevant configuration value.
+{{< /callout >}}
 
 {{< callout context="note" >}}
 Verification still takes the handler from a spec file, not from `.ocmconfig`. Keep a `verifier-spec.yaml` holding the same `type: GPGSigningConfiguration/v1alpha1` for the [verify how-to → GPG tab]({{< relref "verify-component-version.md" >}}).
@@ -387,7 +404,8 @@ For the end-to-end walkthrough including how Fulcio certificates, Rekor transpar
 
 ### Tell OCM to use Sigstore for signing
 
-Add this entry to your `.ocmconfig`. It says "for the signature named `default`, get an OIDC token instead of using a private key":
+Start your `.ocmconfig` with the credential entry below. It means "for the signature named `default`, get an OIDC token instead of using a private key".
+The next part will append the signer to the same list:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -413,19 +431,32 @@ That's all the credential configuration you need. No keys, no paths.
 
 ### Select the Sigstore signer
 
-Until Sigstore is the default signing handler, pick it in `.ocmconfig` — one entry, and it uses public Sigstore defaults:
+Until Sigstore is the default signing handler, pick it in `.ocmconfig`. Append this entry to the `configurations` list you started in the previous step:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
+```
+
+The result is a single `.ocmconfig` file:
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: SigstoreSigner/v1alpha1
+      signature: default
+    credentials:
+    - type: OIDCIdentityTokenProvider/v1alpha1
 - type: signing.config.ocm.software/v1alpha1
   signer:
     type: SigstoreSigningConfiguration/v1alpha1
 ```
 
 That's it. No URLs, no keys, no certificates. The handler uses public Sigstore (`fulcio.sigstore.dev`, `rekor.sigstore.dev`) automatically.
-
-This entry and the credentials entry above both go in the same `.ocmconfig`, under one `configurations` list.
 
 {{< /step >}}
 
@@ -576,7 +607,7 @@ Without this, the next step fails with `unable to mint OIDC token`.
 
 ### Use the same `.ocmconfig` as the interactive flow
 
-Nothing changes here — the credential consumer and the signer from the interactive tab work as-is in CI:
+Nothing changes here: the credential consumer and the signer from the interactive tab work as-is in CI.
 
 ```yaml
 # .ocmconfig (excerpt)

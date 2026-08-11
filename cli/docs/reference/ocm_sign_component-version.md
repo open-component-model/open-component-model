@@ -191,14 +191,15 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 # Verifiers must use the upstream issuer in certificateOIDCIssuer.
 # OCM also stores this value in signatures[].signature.issuer for convenience.
 
-# Sign with Sigstore (requires a sigstore signer in the config)
+# Sign with Sigstore, using a config that holds both the sigstore signer and the OIDC credential
 sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --config ./sigstore.ocmconfig
+
+# --config replaces the well known config locations instead of adding to them, so pass every
+# file that is needed: the signer alone would leave the command without credentials
+sign component-version ./repo//ocm.software/cli:0.12.0 --config ./rsassa-pss.ocmconfig --config ~/.ocmconfig
 
 # Sign with custom signature name
 sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
-
-# Use a config file to override the signer defaults
-sign component-version ./repo//ocm.software/cli:0.12.0 --config ./rsassa-pss.ocmconfig
 
 # Dry-run signing
 sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature test --dry-run

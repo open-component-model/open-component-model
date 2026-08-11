@@ -196,7 +196,7 @@ OCM's `signature.algorithm` field selects between two signing approaches: classi
 | RSA-PKCS#1 v1.5 | Asymmetric (RSA) | Public key or certificate chain | Deterministic, widely supported, compatible with legacy systems |
 | Sigstore (keyless, early access) | Asymmetric (ECDSA, ephemeral) | OIDC identity | Short-lived certificate from Fulcio bound to your OIDC identity, transparency-log entry in Rekor; no long-lived keys to manage |
 
-To override the default signing algorithm or encoding policy, add a `signing.config.ocm.software/v1alpha1` entry to your [`.ocmconfig`]({{< relref "configure-multiple-credentials.md" >}}) and put the signer under its `signer` field — see the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
+To override the default signing algorithm or encoding policy, add a `signing.config.ocm.software/v1alpha1` entry to your [`.ocmconfig`]({{< relref "configure-multiple-credentials.md" >}}) and put the signer under its `signer` field. See the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
 The signer configures only the algorithm and encoding policy; credentials are always resolved separately from the credentials configuration.
 Give the entry a `signature` field to apply it to that one signature only, matching the `--signature` flag; without it the entry applies to every signature.
 
