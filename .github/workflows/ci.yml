@@ -324,6 +324,14 @@ jobs:
           version: ${{ steps.versions.outputs.golangci_lint }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
           args: --timeout 10m --config=${{ github.workspace }}/golangci.yml
+      - name: Instrument - count linted packages
+        if: always()
+        working-directory: ${{ github.workspace }}/${{ matrix.module }}
+        run: |
+          count=$(go list ./... | wc -l)
+          msg="## Linted package count (${{ matrix.module }}): ${count}"
+          echo "$msg"
+          echo "$msg" >> $GITHUB_STEP_SUMMARY
 
   run_integration_tests:
     name: "Integration Tests"
@@ -360,6 +368,14 @@ jobs:
           GITHUB_USER: ${{ github.actor }}
           MODULE: ${{ matrix.module }}
         run: task "${MODULE}:test/integration"
+      - name: Instrument - count integration tests
+        if: always()
+        working-directory: ${{ github.workspace }}/${{ matrix.module }}
+        run: |
+          count=$(go test ./... -list '.*Integration.*' 2>/dev/null | grep -c '^Test' || echo 0)
+          msg="## Integration test count (${{ matrix.module }}): ${count}"
+          echo "$msg"
+          echo "$msg" >> $GITHUB_STEP_SUMMARY
 
   # Sigstore integration tests require a full scaffolding cluster (Fulcio, Rekor,
   # CT-Log, TSA) and short-lived OIDC tokens. This setup is handled by the
@@ -413,6 +429,16 @@ jobs:
         env:
           MODULE: ${{ matrix.module }}
         run: task "${MODULE}:test"
+      - name: Instrument - count tests
+        if: always()
+        working-directory: ${{ github.workspace }}/${{ matrix.module }}
+        run: |
+          count=$(go test ./... -list '.*' 2>/dev/null | grep -c '^Test\|^Example' || echo 0)
+          integration=$(go test ./... -list '.*Integration.*' 2>/dev/null | grep -c '^Test' || echo 0)
+          unit=$((count - integration))
+          msg="## Unit test count (${{ matrix.module }}): ${unit} (total: ${count}, skipped integration: ${integration})"
+          echo "$msg"
+          echo "$msg" >> $GITHUB_STEP_SUMMARY
 
   generate:
     runs-on: ubuntu-24.04-arm
