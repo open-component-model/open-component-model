@@ -28,3 +28,4 @@ require (
 	ocm.software/open-component-model/bindings/go/repository v0.0.10 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+// trigger

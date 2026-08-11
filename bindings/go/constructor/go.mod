@@ -35,3 +35,4 @@ require (
 	ocm.software/open-component-model/bindings/go/ctf v0.4.1 // indirect
 	oras.land/oras-go/v2 v2.6.2 // indirect
 )
+// trigger

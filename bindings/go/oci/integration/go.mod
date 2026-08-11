@@ -84,3 +84,4 @@ require (
 	ocm.software/open-component-model/bindings/go/http v0.0.0-20260807165644-f53677f7cbb9 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+// trigger

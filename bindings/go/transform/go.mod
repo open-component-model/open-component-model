@@ -31,3 +31,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16 // indirect
 )
+// trigger

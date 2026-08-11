@@ -26,3 +26,4 @@ require (
 )
 
 replace ocm.software/open-component-model/bindings/go/sigstore => ../
+// trigger

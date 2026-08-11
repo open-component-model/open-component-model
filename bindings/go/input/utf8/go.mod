@@ -28,3 +28,4 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.10 // indirect
 )
+// trigger

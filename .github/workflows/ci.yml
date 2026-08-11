@@ -324,6 +324,14 @@ jobs:
           version: ${{ steps.versions.outputs.golangci_lint }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
           args: --timeout 10m --config=${{ github.workspace }}/golangci.yml
+      - name: Instrument - list linted packages
+        if: always()
+        working-directory: ${{ github.workspace }}/${{ matrix.module }}
+        run: |
+          echo "## Linted packages (${{ matrix.module }})" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          go list ./... >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
   run_integration_tests:
     name: "Integration Tests"
@@ -360,6 +368,14 @@ jobs:
           GITHUB_USER: ${{ github.actor }}
           MODULE: ${{ matrix.module }}
         run: task "${MODULE}:test/integration"
+      - name: Instrument - list integration test packages
+        if: always()
+        working-directory: ${{ github.workspace }}/${{ matrix.module }}
+        run: |
+          echo "## Integration test packages (${{ matrix.module }})" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          go list ./... >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
   run_unit_tests:
     name: "Unit Tests"
@@ -390,6 +406,14 @@ jobs:
         env:
           MODULE: ${{ matrix.module }}
         run: task "${MODULE}:test"
+      - name: Instrument - list tested packages
+        if: always()
+        working-directory: ${{ github.workspace }}/${{ matrix.module }}
+        run: |
+          echo "## Unit test packages (${{ matrix.module }})" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          go list ./... >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
   generate:
     runs-on: ubuntu-24.04-arm

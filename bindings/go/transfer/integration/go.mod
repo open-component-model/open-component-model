@@ -147,3 +147,4 @@ require (
 
 // Replace to test against current local code
 replace ocm.software/open-component-model/bindings/go/transfer => ../
+// trigger
