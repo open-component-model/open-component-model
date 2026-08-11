@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/constructor
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/opencontainers/go-digest v1.0.0
@@ -10,8 +10,8 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.13
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260806061938-9a58bfdb01b2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260806061938-9a58bfdb01b2
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260807165644-f53677f7cbb9
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260807165644-f53677f7cbb9
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.49
 	ocm.software/open-component-model/bindings/go/repository v0.0.10

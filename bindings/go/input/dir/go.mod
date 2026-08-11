@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/input/dir
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/stretchr/testify v1.11.1
@@ -22,8 +22,8 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.16 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.14 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260806061938-9a58bfdb01b2 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260806061938-9a58bfdb01b2 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260807165644-f53677f7cbb9 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260807165644-f53677f7cbb9 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.10 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect

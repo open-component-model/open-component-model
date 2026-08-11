@@ -41,7 +41,7 @@ jobs:
         with:
           persist-credentials: false
       # Detect shared lint config changes so lint runs on all modules
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         id: lint_config_changes
         with:
           filters: |
@@ -55,7 +55,7 @@ jobs:
               - '.github/scripts/package-lock.json'
               - 'docs/dependency-table.md'
       # Detect CI workflow changes to rebuild/test all modules
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         id: ci_changes
         with:
           filters: |
@@ -96,7 +96,7 @@ jobs:
             // Log for debugging
             console.log('📦 Detected modules:', modules);
             console.log('🎯 Generated filters:', filters);
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         id: changes
         with:
           filters: ${{ steps.discover.outputs.filters }}
@@ -271,7 +271,7 @@ jobs:
             .github/scripts/package.json
             .github/scripts/package-lock.json
           persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
       - run: npm ci --prefix .github/scripts
@@ -331,7 +331,7 @@ jobs:
     # Runner override map — add entries to run specific modules on a different runner.
     # Modules not listed here use the default: ubuntu-24.04-arm.
     # Example: '{"some/module/integration":"ubuntu-latest","other":"ubuntu-22.04"}'
-    runs-on: ${{ fromJSON('{"bindings/go/sigstore/integration":"ubuntu-latest"}')[matrix.module] || 'ubuntu-24.04-arm' }}
+    runs-on: ${{ fromJSON('{}')[matrix.module] || 'ubuntu-24.04-arm' }}
     if: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
