@@ -54,7 +54,6 @@ Component Repositories, and Component Versions.&lt;/p&gt;</description></item><i
  - $EXE_DIR/.ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
- Later entries have higher priority.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
@@ -156,7 +155,6 @@ to enable it. You can execute the following once:&lt;/p&gt;</description></item>
  - $EXE_DIR/.ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
- Later entries have higher priority.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
@@ -240,7 +238,6 @@ use OCM commands or configure OCM resources, you specify types from these subsys
  - $EXE_DIR/.ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
- Later entries have higher priority.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
@@ -331,7 +328,6 @@ and usage of using your command. For example:&lt;/p&gt;</description></item><ite
  - $EXE_DIR/.ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
- Later entries have higher priority.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
@@ -426,7 +422,6 @@ use OCM commands or configure OCM resources, you specify types from these subsys
  - $EXE_DIR/.ocm/config
  - $EXE_DIR/.ocmconfig
  If multiple configuration files are found, they will be merged in the order they are discovered.
- Later entries have higher priority.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
