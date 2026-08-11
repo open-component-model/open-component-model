@@ -9,7 +9,7 @@ require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/gobwas/glob v0.2.3
-	github.com/google/cel-go v0.29.1
+	github.com/google/cel-go v0.29.2
 	github.com/google/go-github/v89 v89.0.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/nlepage/go-tarfs v1.2.1
