@@ -4,7 +4,7 @@ go 1.26.4
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
-replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20260721143128-e5208fdd9cb0
+replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20260807152313-538f27dd2513
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
@@ -19,7 +19,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.36.2
 	k8s.io/apimachinery v0.36.2
 	k8s.io/client-go v0.36.2
-	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
+	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/yaml v1.6.0
 )
