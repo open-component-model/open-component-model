@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/transform
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/google/cel-go v0.29.2

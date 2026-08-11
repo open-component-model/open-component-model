@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/cli/integration
 
-go 1.26.4
+go 1.26.5
 
 replace ocm.software/open-component-model/cli => ../
 

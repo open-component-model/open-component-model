@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/oci/integration
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/nlepage/go-tarfs v1.2.1
