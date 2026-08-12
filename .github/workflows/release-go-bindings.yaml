@@ -1,4 +1,4 @@
-# This is the monolithic release flow described in ADR 25
+# This is the monolithic release flow described in ADR 25; it is a temporary solution that will be superseded by a lockstep release together with CLI and Controller
 name: Release Go Bindings
 on:
   workflow_dispatch:
