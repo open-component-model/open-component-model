@@ -56,7 +56,7 @@ All examples are self-contained and run as part of CI, except **OCI Registry** w
 testcontainers and is skipped with `-short`:
 
 ```bash
-cd bindings/go && go test ./examples/...
+cd bindings/go && go test -short ./examples/...
 ```
 
 ## Testing
