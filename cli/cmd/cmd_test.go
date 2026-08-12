@@ -1504,9 +1504,9 @@ resources:
 			wantFile: "plain",
 		},
 		{
-			name:     "fallback appends extra identity values to disambiguate variants",
+			name:     "fallback uses resource name even with extra identity",
 			identity: "name=variant,architecture=amd64",
-			wantFile: "variant-amd64",
+			wantFile: "variant",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

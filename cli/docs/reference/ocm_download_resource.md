@@ -22,7 +22,7 @@ If no transformer is specified, the resource is written directly in its original
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
 
-When --output is not provided, the output filename is derived from the sanitized resource name. Sanitized extra identity attribute values are appended as a hyphen-separated suffix in sorted identity-key order, if present.
+When --output is not provided, the output filename is the resource name.
 
 ```
 ocm download resource [flags]
@@ -51,7 +51,7 @@ ocm download resource [flags]
                                  (must be one of [auto disable]) (default auto)
   -h, --help                     help for resource
       --identity string          resource identity to download
-      --output string            full output file path (directory + filename). Intermediate directories are created automatically.
+      --output string            output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name.
       --transformer string       transformer to use for the output. If not specified, the resource will be written as is. 
 ```
 

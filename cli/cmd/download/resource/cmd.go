@@ -55,7 +55,7 @@ If no transformer is specified, the resource is written directly in its original
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
 
-When --output is not provided, the output filename is derived from the resource name with any extra identity attribute values appended as a hyphen-separated suffix, if present.`,
+When --output is not provided, the output filename is the resource name.`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
 
@@ -72,7 +72,7 @@ When --output is not provided, the output filename is derived from the resource 
 	}
 
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
-	cmd.Flags().String(FlagOutput, "", "output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name with extra identity values appended as a hyphen-separated suffix.")
+	cmd.Flags().String(FlagOutput, "", "output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
 	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
 		"policy to apply when extracting a resource. "+
@@ -252,33 +252,11 @@ func processResourceOutput(output string, resource *descriptor.Resource, logger 
 		return output, nil
 	}
 
-	// Fallback: resource name, with extra identity attributes appended when present.
-	output = fallbackFileName(resource)
-	logger.Warn("no output location specified, deriving output file name from the resource", slog.String("output", output))
+	// Fallback: resource name.
+	output = resource.Name
+	logger.Warn("no output location specified, using resource name as output file name", slog.String("output", output))
 
 	return output, nil
 }
 
-// fallbackFileName derives a filesystem-safe filename from the resource name plus its
-// extra identity attribute values (sorted by key), so variants of the same name stay distinct.
-func fallbackFileName(resource *descriptor.Resource) string {
-	name := sanitizeFileName(resource.Name)
-	for _, key := range slices.Sorted(maps.Keys(resource.ExtraIdentity)) {
-		name += "-" + sanitizeFileName(resource.ExtraIdentity[key])
-	}
-	return name
-}
 
-// sanitizeFileName replaces characters unsafe in a filename (e.g. '/' in "windows/amd64") with '-'.
-func sanitizeFileName(s string) string {
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			return r
-		case r == '-', r == '_', r == '.':
-			return r
-		default:
-			return '-'
-		}
-	}, s)
-}

@@ -375,10 +375,10 @@ ocm download resource <repo>//<component>:<version> \
   --output /tmp/ocm.exe
 ```
 
-Without `--output`, the filename is derived from the resource name. If the resource has extra identity attributes, their values are appended as a hyphen-separated suffix to keep variants distinct:
+Without `--output`, the filename is the resource name:
 
 ```shell
-# resource name=cli, extraIdentity os=linux,architecture=amd64 → file: cli-amd64-linux
+# resource name=cli → file: cli
 ocm download resource <repo>//<component>:<version> --identity name=cli,os=linux,architecture=amd64
 ```
 
