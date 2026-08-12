@@ -1,0 +1,566 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OCM Component Constructor",
+  "description": "Defines the input format for building OCM component versions. Accepts either a multi-component wrapper or a single inline component definition.",
+  "$defs": {
+    "meta": {
+      "type": "object",
+      "description": "component descriptor metadata",
+      "required": [
+        "schemaVersion"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "description": "Schema version of the component descriptor",
+          "type": "string",
+          "pattern": "^v2"
+        }
+      }
+    },
+    "merge": {
+      "type": "object",
+      "description": "Configuration for merging labels",
+      "properties": {
+        "algorithm": {
+          "description": "Algorithm used for merging labels",
+          "pattern": "^[a-z][a-z0-9/_-]+$"
+        },
+        "config": {
+          "description": "Configuration specific to the merge algorithm"
+        }
+      },
+      "additionalProperties": false
+    },
+    "label": {
+      "type": "object",
+      "description": "Label that can be set on various objects in the Open Component Model domain",
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the label",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "description": "Value of the label",
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            {
+              "type": "object",
+              "description": "an arbitrarily complex structured value"
+            }
+          ]
+        },
+        "version": {
+          "description": "Version of the label",
+          "pattern": "^v[0-9]+$"
+        },
+        "signing": {
+          "description": "Indicates whether the label should be included in the signature",
+          "type": "boolean"
+        },
+        "merge": {
+          "description": "Configuration for merging this label",
+          "$ref": "#/$defs/merge"
+        }
+      }
+    },
+    "componentName": {
+      "type": "string",
+      "description": "Unique name of the component following the Open Component Model naming convention",
+      "maxLength": 255,
+      "pattern": "^[a-z][-a-z0-9]*([.][a-z][-a-z0-9]*)*[.][a-z]{2,}(/[a-z][-a-z0-9_]*([.][a-z][-a-z0-9_]*)*)+$"
+    },
+    "identityAttributeKey": {
+      "description": "Key for identity attributes used to identify elements in a component version",
+      "minLength": 2,
+      "pattern": "^[a-z0-9]([-_+a-z0-9]*[a-z0-9])?$"
+    },
+    "relaxedSemver": {
+      "description": "Relaxed Semver version that allows optional leading 'v', major-only, and major.minor only",
+      "pattern": "^[v]?(0|[1-9]\\d*)(?:\\.(0|[1-9]\\d*))?(?:\\.(0|[1-9]\\d*))?(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "type": "string",
+      "examples": [
+        "v1.0.0",
+        "v1.0",
+        "1.0.0",
+        "1.0"
+      ]
+    },
+    "ocmType": {
+      "description": "Type identifier following the Open Component Model type format",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?",
+      "type": "string",
+      "examples": [
+        "ociArtifact",
+        "ociArtifact/v1",
+        "OCIRegistry",
+        "my.custom.type/v1alpha1"
+      ]
+    },
+    "nonEmptyString": {
+      "description": "A string that must not be empty",
+      "type": "string",
+      "minLength": 1
+    },
+    "identityAttribute": {
+      "type": "object",
+      "description": "Additional identity attributes for element identification",
+      "propertyNames": {
+        "$ref": "#/$defs/identityAttributeKey"
+      }
+    },
+    "access": {
+      "type": "object",
+      "description": "Base type for access specifications",
+      "required": [
+        "type"
+      ]
+    },
+    "input": {
+      "type": "object",
+      "description": "Base type for input specifications",
+      "required": [
+        "type"
+      ]
+    },
+    "commonSourceProperties": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the source",
+          "type": "string",
+          "$ref": "#/$defs/identityAttributeKey"
+        },
+        "extraIdentity": {
+          "description": "Additional identity attributes for the source",
+          "$ref": "#/$defs/identityAttribute"
+        },
+        "version": {
+          "description": "Version of the source",
+          "$ref": "#/$defs/relaxedSemver"
+        },
+        "type": {
+          "description": "Type of the source",
+          "$ref": "#/$defs/ocmType"
+        },
+        "labels": {
+          "description": "Labels associated with the source",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        }
+      }
+    },
+    "commonResourceProperties": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the resource",
+          "type": "string",
+          "$ref": "#/$defs/identityAttributeKey"
+        },
+        "extraIdentity": {
+          "description": "Additional identity attributes for the resource",
+          "$ref": "#/$defs/identityAttribute"
+        },
+        "type": {
+          "description": "Type of the resource",
+          "$ref": "#/$defs/ocmType"
+        },
+        "srcRefs": {
+          "description": "References to sources that produced this resource",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/srcRef"
+          }
+        },
+        "labels": {
+          "description": "Labels associated with the resource",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        }
+      }
+    },
+    "sourceDefinition": {
+      "$ref": "#/$defs/commonSourceProperties",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["access"],
+          "properties": {
+            "access": {
+              "description": "Access specification for the source",
+              "$ref": "#/$defs/access"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["input"],
+          "properties": {
+            "input": {
+              "description": "Input specification for the source",
+              "$ref": "#/$defs/input"
+            }
+          }
+        }
+      ]
+    },
+    "digestSpec": {
+      "type": "object",
+      "description": "Specification of digest information including hashing algorithm and value",
+      "required": [
+        "hashAlgorithm",
+        "normalisationAlgorithm",
+        "value"
+      ],
+      "properties": {
+        "hashAlgorithm": {
+          "description": "Algorithm used for hashing",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "normalisationAlgorithm": {
+          "description": "Algorithm used for normalizing content before hashing",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "value": {
+          "description": "The actual hash value",
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "signatureSpec": {
+      "type": "object",
+      "description": "Specification of signature information",
+      "required": [
+        "algorithm",
+        "value",
+        "mediaType"
+      ],
+      "properties": {
+        "algorithm": {
+          "description": "Algorithm used for signing",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "value": {
+          "description": "The actual signature value",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "mediaType": {
+          "description": "Media type of the signature value",
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "srcRef": {
+      "type": "object",
+      "description": "Reference to a component-local source",
+      "additionalProperties": false,
+      "properties": {
+        "identitySelector": {
+          "description": "Selector for identifying the source",
+          "$ref": "#/$defs/identityAttribute"
+        },
+        "labels": {
+          "description": "Labels for further identification of the source",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        }
+      }
+    },
+    "componentReference": {
+      "type": "object",
+      "description": "Reference to another component in the registry",
+      "required": [
+        "name",
+        "componentName",
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "componentName": {
+          "description": "Name of the referenced component",
+          "$ref": "#/$defs/componentName"
+        },
+        "name": {
+          "description": "Local name of the reference",
+          "type": "string",
+          "$ref": "#/$defs/identityAttributeKey"
+        },
+        "extraIdentity": {
+          "description": "Additional identity attributes for the reference",
+          "$ref": "#/$defs/identityAttribute"
+        },
+        "version": {
+          "description": "Version of the referenced component",
+          "$ref": "#/$defs/relaxedSemver"
+        },
+        "labels": {
+          "description": "Labels associated with the reference",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        },
+        "digest": {
+          "description": "Optional digest of the referenced component",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/digestSpec"
+            }
+          ]
+        }
+      }
+    },
+    "resourceDefinition": {
+      "$ref": "#/$defs/commonResourceProperties",
+      "oneOf": [
+        {
+          "required": [
+            "type",
+            "version",
+            "access"
+          ],
+          "properties": {
+            "type": {
+              "description": "Type of the resource",
+              "$ref": "#/$defs/ocmType"
+            },
+            "version": {
+              "description": "Version of the resource",
+              "$ref": "#/$defs/relaxedSemver"
+            },
+            "relation": {
+              "description": "Relation of the resource to the component (local or external)",
+              "type": "string",
+              "enum": ["local", "external"]
+            },
+            "access": {
+              "description": "Access specification for the resource",
+              "$ref": "#/$defs/access"
+            },
+            "digest": {
+              "description": "Optional digest of the resource",
+              "oneOf": [
+                { "type": "null" },
+                { "$ref": "#/$defs/digestSpec" }
+              ]
+            }
+          }
+        },
+        {
+          "required": [
+            "type",
+            "input"
+          ],
+          "properties": {
+            "input": {
+              "description": "Input specification for the resource",
+              "$ref": "#/$defs/input"
+            },
+            "relation": {
+              "description": "Relation of the resource to the component (local only)",
+              "const": "local"
+            },
+            "type": {
+              "description": "Type of the resource",
+              "$ref": "#/$defs/ocmType"
+            },
+            "version": {
+              "description": "Version of the resource",
+              "$ref": "#/$defs/relaxedSemver"
+            }
+          }
+        }
+      ]
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A component containing sources, resources, and references to other components",
+      "required": [
+        "name",
+        "version",
+        "provider"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the component",
+          "$ref": "#/$defs/componentName"
+        },
+        "version": {
+          "description": "Version of the component",
+          "$ref": "#/$defs/relaxedSemver"
+        },
+        "creationTime": {
+          "description": "Creation time of the component version",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "provider": {
+          "description": "Provider type of the component in the origin's context",
+          "type": "object",
+          "additionalProperties": true,
+          "minProperties": 1,
+          "properties": {
+            "name": {
+              "description": "Name of the provider",
+              "$ref": "#/$defs/nonEmptyString"
+            }
+          }
+        },
+        "labels": {
+          "description": "Labels associated with the component",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        },
+        "sources": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "description": "Sources that produced the component",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/sourceDefinition"
+              }
+            }
+          ]
+        },
+        "componentReferences": {
+          "oneOf": [
+            {
+              "description": "References to other component versions",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/componentReference"
+              }
+            }, {
+              "type": "null"
+            }
+          ]
+        },
+        "resources": {
+          "description": "Resources created by the component or third parties",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/resourceDefinition"
+          }
+        }
+      },
+      "examples": [
+        {
+          "name": "github.com/open-component-model/podinfo",
+          "version": "v1.0.0",
+          "provider": {
+            "name": "open-component-model"
+          },
+          "labels": [
+            {
+              "name": "link-to-documentation",
+              "value": "https://ocm.software/"
+            }
+          ],
+          "resources": [
+            {
+              "name": "data",
+              "type": "blob",
+              "relation": "local",
+              "input": {
+                "type": "file",
+                "path": "./testdata/text.txt"
+              }
+            },
+            {
+              "name": "podinfo",
+              "relation": "external",
+              "type": "ociImage",
+              "version": "6.8.0",
+              "access": {
+                "type": "ociArtifact",
+                "imageReference": "ghcr.io/stefanprodan/podinfo:6.8.0"
+              },
+              "digest": {
+                "hashAlgorithm": "SHA-256",
+                "normalisationAlgorithm": "ociArtifactDigest/v1",
+                "value": "6c1975b871efb327528c84d46d38e6dd7906eecee6402bc270eeb7f1b1a506df"
+              },
+              "srcRefs": [
+                {
+                  "identitySelector": {
+                    "name": "podinfo",
+                    "version": "6.8.0"
+                  }
+                }
+              ]
+            }
+          ],
+          "sources": [
+            {
+              "name": "podinfo",
+              "type": "git",
+              "version": "6.8.0",
+              "access": {
+                "commit": "b3396adb98a6a0f5eeedd1a600beaf5e954a1f28",
+                "ref": "refs/tags/v6.8.0",
+                "repoUrl": "github.com/stefanprodan/podinfo",
+                "type": "gitHub"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "title": "Multi-Component",
+      "description": "A wrapper object with a components list, allowing multiple components to be defined in a single constructor file.",
+      "type": "object",
+      "required": [
+        "components"
+      ],
+      "properties": {
+        "components": {
+          "description": "List of components in the constructor",
+          "type": "array",
+          "items": {
+              "$ref": "#/$defs/component"
+          }
+        }
+      }
+    },
+    {
+      "title": "Single Component",
+      "description": "A single component defined directly at the top level with name, version, provider, and its associated resources, sources, and references.",
+      "$ref": "#/$defs/component"
+    }
+  ]
+}
