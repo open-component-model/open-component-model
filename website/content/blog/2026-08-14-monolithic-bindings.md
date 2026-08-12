@@ -30,7 +30,7 @@ This created friction in three ways:
 ## What Changed
 
 All per-binding `go.mod` files are replaced by a single `go.mod` at
-`bindings/go/`. The module path is unchanged for consumers:
+`bindings/go/`. The import path is unchanged for consumers:
 ```go
 import "ocm.software/open-component-model/bindings/go/oci"
 ```
@@ -61,10 +61,9 @@ needed.
 ## For Consumers
 
 After the first monolithic release, update your go.mod:
-
-```bash
-go get ocm.software/open-component-model/bindings/go@v0.0.1
-```
+* Remove all references to `ocm.software/open-component-model/bindings/go/*`
+* Run `go get ocm.software/open-component-model/bindings/go@v0.0.1` 
+* Run `go mod tidy`
 
 While previously released per-module versions remain available, we discourage continuing to
 use them, as new features and fixes will only be published under the monolithic version.
