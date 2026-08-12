@@ -61,6 +61,7 @@ needed.
 ## For Consumers
 
 After the first monolithic release, update your go.mod:
+
 * Remove all references to `ocm.software/open-component-model/bindings/go/*`
 * Run `go get ocm.software/open-component-model/bindings/go@v0.0.1` 
 * Run `go mod tidy`
