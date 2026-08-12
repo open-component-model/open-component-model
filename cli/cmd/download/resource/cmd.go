@@ -258,5 +258,3 @@ func processResourceOutput(output string, resource *descriptor.Resource, logger 
 
 	return output, nil
 }
-
-
