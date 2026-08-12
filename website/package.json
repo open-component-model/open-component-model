@@ -45,7 +45,7 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "25.9.5",
-    "eslint": "10.8.0",
+    "eslint": "10.8.1",
     "globals": "17.9.0",
     "hugo-extended": "0.164.0",
     "jiti": "2.7.0",
