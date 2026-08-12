@@ -109,7 +109,10 @@ jobs:
           CONSTRUCTOR: ${{ github.workspace }}/.github/components/ocm-release/component-constructor.yaml
         run: |
           set -euo pipefail
+          # scratch image has no /tmp; mount a writable tmpfs for wget-style downloads
           docker run --rm \
+            --tmpfs /tmp:rw,exec \
+            -e TMPDIR=/tmp \
             -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
             -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
             -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
