@@ -8,6 +8,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // platformAttributeMapper defines the mapping between resource identity attributes and OCI platform fields
@@ -47,6 +48,25 @@ var mappings = []platformAttributeMapper{
 			platform.OSVersion = value
 		},
 	},
+}
+
+// PlatformFromIdentity derives an OCI platform from identity attributes, using the
+// same attribute mapping Adopt applies in the opposite direction. Returns nil
+// if it doesn't find anything.
+func PlatformFromIdentity(id runtime.Identity) *ociImageSpecV1.Platform {
+	var platform *ociImageSpecV1.Platform
+	for _, mapping := range mappings {
+		value, exists := id[mapping.attribute]
+		if !exists || value == "" {
+			continue
+		}
+		if platform == nil {
+			platform = &ociImageSpecV1.Platform{}
+		}
+		// if the attribute exists, set it as a platform
+		mapping.setter(platform, value)
+	}
+	return platform
 }
 
 // Adopt modifies the provided OCI descriptor to represent an artifact.

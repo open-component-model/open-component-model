@@ -1,24 +1,64 @@
 ---
-title: ocm get
-description: Get anything from OCM.
+title: ocm get sbom
+description: Get the SBOM describing a resource of a component version.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm get
+## ocm get sbom
 
-Get anything from OCM
+Get the SBOM describing a resource of a component version
+
+### Synopsis
+
+Get the Software Bill of Materials describing a resource of a component version.
+
+The resource is selected with --identity. Its SBOM is then looked for in two ways, in order:
+
+  1. Another resource of the same component version declaring, through the
+     "ocm.software/artefact-references" label, that it describes the selected resource.
+  2. For a resource backed by an OCI artifact, an SBOM attached to that artifact by
+     "docker buildx build --sbom=true". SBOMs attached by other tooling, such as cosign
+     or the OCI referrers API, are not discovered.
+
+The SBOM document is written to standard output as it was published, so it can be piped
+straight into a scanner.
+
+A resource published once per platform is narrowed to the architecture this command runs
+on, unless --identity names a different one. The operating system is only matched when
+--identity names it, because a container image records the system it runs on rather than
+the system asking about it.
 
 ```
-ocm get {component-version|component-versions|cv|cvs|config|cfg|sbom|sboms} [flags]
+ocm get sbom {reference} [flags]
+```
+
+### Examples
+
+```
+Getting the SBOM of a resource:
+
+ocm get sbom ghcr.io/open-component-model//ocm.software/tutorial-sbom:1.0.0 --identity name=cli
+ocm get sbom ./path/to/ctf//ocm.software/tutorial-sbom:1.0.0 --identity name=cli
+
+Selecting one of several builds of the same resource:
+
+ocm get sbom ghcr.io/org//ocm.software/product:1.0.0 --identity name=cli,architecture=arm64
+
+Piping into a scanner:
+
+ocm get sbom ghcr.io/org//ocm.software/product:1.0.0 --identity name=image -o raw > sbom.json
 ```
 
 ### Options
 
 ```
-  -h, --help   help for get
+  -h, --help              help for sbom
+      --identity string   identity of the resource to get the SBOM for
+  -o, --output enum       output format of the SBOM document. 'raw' writes the document byte for byte, which is what any signature or digest over it covers
+                          (must be one of [json raw]) (default json)
 ```
 
 ### Options inherited from parent commands
@@ -65,9 +105,5 @@ ocm get {component-version|component-versions|cv|cvs|config|cfg|sbom|sboms} [fla
 
 ### SEE ALSO
 
-* [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
-* [ocm get component-version]({{< relref "ocm_get_component-version.md" >}})	 - Get component version(s) from an OCM repository
-* [ocm get config]({{< relref "ocm_get_config.md" >}})	 - Display the effective merged OCM configuration
-* [ocm get sbom]({{< relref "ocm_get_sbom.md" >}})	 - Get the SBOM describing a resource of a component version
-* [ocm get types]({{< relref "ocm_get_types.md" >}})	 - Describe OCM types and their configuration schema
+* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
 

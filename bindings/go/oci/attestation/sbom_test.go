@@ -1,0 +1,489 @@
+package attestation_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	goruntime "runtime"
+	"testing"
+
+	"github.com/opencontainers/image-spec/specs-go"
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/content"
+
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/attestation"
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
+	"ocm.software/open-component-model/bindings/go/oci/spec"
+)
+
+const testRepository = "ctf.ocm.software/acme/app"
+
+// slsaProvenance is the predicate type buildx puts on the provenance layer that sits
+// alongside the SBOM layers in the same attestation manifest.
+const slsaProvenance = "https://slsa.dev/provenance/v1"
+
+func newStore(t *testing.T) spec.Store {
+	t.Helper()
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	require.NoError(t, err)
+	store, err := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs)).StoreForReference(t.Context(), testRepository)
+	require.NoError(t, err)
+	return store
+}
+
+func pushBlob(t *testing.T, store spec.Store, mediaType string, raw []byte) ociImageSpecV1.Descriptor {
+	t.Helper()
+	desc := content.NewDescriptorFromBytes(mediaType, raw)
+	require.NoError(t, store.Push(t.Context(), desc, bytes.NewReader(raw)))
+	return desc
+}
+
+func pushJSON(t *testing.T, store spec.Store, mediaType string, value any) ociImageSpecV1.Descriptor {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	require.NoError(t, err)
+	return pushBlob(t, store, mediaType, raw)
+}
+
+// image pushes a platform image manifest and returns its index entry.
+func image(t *testing.T, store spec.Store, platform ociImageSpecV1.Platform, manifestMediaType string) ociImageSpecV1.Descriptor {
+	t.Helper()
+	layer := pushBlob(t, store, ociImageSpecV1.MediaTypeImageLayerGzip,
+		[]byte(fmt.Sprintf("payload for %s/%s", platform.OS, platform.Architecture)))
+	config := pushJSON(t, store, ociImageSpecV1.MediaTypeImageConfig, map[string]any{
+		"architecture": platform.Architecture,
+		"os":           platform.OS,
+		"rootfs":       map[string]any{"type": "layers"},
+	})
+	desc := pushJSON(t, store, manifestMediaType, ociImageSpecV1.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: manifestMediaType,
+		Config:    config,
+		Layers:    []ociImageSpecV1.Descriptor{layer},
+	})
+	desc.Platform = &platform
+	return desc
+}
+
+func predicateFor(index int) map[string]any {
+	name := attestation.CoreSBOMName
+	if index > 0 {
+		name = fmt.Sprintf("%s-stage%d", attestation.CoreSBOMName, index)
+	}
+	return map[string]any{
+		"spdxVersion": "SPDX-2.3",
+		"SPDXID":      fmt.Sprintf("SPDXRef-DOCUMENT-%d", index),
+		"name":        name,
+	}
+}
+
+// replicate a buildkit attestation
+//
+//	{
+//	   "_type": "https://in-toto.io/Statement/v1",
+//	   "predicateType": "https://spdx.dev/Document",
+//	   "subject": [],
+//	   "predicate": {
+//	       "SPDXID": "SPDXRef-DOCUMENT",
+//	       "creationInfo": {
+//	           "created": "2026-08-12T09:56:35Z",
+//	           "creators": [
+//	               "Organization: Anchore, Inc",
+//	               "Tool: syft-v1.42.3"
+//	           ],
+//	           "licenseListVersion": "3.28"
+//	       },
+//	 	...
+//	 }
+func attestationFor(t *testing.T, store spec.Store, subject ociImageSpecV1.Descriptor, predicateTypes ...string) ociImageSpecV1.Descriptor {
+	t.Helper()
+	config := pushJSON(t, store, ociImageSpecV1.MediaTypeImageConfig, map[string]any{
+		"architecture": attestation.PlatformUnknown,
+		"os":           attestation.PlatformUnknown,
+		"config":       map[string]any{},
+		"rootfs":       map[string]any{"type": "layers", "diff_ids": []string{}},
+	})
+
+	layers := make([]ociImageSpecV1.Descriptor, 0, len(predicateTypes))
+	for i, predicateType := range predicateTypes {
+		statement, err := json.Marshal(map[string]any{
+			"_type":         "https://in-toto.io/Statement/v0.1",
+			"predicateType": predicateType,
+			"subject": []map[string]any{{
+				"name":   "_",
+				"digest": map[string]string{"sha256": subject.Digest.Encoded()},
+			}},
+			"predicate": predicateFor(i),
+		})
+		require.NoError(t, err)
+
+		layer := pushBlob(t, store, attestation.MediaTypeInTotoStatement, statement)
+		layer.Annotations = map[string]string{attestation.AnnotationInTotoPredicateType: predicateType}
+		layers = append(layers, layer)
+	}
+
+	desc := pushJSON(t, store, ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Config:    config,
+		Layers:    layers,
+	})
+	// markers are on the index entry. see above.
+	desc.Platform = &ociImageSpecV1.Platform{
+		Architecture: attestation.PlatformUnknown,
+		OS:           attestation.PlatformUnknown,
+	}
+	desc.Annotations = map[string]string{
+		attestation.AnnotationDockerReferenceType:   attestation.ReferenceTypeAttestationManifest,
+		attestation.AnnotationDockerReferenceDigest: subject.Digest.String(),
+	}
+	return desc
+}
+
+func tagIndex(t *testing.T, store spec.Store, mediaType, tag string, entries ...ociImageSpecV1.Descriptor) string {
+	t.Helper()
+	desc := pushJSON(t, store, mediaType, ociImageSpecV1.Index{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: mediaType,
+		Manifests: entries,
+	})
+	require.NoError(t, store.Tag(t.Context(), desc, tag))
+	return testRepository + ":" + tag
+}
+
+func buildxIndex(t *testing.T, store spec.Store, predicateTypes ...string) (ref string, img ociImageSpecV1.Descriptor) {
+	t.Helper()
+	if len(predicateTypes) == 0 {
+		predicateTypes = []string{attestation.PredicateTypeSPDX}
+	}
+	img = image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+	att := attestationFor(t, store, img, predicateTypes...)
+	ref = tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest", img, att)
+	return ref, img
+}
+
+func linuxARM64() attestation.Option {
+	return attestation.WithPlatform(ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"})
+}
+
+func TestFixtureMatchesRealBuildKitOutput(t *testing.T) {
+	store := newStore(t)
+	img := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+	att := attestationFor(t, store, img,
+		attestation.PredicateTypeSPDX, attestation.PredicateTypeSPDX, slsaProvenance)
+
+	raw, err := content.FetchAll(t.Context(), store, att)
+	require.NoError(t, err)
+
+	var manifest ociImageSpecV1.Manifest
+	require.NoError(t, json.Unmarshal(raw, &manifest))
+
+	assert.Equal(t, 2, manifest.SchemaVersion)
+	assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, manifest.MediaType)
+	assert.Equal(t, ociImageSpecV1.MediaTypeImageConfig, manifest.Config.MediaType)
+
+	require.Len(t, manifest.Layers, 3)
+	for _, layer := range manifest.Layers {
+		assert.Equal(t, attestation.MediaTypeInTotoStatement, layer.MediaType)
+		assert.NotEmpty(t, layer.Annotations[attestation.AnnotationInTotoPredicateType])
+	}
+	assert.Equal(t, attestation.PredicateTypeSPDX, manifest.Layers[0].Annotations[attestation.AnnotationInTotoPredicateType])
+	assert.Equal(t, attestation.PredicateTypeSPDX, manifest.Layers[1].Annotations[attestation.AnnotationInTotoPredicateType])
+	assert.Equal(t, slsaProvenance, manifest.Layers[2].Annotations[attestation.AnnotationInTotoPredicateType])
+
+	assert.Equal(t, attestation.ReferenceTypeAttestationManifest, att.Annotations[attestation.AnnotationDockerReferenceType])
+	assert.Equal(t, img.Digest.String(), att.Annotations[attestation.AnnotationDockerReferenceDigest])
+	require.NotNil(t, att.Platform)
+	assert.Equal(t, attestation.PlatformUnknown, att.Platform.OS)
+	assert.Equal(t, attestation.PlatformUnknown, att.Platform.Architecture)
+}
+
+func TestDiscoverSBOMs_RealBuildKitLayerMix(t *testing.T) {
+	store := newStore(t)
+	ref, _ := buildxIndex(t, store,
+		attestation.PredicateTypeSPDX, attestation.PredicateTypeSPDX, slsaProvenance)
+
+	sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+	require.NoError(t, err)
+	require.Len(t, sboms, 2, "both SPDX layers are SBOMs; only the provenance is dropped")
+	for _, sbom := range sboms {
+		assert.Equal(t, attestation.PredicateTypeSPDX, sbom.PredicateType)
+	}
+	assert.NotEqual(t, sboms[0].Layer.Digest, sboms[1].Layer.Digest, "every layer is returned, not just the first")
+
+	// TestCore builds its SBOMs by hand, so this is the only place proving discovery
+	// reads the document name and that Core then picks on it.
+	core, ok := attestation.Core(sboms)
+	require.True(t, ok)
+	assert.Equal(t, attestation.CoreSBOMName, core.Name)
+	assert.True(t, core.IsCore())
+}
+
+func TestCore(t *testing.T) {
+	named := func(names ...string) []attestation.SBOM {
+		out := make([]attestation.SBOM, 0, len(names))
+		for _, name := range names {
+			out = append(out, attestation.SBOM{Name: name})
+		}
+		return out
+	}
+
+	t.Run("picks the image over its build stages", func(t *testing.T) {
+		core, ok := attestation.Core(named("sbom", "sbom-hugo"))
+		require.True(t, ok)
+		assert.Equal(t, "sbom", core.Name)
+	})
+
+	t.Run("does not depend on ordering", func(t *testing.T) {
+		core, ok := attestation.Core(named("sbom-hugo", "sbom-builder", "sbom"))
+		require.True(t, ok)
+		assert.Equal(t, "sbom", core.Name)
+	})
+
+	t.Run("a lone sbom is taken whatever it calls itself", func(t *testing.T) {
+		core, ok := attestation.Core(named("some-other-scanner-output"))
+		require.True(t, ok)
+		assert.Equal(t, "some-other-scanner-output", core.Name)
+	})
+
+	t.Run("reports when only stages are present", func(t *testing.T) {
+		_, ok := attestation.Core(named("sbom-hugo", "sbom-builder"))
+		assert.False(t, ok, "nothing here describes the image itself")
+	})
+
+	t.Run("reports when there is nothing at all", func(t *testing.T) {
+		_, ok := attestation.Core(nil)
+		assert.False(t, ok)
+	})
+
+	t.Run("a stage name is never mistaken for the core", func(t *testing.T) {
+		assert.False(t, attestation.SBOM{Name: "sbom-hugo"}.IsCore())
+		assert.True(t, attestation.SBOM{Name: "sbom"}.IsCore())
+	})
+}
+
+func TestDiscoverSBOMs(t *testing.T) {
+	t.Run("finds the sbom attached to the requested platform", func(t *testing.T) {
+		store := newStore(t)
+		ref, img := buildxIndex(t, store)
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+
+		got := sboms[0]
+		assert.Equal(t, attestation.PredicateTypeSPDX, got.PredicateType)
+		assert.Equal(t, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, got.Platform)
+		assert.Equal(t, img.Digest, got.Subject.Digest)
+		assert.Equal(t, attestation.MediaTypeSPDXJSON, got.MediaType())
+		var predicate map[string]any
+		require.NoError(t, json.Unmarshal(got.Predicate, &predicate))
+		assert.Equal(t, "SPDX-2.3", predicate["spdxVersion"])
+		assert.NotContains(t, predicate, "predicateType")
+	})
+
+	t.Run("preserves the predicate bytes exactly as stored", func(t *testing.T) {
+		store := newStore(t)
+		ref, _ := buildxIndex(t, store)
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+		require.NoError(t, err)
+		var envelope struct {
+			Predicate json.RawMessage `json:"predicate"`
+		}
+		require.NoError(t, json.Unmarshal(sboms[0].Statement, &envelope))
+		assert.Equal(t, []byte(envelope.Predicate), []byte(sboms[0].Predicate))
+	})
+
+	t.Run("skips provenance layers", func(t *testing.T) {
+		store := newStore(t)
+		ref, _ := buildxIndex(t, store, slsaProvenance, attestation.PredicateTypeSPDX)
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+		assert.Equal(t, attestation.PredicateTypeSPDX, sboms[0].PredicateType)
+	})
+
+	t.Run("honours a requested predicate type", func(t *testing.T) {
+		store := newStore(t)
+		ref, _ := buildxIndex(t, store, attestation.PredicateTypeCycloneDX)
+
+		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+		require.ErrorIs(t, err, attestation.ErrNoAttestation, "cyclonedx is not discovered by default")
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64(),
+			attestation.WithPredicateTypes(attestation.PredicateTypeCycloneDX))
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+		assert.Equal(t, attestation.MediaTypeCycloneDXJSON, sboms[0].MediaType())
+	})
+
+	t.Run("defaults to the platform of the running process", func(t *testing.T) {
+		store := newStore(t)
+		host := ociImageSpecV1.Platform{OS: goruntime.GOOS, Architecture: goruntime.GOARCH}
+		img := image(t, store, host, ociImageSpecV1.MediaTypeImageManifest)
+		att := attestationFor(t, store, img, attestation.PredicateTypeSPDX)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest", img, att)
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref)
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+		assert.Equal(t, host, sboms[0].Platform)
+	})
+
+	t.Run("selects the attestation belonging to the requested platform", func(t *testing.T) {
+		store := newStore(t)
+		amd64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}, ociImageSpecV1.MediaTypeImageManifest)
+		arm64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest",
+			amd64, arm64,
+			attestationFor(t, store, amd64, attestation.PredicateTypeSPDX),
+			attestationFor(t, store, arm64, attestation.PredicateTypeSPDX),
+		)
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+		assert.Equal(t, arm64.Digest, sboms[0].Subject.Digest)
+	})
+
+	t.Run("resolves a digest pinned reference", func(t *testing.T) {
+		store := newStore(t)
+		img := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+		att := attestationFor(t, store, img, attestation.PredicateTypeSPDX)
+		index := pushJSON(t, store, ociImageSpecV1.MediaTypeImageIndex, ociImageSpecV1.Index{
+			Versioned: specs.Versioned{SchemaVersion: 2},
+			MediaType: ociImageSpecV1.MediaTypeImageIndex,
+			Manifests: []ociImageSpecV1.Descriptor{img, att},
+		})
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store,
+			testRepository+"@"+index.Digest.String(), linuxARM64())
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+	})
+
+	t.Run("handles docker manifest list media types", func(t *testing.T) {
+		store := newStore(t)
+		img := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, introspection.MediaTypeDockerManifest)
+		att := attestationFor(t, store, img, attestation.PredicateTypeSPDX)
+		ref := tagIndex(t, store, introspection.MediaTypeDockerManifestList, "latest", img, att)
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+	})
+}
+
+func TestDiscoverSBOMs_Errors(t *testing.T) {
+	t.Run("rejects a plain image manifest", func(t *testing.T) {
+		store := newStore(t)
+		img := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+		require.NoError(t, store.Tag(t.Context(), img, "latest"))
+
+		_, err := attestation.DiscoverSBOMs(t.Context(), store, testRepository+":latest", linuxARM64())
+		require.ErrorIs(t, err, attestation.ErrNotAnIndex)
+	})
+
+	t.Run("reports the platforms on offer when the requested one is absent", func(t *testing.T) {
+		store := newStore(t)
+		amd64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}, ociImageSpecV1.MediaTypeImageManifest)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest",
+			amd64, attestationFor(t, store, amd64, attestation.PredicateTypeSPDX))
+
+		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
+		assert.ErrorContains(t, err, "linux/amd64", "the error has to say what could be asked for instead")
+	})
+
+	t.Run("reports a platform that carries no attestation", func(t *testing.T) {
+		store := newStore(t)
+		amd64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}, ociImageSpecV1.MediaTypeImageManifest)
+		arm64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest",
+			amd64, arm64, attestationFor(t, store, amd64, attestation.PredicateTypeSPDX))
+
+		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+		require.ErrorIs(t, err, attestation.ErrNoAttestation)
+		assert.ErrorContains(t, err, "linux/arm64 (no attestation)")
+	})
+
+	t.Run("never matches the attestation manifest itself", func(t *testing.T) {
+		store := newStore(t)
+		ref, _ := buildxIndex(t, store)
+		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, attestation.WithPlatform(
+			ociImageSpecV1.Platform{OS: attestation.PlatformUnknown, Architecture: attestation.PlatformUnknown}))
+		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
+	})
+
+	t.Run("rejects a statement without a predicate", func(t *testing.T) {
+		store := newStore(t)
+		img := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+
+		empty := ociImageSpecV1.DescriptorEmptyJSON
+		require.NoError(t, store.Push(t.Context(), empty, bytes.NewReader(empty.Data)))
+		layer := pushJSON(t, store, attestation.MediaTypeInTotoStatement, map[string]any{
+			"_type":         "https://in-toto.io/Statement/v0.1",
+			"predicateType": attestation.PredicateTypeSPDX,
+		})
+		layer.Annotations = map[string]string{attestation.AnnotationInTotoPredicateType: attestation.PredicateTypeSPDX}
+		att := pushJSON(t, store, ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.Manifest{
+			Versioned: specs.Versioned{SchemaVersion: 2},
+			MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			Config:    empty,
+			Layers:    []ociImageSpecV1.Descriptor{layer},
+		})
+		att.Annotations = map[string]string{
+			attestation.AnnotationDockerReferenceType:   attestation.ReferenceTypeAttestationManifest,
+			attestation.AnnotationDockerReferenceDigest: img.Digest.String(),
+		}
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest", img, att)
+
+		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+		// A layer we were looking for and cannot read is reported, not skipped, and
+		// the message has to say the sbom is broken rather than missing.
+		require.ErrorContains(t, err, "malformed sbom")
+		require.ErrorContains(t, err, "carries no predicate document")
+		require.NotErrorIs(t, err, attestation.ErrNoAttestation, "a broken sbom is not an absent one")
+	})
+
+	t.Run("skips an in-toto layer with no predicate type annotation", func(t *testing.T) {
+		store := newStore(t)
+		img := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+
+		empty := ociImageSpecV1.DescriptorEmptyJSON
+		require.NoError(t, store.Push(t.Context(), empty, bytes.NewReader(empty.Data)))
+		layer := pushJSON(t, store, attestation.MediaTypeInTotoStatement, map[string]any{"predicate": map[string]any{}})
+		att := pushJSON(t, store, ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.Manifest{
+			Versioned: specs.Versioned{SchemaVersion: 2},
+			MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			Config:    empty,
+			Layers:    []ociImageSpecV1.Descriptor{layer},
+		})
+		att.Annotations = map[string]string{
+			attestation.AnnotationDockerReferenceType:   attestation.ReferenceTypeAttestationManifest,
+			attestation.AnnotationDockerReferenceDigest: img.Digest.String(),
+		}
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest", img, att)
+		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+		require.ErrorIs(t, err, attestation.ErrNoAttestation)
+	})
+
+	t.Run("ignores an attestation with no subject annotation", func(t *testing.T) {
+		store := newStore(t)
+		img := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+		att := attestationFor(t, store, img, attestation.PredicateTypeSPDX)
+		delete(att.Annotations, attestation.AnnotationDockerReferenceDigest)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest", img, att)
+
+		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
+		require.ErrorIs(t, err, attestation.ErrNoAttestation)
+	})
+}
