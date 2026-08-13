@@ -308,7 +308,7 @@ jobs:
             .env
           persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -348,7 +348,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -405,7 +405,7 @@ jobs:
             reuse.Taskfile.yml
           persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -427,7 +427,7 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Go (required by some generators)
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ github.workspace }}/bindings/go/go.mod
           cache-dependency-path: |
