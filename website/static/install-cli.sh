@@ -103,9 +103,10 @@ ensure_path() {
     esac
 
     warn "${BIN_DIR} is not in your PATH."
-    warn "Add it by running:"
+    warn "Add it by adding this line to your shell profile"
+    warn "(e.g. ~/.zshrc for zsh, or ~/.bashrc / ~/.profile for bash / sh):"
     warn ""
-    warn '  echo "export PATH=${BIN_DIR}:$PATH" >> ~/.profile && source ~/.profile'
+    warn "  export PATH=\"\$PATH:${BIN_DIR}\""
     warn ""
 }
 
