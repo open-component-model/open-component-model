@@ -8,8 +8,13 @@ draft: true
 ---
 
 The OCM Go bindings have moved from 30+ independently versioned Go modules to a
-single module at `ocm.software/open-component-model/bindings/go`. This post
-explains what changed, why, and what it means for consumers and contributors.
+single module at `ocm.software/open-component-model/bindings/go`. 
+
+*This change does not dilute our current modularity or dependency footprint.* If
+you have questions or concerns about this change please [get in touch](/community/#get-in-touch).
+
+In this post we'll explain what changed, why, and what it means for consumers 
+and contributors.
 
 ## The Problem
 
