@@ -1,11 +1,8 @@
 version: '3'
 
-includes:
-  reuse: ../../../reuse.Taskfile.yml
-
-
 tasks:
-  build:
+  build/plugins:
+    dir: plugin
     cmds:
       - go build -o tmp/testdata/test-plugin-component-version internal/testplugin-component-version/main.go
       - go build -o tmp/testdata/test-plugin-resource internal/testplugin-resource/main.go
@@ -15,8 +12,12 @@ tasks:
       - go build -o tmp/testdata/test-plugin-signinghandler internal/testplugin-signinghandler/main.go
       - go build -o tmp/testdata/test-plugin-component-lister internal/testplugin-component-lister/main.go
       - go build -o tmp/testdata/test-plugin-credential-repository internal/testplugin-credential-repository/main.go
+
   test:
+    deps: [build/plugins]
     cmds:
-      - task: reuse:run-go-test
-    deps:
-      - build
+      - go test -short -skip "Integration" -count=1 $(go list ./... | grep -v /integration) {{.CLI_ARGS}}
+
+  test/integration:
+    cmds:
+      - go test -run "Integration" -count=1 $(go list ./... | grep -v /sigstore/integration)
