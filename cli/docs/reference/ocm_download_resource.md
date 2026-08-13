@@ -24,6 +24,21 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 
 When --output is not provided, the output filename is the resource name.
 
+With --sbom, the Software Bills of Materials describing the resource are downloaded instead of the
+resource itself. This is EXPERIMENTAL: what is discovered, how it is written out and the flags
+themselves may change in a future release. They are looked for in two ways, in order:
+
+  1. Another resource of the same component version declaring, through the
+     "ocm.software/artifact-references" label, that it describes the selected resource.
+  2. For a resource backed by an OCI artifact, SBOMs attached to that artifact by
+     "docker buildx build --sbom=true". SBOMs attached by other tooling, such as cosign
+     or the OCI referrers API, are not discovered.
+
+Every SBOM found is written to its own file in a directory, byte for byte as published, so digests
+and signatures over them still apply. The directory is --output, or the values of the resource
+identity joined by "-" when that is not given, so --identity name=image,architecture=amd64 writes
+into "image-amd64". The paths written are printed to standard output, one per line.
+
 ```
 ocm download resource [flags]
 ```
@@ -42,6 +57,12 @@ ocm download resource [flags]
 
   # Download a resource and apply a transformer
   ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
+
+  # Download every SBOM describing a resource into a directory
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --sbom --output ./sboms
+
+  # Scan every SBOM found for a resource
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --sbom | xargs -n1 grype sbom:
 ```
 
 ### Options
@@ -51,7 +72,10 @@ ocm download resource [flags]
                                  (must be one of [auto disable]) (default auto)
   -h, --help                     help for resource
       --identity string          resource identity to download
-      --output string            output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name.
+      --output string            output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name. With --sbom this is a single file, and standard output is used when it is not given.
+      --sbom                     download the SBOMs describing the resource instead of the resource itself, combining every SBOM found into a single document
+      --sbom-format enum         format to write the combined SBOM in. Only valid together with --sbom.
+                                 (must be one of [cyclonedx spdx]) (default spdx)
       --transformer string       transformer to use for the output. If not specified, the resource will be written as is. 
 ```
 
