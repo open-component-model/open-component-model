@@ -15,22 +15,6 @@
     enabled: true,
   },
   // config:recommended transitively pulls in :ignoreModulesAndTests, which
-  // adds **/examples/** to ignorePaths and hides bindings/go/examples/go.mod.
-  // Re-list that preset minus **/examples/** so Renovate scans it again.
-  // ignorePaths is append-only via presets and has no working list-level
-  // negation, so we override for gomod only. Keep in sync if
-  // :ignoreModulesAndTests gains new patterns upstream.
-  gomod: {
-    ignorePaths: [
-      '**/node_modules/**',
-      '**/bower_components/**',
-      '**/vendor/**',
-      '**/__tests__/**',
-      '**/test/**',
-      '**/tests/**',
-      '**/__fixtures__/**',
-    ],
-  },
   'updateNotScheduled': true, // Update branches that have already been created
   'minimumReleaseAge': '28 days',
   'branchPrefix': 'renovate/',
@@ -219,6 +203,8 @@
       matchManagers: [
         'gomod',
       ],
+      // With the monolithic bindings/go module, this group now only fires for
+      // cli/ and kubernetes/controller/ consuming the published bindings/go tag.
       groupName: 'OCM Monorepo Go Module Dependencies',
       groupSlug: 'ocm-monorepo',
       matchPackageNames: [

@@ -8,146 +8,43 @@ output: prefixed
 includes:
   tools:
     taskfile: ./tools.Taskfile.yml
-  bindings/go/cel:
+  # bindings/go is a single Go module. Unit tests are run via `bindings/go:test`.
+  # Integration tests that only need Docker are run via `bindings/go:test/integration`.
+  # Sigstore integration requires a dedicated scaffolding cluster and runs as a
+  # separate CI job. The other integration includes are for local convenience.
+  # The generator include provides code generation tasks used by `task generate`.
+  bindings/go:
     optional: true
-    taskfile: ./bindings/go/cel/Taskfile.yml
-    dir: ./bindings/go/cel
-  bindings/go/credentials:
-    optional: true
-    taskfile: ./bindings/go/credentials/Taskfile.yml
-    dir: ./bindings/go/credentials
-  bindings/go/constructor:
-    optional: true
-    taskfile: ./bindings/go/constructor/Taskfile.yml
-    dir: ./bindings/go/constructor
-  bindings/go/constructor/integration:
-    optional: true
-    taskfile: ./bindings/go/constructor/integration/Taskfile.yml
-    dir: ./bindings/go/constructor/integration
-  bindings/go/input/dir:
-    optional: true
-    taskfile: ./bindings/go/input/dir/Taskfile.yml
-    dir: ./bindings/go/input/dir
-  bindings/go/input/file:
-    optional: true
-    taskfile: ./bindings/go/input/file/Taskfile.yml
-    dir: ./bindings/go/input/file
-  bindings/go/github:
-    optional: true
-    taskfile: ./bindings/go/github/Taskfile.yml
-    dir: ./bindings/go/github
-  bindings/go/github/integration:
-    optional: true
-    taskfile: ./bindings/go/github/integration/Taskfile.yml
-    dir: ./bindings/go/github/integration
-  bindings/go/helm:
-    optional: true
-    taskfile: ./bindings/go/helm/Taskfile.yml
-    dir: ./bindings/go/helm
-  bindings/go/input/utf8:
-    optional: true
-    taskfile: ./bindings/go/input/utf8/Taskfile.yml
-    dir: ./bindings/go/input/utf8
-  bindings/go/descriptor/v2:
-    optional: true
-    taskfile: ./bindings/go/descriptor/v2/Taskfile.yml
-    dir: ./bindings/go/descriptor/v2
-  bindings/go/descriptor/normalisation:
-    optional: true
-    taskfile: ./bindings/go/descriptor/normalisation/Taskfile.yml
-    dir: ./bindings/go/descriptor/normalisation
-  bindings/go/descriptor/runtime:
-    optional: true
-    taskfile: ./bindings/go/descriptor/runtime/Taskfile.yml
-    dir: ./bindings/go/descriptor/runtime
-  bindings/go/runtime:
-    optional: true
-    taskfile: ./bindings/go/runtime/Taskfile.yml
-    dir: ./bindings/go/runtime
+    taskfile: ./bindings/go/Taskfile.yml
+    dir: ./bindings/go
   bindings/go/generator:
     optional: true
     taskfile: ./bindings/go/generator/Taskfile.yml
     dir: ./bindings/go/generator
-  bindings/go/blob:
+  bindings/go/constructor/integration:
     optional: true
-    taskfile: ./bindings/go/blob/Taskfile.yml
-    dir: ./bindings/go/blob
-  bindings/go/ctf:
+    taskfile: ./bindings/go/constructor/integration/Taskfile.yml
+    dir: ./bindings/go/constructor/integration
+  bindings/go/github/integration:
     optional: true
-    taskfile: ./bindings/go/ctf/Taskfile.yml
-    dir: ./bindings/go/ctf
-  bindings/go/oci:
-    optional: true
-    taskfile: ./bindings/go/oci/Taskfile.yml
-    dir: ./bindings/go/oci
-  bindings/go/examples:
-    optional: true
-    taskfile: ./bindings/go/examples/Taskfile.yml
-    dir: ./bindings/go/examples
-  bindings/go/oci/integration:
-    optional: true
-    taskfile: ./bindings/go/oci/integration/Taskfile.yml
-    dir: ./bindings/go/oci/integration
-  bindings/go/dag:
-    optional: true
-    taskfile: ./bindings/go/dag/Taskfile.yml
-    dir: ./bindings/go/dag
-  bindings/go/plugin:
-    optional: true
-    taskfile: ./bindings/go/plugin/Taskfile.yml
-    dir: ./bindings/go/plugin
-  bindings/go/configuration:
-    optional: true
-    taskfile: ./bindings/go/configuration/Taskfile.yml
-    dir: ./bindings/go/configuration
-  bindings/go/http:
-    optional: true
-    taskfile: ./bindings/go/http/Taskfile.yml
-    dir: ./bindings/go/http
+    taskfile: ./bindings/go/github/integration/Taskfile.yml
+    dir: ./bindings/go/github/integration
   bindings/go/http/integration:
     optional: true
     taskfile: ./bindings/go/http/integration/Taskfile.yml
     dir: ./bindings/go/http/integration
-  bindings/go/repository:
+  bindings/go/oci/integration:
     optional: true
-    taskfile: ./bindings/go/repository/Taskfile.yml
-    dir: ./bindings/go/repository
-  bindings/go/rsa:
-    optional: true
-    taskfile: ./bindings/go/rsa/Taskfile.yml
-    dir: ./bindings/go/rsa
-  bindings/go/gpg:
-    optional: true
-    taskfile: ./bindings/go/gpg/Taskfile.yml
-    dir: ./bindings/go/gpg
-  bindings/go/signing:
-    optional: true
-    taskfile: ./bindings/go/signing/Taskfile.yml
-    dir: ./bindings/go/signing
-  bindings/go/sigstore:
-    optional: true
-    taskfile: ./bindings/go/sigstore/Taskfile.yml
-    dir: ./bindings/go/sigstore
+    taskfile: ./bindings/go/oci/integration/Taskfile.yml
+    dir: ./bindings/go/oci/integration
   bindings/go/sigstore/integration:
     optional: true
     taskfile: ./bindings/go/sigstore/integration/Taskfile.yml
     dir: ./bindings/go/sigstore/integration
-  bindings/go/transfer:
-    optional: true
-    taskfile: ./bindings/go/transfer/Taskfile.yml
-    dir: ./bindings/go/transfer
   bindings/go/transfer/integration:
     optional: true
     taskfile: ./bindings/go/transfer/integration/Taskfile.yml
     dir: ./bindings/go/transfer/integration
-  bindings/go/transform:
-    optional: true
-    taskfile: ./bindings/go/transform/Taskfile.yml
-    dir: ./bindings/go/transform
-  bindings/go/wget:
-    optional: true
-    taskfile: ./bindings/go/wget/Taskfile.yml
-    dir: ./bindings/go/wget
   bindings/go/wget/integration:
     optional: true
     taskfile: ./bindings/go/wget/integration/Taskfile.yml

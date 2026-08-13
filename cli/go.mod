@@ -16,33 +16,7 @@ require (
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
-	ocm.software/open-component-model/bindings/go/blob v0.0.13
-	ocm.software/open-component-model/bindings/go/cel v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/configuration v0.0.16
-	ocm.software/open-component-model/bindings/go/constructor v0.0.13
-	ocm.software/open-component-model/bindings/go/credentials v0.0.14
-	ocm.software/open-component-model/bindings/go/ctf v0.4.1
-	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20260811153859-d0a9bf98c735
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.3-alpha3
-	ocm.software/open-component-model/bindings/go/github v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/gpg v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/helm v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/http v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/input/dir v0.0.4
-	ocm.software/open-component-model/bindings/go/input/file v0.0.5
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/oci v0.0.49
-	ocm.software/open-component-model/bindings/go/plugin v0.0.17
-	ocm.software/open-component-model/bindings/go/repository v0.0.10
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/runtime v0.0.8
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/sigstore v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/transfer v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/transform v0.0.0-20260811140339-29bc20eb921b
-	ocm.software/open-component-model/bindings/go/wget v0.0.0-20260811140339-29bc20eb921b
+	ocm.software/open-component-model/bindings/go v0.0.1-alpha1
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -93,6 +67,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/moby/term v0.5.2 // indirect
