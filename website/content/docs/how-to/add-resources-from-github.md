@@ -166,7 +166,7 @@ would keep pointing wherever the branch moves to.
 ### Build the component version
 
 ```bash
-ocm add cv --repository ctf::./transport-archive --constructor ./component-constructor.yaml
+ocm add cv
 ```
 
 OCM downloads the archive to hash it, and says so:

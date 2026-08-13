@@ -233,7 +233,18 @@ consumers:
         token: ghp_example_token
 ```
 
-A legacy `Credentials/v1` property bag with a `token` property works as well.
+A legacy [`Credentials/v1`](#directcredentialsv1) property bag with a `token` property works as well:
+
+```yaml
+consumers:
+  - identity:
+      type: GitHubRepository
+      hostname: github.com
+    credentials:
+      - type: Credentials/v1
+        properties:
+          token: ghp_example_token
+```
 
 Configuring no consumer at all is valid: the GitHub REST API is then called anonymously.
 
