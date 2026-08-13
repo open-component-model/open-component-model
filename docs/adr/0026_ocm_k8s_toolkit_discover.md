@@ -157,15 +157,34 @@ not as per-edge pruning during traversal. Per-edge pruning would drop deep match
 to match. This trades a broader graph walk for correctness under nested reference structures. The graph walk is
 concurrent and unbounded today; a concurrency limit might be a follow-up.
 
-Short-circuit: When a selector fixes a component identity, `name` and `version` set as concrete equality, no
-other constraints active, the controller extracts that target and terminates DAG traversal at the vertex's subtree
-boundary. Component identity `{name, version}` is [globally unique per the OCM
+Short-circuit: When a selector fixes a component identity `name` and `version` set as concrete equality on
+`matchIdentity` the controller marks that identity as a short-circuit target. Once the DAG traversal resolves it,
+the target's `Discover` call returns an early-exit signal that propagates through the discoverer's `errgroup` and
+stops the walk. Component identity `{name, version}` is [globally unique per the OCM
 spec](https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#component-identity),
-so nothing below the target needs to be walked. Label and expression constraints disable the short-circuit; the
-controller can't tell what they'll evaluate to before actually running them. This is why `MatchIdentity` is a
-first-class map on the CR surface (see [Selector shape](#selector-shape) below) rather than folded into `Expression`:
-the controller can just read the `name` and `version` entries directly and decide whether short-circuit applies, without
-compiling or evaluating CEL.
+so at most one vertex can match and nothing else needs to be walked.
+
+The two selectors have different envelopes for the optimization:
+
+- **`componentSelector`**: `matchLabels` and `expression` are allowed alongside `matchIdentity`. The
+  post-filter (`filterByComponentSelector`) evaluates them against the target's own descriptor. The
+  short-circuit fires from the target's own `Discover` call, which runs only after `Resolve` has already stored
+  the descriptor on the vertex, so the target is guaranteed to be in the discovered set. Cancelled siblings are
+  irrelevant: their descriptors have different identities, so the component-level post-filter would drop them
+  anyway.
+
+- **`referenceSelector`**: `matchLabels` and `expression` must be empty. Reference labels live on edges, and the
+  same target can be reached via multiple parents. The early-exit signal propagates through the discoverer's
+  `errgroup` and cancels sibling goroutines, some of which may still be resolving alternative parents of the
+  target. Those parents' descriptors then never enter `filterByReferenceSelector`, which iterates each surviving
+  descriptor's `Component.References` to decide which targets match. Cancelling a parent hides its reference
+  edge to the target from the post-filter, so a `matchLabels`/`expression` clause that would have matched on
+  the cancelled edge produces a false negative. Requiring empty label/expression clauses keeps short-circuit to
+  cases where the post-filter is a no-op (any surviving edge to the target is a match).
+
+This is why `matchIdentity` is a first-class map on the CR surface (see [Selector shape](#selector-shape) below)
+rather than folded into `expression`: the controller reads `name` and `version` directly and decides whether
+short-circuit applies without compiling or evaluating CEL.
 
 #### Selector shape
 
@@ -173,7 +192,7 @@ Selectors have three fields, all ANDed. An empty selector matches everything.
 
 - `matchIdentity`: equality on identity attributes (`name`, `version`, and per-element extras like `componentName` on
   references). First-class map on the CR surface so the controller can read it statically for the short-circuit
-  optimisation.
+  optimization.
 - `matchLabels`: string-equality on labels whose value is a string. OCM labels may hold arbitrary JSON; non-string
   values are not comparable this way and are silently non-matching.
 - **`expression`**: a CEL boolean predicate. A CEL binding is a named value the expression can reference; for
@@ -192,7 +211,7 @@ reasons:
 - Two ways to write the same query: `env in [prod, staging]` works in both `matchExpressions` and CEL.
 - `LabelSelector` values are string-only: OCM labels are arbitrary JSON. `matchExpressions` covers only the
   string subset; structured labels still need `expression`. Adding it doesn't remove any surface, only adds.
-- The one range operator users actually need, semver, is already in CEL as `semverCheck`.
+- The one range operator users actually need, semver, will already be available as CEL function `semverCheck`.
 
 #### `Extract` and its three modes
 
