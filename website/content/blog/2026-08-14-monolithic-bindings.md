@@ -72,4 +72,4 @@ use them, as new features and fixes will only be published under the monolithic 
 ## Background
 
 This decision is documented in
-[ADR 25: Bindings CI and Release Strategy](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0025_bindings_ci_and_release_strategy.md).
+[ADR 25: Bindings CI and Release Strategy](https://github.com/open-component-model/open-component-model/blob/9ae81694fd824e43562c48aa2c82eb8b6c71d3ba/docs/adr/0025_bindings_ci_and_release_strategy.md).
