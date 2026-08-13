@@ -68,7 +68,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ env.LOCATION }}/go.mod
           cache-dependency-path: ${{ env.LOCATION }}/go.sum
@@ -86,7 +86,7 @@ jobs:
         run: bash website/static/install.sh
 
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@f05a280b876a3a1d35a76a91f701e605777853aa # v2.9.1
+        uses: fluxcd/flux2/action@6a650dba1b4ae9945185c4bb3cc3f386aaf71b3d # v2.9.2
 
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1

@@ -21,7 +21,7 @@ const (
 	// DefaultGitHubRepo is the GitHub repository name (monorepo containing CLI, controller, etc.).
 	DefaultGitHubRepo = "open-component-model"
 	// DefaultTagPrefix identifies CLI releases within the monorepo's release tags.
-	DefaultTagPrefix = "cli/v"
+	DefaultTagPrefix = "v"
 	// DefaultHTTPTimeout is the maximum duration for the GitHub API request.
 	// Kept short to avoid delaying CLI commands in degraded network conditions.
 	DefaultHTTPTimeout = 5 * time.Second
