@@ -4,7 +4,7 @@ description: "The OCM Go bindings libraries move from 30+ independently versione
 date: 2026-08-14T10:00:00+02:00
 contributors: []
 tags: ["ocm", "release", "go", "bindings", "developer-experience"]
-draft: true
+draft: false
 ---
 
 The OCM Go bindings have moved from 30+ independently versioned Go modules to a
