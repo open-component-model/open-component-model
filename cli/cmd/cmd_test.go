@@ -1565,18 +1565,100 @@ resources:
 	))
 	r.NoError(err, "could not construct component version")
 
-	signerSpecFilePath := filepath.Join(tmp, "sigstore-signer-spec.yaml")
-	r.NoError(os.WriteFile(signerSpecFilePath,
-		[]byte("type: SigstoreSigningConfiguration/v1alpha1\n"), 0o600))
+	ocmConfigFilePath := filepath.Join(tmp, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(ocmConfigFilePath, []byte(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
+`), 0o600))
 
 	reference := archiveFilePath + "//" + name + ":" + version
 	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
 		reference,
 		"--signature", "sigstore-wiring-test",
-		"--signer-spec", signerSpecFilePath,
+		"--config", ocmConfigFilePath,
 	))
 	r.Error(err)
 	r.Contains(err.Error(), "OIDC identity token required")
+}
+
+func Test_Sign_Signer_Selected_By_Signature(t *testing.T) {
+	t.Setenv("SIGSTORE_ID_TOKEN", "")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/signer-per-signature", "1.0.0"
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(fmt.Sprintf(`
+name: %[1]s
+version: %[2]s
+provider:
+  name: ocm.software
+resources:
+  - name: my-resource
+    type: blob
+    input:
+      type: utf8/v1
+      text: "signer selection test"
+`, name, version)), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	r.NoError(err, "could not construct component version")
+
+	// this should win
+	ocmConfigFilePath := filepath.Join(tmp, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(ocmConfigFilePath, []byte(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signature: release
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: RSASigningConfiguration/v1alpha1
+`), 0o600))
+
+	reference := archiveFilePath + "//" + name + ":" + version
+
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", "release",
+		"--config", ocmConfigFilePath,
+	))
+	r.ErrorContains(err, "OIDC identity token required")
+
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", "internal",
+		"--config", ocmConfigFilePath,
+	))
+	r.ErrorContains(err, "private key not found")
+}
+
+func Test_Sign_With_Deprecated_Signer_Spec_Flag_Fails(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	signerSpecFilePath := filepath.Join(tmp, "signer-spec.yaml")
+	r.NoError(os.WriteFile(signerSpecFilePath,
+		[]byte("type: RSASigningConfiguration/v1alpha1\n"), 0o600))
+
+	_, err := test.OCM(t, test.WithArgs("sign", "component-version",
+		filepath.Join(tmp, "transport-archive")+"//ocm.software/whatever:1.0.0",
+		"--signer-spec", signerSpecFilePath,
+	))
+	r.Error(err)
+	r.Contains(err.Error(), "--signer-spec is no longer supported")
+	r.Contains(err.Error(), "signing.config.ocm.software/v1alpha1")
 }
 
 // Test_Add_Component_Version_Docker_Credentials tests the use of docker credentials in the add cv command
