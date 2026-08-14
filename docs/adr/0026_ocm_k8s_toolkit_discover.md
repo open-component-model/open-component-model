@@ -238,9 +238,12 @@ tolerance selectors have for missing attributes (see [Selector shape](#selector-
 placeholder instead of dropping, use `has(...)` with a conditional, e.g.
 `has(resource.access.imageReference) ? resource.access.imageReference : "n/a"`.
 
-`expression` mode has no per-field container to drop into: the whole payload is a single CEL expression, so an
-unguarded miss surfaces as `ExtractFailed`. Guard with `has(...)` or CEL optional access
-(`foo.?bar.orValue(...)`) if the expression may traverse fields that are not always present.
+`expression` mode is strict on missing-field access: any miss surfaces as `ExtractFailed`. The tolerance
+selectors and map modes have (missing attribute treated as `false` / field dropped) works because the controller
+loops in Go and calls CEL once per element, so a runtime error scopes to one iteration and the loop moves on.
+`extract.expression` is a single CEL evaluation over the whole `components` list; the controller has no
+per-element boundary at which to catch and continue. Guard traversals of not-always-present fields with `has(...)`
+or CEL optional access (`foo.?bar.orValue(...)`).
 
 `Extract` is optional. When absent, the raw v2 descriptor list is emitted, subject to the etcd soft limit.
 
