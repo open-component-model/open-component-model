@@ -136,7 +136,7 @@ head -n 1 /tmp/keys/public-key.pem
 {{< /tab >}}
 {{< tab "GPG" >}}
 
-Verify a GPG (OpenPGP) signature using the public key configured in `.ocmconfig`. The same `signer-spec.yaml` you used to sign doubles as the verifier spec — no separate file is needed.
+Verify a GPG (OpenPGP) signature using the public key configured in `.ocmconfig`. Verification takes the handler from a spec file passed with `--verifier-spec`, so put the same `type: GPGSigningConfiguration/v1alpha1` you configured for signing into a `verifier-spec.yaml`.
 
 To run this you need the signer's public key on disk and pointed at by `publicKeyPGPFile` in `.ocmconfig`. With Sigstore (other tabs) you don't install a public key at all — you just declare which identity you trust.
 
@@ -167,12 +167,16 @@ If you signed locally, the same `.ocmconfig` you wrote on the sign page already 
 
 If you're verifying a signature **someone else** produced, follow [How-To: Configure Signing Credentials → GPG]({{< relref "configure-signing-credentials.md" >}}) using only the signer's public key (`publicKeyPGPFile`); the `privateKeyPGPFile` entry is not needed for verification.
 
-Reuse the same one-line verifier spec from the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}) — the GPG signer spec doubles as a verifier spec:
+Create a one-line verifier spec holding the same handler type you configured as the signer in the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}):
 
 ```yaml
 # verifier-spec.yaml
 type: GPGSigningConfiguration/v1alpha1
 ```
+
+{{< callout context="note" >}}
+Signing reads its handler from `.ocmconfig`, verification still reads it from this file. The `verifier` field of a `signing.config.ocm.software/v1alpha1` entry is not consulted by `ocm verify` yet.
+{{< /callout >}}
 
 {{< callout context="note" >}}
 `signature: default` matches the default name `ocm verify` looks for. If the signature was created with `--signature <name>`, set the same value in the consumer identity and pass `--signature <name>` on the command line.
@@ -188,7 +192,7 @@ Run the verify command with the verifier spec:
 
 ```bash
 ocm verify cv \
-  --verifier-spec ./signer-spec.yaml \
+  --verifier-spec ./verifier-spec.yaml \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
@@ -215,7 +219,7 @@ If the component carries multiple signatures (e.g. a GPG signature alongside an 
 
 ```bash
 ocm verify cv \
-  --verifier-spec ./signer-spec.yaml \
+  --verifier-spec ./verifier-spec.yaml \
   --signature prod \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
