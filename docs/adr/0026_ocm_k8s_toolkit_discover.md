@@ -173,14 +173,17 @@ The two selectors have different envelopes for the optimization:
   irrelevant: their descriptors have different identities, so the component-level post-filter would drop them
   anyway.
 
-- **`referenceSelector`**: `matchLabels` and `expression` must be empty. Reference labels live on edges, and the
-  same target can be reached via multiple parents. The early-exit signal propagates through the discoverer's
-  `errgroup` and cancels sibling goroutines, some of which may still be resolving alternative parents of the
-  target. Those parents' descriptors then never enter `filterByReferenceSelector`, which iterates each surviving
-  descriptor's `Component.References` to decide which targets match. Cancelling a parent hides its reference
-  edge to the target from the post-filter, so a `matchLabels`/`expression` clause that would have matched on
-  the cancelled edge produces a false negative. Requiring empty label/expression clauses keeps short-circuit to
-  cases where the post-filter is a no-op (any surviving edge to the target is a match).
+- **`referenceSelector`**: `matchLabels` and `expression` must be empty, and `matchIdentity` must contain
+  exactly `componentName` and `version` (no other keys). Reference labels and per-edge identity attributes
+  (local `name`, extra identity) live on edges, and the same target can be reached via multiple parents. The
+  early-exit signal propagates through the discoverer's `errgroup` and cancels sibling goroutines, some of
+  which may still be resolving alternative parents of the target. Those parents' descriptors then never enter
+  `filterByReferenceSelector`, which iterates each surviving descriptor's `Component.References` to decide
+  which targets match. Cancelling a parent hides its reference edge to the target from the post-filter, so a
+  `matchLabels` / `expression` clause, or a `matchIdentity` clause on a per-edge attribute, that would have
+  matched on the cancelled edge produces a false negative. Restricting the short-circuit trigger to a
+  `matchIdentity` of exactly `{componentName, version}` with no label/expression clauses keeps it to cases
+  where the post-filter is a no-op (any surviving edge to the target is a match).
 
 This is why `matchIdentity` is a first-class map on the CR surface (see [Selector shape](#selector-shape) below)
 rather than folded into `expression`: the controller reads `name` and `version` directly and decides whether
