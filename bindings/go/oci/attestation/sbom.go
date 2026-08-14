@@ -268,6 +268,12 @@ func selectPlatform(images []ociImageSpecV1.Descriptor, want ociImageSpecV1.Plat
 		if want.Variant != "" && want.Variant != image.Platform.Variant {
 			continue
 		}
+		if want.OSVersion != "" && want.OSVersion != image.Platform.OSVersion {
+			continue
+		}
+		if len(want.OSFeatures) > 0 && !slices.Equal(want.OSFeatures, image.Platform.OSFeatures) {
+			continue
+		}
 		return image, true
 	}
 	return ociImageSpecV1.Descriptor{}, false

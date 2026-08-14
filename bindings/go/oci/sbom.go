@@ -15,7 +15,6 @@ import (
 )
 
 // DiscoverSBOM returns the SBOM attestations attached to the OCI artifact.
-// Platform is inferred from the extraIdentity.
 func (repo *Repository) DiscoverSBOM(ctx context.Context, res *descriptor.Resource, opts ...attestation.Option) ([]attestation.SBOM, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 

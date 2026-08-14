@@ -10,6 +10,7 @@ import (
 	goruntime "runtime"
 	"strings"
 
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/spf13/cobra"
 
 	ocmblob "ocm.software/open-component-model/bindings/go/blob"
@@ -34,6 +35,7 @@ const (
 const (
 	platformAttributeOS           = "os"
 	platformAttributeArchitecture = "architecture"
+	platformAttributeVariant      = "variant"
 )
 
 // resourceTypeSBOM is the resource type an SBOM is published under.
@@ -68,12 +70,7 @@ The resource is selected with --identity. Its SBOM is then looked for in two way
      or the OCI referrers API, are not discovered.
 
 The SBOM document is written to standard output as it was published, so it can be piped
-straight into a scanner.
-
-A resource published once per platform is narrowed to the architecture this command runs
-on, unless --identity names a different one. The operating system is only matched when
---identity names it, because a container image records the system it runs on rather than
-the system asking about it.`,
+straight into a scanner.`,
 		Example: strings.TrimSpace(`
 Getting the SBOM of a resource:
 
@@ -148,8 +145,13 @@ func GetSBOM(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	document, err := discoverSBOMs(ctx, pluginManager, credentialGraph, logger,
-		componentVersion{desc: desc, repo: repo, ref: ref}, target)
+	document, err := discoverSBOMs(ctx, logger, pluginManager, credentialGraph,
+		componentVersion{desc: desc, repo: repo, ref: ref}, target,
+		attestation.WithPlatform(ociImageSpecV1.Platform{
+			OS:           requestedIdentity[platformAttributeOS],
+			Architecture: requestedIdentity[platformAttributeArchitecture],
+			Variant:      requestedIdentity[platformAttributeVariant],
+		}))
 	if err != nil {
 		return err
 	}
@@ -167,13 +169,14 @@ type componentVersion struct {
 // discoverSBOMs runs the lookup strategies in order and returns the SBOM document.
 func discoverSBOMs(
 	ctx context.Context,
+	logger *slog.Logger,
 	pluginManager *manager.PluginManager,
 	credentialGraph credentials.Resolver,
-	logger *slog.Logger,
 	version componentVersion,
 	target *descriptor.Resource,
+	opts ...attestation.Option,
 ) ([]byte, error) {
-	document, err := discoverForArtefactReferences(ctx, pluginManager, credentialGraph, logger, version, target)
+	document, err := discoverForArtefactReferences(ctx, logger, pluginManager, credentialGraph, version, target)
 	if err == nil {
 		return document, nil
 	}
@@ -184,16 +187,16 @@ func discoverSBOMs(
 	logger.Debug("no sbom resource references the requested resource, inspecting its artifact",
 		slog.String("resource", target.ToIdentity().String()))
 
-	return discoverForOCIArtifacts(ctx, pluginManager, credentialGraph, logger, target)
+	return discoverForOCIArtifacts(ctx, logger, pluginManager, credentialGraph, target, opts...)
 }
 
 // discoverForArtefactReferences looks for a resource of the component version
 // that declares, through the artefact reference label, that it describes the target.
 func discoverForArtefactReferences(
 	ctx context.Context,
+	logger *slog.Logger,
 	pluginManager *manager.PluginManager,
 	credentialGraph credentials.Resolver,
-	logger *slog.Logger,
 	version componentVersion,
 	target *descriptor.Resource,
 ) ([]byte, error) {
@@ -244,10 +247,11 @@ func discoverForArtefactReferences(
 // SBOM attached to it at build time.
 func discoverForOCIArtifacts(
 	ctx context.Context,
+	logger *slog.Logger,
 	pluginManager *manager.PluginManager,
 	credentialGraph credentials.Resolver,
-	logger *slog.Logger,
 	target *descriptor.Resource,
+	opts ...attestation.Option,
 ) ([]byte, error) {
 	targetIdentity := target.ToIdentity()
 
@@ -278,7 +282,7 @@ func discoverForOCIArtifacts(
 		}
 	}
 
-	sboms, err := discoverer.DiscoverSBOM(ctx, target, creds)
+	sboms, err := discoverer.DiscoverSBOM(ctx, target, creds, opts...)
 	if err != nil {
 		return nil, err
 	}

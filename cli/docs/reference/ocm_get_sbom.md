@@ -26,11 +26,6 @@ The resource is selected with --identity. Its SBOM is then looked for in two way
 The SBOM document is written to standard output as it was published, so it can be piped
 straight into a scanner.
 
-A resource published once per platform is narrowed to the architecture this command runs
-on, unless --identity names a different one. The operating system is only matched when
---identity names it, because a container image records the system it runs on rather than
-the system asking about it.
-
 ```
 ocm get sbom {reference} [flags]
 ```

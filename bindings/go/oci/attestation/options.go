@@ -14,10 +14,24 @@ type options struct {
 // Option configures SBOM discovery.
 type Option func(*options)
 
-// WithPlatform adds platform information to the discovery.
+// WithPlatform narrows the discovery to a platform.
 func WithPlatform(platform ociImageSpecV1.Platform) Option {
 	return func(o *options) {
-		o.platform = platform
+		if platform.Architecture != "" {
+			o.platform.Architecture = platform.Architecture
+		}
+		if platform.OS != "" {
+			o.platform.OS = platform.OS
+		}
+		if platform.Variant != "" {
+			o.platform.Variant = platform.Variant
+		}
+		if platform.OSVersion != "" {
+			o.platform.OSVersion = platform.OSVersion
+		}
+		if len(platform.OSFeatures) > 0 {
+			o.platform.OSFeatures = platform.OSFeatures
+		}
 	}
 }
 
@@ -34,9 +48,9 @@ func WithPredicateTypes(types ...string) Option {
 
 func newOptions(opts ...Option) *options {
 	o := &options{
+		// Do not default OS otherwise, we'll restrict images not on current os.
 		platform: ociImageSpecV1.Platform{
 			Architecture: runtime.GOARCH,
-			OS:           runtime.GOOS,
 		},
 		predicateTypes: []string{PredicateTypeSPDX},
 	}

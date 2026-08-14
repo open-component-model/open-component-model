@@ -325,17 +325,41 @@ func TestDiscoverSBOMs(t *testing.T) {
 		assert.Equal(t, attestation.MediaTypeCycloneDXJSON, sboms[0].MediaType())
 	})
 
-	t.Run("defaults to the platform of the running process", func(t *testing.T) {
+	t.Run("defaults to the architecture of the running process but not its os", func(t *testing.T) {
 		store := newStore(t)
-		host := ociImageSpecV1.Platform{OS: goruntime.GOOS, Architecture: goruntime.GOARCH}
-		img := image(t, store, host, ociImageSpecV1.MediaTypeImageManifest)
-		att := attestationFor(t, store, img, attestation.PredicateTypeSPDX)
-		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest", img, att)
+		host := ociImageSpecV1.Platform{OS: "someotheros", Architecture: goruntime.GOARCH}
+		other := ociImageSpecV1.Platform{OS: "someotheros", Architecture: "someotherarch"}
+		hostImg := image(t, store, host, ociImageSpecV1.MediaTypeImageManifest)
+		otherImg := image(t, store, other, ociImageSpecV1.MediaTypeImageManifest)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest",
+			otherImg, hostImg,
+			attestationFor(t, store, otherImg, attestation.PredicateTypeSPDX),
+			attestationFor(t, store, hostImg, attestation.PredicateTypeSPDX),
+		)
 
 		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref)
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
 		assert.Equal(t, host, sboms[0].Platform)
+	})
+
+	t.Run("layers platform requests attribute by attribute", func(t *testing.T) {
+		store := newStore(t)
+		amd64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}, ociImageSpecV1.MediaTypeImageManifest)
+		arm64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest",
+			amd64, arm64,
+			attestationFor(t, store, amd64, attestation.PredicateTypeSPDX),
+			attestationFor(t, store, arm64, attestation.PredicateTypeSPDX),
+		)
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref,
+			attestation.WithPlatform(ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}),
+			attestation.WithPlatform(ociImageSpecV1.Platform{Architecture: "arm64"}))
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+		assert.Equal(t, arm64.Digest, sboms[0].Subject.Digest)
+		assert.Equal(t, "linux", sboms[0].Platform.OS)
 	})
 
 	t.Run("selects the attestation belonging to the requested platform", func(t *testing.T) {
@@ -352,6 +376,32 @@ func TestDiscoverSBOMs(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
 		assert.Equal(t, arm64.Digest, sboms[0].Subject.Digest)
+	})
+
+	t.Run("constrains the operating system version and features", func(t *testing.T) {
+		store := newStore(t)
+		windows := ociImageSpecV1.Platform{
+			OS: "windows", Architecture: "amd64",
+			OSVersion:  "10.0.20348.3692",
+			OSFeatures: []string{"win32k"},
+		}
+		img := image(t, store, windows, ociImageSpecV1.MediaTypeImageManifest)
+		att := attestationFor(t, store, img, attestation.PredicateTypeSPDX)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest", img, att)
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, attestation.WithPlatform(windows))
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+
+		other := windows
+		other.OSVersion = "10.0.17763.7314"
+		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, attestation.WithPlatform(other))
+		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
+
+		other = windows
+		other.OSFeatures = []string{"hyperv"}
+		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, attestation.WithPlatform(other))
+		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
 	})
 
 	t.Run("resolves a digest pinned reference", func(t *testing.T) {

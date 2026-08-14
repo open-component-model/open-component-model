@@ -168,6 +168,32 @@ func TestRepository_DiscoverSBOM(t *testing.T) {
 		assert.Equal(t, "linux/amd64", documentName(t, sboms[0]))
 	})
 
+	t.Run("an explicit platform option applies to a resource naming no platform", func(t *testing.T) {
+		ctfStore, reference := multiPlatformImage(t)
+		repo := Repository(t, ocictf.WithCTF(ctfStore))
+
+		res := sbomResource(reference, nil)
+
+		sboms, err := repo.DiscoverSBOM(t.Context(), res,
+			attestation.WithPlatform(ociImageSpecV1.Platform{Architecture: "amd64"}))
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+		assert.Equal(t, "linux/amd64", documentName(t, sboms[0]))
+	})
+
+	t.Run("an explicit platform option refines the resource attribute by attribute", func(t *testing.T) {
+		ctfStore, reference := multiPlatformImage(t)
+		repo := Repository(t, ocictf.WithCTF(ctfStore))
+
+		res := sbomResource(reference, runtime.Identity{"os": "linux"})
+
+		sboms, err := repo.DiscoverSBOM(t.Context(), res,
+			attestation.WithPlatform(ociImageSpecV1.Platform{Architecture: "arm64"}))
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+		assert.Equal(t, "linux/arm64", documentName(t, sboms[0]))
+	})
+
 	t.Run("reports a platform the image does not offer", func(t *testing.T) {
 		ctfStore, reference := multiPlatformImage(t)
 		repo := Repository(t, ocictf.WithCTF(ctfStore))
