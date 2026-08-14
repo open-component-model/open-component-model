@@ -57,7 +57,7 @@ type BlobCache struct {
 //
 // The cache stores its files under `<Options.Dir>/blobs/<algo>/<hex>`
 // so the same Dir can also host a [ReferenceCache] (which writes
-// `<Dir>/refs/<fnv1a(namespace)>.json`) without collisions.
+// `<Dir>/refs/<sha256(namespace)>.json`) without collisions.
 func NewBlobCache(opts Options) (*BlobCache, error) {
 	opts, err := opts.applyDefaults()
 	if err != nil {
@@ -93,9 +93,12 @@ func NewBlobCache(opts Options) (*BlobCache, error) {
 	return c, nil
 }
 
-// Accept reports whether mediaType should be cached, per [Options.Accept].
-func (c *BlobCache) Accept(mediaType string) bool {
-	return c.opts.Accept(mediaType)
+// Accept reports whether desc should be cached, per [Options.Accept].
+// The full descriptor is fed to the admission filter (not just the
+// media type) so future extensions can key on annotations, size, or
+// artifact type without a breaking signature change.
+func (c *BlobCache) Accept(desc ociImageSpecV1.Descriptor) bool {
+	return c.opts.Accept(desc)
 }
 
 // MaxBlobSize returns the configured per-blob size cap (0 means no cap).
@@ -133,7 +136,7 @@ func (c *BlobCache) Get(dgst digest.Digest) (*os.File, bool, error) {
 	return f, true, nil
 }
 
-// Populate writes r to disk under dgst and inserts the entry into the
+// populate writes r to disk under dgst and inserts the entry into the
 // LRU. It is a no-op (returns false, nil) when:
 //
 //   - [Options.MaxBlobSize] > 0 and size exceeds it.
@@ -143,11 +146,12 @@ func (c *BlobCache) Get(dgst digest.Digest) (*os.File, bool, error) {
 // Concurrent calls for the same digest race on the final [os.Rename];
 // the last winner wins. Both yield byte-identical content (the digest
 // is the key) so the LRU bookkeeping is harmless. Callers that want
-// to avoid duplicate upstream fetches must dedupe at a higher layer.
+// to avoid duplicate upstream fetches must dedupe at a higher layer
+// (see [BlobCache.Fetch], which uses singleflight for exactly this).
 //
 // The boolean return value reports whether the blob was actually
 // inserted into the LRU (true) or skipped (false).
-func (c *BlobCache) Populate(ctx context.Context, dgst digest.Digest, size int64, r io.Reader) (bool, error) {
+func (c *BlobCache) populate(ctx context.Context, dgst digest.Digest, size int64, r io.Reader) (bool, error) {
 	if c.opts.MaxBlobSize > 0 && size > c.opts.MaxBlobSize {
 		c.logger.DebugContext(ctx, "blobcache: skipping oversized blob",
 			slog.String("digest", dgst.String()),
@@ -179,19 +183,28 @@ func (c *BlobCache) Populate(ctx context.Context, dgst digest.Digest, size int64
 // Fetch is the cache-aware Fetch primitive used by store
 // implementations that want to layer the cache in front of an
 // upstream [content.ReadOnlyStorage]. A cache hit returns the on-disk
-// file directly; a miss reads the (small) blob from upstream, tees it
-// to disk, and serves the caller from the in-memory copy.
+// file directly; a miss reads the (small) blob from upstream
+// verifying its digest, records it to disk, and serves the caller
+// from the in-memory copy.
 //
-// Fetch honours [Options.Accept] and [Options.MaxBlobSize]: if the
+// Fetch honors [Options.Accept] and [Options.MaxBlobSize]: if the
 // descriptor fails either filter (or c is nil), the call falls
-// straight through to upstream.Fetch and nothing is buffered.
+// straight through to upstream.Fetch and nothing is buffered. In the
+// oversize case a debug log is emitted so operators can see why the
+// cache did not engage.
 //
 // Concurrent Fetches for the same digest are collapsed via
 // singleflight into a single upstream.Fetch; every caller receives an
 // independent reader over identical bytes.
 func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
-	if c == nil || !c.Accept(target.MediaType) ||
-		(c.MaxBlobSize() > 0 && target.Size > c.MaxBlobSize()) {
+	if c == nil || !c.Accept(target) {
+		return upstream.Fetch(ctx, target)
+	}
+	if c.MaxBlobSize() > 0 && target.Size > c.MaxBlobSize() {
+		c.logger.DebugContext(ctx, "blobcache: skipping oversized descriptor, falling through",
+			slog.String("digest", target.Digest.String()),
+			slog.Int64("size", target.Size),
+			slog.Int64("max", c.MaxBlobSize()))
 		return upstream.Fetch(ctx, target)
 	}
 
@@ -205,23 +218,20 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 	}
 
 	// Miss: collapse concurrent fetches for the same digest into one
-	// upstream round-trip. The leader reads the blob fully, tees it to
-	// disk (best-effort) and returns the bytes; all waiters share those
-	// bytes and each wraps its own reader.
+	// upstream round-trip. The leader fetches the blob fully via
+	// [content.FetchAll], which streams through a VerifyReader so the
+	// bytes are hashed against target.Digest before we ever put them
+	// on disk. The verified bytes are then persisted (best-effort) and
+	// every waiter is served an independent reader over that copy.
 	v, err, _ := c.sf.Do(target.Digest.String(), func() (any, error) {
-		upstreamRC, err := upstream.Fetch(ctx, target)
+		data, err := content.FetchAll(ctx, upstream, target)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("blobcache: fetch upstream: %w", err)
 		}
-		defer func() { _ = upstreamRC.Close() }()
-
-		data, err := io.ReadAll(upstreamRC)
-		if err != nil {
-			return nil, fmt.Errorf("blobcache: read upstream: %w", err)
-		}
-		// Populate is best-effort: a failure to persist must not fail the
-		// fetch, since we already hold the bytes to serve the caller.
-		if _, perr := c.Populate(ctx, target.Digest, target.Size, bytes.NewReader(data)); perr != nil {
+		// populate is best-effort: a failure to persist must not fail
+		// the fetch, since we already hold the verified bytes to serve
+		// the caller.
+		if _, perr := c.populate(ctx, target.Digest, target.Size, bytes.NewReader(data)); perr != nil {
 			c.logger.DebugContext(ctx, "blobcache: populate failed, serving from memory",
 				slog.String("digest", target.Digest.String()), slog.String("err", perr.Error()))
 		}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/errcode"
@@ -49,12 +50,19 @@ type CachingResolver struct {
 	// blobCache, when non-nil, is layered in front of every
 	// [*remote.Repository] this resolver hands out via
 	// [cache.Repository]. Configure via [WithBlobCache].
-	blobCache *cache.BlobCache
+	//
+	// Stored in an atomic.Pointer so [CachingResolver.SetBlobCache] can
+	// race with concurrent [CachingResolver.StoreForReference] calls
+	// without a data race — the doc contract of SetBlobCache says only
+	// stores handed out after the call must observe the new cache, so
+	// tearing is not tolerable.
+	blobCache atomic.Pointer[cache.BlobCache]
 
 	// referenceCache, when non-nil, short-circuits Resolve calls on
 	// every [*remote.Repository] this resolver hands out via
-	// [cache.Repository]. Configure via [WithReferenceCache].
-	referenceCache *cache.ReferenceCache
+	// [cache.Repository]. Configure via [WithReferenceCache]. Same
+	// concurrency contract as [CachingResolver.blobCache].
+	referenceCache atomic.Pointer[cache.ReferenceCache]
 }
 
 // SetBlobCache wires a manifest blob cache into the resolver. Stores
@@ -63,7 +71,7 @@ type CachingResolver struct {
 // Fetch consults the cache. Use [WithBlobCache] for the option-based
 // equivalent.
 func (resolver *CachingResolver) SetBlobCache(c *cache.BlobCache) {
-	resolver.blobCache = c
+	resolver.blobCache.Store(c)
 }
 
 // SetReferenceCache wires a reference cache into the resolver. Stores
@@ -71,7 +79,7 @@ func (resolver *CachingResolver) SetBlobCache(c *cache.BlobCache) {
 // their Resolve consults the cache. Use [WithReferenceCache] for the
 // option-based equivalent.
 func (resolver *CachingResolver) SetReferenceCache(c *cache.ReferenceCache) {
-	resolver.referenceCache = c
+	resolver.referenceCache.Store(c)
 }
 
 func (resolver *CachingResolver) SetClient(client remote.Client) {
@@ -166,8 +174,10 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 
 	store := spec.Store(&remotestore.RemoteStore{Repository: repo})
 
-	if resolver.blobCache != nil || resolver.referenceCache != nil {
-		store = cache.ProxyRepository(repo, resolver.blobCache, resolver.referenceCache)
+	blobCache := resolver.blobCache.Load()
+	refCache := resolver.referenceCache.Load()
+	if blobCache != nil || refCache != nil {
+		store = cache.ProxyRepository(repo, blobCache, refCache)
 	}
 
 	resolver.addToCache(key, store)

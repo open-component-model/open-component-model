@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"golang.org/x/sync/singleflight"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
@@ -71,6 +72,15 @@ type CachingComponentVersionRepositoryProvider struct {
 	// immutable and identified by digest — a digest unambiguously identifies
 	// content regardless of who fetched it. Only tag→digest resolution is
 	// access-controlled; once you hold a digest you are authorised.
+	//
+	// Note: while an attacker who *guesses* a digest could observe its
+	// existence in the cache, they must first obtain the digest via a
+	// [cache.ReferenceCache.Resolve] under credentials that entitle them
+	// to see the tag — which IS credential-scoped. When we grow the
+	// blob cache to cover resource layers, callers with weaker
+	// credentials must not be able to learn digests from a stronger
+	// scope, so revisit this decision if the cache starts holding
+	// layer blobs (see open-component-model#2833 discussion).
 	blobCacheOpts *cache.Options
 
 	// referenceCacheOpts, when non-nil, enables per-scope reference caches.
@@ -87,6 +97,15 @@ type CachingComponentVersionRepositoryProvider struct {
 
 	// referenceCaches stores one *cache.ReferenceCache per credential scope key.
 	referenceCaches sync.Map // string → *cache.ReferenceCache
+
+	// referenceCacheInit serialises the constructor calls per scope
+	// key so a burst of first-use callers for the same scope does not
+	// each build (and discard) their own [cache.ReferenceCache]. The
+	// winner is published into referenceCaches; every other caller
+	// finds it there via Load without re-running the (expensive)
+	// on-disk reseed. Mirrors the pattern used by storeCache.loadOrStore
+	// (see open-component-model/ocm-project#694).
+	referenceCacheInit singleflight.Group
 }
 
 var _ repository.ComponentVersionRepositoryProvider = (*CachingComponentVersionRepositoryProvider)(nil)
@@ -266,6 +285,13 @@ func (b *CachingComponentVersionRepositoryProvider) getOrCreateBlobCache() *cach
 
 // getOrCreateReferenceCache returns the ReferenceCache for the given credential
 // scope, creating and persisting it on first use.
+//
+// Concurrent first-use callers for the same scope are collapsed via
+// [singleflight.Group] so exactly one [cache.NewReferenceCache] runs
+// (which creates directories, walks the disk snapshot, and reseeds
+// the LRU). All waiters observe the shared result. Subsequent calls
+// skip the singleflight and read the published cache from
+// [CachingComponentVersionRepositoryProvider.referenceCaches] directly.
 func (b *CachingComponentVersionRepositoryProvider) getOrCreateReferenceCache(
 	identity *v1.OCIRegistryIdentity,
 	creds *v2.OCICredentials,
@@ -275,27 +301,41 @@ func (b *CachingComponentVersionRepositoryProvider) getOrCreateReferenceCache(
 		return v.(*cache.ReferenceCache)
 	}
 
-	opts := *b.referenceCacheOpts
-	if opts.Dir == "" {
-		base := b.tempDir
-		if base == "" {
-			base = os.TempDir()
+	v, err, _ := b.referenceCacheInit.Do(scope, func() (any, error) {
+		// Re-check under the singleflight so the leader picks up any
+		// concurrently-published cache instead of building another.
+		if existing, ok := b.referenceCaches.Load(scope); ok {
+			return existing, nil
 		}
-		opts.Dir = filepath.Join(base, "ocm-oci-refcache", scope)
-	} else {
-		opts.Dir = filepath.Join(opts.Dir, scope)
-	}
 
-	c, err := cache.NewReferenceCache(opts)
+		opts := *b.referenceCacheOpts
+		if opts.Dir == "" {
+			base := b.tempDir
+			if base == "" {
+				base = os.TempDir()
+			}
+			opts.Dir = filepath.Join(base, "ocm-oci-refcache", scope)
+		} else {
+			opts.Dir = filepath.Join(opts.Dir, scope)
+		}
+
+		c, err := cache.NewReferenceCache(opts)
+		if err != nil {
+			return nil, err
+		}
+		b.referenceCaches.Store(scope, c)
+		return c, nil
+	})
 	if err != nil {
 		slog.Warn("provider: failed to initialise reference cache for scope, continuing without caching",
 			slog.String("scope", scope),
 			slog.String("err", err.Error()))
 		return nil
 	}
-
-	actual, _ := b.referenceCaches.LoadOrStore(scope, c)
-	return actual.(*cache.ReferenceCache)
+	if v == nil {
+		return nil
+	}
+	return v.(*cache.ReferenceCache)
 }
 
 // getConvertedTypedSpec is a helper function that converts any runtime.Typed specification

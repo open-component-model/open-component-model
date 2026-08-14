@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
 	"ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
@@ -15,18 +17,23 @@ import (
 // caller can configure them once and instantiate either or both with
 // matching limits.
 //
-// At minimum [Options.Dir] must be set. [Defaults] returns an Options
-// populated with sensible limits; the per-field defaults are also
-// applied automatically by [NewBlobCache] / [NewReferenceCache] when
-// a caller passes a partially-populated Options.
+// Dir is required at construction (see [Options.applyDefaults]) even
+// though it lives on Options rather than the constructor signature:
+// keeping every parameter on a single struct lets callers configure
+// both caches from one shared config source without a two-argument
+// constructor. [Defaults] returns an Options populated with sensible
+// limits; the per-field defaults are also applied automatically by
+// [NewBlobCache] / [NewReferenceCache] when a caller passes a
+// partially-populated Options.
 //
 // MaxBlobSize and Accept are blob-specific and ignored by
 // [ReferenceCache].
 type Options struct {
-	// Dir is the absolute directory the cache owns. Both caches lay
-	// out their files inside Dir without colliding ([BlobCache] uses
-	// `<Dir>/<algo>/<hex>` files, [ReferenceCache] uses
-	// `<Dir>/references.json`), so the same Dir can be shared.
+	// Dir is the absolute directory the cache owns — required. Both
+	// caches lay out their files inside Dir without colliding
+	// ([BlobCache] uses `<Dir>/blobs/<algo>/<hex>` files,
+	// [ReferenceCache] uses `<Dir>/refs/<sha256(namespace)>.json`), so
+	// the same Dir can be shared.
 	Dir string
 
 	// MaxEntries bounds the LRU. A value of 0 means unlimited
@@ -42,10 +49,12 @@ type Options struct {
 	// A value of 0 disables the cap. Ignored by [ReferenceCache].
 	MaxBlobSize int64
 
-	// Accept reports whether a media type should be cached by the
-	// [BlobCache]. nil falls back to [DefaultAccept] in [NewBlobCache].
-	// Ignored by [ReferenceCache].
-	Accept func(mediaType string) bool
+	// Accept reports whether a blob should be cached by the
+	// [BlobCache]. The full descriptor is passed (not just the media
+	// type) so callers can filter on annotations, artifact type, or
+	// size without a breaking signature change. nil falls back to
+	// [DefaultAccept] in [NewBlobCache]. Ignored by [ReferenceCache].
+	Accept func(desc ociImageSpecV1.Descriptor) bool
 }
 
 // Defaults returns an [Options] populated with sane caching limits:
@@ -86,7 +95,7 @@ func (o Options) applyDefaults() (Options, error) {
 	return o, nil
 }
 
-// DefaultAccept is the default media-type filter. It accepts:
+// DefaultAccept is the default admission filter. It accepts:
 //   - any OCI/Docker manifest or index media type
 //     (see [introspection.IsOCICompliantMediaType]);
 //   - the OCM component config media type;
@@ -94,7 +103,11 @@ func (o Options) applyDefaults() (Options, error) {
 //     prefix [descriptor.MediaTypeComponentDescriptor], which covers
 //     v2+json, v2+yaml, legacy v1 variants, and the legacy +tar
 //     wrapper.
-func DefaultAccept(mediaType string) bool {
+//
+// The size filter is applied separately via [Options.MaxBlobSize] so
+// custom [Options.Accept] implementations do not have to re-encode it.
+func DefaultAccept(desc ociImageSpecV1.Descriptor) bool {
+	mediaType := desc.MediaType
 	if introspection.IsOCICompliantMediaType(mediaType) {
 		return true
 	}

@@ -14,15 +14,28 @@
 //     so two repositories that happen to share a short reference
 //     (e.g. the tag "v1") cannot collide. Each namespace's entries
 //     are persisted to its own file under
-//     `<Options.Dir>/refs/<fnv1a(namespace)>.json`; the FNV-1a hash
-//     is used purely to derive a compact filename — the canonical
-//     namespace string is stored inside the snapshot body, so any
-//     unlikely hash collision is recoverable.
+//     `<Options.Dir>/refs/<sha256(namespace)>.json`; the SHA-256
+//     digest is used purely to derive a compact, collision-free
+//     filename — the canonical namespace string is stored inside the
+//     snapshot body so a reseed recovers the exact key without
+//     trusting the filename to preserve it.
 //
 // Both caches share an [Options] struct so a caller can configure
 // limits once and instantiate either or both. The blob-only fields
 // ([Options.MaxBlobSize] and [Options.Accept]) are ignored by
 // [ReferenceCache].
+//
+// Credential scoping:
+//
+//   - [ScopeKey] returns a short, filesystem-safe hash of the
+//     (registry identity, credential) pair. Callers that share a
+//     cache directory across multiple credential sets should compose
+//     [Options.Dir] with the [ScopeKey] so tag→descriptor mappings
+//     resolved under one credential cannot leak into another. The
+//     content-addressed [BlobCache] does not need this scoping
+//     because blobs are identified by digest, but the tag-mutable
+//     [ReferenceCache] does — see the provider package for the
+//     canonical wiring.
 //
 // Scope and intent:
 //
@@ -49,9 +62,11 @@
 //     for blobs and rewrites/removes the per-namespace snapshot for
 //     references.
 //   - All public methods are safe for concurrent use. Concurrent
-//     [BlobCache.Populate] calls for the same digest race on the
-//     final [os.Rename]; the last winner wins and both produce
-//     byte-identical content because the digest is the cache key.
+//     [BlobCache.Fetch] calls for the same digest are collapsed via
+//     singleflight into a single upstream round-trip; the shared
+//     bytes are then persisted to disk (best-effort) and each waiter
+//     is served its own reader over identical content because the
+//     digest is the cache key.
 //
 // Integrity:
 //

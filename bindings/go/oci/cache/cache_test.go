@@ -49,7 +49,7 @@ func TestCache_HitMiss(t *testing.T) {
 	assert.False(t, hit)
 	assert.Nil(t, f)
 
-	inserted, err := c.Populate(t.Context(), dgst, int64(len(data)), bytes.NewReader(data))
+	inserted, err := c.populate(t.Context(), dgst, int64(len(data)), bytes.NewReader(data))
 	require.NoError(t, err)
 	assert.True(t, inserted)
 	assert.True(t, c.Has(dgst))
@@ -68,7 +68,7 @@ func TestCache_TTLExpiry(t *testing.T) {
 	data := []byte("ttl-bytes")
 	dgst := digest.FromBytes(data)
 
-	_, err := c.Populate(t.Context(), dgst, int64(len(data)), bytes.NewReader(data))
+	_, err := c.populate(t.Context(), dgst, int64(len(data)), bytes.NewReader(data))
 	require.NoError(t, err)
 
 	deadline := time.Now().Add(2 * time.Second)
@@ -101,11 +101,11 @@ func TestCache_LRUOverflow(t *testing.T) {
 	d2 := digest.FromBytes([]byte("b"))
 	d3 := digest.FromBytes([]byte("c"))
 
-	_, err := c.Populate(ctx, d1, 1, bytes.NewReader([]byte("a")))
+	_, err := c.populate(ctx, d1, 1, bytes.NewReader([]byte("a")))
 	require.NoError(t, err)
-	_, err = c.Populate(ctx, d2, 1, bytes.NewReader([]byte("b")))
+	_, err = c.populate(ctx, d2, 1, bytes.NewReader([]byte("b")))
 	require.NoError(t, err)
-	_, err = c.Populate(ctx, d3, 1, bytes.NewReader([]byte("c")))
+	_, err = c.populate(ctx, d3, 1, bytes.NewReader([]byte("c")))
 	require.NoError(t, err)
 
 	assert.False(t, c.Has(d1), "oldest must be evicted")
@@ -121,9 +121,9 @@ func TestCache_SizeCap(t *testing.T) {
 	c := newTestCache(t, Options{MaxBlobSize: 4})
 	dgst := digest.FromBytes([]byte("0123456789"))
 
-	inserted, err := c.Populate(t.Context(), dgst, 10, bytes.NewReader([]byte("0123456789")))
+	inserted, err := c.populate(t.Context(), dgst, 10, bytes.NewReader([]byte("0123456789")))
 	require.NoError(t, err)
-	assert.False(t, inserted, "Populate must skip blobs above MaxBlobSize")
+	assert.False(t, inserted, "populate must skip blobs above MaxBlobSize")
 	assert.False(t, c.Has(dgst))
 
 	_, err = os.Stat(pathFor(c.opts.Dir, dgst))
@@ -134,8 +134,8 @@ func TestCache_TruncatedReadDiscarded(t *testing.T) {
 	c := newTestCache(t, Options{})
 	dgst := digest.FromBytes([]byte("expected-bytes"))
 
-	// Claim size=14 but feed only 4 bytes — Populate must reject.
-	inserted, err := c.Populate(t.Context(), dgst, 14, bytes.NewReader([]byte("abcd")))
+	// Claim size=14 but feed only 4 bytes — populate must reject.
+	inserted, err := c.populate(t.Context(), dgst, 14, bytes.NewReader([]byte("abcd")))
 	require.Error(t, err)
 	assert.False(t, inserted)
 	assert.False(t, c.Has(dgst))
@@ -168,7 +168,7 @@ func TestCache_ConcurrentPopulate_AllSucceed(t *testing.T) {
 	var wg sync.WaitGroup
 	for range N {
 		wg.Go(func() {
-			_, err := c.Populate(t.Context(), dgst, int64(len(data)), bytes.NewReader(data))
+			_, err := c.populate(t.Context(), dgst, int64(len(data)), bytes.NewReader(data))
 			require.NoError(t, err)
 		})
 	}
@@ -201,7 +201,7 @@ func TestCache_AcceptFilter(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.mt, func(t *testing.T) {
-			assert.Equal(t, tc.want, DefaultAccept(tc.mt))
+			assert.Equal(t, tc.want, DefaultAccept(ociImageSpecV1.Descriptor{MediaType: tc.mt}))
 		})
 	}
 }
@@ -210,7 +210,7 @@ func TestCache_GetFileVanished(t *testing.T) {
 	c := newTestCache(t, Options{})
 	data := []byte("vanish")
 	dgst := digest.FromBytes(data)
-	_, err := c.Populate(t.Context(), dgst, int64(len(data)), bytes.NewReader(data))
+	_, err := c.populate(t.Context(), dgst, int64(len(data)), bytes.NewReader(data))
 	require.NoError(t, err)
 
 	// Externally remove the file — Get must now report a miss and
@@ -231,7 +231,7 @@ func TestCache_Reseed_FromExistingDir(t *testing.T) {
 	require.NoError(t, err)
 	data := []byte("persistent")
 	dgst := digest.FromBytes(data)
-	_, err = c1.Populate(t.Context(), dgst, int64(len(data)), bytes.NewReader(data))
+	_, err = c1.populate(t.Context(), dgst, int64(len(data)), bytes.NewReader(data))
 	require.NoError(t, err)
 	assert.True(t, c1.Has(dgst))
 
@@ -342,18 +342,18 @@ func TestCache_Populate_OversizeDrainsAndSkips(t *testing.T) {
 	dgst := digest.FromBytes([]byte("0123456789"))
 
 	cr := &countingReader{r: bytes.NewReader([]byte("0123456789"))}
-	inserted, err := c.Populate(t.Context(), dgst, 10, cr)
+	inserted, err := c.populate(t.Context(), dgst, 10, cr)
 	require.NoError(t, err)
 	assert.False(t, inserted)
 	assert.False(t, c.Has(dgst))
-	// Populate must drain so the producer side does not block.
+	// populate must drain so the producer side does not block.
 	assert.EqualValues(t, 10, cr.n.Load())
 }
 
 func TestCache_Populate_ReaderErrorIsReported(t *testing.T) {
 	c := newTestCache(t, Options{})
 	dgst := digest.FromBytes([]byte("x"))
-	_, err := c.Populate(t.Context(), dgst, 4, errReader{err: errors.New("boom")})
+	_, err := c.populate(t.Context(), dgst, 4, errReader{err: errors.New("boom")})
 	require.Error(t, err)
 	assert.False(t, c.Has(dgst))
 }
@@ -361,7 +361,7 @@ func TestCache_Populate_ReaderErrorIsReported(t *testing.T) {
 func TestCache_Get_StalePathBecomesMiss(t *testing.T) {
 	c := newTestCache(t, Options{})
 	dgst := digest.FromBytes([]byte("vanish"))
-	_, err := c.Populate(t.Context(), dgst, 6, bytes.NewReader([]byte("vanish")))
+	_, err := c.populate(t.Context(), dgst, 6, bytes.NewReader([]byte("vanish")))
 	require.NoError(t, err)
 	require.True(t, c.Has(dgst))
 
@@ -385,7 +385,7 @@ func TestCache_Get_NonNotExistErrorIsReturned(t *testing.T) {
 	}
 	c := newTestCache(t, Options{})
 	dgst := digest.FromBytes([]byte("dirtrick"))
-	_, err := c.Populate(t.Context(), dgst, 8, bytes.NewReader([]byte("dirtrick")))
+	_, err := c.populate(t.Context(), dgst, 8, bytes.NewReader([]byte("dirtrick")))
 	require.NoError(t, err)
 	parent := filepath.Dir(pathFor(c.opts.Dir, dgst))
 	require.NoError(t, os.Chmod(parent, 0))

@@ -229,7 +229,7 @@ func TestDefaultAccept_AllBranches(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.mt, func(t *testing.T) {
-			assert.Equal(t, tc.want, DefaultAccept(tc.mt))
+			assert.Equal(t, tc.want, DefaultAccept(ociImageSpecV1.Descriptor{MediaType: tc.mt}))
 		})
 	}
 }
@@ -245,7 +245,7 @@ func TestCache_Fetch_GetErrorFallsThrough(t *testing.T) {
 		Digest:    digest.FromBytes(manifest),
 		Size:      int64(len(manifest)),
 	}
-	_, err := c.Populate(t.Context(), desc.Digest, desc.Size, bytes.NewReader(manifest))
+	_, err := c.populate(t.Context(), desc.Digest, desc.Size, bytes.NewReader(manifest))
 	require.NoError(t, err)
 
 	// Block read access to the algorithm dir so c.Get returns a non-

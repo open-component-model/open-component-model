@@ -22,14 +22,19 @@ func pathFor(dir string, dgst digest.Digest) string {
 // and renames it into pathFor(dir, dgst). It returns the final path
 // and the number of bytes copied.
 //
-// If max > 0 and the copied byte count exceeds max, the temp file is
-// removed and an error is returned. The destination file is never
-// created in that case.
+// If maxSize > 0 and the copied byte count exceeds maxSize, the temp
+// file is removed and an error is returned. The destination file is
+// never created in that case. The LimitReader stops the copy at
+// maxSize+1 so oversize is detectable without draining unbounded
+// upstream data; when called from [BlobCache.Fetch] the bytes are
+// already in memory and this check is redundant but cheap, but the
+// bound also protects any direct caller that streams straight from
+// upstream.
 //
 // Concurrent writers for the same digest race on the rename; the last
 // rename wins. Both yield identical content, so the LRU bookkeeping is
 // expected to dedupe via singleflight before reaching writeAtomic.
-func writeAtomic(dir string, dgst digest.Digest, maxSize int64, r io.Reader) (path string, n int64, err error) {
+func writeAtomic(dir string, dgst digest.Digest, maxSize int64, r io.Reader) (string, int64, error) {
 	if err := dgst.Validate(); err != nil {
 		return "", 0, fmt.Errorf("invalid digest: %w", err)
 	}
@@ -55,13 +60,12 @@ func writeAtomic(dir string, dgst digest.Digest, maxSize int64, r io.Reader) (pa
 		_ = os.Remove(tmpName)
 	}
 
-	copyR := r
 	if maxSize > 0 {
-		// LimitReader stops at max+1 so we can detect oversize without
-		// reading unbounded amounts.
-		copyR = io.LimitReader(r, maxSize+1)
+		// LimitReader stops at maxSize+1 so we can detect oversize
+		// without reading unbounded amounts.
+		r = io.LimitReader(r, maxSize+1)
 	}
-	n, err = io.Copy(tmp, copyR)
+	n, err := io.Copy(tmp, r)
 	if err != nil {
 		cleanup()
 		return "", 0, fmt.Errorf("copy to temp file: %w", err)

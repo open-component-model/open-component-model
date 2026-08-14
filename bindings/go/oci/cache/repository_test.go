@@ -23,7 +23,7 @@ func TestRepository_Fetch_DelegatesToBlobCache(t *testing.T) {
 		Digest:    digest.FromBytes(manifest),
 		Size:      int64(len(manifest)),
 	}
-	_, err := c.Populate(t.Context(), desc.Digest, desc.Size, bytes.NewReader(manifest))
+	_, err := c.populate(t.Context(), desc.Digest, desc.Size, bytes.NewReader(manifest))
 	require.NoError(t, err)
 
 	// Cache hit serves the file; the embedded *remote.Repository is
