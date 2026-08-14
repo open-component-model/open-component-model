@@ -168,12 +168,7 @@ func Test_Integration_Signing_PEM(t *testing.T) {
 	// Root CA — used as trust anchor by the verifier
 	rootCAPath := writePEMCertFile(t, dir, "root.pem", root)
 
-	// Signer spec: enable PEM encoding policy
-	signerSpec := "type: RSASigningConfiguration/v1alpha1\nsignatureAlgorithm: RSASSA-PSS\nsignatureEncodingPolicy: PEM\n"
-	signerSpecPath := filepath.Join(dir, "signer-spec.yaml")
-	r.NoError(os.WriteFile(signerSpecPath, []byte(signerSpec), 0o600))
-
-	// Signing config: private key + [leaf, interm] chain
+	// Signing config: private key + [leaf, interm] chain, signer with PEM encoding policy
 	signCfg := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
 configurations:
@@ -198,6 +193,11 @@ configurations:
       properties:
         private_key_pem_file: %[5]q
         public_key_pem_file: %[6]q
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: RSASigningConfiguration/v1alpha1
+    signatureAlgorithm: RSASSA-PSS
+    signatureEncodingPolicy: PEM
 `, registry.Host, registry.Port, registry.User, registry.Password, leafKeyPath, chainPath)
 	signCfgPath := filepath.Join(dir, "sign.yaml")
 	r.NoError(os.WriteFile(signCfgPath, []byte(signCfg), os.ModePerm))
@@ -269,7 +269,6 @@ configurations:
 		signArgs := []string{
 			"sign", "cv", ref,
 			"--config", signCfgPath,
-			"--signer-spec", signerSpecPath,
 		}
 
 		signCMD := cmd.New()
