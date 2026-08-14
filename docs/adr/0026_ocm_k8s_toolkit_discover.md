@@ -199,7 +199,10 @@ Selectors have three fields, all ANDed. An empty selector matches everything.
   selectors the controller binds `identity` to the element's identity map and `labels` to its label map, so users
   write `identity.version` or `labels["tier"]`. `expression` covers structured labels, cross-field predicates, and
   semver ranges (`semverCheck(v, c)`). Missing attribute or label references evaluate to `false` rather than raising,
-  so users don't have to guard every access with `has()`.
+  so users don't have to guard every access with `has()`. Without this behaviour, mismatches would return an error
+  instead of "dropping the filter". For example, resources can have different fields depending on their type. Thus,
+  a component version with heterogeneous resources can be filtered with a single `expression` without having to guard
+  every path.
 
 Why bother with `matchIdentity` and `matchLabels` when `expression` can express the same queries? Convenience.
 `matchIdentity` and `matchLabels` are familiar shapes from other CRDs, and they let users write simple queries
@@ -210,13 +213,9 @@ identity is requested, which is a performance win on large graphs.
 
 Adding `matchExpressions []metav1.LabelSelectorRequirement`, the `In` / `NotIn` / `Exists` / `DoesNotExist`
 operators from `metav1.LabelSelector`, was considered because it's a familiar k8s shape and would let admission
-tooling that walks `LabelSelector`-shaped fields work on the string subset without changes. Not adopted, for three
-reasons:
+tooling that walks `LabelSelector`-shaped fields work on the string subset without changes. 
 
-- Two ways to write the same query: `env in [prod, staging]` works in both `matchExpressions` and CEL.
-- `LabelSelector` values are string-only: OCM labels are arbitrary JSON. `matchExpressions` covers only the
-  string subset; structured labels still need `expression`. Adding it doesn't remove any surface, only adds.
-- The one range operator users actually need, semver, will already be available as CEL function `semverCheck`.
+The field was omitted as its semantics are redundant with `expression`. Additionally, `expression` is far more flexibel.
 
 #### `Extract` and its three modes
 
