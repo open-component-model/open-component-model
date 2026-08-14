@@ -201,6 +201,11 @@ Selectors have three fields, all ANDed. An empty selector matches everything.
   semver ranges (`semverCheck(v, c)`). Missing attribute or label references evaluate to `false` rather than raising,
   so users don't have to guard every access with `has()`.
 
+Why bother with `matchIdentity` and `matchLabels` when `expression` can express the same queries? Convenience.
+`matchIdentity` and `matchLabels` are familiar shapes from other CRDs, and they let users write simple queries
+without CEL knowledge. They also let the controller short-circuit the graph walk when a concrete identity is
+requested, which is a performance win on large graphs.
+
 ##### Considered and rejected: k8s-standard `matchExpressions`
 
 Adding `matchExpressions []metav1.LabelSelectorRequirement`, the `In` / `NotIn` / `Exists` / `DoesNotExist`
