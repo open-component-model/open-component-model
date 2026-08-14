@@ -282,9 +282,6 @@ Payload shape is a function of `spec`. Enumerating the shapes:
 - `extract.byComponents`: flat array of per-component records.
 - `extract.expression`: verbatim return value of the CEL expression (any JSON type).
 
-The same schemaless pattern is used by the Resource CR for its CEL-based output, consumers parse both status
-payloads generically with the same code. The payload always lives on `status` (not a child CR, ConfigMap, or artifact).
-
 #### etcd size
 
 Status payloads are subject to the etcd soft limit (~1.5 MiB). Discovery does not store descriptors outside etcd.
