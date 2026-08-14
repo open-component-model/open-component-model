@@ -5,14 +5,14 @@ components:
       name: ocm.software
     resources:
       - name: kustomize-resource
-        type: kustomization
+        type: ociArtifact
         version: "1.0.0"
-        access:
-          type: gitHub
-          # TODO: Replace this with our own kustomization (Problem: Chicken-Egg problem for testing as the commit is
-          #       required).
-          repoUrl: https://github.com/stefanprodan/podinfo
-          commit: cdd09cdd3daacc3082d5a78062ac493806f7abd0
+        input:
+          # ./oci-layout must be built from ./kustomize before running
+          # `ocm add cv`. See README.md for more info.
+          type: dir/v1
+          path: ./oci-layout
+          mediaType: application/vnd.ocm.software.oci.layout.v1+tar
       - name: image-resource
         type: ociArtifact
         version: "1.0.0"

@@ -22,6 +22,9 @@ spec:
             byReference:
               resource:
                 name: kustomize-resource
+          additionalStatusFields:
+            gitRepoURL: resource.access.repoUrl
+            gitCommit: resource.access.commit
     # Deployment using FluxCD
     - id: gitrepository
       template:
@@ -32,9 +35,9 @@ spec:
           namespace: default
         spec:
           interval: 5m
-          url: ${resourceKustomization.status.resource.access.repoUrl}
+          url: ${resourceKustomization.status.additional.gitRepoURL}
           ref:
-            commit: ${resourceKustomization.status.resource.access.commit}
+            commit: ${resourceKustomization.status.additional.gitCommit}
     - id: kustomization
       template:
         apiVersion: kustomize.toolkit.fluxcd.io/v1
@@ -85,8 +88,8 @@ spec:
         spec:
           project: default
           source:
-            repoURL: ${resourceKustomization.status.resource.access.repoUrl}
-            targetRevision: ${resourceKustomization.status.resource.access.commit}
+            repoURL: ${resourceKustomization.status.additional.gitRepoURL}
+            targetRevision: ${resourceKustomization.status.additional.gitCommit}
             path: "kustomize"
             kustomize:
               patches:
