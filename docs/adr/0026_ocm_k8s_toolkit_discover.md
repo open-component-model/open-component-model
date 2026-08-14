@@ -218,7 +218,7 @@ Adding `matchExpressions []metav1.LabelSelectorRequirement`, the `In` / `NotIn` 
 operators from `metav1.LabelSelector`, was considered because it's a familiar k8s shape and would let admission
 tooling that walks `LabelSelector`-shaped fields work on the string subset without changes. 
 
-The field was omitted as its semantics are redundant with `expression`. Additionally, `expression` is far more flexibel.
+The field was omitted as its semantics are redundant with `expression`. Additionally, `expression` is far more flexible.
 
 #### `Extract` and its three modes
 
