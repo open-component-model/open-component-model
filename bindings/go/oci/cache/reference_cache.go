@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -318,7 +319,7 @@ func (c *ReferenceCache) load() (loaded int, err error) {
 		// first: their names carry a `.write-*` prefix (not a
 		// `.json` extension), so the extension filter below would
 		// otherwise skip them and they would accumulate indefinitely.
-		if hasIncomingPrefix(name) {
+		if strings.HasPrefix(name, atomicWritePrefix) {
 			_ = os.Remove(filepath.Join(c.opts.Dir, name))
 			continue
 		}
@@ -363,18 +364,17 @@ func (c *ReferenceCache) load() (loaded int, err error) {
 	return loaded, nil
 }
 
-// hasIncomingPrefix reports whether name is a leftover temp file
-// from a crashed [writeFileAtomic] call.
-func hasIncomingPrefix(name string) bool {
-	const prefix = ".write-"
-	return len(name) >= len(prefix) && name[:len(prefix)] == prefix
-}
+// atomicWritePrefix is the prefix [writeFileAtomic] uses for its
+// [os.CreateTemp] pattern. The `-*` suffix stripped by CreateTemp is
+// what randomises the tail; the constant is exposed so the cleanup
+// scanner and the writer stay in sync.
+const atomicWritePrefix = ".write-"
 
 // writeFileAtomic writes data to path via a temp file in the same
 // directory, fsyncs, and renames into place. The temp file is removed
 // on any failure path.
 func writeFileAtomic(dir, path string, data []byte) error {
-	tmp, err := os.CreateTemp(dir, ".write-*")
+	tmp, err := os.CreateTemp(dir, atomicWritePrefix+"*")
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}

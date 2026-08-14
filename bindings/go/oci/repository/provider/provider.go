@@ -91,9 +91,8 @@ type CachingComponentVersionRepositoryProvider struct {
 	referenceCacheOpts *cache.Options
 
 	// sharedBlobCache is the single process-wide BlobCache shared across all
-	// credential scopes. Initialised lazily on first use via sharedBlobOnce.
-	sharedBlobCache *cache.BlobCache
-	sharedBlobOnce  sync.Once
+	// credential scopes. Initialised lazily on first use via [sync.OnceValue].
+	sharedBlobCache func() *cache.BlobCache
 
 	// referenceCaches stores one *cache.ReferenceCache per credential scope key.
 	referenceCaches sync.Map // string → *cache.ReferenceCache
@@ -126,7 +125,7 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		options.Scheme = repoSpec.Scheme
 	}
 
-	return &CachingComponentVersionRepositoryProvider{
+	prov := &CachingComponentVersionRepositoryProvider{
 		creator:    options.UserAgent,
 		scheme:     options.Scheme,
 		storeCache: &storeCache{store: make(map[string]*ocictf.Store)},
@@ -138,6 +137,11 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		blobCacheOpts:      options.BlobCacheOptions,
 		referenceCacheOpts: options.ReferenceCacheOptions,
 	}
+	// Wire the shared blob cache constructor now that prov exists so the
+	// closure can read its final field values. sync.OnceValue guarantees
+	// the constructor runs at most once across all callers.
+	prov.sharedBlobCache = sync.OnceValue(prov.newSharedBlobCache)
+	return prov
 }
 
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositoryScheme() *runtime.Scheme {
@@ -263,24 +267,28 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 // is therefore safe and avoids redundant disk storage when the same blob is
 // fetched by different callers.
 func (b *CachingComponentVersionRepositoryProvider) getOrCreateBlobCache() *cache.BlobCache {
-	b.sharedBlobOnce.Do(func() {
-		opts := *b.blobCacheOpts
-		if opts.Dir == "" {
-			base := b.tempDir
-			if base == "" {
-				base = os.TempDir()
-			}
-			opts.Dir = filepath.Join(base, "ocm-oci-cas")
+	return b.sharedBlobCache()
+}
+
+// newSharedBlobCache is the once-only constructor for the process-wide
+// blob cache; wired through [sync.OnceValue] in
+// [NewComponentVersionRepositoryProvider].
+func (b *CachingComponentVersionRepositoryProvider) newSharedBlobCache() *cache.BlobCache {
+	opts := *b.blobCacheOpts
+	if opts.Dir == "" {
+		base := b.tempDir
+		if base == "" {
+			base = os.TempDir()
 		}
-		c, err := cache.NewBlobCache(opts)
-		if err != nil {
-			slog.Warn("provider: failed to initialise shared blob cache, continuing without caching",
-				slog.String("err", err.Error()))
-			return
-		}
-		b.sharedBlobCache = c
-	})
-	return b.sharedBlobCache
+		opts.Dir = filepath.Join(base, "ocm-oci-cas")
+	}
+	c, err := cache.NewBlobCache(opts)
+	if err != nil {
+		slog.Warn("provider: failed to initialise shared blob cache, continuing without caching",
+			slog.String("err", err.Error()))
+		return nil
+	}
+	return c
 }
 
 // getOrCreateReferenceCache returns the ReferenceCache for the given credential

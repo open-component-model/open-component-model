@@ -70,10 +70,14 @@
 //
 // Integrity:
 //
-//   - [BlobCache] trusts the descriptor digest as the cache key and
-//     does not verify content. This mirrors oras-go's proxy. Integrity
-//     verification is expected to live one layer above (e.g. oras
-//     VerifyReader paths).
+//   - [BlobCache] verifies content on the cache-miss path by fetching
+//     via [content.FetchAll], which streams the upstream reader
+//     through a [content.VerifyReader] and rejects bytes that do not
+//     hash to the descriptor's digest. Only verified bytes are
+//     persisted to disk and served to callers.
+//   - On a cache hit the bytes are already keyed by digest under a
+//     directory owned by this process; the file's identity is trusted
+//     without a re-hash.
 //   - [ReferenceCache] trusts upstream's resolved descriptor and
 //     records it verbatim.
 package cache

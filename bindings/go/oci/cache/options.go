@@ -77,7 +77,7 @@ func Defaults() *Options {
 // fields from [Defaults].
 func (o Options) applyDefaults() (Options, error) {
 	if o.Dir == "" {
-		return Options{}, errors.New("blobcache: Options.Dir is required")
+		return Options{}, errors.New("cache: Options.Dir is required")
 	}
 	d := Defaults()
 	if o.MaxEntries == 0 {
