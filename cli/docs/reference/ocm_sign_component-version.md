@@ -191,11 +191,15 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 # Verifiers must use the upstream issuer in certificateOIDCIssuer.
 # OCM also stores this value in signatures[].signature.issuer for convenience.
 
-# Sign with Sigstore, using a config that holds both the sigstore signer and the OIDC credential
-sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --config ./sigstore.ocmconfig
+# Sign with Sigtore using default .ocmconfig file
+#
+# In this case, the signer configuration AND the OIDC credentials are all configured in the main ocm configugration
+# file.
+sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 
-# --config replaces the well known config locations instead of adding to them, so pass every
-# file that is needed: the signer alone would leave the command without credentials
+# Optionally, providing a --config flag on the CLI will overwrite all configurations and use this instead.
+# Multiple configuration flags can be combined this way. Either have everything (signer config and credentials) or
+# have multiple --config flags string. 
 sign component-version ./repo//ocm.software/cli:0.12.0 --config ./rsassa-pss.ocmconfig --config ~/.ocmconfig
 
 # Sign with custom signature name

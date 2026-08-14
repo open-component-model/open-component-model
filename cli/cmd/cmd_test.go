@@ -1641,8 +1641,7 @@ configurations:
 		"--signature", "internal",
 		"--config", ocmConfigFilePath,
 	))
-	r.Error(err)
-	r.NotContains(err.Error(), "OIDC identity token required")
+	r.ErrorContains(err, "private key not found")
 }
 
 func Test_Sign_With_Deprecated_Signer_Spec_Flag_Fails(t *testing.T) {

@@ -38,7 +38,7 @@ touch .ocmconfig
 ```
 
 {{< callout context="caution" title="`--config` replaces the default lookup" >}}
-Without `--config`, OCM reads the well known locations (`$OCM_CONFIG`, `$XDG_CONFIG_HOME/ocm/config`, `$HOME/.ocmconfig`,
+Without `--config`, OCM reads the well-known locations (`$OCM_CONFIG`, `$XDG_CONFIG_HOME/ocm/config`, `$HOME/.ocmconfig`,
 `$PWD/.ocmconfig`, ...) and merges them. Passing `--config` skips that lookup and uses only the files you name.
 Therefore, each command needs every entry it depends on including credentials **and** signer config. The flag can be
 repeated (`--config ./signer.yaml --config ~/.ocmconfig`), and later files win field by field.
