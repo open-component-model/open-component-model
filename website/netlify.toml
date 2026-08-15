@@ -1,6 +1,6 @@
 [build.environment]
-  NODE_VERSION = "25.8.1"
-  NPM_VERSION = "11.11.1"
+  NODE_VERSION = "26.5.0"
+  NPM_VERSION = "12.0.1"
   GO_VERSION = "1.26.3"
 
 [build]
@@ -17,15 +17,3 @@
 [context.production]
   command = "npm ci && npm run build"
   publish = "public"
-
-[[plugins]]
-  package = "netlify-plugin-submit-sitemap"
-
-	[plugins.inputs]
-    baseUrl = "https://doks.netlify.app/"
-    sitemapPath = "/sitemap.xml"
-    ignorePeriod = 0
-    providers = [
-      "google",
-      "yandex"
-    ]

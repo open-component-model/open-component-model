@@ -28,6 +28,7 @@ on:
       - '.github/workflows/cli.yml'
       - '.github/workflows/kubernetes-controller.yml'
       - '.github/workflows/conformance.yml'
+      - '.github/workflows/e2e.yml'
       - '.github/workflows/pipeline.yml'
       - '.env'
   workflow_call:
@@ -112,7 +113,7 @@ jobs:
   # controller build; gates publish alongside conformance. ===
   e2e:
     name: E2E
-    needs: [build_controller]
+    needs: [build_cli, build_controller]
     uses: ./.github/workflows/e2e.yml
     permissions:
       contents: read
@@ -121,6 +122,7 @@ jobs:
       ref: ${{ inputs.ref }}
       controller_image_artifact: ${{ needs.build_controller.outputs.artifact_name }}
       controller_version: ${{ needs.build_controller.outputs.version }}
+      cli_artifact: ${{ needs.build_cli.outputs.artifact_name }}
   # === end ===
 
   # === New this part is a copy from cli.yml::build::branch-check + kubernetes-controller.yml::build::branch-check ===
@@ -181,10 +183,10 @@ jobs:
           echo "LAYOUT=$LAYOUT" >> "$GITHUB_ENV"
 
       - name: Setup ORAS
-        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
 
       - name: Log in to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -210,10 +212,14 @@ jobs:
         id: digest
         env:
           VERSION: ${{ needs.build_cli.outputs.version }}
-        run: echo "digest=$(oras resolve ${TARGET_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          digest="$(oras resolve "${TARGET_REPO}:${VERSION}")"
+          [[ "$digest" == sha256:* ]] || { echo "::error::oras resolve returned unexpected digest for ${TARGET_REPO}:${VERSION}: '$digest'"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest OCI image
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.digest.outputs.digest }}
@@ -253,7 +259,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref || github.ref_name }}
           sparse-checkout: |
@@ -263,21 +269,21 @@ jobs:
           persist-credentials: false
 
       - name: Install Task
-        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           version: 3.x
 
       - name: Setup ORAS
-        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
 
       - name: Install Helm
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.0
+          version: v4.2.3
 
       - name: Log in to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -309,10 +315,14 @@ jobs:
         id: image-digest
         env:
           VERSION: ${{ needs.build_controller.outputs.version }}
-        run: echo "digest=$(oras resolve ${IMAGE_NAME}:${VERSION})" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          digest="$(oras resolve "${IMAGE_NAME}:${VERSION}")"
+          [[ "$digest" == sha256:* ]] || { echo "::error::oras resolve returned unexpected digest for ${IMAGE_NAME}:${VERSION}: '$digest'"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest image
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.image-digest.outputs.digest }}
@@ -338,10 +348,14 @@ jobs:
         id: chart-digest
         env:
           VERSION: ${{ needs.build_controller.outputs.version }}
-        run: echo "digest=$(oras resolve ${CHART_REPO}:${VERSION})" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          digest="$(oras resolve "${CHART_REPO}:${VERSION}")"
+          [[ "$digest" == sha256:* ]] || { echo "::error::oras resolve returned unexpected digest for ${CHART_REPO}:${VERSION}: '$digest'"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest chart
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.chart-digest.outputs.digest }}

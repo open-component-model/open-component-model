@@ -635,7 +635,7 @@ func TestHandler_Verify(t *testing.T) {
 			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
 			assertArgs: func(t *testing.T, args []string) {
 				r := require.New(t)
-				r.True(hasArg(args, "--private-infrastructure"))
+				r.True(hasArg(args, "--insecure-ignore-tlog"))
 				r.Equal("/path/to/private_trusted_root.json", argValue(args, "--trusted-root"))
 			},
 		},
@@ -813,7 +813,7 @@ func TestVerify_PrivateInfrastructureWithTrustedRootCredential(t *testing.T) {
 	err := h.Verify(t.Context(), signed, cfg, creds)
 	r.NoError(err)
 	r.NotNil(mock.lastVerifyArgs)
-	r.True(hasArg(mock.lastVerifyArgs, "--private-infrastructure"))
+	r.True(hasArg(mock.lastVerifyArgs, "--insecure-ignore-tlog"))
 }
 
 func TestVerify_CertificateOIDCIssuerAcceptsHTTP(t *testing.T) {
@@ -974,7 +974,7 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 		{
 			name:    "minimal (public sigstore)",
 			cfg:     testSignConfig(),
-			wantLen: 3,
+			wantLen: 2,
 		},
 		{
 			name: "enterprise with issuer and clientID",
@@ -986,7 +986,7 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 				c.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
 				return c
 			}(),
-			wantLen:      5,
+			wantLen:      4,
 			wantIssuer:   "https://keycloak.corp.example.com/realms/sigstore",
 			wantClientID: "corp-sigstore",
 		},
@@ -997,7 +997,7 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 				c.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
 				return c
 			}(),
-			wantLen:    4,
+			wantLen:    3,
 			wantIssuer: "https://dex.example.com",
 		},
 	}
@@ -1012,7 +1012,6 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 			r.NoError(err)
 			r.Equal(signerv1.VersionedType, id.GetType())
 			r.Equal("my-sig", id[signerv1.IdentityAttributeSignature])
-			r.Equal(string(v1alpha1.AlgorithmSigstoreDefault), id[signerv1.IdentityAttributeAlgorithm])
 			r.Len(id, tc.wantLen)
 			if tc.wantIssuer != "" {
 				r.Equal(tc.wantIssuer, id[signerv1.IdentityAttributeIssuer])
@@ -1020,6 +1019,79 @@ func TestGetSigningCredentialConsumerIdentity(t *testing.T) {
 			if tc.wantClientID != "" {
 				r.Equal(tc.wantClientID, id[signerv1.IdentityAttributeClientID])
 			}
+		})
+	}
+}
+
+// TestSigningConsumerIdentity_MatchesDocumentedConfig asserts the handler's requested identity
+// matches a .ocmconfig consumer specifying only {type, signature}. Emitting any extra attribute
+// (e.g. the algorithm dropped in this change) would break that documented contract.
+func TestSigningConsumerIdentity_MatchesDocumentedConfig(t *testing.T) {
+	t.Parallel()
+
+	const signatureName = "default"
+
+	tests := []struct {
+		name           string
+		configIdentity runtime.Identity
+		signConfig     *v1alpha1.SignConfig
+		wantMatch      bool
+	}{
+		{
+			name: "documented minimal config (type + signature) matches",
+			configIdentity: runtime.Identity{
+				runtime.IdentityAttributeType:       signerv1.VersionedType.String(),
+				signerv1.IdentityAttributeSignature: signatureName,
+			},
+			signConfig: testSignConfig(),
+			wantMatch:  true,
+		},
+		{
+			name: "stale algorithm attribute in config breaks the match",
+			configIdentity: runtime.Identity{
+				runtime.IdentityAttributeType:       signerv1.VersionedType.String(),
+				signerv1.IdentityAttributeSignature: signatureName,
+				"algorithm":                        string(v1alpha1.AlgorithmSigstoreV1Alpha1),
+			},
+			signConfig: testSignConfig(),
+			wantMatch:  false,
+		},
+		{
+			name: "signature name mismatch does not match",
+			configIdentity: runtime.Identity{
+				runtime.IdentityAttributeType:       signerv1.VersionedType.String(),
+				signerv1.IdentityAttributeSignature: "other",
+			},
+			signConfig: testSignConfig(),
+			wantMatch:  false,
+		},
+		{
+			name: "enterprise issuer must be mirrored in config",
+			configIdentity: runtime.Identity{
+				runtime.IdentityAttributeType:       signerv1.VersionedType.String(),
+				signerv1.IdentityAttributeSignature: signatureName,
+				signerv1.IdentityAttributeIssuer:    "https://dex.example.com",
+			},
+			signConfig: func() *v1alpha1.SignConfig {
+				c := &v1alpha1.SignConfig{Issuer: "https://dex.example.com"}
+				c.SetType(runtime.NewVersionedType(v1alpha1.SignConfigType, v1alpha1.Version))
+				return c
+			}(),
+			wantMatch: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+
+			h := newWithRunner(&execRecorder{})
+			requested, err := h.GetSigningCredentialConsumerIdentity(t.Context(), signatureName, testDigest(), tc.signConfig)
+			r.NoError(err)
+
+			// matchAnyNode resolves credentials via requested.Match(configIdentity).
+			r.Equal(tc.wantMatch, requested.Match(tc.configIdentity))
 		})
 	}
 }
@@ -1092,8 +1164,7 @@ func TestGetVerifyingCredentialConsumerIdentity(t *testing.T) {
 			}
 			r.Equal(verifierv1.VersionedType, id.GetType())
 			r.Equal("my-sig", id[verifierv1.IdentityAttributeSignature])
-			r.Equal(tc.algorithm, id[verifierv1.IdentityAttributeAlgorithm])
-			r.Len(id, 3)
+			r.Len(id, 2)
 		})
 	}
 }

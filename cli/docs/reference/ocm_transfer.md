@@ -35,12 +35,13 @@ ocm transfer {component-version|component-versions|cv|cvs} [flags]
                                            - $HOME/.ocm/config
                                            - $HOME/.ocmconfig
                                            3. The current working directory:
-                                           - $PWD/ocm/config
+                                           - $PWD/.ocm/config
                                            - $PWD/.ocmconfig
                                            4. The directory of the current executable:
-                                           - $EXE_DIR/ocm/config
+                                           - $EXE_DIR/.ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
+                                           Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
@@ -65,5 +66,5 @@ ocm transfer {component-version|component-versions|cv|cvs} [flags]
 ### SEE ALSO
 
 * [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
-* [ocm transfer component-version]({{< relref "ocm_transfer_component-version.md" >}})	 - Transfer a component version between OCM repositories
+* [ocm transfer component-version]({{< relref "ocm_transfer_component-version.md" >}})	 - Transfer one or more component versions between OCM repositories
 

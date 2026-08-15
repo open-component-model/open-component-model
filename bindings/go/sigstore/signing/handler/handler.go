@@ -260,7 +260,9 @@ func (h *Handler) Verify(
 		extraArgs = append(extraArgs, "--trusted-root", trustedRootPath)
 	}
 	if cfg.PrivateInfrastructure {
-		extraArgs = append(extraArgs, "--private-infrastructure")
+		// --insecure-ignore-tlog replaces --private-infrastructure, which cosign deprecated in
+		// v3.1.0 and removes in v4. It is a pure alias, available since cosign v2.0.
+		extraArgs = append(extraArgs, "--insecure-ignore-tlog")
 	}
 
 	slog.InfoContext(ctx, "sigstore verify: enforcing identity constraints",
@@ -291,7 +293,6 @@ func (*Handler) GetSigningCredentialConsumerIdentity(
 	}
 	id := credentialIdentity(signerv1.VersionedType)
 	id[signerv1.IdentityAttributeSignature] = name
-	id[signerv1.IdentityAttributeAlgorithm] = string(cfg.GetSignatureAlgorithm())
 	if cfg.Issuer != "" {
 		id[signerv1.IdentityAttributeIssuer] = cfg.Issuer
 	}
@@ -311,7 +312,6 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	}
 	id := credentialIdentity(verifierv1.VersionedType)
 	id[verifierv1.IdentityAttributeSignature] = signature.Name
-	id[verifierv1.IdentityAttributeAlgorithm] = signature.Signature.Algorithm
 	return id, nil
 }
 

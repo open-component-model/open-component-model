@@ -42,9 +42,9 @@ func TestGetOCMConfigPaths(t *testing.T) {
 			want: func(workingDirectory, executableDirectory string) []string {
 				return []string{
 					"/ocm-config",
-					"/xdg/.ocm/config",
+					"/xdg/ocm/config",
 					"/xdg/.ocmconfig",
-					"/home/user/.config/.ocm/config",
+					"/home/user/.config/ocm/config",
 					"/home/user/.config/.ocmconfig",
 					"/home/user/.ocm/config",
 					"/home/user/.ocmconfig",

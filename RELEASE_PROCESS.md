@@ -77,18 +77,21 @@ flowchart TD
     end
 
     Pipeline --> ReleaseRC[release_rc<br/>GitHub pre-release<br/>binaries + OCI tarballs + chart + changelog]
+    ReleaseRC --> PubCompRC[publish_components_rc<br/>ocm.software/cli, /controller, /ocm<br/>conflict: replace]
     ReleaseRC --> Gate{{release environment<br/>manual approval}}
     Gate --> Verify[verify_attestations<br/>CLI binaries, CLI OCI,<br/>controller image, chart]
     Verify --> Promote[promote_and_release_final<br/>tag v0.X.Y + cli/v0.X.Y + kubernetes/controller/v0.X.Y + website/v0.X.Y<br/>oras retag images, set :latest if applicable<br/>repackage chart, diff vs RC, push + attest<br/>publish final GitHub release]
+    Promote --> PubCompFinal[publish_components_final<br/>ocm.software/cli, /controller, /ocm<br/>conflict: replace]
     Promote --> WebsiteDocs[create_website_update_pr<br/>open docs PR to main<br/>pin Hugo module imports to website/v0.X.Y]
-    WebsiteDocs --> End([Final release live])
+    PubCompFinal --> End([Final release live])
+    WebsiteDocs --> End
 
     classDef rc fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
     classDef final fill:#dcfce7,stroke:#16a34a,color:#14532d
     classDef gate fill:#fef3c7,stroke:#d97706,color:#78350f
 
-    class Prepare,TagRC,Pipeline,ReleaseRC,BuildCLI,BuildCtl,Conf,PubCLI,PubCtl rc
-    class Verify,Promote,WebsiteDocs final
+    class Prepare,TagRC,Pipeline,ReleaseRC,PubCompRC,BuildCLI,BuildCtl,Conf,PubCLI,PubCtl rc
+    class Verify,Promote,PubCompFinal,WebsiteDocs final
     class Gate gate
 ```
 
@@ -107,6 +110,20 @@ The website integrates into the same workflow run, after `promote_and_release_fi
 * When more than 10 minors would be live, the oldest is retired (entry removed from `hugo.yaml`, imports removed from `module.yaml`). Retirement logic lives in `website/scripts/register-docs-version.js`.
 
 There is no `website/v0.X.Y-rc.N` tag. The website has no RC artifacts to validate (it's a docs site, not a binary or image), so the RC variant would have no consumer.
+
+## OCM components produced
+
+Every release publishes three OCM component-versions to `ghcr.io/<owner>`, all carrying the same version as the GitHub release.
+Both RC and final publications use the `replace` conflict policy so that reruns after a transient failure are idempotent.
+The release workflow's `concurrency` group prevents parallel runs for the same version.
+
+| Component | Reference |
+|---|---|
+| `ocm.software/cli` | multi-arch binaries (linux/darwin/windows × amd64/arm64) referenced by GitHub release download URL + the CLI OCI image referenced by digest |
+| `ocm.software/kubernetes/controller` | controller OCI image + Helm chart, both referenced by digest |
+| `ocm.software/ocm` | product wrapper referencing the two components above via `componentReferences` |
+
+The `ocm.software/ocm` product version is the recommended entry point — it pins the exact CLI and controller versions that were released together.
 
 ## Release responsible
 

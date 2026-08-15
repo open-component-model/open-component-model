@@ -8,7 +8,20 @@
 {{- if not $github }}{{ errorf "person-card shortcode: missing required param 'github' at %s" .Position }}{{ end -}}
 {{- if not $profile }}{{ errorf "person-card shortcode: missing required param 'profile' at %s" .Position }}{{ end -}}
 {{- $profileUrl := printf "https://openprofile.dev/profile/%s" $profile -}}
-{{- $avatarUrl := printf "https://github.com/%s.png?size=120" $github -}}
+{{- /* Fetch server-side so the visitor's browser never calls a third party (GDPR).
+       Fail the build on any miss - a broken avatar should stop the deploy, not ship. */ -}}
+{{- $pos := .Position -}}
+{{- $avatarSrc := printf "https://github.com/%s.png?size=120" $github -}}
+{{- $avatarUrl := "" -}}
+{{- with try (resources.GetRemote $avatarSrc) -}}
+  {{- with .Err -}}
+    {{- errorf "person-card shortcode: failed to fetch avatar for github=%q at %s: %s" $github $pos . -}}
+  {{- else with .Value -}}
+    {{- $avatarUrl = .RelPermalink -}}
+  {{- else -}}
+    {{- errorf "person-card shortcode: avatar not found for github=%q at %s (%s)" $github $pos $avatarSrc -}}
+  {{- end -}}
+{{- end -}}
 <a href="{{ $profileUrl }}" target="_blank" rel="noopener noreferrer" class="ocm-card person-card text-decoration-none">
   <div class="person-card-inner d-flex flex-column align-items-center text-center p-3 gap-2">
     <img src="{{ $avatarUrl }}" alt="{{ $name }}" width="80" height="80" class="rounded-circle person-card-avatar" loading="lazy">

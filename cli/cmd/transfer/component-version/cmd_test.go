@@ -477,3 +477,131 @@ func TestTransferComponentVersionPreservesSignatures(t *testing.T) {
 	r.Len(targetDesc.Component.Resources, 1, "transferred descriptor should have 1 resource")
 	r.Equal("test-blob", targetDesc.Component.Resources[0].Name)
 }
+
+// setupMultiVersionSourceRef builds a CTF with multiple versions of the same component and returns
+// a reference without a version (for multi-version transfer).
+func setupMultiVersionSourceRef(t *testing.T, componentName string, versions ...string) (string, string) {
+	t.Helper()
+	descs := make([]*descriptor.Descriptor, len(versions))
+	for i, v := range versions {
+		descs[i] = createTestDescriptor(componentName, v)
+	}
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, descs...)
+	require.NoError(t, err)
+	// Reference without version triggers multi-version discovery.
+	ref := &compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: fromPath},
+		Component:  componentName,
+	}
+	return ref.String(), fromPath
+}
+
+func TestTransferComponentVersion_AllVersions(t *testing.T) {
+	componentName := "ocm.software/multi-version-component"
+	versions := []string{"1.0.0", "1.1.0", "2.0.0"}
+	sourceRef, _ := setupMultiVersionSourceRef(t, componentName, versions...)
+	toPath := t.TempDir()
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", sourceRef, targetArg),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+	for _, v := range versions {
+		desc, err := targetRepo.GetComponentVersion(ctx, componentName, v)
+		require.NoError(t, err, "version %s should be in target", v)
+		require.Equal(t, v, desc.Component.Version)
+	}
+}
+
+func TestTransferComponentVersion_SemverConstraint(t *testing.T) {
+	componentName := "ocm.software/semver-filter-component"
+	sourceRef, _ := setupMultiVersionSourceRef(t, componentName, "1.0.0", "1.1.0", "2.0.0")
+	toPath := t.TempDir()
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", sourceRef, targetArg, "--semver-constraint", "< 2.0.0"),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+
+	for _, v := range []string{"1.0.0", "1.1.0"} {
+		desc, err := targetRepo.GetComponentVersion(ctx, componentName, v)
+		require.NoError(t, err, "version %s should be in target", v)
+		require.Equal(t, v, desc.Component.Version)
+	}
+
+	_, err = targetRepo.GetComponentVersion(ctx, componentName, "2.0.0")
+	require.Error(t, err, "version 2.0.0 should NOT be in target")
+}
+
+func TestTransferComponentVersion_LatestOnly(t *testing.T) {
+	componentName := "ocm.software/latest-only-component"
+	sourceRef, _ := setupMultiVersionSourceRef(t, componentName, "1.0.0", "1.1.0", "2.0.0")
+	toPath := t.TempDir()
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", sourceRef, targetArg, "--latest"),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+
+	desc, err := targetRepo.GetComponentVersion(ctx, componentName, "2.0.0")
+	require.NoError(t, err, "latest version 2.0.0 should be in target")
+	require.Equal(t, "2.0.0", desc.Component.Version)
+
+	for _, v := range []string{"1.0.0", "1.1.0"} {
+		_, err = targetRepo.GetComponentVersion(ctx, componentName, v)
+		require.Error(t, err, "version %s should NOT be in target when --latest is set", v)
+	}
+}
+
+func TestTransferComponentVersion_ExactVersionIgnoresConstraintFlags(t *testing.T) {
+	componentName := "ocm.software/exact-version-component"
+	versions := []string{"1.0.0", "1.1.0", "2.0.0"}
+	sourceRef, _ := setupMultiVersionSourceRef(t, componentName, versions...)
+
+	// Build a ref with an exact version — semver-constraint and --latest should be warned/ignored.
+	exactRef := &compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: strings.TrimPrefix(strings.Split(sourceRef, "//")[0], "ctf::")},
+		Component:  componentName,
+		Version:    "1.0.0",
+	}
+	toPath := t.TempDir()
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", exactRef.String(), targetArg, "--semver-constraint", "< 2.0.0", "--latest"),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.NoError(t, err, "command should succeed even when both flags are set with exact version")
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+
+	// Only the exact version should have been transferred.
+	desc, err := targetRepo.GetComponentVersion(ctx, componentName, "1.0.0")
+	require.NoError(t, err, "exact version 1.0.0 should be in target")
+	require.Equal(t, "1.0.0", desc.Component.Version)
+
+	for _, v := range []string{"1.1.0", "2.0.0"} {
+		_, err = targetRepo.GetComponentVersion(ctx, componentName, v)
+		require.Error(t, err, "version %s should NOT be in target", v)
+	}
+}

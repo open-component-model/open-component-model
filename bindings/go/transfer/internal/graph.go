@@ -10,6 +10,7 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -18,6 +19,7 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
+	wgetv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
 // TransferRoot pairs a DAG root key with its target repositories and source resolver.
@@ -282,7 +284,7 @@ func logSkippedResource(ctx context.Context, component, version string, resource
 // Each handler creates a Get transformation (fetching the resource from the source) and an Add
 // transformation (uploading it to the target). The uploadType and target type determine whether
 // resources are stored as local blobs or separate OCI artifacts (including Helm charts) in the
-// target repository.
+// target repository. wget resources are always downloaded and embedded as local blobs.
 // It returns CEL spec-field expressions for the file buffers produced, referencing consumer spec
 // fields (not producer outputs) so the DAG edge points from consumer to the cleanup node.
 func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType transferv1alpha1.UploadType) ([]string, error) {
@@ -321,8 +323,20 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 			fmt.Sprintf("${%s.spec.?provFile}", convertResourceID),
 			fmt.Sprintf("${%s.spec.file}", addResourceID),
 		}, nil
+	case *wgetv1.Wget:
+		// A wget resource is a plain blob: download it and embed it as a local blob in the
+		// target. There is no OCI-artifact representation, so uploadAsArtifact is not honored here.
+		if err := processWget(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+			return nil, fmt.Errorf("cannot process wget resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+	case *githubv1.GitHub:
+		if err := processGitHub(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+			return nil, fmt.Errorf("cannot process GitHub resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	default:
-		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, and Helm chart resources are supported for transformation.",
+		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, Helm chart, wget, and GitHub resources are supported for transformation.",
 			"component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version,
 			"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 	}

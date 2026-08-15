@@ -11,6 +11,8 @@ const (
 	WgetConsumerType = "Wget"
 )
 
+var V1VersionedType = runtime.NewVersionedType(WgetConsumerType, v1.Version)
+
 var Scheme = runtime.NewScheme()
 
 func init() {
@@ -22,7 +24,7 @@ func MustAddToScheme(scheme *runtime.Scheme) {
 
 	lowerCaseConsumerType := strings.ToLower(WgetConsumerType)
 	scheme.MustRegisterWithAlias(wget,
-		runtime.NewVersionedType(WgetConsumerType, v1.Version),
+		V1VersionedType,
 		runtime.NewUnversionedType(WgetConsumerType),
 		runtime.NewVersionedType(lowerCaseConsumerType, v1.Version),
 		runtime.NewUnversionedType(lowerCaseConsumerType),

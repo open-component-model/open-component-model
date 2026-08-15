@@ -1,10 +1,15 @@
 package repository
 
-import "net/http"
+import (
+	"net/http"
+
+	"ocm.software/open-component-model/bindings/go/wget/internal/download"
+)
 
 const (
-	// DefaultMaxDownloadSize is the default maximum download size (100 MiB).
-	DefaultMaxDownloadSize int64 = 100 * 1024 * 1024
+	// DefaultMaxDownloadSize is the default maximum download size. Zero means
+	// unlimited; see [download.DefaultMaxDownloadSize].
+	DefaultMaxDownloadSize int64 = download.DefaultMaxDownloadSize
 )
 
 // Options holds configuration options for the wget resource repository.
@@ -23,9 +28,10 @@ func WithHTTPClient(client *http.Client) Option {
 	}
 }
 
-// WithMaxDownloadSize sets the maximum number of bytes to read from a response body.
-// Defaults to DefaultMaxDownloadSize (100 MiB) when not set.
-// Pass 0 to allow unlimited download size (not recommended for untrusted sources).
+// WithMaxDownloadSize caps the number of bytes read from a response body.
+// Zero or negative (the default) means unlimited: bodies are streamed to disk
+// rather than held in memory, so a download is bounded by free disk rather than
+// by RAM.
 func WithMaxDownloadSize(size int64) Option {
 	return func(o *Options) {
 		o.MaxDownloadSize = &size

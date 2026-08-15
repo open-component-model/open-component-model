@@ -47,7 +47,7 @@ ocm verify component-version {reference} [flags]
 
 ```
 # Verify all component version signatures found in a component version
-verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
+verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 
 ## Example Credential Config (Plain encoding — bare public key)
 #
@@ -138,13 +138,13 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
             trusted_root_json_file: /path/to/trusted_root.json
 
 # Verify with Sigstore verifier spec:
-verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./sigstore-verify.yaml
+verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --verifier-spec ./sigstore-verify.yaml
 
 # Verify a specific signature
-verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
 
 # Use a verifier specification file
-verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./rsassa-pss.yaml
+verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --verifier-spec ./rsassa-pss.yaml
 ```
 
 ### Options
@@ -170,12 +170,13 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
                                            - $HOME/.ocm/config
                                            - $HOME/.ocmconfig
                                            3. The current working directory:
-                                           - $PWD/ocm/config
+                                           - $PWD/.ocm/config
                                            - $PWD/.ocmconfig
                                            4. The directory of the current executable:
-                                           - $EXE_DIR/ocm/config
+                                           - $EXE_DIR/.ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
+                                           Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
