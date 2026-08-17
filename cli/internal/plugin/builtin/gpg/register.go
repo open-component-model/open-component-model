@@ -21,6 +21,8 @@ func Register(
 	// has no scheme in released bindings yet
 	gpgCredScheme := runtime.NewScheme()
 	gpgcredsv1alpha1.MustRegisterCredentialType(gpgCredScheme)
+
+	// TODO(matthiasbruns): where do I implement the credential type getter here?
 	repositoryRegistry.Register(gpgCredScheme)
 
 	hdlr, err := handler.New(nil)

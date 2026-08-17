@@ -52,3 +52,4 @@ func (p *OCICredentialRepository) ConsumerIdentityForConfig(_ context.Context, _
 	return nil, fmt.Errorf("credential consumer identities are not necessary for a docker config file and are thus not supported." +
 		"If you need to use a docker config file, it needs to be available on the host system as is, so it shouldn't need to generate a consumer identity")
 }
+

@@ -17,6 +17,7 @@ func Register(
 	repositoryRegistry *credentialrepository.RepositoryRegistry,
 	filesystemConfig *filesystemv1alpha1.Config,
 ) error {
+	// TODO(matthiasbruns): what about them?
 	repositoryRegistry.Register(oidcidentitytoken.Scheme)
 	repositoryRegistry.Register(trustedroot.Scheme)
 

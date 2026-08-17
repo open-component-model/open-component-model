@@ -15,7 +15,7 @@ import (
 func Register(
 	signingHandlerRegistry *signinghandler.SigningRegistry,
 	repositoryRegistry *credentialrepository.RepositoryRegistry,
-	// TODO add filesystem and logging awareness to rsa handler
+// TODO add filesystem and logging awareness to rsa handler
 	_ *filesystemv1alpha1.Config,
 ) error {
 	scheme := runtime.NewScheme()
@@ -28,6 +28,7 @@ func Register(
 		return err
 	}
 
+	// same here - what plugin??
 	repositoryRegistry.Register(rsacredentials.Scheme)
 
 	return errors.Join(

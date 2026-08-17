@@ -30,6 +30,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialplugin"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
@@ -56,6 +57,7 @@ type PluginManager struct {
 	ResourcePluginRegistry             *resource.ResourceRegistry
 	BlobTransformerRegistry            *blobtransformer.Registry
 	SigningRegistry                    *signinghandler.SigningRegistry
+	CredentialTypeRegistry             *credentialtyperepository.CredentialTypeRegistry
 
 	mu sync.Mutex
 
@@ -79,6 +81,7 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 		ResourcePluginRegistry:             resource.NewResourceRegistry(ctx),
 		BlobTransformerRegistry:            blobtransformer.NewBlobTransformerRegistry(ctx),
 		SigningRegistry:                    signinghandler.NewSigningRegistry(ctx),
+		CredentialTypeRegistry:             credentialtyperepository.NewCredentialTypeRegistry(ctx),
 		baseCtx:                            ctx,
 	}
 }

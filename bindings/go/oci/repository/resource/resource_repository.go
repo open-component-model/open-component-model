@@ -17,6 +17,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ocicreds "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -297,4 +298,8 @@ func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource 
 		return nil, fmt.Errorf("error streaming resource upload: %w", err)
 	}
 	return res, nil
+}
+
+func (p *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
+	return ocicreds.Scheme
 }

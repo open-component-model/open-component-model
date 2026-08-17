@@ -5,10 +5,9 @@ import (
 
 	githubdigest "ocm.software/open-component-model/bindings/go/github/digest"
 	githubrepository "ocm.software/open-component-model/bindings/go/github/repository/resource"
-	githubcreds "ocm.software/open-component-model/bindings/go/github/spec/credentials"
 	httpclient "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 )
@@ -17,16 +16,19 @@ import (
 // credential scheme into the CLI plugin registries.
 func Register(resourcePluginRegistry *resource.ResourceRegistry,
 	digestProcessorRegistry *digestprocessor.RepositoryRegistry,
-	credentialRepository *credentialrepository.RepositoryRegistry,
+	credTypeRegistry *credentialtyperepository.CredentialTypeRegistry,
 	httpConfig *httpv1alpha1.Config,
 ) error {
 	httpClient := httpclient.New(httpclient.WithConfig(httpConfig))
 
-	credentialRepository.Register(githubcreds.Scheme)
-
 	repository := githubrepository.NewResourceRepository(githubrepository.WithHTTPClient(httpClient))
 	if err := resourcePluginRegistry.RegisterInternalResourcePlugin(repository); err != nil {
 		return fmt.Errorf("could not register github resource repository plugin: %w", err)
+	}
+
+	// TODO(matthiasbruns): digest processor vs resource repo - two entry points - what to pick?
+	if err := credTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(repository); err != nil {
+		return fmt.Errorf("could not register github credential repository plugin: %w", err)
 	}
 
 	digestProcessor := githubdigest.NewDigestProcessor(githubrepository.WithHTTPClient(httpClient))
