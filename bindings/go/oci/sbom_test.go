@@ -202,7 +202,6 @@ func TestRepository_DiscoverSBOM(t *testing.T) {
 
 		_, err := repo.DiscoverSBOM(t.Context(), res)
 		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
-		assert.ErrorContains(t, err, "linux/arm64")
 	})
 
 	t.Run("rejects an access that is not an oci image", func(t *testing.T) {

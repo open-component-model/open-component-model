@@ -8,11 +8,20 @@ import (
 
 type options struct {
 	platform       ociImageSpecV1.Platform
+	allPlatforms   bool
 	predicateTypes []string
 }
 
 // Option configures SBOM discovery.
 type Option func(*options)
+
+// WithAllPlatforms widens the discovery to every platform the index offers, ignoring
+// any platform set by WithPlatform.
+func WithAllPlatforms() Option {
+	return func(o *options) {
+		o.allPlatforms = true
+	}
+}
 
 // WithPlatform narrows the discovery to a platform.
 func WithPlatform(platform ociImageSpecV1.Platform) Option {

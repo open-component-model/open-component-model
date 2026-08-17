@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"strings"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
@@ -60,32 +59,14 @@ type SBOM struct {
 	// PredicateType names the kind of document Predicate holds, for example
 	// PredicateTypeSPDX.
 	PredicateType string
-	// Name is the document's own name. Make it configurable for BuildKit's naming
-	// convention.
+	// Name is the document's own name, for example "sbom" or "sbom-<stage>" under
+	// BuildKit's naming convention. Empty for producers that do not name their
+	// documents, so it is not a reliable identifier on its own.
 	Name string
 	// Statement is the complete in-toto statement, byte for byte as stored.
 	Statement []byte
 	// Predicate is the SBOM document itself
 	Predicate json.RawMessage
-}
-
-// IsCore returns true if the given SBOM is the core and not the stage.
-// This is specific to BuildKit.
-func (s SBOM) IsCore() bool {
-	return s.Name == CoreSBOMName
-}
-
-// Core finds the Core SBOM for a given artifact.
-func Core(sboms []SBOM) (SBOM, bool) {
-	if len(sboms) == 1 {
-		return sboms[0], true
-	}
-	for _, sbom := range sboms {
-		if sbom.IsCore() {
-			return sbom, true
-		}
-	}
-	return SBOM{}, false
 }
 
 // MediaType returns the right media-type given the PredicateType.
@@ -101,9 +82,9 @@ func (s SBOM) MediaType() string {
 }
 
 // DiscoverSBOMs resolves reference in store and returns every SBOM attestation attached
-// to the image matching the requested platform.
+// to the images matching the requested platform, or to every platform in the index when
+// WithAllPlatforms is given.
 //
-// BuildKit creates _several_ entries for a single attestation so those are normal.
 // Returns the following set of errors:
 // - ErrNotAnIndex if the reference is a plain manifest
 // - ErrPlatformNotFound if there was no platform for the given value
@@ -140,35 +121,43 @@ func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts
 		}
 	}
 
-	image, ok := selectPlatform(images, o.platform)
-	if !ok {
-		return nil, fmt.Errorf("%w: %q has no image for %s, available: %s",
-			ErrPlatformNotFound, reference, formatPlatform(o.platform), describeAvailablePlatforms(images, attestations))
-	}
-
-	var manifests []ociImageSpecV1.Descriptor
-	for _, attestation := range attestations {
-		if attestation.Annotations[AnnotationDockerReferenceDigest] == image.Digest.String() {
-			manifests = append(manifests, attestation)
-		}
-	}
-	if len(manifests) == 0 {
-		return nil, fmt.Errorf("%w: %q has no attestation for %s, available: %s",
-			ErrNoAttestation, reference, formatPlatform(o.platform), describeAvailablePlatforms(images, attestations))
+	selected := selectPlatforms(images, o.platform, o.allPlatforms)
+	if len(selected) == 0 {
+		return nil, fmt.Errorf("%w: %q", ErrPlatformNotFound, reference)
 	}
 
 	var sboms []SBOM
-	for _, manifest := range manifests {
-		found, err := sbomsFromAttestation(ctx, store, o, image, manifest)
-		if err != nil {
-			return nil, err
+	var attested int
+	for _, image := range selected {
+		var manifests []ociImageSpecV1.Descriptor
+		for _, attestation := range attestations {
+			if attestation.Annotations[AnnotationDockerReferenceDigest] == image.Digest.String() {
+				manifests = append(manifests, attestation)
+			}
 		}
-		sboms = append(sboms, found...)
+		if len(manifests) == 0 {
+			slog.DebugContext(ctx, "skipping image without an attestation",
+				slog.String("image", image.Digest.String()),
+				slog.Any("platform", image.Platform))
+			continue
+		}
+		attested++
+
+		for _, manifest := range manifests {
+			found, err := sbomsFromAttestation(ctx, store, o, image, manifest)
+			if err != nil {
+				return nil, err
+			}
+			sboms = append(sboms, found...)
+		}
+	}
+
+	if attested == 0 {
+		return nil, fmt.Errorf("%w: %q", ErrNoAttestation, reference)
 	}
 
 	if len(sboms) == 0 {
-		return nil, fmt.Errorf("%w: %q has attestations for %s but none of predicate type %s",
-			ErrNoAttestation, reference, formatPlatform(o.platform), strings.Join(o.predicateTypes, ", "))
+		return nil, fmt.Errorf("%w: %q has no attestation of predicate types %v", ErrNoAttestation, reference, o.predicateTypes)
 	}
 
 	return sboms, nil
@@ -249,78 +238,42 @@ func sbomsFromAttestation(
 	return sboms, nil
 }
 
-// selectPlatform picks the image entry matching want. Attributes want leaves empty are
-// not constrained, so asking for an architecture alone matches any operating system.
-//
-// Only entries partition kept as images reach this, so the unknown/unknown placeholder
-// BuildKit puts on attestations is already out of the way.
-func selectPlatform(images []ociImageSpecV1.Descriptor, want ociImageSpecV1.Platform) (ociImageSpecV1.Descriptor, bool) {
+// selectPlatforms picks the image entries to inspect. When all is set every entry
+// that has a platform is returned and "want" is ignored. Otherwise, the first entry
+// matching "want" is returned on its own.
+func selectPlatforms(images []ociImageSpecV1.Descriptor, want ociImageSpecV1.Platform, all bool) []ociImageSpecV1.Descriptor {
+	var selected []ociImageSpecV1.Descriptor
 	for _, image := range images {
 		if image.Platform == nil {
 			continue
 		}
-		if want.Architecture != "" && want.Architecture != image.Platform.Architecture {
+		if !all && !platformMatches(*image.Platform, want) {
 			continue
 		}
-		if want.OS != "" && want.OS != image.Platform.OS {
-			continue
+		selected = append(selected, image)
+		if !all {
+			break
 		}
-		if want.Variant != "" && want.Variant != image.Platform.Variant {
-			continue
-		}
-		if want.OSVersion != "" && want.OSVersion != image.Platform.OSVersion {
-			continue
-		}
-		if len(want.OSFeatures) > 0 && !slices.Equal(want.OSFeatures, image.Platform.OSFeatures) {
-			continue
-		}
-		return image, true
 	}
-	return ociImageSpecV1.Descriptor{}, false
+	return selected
 }
 
-// describeAvailablePlatforms renders the platforms an index offers, noting which of
-// them carry no attestation, so a failure tells the caller what could have been asked
-// for instead.
-func describeAvailablePlatforms(images, attestations []ociImageSpecV1.Descriptor) string {
-	if len(images) == 0 {
-		return "none"
+// platformMatches returns if "want" is satisfied.
+func platformMatches(have, want ociImageSpecV1.Platform) bool {
+	switch {
+	case want.Architecture != "" && want.Architecture != have.Architecture:
+		return false
+	case want.OS != "" && want.OS != have.OS:
+		return false
+	case want.Variant != "" && want.Variant != have.Variant:
+		return false
+	case want.OSVersion != "" && want.OSVersion != have.OSVersion:
+		return false
+	case len(want.OSFeatures) > 0 && !slices.Equal(want.OSFeatures, have.OSFeatures):
+		return false
+	default:
+		return true
 	}
-
-	// Only the error paths need to know which images were attested, so the lookup is
-	// built here rather than carried around for the common case.
-	attested := make(map[string]bool, len(attestations))
-	for _, attestation := range attestations {
-		attested[attestation.Annotations[AnnotationDockerReferenceDigest]] = true
-	}
-
-	described := make([]string, 0, len(images))
-	for _, image := range images {
-		if image.Platform == nil {
-			continue
-		}
-		entry := formatPlatform(*image.Platform)
-		if !attested[image.Digest.String()] {
-			entry += " (no attestation)"
-		}
-		described = append(described, entry)
-	}
-	if len(described) == 0 {
-		return "none"
-	}
-
-	slices.Sort(described)
-	return strings.Join(described, ", ")
-}
-
-// formatPlatform takes into consideration the Platform section `Variant`. Which is just
-// a fancy way for defining special CPUs.
-func formatPlatform(platform ociImageSpecV1.Platform) string {
-	parts := []string{platform.OS, platform.Architecture}
-	if platform.Variant != "" {
-		parts = append(parts, platform.Variant)
-	}
-	return strings.Join(parts, "/")
 }
 
 func isIndex(mediaType string) bool {

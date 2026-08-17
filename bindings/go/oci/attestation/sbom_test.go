@@ -71,10 +71,13 @@ func image(t *testing.T, store spec.Store, platform ociImageSpecV1.Platform, man
 	return desc
 }
 
+// predicateFor names its documents the way BuildKit does: "sbom" for the image itself
+// and "sbom-<stage>" for each scanned build stage. Discovery has no opinion on those
+// names, so they are literals here rather than a constant the binding exports.
 func predicateFor(index int) map[string]any {
-	name := attestation.CoreSBOMName
+	name := "sbom"
 	if index > 0 {
-		name = fmt.Sprintf("%s-stage%d", attestation.CoreSBOMName, index)
+		name = fmt.Sprintf("sbom-stage%d", index)
 	}
 	return map[string]any{
 		"spdxVersion": "SPDX-2.3",
@@ -217,55 +220,10 @@ func TestDiscoverSBOMs_RealBuildKitLayerMix(t *testing.T) {
 	}
 	assert.NotEqual(t, sboms[0].Layer.Digest, sboms[1].Layer.Digest, "every layer is returned, not just the first")
 
-	// TestCore builds its SBOMs by hand, so this is the only place proving discovery
-	// reads the document name and that Core then picks on it.
-	core, ok := attestation.Core(sboms)
-	require.True(t, ok)
-	assert.Equal(t, attestation.CoreSBOMName, core.Name)
-	assert.True(t, core.IsCore())
-}
-
-func TestCore(t *testing.T) {
-	named := func(names ...string) []attestation.SBOM {
-		out := make([]attestation.SBOM, 0, len(names))
-		for _, name := range names {
-			out = append(out, attestation.SBOM{Name: name})
-		}
-		return out
-	}
-
-	t.Run("picks the image over its build stages", func(t *testing.T) {
-		core, ok := attestation.Core(named("sbom", "sbom-hugo"))
-		require.True(t, ok)
-		assert.Equal(t, "sbom", core.Name)
-	})
-
-	t.Run("does not depend on ordering", func(t *testing.T) {
-		core, ok := attestation.Core(named("sbom-hugo", "sbom-builder", "sbom"))
-		require.True(t, ok)
-		assert.Equal(t, "sbom", core.Name)
-	})
-
-	t.Run("a lone sbom is taken whatever it calls itself", func(t *testing.T) {
-		core, ok := attestation.Core(named("some-other-scanner-output"))
-		require.True(t, ok)
-		assert.Equal(t, "some-other-scanner-output", core.Name)
-	})
-
-	t.Run("reports when only stages are present", func(t *testing.T) {
-		_, ok := attestation.Core(named("sbom-hugo", "sbom-builder"))
-		assert.False(t, ok, "nothing here describes the image itself")
-	})
-
-	t.Run("reports when there is nothing at all", func(t *testing.T) {
-		_, ok := attestation.Core(nil)
-		assert.False(t, ok)
-	})
-
-	t.Run("a stage name is never mistaken for the core", func(t *testing.T) {
-		assert.False(t, attestation.SBOM{Name: "sbom-hugo"}.IsCore())
-		assert.True(t, attestation.SBOM{Name: "sbom"}.IsCore())
-	})
+	// Discovery reads the document's own name off the predicate and hands it back
+	// untouched. Nothing here narrows on it.
+	names := []string{sboms[0].Name, sboms[1].Name}
+	assert.ElementsMatch(t, []string{"sbom", "sbom-stage1"}, names)
 }
 
 func TestDiscoverSBOMs(t *testing.T) {
@@ -432,6 +390,81 @@ func TestDiscoverSBOMs(t *testing.T) {
 	})
 }
 
+func TestDiscoverSBOMs_AllPlatforms(t *testing.T) {
+	// A platform request is what a caller would otherwise be narrowed by, so every case
+	// here passes one to prove WithAllPlatforms overrides it rather than merging with it.
+	t.Run("returns the sboms of every platform in the index", func(t *testing.T) {
+		store := newStore(t)
+		amd64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}, ociImageSpecV1.MediaTypeImageManifest)
+		arm64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest",
+			amd64, arm64,
+			attestationFor(t, store, amd64, attestation.PredicateTypeSPDX, attestation.PredicateTypeSPDX),
+			attestationFor(t, store, arm64, attestation.PredicateTypeSPDX),
+		)
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64(), attestation.WithAllPlatforms())
+		require.NoError(t, err)
+		require.Len(t, sboms, 3, "both of amd64's documents and arm64's single one")
+
+		byPlatform := map[string]int{}
+		for _, sbom := range sboms {
+			byPlatform[sbom.Platform.OS+"/"+sbom.Platform.Architecture]++
+		}
+		assert.Equal(t, map[string]int{"linux/amd64": 2, "linux/arm64": 1}, byPlatform)
+	})
+
+	t.Run("skips a platform carrying no attestation instead of failing", func(t *testing.T) {
+		store := newStore(t)
+		amd64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}, ociImageSpecV1.MediaTypeImageManifest)
+		arm64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest",
+			amd64, arm64,
+			attestationFor(t, store, arm64, attestation.PredicateTypeSPDX),
+		)
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, attestation.WithAllPlatforms())
+		require.NoError(t, err, "one unattested platform must not sink the whole run")
+		require.Len(t, sboms, 1)
+		assert.Equal(t, arm64.Digest, sboms[0].Subject.Digest)
+	})
+
+	t.Run("reports when no platform in the index is attested", func(t *testing.T) {
+		store := newStore(t)
+		amd64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}, ociImageSpecV1.MediaTypeImageManifest)
+		arm64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest", amd64, arm64)
+
+		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, attestation.WithAllPlatforms())
+		require.ErrorIs(t, err, attestation.ErrNoAttestation)
+	})
+
+	t.Run("reports when every platform is attested but none matches the predicate type", func(t *testing.T) {
+		store := newStore(t)
+		arm64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest",
+			arm64, attestationFor(t, store, arm64, slsaProvenance),
+		)
+
+		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, attestation.WithAllPlatforms())
+		require.ErrorIs(t, err, attestation.ErrNoAttestation)
+		assert.Contains(t, err.Error(), attestation.PredicateTypeSPDX)
+	})
+
+	t.Run("still ignores the unknown/unknown attestation placeholder", func(t *testing.T) {
+		store := newStore(t)
+		arm64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest",
+			arm64, attestationFor(t, store, arm64, attestation.PredicateTypeSPDX),
+		)
+
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, attestation.WithAllPlatforms())
+		require.NoError(t, err)
+		require.Len(t, sboms, 1, "the attestation manifest is not itself an image to inspect")
+		assert.NotEqual(t, attestation.PlatformUnknown, sboms[0].Platform.OS)
+	})
+}
+
 func TestDiscoverSBOMs_Errors(t *testing.T) {
 	t.Run("rejects a plain image manifest", func(t *testing.T) {
 		store := newStore(t)
@@ -442,7 +475,7 @@ func TestDiscoverSBOMs_Errors(t *testing.T) {
 		require.ErrorIs(t, err, attestation.ErrNotAnIndex)
 	})
 
-	t.Run("reports the platforms on offer when the requested one is absent", func(t *testing.T) {
+	t.Run("reports a requested platform that is absent", func(t *testing.T) {
 		store := newStore(t)
 		amd64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}, ociImageSpecV1.MediaTypeImageManifest)
 		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest",
@@ -450,7 +483,6 @@ func TestDiscoverSBOMs_Errors(t *testing.T) {
 
 		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
 		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
-		assert.ErrorContains(t, err, "linux/amd64", "the error has to say what could be asked for instead")
 	})
 
 	t.Run("reports a platform that carries no attestation", func(t *testing.T) {
@@ -462,7 +494,6 @@ func TestDiscoverSBOMs_Errors(t *testing.T) {
 
 		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
 		require.ErrorIs(t, err, attestation.ErrNoAttestation)
-		assert.ErrorContains(t, err, "linux/arm64 (no attestation)")
 	})
 
 	t.Run("never matches the attestation manifest itself", func(t *testing.T) {

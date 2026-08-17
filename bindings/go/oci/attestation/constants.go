@@ -26,14 +26,4 @@ const (
 	MediaTypeSPDXJSON = "application/spdx+json"
 	// MediaTypeCycloneDXJSON media type of CycloneDX document.
 	MediaTypeCycloneDXJSON = "application/vnd.cyclonedx+json"
-
-	// CoreSBOMName is the name BuildKit gives to the core SBOM. This is hardcoded
-	// here at the moment: https://github.com/moby/buildkit/blob/master/frontend/attestations/sbom/sbom.go#L19
-	// There is no other indication at the moment which SBOM document belongs to
-	// the image and which describes the dependencies and which scans the content.
-	// This is specifically a BuildKit dependency.
-	//	// moby/buildkit/frontend/attestations/sbom/sbom.go
-	//	CoreSBOMName    = "sbom"
-	//	ExtraSBOMPrefix = CoreSBOMName + "-"
-	CoreSBOMName = "sbom"
 )
