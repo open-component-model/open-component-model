@@ -169,9 +169,14 @@ credentialTypeScheme.MustRegisterWithAlias(&HelmHTTPCredentials{}, HelmHTTPCrede
 ```
 
 External plugins (separate binaries) declare custom credential types they introduce in the `customCredentialTypes`
-field of their JSON capability spec. The `PluginManager` registers these into the credential type scheme during
-plugin discovery — no manual CLI aggregation needed. Built-in types (e.g., `HelmHTTPCredentials/v1`,
-`OCICredentials/v1`) are already registered by the built-in bindings at startup and must not be re-declared here.
+field of their JSON capability spec — supported on both the credential repository and the credential plugin
+capability. The `PluginManager` extracts them at discovery time and registers them in the credential type registry,
+while the registry owning that capability runs the plugin — no manual CLI aggregation needed. Built-in types (e.g.,
+`HelmHTTPCredentials/v1`, `OCICredentials/v1`) are already registered by the built-in plugins at startup and must not
+be re-declared here.
+
+A type is remembered together with the plugin that declared it: the same plugin may declare a type in more than one
+of its capability specs, while a second plugin claiming a type that is already taken is rejected at startup.
 
 #### Graph Consumption
 
@@ -241,8 +246,9 @@ signature** to `credentials runtime.Typed`, with `scheme.Convert(typed, *runtime
 way — only the Go API shape changes.
 
 **At discovery time:** The plugin manager runs each plugin binary with `capabilities` and reads the capability JSON.
-The plugin manager registers any types listed in `customCredentialTypes` into the credential type scheme — covering
-only custom types the plugin introduces, not built-ins already registered at startup.
+The plugin manager registers any types listed in `customCredentialTypes` — on the credential repository or the
+credential plugin capability — into the credential type registry, covering only custom types the plugin introduces,
+not built-ins already registered at startup.
 
 **At the plugin boundary (post Phase 3):** The graph hands the resolved `runtime.Typed` directly to the plugin
 contract; the plugin transport marshals it to canonical JSON via the scheme and the plugin-side handler unmarshals

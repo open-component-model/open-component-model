@@ -300,6 +300,9 @@ func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource 
 	return res, nil
 }
 
+// GetCredentialTypeScheme returns the credential payload types this repository consumes
+// (currently OCICredentials/v1). ocicreds.Scheme must NOT be used here: it holds the
+// credential repository configuration types (DockerConfig) instead of payload types.
 func (p *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
-	return ocicreds.Scheme
+	return ocicreds.CredentialTypeScheme
 }
