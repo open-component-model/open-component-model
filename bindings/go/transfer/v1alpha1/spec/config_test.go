@@ -84,7 +84,6 @@ func TestConfig_Validate(t *testing.T) {
 		{"valid all fields", spec.Config{Recursive: spec.RecursiveInfinite, CopyMode: spec.CopyModeAllResources, UploadType: spec.UploadAsOciArtifact}, ""},
 		{"valid recursive none", spec.Config{Recursive: spec.RecursiveNone}, ""},
 		{"valid copyMode localBlob", spec.Config{CopyMode: spec.CopyModeLocalBlobResources}, ""},
-		{"valid uploadType default", spec.Config{UploadType: spec.UploadAsDefault}, ""},
 		{"valid uploadType localBlob", spec.Config{UploadType: spec.UploadAsLocalBlob}, ""},
 		{"invalid copyMode", spec.Config{CopyMode: "garbage"}, "invalid copyMode"},
 		{"invalid uploadType", spec.Config{UploadType: "garbage"}, "invalid uploadType"},

@@ -39,7 +39,7 @@ func TestNewDefaultBuilder_CanBuildGitHubGraph(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
-		CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsDefault,
+		CopyMode: transferv1alpha1.CopyModeAllResources,
 	})
 	require.NoError(t, err)
 
