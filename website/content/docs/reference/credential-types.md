@@ -233,7 +233,7 @@ consumers:
         token: ghp_example_token
 ```
 
-A legacy [`Credentials/v1`](#directcredentialsv1) property bag with a `token` property works as well:
+The legacy [`Credentials/v1`](#directcredentialsv1) fallback works as well, with `token` in its `properties` map:
 
 ```yaml
 consumers:
