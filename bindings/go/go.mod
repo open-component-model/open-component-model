@@ -7,7 +7,7 @@ require (
 	github.com/ProtonMail/go-crypto v1.4.1
 	github.com/Shopify/toxiproxy/v2 v2.12.0
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
-	github.com/gabriel-vasile/mimetype v1.4.13
+	github.com/gabriel-vasile/mimetype v1.4.14
 	github.com/gobwas/glob v0.2.3
 	github.com/google/cel-go v0.29.2
 	github.com/google/go-github/v89 v89.0.0
