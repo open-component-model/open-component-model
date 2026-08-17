@@ -105,10 +105,10 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/m
 # Transfer only the latest version
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
 
-# Transfer from one OCI to another using localBlobs
+# Transfer from one OCI to another using localBlobs (default)
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as localBlob
 
-# Transfer from one OCI to another using OCI artifacts (default)
+# Transfer from one OCI to another using OCI artifacts
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
 
 # Transfer a component version containing Helm charts (access-type: helm/v1) as an OCI artifact
