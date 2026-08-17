@@ -68,18 +68,20 @@ For the current release, see the
 using the OCM Controllers with kro and Flux.</p><h2 id=what-youll-learn>What You&rsquo;ll Learn<a href=#what-youll-learn class=anchor aria-hidden=true>#</a></h2><ul><li>Create and publish an OCM component version that references a Helm chart</li><li>Define a ResourceGraphDefinition to orchestrate OCM and Flux resources</li><li>Deploy the Helm chart to your cluster using the OCM Controllers</li></ul><h2 id=estimated-time>Estimated time<a href=#estimated-time class=anchor aria-hidden=true>#</a></h2><p>~20 minutes</p><h2 id=scenario>Scenario<a href=#scenario class=anchor aria-hidden=true>#</a></h2><p>You as a developer create an application, packaged as a Helm chart, and publish it as OCM component version in an OCI registry.
 Then, you as an operator deploy the Helm chart into a Kubernetes cluster using the OCM Controllers.
 You define a ResourceGraphDefinition that tells kro how to orchestrate the OCM and Flux resources to deploy the Helm chart.</p><h2 id=prerequisites>Prerequisites<a href=#prerequisites class=anchor aria-hidden=true>#</a></h2><ul><li><a href=/main/docs/getting-started/set-up-controller-environments/>Controller environment</a> set up (OCM Controllers, kro and Flux in a Kubernetes cluster)</li><li><a href=/main/docs/how-to/configure-custom-rbac-for-deployers/>Custom RBAC</a> configured to allow the controller to manage <code>ResourceGraphDefinitions</code></li><li><a href=/main/docs/getting-started/install-the-ocm-cli/>OCM CLI</a> installed</li><li>Access to an OCI registry (e.g., <a href=https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages target=_blank rel=noopener>ghcr.io</a>)</li><li><code>envsubst</code> installed (pre-installed on most Linux/macOS systems; part of <code>gettext</code>)</li></ul><h2 id=environment-setup>Environment Setup<a href=#environment-setup class=anchor aria-hidden=true>#</a></h2><p>Set environment variables for your GitHub username and OCM repository:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=nb>export</span> <span class=nv>GITHUB_USERNAME</span><span class=o>=</span>&lt;your-github-username&gt;
-</span></span><span class=line><span class=cl><span class=nb>export</span> <span class=nv>OCM_REPO</span><span class=o>=</span>ghcr.io/<span class=nv>$GITHUB_USERNAME</span>/ocm-tutorial</span></span></code></pre></div></figure></div><h2 id=create-and-publish-a-component-version>Create and Publish a Component Version<a href=#create-and-publish-a-component-version class=anchor aria-hidden=true>#</a></h2><ol role=list class=thulite-steps><li><h3 id=create-a-working-directory>Create a working directory<a href=#create-a-working-directory class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>mkdir /tmp/helm-deploy <span class=o>&amp;&amp;</span> <span class=nb>cd</span> /tmp/helm-deploy</span></span></code></pre></div></figure></div></li><li><h3 id=define-the-component>Define the component<a href=#define-the-component class=anchor aria-hidden=true>#</a></h3><p>Create a <code>component-constructor.yaml</code> file that includes a Helm chart resource:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=nt>components</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>ocm.software/ocm-k8s-toolkit/simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>provider</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>ocm.software</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;1.0.0&#34;</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>resources</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>helm-resource</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>helmChart</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=m>1.0.0</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>access</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIImage/v1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>imageReference</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;ghcr.io/stefanprodan/charts/podinfo:6.11.1@sha256:a9b2804ec61795a7457b2303bf9efbc5fba51f856c3945f3bb0af68bf3b35afd&#34;</span></span></span></code></pre></div></figure></div><p>This component references the <code>podinfo</code> Helm chart, a simple web application that displays pod information.</p><div class="callout callout-note d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/info-circle svg-inline callout-icon me-2 mb-3" id="svg-info-circle" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" />   <path d="M12 9h.01" />   <path d="M11 12h1v4h1" /> </svg><div class=callout-content><div class=callout-title>Note</div><div class=callout-body><p>A self-contained component would also list the OCI image that the Helm chart pulls at runtime as a separate resource — that way the component carries everything needed to deploy it, and the image can be transferred and signed alongside the chart. We omit that here to keep the focus on referencing a Helm chart. The <a href=/main/docs/tutorials/create-a-multi-component-product/>Multi-Component Product tutorial</a> shows how to combine charts and images in one component.</p></div></div></div></li><li><h3 id=build-the-component-version>Build the component version<a href=#build-the-component-version class=anchor aria-hidden=true>#</a></h3><p>Now add the component version to a local Common Transport Format (CTF) archive.
+</span></span><span class=line><span class=cl><span class=nb>export</span> <span class=nv>OCM_REPO</span><span class=o>=</span>ghcr.io/<span class=nv>$GITHUB_USERNAME</span>/ocm-tutorial</span></span></code></pre></div></figure></div><h2 id=create-and-publish-a-component-version>Create and Publish a Component Version<a href=#create-and-publish-a-component-version class=anchor aria-hidden=true>#</a></h2><ol role=list class=thulite-steps><li><h3 id=create-a-working-directory>Create a working directory<a href=#create-a-working-directory class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>mkdir /tmp/helm-deploy <span class=o>&amp;&amp;</span> <span class=nb>cd</span> /tmp/helm-deploy</span></span></code></pre></div></figure></div></li><li><h3 id=define-the-component>Define the component<a href=#define-the-component class=anchor aria-hidden=true>#</a></h3><p>Create a <code>component-constructor.yaml</code> file that includes a Helm chart resource:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>cat &gt; component-constructor.yaml <span class=s>&lt;&lt; &#39;EOF&#39;
+</span></span></span><span class=line><span class=cl><span class=s>components:
+</span></span></span><span class=line><span class=cl><span class=s>  - name: ocm.software/ocm-k8s-toolkit/simple
+</span></span></span><span class=line><span class=cl><span class=s>    provider:
+</span></span></span><span class=line><span class=cl><span class=s>      name: ocm.software
+</span></span></span><span class=line><span class=cl><span class=s>    version: &#34;1.0.0&#34;
+</span></span></span><span class=line><span class=cl><span class=s>    resources:
+</span></span></span><span class=line><span class=cl><span class=s>      - name: helm-resource
+</span></span></span><span class=line><span class=cl><span class=s>        type: helmChart
+</span></span></span><span class=line><span class=cl><span class=s>        version: 1.0.0
+</span></span></span><span class=line><span class=cl><span class=s>        access:
+</span></span></span><span class=line><span class=cl><span class=s>          type: OCIImage/v1
+</span></span></span><span class=line><span class=cl><span class=s>          imageReference: &#34;ghcr.io/stefanprodan/charts/podinfo:6.11.1@sha256:a9b2804ec61795a7457b2303bf9efbc5fba51f856c3945f3bb0af68bf3b35afd&#34;
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div><p>This component references the <code>podinfo</code> Helm chart, a simple web application that displays pod information.</p><div class="callout callout-note d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/info-circle svg-inline callout-icon me-2 mb-3" id="svg-info-circle" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" />   <path d="M12 9h.01" />   <path d="M11 12h1v4h1" /> </svg><div class=callout-content><div class=callout-title>Note</div><div class=callout-body><p>A self-contained component would also list the OCI image that the Helm chart pulls at runtime as a separate resource — that way the component carries everything needed to deploy it, and the image can be transferred and signed alongside the chart. We omit that here to keep the focus on referencing a Helm chart. The <a href=/main/docs/tutorials/create-a-multi-component-product/>Multi-Component Product tutorial</a> shows how to combine charts and images in one component.</p></div></div></div></li><li><h3 id=build-the-component-version>Build the component version<a href=#build-the-component-version class=anchor aria-hidden=true>#</a></h3><p>Now add the component version to a local Common Transport Format (CTF) archive.
 By default, the <code>ocm add cv</code> command looks for a file called <code>component-constructor.yaml</code> in the current directory,
 and creates a CTF archive in a folder called <code>transport-archive</code>:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>ocm add cv</span></span></code></pre></div></figure></div><details><summary>You should see this output</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-text data-lang=text><span class=line><span class=cl>time=2026-02-25T12:47:09.622+01:00 level=WARN msg=&#34;could not get credential consumer identity for component version repository&#34; repository=transport-archive error=&#34;failed to get component version repository: cannot resolve consumer identity for ctf: credentials not supported&#34;
 </span></span><span class=line><span class=cl>COMPONENT                           │ VERSION │ PROVIDER
@@ -111,216 +113,222 @@ select the package <code>component-descriptors/ocm.software/ocm-k8s-toolkit/simp
 Create <code>rgd.yaml</code> with the following content:</p><nav><div class="nav nav-tabs" id=tabs-helm-rgd-deployer-tablist role=tablist><button data-toggle-tab=flux class="nav-link active" id=tabs-helm-rgd-deployer-0-tab data-bs-toggle=tab data-bs-target=#tabs-helm-rgd-deployer-0 type=button role=tab aria-controls=tabs-helm-rgd-deployer-0 aria-selected=true>
 Flux</button>
 <button data-toggle-tab="argo cd" class=nav-link id=tabs-helm-rgd-deployer-1-tab data-bs-toggle=tab data-bs-target=#tabs-helm-rgd-deployer-1 type=button role=tab aria-controls=tabs-helm-rgd-deployer-1 aria-selected=false>
-Argo CD</button></div></nav><div class=tab-content id=tabs-helm-rgd-deployer-content><div data-pane=flux class="tab-pane fade show active" id=tabs-helm-rgd-deployer-0 role=tabpanel aria-labelledby=tabs-helm-rgd-deployer-0-tab tabindex=0><p class=tab-pane-label aria-hidden=true>Flux</p><details><summary>ResourceGraphDefinition (rgd.yaml)</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>kro.run/v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>ResourceGraphDefinition</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>schema</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># The name of the CRD that is created by this ResourceGraphDefinition when applied</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># This spec defines values that can be referenced in the ResourceGraphDefinition and that can be set in the</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># instances of this ResourceGraphDefinition.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># We will use it to pass a value to the Helm chart and configure the message the application shows</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># (see resource HelmRelease).</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>message</span><span class=p>:</span><span class=w> </span><span class=l>string | default=&#34;foo&#34;</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>resources</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Repository points to the OCM repository in which the OCM component version is stored and checks if it is</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># reachable by pinging it.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>id</span><span class=p>:</span><span class=w> </span><span class=l>repository</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>readyWhen</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>${repository.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>template</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>delivery.ocm.software/v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Repository</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple-repository</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>repositorySpec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>baseUrl</span><span class=p>:</span><span class=w> </span><span class=l>$OCM_REPO</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>interval</span><span class=p>:</span><span class=w> </span><span class=l>1m</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=c># ocmConfig is required, if the OCM repository requires credentials to access it.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=c># ocmConfig:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Component refers to the Repository, downloads and verifies the OCM component version descriptor.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>id</span><span class=p>:</span><span class=w> </span><span class=l>component</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>readyWhen</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>${component.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>template</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>delivery.ocm.software/v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Component</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple-component</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>repositoryRef</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>${repository.metadata.name}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>component</span><span class=p>:</span><span class=w> </span><span class=l>ocm.software/ocm-k8s-toolkit/simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>semver</span><span class=p>:</span><span class=w> </span><span class=m>1.0.0</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>interval</span><span class=p>:</span><span class=w> </span><span class=l>1m</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=c># ocmConfig is required, if the OCM repository requires credentials to access it.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=c># ocmConfig:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Resource points to the Component, downloads the resource passed by reference-name and verifies it. It then</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># publishes the location of the resource in its status.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>id</span><span class=p>:</span><span class=w> </span><span class=l>resourceChart</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>readyWhen</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>${resourceChart.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>template</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>delivery.ocm.software/v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Resource</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple-resource</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>componentRef</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>${component.metadata.name}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>resource</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>byReference</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>resource</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>helm-resource</span><span class=w> </span><span class=c># This must match the resource name set in the OCM component version (see above)</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>additionalStatusFields</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># toOCI() converts the resource access to an OCI reference object containing registry, repository, tag, and digest</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>oci</span><span class=p>:</span><span class=w> </span><span class=l>resource.access.toOCI()</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=c># ocmConfig is required, if the OCM repository requires credentials to access it.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=c># ocmConfig:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># OCIRepository watches and downloads the resource from the location provided by the Resource status.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># The Helm chart location (url) refers to the status of the above resource.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>id</span><span class=p>:</span><span class=w> </span><span class=l>ocirepository</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>readyWhen</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>${ocirepository.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>template</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>source.toolkit.fluxcd.io/v1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>OCIRepository</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple-ocirepository</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>interval</span><span class=p>:</span><span class=w> </span><span class=l>1m0s</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>layerSelector</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>mediaType</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;application/vnd.cncf.helm.chart.content.v1.tar+gzip&#34;</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>operation</span><span class=p>:</span><span class=w> </span><span class=l>copy</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>url</span><span class=p>:</span><span class=w> </span><span class=l>oci://${resourceChart.status.additional.oci.registry}/${resourceChart.status.additional.oci.repository}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>ref</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>tag</span><span class=p>:</span><span class=w> </span><span class=l>${resourceChart.status.additional.oci.tag}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=c># secretRef is required, if the OCI repository requires credentials to access it.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=c># secretRef:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># HelmRelease refers to the OCIRepository, lets you configure the Helm chart and deploys the Helm chart into the</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Kubernetes cluster.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>id</span><span class=p>:</span><span class=w> </span><span class=l>helmrelease</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>readyWhen</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>${helmrelease.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>template</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>helm.toolkit.fluxcd.io/v2</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>HelmRelease</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple-helmrelease</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>releaseName</span><span class=p>:</span><span class=w> </span><span class=l>simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>interval</span><span class=p>:</span><span class=w> </span><span class=l>1m</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>timeout</span><span class=p>:</span><span class=w> </span><span class=l>5m</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>chartRef</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>OCIRepository</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>${ocirepository.metadata.name}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>namespace</span><span class=p>:</span><span class=w> </span><span class=l>default</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>values</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># We configure the Helm chart using Flux&#39;s HelmRelease &#39;values&#39; field. We pass the value that we set in</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># the instance of the CRD created by the ResourceGraphDefinition (see below).</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>ui</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>message</span><span class=p>:</span><span class=w> </span><span class=l>${schema.spec.message}</span></span></span></code></pre></div></figure></div></details></div><div data-pane="argo cd" class="tab-pane fade" id=tabs-helm-rgd-deployer-1 role=tabpanel aria-labelledby=tabs-helm-rgd-deployer-1-tab tabindex=0><p class=tab-pane-label aria-hidden=true>Argo CD</p><details><summary>ResourceGraphDefinition (rgd.yaml)</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>kro.run/v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>ResourceGraphDefinition</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>schema</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>message</span><span class=p>:</span><span class=w> </span><span class=l>string | default=&#34;foo&#34;</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>resources</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>id</span><span class=p>:</span><span class=w> </span><span class=l>repository</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>readyWhen</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>${repository.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>template</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>delivery.ocm.software/v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Repository</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple-repository</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>repositorySpec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>baseUrl</span><span class=p>:</span><span class=w> </span><span class=l>$OCM_REPO</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>interval</span><span class=p>:</span><span class=w> </span><span class=l>1m</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>id</span><span class=p>:</span><span class=w> </span><span class=l>component</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>readyWhen</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>${component.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>template</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>delivery.ocm.software/v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Component</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple-component</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>repositoryRef</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>${repository.metadata.name}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>component</span><span class=p>:</span><span class=w> </span><span class=l>ocm.software/ocm-k8s-toolkit/simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>semver</span><span class=p>:</span><span class=w> </span><span class=m>1.0.0</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>interval</span><span class=p>:</span><span class=w> </span><span class=l>1m</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>id</span><span class=p>:</span><span class=w> </span><span class=l>resourceChart</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>readyWhen</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>${resourceChart.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>template</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>delivery.ocm.software/v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Resource</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple-resource</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>componentRef</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>${component.metadata.name}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>resource</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>byReference</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>resource</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>helm-resource</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>additionalStatusFields</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>oci</span><span class=p>:</span><span class=w> </span><span class=l>resource.access.toOCI()</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Argo CD Application deploys the Helm chart directly from the OCI registry.</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Values are injected via valuesObject (structured YAML, no escaping issues).</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>id</span><span class=p>:</span><span class=w> </span><span class=l>argocdApplication</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>readyWhen</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>${argocdApplication.status.health.status == &#34;Healthy&#34;}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>${argocdApplication.status.sync.status == &#34;Synced&#34;}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>template</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>argoproj.io/v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Application</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>namespace</span><span class=p>:</span><span class=w> </span><span class=l>argocd</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>finalizers</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=l>resources-finalizer.argocd.argoproj.io</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>project</span><span class=p>:</span><span class=w> </span><span class=l>default</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>source</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>chart</span><span class=p>:</span><span class=w> </span><span class=l>podinfo</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>repoURL</span><span class=p>:</span><span class=w> </span><span class=l>oci://${resourceChart.status.additional.oci.registry}/${resourceChart.status.additional.oci.repository}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>targetRevision</span><span class=p>:</span><span class=w> </span><span class=l>${resourceChart.status.additional.oci.tag}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>helm</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>releaseName</span><span class=p>:</span><span class=w> </span><span class=l>simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>valuesObject</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>ui</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>message</span><span class=p>:</span><span class=w> </span><span class=l>${schema.spec.message}</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>destination</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>server</span><span class=p>:</span><span class=w> </span><span class=l>https://kubernetes.default.svc</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>namespace</span><span class=p>:</span><span class=w> </span><span class=l>default</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>syncPolicy</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>automated</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>prune</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>selfHeal</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>syncOptions</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>              </span>- <span class=l>CreateNamespace=true</span></span></span></code></pre></div></figure></div></details><div class="callout callout-note d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/info-circle svg-inline callout-icon me-2 mb-3" id="svg-info-circle" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" />   <path d="M12 9h.01" />   <path d="M11 12h1v4h1" /> </svg><div class=callout-content><div class=callout-title>Argo CD and OCI Helm</div><div class=callout-body><p>Argo CD references the Helm chart by tag (<code>targetRevision</code>). To pin to a specific digest instead, use <code>targetRevision: sha256:&lt;digest></code>, which is supported since Argo CD v3.1.
+Argo CD</button></div></nav><div class=tab-content id=tabs-helm-rgd-deployer-content><div data-pane=flux class="tab-pane fade show active" id=tabs-helm-rgd-deployer-0 role=tabpanel aria-labelledby=tabs-helm-rgd-deployer-0-tab tabindex=0><p class=tab-pane-label aria-hidden=true>Flux</p><details><summary>ResourceGraphDefinition (rgd.yaml)</summary><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>cat &gt; rgd.yaml <span class=s>&lt;&lt; &#39;EOF&#39;
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: kro.run/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>kind: ResourceGraphDefinition
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: simple
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  schema:
+</span></span></span><span class=line><span class=cl><span class=s>    apiVersion: v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>    # The name of the CRD that is created by this ResourceGraphDefinition when applied
+</span></span></span><span class=line><span class=cl><span class=s>    kind: Simple
+</span></span></span><span class=line><span class=cl><span class=s>    spec:
+</span></span></span><span class=line><span class=cl><span class=s>      # This spec defines values that can be referenced in the ResourceGraphDefinition and that can be set in the
+</span></span></span><span class=line><span class=cl><span class=s>      # instances of this ResourceGraphDefinition.
+</span></span></span><span class=line><span class=cl><span class=s>      # We will use it to pass a value to the Helm chart and configure the message the application shows
+</span></span></span><span class=line><span class=cl><span class=s>      # (see resource HelmRelease).
+</span></span></span><span class=line><span class=cl><span class=s>      message: string | default=&#34;foo&#34;
+</span></span></span><span class=line><span class=cl><span class=s>  resources:
+</span></span></span><span class=line><span class=cl><span class=s>    # Repository points to the OCM repository in which the OCM component version is stored and checks if it is
+</span></span></span><span class=line><span class=cl><span class=s>    # reachable by pinging it.
+</span></span></span><span class=line><span class=cl><span class=s>    - id: repository
+</span></span></span><span class=line><span class=cl><span class=s>      readyWhen:
+</span></span></span><span class=line><span class=cl><span class=s>        - ${repository.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}
+</span></span></span><span class=line><span class=cl><span class=s>      template:
+</span></span></span><span class=line><span class=cl><span class=s>        apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>        kind: Repository
+</span></span></span><span class=line><span class=cl><span class=s>        metadata:
+</span></span></span><span class=line><span class=cl><span class=s>          name: simple-repository
+</span></span></span><span class=line><span class=cl><span class=s>        spec:
+</span></span></span><span class=line><span class=cl><span class=s>          repositorySpec:
+</span></span></span><span class=line><span class=cl><span class=s>              baseUrl: $OCM_REPO
+</span></span></span><span class=line><span class=cl><span class=s>              type: OCIRegistry
+</span></span></span><span class=line><span class=cl><span class=s>          interval: 1m
+</span></span></span><span class=line><span class=cl><span class=s>          # ocmConfig is required, if the OCM repository requires credentials to access it.
+</span></span></span><span class=line><span class=cl><span class=s>          # ocmConfig:
+</span></span></span><span class=line><span class=cl><span class=s>    # Component refers to the Repository, downloads and verifies the OCM component version descriptor.
+</span></span></span><span class=line><span class=cl><span class=s>    - id: component
+</span></span></span><span class=line><span class=cl><span class=s>      readyWhen:
+</span></span></span><span class=line><span class=cl><span class=s>        - ${component.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}
+</span></span></span><span class=line><span class=cl><span class=s>      template:
+</span></span></span><span class=line><span class=cl><span class=s>        apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>        kind: Component
+</span></span></span><span class=line><span class=cl><span class=s>        metadata:
+</span></span></span><span class=line><span class=cl><span class=s>          name: simple-component
+</span></span></span><span class=line><span class=cl><span class=s>        spec:
+</span></span></span><span class=line><span class=cl><span class=s>          repositoryRef:
+</span></span></span><span class=line><span class=cl><span class=s>            name: ${repository.metadata.name}
+</span></span></span><span class=line><span class=cl><span class=s>          component: ocm.software/ocm-k8s-toolkit/simple
+</span></span></span><span class=line><span class=cl><span class=s>          semver: 1.0.0
+</span></span></span><span class=line><span class=cl><span class=s>          interval: 1m
+</span></span></span><span class=line><span class=cl><span class=s>          # ocmConfig is required, if the OCM repository requires credentials to access it.
+</span></span></span><span class=line><span class=cl><span class=s>          # ocmConfig:
+</span></span></span><span class=line><span class=cl><span class=s>    # Resource points to the Component, downloads the resource passed by reference-name and verifies it. It then
+</span></span></span><span class=line><span class=cl><span class=s>    # publishes the location of the resource in its status.
+</span></span></span><span class=line><span class=cl><span class=s>    - id: resourceChart
+</span></span></span><span class=line><span class=cl><span class=s>      readyWhen:
+</span></span></span><span class=line><span class=cl><span class=s>        - ${resourceChart.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}
+</span></span></span><span class=line><span class=cl><span class=s>      template:
+</span></span></span><span class=line><span class=cl><span class=s>        apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>        kind: Resource
+</span></span></span><span class=line><span class=cl><span class=s>        metadata:
+</span></span></span><span class=line><span class=cl><span class=s>          name: simple-resource
+</span></span></span><span class=line><span class=cl><span class=s>        spec:
+</span></span></span><span class=line><span class=cl><span class=s>          componentRef:
+</span></span></span><span class=line><span class=cl><span class=s>            name: ${component.metadata.name}
+</span></span></span><span class=line><span class=cl><span class=s>          resource:
+</span></span></span><span class=line><span class=cl><span class=s>            byReference:
+</span></span></span><span class=line><span class=cl><span class=s>              resource:
+</span></span></span><span class=line><span class=cl><span class=s>                name: helm-resource # This must match the resource name set in the OCM component version (see above)
+</span></span></span><span class=line><span class=cl><span class=s>          additionalStatusFields:
+</span></span></span><span class=line><span class=cl><span class=s>            # toOCI() converts the resource access to an OCI reference object containing registry, repository, tag, and digest
+</span></span></span><span class=line><span class=cl><span class=s>            oci: resource.access.toOCI()
+</span></span></span><span class=line><span class=cl><span class=s>          # ocmConfig is required, if the OCM repository requires credentials to access it.
+</span></span></span><span class=line><span class=cl><span class=s>          # ocmConfig:
+</span></span></span><span class=line><span class=cl><span class=s>    # OCIRepository watches and downloads the resource from the location provided by the Resource status.
+</span></span></span><span class=line><span class=cl><span class=s>    # The Helm chart location (url) refers to the status of the above resource.
+</span></span></span><span class=line><span class=cl><span class=s>    - id: ocirepository
+</span></span></span><span class=line><span class=cl><span class=s>      readyWhen:
+</span></span></span><span class=line><span class=cl><span class=s>        - ${ocirepository.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}
+</span></span></span><span class=line><span class=cl><span class=s>      template:
+</span></span></span><span class=line><span class=cl><span class=s>        apiVersion: source.toolkit.fluxcd.io/v1
+</span></span></span><span class=line><span class=cl><span class=s>        kind: OCIRepository
+</span></span></span><span class=line><span class=cl><span class=s>        metadata:
+</span></span></span><span class=line><span class=cl><span class=s>          name: simple-ocirepository
+</span></span></span><span class=line><span class=cl><span class=s>        spec:
+</span></span></span><span class=line><span class=cl><span class=s>          interval: 1m0s
+</span></span></span><span class=line><span class=cl><span class=s>          layerSelector:
+</span></span></span><span class=line><span class=cl><span class=s>            mediaType: &#34;application/vnd.cncf.helm.chart.content.v1.tar+gzip&#34;
+</span></span></span><span class=line><span class=cl><span class=s>            operation: copy
+</span></span></span><span class=line><span class=cl><span class=s>          url: oci://${resourceChart.status.additional.oci.registry}/${resourceChart.status.additional.oci.repository}
+</span></span></span><span class=line><span class=cl><span class=s>          ref:
+</span></span></span><span class=line><span class=cl><span class=s>            tag: ${resourceChart.status.additional.oci.tag}
+</span></span></span><span class=line><span class=cl><span class=s>          # secretRef is required, if the OCI repository requires credentials to access it.
+</span></span></span><span class=line><span class=cl><span class=s>          # secretRef:
+</span></span></span><span class=line><span class=cl><span class=s>    # HelmRelease refers to the OCIRepository, lets you configure the Helm chart and deploys the Helm chart into the
+</span></span></span><span class=line><span class=cl><span class=s>    # Kubernetes cluster.
+</span></span></span><span class=line><span class=cl><span class=s>    - id: helmrelease
+</span></span></span><span class=line><span class=cl><span class=s>      readyWhen:
+</span></span></span><span class=line><span class=cl><span class=s>        - ${helmrelease.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}
+</span></span></span><span class=line><span class=cl><span class=s>      template:
+</span></span></span><span class=line><span class=cl><span class=s>        apiVersion: helm.toolkit.fluxcd.io/v2
+</span></span></span><span class=line><span class=cl><span class=s>        kind: HelmRelease
+</span></span></span><span class=line><span class=cl><span class=s>        metadata:
+</span></span></span><span class=line><span class=cl><span class=s>          name: simple-helmrelease
+</span></span></span><span class=line><span class=cl><span class=s>        spec:
+</span></span></span><span class=line><span class=cl><span class=s>          releaseName: simple
+</span></span></span><span class=line><span class=cl><span class=s>          interval: 1m
+</span></span></span><span class=line><span class=cl><span class=s>          timeout: 5m
+</span></span></span><span class=line><span class=cl><span class=s>          chartRef:
+</span></span></span><span class=line><span class=cl><span class=s>            kind: OCIRepository
+</span></span></span><span class=line><span class=cl><span class=s>            name: ${ocirepository.metadata.name}
+</span></span></span><span class=line><span class=cl><span class=s>            namespace: default
+</span></span></span><span class=line><span class=cl><span class=s>          values:
+</span></span></span><span class=line><span class=cl><span class=s>            # We configure the Helm chart using Flux&#39;s HelmRelease &#39;values&#39; field. We pass the value that we set in
+</span></span></span><span class=line><span class=cl><span class=s>            # the instance of the CRD created by the ResourceGraphDefinition (see below).
+</span></span></span><span class=line><span class=cl><span class=s>            ui:
+</span></span></span><span class=line><span class=cl><span class=s>              message: ${schema.spec.message}
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div></details></div><div data-pane="argo cd" class="tab-pane fade" id=tabs-helm-rgd-deployer-1 role=tabpanel aria-labelledby=tabs-helm-rgd-deployer-1-tab tabindex=0><p class=tab-pane-label aria-hidden=true>Argo CD</p><details><summary>ResourceGraphDefinition (rgd.yaml)</summary><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>cat &gt; rgd.yaml <span class=s>&lt;&lt; &#39;EOF&#39;
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: kro.run/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>kind: ResourceGraphDefinition
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: simple
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  schema:
+</span></span></span><span class=line><span class=cl><span class=s>    apiVersion: v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>    kind: Simple
+</span></span></span><span class=line><span class=cl><span class=s>    spec:
+</span></span></span><span class=line><span class=cl><span class=s>      message: string | default=&#34;foo&#34;
+</span></span></span><span class=line><span class=cl><span class=s>  resources:
+</span></span></span><span class=line><span class=cl><span class=s>    - id: repository
+</span></span></span><span class=line><span class=cl><span class=s>      readyWhen:
+</span></span></span><span class=line><span class=cl><span class=s>        - ${repository.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}
+</span></span></span><span class=line><span class=cl><span class=s>      template:
+</span></span></span><span class=line><span class=cl><span class=s>        apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>        kind: Repository
+</span></span></span><span class=line><span class=cl><span class=s>        metadata:
+</span></span></span><span class=line><span class=cl><span class=s>          name: simple-repository
+</span></span></span><span class=line><span class=cl><span class=s>        spec:
+</span></span></span><span class=line><span class=cl><span class=s>          repositorySpec:
+</span></span></span><span class=line><span class=cl><span class=s>              baseUrl: $OCM_REPO
+</span></span></span><span class=line><span class=cl><span class=s>              type: OCIRegistry
+</span></span></span><span class=line><span class=cl><span class=s>          interval: 1m
+</span></span></span><span class=line><span class=cl><span class=s>    - id: component
+</span></span></span><span class=line><span class=cl><span class=s>      readyWhen:
+</span></span></span><span class=line><span class=cl><span class=s>        - ${component.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}
+</span></span></span><span class=line><span class=cl><span class=s>      template:
+</span></span></span><span class=line><span class=cl><span class=s>        apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>        kind: Component
+</span></span></span><span class=line><span class=cl><span class=s>        metadata:
+</span></span></span><span class=line><span class=cl><span class=s>          name: simple-component
+</span></span></span><span class=line><span class=cl><span class=s>        spec:
+</span></span></span><span class=line><span class=cl><span class=s>          repositoryRef:
+</span></span></span><span class=line><span class=cl><span class=s>            name: ${repository.metadata.name}
+</span></span></span><span class=line><span class=cl><span class=s>          component: ocm.software/ocm-k8s-toolkit/simple
+</span></span></span><span class=line><span class=cl><span class=s>          semver: 1.0.0
+</span></span></span><span class=line><span class=cl><span class=s>          interval: 1m
+</span></span></span><span class=line><span class=cl><span class=s>    - id: resourceChart
+</span></span></span><span class=line><span class=cl><span class=s>      readyWhen:
+</span></span></span><span class=line><span class=cl><span class=s>        - ${resourceChart.status.conditions.exists(c, c.type == &#39;Ready&#39; &amp;&amp; c.status == &#39;True&#39;)}
+</span></span></span><span class=line><span class=cl><span class=s>      template:
+</span></span></span><span class=line><span class=cl><span class=s>        apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>        kind: Resource
+</span></span></span><span class=line><span class=cl><span class=s>        metadata:
+</span></span></span><span class=line><span class=cl><span class=s>          name: simple-resource
+</span></span></span><span class=line><span class=cl><span class=s>        spec:
+</span></span></span><span class=line><span class=cl><span class=s>          componentRef:
+</span></span></span><span class=line><span class=cl><span class=s>            name: ${component.metadata.name}
+</span></span></span><span class=line><span class=cl><span class=s>          resource:
+</span></span></span><span class=line><span class=cl><span class=s>            byReference:
+</span></span></span><span class=line><span class=cl><span class=s>              resource:
+</span></span></span><span class=line><span class=cl><span class=s>                name: helm-resource
+</span></span></span><span class=line><span class=cl><span class=s>          additionalStatusFields:
+</span></span></span><span class=line><span class=cl><span class=s>            oci: resource.access.toOCI()
+</span></span></span><span class=line><span class=cl><span class=s>    # Argo CD Application deploys the Helm chart directly from the OCI registry.
+</span></span></span><span class=line><span class=cl><span class=s>    # Values are injected via valuesObject (structured YAML, no escaping issues).
+</span></span></span><span class=line><span class=cl><span class=s>    - id: argocdApplication
+</span></span></span><span class=line><span class=cl><span class=s>      readyWhen:
+</span></span></span><span class=line><span class=cl><span class=s>        - ${argocdApplication.status.health.status == &#34;Healthy&#34;}
+</span></span></span><span class=line><span class=cl><span class=s>        - ${argocdApplication.status.sync.status == &#34;Synced&#34;}
+</span></span></span><span class=line><span class=cl><span class=s>      template:
+</span></span></span><span class=line><span class=cl><span class=s>        apiVersion: argoproj.io/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>        kind: Application
+</span></span></span><span class=line><span class=cl><span class=s>        metadata:
+</span></span></span><span class=line><span class=cl><span class=s>          name: simple
+</span></span></span><span class=line><span class=cl><span class=s>          namespace: argocd
+</span></span></span><span class=line><span class=cl><span class=s>          finalizers:
+</span></span></span><span class=line><span class=cl><span class=s>            - resources-finalizer.argocd.argoproj.io
+</span></span></span><span class=line><span class=cl><span class=s>        spec:
+</span></span></span><span class=line><span class=cl><span class=s>          project: default
+</span></span></span><span class=line><span class=cl><span class=s>          source:
+</span></span></span><span class=line><span class=cl><span class=s>            chart: podinfo
+</span></span></span><span class=line><span class=cl><span class=s>            repoURL: oci://${resourceChart.status.additional.oci.registry}/${resourceChart.status.additional.oci.repository}
+</span></span></span><span class=line><span class=cl><span class=s>            targetRevision: ${resourceChart.status.additional.oci.tag}
+</span></span></span><span class=line><span class=cl><span class=s>            helm:
+</span></span></span><span class=line><span class=cl><span class=s>              releaseName: simple
+</span></span></span><span class=line><span class=cl><span class=s>              valuesObject:
+</span></span></span><span class=line><span class=cl><span class=s>                ui:
+</span></span></span><span class=line><span class=cl><span class=s>                  message: ${schema.spec.message}
+</span></span></span><span class=line><span class=cl><span class=s>          destination:
+</span></span></span><span class=line><span class=cl><span class=s>            server: https://kubernetes.default.svc
+</span></span></span><span class=line><span class=cl><span class=s>            namespace: default
+</span></span></span><span class=line><span class=cl><span class=s>          syncPolicy:
+</span></span></span><span class=line><span class=cl><span class=s>            automated:
+</span></span></span><span class=line><span class=cl><span class=s>              prune: true
+</span></span></span><span class=line><span class=cl><span class=s>              selfHeal: true
+</span></span></span><span class=line><span class=cl><span class=s>            syncOptions:
+</span></span></span><span class=line><span class=cl><span class=s>              - CreateNamespace=true
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div></details><div class="callout callout-note d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/info-circle svg-inline callout-icon me-2 mb-3" id="svg-info-circle" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" />   <path d="M12 9h.01" />   <path d="M11 12h1v4h1" /> </svg><div class=callout-content><div class=callout-title>Argo CD and OCI Helm</div><div class=callout-body><p>Argo CD references the Helm chart by tag (<code>targetRevision</code>). To pin to a specific digest instead, use <code>targetRevision: sha256:&lt;digest></code>, which is supported since Argo CD v3.1.
 Values are injected via <code>helm.valuesObject</code> (a structured YAML object), which avoids escaping issues that arise with the string-based <code>helm.values</code> field.</p></div></div></div></div></div></li><li><h3 id=apply-the-resourcegraphdefinition>Apply the ResourceGraphDefinition<a href=#apply-the-resourcegraphdefinition class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>envsubst &lt; rgd.yaml <span class=p>|</span> kubectl apply -f -</span></span></code></pre></div></figure></div><details><summary>You should see this output</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-text data-lang=text><span class=line><span class=cl>resourcegraphdefinition.kro.run/simple created</span></span></code></pre></div></figure></div></details><p>Verify it&rsquo;s active:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>kubectl get rgd</span></span></code></pre></div></figure></div><details><summary>You should see this output</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-text data-lang=text><span class=line><span class=cl>NAME     APIVERSION   KIND     STATE    AGE
-</span></span><span class=line><span class=cl>simple   v1alpha1     Simple   Active   19s</span></span></code></pre></div></figure></div></details><br><p>A new Custom Resource Definition called <code>Simple</code> that you can now instantiate has been created.</p></li><li><h3 id=create-an-instance>Create an instance<a href=#create-an-instance class=anchor aria-hidden=true>#</a></h3><p>Create the file <code>instance.yaml</code> to deploy the application:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>kro.run/v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>simple</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>message</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;Deployed with OCM!&#34;</span></span></span></code></pre></div></figure></div></li><li><p><strong>Deploy the application</strong></p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>kubectl apply -f instance.yaml</span></span></code></pre></div></figure></div><details><summary>You should see this output</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-text data-lang=text><span class=line><span class=cl>simple.kro.run/simple created</span></span></code></pre></div></figure></div></details><p>Wait for the deployment to complete:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>kubectl get simple -w</span></span></code></pre></div></figure></div><details><summary>You should see this output</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-text data-lang=text><span class=line><span class=cl>NAME     STATE    SYNCED   AGE
+</span></span><span class=line><span class=cl>simple   v1alpha1     Simple   Active   19s</span></span></code></pre></div></figure></div></details><br><p>A new Custom Resource Definition called <code>Simple</code> that you can now instantiate has been created.</p></li><li><h3 id=create-an-instance>Create an instance<a href=#create-an-instance class=anchor aria-hidden=true>#</a></h3><p>Create the file <code>instance.yaml</code> to deploy the application:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>cat &gt; instance.yaml <span class=s>&lt;&lt; &#39;EOF&#39;
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: kro.run/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>kind: Simple
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: simple
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  message: &#34;Deployed with OCM!&#34;
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div></li><li><p><strong>Deploy the application</strong></p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>kubectl apply -f instance.yaml</span></span></code></pre></div></figure></div><details><summary>You should see this output</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-text data-lang=text><span class=line><span class=cl>simple.kro.run/simple created</span></span></code></pre></div></figure></div></details><p>Wait for the deployment to complete:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>kubectl get simple -w</span></span></code></pre></div></figure></div><details><summary>You should see this output</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-text data-lang=text><span class=line><span class=cl>NAME     STATE    SYNCED   AGE
 </span></span><span class=line><span class=cl>simple   ACTIVE   True     2m</span></span></code></pre></div></figure></div></details></li><li><h3 id=verify-the-deployment>Verify the deployment<a href=#verify-the-deployment class=anchor aria-hidden=true>#</a></h3><p>Check that the pod is running:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>kubectl get deployments</span></span></code></pre></div></figure></div><p>Output:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-text data-lang=text><span class=line><span class=cl>NAME             READY   UP-TO-DATE   AVAILABLE   AGE
 </span></span><span class=line><span class=cl>simple-podinfo   1/1     1            1           3m</span></span></code></pre></div></figure></div><p>Verify the custom message you configured in the HelmRelease values is showing up in the application:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>kubectl get pods -l app.kubernetes.io/name<span class=o>=</span>simple-podinfo <span class=se>\
 </span></span></span><span class=line><span class=cl>  -o <span class=nv>jsonpath</span><span class=o>=</span><span class=s1>&#39;{.items[0].spec.containers[0].env[?(@.name==&#34;PODINFO_UI_MESSAGE&#34;)].value}&#39;</span></span></span></code></pre></div></figure></div><p>Output:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-text data-lang=text><span class=line><span class=cl>Deployed with OCM!</span></span></code></pre></div></figure></div></li></ol><h2 id=troubleshooting>Troubleshooting<a href=#troubleshooting class=anchor aria-hidden=true>#</a></h2><h3 id=authentication-errors>Authentication Errors<a href=#authentication-errors class=anchor aria-hidden=true>#</a></h3><p>If you see errors like:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-text data-lang=text><span class=line><span class=cl>failed to list versions: response status code 401: unauthorized</span></span></code></pre></div></figure></div><p>Your registry package is private. Either:</p><ul><li>Make the package public in your registry settings, or</li><li><a href=/main/docs/how-to/configure-credentials-for-ocm-controllers/>Configure credentials</a> as
