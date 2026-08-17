@@ -25,15 +25,16 @@ func Register(resourcePluginRegistry *resource.ResourceRegistry,
 	if err := resourcePluginRegistry.RegisterInternalResourcePlugin(repository); err != nil {
 		return fmt.Errorf("could not register github resource repository plugin: %w", err)
 	}
-
-	// TODO(matthiasbruns): digest processor vs resource repo - two entry points - what to pick?
 	if err := credTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(repository); err != nil {
-		return fmt.Errorf("could not register github credential repository plugin: %w", err)
+		return fmt.Errorf("could not register github credential type plugin: %w", err)
 	}
 
 	digestProcessor := githubdigest.NewDigestProcessor(githubrepository.WithHTTPClient(httpClient))
 	if err := digestProcessorRegistry.RegisterInternalDigestProcessorPlugin(digestProcessor); err != nil {
 		return fmt.Errorf("could not register github digest processor plugin: %w", err)
+	}
+	if err := credTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(digestProcessor); err != nil {
+		return fmt.Errorf("could not register github credential type plugin: %w", err)
 	}
 
 	return nil

@@ -26,13 +26,11 @@ func Register(inputRegistry *input.RepositoryRegistry,
 		TempFolder: filesystemConfig.TempFolder,
 		HTTPConfig: httpConfig,
 	}
-
-	if err := credTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(method); err != nil {
-		return fmt.Errorf("could not register helm credential repository plugin: %w", err)
-	}
-
 	if err := inputRegistry.RegisterInternalResourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register wget resource input method: %w", err)
+	}
+	if err := credTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(method); err != nil {
+		return fmt.Errorf("could not register helm credential type plugin: %w", err)
 	}
 
 	wgetResourceRepository := wgetrepository.NewResourceRepository(
@@ -45,6 +43,8 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	if err := digestProcessorRegistry.RegisterInternalDigestProcessorPlugin(wgetResourceRepository); err != nil {
 		return fmt.Errorf("could not register wget digest processor plugin: %w", err)
 	}
-
+	if err := credTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(wgetResourceRepository); err != nil {
+		return fmt.Errorf("could not register wget credential type plugin: %w", err)
+	}
 	return nil
 }

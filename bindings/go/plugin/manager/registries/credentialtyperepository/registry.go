@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"sync"
 
-	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -23,13 +22,9 @@ type CredentialTypeRegistry struct {
 
 func NewCredentialTypeRegistry(ctx context.Context) *CredentialTypeRegistry {
 	return &CredentialTypeRegistry{
-		ctx:                                 ctx,
-		capabilities:                        make(map[string]credentialsv1.CapabilitySpec),
-		registry:                            make(map[runtime.Type]mtypes.Plugin),
-		constructedPlugins:                  make(map[string]*constructedPlugin), // running plugins
-		consumerTypeRegistrations:           make(map[runtime.Type]runtime.Type),
-		internalCredentialRepositoryPlugins: make(map[runtime.Type]credentials.RepositoryPlugin),
-		scheme:                              runtime.NewScheme(),
+		ctx:      ctx,
+		registry: make(map[runtime.Type]mtypes.Plugin),
+		scheme:   runtime.NewScheme(),
 	}
 }
 
@@ -79,18 +74,18 @@ func (r *CredentialTypeRegistry) AddPlugin(plugin mtypes.Plugin, spec runtime.Ty
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	capability := credentialsv1.CapabilitySpec{}
-	if err := credentialsv1.Scheme.Convert(spec, &capability); err != nil {
-		return fmt.Errorf("failed to convert object: %w", err)
-	}
-	if _, ok := r.capabilities[plugin.ID]; ok {
-		return fmt.Errorf("plugin with ID %s already registered", plugin.ID)
-	}
-	r.capabilities[plugin.ID] = capability
-
-	if err := r.registerCustomCredentialTypes(capability); err != nil {
-		return fmt.Errorf("failed to register custom credential types: %w", err)
-	}
+	//capability := credentialsv1.CapabilitySpec{}
+	//if err := credentialsv1.Scheme.Convert(spec, &capability); err != nil {
+	//	return fmt.Errorf("failed to convert object: %w", err)
+	//}
+	//if _, ok := r.capabilities[plugin.ID]; ok {
+	//	return fmt.Errorf("plugin with ID %s already registered", plugin.ID)
+	//}
+	//r.capabilities[plugin.ID] = capability
+	//
+	//if err := r.registerCustomCredentialTypes(capability); err != nil {
+	//	return fmt.Errorf("failed to register custom credential types: %w", err)
+	//}
 
 	return nil
 }

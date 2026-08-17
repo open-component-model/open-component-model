@@ -2,20 +2,20 @@ package rsa
 
 import (
 	"errors"
+	"fmt"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
-	rsacredentials "ocm.software/open-component-model/bindings/go/rsa/spec/credentials"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Register(
 	signingHandlerRegistry *signinghandler.SigningRegistry,
-	repositoryRegistry *credentialrepository.RepositoryRegistry,
-// TODO add filesystem and logging awareness to rsa handler
+	credTypeRegistry *credentialtyperepository.CredentialTypeRegistry,
+	// TODO add filesystem and logging awareness to rsa handler
 	_ *filesystemv1alpha1.Config,
 ) error {
 	scheme := runtime.NewScheme()
@@ -28,8 +28,9 @@ func Register(
 		return err
 	}
 
-	// same here - what plugin??
-	repositoryRegistry.Register(rsacredentials.Scheme)
+	if err := credTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(hdlr); err != nil {
+		return fmt.Errorf("could not register rsa credential type plugin: %w", err)
+	}
 
 	return errors.Join(
 		signingHandlerRegistry.RegisterInternalComponentSignatureHandler(hdlr),
