@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -28,7 +29,8 @@ const (
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
-// ResourceRepository implements the ResourceRepository interface for the S3 access type.
+// ResourceRepository implements the ResourceRepository interface for the S3Bucket
+// access type.
 type ResourceRepository struct {
 	client           download.ObjectGetter
 	maxDownloadSize  *int64
@@ -75,7 +77,8 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return identityv1.IdentityFromObject(spec.BucketName, spec.ObjectKey, spec.Endpoint)
 }
 
-// DownloadResource downloads a resource from the bucket/key described by the S3 access spec.
+// DownloadResource downloads a resource from the bucket/key described by the
+// S3Bucket access spec.
 //
 // The object is streamed into a file under the configured TempFolder, and the
 // returned blob reads from that file, which outlives this call. The blob owns that
@@ -97,10 +100,10 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S3Bucket, error) {
 	if resource == nil {
-		return nil, fmt.Errorf("resource is required")
+		return nil, errors.New("resource is required")
 	}
 	if resource.Access == nil {
-		return nil, fmt.Errorf("resource access is required")
+		return nil, errors.New("resource access is required")
 	}
 
 	spec := &v1.S3Bucket{}
@@ -145,11 +148,11 @@ func (r *ResourceRepository) download(ctx context.Context, spec *v1.S3Bucket, cr
 	}, opts...)
 }
 
-// UploadResource is not supported by the S3 access type, which is download-only
-// (matching ocmv1). It exists to satisfy the [repository.ResourceRepository]
-// interface and always returns an error.
+// UploadResource is not supported by the S3Bucket access type, which is
+// download-only (matching ocmv1). It exists to satisfy the
+// [repository.ResourceRepository] interface and always returns an error.
 func (r *ResourceRepository) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
-	return nil, fmt.Errorf("uploading resources is not supported by the s3 access type")
+	return nil, errors.New("uploading resources is not supported by the S3Bucket access type")
 }
 
 // GetResourceDigestProcessorCredentialConsumerIdentity resolves the credential consumer

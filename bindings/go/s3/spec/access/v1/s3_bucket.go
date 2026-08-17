@@ -1,7 +1,7 @@
 package v1
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -52,10 +52,10 @@ type S3Bucket struct {
 // Validate verifies that the required fields of the S3Bucket access are set.
 func (t *S3Bucket) Validate() error {
 	if t.BucketName == "" {
-		return fmt.Errorf("bucketName is required")
+		return errors.New("bucketName is required")
 	}
 	if t.ObjectKey == "" {
-		return fmt.Errorf("objectKey is required")
+		return errors.New("objectKey is required")
 	}
 	return nil
 }

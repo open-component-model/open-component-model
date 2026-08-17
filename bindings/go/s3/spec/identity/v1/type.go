@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -102,7 +103,7 @@ func FromIdentity(id runtime.Identity) *S3BucketIdentity {
 // identity byte for byte.
 func IdentityFromObject(bucketName, objectKey, endpoint string) (runtime.Identity, error) {
 	if bucketName == "" {
-		return nil, fmt.Errorf("bucketName is required")
+		return nil, errors.New("bucketName is required")
 	}
 
 	loc := bucketName

@@ -150,7 +150,7 @@
 //	{type: S3Bucket}                          // any AWS S3 object
 //	{type: S3Bucket, path: my-bucket/a/b.txt} // that one object
 //
-// region, mediaType, version and the TLS/path-style switches do not take part in
+// region, mediaType, version and the path-style switch do not take part in
 // credential matching. The legacy ocmv1 consumer identity (type S3, pathprefix key)
 // is not resolved: the flow returns a single identity, and multi-identity resolution
 // is tracked by https://github.com/open-component-model/ocm-project/issues/847

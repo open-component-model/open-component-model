@@ -5,6 +5,7 @@ package download
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -82,10 +83,10 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 	}
 
 	if req.BucketName == "" {
-		return nil, fmt.Errorf("bucketName is required")
+		return nil, errors.New("bucketName is required")
 	}
 	if req.ObjectKey == "" {
-		return nil, fmt.Errorf("objectKey is required")
+		return nil, errors.New("objectKey is required")
 	}
 
 	getter := o.Client

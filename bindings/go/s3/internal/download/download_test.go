@@ -726,7 +726,7 @@ func TestNewClient(t *testing.T) {
 		}
 	})
 
-	// A per-host retry entries that should merge with global ones.
+	// A per-host retry entry replaces the global one; an absent entry inherits it.
 	t.Run("a per-host retry overrides the global one", func(t *testing.T) {
 		retryCfg := func(maxRetries int) *httpv1alpha1.RetryConfig {
 			return &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}
