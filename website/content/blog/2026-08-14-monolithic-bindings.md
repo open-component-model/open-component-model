@@ -44,7 +44,7 @@ The only difference in your `go.mod` is the `require` line:
 
 ```diff
 -require ocm.software/open-component-model/bindings/go/oci v0.0.49
-+require ocm.software/open-component-model/bindings/go v0.0.1
++require ocm.software/open-component-model/bindings/go v0.0.2
 ```
 
 ## What Stays the Same
@@ -68,7 +68,7 @@ needed.
 After the first monolithic release, update your go.mod:
 
 * Remove all references to `ocm.software/open-component-model/bindings/go/*`
-* Run `go get ocm.software/open-component-model/bindings/go@v0.0.1` 
+* Run `go get ocm.software/open-component-model/bindings/go@v0.0.2` 
 * Run `go mod tidy`
 
 While previously released per-module versions remain available, we discourage continuing to
