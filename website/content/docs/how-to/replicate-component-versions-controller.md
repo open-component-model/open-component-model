@@ -214,7 +214,7 @@ directly to a flag on the `ocm transfer component-version` CLI command:
 |--------------|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `recursive`  | `-r, --recursive`  | `-1` follows component references without limit; `0` disables recursion. The CLI flag is a boolean: set means `-1`, unset means `0`.                                                                                                                 |
 | `copyMode`   | `--copy-resources` | `localBlob` (default) includes only local-blob resources; `allResources` also pulls in remote OCI artifacts and Helm charts. Set the CLI flag for `allResources`, leave it unset for `localBlob`.                                                    |
-| `uploadType` | `-u, --upload-as`  | How resources are stored in the target: `localBlob` (default) embeds them in the descriptor, `ociArtifact` uploads them as separate OCI artifacts (OCI target only). Only relevant for resources that `copyMode` includes. |
+| `uploadType` | `-u, --upload-as`  | How resources are stored in the target: `localBlob` (default) embeds them in the descriptor, `ociArtifact` uploads them as separate OCI artifacts (OCI target only). Only relevant for resources that `copyMode` includes.                           |
 
 The example sets `recursive: -1` and `copyMode: localBlob` because the sample components
 carry blob resources, and omits `uploadType` so it defaults to `localBlob`. To stream
