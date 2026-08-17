@@ -24,7 +24,7 @@ This guide covers participation in the SIG itself. For contributing **code** to 
 
 1. Read the [SIG Handbook](./SIG-Handbook.md) for governance and lifecycle rules.
 2. Browse [`sigs.yaml`](./sigs.yaml) and pick the SIG whose scope matches your interest. Each SIG has its own folder with a charter and meeting notes.
-3. Skim the [SIG Runtime charter](./Runtime/SIG-Runtime-CHARTER.md) so you know what is in scope and what is not.
+3. Skim the [SIG Runtime Overview](Runtime/SIG-Runtime-OVERVIEW.md) so you know what is in scope and what is not.
 4. Join the SIG's channels (listed in the charter) and read the [OCM Code of Conduct](https://github.com/open-component-model/.github/blob/main/CODE_OF_CONDUCT.md).
 
 ## Ways to Participate
@@ -39,7 +39,7 @@ There is no single ladder. These are the SIG-specific entry points; for the gene
 
 ## Communication and Meetings
 
-- **SIG channels and meeting time:** [SIG Runtime charter, Communication](./Runtime/SIG-Runtime-CHARTER.md#communication) and [Meetings](./Runtime/SIG-Runtime-CHARTER.md#meetings).
+- **SIG channels and meeting time:** [SIG Runtime Overview, Communication](Runtime/SIG-Runtime-OVERVIEW.md#communication) and [Meetings](Runtime/SIG-Runtime-OVERVIEW.md#meetings).
 - **Project-wide channels:** [ocm.software/community](https://ocm.software/community).
 - **OCM Community Call and TSC meeting:** [How We Work](https://ocm.software/community/how-we-work/).
 
@@ -60,7 +60,7 @@ Voting rights may lapse after extended inactivity. The full rules, including quo
 
 ### Charter or scope change
 
-Open a PR against the [SIG Runtime charter](./Runtime/SIG-Runtime-CHARTER.md). Add the change to the next TSC agenda.
+Open a PR against the [SIG Runtime Overview](Runtime/SIG-Runtime-OVERVIEW.md). Add the change to the next TSC agenda.
 Major changes require a two-thirds supermajority of voting members and TSC approval.
 
 ### New SIG
@@ -73,4 +73,4 @@ For larger changes, please open an [ADR](../../adr) first.
 
 ## Need Help?
 
-Ask in the SIG channels listed in the [charter](./Runtime/SIG-Runtime-CHARTER.md#communication), or at the next community call. The Chair and Tech Lead listed in the [SIG Runtime charter](./Runtime/SIG-Runtime-CHARTER.md#roles) are the right first contacts. All participation is governed by the [OCM Code of Conduct](https://github.com/open-component-model/.github/blob/main/CODE_OF_CONDUCT.md).
+Ask in the SIG channels listed in the [charter](Runtime/SIG-Runtime-OVERVIEW.md#communication), or at the next community call. The Chair and Tech Lead listed in the [SIG Runtime Overview](Runtime/SIG-Runtime-OVERVIEW.md#roles) are the right first contacts. All participation is governed by the [OCM Code of Conduct](https://github.com/open-component-model/.github/blob/main/CODE_OF_CONDUCT.md).

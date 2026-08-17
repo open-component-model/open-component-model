@@ -151,20 +151,22 @@ No `algorithm` field is needed in the consumer identity — Sigstore is the only
 
 {{< step >}}
 
-### Create the signer spec
+### Select the signer
 
-The signer spec selects which signing handler runs. Create `sigstore-sign.yaml`:
+The signer selects which signing handler runs. Add it to the same `.ocmconfig`:
 
 ```bash
-cat > sigstore-sign.yaml << 'EOF'
-type: SigstoreSigningConfiguration/v1alpha1
+cat >> .ocmconfig << 'EOF'
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
 EOF
 ```
 
-That's the full signer spec for public Sigstore. With no other fields, the handler uses the public-good Fulcio (`fulcio.sigstore.dev`) and Rekor (`rekor.sigstore.dev`) endpoints, with trust roots discovered automatically via TUF.
+That's the full signer for public Sigstore. With no other fields, the handler uses the public-good Fulcio (`fulcio.sigstore.dev`) and Rekor (`rekor.sigstore.dev`) endpoints, with trust roots discovered automatically via TUF.
 
-{{< callout context="note" title="Spec and credential work as a pair" icon="outline/info-circle" >}}
-The signer spec picks **how** to sign (which handler, which endpoints). The `.ocmconfig` consumer identity provides the credential **the handler asks for** (the OIDC token, in this case). Both must be present for signing to succeed — the spec on its own has no token, the credential on its own has no handler. Linking them is the consumer-identity `type` and `signature` fields.
+{{< callout context="note" title="Signer and credential work as a pair" icon="outline/info-circle" >}}
+The signer picks **how** to sign (which handler, which endpoints). The consumer identity provides the credential **the handler asks for** (the OIDC token, in this case). Both must be present for signing to succeed: the signer on its own has no token, the credential on its own has no handler. Linking them is the consumer-identity `type` and `signature` fields. To use Sigstore for one signature only, add `signature: <name>` next to the signer.
 {{< /callout >}}
 
 {{< /step >}}
@@ -173,12 +175,11 @@ The signer spec picks **how** to sign (which handler, which endpoints). The `.oc
 
 ### Sign the component version
 
-Run the sign command with both files:
+Run the sign command:
 
 ```bash
 ocm sign cv \
   --config ./.ocmconfig \
-  --signer-spec ./sigstore-sign.yaml \
   ./transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
@@ -339,7 +340,7 @@ What just ran: OCM extracted the Sigstore bundle from the descriptor, validated 
 - ✅ Signed a component version using a short-lived Fulcio certificate
 - ✅ Read the recorded identity out of a Sigstore signature
 - ✅ Verified the signature by declaring which identity you trust
-- ✅ Saw how spec files and `.ocmconfig` consumer identities link via `signature` name
+- ✅ Saw how the configured signer and the `.ocmconfig` consumer identity link via `signature` name
 
 ## Where to next
 

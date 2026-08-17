@@ -18,12 +18,8 @@ vars:
   BUILD_VERSION: '{{ .BUILD_VERSION | default .VERSION }}'
   COMPONENT_CONSTRUCTOR_FILE: "{{ .TASKFILE_DIR }}/tmp/component-constructor.yaml"
   CTF_LOCATION: '{{ .TASKFILE_DIR }}/tmp/transport-archive'
-  GOOS:
-    sh: |
-      go env GOOS
-  GOARCH:
-    sh: |
-      go env GOARCH
+  GOOS: '{{ .GOOS | default OS }}'
+  GOARCH: '{{ .GOARCH | default ARCH }}'
 tasks:
   test:
     cmds:
@@ -68,8 +64,18 @@ tasks:
           GOOS: '{{.ITEM.GOOS }}'
           GOARCH: '{{.ITEM.GOARCH }}'
 
-  build/multiarch/image:
-    deps: [ "build/multiarch" ]
+  build/single:
+    desc: "Build a single CLI target for the given GOOS/GOARCH (CI build-matrix entrypoint)"
+    requires:
+      vars: [ GOOS, GOARCH ]
+    cmds:
+      - task: build:target
+        vars:
+          GOOS: '{{ .GOOS }}'
+          GOARCH: '{{ .GOARCH }}'
+
+  package/image:
+    internal: true
     dir: '{{ .TASKFILE_DIR }}'
     cmds:
       - |
@@ -91,6 +97,11 @@ tasks:
             mediaType: application/vnd.ocm.software.oci.layout.v1+tar
             path: {{ .TASKFILE_DIR }}/tmp/oci/cli.tar
         EOF
+
+  build/multiarch/image:
+    deps: [ "build/multiarch" ]
+    cmds:
+      - task: package/image
 
   build:target:
     desc: "Build CLI for a specific GOOS/GOARCH target"
@@ -134,6 +145,18 @@ tasks:
         --constructor {{ .COMPONENT_CONSTRUCTOR_FILE }} \
         --repository {{ .CTF_LOCATION }}
 
+  assemble/ctf:
+    desc: "Assemble the CTF from binaries already present in tmp/bin without recompiling (CI join entrypoint)"
+    cmds:
+      - task: package/image
+      - task: assemble/component-constructor
+      - ln -sf {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }} {{ .TASKFILE_DIR }}/tmp/bin/ocm
+      - |
+        rm -rf {{ .CTF_LOCATION }}
+        {{ .TASKFILE_DIR }}/tmp/bin/ocm add component-versions \
+          --constructor {{ .COMPONENT_CONSTRUCTOR_FILE }} \
+          --repository {{ .CTF_LOCATION }}
+
   verify/ctf:
     desc: "Verify the CTF by checking the component version and being able to fetch and run the CLI for the Host Architecture"
     silent: true
@@ -165,6 +188,12 @@ tasks:
       - task: download/deps
       - task: build/multiarch/image
         silent: true
+      - task: assemble/component-constructor
+
+  assemble/component-constructor:
+    internal: true
+    silent: true
+    cmds:
       - |
         cat <<EOF > {{ .COMPONENT_CONSTRUCTOR_FILE }}
         name: {{ .PROVIDER }}/{{ .NAME }}

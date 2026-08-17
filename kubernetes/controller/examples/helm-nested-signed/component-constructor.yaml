@@ -3,25 +3,21 @@ components:
     version: "1.0.0"
     provider:
       name: ocm.software
-    references:
+    componentReferences:
       - name: nested-signed-extended
         componentName: ocm.software/ocm-k8s-toolkit/examples/helm-nested-signed/extended
         version: "1.0.0"
       - name: nested-signed-chart
         componentName: ocm.software/ocm-k8s-toolkit/examples/helm-nested-signed/chart
         version: "1.0.0"
----
-components:
   - name: ocm.software/ocm-k8s-toolkit/examples/helm-nested-signed/extended
     version: "1.0.0"
     provider:
       name: ocm.software
-    references:
+    componentReferences:
       - name: nested-signed-rgd
         componentName: ocm.software/ocm-k8s-toolkit/examples/helm-nested-signed/rgd
         version: "1.0.0"
----
-components:
   - name: ocm.software/ocm-k8s-toolkit/examples/helm-nested-signed/rgd
     version: "1.0.0"
     provider:
@@ -33,8 +29,6 @@ components:
         input:
           type: file
           path: ./rgd.yaml
----
-components:
   - name: ocm.software/ocm-k8s-toolkit/examples/helm-nested-signed/chart
     version: "1.0.0"
     provider:

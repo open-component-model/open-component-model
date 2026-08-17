@@ -64,6 +64,9 @@ configurations:
       properties:
         privateKeyPGPFile: %[5]q
         publicKeyPGPFile: %[6]q
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
 `, registry.Host, registry.Port, registry.User, registry.Password, privKeyPath, pubKeyPath)
 	cfgPath := filepath.Join(dir, "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
@@ -109,7 +112,6 @@ configurations:
 			"sign", "cv",
 			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--config", cfgPath,
-			"--signer-spec", gpgSpecPath,
 		}
 
 		verifyArgs := []string{
@@ -165,7 +167,6 @@ configurations:
 			"sign", "cv",
 			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--config", cfgPath,
-			"--signer-spec", gpgSpecPath,
 		})
 		r.NoError(signCMD.ExecuteContext(t.Context()))
 
