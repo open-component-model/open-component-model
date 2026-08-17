@@ -60,7 +60,7 @@ This means:
 
 **Localization** keeps image references in sync when components move between registries:
 
-1. **During transfer**: When you run `ocm transfer cv --copy-resources`, OCM copies artifacts to the new registry and updates references in the component descriptor
+1. **During transfer**: When you run `ocm transfer cv --copy-resources --upload-as ociArtifact`, OCM uploads artifacts to the new registry as OCI artifacts and updates the descriptor's image references accordingly
 2. **During deployment**: The RGD reads the updated image reference from the component and injects it into Helm values
 
 This ensures your deployment always uses images from the current registry, not hardcoded original locations.
@@ -491,7 +491,7 @@ Build the component version locally:
 ocm add cv
 ```
 
-Transfer to your registry with `--copy-resources` to enable localization (this copies the Helm chart and image to your registry):
+Transfer to your registry with `--copy-resources --upload-as ociArtifact` to enable localization. The `--upload-as ociArtifact` flag is required so the Helm chart and image land as OCI artifacts in the target registry, keeping image references the RGD can rewrite:
 
 ```bash
 ocm transfer cv --copy-resources --upload-as ociArtifact transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
@@ -733,7 +733,7 @@ If pods show `ImagePullBackOff` or `ErrImagePull` errors, the kubelet cannot pul
 You've successfully:
 
 - Created an OCM component with embedded deployment instructions (RGD)
-- Used `--copy-resources` to enable localization during transfer
+- Used `--copy-resources --upload-as ociArtifact` to enable localization during transfer
 - Deployed the component using the bootstrap pattern
 - Verified that localization kept image references in sync
 
