@@ -248,13 +248,13 @@ func isTar(mediaType string) bool {
 
 func processResourceOutput(output string, resource *descriptor.Resource, logger *slog.Logger) (string, error) {
 	if output != "" {
-		logger.Info("using explicit --output", slog.String("output", output))
+		logger.Debug("using explicit --output", slog.String("output", output))
 		return output, nil
 	}
 
 	// Fallback: resource name.
 	output = resource.Name
-	logger.Warn("no output location specified, using resource name as output file name", slog.String("output", output))
+	logger.Debug("no output location specified, using resource name as output file name", slog.String("output", output))
 
 	return output, nil
 }
