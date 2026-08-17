@@ -175,6 +175,14 @@
       enabled: false,
     },
     {
+      // Renamed to github.com/ThalesGroup/crypto11 at v1.5.0. Pinned to v1.2.5
+      // on the old path (indirect via cosign). Bumps past v1.4.x fail the
+      // go.sum artifact step with a module-path mismatch (#2966, #3379).
+      matchManagers: ['gomod'],
+      matchDepNames: ['github.com/ThalesIgnite/crypto11'],
+      enabled: false,
+    },
+    {
       matchManagers: [
         'gomod',
       ],
