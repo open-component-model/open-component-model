@@ -171,7 +171,8 @@ mkdir /tmp/bootstrap-deploy && cd /tmp/bootstrap-deploy
 
 Create a `component-constructor.yaml` file:
 
-```yaml
+```shell
+cat > component-constructor.yaml << 'EOF'
 components:
   - name: ocm.software/ocm-k8s-toolkit/bootstrap
     version: "1.0.0"
@@ -196,6 +197,7 @@ components:
         input:
           type: File/v1
           path: ./resourceGraphDefinition.yaml
+EOF
 ```
 
 As you can see, the resource `resource-graph-definition` is of type `blob` and contains the path to a file
@@ -209,7 +211,8 @@ Choose your deployer tab for the deployer-specific resources:
 {{< tabs "bootstrap-rgd-deployer" >}}
 {{< tab "Flux" >}}
 
-```yaml
+```shell
+cat > resourceGraphDefinition.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
@@ -317,12 +320,14 @@ spec:
             image:
               repository: ${resourceImage.status.additional.oci.registry}/${resourceImage.status.additional.oci.repository}
               tag: latest@${resourceImage.status.additional.oci.digest}
+EOF
 ```
 
 {{< /tab >}}
 {{< tab "Argo CD" >}}
 
-```yaml
+```shell
+cat > resourceGraphDefinition.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
@@ -416,6 +421,7 @@ spec:
               selfHeal: true
             syncOptions:
               - CreateNamespace=true
+EOF
 ```
 
 {{< /tab >}}
@@ -531,7 +537,8 @@ secret to the repository's `ocmConfig`, as described above!
 {{< /callout >}}
 
 {{< details "Bootstrap Resources (bootstrap.yaml)" >}}
-```yaml
+```shell
+cat > bootstrap.yaml << 'EOF'
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository
 metadata:
@@ -589,6 +596,7 @@ spec:
   # ocmConfig is required, if the OCM repository requires credentials to access it.
   # (You also need to specify the namespace of the reference as the 'deployer' is cluster-scoped.)
   # ocmConfig:
+EOF
 ```
 {{< /details >}}
 {{< /step >}}
@@ -625,11 +633,13 @@ When the state shows `Active`, kro has processed the RGD and created a new CRD c
 
 Now create an instance of the Bootstrap CRD to trigger the actual deployment. Create `instance.yaml`:
 
-```yaml
+```shell
+cat > instance.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
 kind: Bootstrap
 metadata:
   name: bootstrap
+EOF
 ```
 {{< /step >}}
 
