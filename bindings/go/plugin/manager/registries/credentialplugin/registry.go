@@ -52,7 +52,6 @@ func (r *Registry) AddPlugin(plugin mtypes.Plugin, spec runtime.Typed) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// TODO(matthiasbruns): how do I split custom typed and this now???
 	capability := credentialpluginv1.CapabilitySpec{}
 	if err := credentialpluginv1.Scheme.Convert(spec, &capability); err != nil {
 		return fmt.Errorf("failed to convert object: %w", err)
