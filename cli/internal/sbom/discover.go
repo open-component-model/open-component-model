@@ -64,21 +64,15 @@ type Document struct {
 // String implements the stringer interface to avoid dumping the entire
 // struct in outputs.
 func (d Document) String() string {
-	var (
-		name     string
-		resource string
-		platform string
-	)
+	var resource string
 	if d.Resource != nil {
 		resource = d.Resource.Name
 	}
-	if d.Name != "" {
-		name = d.Name
-		if name == "" {
-			name = d.Layer
-		}
+	name := d.Name
+	if name == "" {
+		name = d.Layer
 	}
-	platform = fmt.Sprintf("%s/%s", d.Platform.OS, d.Platform.Architecture)
+	platform := fmt.Sprintf("%s/%s", d.Platform.OS, d.Platform.Architecture)
 	return fmt.Sprintf("%s %s %s", name, resource, platform)
 }
 

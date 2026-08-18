@@ -152,6 +152,10 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting sbom format flag failed: %w", err)
 	}
 
+	if !wantSBOM && cmd.Flags().Changed(FlagSBOMFormat) {
+		return fmt.Errorf("--%s is only valid together with --%s", FlagSBOMFormat, FlagSBOM)
+	}
+
 	requestedIdentity, err := runtime.ParseIdentity(identityStr)
 	if err != nil {
 		return fmt.Errorf("parsing resource identity %q failed: %w", identityStr, err)

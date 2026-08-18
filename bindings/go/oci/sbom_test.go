@@ -41,9 +41,6 @@ func attestedImage(t *testing.T, store spec.Store, platform ociImageSpecV1.Platf
 
 	empty := ociImageSpecV1.DescriptorEmptyJSON
 	require.NoError(t, store.Push(ctx, empty, bytes.NewReader(empty.Data)))
-
-	// The config carries the platform, which is what makes each platform's manifest
-	// digest distinct in a real build.
 	config := push(ociImageSpecV1.MediaTypeImageConfig, map[string]any{
 		"architecture": platform.Architecture,
 		"os":           platform.OS,

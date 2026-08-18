@@ -2,6 +2,7 @@ package sbom
 
 import (
 	"bytes"
+	"crypto"
 	"fmt"
 	"io"
 	"strings"
@@ -31,7 +32,7 @@ var serializeAs = map[string]formats.Format{
 }
 
 // Combine folds every discovered document into a single SBOM rooted at the resource
-// they describe. now is used for
+// they describe. now is used as the creation timestamp of the combined document.
 //
 // This document is a new document. The original digest information is discarded.
 func Combine(documents []Document, res *descriptor.Resource, now time.Time) (*protosbom.Document, error) {
@@ -50,7 +51,10 @@ func Combine(documents []Document, res *descriptor.Resource, now time.Time) (*pr
 		combined = combined.Union(parsed.NodeList)
 	}
 
-	root := rootNode(res)
+	root, err := rootNode(res)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create root node: %w", err)
+	}
 	sources := combined.RootElements
 	combined.AddNode(root)
 	for _, source := range sources {
@@ -105,7 +109,7 @@ func rootID(res *descriptor.Resource) string {
 }
 
 // rootNode is the root node of our combined document.
-func rootNode(res *descriptor.Resource) *protosbom.Node {
+func rootNode(res *descriptor.Resource) (*protosbom.Node, error) {
 	node := &protosbom.Node{
 		Id:      rootID(res),
 		Type:    protosbom.Node_PACKAGE,
@@ -113,11 +117,20 @@ func rootNode(res *descriptor.Resource) *protosbom.Node {
 		Version: res.Version,
 	}
 	if res.Digest != nil && res.Digest.Value != "" {
+		var algo int32
+		switch res.Digest.HashAlgorithm {
+		case crypto.SHA256.String():
+			algo = int32(protosbom.HashAlgorithm_SHA256)
+		case crypto.SHA512.String():
+			algo = int32(protosbom.HashAlgorithm_SHA512)
+		default:
+			return nil, fmt.Errorf("unsupported digest algorithm: %s", res.Digest.HashAlgorithm)
+		}
 		node.Hashes = map[int32]string{
-			int32(protosbom.HashAlgorithm_SHA256): res.Digest.Value,
+			algo: res.Digest.Value,
 		}
 	}
-	return node
+	return node, nil
 }
 
 // constructMetadata sets the combined document's own metadata.

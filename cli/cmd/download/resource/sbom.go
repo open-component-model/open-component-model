@@ -38,7 +38,7 @@ type downloadContext struct {
 
 // downloadSBOMs combines every SBOM describing the resource into one document and
 // writes it to either an output location or stdout.
-func downloadSBOMs(cmd *cobra.Command, dc downloadContext) error {
+func downloadSBOMs(cmd *cobra.Command, dc downloadContext) (err error) {
 	ctx := cmd.Context()
 
 	documents, err := sbom.Discover(ctx, sbom.Request{
@@ -77,8 +77,8 @@ func downloadSBOMs(cmd *cobra.Command, dc downloadContext) error {
 		err = errors.Join(err, file.Close())
 	}()
 
-	if err := sbom.Write(combined, dc.sbomFormat, file); err != nil {
-		return err
+	if werr := sbom.Write(combined, dc.sbomFormat, file); werr != nil {
+		return werr
 	}
 	dc.logger.Info("wrote combined sbom", slog.String("path", dc.output))
 	return nil

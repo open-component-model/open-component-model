@@ -219,9 +219,6 @@ func TestDiscoverSBOMs_RealBuildKitLayerMix(t *testing.T) {
 		assert.Equal(t, attestation.PredicateTypeSPDX, sbom.PredicateType)
 	}
 	assert.NotEqual(t, sboms[0].Layer.Digest, sboms[1].Layer.Digest, "every layer is returned, not just the first")
-
-	// Discovery reads the document's own name off the predicate and hands it back
-	// untouched. Nothing here narrows on it.
 	names := []string{sboms[0].Name, sboms[1].Name}
 	assert.ElementsMatch(t, []string{"sbom", "sbom-stage1"}, names)
 }
@@ -391,8 +388,6 @@ func TestDiscoverSBOMs(t *testing.T) {
 }
 
 func TestDiscoverSBOMs_AllPlatforms(t *testing.T) {
-	// A platform request is what a caller would otherwise be narrowed by, so every case
-	// here passes one to prove WithAllPlatforms overrides it rather than merging with it.
 	t.Run("returns the sboms of every platform in the index", func(t *testing.T) {
 		store := newStore(t)
 		amd64 := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}, ociImageSpecV1.MediaTypeImageManifest)
