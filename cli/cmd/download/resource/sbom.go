@@ -13,7 +13,6 @@ import (
 	ocmblob "ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/oci/attestation"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -50,7 +49,7 @@ func downloadSBOMs(cmd *cobra.Command, dc downloadContext) (err error) {
 		Download: func(ctx context.Context, res *descriptor.Resource, identity runtime.Identity) (ocmblob.ReadOnlyBlob, error) {
 			return shared.DownloadResourceData(ctx, dc.pluginManager, dc.credentialGraph, dc.ref.Component, dc.ref.Version, dc.repo, res, identity)
 		},
-		Options: []attestation.Option{attestation.WithAllPlatforms()},
+		Options: []repository.SBOMOption{repository.WithAllSBOMPlatforms()},
 	})
 	if err != nil {
 		return err

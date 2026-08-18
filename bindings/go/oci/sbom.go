@@ -11,11 +11,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/attestation"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // DiscoverSBOM returns the SBOM attestations attached to the OCI artifact.
-func (repo *Repository) DiscoverSBOM(ctx context.Context, res *descriptor.Resource, opts ...attestation.Option) ([]attestation.SBOM, error) {
+func (repo *Repository) DiscoverSBOM(ctx context.Context, res *descriptor.Resource, opts ...repository.SBOMOption) ([]attestation.SBOM, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 
 	if res.Access == nil || res.Access.GetType().IsEmpty() {
@@ -24,7 +25,7 @@ func (repo *Repository) DiscoverSBOM(ctx context.Context, res *descriptor.Resour
 
 	// user set value should overwrite the platform request.
 	if platform := identity.PlatformFromIdentity(res.ToIdentity()); platform != nil {
-		opts = append([]attestation.Option{attestation.WithPlatform(*platform)}, opts...)
+		opts = append([]repository.SBOMOption{repository.WithSBOMPlatform(attestation.ToRepositoryPlatform(*platform))}, opts...)
 	}
 
 	reference, err := repo.ociImageReference(res.Access)

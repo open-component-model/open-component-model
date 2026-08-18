@@ -19,6 +19,7 @@ import (
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -56,14 +57,14 @@ func attestedImage(t *testing.T, store spec.Store, platform ociImageSpecV1.Platf
 
 	statement := push(attestation.MediaTypeInTotoStatement, map[string]any{
 		"_type":         "https://in-toto.io/Statement/v0.1",
-		"predicateType": attestation.PredicateTypeSPDX,
+		"predicateType": repository.PredicateTypeSPDX,
 		"predicate": map[string]any{
 			"spdxVersion": "SPDX-2.3",
 			"name":        platform.OS + "/" + platform.Architecture,
 		},
 	})
 	statement.Annotations = map[string]string{
-		attestation.AnnotationInTotoPredicateType: attestation.PredicateTypeSPDX,
+		attestation.AnnotationInTotoPredicateType: repository.PredicateTypeSPDX,
 	}
 
 	attested = push(ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.Manifest{
@@ -159,7 +160,7 @@ func TestRepository_DiscoverSBOM(t *testing.T) {
 		res := sbomResource(reference, runtime.Identity{"architecture": "arm64", "os": "linux"})
 
 		sboms, err := repo.DiscoverSBOM(t.Context(), res,
-			attestation.WithPlatform(ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}))
+			repository.WithSBOMPlatform(repository.Platform{OS: "linux", Architecture: "amd64"}))
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
 		assert.Equal(t, "linux/amd64", documentName(t, sboms[0]))
@@ -172,7 +173,7 @@ func TestRepository_DiscoverSBOM(t *testing.T) {
 		res := sbomResource(reference, nil)
 
 		sboms, err := repo.DiscoverSBOM(t.Context(), res,
-			attestation.WithPlatform(ociImageSpecV1.Platform{Architecture: "amd64"}))
+			repository.WithSBOMPlatform(repository.Platform{Architecture: "amd64"}))
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
 		assert.Equal(t, "linux/amd64", documentName(t, sboms[0]))
@@ -185,7 +186,7 @@ func TestRepository_DiscoverSBOM(t *testing.T) {
 		res := sbomResource(reference, runtime.Identity{"os": "linux"})
 
 		sboms, err := repo.DiscoverSBOM(t.Context(), res,
-			attestation.WithPlatform(ociImageSpecV1.Platform{Architecture: "arm64"}))
+			repository.WithSBOMPlatform(repository.Platform{Architecture: "arm64"}))
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
 		assert.Equal(t, "linux/arm64", documentName(t, sboms[0]))

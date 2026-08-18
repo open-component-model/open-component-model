@@ -32,6 +32,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
+	"ocm.software/open-component-model/bindings/go/repository"
 )
 
 var (
@@ -69,28 +70,16 @@ type SBOM struct {
 	Predicate json.RawMessage
 }
 
-// MediaType returns the right media-type given the PredicateType.
-func (s SBOM) MediaType() string {
-	switch s.PredicateType {
-	case PredicateTypeSPDX:
-		return MediaTypeSPDXJSON
-	case PredicateTypeCycloneDX:
-		return MediaTypeCycloneDXJSON
-	default:
-		return "application/json"
-	}
-}
-
 // DiscoverSBOMs resolves reference in store and returns every SBOM attestation attached
 // to the images matching the requested platform, or to every platform in the index when
-// WithAllPlatforms is given.
+// WithAllSBOMPlatforms is given.
 //
 // Returns the following set of errors:
 // - ErrNotAnIndex if the reference is a plain manifest
 // - ErrPlatformNotFound if there was no platform for the given value
 // - ErrNoAttestation if there was no SBOM.
-func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts ...Option) ([]SBOM, error) {
-	o := newOptions(opts...)
+func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts ...repository.SBOMOption) ([]SBOM, error) {
+	o := repository.NewSBOMOptions(opts...)
 
 	parsed, err := looseref.ParseReference(reference)
 	if err != nil {
@@ -121,7 +110,7 @@ func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts
 		}
 	}
 
-	selected := selectPlatforms(images, o.platform, o.allPlatforms)
+	selected := selectPlatforms(images, o.Platform, o.AllPlatforms)
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("%w: %q", ErrPlatformNotFound, reference)
 	}
@@ -157,7 +146,7 @@ func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts
 	}
 
 	if len(sboms) == 0 {
-		return nil, fmt.Errorf("%w: %q has no attestation of predicate types %v", ErrNoAttestation, reference, o.predicateTypes)
+		return nil, fmt.Errorf("%w: %q has no attestation of predicate types %v", ErrNoAttestation, reference, o.PredicateTypes)
 	}
 
 	return sboms, nil
@@ -168,7 +157,7 @@ func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts
 func sbomsFromAttestation(
 	ctx context.Context,
 	store spec.Store,
-	o *options,
+	o *repository.SBOMOptions,
 	image, attestation ociImageSpecV1.Descriptor,
 ) ([]SBOM, error) {
 	var manifest ociImageSpecV1.Manifest
@@ -189,7 +178,7 @@ func sbomsFromAttestation(
 				slog.String("attestation", attestation.Digest.String()))
 			continue
 		}
-		if !slices.Contains(o.predicateTypes, predicateType) {
+		if !slices.Contains(o.PredicateTypes, predicateType) {
 			slog.DebugContext(ctx, "skipping in-toto layer of unwanted predicate type",
 				slog.String("layer", layer.Digest.String()),
 				slog.String("predicateType", predicateType))
@@ -241,7 +230,7 @@ func sbomsFromAttestation(
 // selectPlatforms picks the image entries to inspect. When all is set every entry
 // that has a platform is returned and "want" is ignored. Otherwise, the first entry
 // matching "want" is returned on its own.
-func selectPlatforms(images []ociImageSpecV1.Descriptor, want ociImageSpecV1.Platform, all bool) []ociImageSpecV1.Descriptor {
+func selectPlatforms(images []ociImageSpecV1.Descriptor, want repository.Platform, all bool) []ociImageSpecV1.Descriptor {
 	var selected []ociImageSpecV1.Descriptor
 	for _, image := range images {
 		if image.Platform == nil {
@@ -259,7 +248,7 @@ func selectPlatforms(images []ociImageSpecV1.Descriptor, want ociImageSpecV1.Pla
 }
 
 // platformMatches returns if "want" is satisfied.
-func platformMatches(have, want ociImageSpecV1.Platform) bool {
+func platformMatches(have ociImageSpecV1.Platform, want repository.Platform) bool {
 	switch {
 	case want.Architecture != "" && want.Architecture != have.Architecture:
 		return false

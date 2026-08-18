@@ -17,14 +17,12 @@ import (
 	"fmt"
 	"log/slog"
 
-	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-
 	ocmblob "ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	artefactref "ocm.software/open-component-model/bindings/go/descriptor/runtime/labels/artefactref/v1"
-	"ocm.software/open-component-model/bindings/go/oci/attestation"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -50,13 +48,14 @@ type Document struct {
 	// Resource is the resource the SBOM describes.
 	Resource *descriptor.Resource
 	// Platform is zero when the source carries none.
-	Platform ociImageSpecV1.Platform
+	Platform repository.Platform
 	// Name is the document's own name.
 	Name string
 	// PredicateType is empty when it could not be determined.
 	PredicateType string
-	// Layer is the in-toto layer the document came from. It is the only identifier _guaranteed_ to be unique.
-	Layer string
+	// ID identifies the document within the resource. It is the only identifier
+	// _guaranteed_ to be unique, but only the sources that carry one set it.
+	ID string
 	// Data is the raw byte format of the sbom document.
 	Data []byte
 }
@@ -70,7 +69,7 @@ func (d Document) String() string {
 	}
 	name := d.Name
 	if name == "" {
-		name = d.Layer
+		name = d.ID
 	}
 	platform := fmt.Sprintf("%s/%s", d.Platform.OS, d.Platform.Architecture)
 	return fmt.Sprintf("%s %s %s", name, resource, platform)
@@ -84,8 +83,8 @@ type Request struct {
 	Credentials   credentials.Resolver
 	Download      Downloader
 	Logger        *slog.Logger
-	// Options are passed to attestation discovery, for example WithAllPlatforms.
-	Options []attestation.Option
+	// Options are passed to sbom discovery, for example WithAllSBOMPlatforms.
+	Options []repository.SBOMOption
 }
 
 // Discover returns every SBOM describing the requested resource. The first strategy to
@@ -149,7 +148,7 @@ func fromArtefactReferences(ctx context.Context, req Request) ([]Document, error
 
 		documents = append(documents, Document{
 			Resource: req.Resource,
-			Platform: ociImageSpecV1.Platform{
+			Platform: repository.Platform{
 				OS:           candidate.ExtraIdentity[attributeOS],
 				Architecture: candidate.ExtraIdentity[attributeArchitecture],
 				Variant:      candidate.ExtraIdentity[attributeVariant],
@@ -183,7 +182,7 @@ func fromAttestations(ctx context.Context, req Request) ([]Document, error) {
 		return nil, notInspectable(err)
 	}
 
-	discoverer, ok := plugin.(attestation.SBOMDiscoverer)
+	discoverer, ok := plugin.(repository.SBOMDiscoverer)
 	if !ok {
 		return nil, notInspectable(fmt.Errorf("%T does not support sbom discovery", plugin))
 	}
@@ -214,8 +213,8 @@ func fromAttestations(ctx context.Context, req Request) ([]Document, error) {
 			Platform:      found.Platform,
 			Name:          found.Name,
 			PredicateType: found.PredicateType,
-			Layer:         found.Layer.Digest.String(),
-			Data:          found.Predicate,
+			ID:            found.ID,
+			Data:          found.Data,
 		})
 	}
 
@@ -234,9 +233,9 @@ func detectPredicateType(data []byte) string {
 	}
 	switch {
 	case probe.SPDXVersion != "":
-		return attestation.PredicateTypeSPDX
+		return repository.PredicateTypeSPDX
 	case probe.BOMFormat != "":
-		return attestation.PredicateTypeCycloneDX
+		return repository.PredicateTypeCycloneDX
 	default:
 		return ""
 	}
