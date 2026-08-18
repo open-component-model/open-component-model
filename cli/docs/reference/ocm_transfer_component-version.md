@@ -120,7 +120,7 @@ transfer component-version --transfer-spec spec.yaml
       --semver-constraint string   semantic version constraint restricting which versions to transfer (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
       --transfer-spec string       path to a transfer specification file (use "-" for stdin)
   -u, --upload-as enum             Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
-                                   (must be one of [default localBlob ociArtifact]) (default default)
+                                   (must be one of [localBlob ociArtifact]) (default localBlob)
 ```
 
 ### Options inherited from parent commands
