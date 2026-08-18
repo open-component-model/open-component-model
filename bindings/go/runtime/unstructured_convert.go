@@ -137,10 +137,8 @@ func marshalerToUnstructured(v reflect.Value) (any, bool, error) {
 		if err != nil {
 			return nil, true, fmt.Errorf("MarshalJSON failed for %s: %w", t, err)
 		}
-		dec := json.NewDecoder(bytes.NewReader(data))
-		dec.UseNumber()
-		var out any
-		if err := dec.Decode(&out); err != nil {
+		out, err := decodeJSONValue(data)
+		if err != nil {
 			return nil, true, fmt.Errorf("decoding MarshalJSON output of %s: %w", t, err)
 		}
 		return out, true, nil
@@ -183,11 +181,77 @@ func numberToUnstructured(n json.Number) (any, error) {
 	if i, err := n.Int64(); err == nil {
 		return i, nil
 	}
+	// An integer literal too large for int64 would lose digits as a float64; json.Number is
+	// JSON-native and marshals as a bare number, so keep it (same rule as uint64 > MaxInt64).
+	if isIntegerLiteral(n.String()) {
+		return n, nil
+	}
 	f, err := n.Float64()
 	if err != nil {
 		return nil, fmt.Errorf("invalid json.Number %q: %w", n.String(), err)
 	}
 	return f, nil
+}
+
+// isIntegerLiteral reports whether s is a JSON number without a fraction or exponent part.
+func isIntegerLiteral(s string) bool {
+	return !strings.ContainsAny(s, ".eE")
+}
+
+// decodeJSONValue decodes JSON into JSON-native Go values with the same numeric representation
+// that the reflective walk produces, so a value reaches Unstructured.Data as the same concrete
+// type no matter which path built it.
+func decodeJSONValue(data []byte) (any, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var out any
+	if err := dec.Decode(&out); err != nil {
+		return nil, err
+	}
+	return normalizeDecodedNumbers(out)
+}
+
+// normalizeDecodedNumbers replaces every json.Number left by UseNumber with the concrete numeric
+// type a json.Number field yields, so Unstructured.Data holds one numeric representation.
+func normalizeDecodedNumbers(v any) (any, error) {
+	switch t := v.(type) {
+	case json.Number:
+		return numberToUnstructured(t)
+	case map[string]any:
+		for k, val := range t {
+			n, err := normalizeDecodedNumbers(val)
+			if err != nil {
+				return nil, err
+			}
+			t[k] = n
+		}
+		return t, nil
+	case []any:
+		for i, val := range t {
+			n, err := normalizeDecodedNumbers(val)
+			if err != nil {
+				return nil, err
+			}
+			t[i] = n
+		}
+		return t, nil
+	default:
+		return v, nil
+	}
+}
+
+// jsonToUnstructuredMap decodes a JSON object into a map suitable for Unstructured.Data,
+// preserving concrete numeric types the way toUnstructuredMap does.
+func jsonToUnstructuredMap(data []byte) (map[string]any, error) {
+	v, err := decodeJSONValue(data)
+	if err != nil {
+		return nil, err
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expected JSON object when converting to unstructured, got %T", v)
+	}
+	return m, nil
 }
 
 func (c *unstructuredConverter) slice(v reflect.Value) (any, error) {

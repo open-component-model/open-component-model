@@ -191,6 +191,16 @@ func TestConvert_Errors(t *testing.T) {
 	})
 }
 
+// SizedType carries an int64 too large to survive a float64 round trip.
+type SizedType struct {
+	Type runtime.Type `json:"type"`
+	Size int64        `json:"size"`
+}
+
+func (t *SizedType) SetType(typ runtime.Type)     { t.Type = typ }
+func (t *SizedType) GetType() runtime.Type        { return t.Type }
+func (t *SizedType) DeepCopyTyped() runtime.Typed { c := *t; return &c }
+
 // newUnstructured builds an Unstructured with the given type string and foo value.
 func newUnstructured(typ, foo string) *runtime.Unstructured {
 	u := runtime.NewUnstructured()
@@ -282,6 +292,56 @@ func TestConvert_RawToUnstructured(t *testing.T) {
 	require.NoError(t, scheme.Convert(from, &into))
 	assert.Equal(t, "bar", into.Data["foo"])
 	assert.Equal(t, typ, into.GetType())
+}
+
+// TestConvert_RawToUnstructured_Precision guards the numeric parity between the Raw → Unstructured
+// and Typed → Unstructured paths: a plain json.Unmarshal would decode into float64 and drop digits
+// beyond 2^53.
+func TestConvert_RawToUnstructured_Precision(t *testing.T) {
+	const big = int64(9_007_199_254_740_993)
+
+	proto := &SizedType{}
+	scheme := runtime.NewScheme()
+	scheme.MustRegister(proto, "v1")
+	typ := scheme.MustTypeForPrototype(proto)
+
+	from := &runtime.Raw{Type: typ, Data: []byte(`{"type":"SizedType/v1","size":9007199254740993}`)}
+	into := runtime.NewUnstructured()
+	require.NoError(t, scheme.Convert(from, &into))
+	assert.Equal(t, big, into.Data["size"])
+
+	// The same value taken through Typed → Unstructured must land as the same concrete type.
+	viaTyped := runtime.NewUnstructured()
+	require.NoError(t, scheme.Convert(&SizedType{Type: typ, Size: big}, &viaTyped))
+	assert.Equal(t, into.Data, viaTyped.Data)
+
+	// ... and it survives the way back out.
+	back := &SizedType{}
+	require.NoError(t, scheme.Convert(&into, back))
+	assert.Equal(t, big, back.Size)
+}
+
+// TestConvert_UnstructuredToRaw_Canonicalizes pins that this path yields canonical Raw.Data, the
+// same as Typed → Raw, so a digest over Raw.Data does not depend on the source kind.
+func TestConvert_UnstructuredToRaw_Canonicalizes(t *testing.T) {
+	proto := &TestType{}
+	scheme := runtime.NewScheme()
+	scheme.MustRegister(proto, "v1")
+	typ := scheme.MustTypeForPrototype(proto)
+
+	// "foo" after "type", plus characters encoding/json HTML-escapes but JCS does not.
+	from := runtime.NewUnstructured()
+	from.Data["type"] = "TestType/v1"
+	from.Data["foo"] = "a<b&c>d"
+
+	viaUnstructured := &runtime.Raw{}
+	require.NoError(t, scheme.Convert(&from, viaUnstructured))
+
+	viaTyped := &runtime.Raw{}
+	require.NoError(t, scheme.Convert(&TestType{Type: typ, Foo: "a<b&c>d"}, viaTyped))
+
+	assert.Equal(t, string(viaTyped.Data), string(viaUnstructured.Data))
+	assert.Equal(t, `{"foo":"a<b&c>d","type":"TestType/v1"}`, string(viaUnstructured.Data))
 }
 
 // TestConvert_Unstructured_RoundTrip verifies Typed → Unstructured → Typed is lossless.

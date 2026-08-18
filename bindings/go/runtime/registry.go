@@ -375,9 +375,13 @@ func (r *Scheme) DefaultType(typed Typed) (updated bool, err error) {
 //   - Raw → Typed: unmarshals Raw.Data JSON via json.Unmarshal into the Typed object (if Typed.GetType is registered).
 //   - Typed → Raw: marshals the Typed with json.Marshal, applies canonicalization, and stores the result in Raw.Data.
 //     (See Raw.UnmarshalJSON for equivalent behavior)
+//   - Raw → Unstructured: decodes Raw.Data into Unstructured.Data with the same numeric rules as
+//     Typed → Unstructured (if the type is registered).
 //   - Unstructured → Unstructured: performs a deep copy of the underlying map.
 //   - Unstructured → Typed: marshals Unstructured.Data to JSON and unmarshals it into the Typed object
 //     (if Typed.GetType is registered). The "type" field in the map identifies the target type.
+//   - Unstructured → Raw: a special case of the above; Raw.UnmarshalJSON canonicalizes the bytes, so
+//     Raw.Data is canonical here just as it is for Typed → Raw.
 //   - Typed → Unstructured: reflectively converts the Typed into Unstructured.Data, preserving concrete
 //     numeric types (int64/float64) rather than coercing them to float64 (if Typed.GetType is registered).
 //   - Typed → Typed: performs a deep copy using Typed.DeepCopyTyped, with reflection-based assignment.
@@ -427,9 +431,10 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 }
 
 // convertFromRaw handles conversions where the source is a *Raw.
-// It supports Raw → Raw (deep copy of the underlying []byte) and Raw → Typed
-// (json.Unmarshal of Raw.Data into the target, gated on the type being registered
-// unless allowUnknown is set).
+// It supports Raw → Raw (deep copy of the underlying []byte), Raw → Unstructured
+// (decoded with the numeric rules of toUnstructuredMap) and Raw → Typed
+// (json.Unmarshal of Raw.Data into the target), the latter two gated on the type
+// being registered unless allowUnknown is set.
 func (r *Scheme) convertFromRaw(from *Raw, into Typed, fromType Type) error {
 	// Raw → Raw: deep copy the underlying data.
 	if rawInto, ok := into.(*Raw); ok {
@@ -437,10 +442,22 @@ func (r *Scheme) convertFromRaw(from *Raw, into Typed, fromType Type) error {
 		return nil
 	}
 
-	// Raw → Typed: unmarshal the Raw.Data into the target.
 	if !r.IsRegistered(fromType) && !r.allowUnknown {
 		return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
 	}
+
+	// Raw → Unstructured: decode with the same numeric rules as Typed → Unstructured. A plain
+	// json.Unmarshal would decode every number as float64 and silently drop digits beyond 2^53.
+	if unstructuredInto, ok := into.(*Unstructured); ok {
+		data, err := jsonToUnstructuredMap(from.Data)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal from raw into unstructured: %w", err)
+		}
+		unstructuredInto.Data = data
+		return nil
+	}
+
+	// Raw → Typed: unmarshal the Raw.Data into the target.
 	if err := json.Unmarshal(from.Data, into); err != nil {
 		return fmt.Errorf("failed to unmarshal from raw: %w", err)
 	}
@@ -449,9 +466,10 @@ func (r *Scheme) convertFromRaw(from *Raw, into Typed, fromType Type) error {
 
 // convertFromUnstructured handles conversions where the source is an *Unstructured.
 // It supports Unstructured → Unstructured (deep copy of the underlying map) and
-// Unstructured → Typed (incl. Raw), marshaling Unstructured.Data to JSON and unmarshaling
-// it into the target. The "type" field in the map identifies the source type, mirroring
-// Raw → Typed; the conversion is gated on that type being registered unless allowUnknown is set.
+// Unstructured → Typed (incl. Raw, whose UnmarshalJSON canonicalizes the bytes), marshaling
+// Unstructured.Data to JSON and unmarshaling it into the target. The "type" field in the map
+// identifies the source type, mirroring Raw → Typed; the conversion is gated on that type being
+// registered unless allowUnknown is set.
 func (r *Scheme) convertFromUnstructured(from *Unstructured, into Typed, fromType Type) error {
 	// Unstructured → Unstructured: deep copy the underlying map.
 	if unstructuredInto, ok := into.(*Unstructured); ok {

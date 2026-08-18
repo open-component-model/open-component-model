@@ -194,9 +194,10 @@ func TestDescResource_InlineAndRawMessage(t *testing.T) {
 	assert.Equal(t, map[string]any{"arch": "amd64"}, data["extraIdentity"])
 	assert.NotContains(t, data, "descObjectMeta")
 
-	// A big integer inside a json.RawMessage survives (as a lossless json.Number).
+	// A big integer inside a json.RawMessage survives, with the same concrete type a plain
+	// int64 field yields, so consumers need only one numeric case.
 	sizes := data["labels"].([]any)[0].(map[string]any)["value"].(map[string]any)
-	assert.Equal(t, json.Number("9007199254740993"), sizes["a"])
+	assert.Equal(t, int64(9007199254740993), sizes["a"])
 
 	assertMatchesJSON(t, from, data)
 }
@@ -265,13 +266,14 @@ func TestMarshalers_ShadowZeroIsNull(t *testing.T) {
 
 type numHost struct {
 	typedBase
-	I   int         `json:"i"`
-	I64 int64       `json:"i64"`
-	U   uint        `json:"u"`
-	U64 uint64      `json:"u64"`
-	F32 float32     `json:"f32"`
-	F64 float64     `json:"f64"`
-	Num json.Number `json:"num"`
+	I   int             `json:"i"`
+	I64 int64           `json:"i64"`
+	U   uint            `json:"u"`
+	U64 uint64          `json:"u64"`
+	F32 float32         `json:"f32"`
+	F64 float64         `json:"f64"`
+	Num json.Number     `json:"num"`
+	Raw json.RawMessage `json:"raw,omitempty"`
 }
 
 func (h *numHost) DeepCopyTyped() runtime.Typed { c := *h; return &c }
@@ -304,6 +306,18 @@ func TestNumbers(t *testing.T) {
 		back := &numHost{}
 		require.NoError(t, s.Convert(&runtime.Unstructured{Data: data}, back))
 		assert.Equal(t, huge, back.U64)
+	})
+
+	t.Run("marshaler output uses the same numeric types as plain fields", func(t *testing.T) {
+		from := &numHost{I64: bigSize, Raw: json.RawMessage(`{"n":42,"list":[7,1.5],"huge":18446744073709551616}`)}
+		_, data := mustToUnstructured(t, from)
+
+		raw := data["raw"].(map[string]any)
+		assert.Equal(t, int64(42), raw["n"])
+		assert.Equal(t, []any{int64(7), 1.5}, raw["list"])
+		// Integers beyond int64 keep the lossless json.Number form, as uint64 > MaxInt64 does.
+		assert.Equal(t, json.Number("18446744073709551616"), raw["huge"])
+		assertMatchesJSON(t, from, data)
 	})
 
 	t.Run("NaN and Inf are rejected", func(t *testing.T) {
