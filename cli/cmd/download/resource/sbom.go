@@ -40,7 +40,7 @@ type downloadContext struct {
 func downloadSBOMs(cmd *cobra.Command, dc downloadContext) (err error) {
 	ctx := cmd.Context()
 
-	documents, err := sbom.Discover(ctx, sbom.Request{
+	discovered, err := sbom.Discover(ctx, sbom.Request{
 		Descriptor:    dc.descriptor,
 		Resource:      dc.resource,
 		PluginManager: dc.pluginManager,
@@ -55,13 +55,13 @@ func downloadSBOMs(cmd *cobra.Command, dc downloadContext) (err error) {
 		return err
 	}
 
-	combined, err := sbom.Combine(documents, dc.resource, time.Now())
+	combined, err := sbom.Combine(discovered, dc.resource, time.Now())
 	if err != nil {
 		return err
 	}
 	dc.logger.Info("combined discovered sboms into one document",
 		slog.String("resource", dc.resource.ToIdentity().String()),
-		slog.Int("documents", len(documents)),
+		slog.Int("documents", len(discovered)),
 		slog.String("format", dc.sbomFormat))
 
 	if dc.output == "" {

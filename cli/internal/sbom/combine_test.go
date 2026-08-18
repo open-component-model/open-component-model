@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/sbom"
 )
@@ -61,16 +62,16 @@ func resource() *descriptor.Resource {
 	}
 }
 
-func documents(names ...string) []sbom.Document {
-	out := make([]sbom.Document, 0, len(names))
+func documents(names ...string) []repository.SBOM {
+	out := make([]repository.SBOM, 0, len(names))
 	for _, name := range names {
-		out = append(out, sbom.Document{Resource: resource(), Name: name, Data: spdxDoc(name)})
+		out = append(out, repository.SBOM{Name: name, Data: spdxDoc(name)})
 	}
 	return out
 }
 
 // render combines and serialises in one step, which is how every caller uses this.
-func render(t *testing.T, docs []sbom.Document, format string) []byte {
+func render(t *testing.T, docs []repository.SBOM, format string) []byte {
 	t.Helper()
 	combined, err := sbom.Combine(docs, resource(), stamp)
 	require.NoError(t, err)
@@ -157,9 +158,9 @@ func TestCombine(t *testing.T) {
 		// The point of going through protobom: a resource can carry an SPDX document
 		// from one producer and a CycloneDX one from another, and both have to land in
 		// the same output whichever format is asked for.
-		mixed := []sbom.Document{
-			{Resource: resource(), Name: "from-spdx", Data: spdxDoc("fromspdx")},
-			{Resource: resource(), Name: "from-cdx", Data: cdxDoc("fromcdx")},
+		mixed := []repository.SBOM{
+			{Name: "from-spdx", Data: spdxDoc("fromspdx")},
+			{Name: "from-cdx", Data: cdxDoc("fromcdx")},
 		}
 
 		t.Run("into spdx", func(t *testing.T) {

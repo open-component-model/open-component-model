@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/repository"
 )
 
 const (
@@ -31,22 +32,23 @@ var serializeAs = map[string]formats.Format{
 	FormatCycloneDX: formats.CDX16JSON,
 }
 
-// Combine folds every discovered document into a single SBOM rooted at the resource
+// Combine folds every discovered sbom into a single SBOM rooted at the resource
 // they describe. now is used as the creation timestamp of the combined document.
 //
 // This document is a new document. The original digest information is discarded.
-func Combine(documents []Document, res *descriptor.Resource, now time.Time) (*protosbom.Document, error) {
-	if len(documents) == 0 {
+func Combine(sboms []repository.SBOM, res *descriptor.Resource, now time.Time) (*protosbom.Document, error) {
+	if len(sboms) == 0 {
 		return nil, fmt.Errorf("no sbom documents to combine")
 	}
 
 	parser := reader.New()
 
 	combined := protosbom.NewNodeList()
-	for _, document := range documents {
-		parsed, err := parser.ParseStream(bytes.NewReader(document.Data))
+	for _, discovered := range sboms {
+		parsed, err := parser.ParseStream(bytes.NewReader(discovered.Data))
 		if err != nil {
-			return nil, fmt.Errorf("parsing discovered sbom %q failed: %w", document, err)
+			// repository.SBOM stringifies to its name, never its contents.
+			return nil, fmt.Errorf("parsing discovered sbom %q failed: %w", discovered, err)
 		}
 		combined = combined.Union(parsed.NodeList)
 	}

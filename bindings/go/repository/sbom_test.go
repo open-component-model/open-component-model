@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"fmt"
 	goruntime "runtime"
 	"testing"
 
@@ -53,4 +54,40 @@ func TestSBOM_MediaType(t *testing.T) {
 	} {
 		assert.Equal(t, want, repository.SBOM{PredicateType: predicateType}.MediaType(), predicateType)
 	}
+}
+
+func TestPlatform_String(t *testing.T) {
+	for _, tc := range []struct {
+		platform repository.Platform
+		want     string
+	}{
+		{repository.Platform{OS: "linux", Architecture: "arm64"}, "linux/arm64"},
+		{repository.Platform{OS: "linux", Architecture: "arm", Variant: "v7"}, "linux/arm/v7"},
+		{repository.Platform{Architecture: "amd64"}, "amd64"},
+		{repository.Platform{}, ""},
+	} {
+		assert.Equal(t, tc.want, tc.platform.String())
+	}
+}
+
+func TestSBOM_String(t *testing.T) {
+	document := []byte(`{"spdxVersion":"SPDX-2.3","packages":[{"name":"secret"}]}`)
+
+	t.Run("never renders the document itself", func(t *testing.T) {
+		sbom := repository.SBOM{Name: "sbom", ID: "sha256:abc", Data: document}
+		assert.NotContains(t, fmt.Sprintf("%v %q %s", sbom, sbom, sbom), "secret",
+			"formatting an sbom must not spill it into a log line or an error")
+	})
+
+	t.Run("names the document, with its platform when it has one", func(t *testing.T) {
+		assert.Equal(t, "sbom (linux/arm64)", repository.SBOM{
+			Name:     "sbom",
+			Platform: repository.Platform{OS: "linux", Architecture: "arm64"},
+		}.String())
+	})
+
+	t.Run("falls back to the id, then to a placeholder", func(t *testing.T) {
+		assert.Equal(t, "sha256:abc", repository.SBOM{ID: "sha256:abc"}.String())
+		assert.Equal(t, "unnamed sbom", repository.SBOM{Data: document}.String())
+	})
 }

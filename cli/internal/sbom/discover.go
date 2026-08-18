@@ -43,38 +43,6 @@ var errNoReference = errors.New("no resource references the target")
 // dependencies on cmd.
 type Downloader func(ctx context.Context, res *descriptor.Resource, identity runtime.Identity) (ocmblob.ReadOnlyBlob, error)
 
-// Document is one SBOM found for a resource.
-type Document struct {
-	// Resource is the resource the SBOM describes.
-	Resource *descriptor.Resource
-	// Platform is zero when the source carries none.
-	Platform repository.Platform
-	// Name is the document's own name.
-	Name string
-	// PredicateType is empty when it could not be determined.
-	PredicateType string
-	// ID identifies the document within the resource. It is the only identifier
-	// _guaranteed_ to be unique, but only the sources that carry one set it.
-	ID string
-	// Data is the raw byte format of the sbom document.
-	Data []byte
-}
-
-// String implements the stringer interface to avoid dumping the entire
-// struct in outputs.
-func (d Document) String() string {
-	var resource string
-	if d.Resource != nil {
-		resource = d.Resource.Name
-	}
-	name := d.Name
-	if name == "" {
-		name = d.ID
-	}
-	platform := fmt.Sprintf("%s/%s", d.Platform.OS, d.Platform.Architecture)
-	return fmt.Sprintf("%s %s %s", name, resource, platform)
-}
-
 // Request has everything Discover needs to look for the SBOMs of one resource.
 type Request struct {
 	Descriptor    *descriptor.Descriptor
@@ -89,10 +57,10 @@ type Request struct {
 
 // Discover returns every SBOM describing the requested resource. The first strategy to
 // produce anything wins.
-func Discover(ctx context.Context, req Request) ([]Document, error) {
-	documents, err := fromArtefactReferences(ctx, req)
+func Discover(ctx context.Context, req Request) ([]repository.SBOM, error) {
+	sboms, err := fromArtefactReferences(ctx, req)
 	if err == nil {
-		return documents, nil
+		return sboms, nil
 	}
 	if !errors.Is(err, errNoReference) {
 		return nil, err
@@ -106,7 +74,7 @@ func Discover(ctx context.Context, req Request) ([]Document, error) {
 
 // fromArtefactReferences collects every resource of the component version declaring,
 // through the artefact reference label, that it describes the target.
-func fromArtefactReferences(ctx context.Context, req Request) ([]Document, error) {
+func fromArtefactReferences(ctx context.Context, req Request) ([]repository.SBOM, error) {
 	targetIdentity := req.Resource.ToIdentity()
 
 	referring, err := artefactref.FindDescribingResources(req.Descriptor, targetIdentity)
@@ -129,7 +97,7 @@ func fromArtefactReferences(ctx context.Context, req Request) ([]Document, error
 		return nil, fmt.Errorf("%w: no resource of type %q describes %q", errNoReference, ResourceTypeSBOM, targetIdentity)
 	}
 
-	documents := make([]Document, 0, len(describing))
+	sboms := make([]repository.SBOM, 0, len(describing))
 	for _, candidate := range describing {
 		identity := candidate.ToIdentity()
 
@@ -146,25 +114,25 @@ func fromArtefactReferences(ctx context.Context, req Request) ([]Document, error
 			slog.String("sbom", identity.String()),
 			slog.String("resource", targetIdentity.String()))
 
-		documents = append(documents, Document{
-			Resource: req.Resource,
+		sboms = append(sboms, repository.SBOM{
 			Platform: repository.Platform{
 				OS:           candidate.ExtraIdentity[attributeOS],
 				Architecture: candidate.ExtraIdentity[attributeArchitecture],
 				Variant:      candidate.ExtraIdentity[attributeVariant],
 			},
+			ID:            identity.String(),
 			Name:          candidate.Name,
 			PredicateType: detectPredicateType(buf.Bytes()),
 			Data:          buf.Bytes(),
 		})
 	}
 
-	return documents, nil
+	return sboms, nil
 }
 
 // fromAttestations inspects the artifact the resource itself points at, for SBOMs
 // attached to it at build time.
-func fromAttestations(ctx context.Context, req Request) ([]Document, error) {
+func fromAttestations(ctx context.Context, req Request) ([]repository.SBOM, error) {
 	targetIdentity := req.Resource.ToIdentity()
 
 	access := req.Resource.GetAccess()
@@ -206,19 +174,7 @@ func fromAttestations(ctx context.Context, req Request) ([]Document, error) {
 		slog.String("resource", targetIdentity.String()),
 		slog.Int("discovered", len(sboms)))
 
-	documents := make([]Document, 0, len(sboms))
-	for _, found := range sboms {
-		documents = append(documents, Document{
-			Resource:      req.Resource,
-			Platform:      found.Platform,
-			Name:          found.Name,
-			PredicateType: found.PredicateType,
-			ID:            found.ID,
-			Data:          found.Data,
-		})
-	}
-
-	return documents, nil
+	return sboms, nil
 }
 
 // detectPredicateType identifies a document by its own contents. We use this output

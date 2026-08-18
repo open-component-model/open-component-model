@@ -1,8 +1,10 @@
 package repository
 
 import (
+	"cmp"
 	"context"
 	goruntime "runtime"
+	"strings"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -46,6 +48,16 @@ type SBOM struct {
 	Data []byte
 }
 
+// String names the document without its contents, so that formatting an SBOM with
+// %v or %q cannot spill the whole document into a log line or an error message.
+func (s SBOM) String() string {
+	name := cmp.Or(s.Name, s.ID, "unnamed sbom")
+	if platform := s.Platform.String(); platform != "" {
+		return name + " (" + platform + ")"
+	}
+	return name
+}
+
 // MediaType returns the media type matching PredicateType.
 func (s SBOM) MediaType() string {
 	switch s.PredicateType {
@@ -66,6 +78,18 @@ type Platform struct {
 	Variant      string
 	OSVersion    string
 	OSFeatures   []string
+}
+
+// String renders the platform the conventional way, "os/architecture/variant",
+// leaving out the attributes that are not set. Empty for the zero platform.
+func (p Platform) String() string {
+	set := make([]string, 0, 3)
+	for _, attribute := range []string{p.OS, p.Architecture, p.Variant} {
+		if attribute != "" {
+			set = append(set, attribute)
+		}
+	}
+	return strings.Join(set, "/")
 }
 
 // SBOMOptions configures SBOM discovery.
