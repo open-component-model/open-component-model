@@ -93,6 +93,31 @@ func TestRegisterCustomTypes_SamePluginDeclaresTwice(t *testing.T) {
 	r.True(scheme.IsRegistered(alias))
 }
 
+// TestRegisterCustomTypes_SamePluginAddsAliasLater covers a plugin binary whose second capability
+// spec adds an alias to a type it already declared: the type itself is known, but the new alias
+// still has to be registered.
+func TestRegisterCustomTypes_SamePluginAddsAliasLater(t *testing.T) {
+	r := require.New(t)
+	reg := newRegistry(t)
+
+	typ := runtime.NewVersionedType("CredA", "v1")
+	alias := runtime.NewUnversionedType("CredA")
+	plugin := types.Plugin{ID: "plugin-a"}
+
+	r.NoError(reg.RegisterCustomTypes(plugin, []types.Type{{Type: typ}}))
+	r.NoError(reg.RegisterCustomTypes(plugin, []types.Type{{Type: typ, Aliases: []runtime.Type{alias}}}))
+
+	scheme := reg.GetCredentialTypeScheme()
+	r.True(scheme.IsRegistered(typ))
+	r.True(scheme.IsRegistered(alias), "the alias added by the second declaration must be registered")
+
+	obj, err := scheme.NewObject(alias)
+	r.NoError(err)
+	raw, ok := obj.(*runtime.Raw)
+	r.True(ok)
+	r.Equal(alias, raw.GetType())
+}
+
 // TestRegisterCustomTypes_BuiltinTypeIsNotClaimable guards types registered by a builtin plugin: they have no
 // declaring plugin ID, so an external plugin must not be able to take them over.
 func TestRegisterCustomTypes_BuiltinTypeIsNotClaimable(t *testing.T) {

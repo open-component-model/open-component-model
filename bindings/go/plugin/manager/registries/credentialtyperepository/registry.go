@@ -111,16 +111,19 @@ func (r *CredentialTypeRegistry) RegisterCustomTypes(plugin mtypes.Plugin, types
 		allTypes := append([]runtime.Type{t.Type}, t.Aliases...)
 
 		conflict := false
-		declared := 0
+		// Collect the types that are not known yet. Registering an already known type again is
+		// rejected by the scheme, which would drop the aliases behind it, so only the missing ones
+		// are handed over.
+		missing := make([]runtime.Type, 0, len(allTypes))
 		for _, alias := range allTypes {
 			if !r.scheme.IsRegistered(alias) {
+				missing = append(missing, alias)
+
 				continue
 			}
 			// Already known: only the plugin that declared it may declare it again, e.g. from a
 			// second capability spec of the same plugin binary.
 			if declaredBy, ok := r.registry[alias]; ok && declaredBy.ID == plugin.ID {
-				declared++
-
 				continue
 			}
 			errs = append(errs, fmt.Errorf("credential type %s already registered", alias))
@@ -129,11 +132,11 @@ func (r *CredentialTypeRegistry) RegisterCustomTypes(plugin mtypes.Plugin, types
 		if conflict {
 			continue
 		}
-		if declared == len(allTypes) {
+		if len(missing) == 0 {
 			continue
 		}
 
-		if err := r.scheme.RegisterWithAlias(typed, allTypes...); err != nil {
+		if err := r.scheme.RegisterWithAlias(typed, missing...); err != nil {
 			slog.ErrorContext(r.ctx, "failed to build scheme for plugin credential type", "type", t.Type, "error", err)
 			errs = append(errs, err)
 
