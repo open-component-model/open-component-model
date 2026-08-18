@@ -10,6 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
+	helmcreds "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
 	credsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input"
 	"ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
@@ -157,4 +158,8 @@ func (i *InputMethod) createRemoteResourceAccess(resource *constructorruntime.Re
 	resource.Type = HelmRepositoryType
 
 	return resource, nil
+}
+
+func (i *InputMethod) GetCredentialTypeScheme() *runtime.Scheme {
+	return helmcreds.Scheme
 }
