@@ -22,4 +22,7 @@ func init() {
 type CapabilitySpec struct {
 	Type                           runtime.Type `json:"type"`
 	SupportedCredentialPluginTypes []types.Type `json:"supportedCredentialPluginTypes"`
+	// CustomCredentialTypes allows plugins to introduce new credential types that are not predefined in the system.
+	// The graph internally provides them as runtime.Raw and the plugins itself need to convert them back.
+	CustomCredentialTypes []types.Type `json:"customCredentialTypes,omitempty"`
 }

@@ -1,61 +1,43 @@
-package credentialrepository_test
+package credentialtyperepository_test
 
-// Tests for the custom credential type registration path that lives inside
-// RepositoryRegistry.AddPlugin (via registerCustomCredentialTypes).
-// These tests were previously in the credentialtype package before the plugin
-// support was consolidated here.
+// Tests for the custom credential type registration path, moved here from the
+// credentialrepository package together with the registration logic itself. External plugins
+// declare the types they introduce in a capability spec; the manager extracts them and hands them
+// to this registry, while the registry owning that capability runs the plugin.
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
-	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// credentialTypeCapability builds a CapabilitySpec carrying only CustomCredentialTypes,
-// which is the part exercised by registerCustomCredentialTypes.
-func credentialTypeCapability(customTypes ...types.Type) *v1.CapabilitySpec {
-	return &v1.CapabilitySpec{
-		Type:                  runtime.NewUnversionedType(string(v1.CredentialRepositoryPluginType)),
-		CustomCredentialTypes: customTypes,
-	}
-}
-
-func newRepoRegistry(t *testing.T) *credentialrepository.RepositoryRegistry {
-	t.Helper()
-	return credentialrepository.NewCredentialRepositoryRegistry(t.Context())
-}
-
-func TestAddPlugin_MultipleCustomCredentialTypes(t *testing.T) {
+func TestRegisterCustomTypes_MultipleCustomCredentialTypes(t *testing.T) {
 	r := require.New(t)
-	reg := newRepoRegistry(t)
+	reg := newRegistry(t)
 
 	typeA := runtime.NewVersionedType("CredA", "v1")
 	typeB := runtime.NewVersionedType("CredB", "v2")
-	r.NoError(reg.AddPlugin(types.Plugin{}, credentialTypeCapability(
-		types.Type{Type: typeA},
-		types.Type{Type: typeB},
-	)))
+	r.NoError(reg.RegisterCustomTypes(types.Plugin{ID: "plugin-a"}, []types.Type{
+		{Type: typeA},
+		{Type: typeB},
+	}))
 
 	scheme := reg.GetCredentialTypeScheme()
 	r.True(scheme.IsRegistered(typeA))
 	r.True(scheme.IsRegistered(typeB))
 }
 
-func TestAddPlugin_NoCustomCredentialTypes(t *testing.T) {
+func TestRegisterCustomTypes_NoCustomCredentialTypes(t *testing.T) {
 	r := require.New(t)
-	reg := newRepoRegistry(t)
-	r.NoError(reg.AddPlugin(types.Plugin{}, credentialTypeCapability()))
+	reg := newRegistry(t)
+	r.NoError(reg.RegisterCustomTypes(types.Plugin{ID: "plugin-a"}, nil))
 	r.NotNil(reg.GetCredentialTypeScheme())
 }
 
-func TestAddPlugin_ConflictsBetweenPlugins(t *testing.T) {
+func TestRegisterCustomTypes_ConflictsBetweenPlugins(t *testing.T) {
 	typeA := runtime.NewVersionedType("CredA", "v1")
 	aliasA := runtime.NewUnversionedType("CredA")
 	typeB := runtime.NewVersionedType("CredB", "v1")
@@ -85,26 +67,74 @@ func TestAddPlugin_ConflictsBetweenPlugins(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			reg := newRepoRegistry(t)
-			r.NoError(reg.AddPlugin(types.Plugin{ID: "plugin-a"}, credentialTypeCapability(tc.first...)))
-			r.Error(reg.AddPlugin(types.Plugin{ID: "plugin-b"}, credentialTypeCapability(tc.second...)))
+			reg := newRegistry(t)
+			r.NoError(reg.RegisterCustomTypes(types.Plugin{ID: "plugin-a"}, tc.first))
+			r.Error(reg.RegisterCustomTypes(types.Plugin{ID: "plugin-b"}, tc.second))
 		})
 	}
 }
 
-// TestAddPlugin_MultipleTypesDoNotConflictWithRaw verifies that registering several
-// plugin credential types does not cause them to alias each other through *runtime.Raw.
-func TestAddPlugin_MultipleTypesDoNotConflictWithRaw(t *testing.T) {
+// TestRegisterCustomTypes_SamePluginDeclaresTwice covers a plugin binary that lists the same
+// custom type in more than one of its capability specs: it declares its own type, so it must not collide with
+// itself.
+func TestRegisterCustomTypes_SamePluginDeclaresTwice(t *testing.T) {
+	r := require.New(t)
+	reg := newRegistry(t)
+
+	typ := runtime.NewVersionedType("CredA", "v1")
+	alias := runtime.NewUnversionedType("CredA")
+	plugin := types.Plugin{ID: "plugin-a"}
+
+	r.NoError(reg.RegisterCustomTypes(plugin, []types.Type{{Type: typ, Aliases: []runtime.Type{alias}}}))
+	r.NoError(reg.RegisterCustomTypes(plugin, []types.Type{{Type: typ, Aliases: []runtime.Type{alias}}}))
+
+	scheme := reg.GetCredentialTypeScheme()
+	r.True(scheme.IsRegistered(typ))
+	r.True(scheme.IsRegistered(alias))
+}
+
+// TestRegisterCustomTypes_BuiltinTypeIsNotClaimable guards types registered by a builtin plugin: they have no
+// declaring plugin ID, so an external plugin must not be able to take them over.
+func TestRegisterCustomTypes_BuiltinTypeIsNotClaimable(t *testing.T) {
+	r := require.New(t)
+	reg := newRegistry(t)
+
+	typ := runtime.NewVersionedType("CredA", "v1")
+	builtin := runtime.NewScheme()
+	builtin.MustRegisterWithAlias(&runtime.Raw{}, typ)
+
+	r.NoError(reg.Register(builtin))
+	r.ErrorContains(reg.RegisterCustomTypes(types.Plugin{ID: "plugin-a"}, []types.Type{{Type: typ}}), "already registered")
+}
+
+func TestRegisterCustomTypes_NonConflictingTypesStillRegistered(t *testing.T) {
+	r := require.New(t)
+	reg := newRegistry(t)
+
+	typeA := runtime.NewVersionedType("CredA", "v1")
+	typeB := runtime.NewVersionedType("CredB", "v1")
+
+	r.NoError(reg.RegisterCustomTypes(types.Plugin{ID: "plugin-a"}, []types.Type{{Type: typeA}}))
+	r.Error(reg.RegisterCustomTypes(types.Plugin{ID: "plugin-b"}, []types.Type{
+		{Type: typeA},
+		{Type: typeB},
+	}))
+	r.True(reg.GetCredentialTypeScheme().IsRegistered(typeB), "non-conflicting type must still be registered")
+}
+
+// TestRegisterCustomTypes_MultipleTypesDoNotConflictWithRaw verifies that registering several plugin
+// credential types does not cause them to alias each other through *runtime.Raw.
+func TestRegisterCustomTypes_MultipleTypesDoNotConflictWithRaw(t *testing.T) {
 	typeA := runtime.NewVersionedType("PluginCredA", "v1")
 	typeB := runtime.NewVersionedType("PluginCredB", "v1")
 	typeC := runtime.NewVersionedType("PluginCredC", "v2")
 
-	reg := newRepoRegistry(t)
-	require.NoError(t, reg.AddPlugin(types.Plugin{}, credentialTypeCapability(
-		types.Type{Type: typeA},
-		types.Type{Type: typeB},
-		types.Type{Type: typeC},
-	)))
+	reg := newRegistry(t)
+	require.NoError(t, reg.RegisterCustomTypes(types.Plugin{ID: "plugin-a"}, []types.Type{
+		{Type: typeA},
+		{Type: typeB},
+		{Type: typeC},
+	}))
 
 	scheme := reg.GetCredentialTypeScheme()
 
@@ -147,11 +177,11 @@ func TestAddPlugin_MultipleTypesDoNotConflictWithRaw(t *testing.T) {
 		aliasType := runtime.NewUnversionedType("PluginCredWithAlias")
 		unrelated := runtime.NewVersionedType("Unrelated", "v1")
 
-		reg2 := newRepoRegistry(t)
-		r.NoError(reg2.AddPlugin(types.Plugin{}, credentialTypeCapability(
-			types.Type{Type: aliasedType, Aliases: []runtime.Type{aliasType}},
+		reg2 := newRegistry(t)
+		r.NoError(reg2.RegisterCustomTypes(types.Plugin{ID: "plugin-b"}, []types.Type{
+			{Type: aliasedType, Aliases: []runtime.Type{aliasType}},
 			types.Type{Type: unrelated},
-		)))
+		}))
 
 		s := reg2.GetCredentialTypeScheme()
 		r.True(s.IsRegistered(aliasedType))
@@ -178,17 +208,12 @@ func TestAddPlugin_MultipleTypesDoNotConflictWithRaw(t *testing.T) {
 	})
 }
 
-func TestAddPlugin_ConvertRoundTrips(t *testing.T) {
-	type customCred struct {
-		Type  runtime.Type `json:"type"`
-		Token string       `json:"token,omitempty"`
-	}
-
+func TestRegisterCustomTypes_ConvertRoundTrips(t *testing.T) {
 	pluginType := runtime.NewVersionedType("PluginTokenA", "v1")
-	reg := newRepoRegistry(t)
-	require.NoError(t, reg.AddPlugin(types.Plugin{}, credentialTypeCapability(
-		types.Type{Type: pluginType},
-	)))
+	reg := newRegistry(t)
+	require.NoError(t, reg.RegisterCustomTypes(types.Plugin{ID: "plugin-a"}, []types.Type{
+		{Type: pluginType},
+	}))
 
 	scheme := reg.GetCredentialTypeScheme()
 
@@ -215,37 +240,4 @@ func TestAddPlugin_ConvertRoundTrips(t *testing.T) {
 		_, ok := obj.(*runtime.Raw)
 		r.True(ok, "expected *runtime.Raw for plugin type, got %T", obj)
 	})
-}
-
-// ── Register (built-in scheme merging) ───────────────────────────────────────
-
-func TestRegister_BuiltinScheme(t *testing.T) {
-	r := require.New(t)
-	reg := newRepoRegistry(t)
-
-	reg.Register(dummytype.Scheme)
-
-	scheme := reg.GetCredentialTypeScheme()
-	r.True(scheme.IsRegistered(runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)))
-	r.True(scheme.IsRegistered(runtime.NewUnversionedType(dummyv1.Type)))
-	r.True(scheme.IsRegistered(runtime.NewVersionedType(dummyv1.ShortType, dummyv1.Version)))
-	r.True(scheme.IsRegistered(runtime.NewUnversionedType(dummyv1.ShortType)))
-}
-
-func TestRegister_MultipleSchemesAreMerged(t *testing.T) {
-	r := require.New(t)
-	reg := newRepoRegistry(t)
-
-	schemeA := runtime.NewScheme()
-	schemeA.MustRegisterWithAlias(&runtime.Raw{}, runtime.NewVersionedType("CredA", "v1"))
-
-	schemeB := runtime.NewScheme()
-	schemeB.MustRegisterWithAlias(&runtime.Raw{}, runtime.NewVersionedType("CredB", "v1"))
-
-	reg.Register(schemeA)
-	reg.Register(schemeB)
-
-	scheme := reg.GetCredentialTypeScheme()
-	r.True(scheme.IsRegistered(runtime.NewVersionedType("CredA", "v1")))
-	r.True(scheme.IsRegistered(runtime.NewVersionedType("CredB", "v1")))
 }
