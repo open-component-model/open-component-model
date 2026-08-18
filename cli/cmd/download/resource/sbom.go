@@ -2,11 +2,8 @@ package resource
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -31,13 +28,12 @@ type downloadContext struct {
 	descriptor      *descriptor.Descriptor
 	resource        *descriptor.Resource
 	output          string
-	sbomFormat      string
 	identity        runtime.Identity
 }
 
-// downloadSBOMs combines every SBOM describing the resource into one document and
-// writes it to either an output location or stdout.
-func downloadSBOMs(cmd *cobra.Command, dc downloadContext) (err error) {
+// downloadSBOMs writes every SBOM describing the resource into a directory, one file
+// each, and prints the paths written so they can be piped into a scanner.
+func downloadSBOMs(cmd *cobra.Command, dc downloadContext) error {
 	ctx := cmd.Context()
 
 	discovered, err := sbom.Discover(ctx, sbom.Request{
@@ -55,30 +51,26 @@ func downloadSBOMs(cmd *cobra.Command, dc downloadContext) (err error) {
 		return err
 	}
 
-	combined, err := sbom.Combine(discovered, dc.resource, time.Now())
+	directory := dc.output
+	if directory == "" {
+		directory = dc.identity.String()
+	}
+
+	written, err := sbom.Write(discovered, directory)
 	if err != nil {
 		return err
 	}
-	dc.logger.Info("combined discovered sboms into one document",
+
+	dc.logger.Info("wrote discovered sboms",
 		slog.String("resource", dc.resource.ToIdentity().String()),
-		slog.Int("documents", len(discovered)),
-		slog.String("format", dc.sbomFormat))
+		slog.String("directory", directory),
+		slog.Int("documents", len(written)))
 
-	if dc.output == "" {
-		return sbom.Write(combined, dc.sbomFormat, cmd.OutOrStdout())
+	for _, path := range written {
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), path); err != nil {
+			return fmt.Errorf("writing sbom output paths failed: %w", err)
+		}
 	}
 
-	file, err := os.Create(dc.output)
-	if err != nil {
-		return fmt.Errorf("creating sbom output file %q failed: %w", dc.output, err)
-	}
-	defer func() {
-		err = errors.Join(err, file.Close())
-	}()
-
-	if werr := sbom.Write(combined, dc.sbomFormat, file); werr != nil {
-		return werr
-	}
-	dc.logger.Info("wrote combined sbom", slog.String("path", dc.output))
 	return nil
 }

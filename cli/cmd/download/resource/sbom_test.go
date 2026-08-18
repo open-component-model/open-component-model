@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -132,59 +132,49 @@ func spdx(name string) string {
 }`
 }
 
-// combined is the parsed SPDX document the command produced.
-type combined struct {
-	SPDXVersion string `json:"spdxVersion"`
-	Name        string `json:"name"`
-	Packages    []struct {
-		SPDXID string `json:"SPDXID"`
-		Name   string `json:"name"`
-	} `json:"packages"`
-	Relationships []struct {
-		SPDXElementID      string `json:"spdxElementId"`
-		RelatedSPDXElement string `json:"relatedSpdxElement"`
-		RelationshipType   string `json:"relationshipType"`
-	} `json:"relationships"`
+// cyclonedx is a minimal but complete CycloneDX 1.6 document.
+func cyclonedx(name string) string {
+	return `{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {"component": {"type": "application", "name": "` + name + `"}},
+  "components": [{"type": "library", "name": "pkg-` + name + `", "version": "1.0.0"}]
+}`
 }
 
-func (c combined) packageNames() []string {
-	names := make([]string, 0, len(c.Packages))
-	for _, p := range c.Packages {
-		names = append(names, p.Name)
-	}
-	return names
-}
+// downloadSBOMs runs the command into a fresh directory, returning that directory and
+// the paths the command printed to stdout.
+func downloadSBOMs(t *testing.T, ref string, extra ...string) (string, []string, error) {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "sboms")
+	var out bytes.Buffer
+	args := append([]string{"download", "resource", ref, "--identity", "name=" + targetName, "--sbom", "--output", dir}, extra...)
+	_, err := test.OCM(t, test.WithArgs(args...), test.WithOutput(&out))
 
-// roots returns what the document declares itself to describe.
-func (c combined) roots() []string {
-	var found []string
-	for _, r := range c.Relationships {
-		if r.RelationshipType == "DESCRIBES" {
-			found = append(found, r.RelatedSPDXElement)
+	var printed []string
+	for line := range strings.SplitSeq(strings.TrimSpace(out.String()), "\n") {
+		if line != "" {
+			printed = append(printed, line)
 		}
+	}
+	return dir, printed, err
+}
+
+// names lists the file names in dir.
+func names(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	found := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		found = append(found, entry.Name())
 	}
 	return found
 }
 
-func parseCombined(t *testing.T, raw []byte) combined {
-	t.Helper()
-	var doc combined
-	require.NoError(t, json.Unmarshal(raw, &doc), "the command must emit parseable json")
-	return doc
-}
-
-// downloadSBOM runs the command with no --output and uses a scanner for fetching the content
-// from stdout.
-func downloadSBOM(t *testing.T, ref string, extra ...string) ([]byte, error) {
-	t.Helper()
-	var out bytes.Buffer
-	args := append([]string{"download", "resource", ref, "--identity", "name=" + targetName, "--sbom"}, extra...)
-	_, err := test.OCM(t, test.WithArgs(args...), test.WithOutput(&out))
-	return out.Bytes(), err
-}
-
 func TestDownloadResourceSBOM_ArtefactReference(t *testing.T) {
-	t.Run("emits the sbom a sibling resource declares it describes", func(t *testing.T) {
+	t.Run("writes the sbom a sibling resource declares it describes", func(t *testing.T) {
 		ref := setupComponent(t,
 			target(),
 			resourceSpec{
@@ -195,15 +185,33 @@ func TestDownloadResourceSBOM_ArtefactReference(t *testing.T) {
 			},
 		)
 
-		raw, err := downloadSBOM(t, ref)
+		dir, printed, err := downloadSBOMs(t, ref)
 		require.NoError(t, err)
 
-		doc := parseCombined(t, raw)
-		assert.Equal(t, "SPDX-2.3", doc.SPDXVersion)
-		assert.Contains(t, doc.packageNames(), "pkg-only")
+		require.Equal(t, []string{"image-sbom.spdx.json"}, names(t, dir))
+		assert.Equal(t, []string{filepath.Join(dir, "image-sbom.spdx.json")}, printed,
+			"the paths written go to stdout so they can be piped onwards")
 	})
 
-	t.Run("combines every describing sbom into one document", func(t *testing.T) {
+	t.Run("keeps the published bytes exactly", func(t *testing.T) {
+		// The whole reason the combined document was dropped: a round trip through an
+		// intermediate representation loses information, and once the bytes change no
+		// digest or signature over the original applies any more.
+		document := spdx("only")
+		ref := setupComponent(t,
+			target(),
+			resourceSpec{name: "image-sbom", resourceType: "sbom", describes: describesTarget(), content: document},
+		)
+
+		dir, _, err := downloadSBOMs(t, ref)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(filepath.Join(dir, "image-sbom.spdx.json"))
+		require.NoError(t, err)
+		assert.Equal(t, document, string(content), "the document must be byte for byte what was published")
+	})
+
+	t.Run("writes one file per describing sbom", func(t *testing.T) {
 		ref := setupComponent(t,
 			target(),
 			resourceSpec{
@@ -222,81 +230,46 @@ func TestDownloadResourceSBOM_ArtefactReference(t *testing.T) {
 			},
 		)
 
-		raw, err := downloadSBOM(t, ref)
+		dir, printed, err := downloadSBOMs(t, ref)
 		require.NoError(t, err)
 
-		doc := parseCombined(t, raw)
-		assert.Subset(t, doc.packageNames(), []string{"pkg-amd64", "pkg-arm64"},
-			"both platforms' packages survive the merge; nothing is narrowed away")
+		assert.ElementsMatch(t, []string{
+			"image-sbom_linux_amd64.spdx.json",
+			"image-sbom_linux_arm64.spdx.json",
+		}, names(t, dir), "both platforms are written, and the platform disambiguates the name")
+		assert.Len(t, printed, 2)
+
+		amd64, err := os.ReadFile(filepath.Join(dir, "image-sbom_linux_amd64.spdx.json"))
+		require.NoError(t, err)
+		assert.Contains(t, string(amd64), "pkg-amd64", "each file holds its own platform's document")
 	})
 
-	t.Run("roots the combined document at the resource, not at a source document", func(t *testing.T) {
+	t.Run("names the file after the document format", func(t *testing.T) {
 		ref := setupComponent(t,
 			target(),
-			resourceSpec{
-				name:          "image-sbom",
-				resourceType:  "sbom",
-				extraIdentity: runtime.Identity{"architecture": "amd64"},
-				describes:     describesTarget(),
-				content:       spdx("amd64"),
-			},
-			resourceSpec{
-				name:          "image-sbom",
-				resourceType:  "sbom",
-				extraIdentity: runtime.Identity{"architecture": "arm64"},
-				describes:     describesTarget(),
-				content:       spdx("arm64"),
-			},
+			resourceSpec{name: "image-sbom", resourceType: "sbom", describes: describesTarget(), content: cyclonedx("only")},
 		)
 
-		raw, err := downloadSBOM(t, ref)
+		dir, _, err := downloadSBOMs(t, ref)
 		require.NoError(t, err)
-
-		doc := parseCombined(t, raw)
-		// Exactly one root, whatever the number of sources. CycloneDX cannot be
-		// serialised at all from a multi-root document, so this is load-bearing.
-		require.Len(t, doc.roots(), 1)
-		assert.Contains(t, doc.roots()[0], "ocm-resource")
-
-		// SPDX constrains element ids, and an OCM identity is full of "=" and ",".
-		valid := regexp.MustCompile(`^SPDXRef-[a-zA-Z0-9.-]+$`)
-		for _, pkg := range doc.Packages {
-			assert.Regexp(t, valid, pkg.SPDXID)
-		}
+		assert.Equal(t, []string{"image-sbom.cdx.json"}, names(t, dir),
+			"the format is sniffed from the document, not converted")
 	})
 
-	t.Run("writes to a file when --output is given", func(t *testing.T) {
-		ref := setupComponent(t,
-			target(),
-			resourceSpec{name: "image-sbom", resourceType: "sbom", describes: describesTarget(), content: spdx("only")},
-		)
-		output := filepath.Join(t.TempDir(), "combined.spdx.json")
+	t.Run("defaults the directory to the resource identity", func(t *testing.T) {
+		t.Chdir(t.TempDir())
 
-		stdout, err := downloadSBOM(t, ref, "--output", output)
-		require.NoError(t, err)
-		assert.NotContains(t, string(stdout), "spdxVersion", "the document goes to the file, not stdout")
-
-		written, err := os.ReadFile(output)
-		require.NoError(t, err)
-		assert.Contains(t, parseCombined(t, written).packageNames(), "pkg-only")
-	})
-
-	t.Run("emits cyclonedx when asked", func(t *testing.T) {
 		ref := setupComponent(t,
 			target(),
 			resourceSpec{name: "image-sbom", resourceType: "sbom", describes: describesTarget(), content: spdx("only")},
 		)
 
-		raw, err := downloadSBOM(t, ref, "--sbom-format", "cyclonedx")
+		var out bytes.Buffer
+		_, err := test.OCM(t, test.WithArgs(
+			"download", "resource", ref, "--identity", "name="+targetName, "--sbom"), test.WithOutput(&out))
 		require.NoError(t, err)
 
-		var doc struct {
-			BOMFormat   string `json:"bomFormat"`
-			SpecVersion string `json:"specVersion"`
-		}
-		require.NoError(t, json.Unmarshal(raw, &doc))
-		assert.Equal(t, "CycloneDX", doc.BOMFormat)
-		assert.NotEmpty(t, doc.SpecVersion)
+		assert.Equal(t, []string{"image-sbom.spdx.json"}, names(t, "name="+targetName))
 	})
 
 	t.Run("ignores a describing resource that is not an sbom", func(t *testing.T) {
@@ -309,7 +282,7 @@ func TestDownloadResourceSBOM_ArtefactReference(t *testing.T) {
 				content:      "not an sbom",
 			},
 		)
-		_, err := downloadSBOM(t, ref)
+		_, _, err := downloadSBOMs(t, ref)
 		require.Error(t, err, "the only describing resource is not an sbom, so the artifact is inspected instead")
 	})
 
@@ -323,7 +296,7 @@ func TestDownloadResourceSBOM_ArtefactReference(t *testing.T) {
 				content:      spdx("other"),
 			},
 		)
-		_, err := downloadSBOM(t, ref)
+		_, _, err := downloadSBOMs(t, ref)
 		require.Error(t, err)
 	})
 }
@@ -332,21 +305,21 @@ func TestDownloadResourceSBOM_Errors(t *testing.T) {
 	t.Run("reports when nothing describes the resource and it cannot be inspected", func(t *testing.T) {
 		ref := setupComponent(t, target())
 
-		_, err := downloadSBOM(t, ref)
+		_, _, err := downloadSBOMs(t, ref)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no sbom found for resource")
 	})
 
 	t.Run("rejects a transformer alongside the flag", func(t *testing.T) {
 		ref := setupComponent(t, target())
-		_, err := downloadSBOM(t, ref, "--transformer", "anything")
+		_, _, err := downloadSBOMs(t, ref, "--transformer", "anything")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "[sbom transformer]")
 	})
 
 	t.Run("rejects an extraction policy alongside the flag", func(t *testing.T) {
 		ref := setupComponent(t, target())
-		_, err := downloadSBOM(t, ref, "--extraction-policy", "disable")
+		_, _, err := downloadSBOMs(t, ref, "--extraction-policy", "disable")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "[sbom extraction-policy]")
 	})
@@ -363,7 +336,7 @@ func TestDownloadResource_WithoutSBOMFlagIsUnaffected(t *testing.T) {
 		"download", "resource", ref, "--identity", "name="+targetName, "--output", output))
 	require.NoError(t, err)
 
-	written, err := os.ReadFile(output)
+	content, err := os.ReadFile(output)
 	require.NoError(t, err)
-	assert.Equal(t, "the artifact itself", string(written), "the resource itself is downloaded, not its sbom")
+	assert.Equal(t, "the artifact itself", string(content), "the resource itself is downloaded, not its sbom")
 }
