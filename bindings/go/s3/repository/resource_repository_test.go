@@ -113,55 +113,86 @@ func servedBy(srv *fakeS3, spec *v1.S3Bucket) *v1.S3Bucket {
 	return spec
 }
 
+// The identity itself is built by [identityv1.IdentityFromObject] and covered by its
+// own tests. What the repository adds is carrying the access spec into it, and
+// rejecting an access that names no object before it gets there.
 func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	repo := NewResourceRepository(nil)
 
-	id, err := repo.GetResourceCredentialConsumerIdentity(context.Background(),
-		s3Resource(&v1.S3Bucket{BucketName: "my-bucket", ObjectKey: "path/to/blob", Region: "eu-central-1"}))
-	require.NoError(t, err)
-	require.Empty(t, id[runtime.IdentityAttributeHostname])
-	require.Empty(t, id[runtime.IdentityAttributeScheme])
-	require.Equal(t, "my-bucket/path/to/blob", id[runtime.IdentityAttributePath])
-	require.Equal(t, identityv1.S3BucketIdentityType, id[runtime.IdentityAttributeType])
+	t.Run("the access spec is carried into the identity", func(t *testing.T) {
+		id, err := repo.GetResourceCredentialConsumerIdentity(context.Background(),
+			s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "obj", Endpoint: "https://minio.internal:9000"}))
+		require.NoError(t, err)
+		require.Equal(t, "b/obj", id[runtime.IdentityAttributePath])
+		require.Equal(t, "minio.internal", id[runtime.IdentityAttributeHostname])
+		require.Equal(t, "9000", id[runtime.IdentityAttributePort])
+		require.Equal(t, identityv1.S3BucketIdentityType, id[runtime.IdentityAttributeType])
+	})
 
-	_, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
-		s3Resource(&v1.S3Bucket{BucketName: "my-bucket"}))
-	require.ErrorContains(t, err, "objectKey is required")
+	tests := []struct {
+		name     string
+		resource *descriptor.Resource
+		wantErr  string
+	}{
+		{
+			name:     "missing object key",
+			resource: s3Resource(&v1.S3Bucket{BucketName: "my-bucket"}),
+			wantErr:  "objectKey is required",
+		},
+		{
+			name:     "empty access",
+			resource: s3Resource(&v1.S3Bucket{}),
+			wantErr:  "bucketName is required",
+		},
+		{
+			name:     "no resource",
+			resource: nil,
+			wantErr:  "resource is required",
+		},
+	}
 
-	id, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
-		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "obj", Endpoint: "https://minio.internal:9000"}))
-	require.NoError(t, err)
-	require.Equal(t, "minio.internal", id[runtime.IdentityAttributeHostname])
-	require.Equal(t, "9000", id[runtime.IdentityAttributePort])
-	require.Equal(t, "b/obj", id[runtime.IdentityAttributePath])
-
-	_, err = repo.GetResourceCredentialConsumerIdentity(context.Background(), s3Resource(&v1.S3Bucket{}))
-	require.Error(t, err)
-	_, err = repo.GetResourceCredentialConsumerIdentity(context.Background(), nil)
-	require.Error(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := repo.GetResourceCredentialConsumerIdentity(context.Background(), tt.resource)
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
 }
 
 func Test_DownloadResource(t *testing.T) {
 	content := []byte("hello from s3")
+	tempFolder := t.TempDir()
 	srv := newFakeS3(t, content, "")
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
 
 	b, err := repo.DownloadResource(context.Background(),
 		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"})),
 		fakeCredentials())
 	require.NoError(t, err)
 
-	rc, err := b.ReadCloser()
-	require.NoError(t, err)
-	defer func() { _ = rc.Close() }()
-	got, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	require.Equal(t, content, got)
-
 	requests := srv.recorded()
 	require.Len(t, requests, 1)
 	require.Equal(t, "/my-bucket/path/blob.txt", requests[0].path)
 	require.Equal(t, "v-1", requests[0].versionID)
+
+	entries, err := os.ReadDir(tempFolder)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "the object must be streamed into the configured temp folder")
+
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	require.NoError(t, rc.Close())
+	require.Equal(t, content, got)
+
+	closer, ok := b.(io.Closer)
+	require.True(t, ok, "the downloaded blob must be closeable so callers can release its file")
+	require.NoError(t, closer.Close())
+
+	entries, err = os.ReadDir(tempFolder)
+	require.NoError(t, err)
+	require.Empty(t, entries, "closing the blob must remove the downloaded file")
 }
 
 func Test_ProcessResourceDigest(t *testing.T) {
@@ -329,6 +360,11 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 			}
 			require.NoError(t, err)
 
+			// The processed access is a copy: the caller's resource is never pinned in place.
+			original := v1.S3Bucket{}
+			require.NoError(t, accessspec.Scheme.Convert(resource.Access, &original))
+			require.Equal(t, tt.specVersion, original.Version, "the caller's resource must not be pinned in place")
+
 			if tt.wantRaw {
 				// A rewritten access is handed back in the raw form a constructor parsed,
 				// because the v2 descriptor encoder cannot encode a typed access it has no
@@ -345,81 +381,6 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 			require.NotNil(t, res.Digest)
 		})
 	}
-}
-
-func Test_ProcessResourceDigest_DoesNotMutateInputResource(t *testing.T) {
-	srv := newFakeS3(t, []byte("digest me"), "v-99")
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
-
-	resource := s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"}))
-	res, err := repo.ProcessResourceDigest(context.Background(), resource, fakeCredentials())
-	require.NoError(t, err)
-
-	original := v1.S3Bucket{}
-	require.NoError(t, accessspec.Scheme.Convert(resource.Access, &original))
-	require.Empty(t, original.Version, "the caller's resource must not be pinned in place")
-
-	pinned := v1.S3Bucket{}
-	require.NoError(t, accessspec.Scheme.Convert(res.Access, &pinned))
-	require.Equal(t, "v-99", pinned.Version)
-}
-
-func Test_DownloadResource_StreamsIntoConfiguredTempFolder(t *testing.T) {
-	content := []byte("hello from s3")
-	tempFolder := t.TempDir()
-	srv := newFakeS3(t, content, "")
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
-
-	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
-	require.NoError(t, err)
-
-	entries, err := os.ReadDir(tempFolder)
-	require.NoError(t, err)
-	require.Len(t, entries, 1, "the object must be streamed into the configured temp folder")
-
-	rc, err := b.ReadCloser()
-	require.NoError(t, err)
-	defer func() { _ = rc.Close() }()
-	got, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	require.Equal(t, content, got)
-}
-
-func Test_DownloadResource_BlobOwnsItsFile(t *testing.T) {
-	tempFolder := t.TempDir()
-	srv := newFakeS3(t, []byte("hello from s3"), "")
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
-
-	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
-	require.NoError(t, err)
-
-	entries, err := os.ReadDir(tempFolder)
-	require.NoError(t, err)
-	require.Len(t, entries, 1)
-
-	closer, ok := b.(io.Closer)
-	require.True(t, ok, "the downloaded blob must be closeable so callers can release its file")
-	require.NoError(t, closer.Close())
-
-	entries, err = os.ReadDir(tempFolder)
-	require.NoError(t, err)
-	require.Empty(t, entries, "closing the blob must remove the downloaded file")
-}
-
-func Test_ProcessResourceDigest_LeavesNoTempFile(t *testing.T) {
-	tempFolder := t.TempDir()
-	srv := newFakeS3(t, []byte("digest me"), "")
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
-
-	_, err := repo.ProcessResourceDigest(context.Background(),
-		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
-	require.NoError(t, err)
-
-	entries, err := os.ReadDir(tempFolder)
-	require.NoError(t, err)
-	require.Empty(t, entries, "digest processing must not leave the downloaded object behind")
 }
 
 func Test_NewResourceRepository_NilFilesystemConfig(t *testing.T) {

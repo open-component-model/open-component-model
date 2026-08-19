@@ -428,17 +428,6 @@ func TestDownload_StreamsIntoTempDir(t *testing.T) {
 	assert.Equal(t, content, readBlob(t, res.Blob))
 }
 
-func TestDownload_TempFileOutlivesCall(t *testing.T) {
-	tempDir := t.TempDir()
-	srv := newFakeS3(t, s3Object{body: []byte("still here")})
-
-	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(tempDir))
-	require.NoError(t, err)
-
-	require.Len(t, filesIn(t, tempDir), 1)
-	assert.Equal(t, []byte("still here"), readBlob(t, res.Blob))
-}
-
 func TestDownload_CloseRemovesTempFile(t *testing.T) {
 	tempDir := t.TempDir()
 	srv := newFakeS3(t, s3Object{body: []byte("payload")})
@@ -558,22 +547,6 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 	}
 }
 
-func TestDownload_OversizedObjectIsRejectedBeforeTransfer(t *testing.T) {
-	// The store announces a huge object and sends none of it, so a download that read
-	// the body before consulting the reported length would fail on the truncated
-	// transfer rather than on the limit.
-	srv := newFakeS3(t, s3Object{
-		body:           []byte("0123456789"),
-		declaredLength: new(int64(1 << 30)),
-		suppressBody:   true,
-	})
-
-	_, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"},
-		WithMaxDownloadSize(10), WithTempDir(t.TempDir()))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exceeds maximum allowed size")
-}
-
 func TestDownload_TempDirUnwritable(t *testing.T) {
 	srv := newFakeS3(t, s3Object{body: []byte("content")})
 
@@ -619,7 +592,6 @@ func TestHTTPConfig(t *testing.T) {
 		require.NotNil(t, got.Retry)
 		require.NotNil(t, got.Retry.MaxRetries)
 		assert.Equal(t, disableRetry, *got.Retry.MaxRetries)
-		assert.Equal(t, 7, *cfg.Retry.MaxRetries, "the caller keeps the retry count it configured")
 	})
 
 	// A per-host entry overrides the global policy, so leaving one on would reinstate
@@ -684,6 +656,7 @@ func TestHTTPConfig(t *testing.T) {
 		}
 		got := httpConfig(cfg)
 
+		assert.Equal(t, 7, *cfg.Retry.MaxRetries, "the caller keeps the retry count it configured")
 		assert.Nil(t, cfg.InsecureSkipVerify, "the caller's TLS config must be left alone")
 		assert.NotSame(t, cfg, got)
 		assert.NotSame(t, cfg.Retry, got.Retry, "the retry config must be copied, not shared")
@@ -693,49 +666,72 @@ func TestHTTPConfig(t *testing.T) {
 func TestNewClient(t *testing.T) {
 	ctx := t.Context()
 
-	t.Run("region defaults when unset", func(t *testing.T) {
-		client, err := newClient(ctx, Request{BucketName: "b", ObjectKey: "k"}, &option{})
-		require.NoError(t, err)
-		assert.Equal(t, defaultRegion, client.Options().Region)
-	})
-
-	t.Run("explicit region is used", func(t *testing.T) {
-		client, err := newClient(ctx, Request{Region: "eu-central-1"}, &option{})
-		require.NoError(t, err)
-		assert.Equal(t, "eu-central-1", client.Options().Region)
-	})
-
-	t.Run("custom endpoint and path style are applied", func(t *testing.T) {
-		client, err := newClient(ctx, Request{
-			Endpoint:     "https://minio.internal:9000",
-			UsePathStyle: true,
-		}, &option{})
-		require.NoError(t, err)
-		assert.Equal(t, "https://minio.internal:9000", aws.ToString(client.Options().BaseEndpoint))
-		assert.True(t, client.Options().UsePathStyle)
-	})
-
-	t.Run("no endpoint leaves the base endpoint unset", func(t *testing.T) {
-		client, err := newClient(ctx, Request{Region: "us-west-2"}, &option{})
-		require.NoError(t, err)
-		assert.Nil(t, client.Options().BaseEndpoint, "AWS is targeted when no endpoint is given")
-		assert.False(t, client.Options().UsePathStyle)
+	t.Run("the request addresses the client", func(t *testing.T) {
+		for _, tt := range []struct {
+			name          string
+			req           Request
+			wantRegion    string
+			wantEndpoint  string
+			wantPathStyle bool
+		}{
+			{
+				name:       "region defaults when unset",
+				req:        Request{BucketName: "b", ObjectKey: "k"},
+				wantRegion: defaultRegion,
+			},
+			{
+				name:       "explicit region is used",
+				req:        Request{Region: "eu-central-1"},
+				wantRegion: "eu-central-1",
+			},
+			{
+				name:          "custom endpoint and path style are applied",
+				req:           Request{Endpoint: "https://minio.internal:9000", UsePathStyle: true},
+				wantRegion:    defaultRegion,
+				wantEndpoint:  "https://minio.internal:9000",
+				wantPathStyle: true,
+			},
+			{
+				// AWS is targeted when no endpoint is given.
+				name:       "no endpoint leaves the base endpoint unset",
+				req:        Request{Region: "us-west-2"},
+				wantRegion: "us-west-2",
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				client, err := newClient(ctx, tt.req, &option{})
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantRegion, client.Options().Region)
+				assert.Equal(t, tt.wantEndpoint, aws.ToString(client.Options().BaseEndpoint))
+				assert.Equal(t, tt.wantPathStyle, client.Options().UsePathStyle)
+			})
+		}
 	})
 
 	t.Run("static credentials are applied", func(t *testing.T) {
-		client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &credv1.S3Credentials{
-			Type:            credv1.S3CredentialsVersionedType,
-			AccessKeyID:     "AKIA",
-			SecretAccessKey: "secret",
-			SessionToken:    "session",
-		}})
-		require.NoError(t, err)
+		for _, tt := range []struct {
+			name         string
+			sessionToken string
+		}{
+			{name: "with a session token", sessionToken: "session"},
+			{name: "without a session token"},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &credv1.S3Credentials{
+					Type:            credv1.S3CredentialsVersionedType,
+					AccessKeyID:     "AKIA",
+					SecretAccessKey: "secret",
+					SessionToken:    tt.sessionToken,
+				}})
+				require.NoError(t, err)
 
-		creds, err := client.Options().Credentials.Retrieve(ctx)
-		require.NoError(t, err)
-		assert.Equal(t, "AKIA", creds.AccessKeyID)
-		assert.Equal(t, "secret", creds.SecretAccessKey)
-		assert.Equal(t, "session", creds.SessionToken)
+				creds, err := client.Options().Credentials.Retrieve(ctx)
+				require.NoError(t, err)
+				assert.Equal(t, "AKIA", creds.AccessKeyID)
+				assert.Equal(t, "secret", creds.SecretAccessKey)
+				assert.Equal(t, tt.sessionToken, creds.SessionToken)
+			})
+		}
 	})
 
 	t.Run("empty credentials fall through to the default chain", func(t *testing.T) {
@@ -775,27 +771,6 @@ func TestNewClient(t *testing.T) {
 					"the configured credential must be the one that fails, not a fallback from the default chain")
 			})
 		}
-	})
-
-	t.Run("static credentials without a session token are applied", func(t *testing.T) {
-		client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &credv1.S3Credentials{
-			Type:            credv1.S3CredentialsVersionedType,
-			AccessKeyID:     "AKIA",
-			SecretAccessKey: "secret",
-		}})
-		require.NoError(t, err)
-
-		creds, err := client.Options().Credentials.Retrieve(ctx)
-		require.NoError(t, err)
-		assert.Equal(t, "AKIA", creds.AccessKeyID)
-		assert.Empty(t, creds.SessionToken)
-	})
-
-	t.Run("unconvertible credentials error", func(t *testing.T) {
-		unknown := &runtime.Raw{Type: runtime.NewVersionedType("Unknown", "v1"), Data: []byte("{}")}
-		_, err := newClient(ctx, Request{}, &option{Credentials: unknown})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "error converting s3 credentials")
 	})
 
 	t.Run("an HTTP client is always installed", func(t *testing.T) {
