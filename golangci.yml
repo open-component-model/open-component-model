@@ -480,6 +480,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
             - "ocm.software/open-component-model/bindings/go/github"
             - "ocm.software/open-component-model/bindings/go/helm"
+            - "ocm.software/open-component-model/bindings/go/http"
             - "ocm.software/open-component-model/bindings/go/oci"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/runtime"
