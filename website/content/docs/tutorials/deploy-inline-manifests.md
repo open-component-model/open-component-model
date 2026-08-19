@@ -64,6 +64,16 @@ You deliver **two** RGDs inside one OCM component:
 - **The system RGD (`system`)** composes the application. It reads the localized image from
   the OCM component and creates a `Podinfo` instance wired with that image and your message.
 
+This split is deliberate, and it is the real payoff of dropping Helm. The app RGD turns your
+application into a first-class Kubernetes API: a `Podinfo` kind with a typed schema, so
+operators run `kubectl get podinfo`, set fields with validation, and read status like any
+built-in resource. It stays generic, with no OCM coupling. The system RGD holds the
+OCM-specific wiring, reading the localized image and composing the app into an instance. A
+Helm chart gives you templated YAML and a release object; these two RGDs give you a queryable
+API plus a composition layer. That power has a cost: you define the API yourself and deliver
+two RGDs instead of one chart, so for a one-off install of someone else's chart a HelmRelease
+is still simpler.
+
 The OCM controllers deliver both RGDs. A `Repository` and `Component` fetch the component,
 and one `Resource` + `Deployer` pair per RGD applies it to the cluster. You then create a
 single `System` instance, and the chain converges to a running Podinfo.
@@ -282,8 +292,10 @@ EOF
 ### Write the system RGD
 
 This RGD reads the localized image from the OCM component and creates a `Podinfo` instance
-with it. The `resourceImage` node fetches the image reference. The `app` node builds a
-plain-digest reference and passes it, along with the message, to the `Podinfo` instance.
+with it. The `resourceImage` node fetches the image reference. The `app` node assembles the
+pod image as `registry`/`repository`@`digest` from the three fields `toOCI()` exposes under
+`resourceImage.status.additional.oci`, then passes it with your message to the `Podinfo`
+instance. Pinning the digest (not the tag) locks in the exact image OCM localized.
 
 ```bash
 cat > rgd-system.yaml << 'EOF'
@@ -441,7 +453,9 @@ Rebuild and transfer the component after editing the RGDs.
 
 ### Deliver both RGDs
 
-The bootstrap resources fetch the component and deliver each RGD with its own Deployer.
+The bootstrap resources are OCM controller objects: a `Repository` and `Component` fetch the
+component from your registry, then a `Resource` + `Deployer` pair per RGD applies it to the
+cluster. That is six objects for two RGDs, boilerplate that grows with every RGD you deliver.
 
 ```bash
 cat > bootstrap.yaml << 'EOF'
