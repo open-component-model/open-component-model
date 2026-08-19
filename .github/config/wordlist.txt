@@ -954,4 +954,6 @@ ifying
 Wget's
 presigned
 WgetCredentials
-exe
+GitHubCredentials
+GitHubRepository
+normalisation
