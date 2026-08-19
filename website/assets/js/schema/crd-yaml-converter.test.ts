@@ -23,7 +23,7 @@ function crd(kind: string, group: string, versions: Array<{name: string; served?
         openAPIV3Schema:
           type: object
           properties:${Object.entries(v.props || { spec: "object" }).map(
-        ([k, t]) => `\n            ${k}:\n              type: ${t}`).join("")}`).join("");
+                ([k, t]) => `\n            ${k}:\n              type: ${t}`).join("")}`).join("");
 
     return `apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition

@@ -18,7 +18,7 @@ import mermaid from 'mermaid';
 // the message differs so systemic failures are not mistaken for one bad diagram.
 const logMermaidError = (prefix) => (err) => {
     const isSyntax =
-    err?.name === 'UnknownDiagramError' ||
+        err?.name === 'UnknownDiagramError' ||
     err?.message?.includes('No diagram type detected') ||
     err?.message?.includes('Parse error');
     if (isSyntax) {

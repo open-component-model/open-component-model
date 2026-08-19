@@ -37,7 +37,7 @@ document.addEventListener('click', (e) => {
     // If already on this page, let the native <summary> toggle through
     // by NOT calling preventDefault — just stop the link from navigating.
     const onSamePage =
-    link.getAttribute('aria-current') === 'page' ||
+        link.getAttribute('aria-current') === 'page' ||
     new URL(link.href, location.href).pathname === location.pathname;
 
     if (onSamePage) {
