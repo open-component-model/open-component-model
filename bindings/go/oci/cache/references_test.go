@@ -375,3 +375,56 @@ func TestWriteFileAtomic_TempDirMissing(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create temp file")
 }
+
+func TestReferenceCache_NormalizeReference(t *testing.T) {
+	c := newTestRefCache(t, Options{})
+	tests := []struct {
+		name      string
+		namespace string
+		reference string
+		want      string
+	}{
+		{
+			"empty namespace",
+			"",
+			"ghcr.io/owner/repo:v1",
+			"ghcr.io/owner/repo:v1",
+		},
+		{
+			"unmatched namespace",
+			"ghcr.io/other/repo",
+			"ghcr.io/owner/repo:v1",
+			"ghcr.io/owner/repo:v1",
+		},
+		{
+			"matched tag reference",
+			"ghcr.io/owner/repo",
+			"ghcr.io/owner/repo:v1",
+			"v1",
+		},
+		{
+			"matched digest reference",
+			"ghcr.io/owner/repo",
+			"ghcr.io/owner/repo@sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+			"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+		},
+		{
+			"partial matched namespace prefix without separator",
+			"ghcr.io/owner/repo",
+			"ghcr.io/owner/repository:v1",
+			"ghcr.io/owner/repository:v1",
+		},
+		{
+			"already stripped reference",
+			"ghcr.io/owner/repo",
+			"v1",
+			"v1",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := c.normalizeReference(tc.namespace, tc.reference)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}

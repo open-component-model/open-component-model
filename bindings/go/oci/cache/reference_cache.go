@@ -158,7 +158,8 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 // in-memory entry is still added and a warning is logged. The caller
 // never sees an error from this method.
 func (c *ReferenceCache) Add(namespace, reference string, desc ociImageSpecV1.Descriptor) {
-	c.lru.Add(referenceKey{namespace, reference}, referenceEntry{Descriptor: desc, SavedAt: time.Now()})
+	normRef := c.normalizeReference(namespace, reference)
+	c.lru.Add(referenceKey{namespace, normRef}, referenceEntry{Descriptor: desc, SavedAt: time.Now()})
 	if err := c.writeNamespace(namespace); err != nil {
 		c.logger.Warn("refcache: write snapshot failed",
 			slog.String("namespace", namespace),
@@ -177,7 +178,8 @@ func (c *ReferenceCache) Invalidate(namespace, reference string) {
 	if c == nil {
 		return
 	}
-	c.lru.Remove(referenceKey{namespace, reference})
+	normRef := c.normalizeReference(namespace, reference)
+	c.lru.Remove(referenceKey{namespace, normRef})
 	if err := c.writeNamespace(namespace); err != nil {
 		c.logger.Warn("refcache: write snapshot after invalidate failed",
 			slog.String("namespace", namespace),
@@ -190,7 +192,8 @@ func (c *ReferenceCache) Invalidate(namespace, reference string) {
 // pair and whether it was found. See [ReferenceCache.Add] for the
 // namespace contract.
 func (c *ReferenceCache) Lookup(namespace, reference string) (ociImageSpecV1.Descriptor, bool) {
-	v, ok := c.lru.Get(referenceKey{namespace, reference})
+	normRef := c.normalizeReference(namespace, reference)
+	v, ok := c.lru.Get(referenceKey{namespace, normRef})
 	return v.Descriptor, ok
 }
 
@@ -206,7 +209,8 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, namespa
 	if c == nil {
 		return upstream.Resolve(ctx, reference)
 	}
-	if v, ok := c.lru.Get(referenceKey{namespace, reference}); ok {
+	normRef := c.normalizeReference(namespace, reference)
+	if v, ok := c.lru.Get(referenceKey{namespace, normRef}); ok {
 		c.logger.DebugContext(ctx, "refcache: hit",
 			slog.String("namespace", namespace),
 			slog.String("reference", reference),
@@ -216,8 +220,8 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, namespa
 	// Collapse concurrent misses for the same key into one upstream
 	// round-trip so a burst of identical resolves does not stampede the
 	// registry.
-	v, err, _ := c.sf.Do(namespace+"\x00"+reference, func() (any, error) {
-		if v, ok := c.lru.Get(referenceKey{namespace, reference}); ok {
+	v, err, _ := c.sf.Do(namespace+"\x00"+normRef, func() (any, error) {
+		if v, ok := c.lru.Get(referenceKey{namespace, normRef}); ok {
 			return v.Descriptor, nil
 		}
 		desc, err := upstream.Resolve(ctx, reference)
@@ -240,6 +244,21 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, namespa
 func (c *ReferenceCache) pathForNamespace(namespace string) string {
 	sum := sha256.Sum256([]byte(namespace))
 	return filepath.Join(c.opts.Dir, hex.EncodeToString(sum[:])+referenceFileExt)
+}
+
+// normalizeReference strips the registry/repository prefix (the namespace)
+// from the reference if present, including the colon/at separator.
+// This prevents duplicating the namespace inside the reference cache key.
+func (c *ReferenceCache) normalizeReference(namespace, reference string) string {
+	if namespace != "" && strings.HasPrefix(reference, namespace) {
+		remainder := reference[len(namespace):]
+		if strings.HasPrefix(remainder, ":") {
+			return remainder[1:]
+		} else if strings.HasPrefix(remainder, "@") {
+			return remainder[1:]
+		}
+	}
+	return reference
 }
 
 // snapshotNamespace materialises the LRU entries for a single
