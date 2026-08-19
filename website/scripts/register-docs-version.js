@@ -55,7 +55,9 @@ function compareSemver(a, b) {
     for (let i = 0; i < len; i++) {
         const av = pa[i] || 0;
         const bv = pb[i] || 0;
-        if (av !== bv) {return av - bv;}
+        if (av !== bv) {
+            return av - bv;
+        }
     }
     return 0;
 }
@@ -85,9 +87,13 @@ function assignVersionWeights(existingVersions, newVersion) {
     const semverKeys = [];
 
     for (const key of Object.keys(versions)) {
-        if (key === 'main') {hasMain = true;}
-        else if (key === 'legacy') {hasLegacy = true;}
-        else {semverKeys.push(key);}
+        if (key === 'main') {
+            hasMain = true;
+        } else if (key === 'legacy') {
+            hasLegacy = true;
+        } else {
+            semverKeys.push(key);
+        }
     }
 
     if (!alreadyExists) {
@@ -126,7 +132,9 @@ function parseArguments(args) {
 
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--cli-gomod') {
-            if (i + 1 >= args.length) {throw new Error('--cli-gomod requires a path argument');}
+            if (i + 1 >= args.length) {
+                throw new Error('--cli-gomod requires a path argument');
+            }
             flags.cliGomod = args[++i];
         } else if (args[i].startsWith('--')) {
             throw new Error(`Unknown flag: ${args[i]}`);
@@ -135,8 +143,12 @@ function parseArguments(args) {
         }
     }
 
-    if (positionals.length === 0) {throw new Error('Missing version. Usage: register-docs-version.js X.Y.Z --cli-gomod <path>');}
-    if (positionals.length > 1) {throw new Error(`Expected exactly one version argument, got ${positionals.length}: ${positionals.join(', ')}`);}
+    if (positionals.length === 0) {
+        throw new Error('Missing version. Usage: register-docs-version.js X.Y.Z --cli-gomod <path>');
+    }
+    if (positionals.length > 1) {
+        throw new Error(`Expected exactly one version argument, got ${positionals.length}: ${positionals.join(', ')}`);
+    }
 
     const fullVersion = positionals[0];
     const versionPattern = /^\d+\.\d+\.\d+$/;
@@ -293,7 +305,9 @@ function bindingSchemaImports(version, deps) {
     }
     const byPackage = new Map();
     for (const m of BINDING_SCHEMA_MOUNTS) {
-        if (!byPackage.has(m.pkg)) {byPackage.set(m.pkg, []);}
+        if (!byPackage.has(m.pkg)) {
+            byPackage.set(m.pkg, []);
+        }
         byPackage.get(m.pkg).push(m);
     }
     return [...byPackage.entries()].map(([pkg, mounts]) => ({
@@ -372,7 +386,9 @@ function buildModuleBlocks(version, fullVersion, deps) {
  */
 function retireOldestVersion(versions) {
     const semverKeys = Object.keys(versions).filter(k => !SPECIAL_VERSIONS.has(k));
-    if (semverKeys.length <= MAX_MINOR_VERSIONS) {return null;}
+    if (semverKeys.length <= MAX_MINOR_VERSIONS) {
+        return null;
+    }
 
     semverKeys.sort((a, b) => compareSemver(a, b)); // ascending
     const oldest = semverKeys[0];
@@ -393,13 +409,17 @@ function retireOldestVersion(versions) {
  * @returns {boolean} true if any tags were updated
  */
 function updateImportTags(parsed, version, fullVersion, deps) {
-    if (!parsed?.imports) {return false;}
+    if (!parsed?.imports) {
+        return false;
+    }
 
     let changed = false;
 
     for (const imp of parsed.imports) {
         const matchesVersion = imp?.mounts?.some(m => m?.sites?.matrix?.versions?.includes(version));
-        if (!matchesVersion) {continue;}
+        if (!matchesVersion) {
+            continue;
+        }
 
         let newTag = null;
         if (imp.path.endsWith('/website') ||
@@ -441,7 +461,9 @@ function updateImportTags(parsed, version, fullVersion, deps) {
 
 // Remove all imports for a given version from module.yaml parsed object
 function removeImportsForVersion(parsed, version) {
-    if (!parsed?.imports) {return;}
+    if (!parsed?.imports) {
+        return;
+    }
     parsed.imports = parsed.imports.filter(
         imp => !imp?.mounts?.some(m => m?.sites?.matrix?.versions?.includes(version))
     );

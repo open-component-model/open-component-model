@@ -8,11 +8,12 @@ const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildMo
 
 // Resolved CLI-derived versions for tests that need every binding import emitted.
 // buildModuleBlocks now drops bindings whose version is undefined (filter at the
-// end), so tests asserting "all 13 imports" / "all schema targets" must pass deps.
+// end), so tests asserting "all 14 imports" / "all schema targets" must pass deps.
 const ALL_DEPS = {
     'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.7',
     'ocm.software/open-component-model/bindings/go/credentials': 'v0.0.13',
     'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.3-alpha3',
+    'ocm.software/open-component-model/bindings/go/github': 'v0.0.1',
     'ocm.software/open-component-model/bindings/go/gpg': 'v0.0.1',
     'ocm.software/open-component-model/bindings/go/helm': 'v0.0.1',
     'ocm.software/open-component-model/bindings/go/http': 'v0.0.5',
@@ -121,9 +122,9 @@ test('hasAllImportsForVersion: returns true when the full import set (built with
 
 // --- buildModuleBlocks ---
 
-test('buildModuleBlocks: returns 13 imports (website + CLI + 10 bindings + controller)', () => {
+test('buildModuleBlocks: returns 14 imports (website + CLI + 11 bindings + controller)', () => {
     const { imports } = buildModuleBlocks('0.3', '0.3.0', ALL_DEPS);
-    assert.equal(imports.length, 13);
+    assert.equal(imports.length, 14);
 });
 
 test('buildModuleBlocks: does not return a mount field', () => {
@@ -222,6 +223,7 @@ test('buildModuleBlocks: schema imports have correct targets with version prefix
         'content/docs/reference/ocm-cli',
         'static/2.0/schemas/bindings/go/constructor',
         'static/2.0/schemas/bindings/go/credentials/direct/v1',
+        'static/2.0/schemas/bindings/go/credentials/github/v1',
         'static/2.0/schemas/bindings/go/credentials/gpg/v1alpha1',
         'static/2.0/schemas/bindings/go/credentials/helm/v1',
         'static/2.0/schemas/bindings/go/credentials/oci/v1',
@@ -246,6 +248,7 @@ test('buildModuleBlocks: schema imports have correct sources', () => {
         'spec/config/v1alpha1/schemas',
         'spec/credentials/oidcidentitytoken/v1alpha1/schemas',
         'spec/credentials/trustedroot/v1alpha1/schemas',
+        'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',
@@ -487,6 +490,7 @@ test('updateImportTags: updates versioned tags for matching version', () => {
         'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.8',
         'ocm.software/open-component-model/bindings/go/credentials': 'v0.0.14',
         'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.4',
+        'ocm.software/open-component-model/bindings/go/github': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/gpg': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/helm': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/http': 'v0.0.5',
@@ -558,6 +562,11 @@ test('updateImportTags: updates versioned tags for matching version', () => {
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
             },
             {
+                path: 'ocm.software/open-component-model/bindings/go/github',
+                version: 'bindings/go/github/v0.0.1',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+            {
                 path: 'ocm.software/open-component-model/kubernetes/controller',
                 version: 'kubernetes/controller/v0.3.0',
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
@@ -580,6 +589,7 @@ test('updateImportTags: updates versioned tags for matching version', () => {
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/rsa'], 'v0.0.2');
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/sigstore'], 'v0.0.2');
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/wget'], 'v0.0.2');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/github'], 'v0.0.2');
     assert.equal(byPath['ocm.software/open-component-model/kubernetes/controller'], 'v0.3.1');
 });
 
@@ -655,6 +665,7 @@ test('updateImportTags: patching freshly-built blocks equals building directly w
         'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.8',
         'ocm.software/open-component-model/bindings/go/credentials': 'v0.0.14',
         'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.4',
+        'ocm.software/open-component-model/bindings/go/github': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/gpg': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/helm': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/oci': 'v0.0.47',

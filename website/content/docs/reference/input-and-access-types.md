@@ -305,6 +305,46 @@ access type instead. The [Helm resource repository]({{< relref "resource-reposit
 only supports HTTP/HTTPS-based chart repositories.
 {{< /callout >}}
 
+### `GitHub/v1`
+
+References a commit of a GitHub repository, downloaded as a source archive via the GitHub
+REST API. Also usable unversioned as `GitHub`. Legacy aliases: `github`, `github/v1`,
+`gitHub`, `gitHub/v1`.
+
+| Field         | Type   | Required | Description                                                                                                                      |
+|---------------|--------|----------|----------------------------------------------------------------------------------------------------------------------------------|
+| `repoUrl`     | string | yes      | Repository URL (scheme optional, `https` assumed), e.g. `github.com/open-component-model/ocm`.                                   |
+| `apiHostname` | string | no       | Overrides the GitHub REST API hostname for GitHub Enterprise.                                                                    |
+| `commit`      | string | no*      | 40-character hex commit SHA. When set it is authoritative.                                                                       |
+| `ref`         | string | no*      | Git reference (e.g. `refs/heads/main`), resolved to a commit at download time and pinned onto the resource by digest processing. |
+
+\* At least one of `commit` or `ref` must be set. A resource may be authored with only a
+`ref`; its `commit` is pinned later during digest processing. A source is never pinned, so
+give it a `commit`.
+
+```yaml
+resources:
+  - name: my-source
+    version: 1.0.0
+    type: directoryTree
+    relation: external
+    access:
+      type: GitHub/v1
+      repoUrl: https://github.com/open-component-model/ocm
+      commit: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+```
+
+The same access works under `sources:`, where it stays a remote reference: sources carry no
+digest and no copy mode embeds them.
+
+{{< callout context="note" >}}
+Any `repoUrl` host other than `github.com` is treated as GitHub Enterprise, with the REST API
+on that same host. Set `apiHostname` only when the API lives on a different host.
+
+`apiHostname` and the optional `commit` extend the OCM spec's `gitHub` access type: the spec
+lists `commit` as required and has no `apiHostname` attribute.
+{{< /callout >}}
+
 ### `File/v1alpha1`
 
 References a file by URI ([RFC 8089](https://datatracker.ietf.org/doc/html/rfc8089)). Legacy alias: `file`.

@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -106,10 +107,10 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/m
 # Transfer only the latest version
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
 
-# Transfer from one OCI to another using localBlobs
+# Transfer from one OCI to another using localBlobs (default)
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as localBlob
 
-# Transfer from one OCI to another using OCI artifacts (default)
+# Transfer from one OCI to another using OCI artifacts
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
 
 # Transfer a component version containing Helm charts (access-type: helm/v1) as an OCI artifact
@@ -205,6 +206,11 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("credentials graph not found in context")
 	}
 
+	httpConfig, err := httpv1alpha1.ResolveHTTPConfig(octx.Configuration())
+	if err != nil {
+		return fmt.Errorf("could not get http configuration: %w", err)
+	}
+
 	specPath, err := cmd.Flags().GetString(FlagTransferSpec)
 	if err != nil {
 		return fmt.Errorf("getting transfer-spec flag failed: %w", err)
@@ -237,7 +243,12 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build transformation graph
-	b := transfer.NewDefaultBuilder(pm.ComponentVersionRepositoryRegistry, pm.ResourcePluginRegistry, credGraph)
+	b := transfer.NewDefaultBuilder(
+		pm.ComponentVersionRepositoryRegistry,
+		pm.ResourcePluginRegistry,
+		credGraph,
+		transfer.WithHTTPConfig(httpConfig),
+	)
 	graph, err := b.
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
 		BuildAndCheck(tgd)

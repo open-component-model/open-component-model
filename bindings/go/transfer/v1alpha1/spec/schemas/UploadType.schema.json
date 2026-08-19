@@ -4,14 +4,10 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/UploadType.schema.json",
   "title": "UploadType",
   "type": "string",
-  "description": "UploadType determines how resources are stored in the target repository during transfer.\n\nThis option is only relevant when resources are being copied (i.e., when [CopyModeAllResources]\nis set or for local blob resources in the default mode). It controls whether resources are\nembedded as local blobs within the component descriptor or uploaded as separate OCI artifacts\nwith their own repository references.",
+  "description": "UploadType determines how resources are stored in the target repository during transfer.\n\nThis option is only relevant when resources are being copied (i.e., when [CopyModeAllResources]\nis set or for local blob resources with [CopyModeLocalBlobResources]). It controls whether\nresources are embedded as local blobs within the component descriptor or uploaded as separate\nOCI artifacts with their own repository references. When unset, callers resolve to\n[UploadAsLocalBlob].",
   "oneOf": [
     {
-      "description": "UploadAsDefault lets the transfer logic decide the upload strategy based on the source\naccess type and target repository capabilities. Local blob resources remain as local blobs,\nand the original access semantics are preserved where possible.",
-      "const": "default"
-    },
-    {
-      "description": "UploadAsLocalBlob forces all transferred resources to be stored as local blobs\nin the target repository. The resource content is embedded directly in the\ncomponent version's OCI manifest layers.",
+      "description": "UploadAsLocalBlob stores all transferred resources as local blobs in the target\nrepository. The resource content is embedded directly in the component version's\nOCI manifest layers. This is the default when [UploadType] is unset.",
       "const": "localBlob"
     },
     {
