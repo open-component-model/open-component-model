@@ -34,7 +34,11 @@ func Register(
 		provider.WithHTTPConfig(httpConfig),
 	)
 
-	resourceRepoPlugin := ocires.NewResourceRepository(filesystemConfig, ocires.WithUserAgent(creator))
+	resourceRepoPlugin := ocires.NewResourceRepository(
+		filesystemConfig,
+		ocires.WithUserAgent(creator),
+		ocires.WithHTTPConfig(httpConfig),
+	)
 	ociBlobTransformerPlugin := transformer.New(logger)
 
 	return errors.Join(
