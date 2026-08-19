@@ -458,6 +458,7 @@ jobs:
       - run_integration_tests
       - run_sigstore_integration
       - golangci_lint
+      - dependency_table_verify
     if: ${{ failure() }}
     steps:
       - name: Some CI step failed or was cancelled!
