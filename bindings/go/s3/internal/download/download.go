@@ -74,9 +74,9 @@ type Request struct {
 // The returned [Blob] owns that file: callers should [Blob.Close] it once they are
 // done, and an unclosed blob has its file removed when it becomes unreachable.
 //
-// The S3 client, credentials and maximum size are supplied via options; see
-// [WithClient], [WithCredentials] and [WithMaxDownloadSize].
-func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err error) {
+// The credentials and maximum size are supplied via options; see [WithCredentials]
+// and [WithMaxDownloadSize].
+func Download(ctx context.Context, req Request, opts ...Option) (*Result, error) {
 	o := &option{}
 	for _, opt := range opts {
 		opt(o)
@@ -89,13 +89,9 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 		return nil, errors.New("objectKey is required")
 	}
 
-	getter := o.Client
-	if getter == nil {
-		client, err := newClient(ctx, req, o)
-		if err != nil {
-			return nil, err
-		}
-		getter = client
+	getter, err := newClient(ctx, req, o)
+	if err != nil {
+		return nil, err
 	}
 
 	in := &s3.GetObjectInput{
@@ -136,17 +132,37 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 		body = io.LimitReader(out.Body, limit)
 	}
 
+	mediaType := req.MediaType
+	if mediaType == "" {
+		mediaType = aws.ToString(out.ContentType)
+	}
+	if mediaType == "" {
+		mediaType = "application/octet-stream"
+	}
+
 	file, err := os.CreateTemp(o.TempDir, tempFilePattern)
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary file for s3 object %s/%s: %w", req.BucketName, req.ObjectKey, err)
 	}
-	path := file.Name()
 
-	defer func() {
-		if err != nil {
-			_ = os.Remove(path)
-		}
-	}()
+	b, err := storeObject(file, body, maxDownloadSize, req)
+	if err != nil {
+		// Nothing else owns the file until the blob does, so a download that does not
+		// produce one takes its file with it.
+		_ = os.Remove(file.Name())
+		return nil, err
+	}
+	b.SetMediaType(mediaType)
+
+	return &Result{Blob: b, VersionID: aws.ToString(out.VersionId)}, nil
+}
+
+// storeObject streams body into file and returns a blob backed by it, which from then
+// on owns the file. It closes file whether or not it succeeds, but never removes it:
+// the caller does that, so that the one thing it can do about a failure is done in one
+// place rather than at every error return.
+func storeObject(file *os.File, body io.Reader, maxDownloadSize int64, req Request) (*Blob, error) {
+	path := file.Name()
 
 	written, err := io.Copy(file, body)
 	if closeErr := file.Close(); err == nil {
@@ -160,21 +176,12 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Result, err 
 		return nil, fmt.Errorf("s3 object %s/%s exceeds maximum allowed size of %d bytes", req.BucketName, req.ObjectKey, maxDownloadSize)
 	}
 
-	mediaType := req.MediaType
-	if mediaType == "" {
-		mediaType = aws.ToString(out.ContentType)
-	}
-	if mediaType == "" {
-		mediaType = "application/octet-stream"
-	}
-
 	b, err := newBlob(path)
 	if err != nil {
 		return nil, fmt.Errorf("error creating blob for s3 object %s/%s from %s: %w", req.BucketName, req.ObjectKey, path, err)
 	}
-	b.SetMediaType(mediaType)
 
-	return &Result{Blob: b, VersionID: aws.ToString(out.VersionId)}, nil
+	return b, nil
 }
 
 // disableRetry is the maxRetries value that turns the ocm transport's retry off.

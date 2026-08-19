@@ -4,16 +4,10 @@ import (
 	"net/http"
 
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 )
 
 // Options holds configuration for the S3 resource repository.
 type Options struct {
-	// client injects a pre-built S3 client in tests. It is deliberately not settable
-	// from outside this package: an S3 client bakes in one endpoint, region and
-	// identity, so injecting one would route every resource to the same place
-	// regardless of its access spec and credentials.
-	client download.ObjectGetter
 	// MaxDownloadSize caps the number of bytes read from an object. Nil uses the
 	// default (unlimited).
 	MaxDownloadSize *int64

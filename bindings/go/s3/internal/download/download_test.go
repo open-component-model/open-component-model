@@ -1,23 +1,26 @@
 package download
 
 import (
-	"bytes"
-	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"math"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -27,76 +30,180 @@ import (
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
-// fakeGetter is a stand-in S3 client returning canned object content and recording
-// the input it was called with.
-type fakeGetter struct {
-	body          []byte
-	contentType   string
-	contentLength *int64
-	bodyReader    io.ReadCloser
-	versionID     string
-	err           error
-
-	gotInput *s3.GetObjectInput
-	closed   bool
+// s3Object is the canned response [fakeS3] serves for a GetObject request.
+type s3Object struct {
+	// body is the object content.
+	body []byte
+	// contentType is served as the Content-Type header. Empty sends none, which is
+	// what an object stored without one looks like.
+	contentType string
+	// versionID is served as the x-amz-version-id header. Empty sends none, as a
+	// store that does not report versions does.
+	versionID string
+	// errStatus and errCode serve an S3 error in place of the object.
+	errStatus int
+	errCode   string
+	// chunked serves the body without a Content-Length, which is how a store that
+	// does not know the object size up front answers.
+	chunked bool
+	// abortAfter drops the connection after that many bytes of body, simulating a
+	// store failing mid-object. It implies chunked, since a length cannot be declared
+	// for a body that is never finished.
+	abortAfter *int
+	// suppressBody serves the headers of an object but none of it, so that a caller
+	// deciding from the reported length alone can be told apart from one that reads
+	// first.
+	suppressBody bool
+	// declaredLength overrides the Content-Length header. Nil reports the true length
+	// of body.
+	//
+	// It cannot understate the real length: the transport enforces the declared count,
+	// so a store cannot hand out more than it announced.
+	declaredLength *int64
 }
 
-func (f *fakeGetter) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
-	f.gotInput = in
-	if f.err != nil {
-		return nil, f.err
-	}
-
-	body := f.bodyReader
-	if body == nil {
-		body = io.NopCloser(bytes.NewReader(f.body))
-	}
-
-	length := int64(len(f.body))
-	if f.contentLength != nil {
-		length = *f.contentLength
-	}
-
-	out := &s3.GetObjectOutput{
-		Body:          &trackedBody{ReadCloser: body, closed: &f.closed},
-		ContentLength: new(length),
-	}
-	if f.contentType != "" {
-		out.ContentType = new(f.contentType)
-	}
-	if f.versionID != "" {
-		out.VersionId = new(f.versionID)
-	}
-	return out, nil
+// s3Request is one request a [fakeS3] answered.
+type s3Request struct {
+	method string
+	// path is the request path, which is /bucket/key for path-style addressing.
+	path string
+	// versionID is the versionId query parameter, empty when none was sent.
+	versionID string
+	header    http.Header
 }
 
-type trackedBody struct {
-	io.ReadCloser
-	closed *bool
+// fakeS3 is an httptest server answering S3 GetObject requests with a canned object,
+// so that the download is exercised over the wire it actually uses: the request is
+// signed, addressed and parsed by the real AWS SDK, and only the store is fake.
+// Requests are not authenticated, because what is under test is the download rather
+// than S3's own auth.
+type fakeS3 struct {
+	*httptest.Server
+
+	object s3Object
+
+	mu       sync.Mutex
+	requests []s3Request
 }
 
-func (t *trackedBody) Close() error {
-	*t.closed = true
-	return t.ReadCloser.Close()
+// newFakeS3 starts a server serving object, and stops it when the test ends.
+func newFakeS3(t *testing.T, object s3Object) *fakeS3 {
+	t.Helper()
+
+	f := &fakeS3{object: object}
+	f.Server = httptest.NewServer(http.HandlerFunc(f.serve))
+	t.Cleanup(f.Close)
+
+	return f
 }
 
-// errReader fails after yielding prefix, simulating a connection dropping mid-object.
-type errReader struct {
-	prefix []byte
-	off    int
-	err    error
+// recorded returns the requests the server answered, in the order it answered them.
+func (f *fakeS3) recorded() []s3Request {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return append([]s3Request(nil), f.requests...)
 }
 
-func (e *errReader) Read(p []byte) (int, error) {
-	if e.off < len(e.prefix) {
-		n := copy(p, e.prefix[e.off:])
-		e.off += n
-		return n, nil
+func (f *fakeS3) serve(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	f.requests = append(f.requests, s3Request{
+		method:    r.Method,
+		path:      r.URL.Path,
+		versionID: r.URL.Query().Get("versionId"),
+		header:    r.Header.Clone(),
+	})
+	f.mu.Unlock()
+
+	if f.object.errStatus != 0 {
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(f.object.errStatus)
+		fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><Error><Code>%s</Code></Error>`, f.object.errCode)
+		return
 	}
-	return 0, e.err
+
+	if f.object.contentType != "" {
+		w.Header().Set("Content-Type", f.object.contentType)
+	} else {
+		// A nil entry suppresses the type the server would otherwise sniff from the
+		// body, so that an object stored without a content type stays without one.
+		w.Header()["Content-Type"] = nil
+	}
+	if f.object.versionID != "" {
+		w.Header().Set("x-amz-version-id", f.object.versionID)
+	}
+
+	// Real S3 reports a checksum, and the SDK warns about every response carrying
+	// none. A body that is cut short or never sent cannot be summed.
+	if !f.object.suppressBody && f.object.abortAfter == nil {
+		w.Header().Set("x-amz-checksum-crc32", checksumCRC32(f.object.body))
+	}
+
+	length := int64(len(f.object.body))
+	if f.object.declaredLength != nil {
+		length = *f.object.declaredLength
+	}
+
+	// Flushing before the body is written is what makes the response chunked: the
+	// headers go out before the server knows how much follows, so it cannot declare a
+	// length. An unflushed response has its Content-Length filled in automatically.
+	if f.object.chunked || f.object.abortAfter != nil {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+	} else {
+		w.Header().Set("Content-Length", strconv.FormatInt(length, 10))
+		w.WriteHeader(http.StatusOK)
+	}
+
+	if f.object.suppressBody {
+		return
+	}
+
+	body := f.object.body
+	if n := f.object.abortAfter; n != nil {
+		if *n < len(body) {
+			body = body[:*n]
+		}
+		_, _ = w.Write(body)
+		w.(http.Flusher).Flush()
+		// The connection is dropped with the object half-delivered. ErrAbortHandler is
+		// the panic the server swallows silently rather than logging as a failure.
+		panic(http.ErrAbortHandler)
+	}
+
+	_, _ = w.Write(body)
 }
 
-func (e *errReader) Close() error { return nil }
+// checksumCRC32 is the CRC32 of body in the base64 form S3 reports it in.
+func checksumCRC32(body []byte) string {
+	sum := make([]byte, 4)
+	binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(body))
+
+	return base64.StdEncoding.EncodeToString(sum)
+}
+
+// fakeCredentials are static credentials for [fakeS3]. Their value is irrelevant — the
+// fake verifies no signature — but supplying them keeps the AWS default credential
+// chain, and the instance-metadata lookups it makes, out of the tests.
+func fakeCredentials() *credv1.S3Credentials {
+	return &credv1.S3Credentials{
+		Type:            credv1.S3CredentialsVersionedType,
+		AccessKeyID:     "test-access-key",
+		SecretAccessKey: "test-secret-key",
+	}
+}
+
+// downloadFrom downloads req from srv. The fake serves no bucket subdomains, so the
+// request is addressed path-style, and static credentials keep the AWS default
+// credential chain — and the instance-metadata lookups it makes — out of the test.
+func downloadFrom(t *testing.T, srv *fakeS3, req Request, opts ...Option) (*Result, error) {
+	t.Helper()
+
+	req.Endpoint = srv.URL
+	req.UsePathStyle = true
+
+	return Download(t.Context(), req, append([]Option{WithCredentials(fakeCredentials())}, opts...)...)
+}
 
 func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	t.Helper()
@@ -144,35 +251,38 @@ func TestDownload_RequiredFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fake := &fakeGetter{body: []byte("unused")}
-			_, err := Download(t.Context(), tt.req, WithClient(fake), WithTempDir(t.TempDir()))
+			srv := newFakeS3(t, s3Object{body: []byte("unused")})
+
+			_, err := downloadFrom(t, srv, tt.req, WithTempDir(t.TempDir()))
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
-			assert.Nil(t, fake.gotInput, "validation must happen before GetObject is called")
+			assert.Empty(t, srv.recorded(), "validation must happen before the object is requested")
 		})
 	}
 }
 
 func TestDownload_ReturnsObjectBody(t *testing.T) {
 	content := []byte("hello from s3")
-	fake := &fakeGetter{body: content, contentType: "text/plain"}
+	srv := newFakeS3(t, s3Object{body: content, contentType: "text/plain"})
 
-	res, err := Download(t.Context(), Request{BucketName: "my-bucket", ObjectKey: "path/blob.txt"},
-		WithClient(fake), WithTempDir(t.TempDir()))
+	res, err := downloadFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "path/blob.txt"},
+		WithTempDir(t.TempDir()))
 	require.NoError(t, err)
-
 	assert.Equal(t, content, readBlob(t, res.Blob))
-	assert.True(t, fake.closed, "the object body must be closed")
 
-	assert.Equal(t, "my-bucket", aws.ToString(fake.gotInput.Bucket))
-	assert.Equal(t, "path/blob.txt", aws.ToString(fake.gotInput.Key))
-	assert.Nil(t, fake.gotInput.VersionId, "no version pinned means the latest object")
+	requests := srv.recorded()
+	require.Len(t, requests, 1)
+	assert.Equal(t, http.MethodGet, requests[0].method)
+	assert.Equal(t, "/my-bucket/path/blob.txt", requests[0].path)
+	assert.Empty(t, requests[0].versionID, "no version pinned means the latest object")
+	assert.NotEmpty(t, requests[0].header.Get("Authorization"), "the request must be signed")
 }
 
 func TestDownload_BlobIsReReadable(t *testing.T) {
 	content := []byte("read me twice")
-	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
-		WithClient(&fakeGetter{body: content}), WithTempDir(t.TempDir()))
+	srv := newFakeS3(t, s3Object{body: content})
+
+	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(t.TempDir()))
 	require.NoError(t, err)
 
 	assert.Equal(t, content, readBlob(t, res.Blob))
@@ -181,21 +291,24 @@ func TestDownload_BlobIsReReadable(t *testing.T) {
 
 func TestDownload_BlobReportsSize(t *testing.T) {
 	content := []byte("sized content")
-	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
-		WithClient(&fakeGetter{body: content}), WithTempDir(t.TempDir()))
+	srv := newFakeS3(t, s3Object{body: content})
+
+	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(t.TempDir()))
 	require.NoError(t, err)
 
 	assert.Equal(t, int64(len(content)), res.Blob.Size())
 }
 
 func TestDownload_PinnedVersionIsForwarded(t *testing.T) {
-	fake := &fakeGetter{body: []byte("versioned")}
+	srv := newFakeS3(t, s3Object{body: []byte("versioned")})
 
-	_, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k", Version: "v-1"},
-		WithClient(fake), WithTempDir(t.TempDir()))
+	_, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k", Version: "v-1"},
+		WithTempDir(t.TempDir()))
 	require.NoError(t, err)
 
-	assert.Equal(t, "v-1", aws.ToString(fake.gotInput.VersionId))
+	requests := srv.recorded()
+	require.Len(t, requests, 1)
+	assert.Equal(t, "v-1", requests[0].versionID)
 }
 
 func TestDownload_ResolvedVersionIsReturned(t *testing.T) {
@@ -223,9 +336,9 @@ func TestDownload_ResolvedVersionIsReturned(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
-				WithClient(&fakeGetter{body: []byte("content"), versionID: tt.versionID}),
-				WithTempDir(t.TempDir()))
+			srv := newFakeS3(t, s3Object{body: []byte("content"), versionID: tt.versionID})
+
+			res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(t.TempDir()))
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, res.VersionID)
 		})
@@ -264,9 +377,9 @@ func TestDownload_MediaType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := Download(t.Context(),
-				Request{BucketName: "b", ObjectKey: "k", MediaType: tt.mediaType},
-				WithClient(&fakeGetter{body: []byte("content"), contentType: tt.contentType}),
+			srv := newFakeS3(t, s3Object{body: []byte("content"), contentType: tt.contentType})
+
+			res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k", MediaType: tt.mediaType},
 				WithTempDir(t.TempDir()))
 			require.NoError(t, err)
 
@@ -278,38 +391,31 @@ func TestDownload_MediaType(t *testing.T) {
 }
 
 func TestDownload_GetObjectErrorIsWrapped(t *testing.T) {
-	fake := &fakeGetter{err: fmt.Errorf("access denied")}
+	srv := newFakeS3(t, s3Object{errStatus: http.StatusForbidden, errCode: "AccessDenied"})
 
-	_, err := Download(t.Context(), Request{BucketName: "my-bucket", ObjectKey: "my-key"},
-		WithClient(fake), WithTempDir(t.TempDir()))
+	_, err := downloadFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "my-key"}, WithTempDir(t.TempDir()))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error getting s3 object my-bucket/my-key")
-	assert.Contains(t, err.Error(), "access denied", "the underlying cause must be preserved")
+	assert.Contains(t, err.Error(), "AccessDenied", "the underlying cause must be preserved")
 }
 
 func TestDownload_BodyReadErrorIsWrappedAndFileRemoved(t *testing.T) {
 	tempDir := t.TempDir()
-	fake := &fakeGetter{
-		body:       []byte("0123456789"),
-		bodyReader: &errReader{prefix: []byte("01234"), err: fmt.Errorf("connection reset")},
-	}
+	srv := newFakeS3(t, s3Object{body: []byte("0123456789"), abortAfter: new(5)})
 
-	_, err := Download(t.Context(), Request{BucketName: "my-bucket", ObjectKey: "my-key"},
-		WithClient(fake), WithTempDir(tempDir))
+	_, err := downloadFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "my-key"}, WithTempDir(tempDir))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error writing s3 object my-bucket/my-key")
-	assert.Contains(t, err.Error(), "connection reset")
 
 	assert.Empty(t, filesIn(t, tempDir), "a partial download must not leave a file behind")
-	assert.True(t, fake.closed, "the object body must be closed even when the read fails")
 }
 
 func TestDownload_StreamsIntoTempDir(t *testing.T) {
 	tempDir := t.TempDir()
 	content := []byte("streamed to disk")
+	srv := newFakeS3(t, s3Object{body: content})
 
-	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
-		WithClient(&fakeGetter{body: content}), WithTempDir(tempDir))
+	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(tempDir))
 	require.NoError(t, err)
 
 	names := filesIn(t, tempDir)
@@ -324,9 +430,9 @@ func TestDownload_StreamsIntoTempDir(t *testing.T) {
 
 func TestDownload_TempFileOutlivesCall(t *testing.T) {
 	tempDir := t.TempDir()
+	srv := newFakeS3(t, s3Object{body: []byte("still here")})
 
-	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
-		WithClient(&fakeGetter{body: []byte("still here")}), WithTempDir(tempDir))
+	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(tempDir))
 	require.NoError(t, err)
 
 	require.Len(t, filesIn(t, tempDir), 1)
@@ -335,9 +441,9 @@ func TestDownload_TempFileOutlivesCall(t *testing.T) {
 
 func TestDownload_CloseRemovesTempFile(t *testing.T) {
 	tempDir := t.TempDir()
+	srv := newFakeS3(t, s3Object{body: []byte("payload")})
 
-	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
-		WithClient(&fakeGetter{body: []byte("payload")}), WithTempDir(tempDir))
+	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(tempDir))
 	require.NoError(t, err)
 	require.Len(t, filesIn(t, tempDir), 1)
 
@@ -351,10 +457,10 @@ func TestDownload_CloseRemovesTempFile(t *testing.T) {
 // process.
 func TestDownload_AbandonedBlobIsReclaimed(t *testing.T) {
 	tempDir := t.TempDir()
+	srv := newFakeS3(t, s3Object{body: []byte("payload")})
 
 	func() {
-		_, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
-			WithClient(&fakeGetter{body: []byte("payload")}), WithTempDir(tempDir))
+		_, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(tempDir))
 		require.NoError(t, err)
 		require.Len(t, filesIn(t, tempDir), 1)
 	}()
@@ -370,10 +476,10 @@ func TestDownload_AbandonedBlobIsReclaimed(t *testing.T) {
 // The cleanup must not pull the file out from under a read still in progress.
 func TestDownload_OpenReaderSurvivesCollection(t *testing.T) {
 	content := []byte("payload that is read after the blob goes out of scope")
+	srv := newFakeS3(t, s3Object{body: content})
 
 	rc := func() io.ReadCloser {
-		res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
-			WithClient(&fakeGetter{body: content}), WithTempDir(t.TempDir()))
+		res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(t.TempDir()))
 		require.NoError(t, err)
 
 		rc, err := res.Blob.ReadCloser()
@@ -393,11 +499,11 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 	content := []byte("0123456789")
 
 	tests := []struct {
-		name          string
-		maxSize       int64
-		unset         bool
-		contentLength *int64
-		wantErr       bool
+		name    string
+		maxSize int64
+		unset   bool
+		object  s3Object
+		wantErr bool
 	}{
 		{name: "body below the limit", maxSize: 100},
 		{name: "body exactly at the limit", maxSize: 10},
@@ -407,31 +513,39 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 		{name: "unset uses the default", unset: true},
 		{name: "the largest limit does not overflow into a truncated read", maxSize: math.MaxInt64},
 		{
-			name:          "oversized object is rejected from its reported length",
-			maxSize:       5,
-			contentLength: new(int64(1 << 30)),
-			wantErr:       true,
+			// The store announces the object and sends none of it, so a download that read
+			// the body before consulting the reported length would fail on the truncated
+			// transfer rather than on the limit.
+			name:    "oversized object is rejected from its reported length",
+			maxSize: 5,
+			object:  s3Object{declaredLength: new(int64(1 << 30)), suppressBody: true},
+			wantErr: true,
 		},
 		{
-			name:          "understated length is still caught while streaming",
-			maxSize:       5,
-			contentLength: new(int64(1)),
-			wantErr:       true,
+			// A store cannot understate its length — the transport enforces the count it
+			// declared — but one that declares none can hand out more than the limit.
+			name:    "a store reporting no length is caught while streaming",
+			maxSize: 5,
+			object:  s3Object{chunked: true},
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tempDir := t.TempDir()
-			opts := []Option{
-				WithClient(&fakeGetter{body: content, contentLength: tt.contentLength}),
-				WithTempDir(tempDir),
+			object := tt.object
+			if object.body == nil {
+				object.body = content
 			}
+			srv := newFakeS3(t, object)
+
+			opts := []Option{WithTempDir(tempDir)}
 			if !tt.unset {
 				opts = append(opts, WithMaxDownloadSize(tt.maxSize))
 			}
 
-			res, err := Download(t.Context(), Request{BucketName: "my-bucket", ObjectKey: "my-key"}, opts...)
+			res, err := downloadFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "my-key"}, opts...)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "exceeds maximum allowed size")
@@ -445,31 +559,34 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 }
 
 func TestDownload_OversizedObjectIsRejectedBeforeTransfer(t *testing.T) {
-	body := &errReader{err: fmt.Errorf("body must not be read")}
-	fake := &fakeGetter{
-		body:          []byte("0123456789"),
-		bodyReader:    body,
-		contentLength: new(int64(1 << 30)),
-	}
+	// The store announces a huge object and sends none of it, so a download that read
+	// the body before consulting the reported length would fail on the truncated
+	// transfer rather than on the limit.
+	srv := newFakeS3(t, s3Object{
+		body:           []byte("0123456789"),
+		declaredLength: new(int64(1 << 30)),
+		suppressBody:   true,
+	})
 
-	_, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
-		WithClient(fake), WithMaxDownloadSize(10), WithTempDir(t.TempDir()))
+	_, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"},
+		WithMaxDownloadSize(10), WithTempDir(t.TempDir()))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exceeds maximum allowed size")
-	assert.Zero(t, body.off, "the body must not be read when the reported length already exceeds the limit")
 }
 
 func TestDownload_TempDirUnwritable(t *testing.T) {
-	_, err := Download(t.Context(), Request{BucketName: "my-bucket", ObjectKey: "my-key"},
-		WithClient(&fakeGetter{body: []byte("content")}),
+	srv := newFakeS3(t, s3Object{body: []byte("content")})
+
+	_, err := downloadFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "my-key"},
 		WithTempDir(filepath.Join(t.TempDir(), "does-not-exist")))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error creating temporary file for s3 object my-bucket/my-key")
 }
 
 func TestDownload_EmptyObject(t *testing.T) {
-	res, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
-		WithClient(&fakeGetter{body: []byte{}}), WithTempDir(t.TempDir()))
+	srv := newFakeS3(t, s3Object{body: []byte{}})
+
+	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(t.TempDir()))
 	require.NoError(t, err)
 	assert.Empty(t, readBlob(t, res.Blob))
 }

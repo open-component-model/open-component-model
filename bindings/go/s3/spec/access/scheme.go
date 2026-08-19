@@ -7,10 +7,6 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
 )
 
-const (
-	S3BucketConsumerType = "S3Bucket"
-)
-
 var V1VersionedType = runtime.NewVersionedType(v1.Type, v1.Version)
 
 var Scheme = runtime.NewScheme()

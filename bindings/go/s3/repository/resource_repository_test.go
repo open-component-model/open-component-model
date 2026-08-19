@@ -1,15 +1,18 @@
 package repository
 
 import (
-	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
+	"hash/crc32"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -19,35 +22,79 @@ import (
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
+	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
+	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 )
 
-// WithClient injects a pre-built S3 client. It lives in this test-only file because
-// it is sound only when every resource shares one endpoint, region and identity.
-func WithClient(client download.ObjectGetter) Option {
-	return func(o *Options) {
-		o.client = client
-	}
+// fakeS3 is an httptest server answering GetObject with a canned object, so that the
+// repository is exercised over the real AWS SDK rather than a stubbed client. It
+// serves only what the repository itself needs to be tested — a body and the version
+// the store reports — because everything the download does with the response is
+// covered in the download package.
+type fakeS3 struct {
+	*httptest.Server
+
+	body      []byte
+	versionID string
+
+	mu       sync.Mutex
+	requests []s3Request
 }
 
-// fakeGetter is a stand-in S3 client returning canned object content and recording
-// the input it was called with.
-type fakeGetter struct {
-	body        []byte
-	contentType string
-	versionID   string
-	gotInput    *s3.GetObjectInput
+// s3Request is one request a [fakeS3] answered.
+type s3Request struct {
+	// path is the request path, which is /bucket/key for path-style addressing.
+	path string
+	// versionID is the versionId query parameter, empty when none was sent.
+	versionID string
 }
 
-func (f *fakeGetter) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
-	f.gotInput = in
-	out := &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(f.body))}
-	if f.contentType != "" {
-		out.ContentType = new(f.contentType)
+// newFakeS3 starts a server serving body, reporting versionID as the object version
+// when it is not empty, and stops it when the test ends.
+func newFakeS3(t *testing.T, body []byte, versionID string) *fakeS3 {
+	t.Helper()
+
+	f := &fakeS3{body: body, versionID: versionID}
+	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.requests = append(f.requests, s3Request{
+			path:      r.URL.Path,
+			versionID: r.URL.Query().Get("versionId"),
+		})
+		f.mu.Unlock()
+
+		if f.versionID != "" {
+			w.Header().Set("x-amz-version-id", f.versionID)
+		}
+		// Real S3 reports a checksum, and the SDK warns about every response carrying none.
+		sum := make([]byte, 4)
+		binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(f.body))
+		w.Header().Set("x-amz-checksum-crc32", base64.StdEncoding.EncodeToString(sum))
+
+		_, _ = w.Write(f.body)
+	}))
+	t.Cleanup(f.Close)
+
+	return f
+}
+
+// recorded returns the requests the server answered, in the order it answered them.
+func (f *fakeS3) recorded() []s3Request {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return append([]s3Request(nil), f.requests...)
+}
+
+// fakeCredentials are static credentials for [fakeS3]. Their value is irrelevant — the
+// fake verifies no signature — but supplying them keeps the AWS default credential
+// chain, and the instance-metadata lookups it makes, out of the tests.
+func fakeCredentials() *credv1.S3Credentials {
+	return &credv1.S3Credentials{
+		Type:            credv1.S3CredentialsVersionedType,
+		AccessKeyID:     "test-access-key",
+		SecretAccessKey: "test-secret-key",
 	}
-	if f.versionID != "" {
-		out.VersionId = new(f.versionID)
-	}
-	return out, nil
 }
 
 func s3Resource(spec *v1.S3Bucket) *descriptor.Resource {
@@ -55,6 +102,15 @@ func s3Resource(spec *v1.S3Bucket) *descriptor.Resource {
 	r := &descriptor.Resource{}
 	r.Access = spec
 	return r
+}
+
+// servedBy points spec at srv. The fake serves no bucket subdomains, so the access is
+// addressed path-style.
+func servedBy(srv *fakeS3, spec *v1.S3Bucket) *v1.S3Bucket {
+	spec.Endpoint = srv.URL
+	spec.UsePathStyle = true
+
+	return spec
 }
 
 func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
@@ -66,7 +122,7 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	require.Empty(t, id[runtime.IdentityAttributeHostname])
 	require.Empty(t, id[runtime.IdentityAttributeScheme])
 	require.Equal(t, "my-bucket/path/to/blob", id[runtime.IdentityAttributePath])
-	require.Equal(t, accessspec.S3BucketConsumerType, id[runtime.IdentityAttributeType])
+	require.Equal(t, identityv1.S3BucketIdentityType, id[runtime.IdentityAttributeType])
 
 	_, err = repo.GetResourceCredentialConsumerIdentity(context.Background(),
 		s3Resource(&v1.S3Bucket{BucketName: "my-bucket"}))
@@ -87,11 +143,12 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 
 func Test_DownloadResource(t *testing.T) {
 	content := []byte("hello from s3")
-	fake := &fakeGetter{body: content, contentType: "text/plain"}
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()}, WithClient(fake))
+	srv := newFakeS3(t, content, "")
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
 
 	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(&v1.S3Bucket{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"}), nil)
+		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"})),
+		fakeCredentials())
 	require.NoError(t, err)
 
 	rc, err := b.ReadCloser()
@@ -101,19 +158,20 @@ func Test_DownloadResource(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, content, got)
 
-	require.Equal(t, "my-bucket", aws.ToString(fake.gotInput.Bucket))
-	require.Equal(t, "path/blob.txt", aws.ToString(fake.gotInput.Key))
-	require.Equal(t, "v-1", aws.ToString(fake.gotInput.VersionId))
+	requests := srv.recorded()
+	require.Len(t, requests, 1)
+	require.Equal(t, "/my-bucket/path/blob.txt", requests[0].path)
+	require.Equal(t, "v-1", requests[0].versionID)
 }
 
 func Test_ProcessResourceDigest(t *testing.T) {
 	content := []byte("digest me")
 	tempFolder := t.TempDir()
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
-		WithClient(&fakeGetter{body: content}))
+	srv := newFakeS3(t, content, "")
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
 
 	res, err := repo.ProcessResourceDigest(context.Background(),
-		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"}), nil)
+		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
 	require.NoError(t, err)
 	require.NotNil(t, res.Digest)
 	require.Equal(t, godigest.FromBytes(content).Encoded(), res.Digest.Value)
@@ -168,13 +226,13 @@ func Test_ProcessResourceDigest_VerifiesLeniently(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()},
-				WithClient(&fakeGetter{body: content}))
+			srv := newFakeS3(t, content, "")
+			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
 
-			resource := s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"})
+			resource := s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"}))
 			resource.Digest = tt.digest
 
-			res, err := repo.ProcessResourceDigest(context.Background(), resource, nil)
+			res, err := repo.ProcessResourceDigest(context.Background(), resource, fakeCredentials())
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.wantErr)
@@ -259,11 +317,11 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()},
-				WithClient(&fakeGetter{body: []byte("digest me"), versionID: tt.versionID}))
+			srv := newFakeS3(t, []byte("digest me"), tt.versionID)
+			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
 
-			resource := s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k", Version: tt.specVersion})
-			res, err := repo.ProcessResourceDigest(context.Background(), resource, nil)
+			resource := s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k", Version: tt.specVersion}))
+			res, err := repo.ProcessResourceDigest(context.Background(), resource, fakeCredentials())
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.wantErr)
@@ -290,11 +348,11 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 }
 
 func Test_ProcessResourceDigest_DoesNotMutateInputResource(t *testing.T) {
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()},
-		WithClient(&fakeGetter{body: []byte("digest me"), versionID: "v-99"}))
+	srv := newFakeS3(t, []byte("digest me"), "v-99")
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
 
-	resource := s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"})
-	res, err := repo.ProcessResourceDigest(context.Background(), resource, nil)
+	resource := s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"}))
+	res, err := repo.ProcessResourceDigest(context.Background(), resource, fakeCredentials())
 	require.NoError(t, err)
 
 	original := v1.S3Bucket{}
@@ -309,11 +367,11 @@ func Test_ProcessResourceDigest_DoesNotMutateInputResource(t *testing.T) {
 func Test_DownloadResource_StreamsIntoConfiguredTempFolder(t *testing.T) {
 	content := []byte("hello from s3")
 	tempFolder := t.TempDir()
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
-		WithClient(&fakeGetter{body: content}))
+	srv := newFakeS3(t, content, "")
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
 
 	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"}), nil)
+		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
 	require.NoError(t, err)
 
 	entries, err := os.ReadDir(tempFolder)
@@ -330,11 +388,11 @@ func Test_DownloadResource_StreamsIntoConfiguredTempFolder(t *testing.T) {
 
 func Test_DownloadResource_BlobOwnsItsFile(t *testing.T) {
 	tempFolder := t.TempDir()
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
-		WithClient(&fakeGetter{body: []byte("hello from s3")}))
+	srv := newFakeS3(t, []byte("hello from s3"), "")
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
 
 	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"}), nil)
+		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
 	require.NoError(t, err)
 
 	entries, err := os.ReadDir(tempFolder)
@@ -352,11 +410,11 @@ func Test_DownloadResource_BlobOwnsItsFile(t *testing.T) {
 
 func Test_ProcessResourceDigest_LeavesNoTempFile(t *testing.T) {
 	tempFolder := t.TempDir()
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
-		WithClient(&fakeGetter{body: []byte("digest me")}))
+	srv := newFakeS3(t, []byte("digest me"), "")
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
 
 	_, err := repo.ProcessResourceDigest(context.Background(),
-		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"}), nil)
+		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
 	require.NoError(t, err)
 
 	entries, err := os.ReadDir(tempFolder)
@@ -370,10 +428,11 @@ func Test_NewResourceRepository_NilFilesystemConfig(t *testing.T) {
 	t.Setenv("TMPDIR", osTempDir)
 
 	content := []byte("no config")
-	repo := NewResourceRepository(nil, WithClient(&fakeGetter{body: content}))
+	srv := newFakeS3(t, content, "")
+	repo := NewResourceRepository(nil)
 
 	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "k"}), nil)
+		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
 	require.NoError(t, err)
 
 	rc, err := b.ReadCloser()

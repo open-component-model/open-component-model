@@ -32,7 +32,6 @@ var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 // ResourceRepository implements the ResourceRepository interface for the S3Bucket
 // access type.
 type ResourceRepository struct {
-	client           download.ObjectGetter
 	maxDownloadSize  *int64
 	httpConfig       *httpv1alpha1.Config
 	httpClient       *http.Client
@@ -51,7 +50,6 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 		opt(options)
 	}
 	return &ResourceRepository{
-		client:           options.client,
 		maxDownloadSize:  options.MaxDownloadSize,
 		httpConfig:       options.HTTPConfig,
 		httpClient:       options.HTTPClient,
@@ -123,9 +121,6 @@ func (r *ResourceRepository) download(ctx context.Context, spec *v1.S3Bucket, cr
 	opts := []download.Option{
 		download.WithCredentials(credentials),
 		download.WithTempDir(r.filesystemConfig.TempFolder),
-	}
-	if r.client != nil {
-		opts = append(opts, download.WithClient(r.client))
 	}
 	if r.maxDownloadSize != nil {
 		opts = append(opts, download.WithMaxDownloadSize(*r.maxDownloadSize))

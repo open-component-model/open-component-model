@@ -1,10 +1,7 @@
 package download
 
 import (
-	"context"
 	"net/http"
-
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -15,14 +12,7 @@ import (
 // by free disk rather than by RAM. Use [WithMaxDownloadSize] to cap it.
 const DefaultMaxDownloadSize int64 = 0
 
-// ObjectGetter is the subset of the S3 client used by the downloader. The
-// generated *s3.Client satisfies it, and tests can inject a fake.
-type ObjectGetter interface {
-	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
-}
-
 type option struct {
-	Client          ObjectGetter
 	HTTPClient      *http.Client
 	Credentials     runtime.Typed
 	MaxDownloadSize *int64
@@ -32,12 +22,6 @@ type option struct {
 
 // Option configures a download.
 type Option func(*option)
-
-// WithClient injects a pre-built S3 client (or a fake, in tests). When set, the
-// downloader does not construct its own client from the request and credentials.
-func WithClient(c ObjectGetter) Option {
-	return func(o *option) { o.Client = c }
-}
 
 // WithCredentials sets the OCM credentials used to build the S3 client. When nil,
 // the AWS default credential chain is used.
