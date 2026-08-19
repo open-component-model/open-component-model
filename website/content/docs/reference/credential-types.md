@@ -30,6 +30,7 @@ OCM ships with the following built-in credential types:
 | [`OCICredentials/v1`](#ocicredentialsv1)                   | `OCIRegistry` consumers                  | OCI registry username/password and token auth                   |
 | [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1)         | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs                  |
 | [`WgetCredentials/v1`](#wgetcredentialsv1)                 | `Wget` consumers                         | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
+| [`GitHubCredentials/v1`](#githubcredentialsv1)             | `GitHubRepository` consumers             | GitHub and GitHub Enterprise REST API token auth                |
 | [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
 | [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
 | [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers      | OIDC token for Sigstore keyless signing via Fulcio              |
@@ -213,6 +214,43 @@ is set, and a client certificate has no effect on a plain `http://` URL.
 [`Wget`]({{< relref "credential-consumer-identities.md#wget" >}}) consumer identities, covering both the
 [`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
 [`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}).
+
+---
+
+## GitHubCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/github/v1/GitHubCredentials.schema.json" >}}
+
+### Example
+
+```yaml
+consumers:
+  - identity:
+      type: GitHubRepository
+      hostname: github.com
+    credentials:
+      - type: GitHubCredentials/v1
+        token: ghp_example_token
+```
+
+The legacy [`Credentials/v1`](#directcredentialsv1) fallback works as well, with `token` in its `properties` map:
+
+```yaml
+consumers:
+  - identity:
+      type: GitHubRepository
+      hostname: github.com
+    credentials:
+      - type: Credentials/v1
+        properties:
+          token: ghp_example_token
+```
+
+Configuring no consumer at all is valid: the GitHub REST API is then called anonymously.
+
+### Used With
+
+[`GitHubRepository`]({{< relref "credential-consumer-identities.md#githubrepository" >}}) consumer identities.
 
 ---
 
