@@ -9,6 +9,12 @@ import (
 
 const (
 	Type = "S3Bucket"
+
+	// LowerCamelType is the lowerCamelCase spelling of [Type]. OCM access types are
+	// conventionally written that way in descriptors (ociArtifact, ociBlob), so it is
+	// declared alongside [Type] in the JSON schema and registered as a scheme alias.
+	// Scheme lookups are exact, so the spelling has to match the schema byte for byte.
+	LowerCamelType = "s3Bucket"
 )
 
 // S3Bucket describes access to a single blob (object) stored in an S3Bucket or S3Bucket-compatible

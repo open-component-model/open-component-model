@@ -7,6 +7,10 @@ vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
 
 tasks:
+  test:
+    cmds:
+      - task: test/integration
+
   test/integration:
     cmds:
       - task: reuse:run-go-test
