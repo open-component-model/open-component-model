@@ -784,6 +784,7 @@ This pattern allows developers to ship deployment instructions alongside their s
 
 ## Next Steps
 
+- [Deploy an Application from Inline Manifests with OCM and kro]({{< relref "deploy-inline-manifests.md" >}}) covers the same delivery without a Helm chart, using plain manifests and kro
 - [How-to: Air-Gap Transfer]({{< relref "air-gap-transfer.md" >}}) — Transfer components to disconnected environments
 - [How-to: Configure Credentials for Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}) — Set up private registry access
 - [Concept: OCM Controllers]({{< relref "ocm-controllers.md" >}}) — Understand the controller architecture

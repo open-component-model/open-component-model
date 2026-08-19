@@ -81,7 +81,7 @@ drives the whole graph. See [kro Resource Graph Definitions](https://kro.dev/doc
 <summary>Architecture diagram</summary>
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 320}}}%%
+%%{init: {"theme":"base", "flowchart": {"wrappingWidth": 320}}}%%
 flowchart TB
     subgraph legend[Legend]
         direction TB
@@ -89,7 +89,7 @@ flowchart TB
             direction LR
             l1a[ ] -- referenced by / data flow --> l1b[ ]
             l2a[ ] == creates ==> l2b[ ]
-            l3a[ ] eLegDot@-. instance of .-> l3b[ ]
+            l3a[ ] eLegDot@-. instantiated as .-> l3b[ ]
             l4a[ ] eKroLeg@-- kro-native: templated directly --> l4b[ ]
         end
         subgraph boxes[ ]
@@ -143,8 +143,8 @@ flowchart TB
         k8sDeployerB ==> rgdSystem
         rgdPodinfo ==> crdPodinfo
         rgdSystem ==> crdSystem
-        instanceSystem eInstSys@-. instance of .-> crdSystem
-        podinfoInstance eInstPod@-. instance of .-> crdPodinfo
+        crdSystem eInstSys@-. instantiated as .-> instanceSystem
+        crdPodinfo eInstPod@-. instantiated as .-> podinfoInstance
         rgdPodinfo eKnative@-- kro-native: templated directly --> workload
     end
 
