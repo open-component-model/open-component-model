@@ -249,6 +249,7 @@ const CLI_DERIVED_MODULES = [
     `${MODULE_PREFIX}/bindings/go/constructor`,
     `${MODULE_PREFIX}/bindings/go/credentials`,
     `${MODULE_PREFIX}/bindings/go/descriptor/v2`,
+    `${MODULE_PREFIX}/bindings/go/github`,
     `${MODULE_PREFIX}/bindings/go/gpg`,
     `${MODULE_PREFIX}/bindings/go/helm`,
     `${MODULE_PREFIX}/bindings/go/http`,
@@ -272,6 +273,7 @@ const MONOLITHIC_BINDINGS_MODULE = `${MODULE_PREFIX}/bindings/go`;
 const BINDING_SCHEMA_MOUNTS = [
     { pkg: 'constructor',   source: 'spec/v1/resources',                                 target: 'schemas/bindings/go/constructor' },
     { pkg: 'descriptor/v2', source: 'resources',                                         target: 'schemas/bindings/go/descriptor/v2' },
+    { pkg: 'github', source: 'spec/credentials/v1/schemas', target: 'schemas/bindings/go/credentials/github/v1' },
     { pkg: 'http',          source: 'spec/config/v1alpha1/schemas',                      target: 'schemas/bindings/go/http' },
     { pkg: 'oci',           source: 'spec/credentials/v1/schemas',                       target: 'schemas/bindings/go/credentials/oci/v1' },
     { pkg: 'helm',          source: 'spec/credentials/v1/schemas',                       target: 'schemas/bindings/go/credentials/helm/v1' },
@@ -432,6 +434,8 @@ function updateImportTags(parsed, version, fullVersion, deps) {
             newTag = deps[`${MODULE_PREFIX}/bindings/go/constructor`];
         } else if (deps && imp.path.endsWith('/bindings/go/descriptor/v2')) {
             newTag = deps[`${MODULE_PREFIX}/bindings/go/descriptor/v2`];
+        } else if (deps && imp.path.endsWith('/bindings/go/github')) {
+            newTag = deps[`${MODULE_PREFIX}/bindings/go/github`];
         } else if (deps && imp.path.endsWith('/bindings/go/http')) {
             newTag = deps[`${MODULE_PREFIX}/bindings/go/http`];
         } else if (deps && imp.path.endsWith('/bindings/go/oci')) {
