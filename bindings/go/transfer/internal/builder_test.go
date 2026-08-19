@@ -25,7 +25,7 @@ type stubCredResolver struct {
 }
 
 func TestNewBuilder(t *testing.T) {
-	b := NewDefaultBuilder(&stubRepoProvider{}, &stubResourceRepo{}, &stubCredResolver{})
+	b := NewDefaultBuilder(&stubRepoProvider{}, &stubResourceRepo{}, &stubCredResolver{}, nil)
 	assert.NotNil(t, b)
 }
 
@@ -45,6 +45,6 @@ func TestNewDefaultBuilder_CanBuildGitHubGraph(t *testing.T) {
 
 	// BuildAndCheck resolves a transformer for every node type. Providers are only used at
 	// Process time, so nil is fine here.
-	_, err = NewDefaultBuilder(nil, nil, nil).BuildAndCheck(tgd)
+	_, err = NewDefaultBuilder(nil, nil, nil, nil).BuildAndCheck(tgd)
 	require.NoError(t, err, "default builder must resolve the GetGitHubCommit transformer")
 }
