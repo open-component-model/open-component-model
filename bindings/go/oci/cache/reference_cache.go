@@ -18,6 +18,8 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/sync/singleflight"
+
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 )
 
 // referenceSubdir is the directory under [Options.Dir] that the
@@ -158,7 +160,7 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 // in-memory entry is still added and a warning is logged. The caller
 // never sees an error from this method.
 func (c *ReferenceCache) Add(namespace, reference string, desc ociImageSpecV1.Descriptor) {
-	normRef := c.normalizeReference(namespace, reference)
+	normRef := c.normalizeReference(reference)
 	c.lru.Add(referenceKey{namespace, normRef}, referenceEntry{Descriptor: desc, SavedAt: time.Now()})
 	if err := c.writeNamespace(namespace); err != nil {
 		c.logger.Warn("refcache: write snapshot failed",
@@ -178,7 +180,7 @@ func (c *ReferenceCache) Invalidate(namespace, reference string) {
 	if c == nil {
 		return
 	}
-	normRef := c.normalizeReference(namespace, reference)
+	normRef := c.normalizeReference(reference)
 	c.lru.Remove(referenceKey{namespace, normRef})
 	if err := c.writeNamespace(namespace); err != nil {
 		c.logger.Warn("refcache: write snapshot after invalidate failed",
@@ -192,7 +194,7 @@ func (c *ReferenceCache) Invalidate(namespace, reference string) {
 // pair and whether it was found. See [ReferenceCache.Add] for the
 // namespace contract.
 func (c *ReferenceCache) Lookup(namespace, reference string) (ociImageSpecV1.Descriptor, bool) {
-	normRef := c.normalizeReference(namespace, reference)
+	normRef := c.normalizeReference(reference)
 	v, ok := c.lru.Get(referenceKey{namespace, normRef})
 	return v.Descriptor, ok
 }
@@ -209,7 +211,7 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, namespa
 	if c == nil {
 		return upstream.Resolve(ctx, reference)
 	}
-	normRef := c.normalizeReference(namespace, reference)
+	normRef := c.normalizeReference(reference)
 	if v, ok := c.lru.Get(referenceKey{namespace, normRef}); ok {
 		c.logger.DebugContext(ctx, "refcache: hit",
 			slog.String("namespace", namespace),
@@ -246,16 +248,13 @@ func (c *ReferenceCache) pathForNamespace(namespace string) string {
 	return filepath.Join(c.opts.Dir, hex.EncodeToString(sum[:])+referenceFileExt)
 }
 
-// normalizeReference strips the registry/repository prefix (the namespace)
-// from the reference if present, including the colon/at separator.
-// This prevents duplicating the namespace inside the reference cache key.
-func (c *ReferenceCache) normalizeReference(namespace, reference string) string {
-	if namespace != "" && strings.HasPrefix(reference, namespace) {
-		remainder := reference[len(namespace):]
-		if strings.HasPrefix(remainder, ":") {
-			return remainder[1:]
-		} else if strings.HasPrefix(remainder, "@") {
-			return remainder[1:]
+// normalizeReference extracts the bare tag or digest from the reference if
+// possible. This prevents duplicating the registry/repository prefix inside
+// the reference cache key when fully-qualified references are used.
+func (c *ReferenceCache) normalizeReference(reference string) string {
+	if ref, err := looseref.ParseReference(reference); err == nil {
+		if refOrTag := ref.ReferenceOrTag(); refOrTag != "" {
+			return refOrTag
 		}
 	}
 	return reference

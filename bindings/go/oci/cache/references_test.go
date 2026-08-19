@@ -73,18 +73,18 @@ func TestReferenceCache_Invalidate_RemovesEntryAndSurvivesRestart(t *testing.T) 
 
 	c1, err := NewReferenceCache(Options{Dir: dir})
 	require.NoError(t, err)
-	c1.Add("ns", "tag:v1", desc)
-	_, ok := c1.Lookup("ns", "tag:v1")
+	c1.Add("ns", "v1", desc)
+	_, ok := c1.Lookup("ns", "v1")
 	require.True(t, ok)
 
-	c1.Invalidate("ns", "tag:v1")
-	_, ok = c1.Lookup("ns", "tag:v1")
+	c1.Invalidate("ns", "v1")
+	_, ok = c1.Lookup("ns", "v1")
 	assert.False(t, ok, "entry must be gone from the in-memory LRU")
 
 	// A restart must not resurrect the invalidated mapping.
 	c2, err := NewReferenceCache(Options{Dir: dir})
 	require.NoError(t, err)
-	_, ok = c2.Lookup("ns", "tag:v1")
+	_, ok = c2.Lookup("ns", "v1")
 	assert.False(t, ok, "invalidated mapping must not survive a restart")
 }
 
@@ -108,7 +108,7 @@ func TestReferenceCache_Load_DropsExpiredEntries(t *testing.T) {
 
 	c1, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
 	require.NoError(t, err)
-	c1.Add("ns", "tag:v1", desc)
+	c1.Add("ns", "v1", desc)
 
 	// Backdate the persisted entry beyond the TTL by rewriting its
 	// snapshot file with an old savedAt.
@@ -117,9 +117,9 @@ func TestReferenceCache_Load_DropsExpiredEntries(t *testing.T) {
 	require.NoError(t, err)
 	var snap referenceFileSnapshot
 	require.NoError(t, json.Unmarshal(raw, &snap))
-	entry := snap.References["tag:v1"]
+	entry := snap.References["v1"]
 	entry.SavedAt = time.Now().Add(-2 * time.Hour)
-	snap.References["tag:v1"] = entry
+	snap.References["v1"] = entry
 	rewritten, err := json.Marshal(snap)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(snapPath, rewritten, 0o600))
@@ -127,7 +127,7 @@ func TestReferenceCache_Load_DropsExpiredEntries(t *testing.T) {
 	// A restart must honour the TTL and drop the stale mapping.
 	c2, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
 	require.NoError(t, err)
-	_, ok := c2.Lookup("ns", "tag:v1")
+	_, ok := c2.Lookup("ns", "v1")
 	assert.False(t, ok, "entry older than TTL must be dropped on reload")
 }
 
@@ -141,11 +141,11 @@ func TestReferenceCache_Load_KeepsFreshEntriesWithinTTL(t *testing.T) {
 
 	c1, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
 	require.NoError(t, err)
-	c1.Add("ns", "tag:v1", desc)
+	c1.Add("ns", "v1", desc)
 
 	c2, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
 	require.NoError(t, err)
-	got, ok := c2.Lookup("ns", "tag:v1")
+	got, ok := c2.Lookup("ns", "v1")
 	require.True(t, ok, "a fresh entry within TTL must survive a restart")
 	assert.Equal(t, desc, got)
 }
@@ -173,7 +173,7 @@ func TestReferenceCache_Resolve_CollapsesConcurrentMisses(t *testing.T) {
 	results := make([]ociImageSpecV1.Descriptor, N)
 	for i := range N {
 		wg.Go(func() {
-			got, err := c.Resolve(t.Context(), upstream, "ns", "tag:v1")
+			got, err := c.Resolve(t.Context(), upstream, "ns", "v1")
 			require.NoError(t, err)
 			results[i] = got
 		})
@@ -380,50 +380,38 @@ func TestReferenceCache_NormalizeReference(t *testing.T) {
 	c := newTestRefCache(t, Options{})
 	tests := []struct {
 		name      string
-		namespace string
 		reference string
 		want      string
 	}{
 		{
-			"empty namespace",
-			"",
-			"ghcr.io/owner/repo:v1",
-			"ghcr.io/owner/repo:v1",
-		},
-		{
-			"unmatched namespace",
-			"ghcr.io/other/repo",
-			"ghcr.io/owner/repo:v1",
-			"ghcr.io/owner/repo:v1",
-		},
-		{
-			"matched tag reference",
-			"ghcr.io/owner/repo",
+			"full reference with tag",
 			"ghcr.io/owner/repo:v1",
 			"v1",
 		},
 		{
-			"matched digest reference",
-			"ghcr.io/owner/repo",
+			"full reference with digest",
 			"ghcr.io/owner/repo@sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
 			"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
 		},
 		{
-			"partial matched namespace prefix without separator",
-			"ghcr.io/owner/repo",
-			"ghcr.io/owner/repository:v1",
-			"ghcr.io/owner/repository:v1",
+			"already bare tag reference",
+			"v1",
+			"v1",
 		},
 		{
-			"already stripped reference",
-			"ghcr.io/owner/repo",
-			"v1",
-			"v1",
+			"already bare digest reference",
+			"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+			"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+		},
+		{
+			"weird non-standard reference falls back to original",
+			"ghcr.io/owner/repo:tag\nwith\ttabs",
+			"ghcr.io/owner/repo:tag\nwith\ttabs",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := c.normalizeReference(tc.namespace, tc.reference)
+			got := c.normalizeReference(tc.reference)
 			assert.Equal(t, tc.want, got)
 		})
 	}
