@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags } = require('./register-docs-version');
+const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS } = require('./register-docs-version');
 
 // Resolved CLI-derived versions for tests that need every binding import emitted.
 // buildModuleBlocks now drops bindings whose version is undefined (filter at the
@@ -672,4 +672,88 @@ test('updateImportTags: patching freshly-built blocks equals building directly w
     const { imports: directImports } = buildModuleBlocks('0.3', '0.3.1', deps);
 
     assert.deepEqual(parsed.imports, directImports);
+});
+
+// --- monolithic bindings layout ---
+
+// Deps as resolved from a CLI go.mod of the monolithic era: a single module.
+const MONOLITH_DEPS = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.0' };
+
+test('buildModuleBlocks: monolithic bindings yield one import (website + CLI + bindings + controller)', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    assert.equal(imports.length, 4);
+    const monolith = imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE);
+    assert.ok(monolith, 'monolithic bindings import should exist');
+    assert.equal(monolith.version, 'v0.15.0');
+});
+
+test('buildModuleBlocks: monolithic import mounts cover every schema directory', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const monolith = imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE);
+    assert.equal(monolith.mounts.length, BINDING_SCHEMA_MOUNTS.length);
+    for (const m of monolith.mounts) {
+        assert.deepEqual(m.sites.matrix.versions, ['0.15']);
+        assert.match(m.target, /^static\/0\.15\/schemas\/bindings\/go\//);
+    }
+});
+
+test('buildModuleBlocks: monolithic and legacy layouts mount the same schema set', () => {
+    const { imports: legacy } = buildModuleBlocks('0.15', '0.15.0', ALL_DEPS);
+    const { imports: monolith } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const legacyTargets = legacy.flatMap(i => i.mounts.map(m => m.target)).sort();
+    const monolithTargets = monolith.flatMap(i => i.mounts.map(m => m.target)).sort();
+    assert.deepEqual(monolithTargets, legacyTargets);
+
+    // The module merge kept the package directory layout intact, so each
+    // monolithic mount source is the legacy package-relative source prefixed
+    // with the package directory.
+    const monolithByTarget = new Map(
+        monolith.find(i => i.path === MONOLITHIC_BINDINGS_MODULE).mounts.map(m => [m.target, m.source])
+    );
+    for (const { pkg, source, target } of BINDING_SCHEMA_MOUNTS) {
+        assert.equal(monolithByTarget.get(`static/0.15/${target}`), `${pkg}/${source}`);
+    }
+});
+
+test('buildModuleBlocks: monolithic layout wins if both layouts resolve (impossible in Go, defensive)', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', { ...ALL_DEPS, ...MONOLITH_DEPS });
+    assert.equal(imports.filter(i => i.path === MONOLITHIC_BINDINGS_MODULE).length, 1);
+    assert.equal(imports.some(i => i.path.endsWith('/bindings/go/oci')), false);
+});
+
+test('hasAllImportsForVersion: monolithic layout is consistent', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    assert.equal(hasAllImportsForVersion({ imports }, '0.15', MONOLITH_DEPS), true);
+});
+
+test('hasAllImportsForVersion: detects a truncated monolithic mount list', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const truncated = imports.map(i =>
+        i.path === MONOLITHIC_BINDINGS_MODULE ? { ...i, mounts: i.mounts.slice(1) } : i
+    );
+    assert.equal(hasAllImportsForVersion({ imports: truncated }, '0.15', MONOLITH_DEPS), false);
+});
+
+test('updateImportTags: updates monolithic bindings import on patch releases', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const parsed = { imports };
+    const changed = updateImportTags(parsed, '0.15', '0.15.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.1' });
+    assert.equal(changed, true);
+    assert.equal(parsed.imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE).version, 'v0.15.1');
+});
+
+test('updateImportTags: monolithic bindings untouched when deps not provided', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const parsed = { imports };
+    const changed = updateImportTags(parsed, '0.15', '0.15.1');
+    assert.equal(changed, true); // website/cli/controller still bump
+    assert.equal(parsed.imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE).version, 'v0.15.0');
+});
+
+test('updateImportTags: monolithic patch roundtrip equals fresh build with patch version', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const parsed = { imports };
+    updateImportTags(parsed, '0.15', '0.15.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.1' });
+    const { imports: direct } = buildModuleBlocks('0.15', '0.15.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.1' });
+    assert.deepEqual(parsed.imports, direct);
 });
