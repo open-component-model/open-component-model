@@ -1,5 +1,5 @@
 ---
-title: Deploy Helm Charts with Bootstrap Setup
+title: Deploy an Application from a Helm Chart with OCM and kro
 description: "Deploy a Helm Chart using a ResourceGraphDefinition delivered with OCM."
 icon: "⚙️"
 weight: 61
@@ -8,10 +8,15 @@ toc: true
 
 ## What You'll Learn
 
-In this tutorial, you'll learn how to package deployment instructions (a `ResourceGraphDefinition`) inside an OCM
-component, so operators can deploy your Helm chart without knowing the underlying resource structure. You'll also learn
-**localization**—how to automatically update image references in the
-deployment instructions when transferring components between registries.
+Your application already ships as a Helm chart, and you want its delivery to be just as repeatable: one versioned
+OCM component that carries the chart, its container image, and the instructions to deploy it. Promote that component
+from a staging registry to production, or hand it to an air-gapped cluster, and the image references should update
+themselves. Patching a values file to correct a registry path is exactly what this avoids.
+
+This tutorial builds that pipeline. You package the chart as an OCM component, capture its deployment as a kro
+`ResourceGraphDefinition`, and let the OCM controllers deliver and localize it into the cluster. A GitOps deployer
+(Flux or Argo CD) renders the chart, so operators install it without touching its internals.
+[Podinfo](https://github.com/stefanprodan/podinfo) stands in for your application.
 
 By the end, you'll have:
 
@@ -73,14 +78,21 @@ The following diagram shows the complete resource flow. You can refer back to it
 <summary>View Resource Overview Diagram</summary>
 
 ```mermaid
+%%{init: {"theme":"base", "flowchart": {"wrappingWidth": 300}}}%%
 flowchart TB
     subgraph legend[Legend]
-        start1[ ] ---references[referenced by] --> end1[ ]
-        start2[ ] -.-creates -.-> end2[ ]
-        start3[ ] ---instanceOf[instance of] --> end3[ ]
-        start4[ ] ~~~reconciledBy[reconciled by] ~~~ end4[ ]
-        start5[ ] ~~~k8sObject[k8s object] ~~~ end5[ ]
-        start6[ ] ~~~templateOf[template of] ~~~ end6[ ]
+        direction TB
+        subgraph conns[ ]
+            direction LR
+            l1a[ ] -- referenced by / data flow --> l1b[ ]
+            l2a[ ] == creates ==> l2b[ ]
+            l3a[ ] eLegDot@-. instantiated as .-> l3b[ ]
+        end
+        subgraph boxes[ ]
+            direction TB
+            pillOcm[OCM content] ~~~ pillRec[reconciled by controllers] ~~~ pillK8s[Kubernetes object] ~~~ pillTpl[RGD template]
+        end
+        conns ~~~ boxes
     end
 
     subgraph background[ ]
@@ -121,26 +133,47 @@ flowchart TB
                         source[Source]
                         helmRelease[Release]
                     end
-                    k8sResourceImage ---info[localization reference] --> helmRelease
+                    k8sResourceImage -- localization reference --> helmRelease
                 end
             end
-            helmRelease --> deployment[Deployment: Helm chart]
+            helmRelease ==> deployment[Deployment: Helm chart]
         end
 
-        ocmRepo --> k8sRepo --> k8sComponent --> k8sResourceRGD --> k8sDeployer --> rgd --> crdBootstrap --> instanceBootstrap
-        k8sComponent --> k8sResourceHelm & k8sResourceImage
-        k8sResourceHelm --> source --> helmRelease
+        ocmRepo --> k8sRepo
+        k8sRepo ==> k8sComponent
+        k8sComponent ==> k8sResourceRGD
+        k8sComponent ==> k8sResourceHelm
+        k8sComponent ==> k8sResourceImage
+        k8sResourceRGD --> k8sDeployer
+        k8sDeployer ==> rgd
+        rgd ==> crdBootstrap
+        crdBootstrap eInstOf@-. instantiated as .-> instanceBootstrap
+        k8sResourceHelm --> source
+        source --> helmRelease
     end
 
-    class start1,end1,start2,end2,start3,end3,start4,end4,start5,end5,start6,end6 legendStartEnd;
-    class references,creates,instanceOf legendItems;
-    class templateOf,rgdResourceHelm,rgdResourceImage,rgdSource,rgdHelmRelease templateOf;
-    class info information;
-    class reconciledBy,ocmK8sToolkit,bootstrap,deployer,kro reconciledBy;
-    class k8sObject,rgd,k8sRepo,k8sComponent,k8sResourceRGD,k8sDeployer,k8sResourceHelm,k8sResourceImage,source,helmRelease,deployment,crdBootstrap,instanceBootstrap k8sObject;
-    class ocmRepo,ocmCV,ocmResourceHelm,ocmResourceRGD,ocmResourceImage ocm;
+    eLegDot@{stroke-width: 2px}
+    eInstOf@{stroke-width: 2px}
+
+    classDef ocm fill:#e8def8,stroke:#8e68d0,color:#1a1a1a
+    classDef reconciledBy fill:#def2e4,stroke:#4d8a4d,color:#1a1a1a
+    classDef k8sObject fill:#d7e4fb,stroke:#3c63c8,color:#1a1a1a
+    classDef templateOf fill:#fdf0d5,stroke:#c8891c,color:#1a1a1a
+    classDef cluster fill:#f3f4f6,stroke:#6b7280,color:#1a1a1a
+    classDef anchor fill:#eceff3,stroke:#9aa4b2,color:#1a1a1a
+    classDef ghost fill:transparent,stroke:transparent,color:transparent
+
+    class l1a,l1b,l2a,l2b,l3a,l3b anchor;
+    class ocmRepo,ocmCV,ocmResourceHelm,ocmResourceImage,ocmResourceRGD ocm;
     class k8sCluster cluster;
-    class legend legendStyle;
+    class bootstrap,kro,ocmControllers,deployer reconciledBy;
+    class k8sRepo,k8sComponent,k8sResourceRGD,k8sDeployer,rgd,crdBootstrap,instanceBootstrap,k8sResourceHelm,k8sResourceImage,source,helmRelease,deployment k8sObject;
+    class rgdResourceHelm,rgdResourceImage,rgdSource,rgdHelmRelease templateOf;
+    class pillOcm ocm;
+    class pillRec reconciledBy;
+    class pillK8s k8sObject;
+    class pillTpl templateOf;
+    class conns,boxes ghost;
 ```
 
 </details>
@@ -514,7 +547,7 @@ Check that the component was transferred and resources were localized:
 ocm get cv $OCM_REPO//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 -o yaml | grep imageReference
 ```
 
-You should see image references pointing to `$OCM_REPO/...` instead of the original locations—this confirms localization worked.
+You should see image references pointing to `$OCM_REPO/...` instead of the original locations. This confirms localization worked.
 {{< /step >}}
 {{< /steps >}}
 
@@ -697,7 +730,7 @@ ghcr.io/$GITHUB_USERNAME/component-descriptors/ocm.software/ocm-k8s-toolkit/boot
 ```
 </details>
 
-The image reference points to your registry with a digest—localization worked!
+The image reference points to your registry with a digest. Localization worked!
 {{< /step >}}
 {{< /steps >}}
 
