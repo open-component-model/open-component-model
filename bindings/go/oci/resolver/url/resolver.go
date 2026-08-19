@@ -45,7 +45,7 @@ type CachingResolver struct {
 	DisableCacheProxy bool
 
 	cacheMu sync.RWMutex
-	cache   map[string]spec.Store
+	cache   map[string]*remotestore.RemoteStore
 
 	// blobCache, when non-nil, is layered in front of every
 	// [*remote.Repository] this resolver hands out via
@@ -148,8 +148,13 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		key = fmt.Sprintf("%s://%s", ref.Scheme, key)
 	}
 
-	if store, ok := resolver.getFromCache(key); ok {
-		return store, nil
+	if remoteStore, ok := resolver.getFromCache(key); ok {
+		blobCache := resolver.blobCache.Load()
+		refCache := resolver.referenceCache.Load()
+		if blobCache != nil || refCache != nil {
+			return cache.ProxyRepository(remoteStore.Repository, blobCache, refCache), nil
+		}
+		return remoteStore, nil
 	}
 
 	repo := &remote.Repository{
@@ -172,28 +177,27 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		repo.Client = resolver.baseClient
 	}
 
-	store := spec.Store(&remotestore.RemoteStore{Repository: repo})
+	store := &remotestore.RemoteStore{Repository: repo}
+	resolver.addToCache(key, store)
 
 	blobCache := resolver.blobCache.Load()
 	refCache := resolver.referenceCache.Load()
 	if blobCache != nil || refCache != nil {
-		store = cache.ProxyRepository(repo, blobCache, refCache)
+		return cache.ProxyRepository(repo, blobCache, refCache), nil
 	}
-
-	resolver.addToCache(key, store)
 	return store, nil
 }
 
-func (resolver *CachingResolver) addToCache(reference string, store spec.Store) {
+func (resolver *CachingResolver) addToCache(reference string, store *remotestore.RemoteStore) {
 	resolver.cacheMu.Lock()
 	defer resolver.cacheMu.Unlock()
 	if resolver.cache == nil {
-		resolver.cache = make(map[string]spec.Store)
+		resolver.cache = make(map[string]*remotestore.RemoteStore)
 	}
 	resolver.cache[reference] = store
 }
 
-func (resolver *CachingResolver) getFromCache(reference string) (spec.Store, bool) {
+func (resolver *CachingResolver) getFromCache(reference string) (*remotestore.RemoteStore, bool) {
 	resolver.cacheMu.RLock()
 	defer resolver.cacheMu.RUnlock()
 	store, ok := resolver.cache[reference]
