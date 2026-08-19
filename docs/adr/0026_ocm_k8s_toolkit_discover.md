@@ -29,8 +29,8 @@ Two external consumer projects asked for a query-based mode on top of that ident
   CR-reconcile round-trip is a blocker. That is why ODGs requirements are out of scope for this ADR.
   Details in [ocm-project#1154](https://github.com/open-component-model/ocm-project/issues/1154).
 
-Neither workflow is expressible today. A caller who does not know the exact
-`(component, version, resource, referencePath)` tuple up front has no way to ask the controller
+Neither workflow is expressible today. Currently, the purpose of the OCM K8s Toolkit is to deploy a resource to a
+cluster that has a known identity. There is no way to ask the controller
 "give me all versions of resource R across umbrella C's references" or
 "publish this component's descriptor so I can navigate it".
 
