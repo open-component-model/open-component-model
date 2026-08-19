@@ -58,6 +58,32 @@ func TestRepository_Resolve_DelegatesToReferenceCache(t *testing.T) {
 	assert.Equal(t, desc, got)
 }
 
+func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
+	rc := newTestRefCache(t, Options{})
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("normalized-test")),
+		Size:      15,
+	}
+	inner := &remote.Repository{
+		Reference: registry.Reference{Registry: "ghcr.io", Repository: "owner/repo"},
+	}
+	repo := &Repository{Repository: inner, ReferenceCache: rc}
+
+	// 1. Add as fully-qualified reference
+	rc.Add("ghcr.io/owner/repo", "ghcr.io/owner/repo:v1", desc)
+
+	// 2. Lookup using short tag (should hit, since both normalize to "v1")
+	gotShort, ok := rc.Lookup("ghcr.io/owner/repo", "v1")
+	require.True(t, ok)
+	assert.Equal(t, desc, gotShort)
+
+	// 3. Resolve using fully-qualified reference (should hit)
+	gotFull, err := repo.Resolve(t.Context(), "ghcr.io/owner/repo:v1")
+	require.NoError(t, err)
+	assert.Equal(t, desc, gotFull)
+}
+
 func TestRepository_referenceNamespace(t *testing.T) {
 	tests := []struct {
 		name string
