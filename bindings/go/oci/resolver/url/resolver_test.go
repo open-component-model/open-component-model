@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/registry/remote"
@@ -521,5 +523,41 @@ func TestURLPathResolver_DynamicCacheSwapping(t *testing.T) {
 	store, err = resolver.StoreForReference(ctx, ref)
 	require.NoError(t, err)
 	assert.IsType(t, &remotestore.RemoteStore{}, store)
+}
+
+func TestURLPathResolver_StoreResolve_HitsNormalizedCache(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a ReferenceCache
+	dir := t.TempDir()
+	rc, err := cache.NewReferenceCache(cache.Options{Dir: dir})
+	require.NoError(t, err)
+
+	// Pre-populate cache with the normalized key "v1.0.0" under the repository namespace "example.com/test-component"
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("resolver-cached-descriptor")),
+		Size:      26,
+	}
+	rc.Add("example.com/test-component", "v1.0.0", desc)
+
+	// Create CachingResolver configured with the reference cache
+	resolver, err := url.New(
+		url.WithBaseURL("http://example.com"),
+		url.WithReferenceCache(rc),
+	)
+	require.NoError(t, err)
+
+	// Get store for reference
+	ref := "example.com/test-component:v1.0.0"
+	store, err := resolver.StoreForReference(ctx, ref)
+	require.NoError(t, err)
+
+	// Resolve the fully-qualified reference.
+	// This simulates exactly what getDescriptorOCIImageManifest does.
+	// Since "v1.0.0" is cached, it must return a hit without hitting any remote registry.
+	got, err := store.Resolve(ctx, ref)
+	require.NoError(t, err)
+	assert.Equal(t, desc, got)
 }
 
