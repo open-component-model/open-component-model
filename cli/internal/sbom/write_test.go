@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/sbom"
 )
 
@@ -133,4 +134,47 @@ func TestWrite(t *testing.T) {
 		_, err := sbom.Write(nil, t.TempDir())
 		require.Error(t, err)
 	})
+}
+
+func TestDirectory(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		identity runtime.Identity
+		want     string
+	}{
+		{
+			name:     "a name alone reads as a plain directory",
+			identity: runtime.Identity{"name": "image"},
+			want:     "image",
+		},
+		{
+			name:     "the name leads, the rest follows sorted",
+			identity: runtime.Identity{"os": "linux", "architecture": "amd64", "name": "image"},
+			want:     "image-amd64-linux",
+		},
+		{
+			name:     "values that are not file name characters fold",
+			identity: runtime.Identity{"name": "org/image", "version": "1.0.0"},
+			want:     "org_image-1_0_0",
+		},
+		{
+			name:     "an identity without a name stays sorted by key",
+			identity: runtime.Identity{"os": "linux", "architecture": "amd64"},
+			want:     "amd64-linux",
+		},
+		{
+			name:     "an empty identity falls back",
+			identity: runtime.Identity{},
+			want:     "sboms",
+		},
+		{
+			name:     "values that fold away entirely fall back",
+			identity: runtime.Identity{"name": "..."},
+			want:     "sboms",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, sbom.Directory(tc.identity))
+		})
+	}
 }

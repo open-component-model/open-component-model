@@ -57,7 +57,8 @@ If no transformer is specified, the resource is written directly in its original
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
 
 With --sbom, the Software Bills of Materials describing the resource are downloaded instead of the
-resource itself. They are looked for in two ways, in order:
+resource itself. This is EXPERIMENTAL: what is discovered, how it is written out and the flags
+themselves may change in a future release. They are looked for in two ways, in order:
 
   1. Another resource of the same component version declaring, through the
      "ocm.software/artefact-references" label, that it describes the selected resource.
@@ -66,8 +67,9 @@ resource itself. They are looked for in two ways, in order:
      or the OCI referrers API, are not discovered.
 
 Every SBOM found is written to its own file in a directory, byte for byte as published, so digests
-and signatures over them still apply. The directory is --output, or the resource identity when that
-is not given. The paths written are printed to standard output, one per line.
+and signatures over them still apply. The directory is --output, or the values of the resource
+identity joined by "-" when that is not given, so --identity name=image,architecture=amd64 writes
+into "image-amd64". The paths written are printed to standard output, one per line.
 
 When --output is not provided, the output filename is the resource name.`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
@@ -95,10 +97,12 @@ When --output is not provided, the output filename is the resource name.`,
 	cmd.Flags().String(FlagOutput, "", "output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name.")
 	cmd.Flags().String(FlagOutput, "", "output location to download to. If no transformer is specified, and no "+
 		"format was discovered that can be written to a directory, the resource will be written to a file. "+
-		"With --sbom this is the directory the SBOMs are written into, defaulting to the resource identity.")
+		"With --sbom this is the directory the SBOMs are written into, defaulting to the values of the "+
+		"resource identity joined by \"-\".")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
-	cmd.Flags().Bool(FlagSBOM, false, "download the SBOMs describing the resource instead of the resource itself, "+
-		"writing every SBOM found to its own file in the output directory")
+	cmd.Flags().Bool(FlagSBOM, false, "experimental: download the SBOMs describing the resource instead of the "+
+		"resource itself, writing every SBOM found to its own file in the output directory. What is discovered, "+
+		"how it is written out and this flag itself may change in a future release")
 	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
 		"policy to apply when extracting a resource. "+
 			"If set to 'disable', the resource will not be extracted, even if they could be. "+

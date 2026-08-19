@@ -2,17 +2,44 @@ package sbom
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // extensions names the file a document of a given predicate type is written to.
 var extensions = map[string]string{
 	repository.PredicateTypeSPDX:      ".spdx.json",
 	repository.PredicateTypeCycloneDX: ".cdx.json",
+}
+
+// Directory names the directory the SBOMs of a resource are written into when no output
+// location was given. An identity renders as "name=image,architecture=amd64", which a
+// shell needs quoting for and reads as an assignment, so only its values are used, the
+// resource name leading: "image-amd64".
+func Directory(identity runtime.Identity) string {
+	keys := slices.Sorted(maps.Keys(identity))
+	if index := slices.Index(keys, descriptor.IdentityAttributeName); index > 0 {
+		keys = slices.Insert(slices.Delete(keys, index, index+1), 0, descriptor.IdentityAttributeName)
+	}
+
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if value := safe(identity[key]); value != "" {
+			parts = append(parts, value)
+		}
+	}
+	if len(parts) == 0 {
+		return "sboms"
+	}
+
+	return strings.Join(parts, "-")
 }
 
 // Write writes every discovered SBOM into dir, one file per document, byte for byte as

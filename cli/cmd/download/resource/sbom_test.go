@@ -256,7 +256,7 @@ func TestDownloadResourceSBOM_ArtefactReference(t *testing.T) {
 			"the format is sniffed from the document, not converted")
 	})
 
-	t.Run("defaults the directory to the resource identity", func(t *testing.T) {
+	t.Run("defaults the directory to the identity values, not the identity itself", func(t *testing.T) {
 		t.Chdir(t.TempDir())
 
 		ref := setupComponent(t,
@@ -269,7 +269,9 @@ func TestDownloadResourceSBOM_ArtefactReference(t *testing.T) {
 			"download", "resource", ref, "--identity", "name="+targetName, "--sbom"), test.WithOutput(&out))
 		require.NoError(t, err)
 
-		assert.Equal(t, []string{"image-sbom.spdx.json"}, names(t, "name="+targetName))
+		// "name=image" needs quoting in a shell and reads as an assignment, so only the value is used.
+		assert.NoDirExists(t, "name="+targetName)
+		assert.Equal(t, []string{"image-sbom.spdx.json"}, names(t, targetName))
 	})
 
 	t.Run("ignores a describing resource that is not an sbom", func(t *testing.T) {

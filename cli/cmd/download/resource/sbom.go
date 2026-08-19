@@ -36,6 +36,8 @@ type downloadContext struct {
 func downloadSBOMs(cmd *cobra.Command, dc downloadContext) error {
 	ctx := cmd.Context()
 
+	dc.logger.Warn("--sbom is experimental: the set of SBOMs discovered, the layout written and the flags themselves may change in a future release")
+
 	discovered, err := sbom.Discover(ctx, sbom.Request{
 		Descriptor:    dc.descriptor,
 		Resource:      dc.resource,
@@ -53,7 +55,7 @@ func downloadSBOMs(cmd *cobra.Command, dc downloadContext) error {
 
 	directory := dc.output
 	if directory == "" {
-		directory = dc.identity.String()
+		directory = sbom.Directory(dc.identity)
 	}
 
 	written, err := sbom.Write(discovered, directory)
