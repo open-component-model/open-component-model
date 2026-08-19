@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -205,6 +206,11 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("credentials graph not found in context")
 	}
 
+	httpConfig, err := httpv1alpha1.ResolveHTTPConfig(octx.Configuration())
+	if err != nil {
+		return fmt.Errorf("could not get http configuration: %w", err)
+	}
+
 	specPath, err := cmd.Flags().GetString(FlagTransferSpec)
 	if err != nil {
 		return fmt.Errorf("getting transfer-spec flag failed: %w", err)
@@ -237,7 +243,12 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build transformation graph
-	b := transfer.NewDefaultBuilder(pm.ComponentVersionRepositoryRegistry, pm.ResourcePluginRegistry, credGraph)
+	b := transfer.NewDefaultBuilder(
+		pm.ComponentVersionRepositoryRegistry,
+		pm.ResourcePluginRegistry,
+		credGraph,
+		transfer.WithHTTPConfig(httpConfig),
+	)
 	graph, err := b.
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
 		BuildAndCheck(tgd)
