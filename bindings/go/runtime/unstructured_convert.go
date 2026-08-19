@@ -5,7 +5,9 @@ import (
 	"encoding"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
 	"strconv"
@@ -193,9 +195,20 @@ func numberToUnstructured(n json.Number) (any, error) {
 	return f, nil
 }
 
-// isIntegerLiteral reports whether s is a JSON number without a fraction or exponent part.
+// isIntegerLiteral reports whether s is a JSON integer literal: an optional minus sign followed
+// by digits, without a fraction or exponent part. A json.Number can be set to an arbitrary string
+// in Go, so the digits are validated; anything else is left to Float64 to reject.
 func isIntegerLiteral(s string) bool {
-	return !strings.ContainsAny(s, ".eE")
+	s = strings.TrimPrefix(s, "-")
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // decodeJSONValue decodes JSON into JSON-native Go values with the same numeric representation
@@ -207,6 +220,14 @@ func decodeJSONValue(data []byte) (any, error) {
 	var out any
 	if err := dec.Decode(&out); err != nil {
 		return nil, err
+	}
+	// json.Unmarshal rejects anything after the top-level value; decoding only the first one
+	// would silently drop the rest.
+	if err := dec.Decode(new(any)); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return nil, fmt.Errorf("unexpected data after top-level JSON value")
+		}
+		return nil, fmt.Errorf("unexpected data after top-level JSON value: %w", err)
 	}
 	return normalizeDecodedNumbers(out)
 }

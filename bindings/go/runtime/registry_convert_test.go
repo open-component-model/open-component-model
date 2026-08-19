@@ -321,6 +321,25 @@ func TestConvert_RawToUnstructured_Precision(t *testing.T) {
 	assert.Equal(t, big, back.Size)
 }
 
+// TestConvert_RawToUnstructured_RejectsTrailingData pins that malformed Raw.Data errors instead of
+// being truncated to its first JSON value, matching the Raw → Typed path (json.Unmarshal).
+func TestConvert_RawToUnstructured_RejectsTrailingData(t *testing.T) {
+	proto := &TestType{}
+	scheme := runtime.NewScheme()
+	scheme.MustRegister(proto, "v1")
+	typ := scheme.MustTypeForPrototype(proto)
+
+	for _, data := range []string{
+		`{"type":"TestType/v1","foo":"bar"} {"foo":"dropped"}`,
+		`{"type":"TestType/v1","foo":"bar"} trailing`,
+	} {
+		into := runtime.NewUnstructured()
+		err := scheme.Convert(&runtime.Raw{Type: typ, Data: []byte(data)}, &into)
+		require.Error(t, err, "input: %s", data)
+		assert.Contains(t, err.Error(), "unexpected data after top-level JSON value")
+	}
+}
+
 // TestConvert_UnstructuredToRaw_Canonicalizes pins that this path yields canonical Raw.Data, the
 // same as Typed → Raw, so a digest over Raw.Data does not depend on the source kind.
 func TestConvert_UnstructuredToRaw_Canonicalizes(t *testing.T) {

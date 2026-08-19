@@ -320,6 +320,20 @@ func TestNumbers(t *testing.T) {
 		assertMatchesJSON(t, from, data)
 	})
 
+	t.Run("malformed json.Number is rejected", func(t *testing.T) {
+		s := runtime.NewScheme()
+		s.MustRegister(&numHost{}, "v1")
+		typ := s.MustTypeForPrototype(&numHost{})
+		// A json.Number field holds an arbitrary string; encoding/json rejects these at marshal
+		// time, so the conversion must not put them into Unstructured.Data either.
+		for _, n := range []json.Number{"-", "1x", "abc"} {
+			u := runtime.NewUnstructured()
+			err := s.Convert(&numHost{typedBase: typedBase{Type: typ}, Num: n}, &u)
+			require.Error(t, err, "number: %q", n)
+			assert.Contains(t, err.Error(), "invalid json.Number")
+		}
+	})
+
 	t.Run("NaN and Inf are rejected", func(t *testing.T) {
 		s := runtime.NewScheme()
 		s.MustRegister(&numHost{}, "v1")
