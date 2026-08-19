@@ -430,28 +430,14 @@ function updateImportTags(parsed, version, fullVersion, deps) {
             newTag = `v${fullVersion}`;
         } else if (deps && imp.path === MONOLITHIC_BINDINGS_MODULE) {
             newTag = deps[MONOLITHIC_BINDINGS_MODULE];
-        } else if (deps && imp.path.endsWith('/bindings/go/constructor')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/constructor`];
-        } else if (deps && imp.path.endsWith('/bindings/go/descriptor/v2')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/descriptor/v2`];
-        } else if (deps && imp.path.endsWith('/bindings/go/github')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/github`];
-        } else if (deps && imp.path.endsWith('/bindings/go/http')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/http`];
-        } else if (deps && imp.path.endsWith('/bindings/go/oci')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/oci`];
-        } else if (deps && imp.path.endsWith('/bindings/go/helm')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/helm`];
-        } else if (deps && imp.path.endsWith('/bindings/go/rsa')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/rsa`];
-        } else if (deps && imp.path.endsWith('/bindings/go/gpg')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/gpg`];
-        } else if (deps && imp.path.endsWith('/bindings/go/sigstore')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/sigstore`];
-        } else if (deps && imp.path.endsWith('/bindings/go/credentials')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/credentials`];
-        } else if (deps && imp.path.endsWith('/bindings/go/wget')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/wget`];
+        } else if (deps) {
+            for (const modulePath of CLI_DERIVED_MODULES) {
+                const moduleSubPath = modulePath.slice(MODULE_PREFIX.length + 1)
+                if (imp.path.endsWith(moduleSubPath)) {
+                    newTag = deps[modulePath];
+                    break;
+                }
+            }
         }
 
         if (newTag && imp.version !== newTag) {
