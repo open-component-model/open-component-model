@@ -13,6 +13,9 @@ export default defineConfig([
     tseslint.configs.recommended,
     {
         rules: {
+            "curly": "error",
+            "indent": ["error", 4],
+            "brace-style": ["error", "1tbs"],
             "@typescript-eslint/no-unused-vars": ["error", {argsIgnorePattern: "^_", varsIgnorePattern: "^_"}],
         }
     },
