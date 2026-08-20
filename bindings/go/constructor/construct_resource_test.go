@@ -443,6 +443,37 @@ func TestConstructWithAccessTypeWithoutDigestProcessor(t *testing.T) {
 	assert.Len(t, mockTargetRepo.addedVersions, 1)
 }
 
+func TestConstructWithNilDigestProcessor(t *testing.T) {
+	// A provider that returns neither a processor nor an error must not panic the construction.
+	constructor := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: external
+        type: blob
+        access:
+          type: MyCustomAccessType/v1
+          url: my.custom.domain.com/access
+`)
+
+	mockTargetRepo := newMockTargetRepository()
+
+	opts := Options{
+		TargetRepositoryProvider:        &mockTargetRepositoryProvider{repo: mockTargetRepo},
+		ResourceDigestProcessorProvider: &mockDigestProcessorProvider{},
+	}
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
+
+	require.NoError(t, constructorInstance.Construct(context.Background()))
+	descs := collectDescriptors(t, graph)
+	require.Len(t, descs, 1)
+
+	resource := descs[0].Component.Resources[0]
+	require.NotNil(t, resource.Access)
+	assert.Nil(t, resource.Digest, "a resource without a digest processor must be stored without a digest")
+}
+
 func TestConstructWithInvalidInputMethod(t *testing.T) {
 	constructor := setupTestComponent(t, `
       - name: test-resource
