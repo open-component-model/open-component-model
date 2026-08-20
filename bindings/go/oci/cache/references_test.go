@@ -466,11 +466,11 @@ func TestReferenceCache_Add_RewritesEvictedNamespaceSnapshot(t *testing.T) {
 	_, ok := c1.Lookup(refA)
 	r.False(ok, "A must be evicted from memory")
 
-	c2, err := NewReferenceCache(Options{Dir: dir, MaxEntries: 1})
+	c2, err := NewReferenceCache(Options{Dir: dir, MaxEntries: 2})
 	r.NoError(err)
 
 	_, ok = c2.Lookup(refA)
-	assert.False(t, ok, "capacity-evicted reference must not survive restart")
+	assert.False(t, ok, "snapshot-evicted reference must not survive restart")
 
 	gotB, ok := c2.Lookup(refB)
 	r.True(ok)
