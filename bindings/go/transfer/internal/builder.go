@@ -3,8 +3,11 @@ package internal
 import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	githubtransformer "ocm.software/open-component-model/bindings/go/github/transformation"
+	githubv1alpha1 "ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
 	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -16,19 +19,22 @@ import (
 	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
 
-// NewDefaultBuilder creates a builder.Builder pre-configured with all standard OCI, CTF, and Helm transformers.
+// NewDefaultBuilder creates a builder.Builder pre-configured with all standard OCI, CTF,
+// Helm, wget, and GitHub transformers.
 // It accepts the repository provider, resource repository, and credential resolver interfaces
 // that are needed by the transformers to interact with repositories.
 func NewDefaultBuilder(
 	repoProvider repository.ComponentVersionRepositoryProvider,
 	resourceRepo repository.ResourceRepository,
 	credentialProvider credentials.Resolver,
+	httpConfig *httpv1alpha1.Config,
 ) *builder.Builder {
 	transformerScheme := runtime.NewScheme()
 	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(ociaccess.Scheme)
 	transformerScheme.MustRegisterScheme(helmv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(wgetv1alpha1.Scheme)
+	transformerScheme.MustRegisterScheme(githubv1alpha1.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
 		Scheme:             transformerScheme,
@@ -81,7 +87,10 @@ func NewDefaultBuilder(
 		// from the CLI or upstream.
 		//
 		// Filesystem config can be empty here because a streaming transfer does not need working dir or temp dir.
-		Repository:         resource.NewResourceRepository(&filesystemv1alpha1.Config{}),
+		Repository: resource.NewResourceRepository(
+			&filesystemv1alpha1.Config{},
+			resource.WithHTTPConfig(httpConfig),
+		),
 		CredentialProvider: credentialProvider,
 	}
 
@@ -97,6 +106,13 @@ func NewDefaultBuilder(
 
 	// Wget transformer
 	downloadWget := &wgettransformer.DownloadWgetResource{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
+	// GitHub transformers
+	getGitHubCommit := &githubtransformer.GetGitHubCommit{
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
@@ -123,5 +139,6 @@ func NewDefaultBuilder(
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).
+		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }

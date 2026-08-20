@@ -11,9 +11,20 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/github/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+// pinnedAccess decodes the access a processed resource carries. The processor
+// hands it back as the runtime.Raw every other access type uses, so tests
+// decode it instead of type-asserting.
+func pinnedAccess(t *testing.T, res *descriptor.Resource) *v1.GitHub {
+	t.Helper()
+	gitHub := &v1.GitHub{}
+	require.NoError(t, access.Scheme.Convert(res.Access, gitHub))
+	return gitHub
+}
 
 const (
 	testCommit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
@@ -142,8 +153,7 @@ func TestDigestProcessor(t *testing.T) {
 			processed, err := processor.ProcessResourceDigest(t.Context(), res, nil)
 			require.NoError(t, err)
 
-			pinned, ok := processed.Access.(*v1.GitHub)
-			require.True(t, ok, "processed access must be typed *v1.GitHub")
+			pinned := pinnedAccess(t, processed)
 			assert.Equal(t, testCommit, pinned.Commit, "commit must be pinned to the resolved sha")
 			require.NotNil(t, processed.Digest)
 			assert.Equal(t, payloadDigest, processed.Digest.Value)
@@ -174,8 +184,7 @@ func TestDigestProcessor(t *testing.T) {
 			processed, err := processor.ProcessResourceDigest(t.Context(), res, nil)
 			require.NoError(t, err)
 
-			pinned, ok := processed.Access.(*v1.GitHub)
-			require.True(t, ok)
+			pinned := pinnedAccess(t, processed)
 			assert.Equal(t, testCommit, pinned.Commit, "the pinned commit stays authoritative")
 			assert.Equal(t, "main", pinned.Ref, "the ref is preserved as informational")
 			require.NotNil(t, processed.Digest)

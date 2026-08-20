@@ -60,7 +60,8 @@ mkdir /tmp/helm-deploy && cd /tmp/helm-deploy
 
 Create a `component-constructor.yaml` file that includes a Helm chart resource:
 
-```yaml
+```shell
+cat > component-constructor.yaml << 'EOF'
 components:
   - name: ocm.software/ocm-k8s-toolkit/simple
     provider:
@@ -73,6 +74,7 @@ components:
         access:
           type: OCIImage/v1
           imageReference: "ghcr.io/stefanprodan/charts/podinfo:6.11.1@sha256:a9b2804ec61795a7457b2303bf9efbc5fba51f856c3945f3bb0af68bf3b35afd"
+EOF
 ```
 
 This component references the `podinfo` Helm chart, a simple web application that displays pod information.
@@ -199,11 +201,15 @@ ocm get cv $OCM_REPO//ocm.software/ocm-k8s-toolkit/simple:1.0.0
 
 ### Create ResourceGraphDefinition
 
-The ResourceGraphDefinition tells kro how to orchestrate the OCM and Flux resources.
+The ResourceGraphDefinition tells kro how to orchestrate the OCM and Flux or ArgoCD resources.
 Create `rgd.yaml` with the following content:
 
+{{< tabs "helm-rgd-deployer" >}}
+{{< tab "Flux" >}}
+
 {{< details "ResourceGraphDefinition (rgd.yaml)" >}}
-```yaml
+```shell
+cat > rgd.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
@@ -319,8 +325,116 @@ spec:
             # the instance of the CRD created by the ResourceGraphDefinition (see below).
             ui:
               message: ${schema.spec.message}
+EOF
 ```
 {{< /details >}}
+
+{{< /tab >}}
+{{< tab "Argo CD" >}}
+
+{{< details "ResourceGraphDefinition (rgd.yaml)" >}}
+```shell
+cat > rgd.yaml << 'EOF'
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: simple
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: Simple
+    spec:
+      message: string | default="foo"
+  resources:
+    - id: repository
+      readyWhen:
+        - ${repository.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Repository
+        metadata:
+          name: simple-repository
+        spec:
+          repositorySpec:
+              baseUrl: $OCM_REPO
+              type: OCIRegistry
+          interval: 1m
+    - id: component
+      readyWhen:
+        - ${component.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Component
+        metadata:
+          name: simple-component
+        spec:
+          repositoryRef:
+            name: ${repository.metadata.name}
+          component: ocm.software/ocm-k8s-toolkit/simple
+          semver: 1.0.0
+          interval: 1m
+    - id: resourceChart
+      readyWhen:
+        - ${resourceChart.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')}
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: simple-resource
+        spec:
+          componentRef:
+            name: ${component.metadata.name}
+          resource:
+            byReference:
+              resource:
+                name: helm-resource
+          additionalStatusFields:
+            oci: resource.access.toOCI()
+    # Argo CD Application deploys the Helm chart directly from the OCI registry.
+    # Values are injected via valuesObject (structured YAML, no escaping issues).
+    - id: argocdApplication
+      readyWhen:
+        - ${argocdApplication.status.health.status == "Healthy"}
+        - ${argocdApplication.status.sync.status == "Synced"}
+      template:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: simple
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: default
+          source:
+            chart: podinfo
+            repoURL: oci://${resourceChart.status.additional.oci.registry}/${resourceChart.status.additional.oci.repository}
+            targetRevision: ${resourceChart.status.additional.oci.tag}
+            helm:
+              releaseName: simple
+              valuesObject:
+                ui:
+                  message: ${schema.spec.message}
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: default
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true
+EOF
+```
+{{< /details >}}
+
+{{< callout context="note" title="Argo CD and OCI Helm" icon="outline/info-circle" >}}
+Argo CD references the Helm chart by tag (`targetRevision`). To pin to a specific digest instead, use `targetRevision: sha256:<digest>`, which is supported since Argo CD v3.1.
+Values are injected via `helm.valuesObject` (a structured YAML object), which avoids escaping issues that arise with the string-based `helm.values` field.
+{{< /callout >}}
+
+{{< /tab >}}
+{{< /tabs >}}
 {{< /step >}}
 
 {{< step >}}
@@ -364,13 +478,15 @@ A new Custom Resource Definition called `Simple` that you can now instantiate ha
 
 Create the file `instance.yaml` to deploy the application:
 
-```yaml
+```shell
+cat > instance.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
 kind: Simple
 metadata:
   name: simple
 spec:
   message: "Deployed with OCM!"
+EOF
 ```
 {{< /step >}}
 

@@ -1482,6 +1482,33 @@ func TestConvertToV1Resource(t *testing.T) {
 				Options: &v1.ResourceOptions{OwnershipPolicy: "bogus"},
 			},
 		},
+		{
+			name: "resource with digest",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:     "test-type",
+				Relation: ExternalRelation,
+				Digest: &Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  "abc123",
+				},
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:     "test-type",
+				Relation: v1.ExternalRelation,
+				Digest: &v1.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  "abc123",
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1712,6 +1739,33 @@ func TestConvertFromV1Resource(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "resource with digest",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:     "test-type",
+				Relation: v1.ExternalRelation,
+				Digest: &v1.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  "abc123",
+				},
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+				Type:     "test-type",
+				Relation: ExternalRelation,
+				Digest: &Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  "abc123",
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1720,4 +1774,75 @@ func TestConvertFromV1Resource(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestConvertResourceDigestV1RoundTrip(t *testing.T) {
+	v1res := v1.Resource{
+		ElementMeta: v1.ElementMeta{
+			ObjectMeta: v1.ObjectMeta{Name: "test-resource", Version: "1.0.0"},
+		},
+		Type:     "blob",
+		Relation: v1.ExternalRelation,
+		Digest: &v1.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  "abc123",
+		},
+	}
+
+	// v1 -> runtime carries the digest.
+	rt := ConvertToRuntimeConstructorResource(v1res)
+	assert.NotNil(t, rt.Digest)
+	assert.Equal(t, "SHA-256", rt.Digest.HashAlgorithm)
+	assert.Equal(t, "genericBlobDigest/v1", rt.Digest.NormalisationAlgorithm)
+	assert.Equal(t, "abc123", rt.Digest.Value)
+	// The digest must be a distinct allocation, not aliased to the source.
+	assert.NotSame(t, v1res.Digest, rt.Digest)
+
+	// runtime -> v1 restores an equal, distinct digest.
+	back, err := ConvertToV1Resource(&rt)
+	assert.NoError(t, err)
+	assert.Equal(t, v1res.Digest, back.Digest)
+	assert.NotSame(t, rt.Digest, back.Digest)
+}
+
+func TestConvertResourceDigestV1Nil(t *testing.T) {
+	v1res := v1.Resource{
+		ElementMeta: v1.ElementMeta{
+			ObjectMeta: v1.ObjectMeta{Name: "test-resource", Version: "1.0.0"},
+		},
+		Type: "blob",
+	}
+	rt := ConvertToRuntimeConstructorResource(v1res)
+	assert.Nil(t, rt.Digest)
+
+	back, err := ConvertToV1Resource(&rt)
+	assert.NoError(t, err)
+	assert.Nil(t, back.Digest)
+}
+
+// TestConvertResourceDigestFullChain proves a pinned digest survives the entire
+// conversion chain v1 -> runtime -> descriptor -> runtime -> v1 unchanged.
+func TestConvertResourceDigestFullChain(t *testing.T) {
+	original := &v1.Digest{
+		HashAlgorithm:          "SHA-256",
+		NormalisationAlgorithm: "genericBlobDigest/v1",
+		Value:                  "abc123",
+	}
+	v1res := v1.Resource{
+		ElementMeta: v1.ElementMeta{
+			ObjectMeta: v1.ObjectMeta{Name: "test-resource", Version: "1.0.0"},
+		},
+		Type:     "blob",
+		Relation: v1.ExternalRelation,
+		Digest:   original,
+	}
+
+	runtimeRes := ConvertToRuntimeConstructorResource(v1res)
+	descRes := ConvertToDescriptorResource(&runtimeRes)
+	backToRuntime := ConvertFromDescriptorResource(descRes)
+	backToV1, err := ConvertToV1Resource(backToRuntime)
+	assert.NoError(t, err)
+
+	assert.Equal(t, original, backToV1.Digest)
 }

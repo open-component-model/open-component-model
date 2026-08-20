@@ -269,6 +269,11 @@ func (in *Resource) DeepCopyInto(out *Resource) {
 		}
 	}
 	out.Options = in.Options
+	if in.Digest != nil {
+		in, out := &in.Digest, &out.Digest
+		*out = new(Digest)
+		**out = **in
+	}
 	in.AccessOrInput.DeepCopyInto(&out.AccessOrInput)
 	return
 }

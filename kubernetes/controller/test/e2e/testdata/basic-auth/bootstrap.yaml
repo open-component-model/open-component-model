@@ -15,7 +15,7 @@ spec:
     baseUrl: http://protected-registry1-internal.default.svc.cluster.local:5002
     scheme: http
     port: 5002
-    type: OCIRegistry # ocm lib v1 type
+    type: OCIRegistry
   interval: 10m
   ocmConfig:
     - kind: Secret
