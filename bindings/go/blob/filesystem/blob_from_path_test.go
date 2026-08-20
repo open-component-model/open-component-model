@@ -80,6 +80,25 @@ func TestGetBlobFromPath_SimpleDirectory(t *testing.T) {
 	r.Equal("content2", foundFiles["file2.txt"])
 }
 
+func TestGetBlobFromPath_RelativeDirectory(t *testing.T) {
+	r := require.New(t)
+
+	// Change working directory to explicitly not be in the working directory we pass via options
+	wd := t.TempDir()
+	t.Chdir(wd)
+
+	// Setup: create directory with multiple files
+	tmpDir := t.TempDir()
+	createTestFile(t, filepath.Join(tmpDir, "testFolder"), "file.txt", "content")
+
+	// Test: create blob from directory (should be TAR archive)
+	opt := filesystem.DirOptions{Reproducible: true}
+	opt.WorkingDir = tmpDir
+	b, err := filesystem.GetBlobFromPath(context.Background(), "testFolder", opt)
+	r.NoError(err)
+	r.NotNil(b)
+}
+
 // PATTERN FILTERING: Include/exclude pattern functionality
 func TestGetBlobFromPath_PatternSemantics(t *testing.T) {
 	r := require.New(t)
