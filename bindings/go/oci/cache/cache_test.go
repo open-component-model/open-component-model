@@ -28,6 +28,9 @@ func newTestCache(t *testing.T, opts Options) *BlobCache {
 	if opts.Accept == nil {
 		opts.Accept = DefaultAccept
 	}
+	if opts.RemotePolicy == "" {
+		opts.RemotePolicy = RemotePolicyIfNotPresent
+	}
 	c, err := NewBlobCache(opts)
 	require.NoError(t, err)
 	return c

@@ -81,6 +81,7 @@ type Options struct {
 //   - 10 minute TTL
 //   - 4 MiB per-blob size cap
 //   - [DefaultAccept] media-type filter
+//   - [RemotePolicyAlways] (secure by default)
 //
 // Dir is left zero — callers must set it explicitly.
 func Defaults() *Options {
@@ -89,7 +90,7 @@ func Defaults() *Options {
 		TTL:          10 * time.Minute,
 		MaxBlobSize:  4 << 20,
 		Accept:       DefaultAccept,
-		RemotePolicy: RemotePolicyIfNotPresent,
+		RemotePolicy: RemotePolicyAlways,
 	}
 }
 

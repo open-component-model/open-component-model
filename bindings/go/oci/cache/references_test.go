@@ -32,6 +32,9 @@ func newTestRefCache(t *testing.T, opts Options) *ReferenceCache {
 	if opts.Dir == "" {
 		opts.Dir = filepath.Join(t.TempDir(), "refcache")
 	}
+	if opts.RemotePolicy == "" {
+		opts.RemotePolicy = RemotePolicyIfNotPresent
+	}
 	c, err := NewReferenceCache(opts)
 	require.NoError(t, err)
 	return c
