@@ -24,7 +24,7 @@ import (
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
-const minioImage = "minio/minio:RELEASE.2024-01-16T16-07-38Z"
+const minioImage = "minio/minio"
 
 // Test_Integration_S3 exercises the S3 ResourceRepository end to end against a MinIO
 // container.
