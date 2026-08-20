@@ -223,24 +223,51 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 	// bytes are hashed against target.Digest before we ever put them
 	// on disk. The verified bytes are then persisted (best-effort) and
 	// every waiter is served an independent reader over that copy.
-	v, err, _ := c.sf.Do(target.Digest.String(), func() (any, error) {
-		data, err := content.FetchAll(ctx, upstream, target)
+	//
+	// We use DoChan instead of Do so that each caller can return on its
+	// own context cancellation while the shared fetch continues for any
+	// remaining waiters. The fetch itself runs under context.Background
+	// so it is not tied to any single caller's lifetime.
+	//
+	// Trade-off: if every caller cancels before the fetch completes the
+	// upstream round-trip continues to completion with no one to receive
+	// the result. For this cache (small manifests, bounded by
+	// MaxBlobSize, registry upstreams with their own timeouts) that is
+	// acceptable. A ref-counted shared context that cancels when the
+	// last waiter leaves would be the more principled alternative.
+	fetchCtx := context.Background()
+	ch := c.sf.DoChan(target.Digest.String(), func() (any, error) {
+		c.logger.Debug("blobcache: singleflight leader: starting upstream fetch",
+			slog.String("digest", target.Digest.String()))
+		data, err := content.FetchAll(fetchCtx, upstream, target)
 		if err != nil {
 			return nil, fmt.Errorf("blobcache: fetch upstream: %w", err)
 		}
 		// populate is best-effort: a failure to persist must not fail
 		// the fetch, since we already hold the verified bytes to serve
 		// the caller.
-		if _, perr := c.populate(ctx, target.Digest, target.Size, bytes.NewReader(data)); perr != nil {
+		if _, perr := c.populate(fetchCtx, target.Digest, target.Size, bytes.NewReader(data)); perr != nil {
 			c.logger.DebugContext(ctx, "blobcache: populate failed, serving from memory",
 				slog.String("digest", target.Digest.String()), slog.String("err", perr.Error()))
 		}
 		return data, nil
 	})
-	if err != nil {
-		return nil, err
+	select {
+	case <-ctx.Done():
+		c.logger.DebugContext(ctx, "blobcache: caller canceled while waiting for fetch",
+			slog.String("digest", target.Digest.String()),
+			slog.String("err", ctx.Err().Error()))
+		return nil, ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		if res.Shared {
+			c.logger.DebugContext(ctx, "blobcache: singleflight: result shared across concurrent callers",
+				slog.String("digest", target.Digest.String()))
+		}
+		return io.NopCloser(bytes.NewReader(res.Val.([]byte))), nil
 	}
-	return io.NopCloser(bytes.NewReader(v.([]byte))), nil
 }
 
 // onEvict is the LRU's eviction callback. It removes the on-disk file

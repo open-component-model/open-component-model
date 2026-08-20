@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -155,16 +156,41 @@ func TestCache_Fetch_ConcurrentReadersGetEqualBytes(t *testing.T) {
 	}
 }
 
-// gatedReadOnly blocks inside Fetch until release is closed so a test
-// can guarantee concurrent Fetch calls overlap on the same digest.
+// gatedReadOnly blocks inside Fetch until release is closed. It
+// signals on blocked (buffered, cap N) each time a caller enters the
+// gate, so tests can wait for a precise number of goroutines to be
+// parked before releasing.
 type gatedReadOnly struct {
 	*fakeReadOnly
+	blocked chan struct{}
 	release chan struct{}
 }
 
+func newGated(base *fakeReadOnly, cap int) *gatedReadOnly {
+	return &gatedReadOnly{
+		fakeReadOnly: base,
+		blocked:      make(chan struct{}, cap),
+		release:      make(chan struct{}),
+	}
+}
+
 func (s *gatedReadOnly) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	s.blocked <- struct{}{}
 	<-s.release
 	return s.fakeReadOnly.Fetch(ctx, target)
+}
+
+// waitBlocked drains n tokens from s.blocked, confirming n goroutines
+// have entered the gate.
+func (s *gatedReadOnly) waitBlocked(t *testing.T, n int) {
+	t.Helper()
+	for range n {
+		select {
+		case <-s.blocked:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for goroutine %d/%d to block", n, n)
+		}
+	}
 }
 
 func TestCache_Fetch_CollapsesConcurrentMisses(t *testing.T) {
@@ -172,11 +198,12 @@ func TestCache_Fetch_CollapsesConcurrentMisses(t *testing.T) {
 	base := newFakeReadOnly()
 	manifest := bytes.Repeat([]byte("m"), 4096)
 	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
-	gated := &gatedReadOnly{fakeReadOnly: base, release: make(chan struct{})}
+	gated := newGated(base, 1) // only the singleflight leader enters the gate
 
 	const N = 8
 	results := make([][]byte, N)
 	var wg sync.WaitGroup
+	t.Logf("launching %d concurrent Fetch goroutines for the same digest", N)
 	for i := range N {
 		wg.Go(func() {
 			rc, err := c.Fetch(t.Context(), gated, desc)
@@ -184,11 +211,15 @@ func TestCache_Fetch_CollapsesConcurrentMisses(t *testing.T) {
 			results[i] = readAllAndClose(t, rc)
 		})
 	}
-	// Let the goroutines pile onto the singleflight key before the
-	// leader is allowed to complete its upstream fetch.
-	time.Sleep(50 * time.Millisecond)
+	// Singleflight elects exactly one leader to call upstream; that
+	// goroutine parks inside gatedReadOnly.Fetch waiting for release.
+	// The other N-1 callers block on the DoChan result channel.
+	t.Log("waiting for the single upstream fetch goroutine to park at the gate")
+	gated.waitBlocked(t, 1)
+	t.Logf("fetch goroutine parked; releasing gate — expecting %d upstream calls: 1", N)
 	close(gated.release)
 	wg.Wait()
+	t.Logf("all %d callers returned; upstream fetch count: %d", N, base.fetches.Load())
 
 	for i := range results {
 		assert.Equal(t, manifest, results[i], "reader %d", i)
@@ -232,6 +263,157 @@ func TestDefaultAccept_AllBranches(t *testing.T) {
 			assert.Equal(t, tc.want, DefaultAccept(ociImageSpecV1.Descriptor{MediaType: tc.mt}))
 		})
 	}
+}
+
+// blockingReadOnly blocks inside Fetch until ready is closed. It
+// signals on blocked (capacity 1) when it enters the wait, so the
+// test can synchronise without sleeping.
+type blockingReadOnly struct {
+	*fakeReadOnly
+	blocked chan struct{}
+	ready   chan struct{}
+}
+
+func newBlocking(base *fakeReadOnly) *blockingReadOnly {
+	return &blockingReadOnly{
+		fakeReadOnly: base,
+		blocked:      make(chan struct{}, 1),
+		ready:        make(chan struct{}),
+	}
+}
+
+func (s *blockingReadOnly) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	select {
+	case s.blocked <- struct{}{}:
+	default:
+	}
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-s.ready:
+	}
+	return s.fakeReadOnly.Fetch(ctx, target)
+}
+
+func (s *blockingReadOnly) waitBlocked(t *testing.T) {
+	t.Helper()
+	select {
+	case <-s.blocked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for fetch goroutine to block")
+	}
+}
+
+// TestCache_Fetch_CanceledLeaderFollowerStillReceives verifies that
+// when the leader caller's context is canceled before the shared fetch
+// completes, the fetch continues and a concurrent follower receives
+// the result.
+func TestCache_Fetch_CanceledLeaderFollowerStillReceives(t *testing.T) {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	c := newTestCache(t, Options{})
+	base := newFakeReadOnly()
+	manifest := []byte(`{"schemaVersion":2,"leader":true}`)
+	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
+	blocking := newBlocking(base)
+
+	leaderCtx, leaderCancel := context.WithCancel(t.Context())
+
+	var leaderErr error
+	leaderDone := make(chan struct{})
+	t.Log("leader: starting Fetch — singleflight will elect it to call upstream")
+	go func() {
+		defer close(leaderDone)
+		_, leaderErr = c.Fetch(leaderCtx, blocking, desc)
+		t.Logf("leader: Fetch returned: %v", leaderErr)
+	}()
+
+	// blockingReadOnly.Fetch signals on blocked before parking; this
+	// confirms the singleflight goroutine is inside the upstream call
+	// and won't complete until blocking.ready is closed.
+	t.Log("waiting for singleflight goroutine to park inside upstream Fetch")
+	blocking.waitBlocked(t)
+	t.Log("singleflight goroutine parked; canceling leader context")
+	leaderCancel()
+	<-leaderDone
+	require.ErrorIs(t, leaderErr, context.Canceled, "leader must return its cancellation")
+	t.Log("leader returned context.Canceled — singleflight goroutine still blocked on ready")
+
+	// The singleflight goroutine is still running (blocked on ready).
+	// Start the follower; it calls DoChan and receives the same
+	// in-flight result channel, or gets a cache hit if the fetch
+	// completes first — either way it must succeed.
+	type fetchResult struct {
+		data []byte
+		err  error
+	}
+	followerCh := make(chan fetchResult, 1)
+	t.Log("follower: starting Fetch while singleflight goroutine is still in-flight")
+	go func() {
+		rc, err := c.Fetch(t.Context(), blocking, desc)
+		if err != nil {
+			t.Logf("follower: Fetch returned error: %v", err)
+			followerCh <- fetchResult{err: err}
+			return
+		}
+		data := readAllAndClose(t, rc)
+		t.Logf("follower: Fetch succeeded (%d bytes)", len(data))
+		followerCh <- fetchResult{data: data}
+	}()
+	t.Log("unblocking singleflight goroutine by closing ready")
+	close(blocking.ready)
+
+	res := <-followerCh
+	require.NoError(t, res.err, "follower must succeed even after leader canceled")
+	assert.Equal(t, manifest, res.data)
+	assert.True(t, c.Has(desc.Digest), "blob must be persisted for the follower")
+	t.Logf("blob persisted: %v", c.Has(desc.Digest))
+}
+
+// TestCache_Fetch_CanceledFollowerDoesNotAffectOthers verifies that a
+// follower whose context is canceled before the shared fetch completes
+// returns [context.Canceled] while the leader (and any other active
+// caller) can still retrieve the result.
+func TestCache_Fetch_CanceledFollowerDoesNotAffectOthers(t *testing.T) {
+	c := newTestCache(t, Options{})
+	base := newFakeReadOnly()
+	manifest := []byte(`{"schemaVersion":2,"follower":true}`)
+	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
+	blocking := newBlocking(base)
+
+	type leaderResult struct {
+		data []byte
+		err  error
+	}
+	leaderCh := make(chan leaderResult, 1)
+	t.Log("leader: starting Fetch — will block inside upstream until ready is closed")
+	go func() {
+		rc, err := c.Fetch(t.Context(), blocking, desc)
+		if err != nil {
+			t.Logf("leader: Fetch returned error: %v", err)
+			leaderCh <- leaderResult{err: err}
+			return
+		}
+		data := readAllAndClose(t, rc)
+		t.Logf("leader: Fetch succeeded (%d bytes)", len(data))
+		leaderCh <- leaderResult{data: data}
+	}()
+
+	t.Log("waiting for singleflight goroutine to park inside upstream Fetch")
+	blocking.waitBlocked(t)
+	t.Log("singleflight goroutine parked; follower joining with a pre-canceled context")
+	followerCtx, followerCancel := context.WithCancel(t.Context())
+	followerCancel()
+	_, followerErr := c.Fetch(followerCtx, blocking, desc)
+	t.Logf("follower: Fetch returned: %v (singleflight goroutine still running)", followerErr)
+	require.ErrorIs(t, followerErr, context.Canceled, "follower must return its cancellation")
+
+	t.Log("unblocking singleflight goroutine by closing ready")
+	close(blocking.ready)
+	result := <-leaderCh
+	require.NoError(t, result.err, "leader must succeed after follower canceled")
+	assert.Equal(t, manifest, result.data)
+	assert.True(t, c.Has(desc.Digest))
+	t.Logf("blob persisted: %v; upstream fetch count: %d", c.Has(desc.Digest), base.fetches.Load())
 }
 
 func TestCache_Fetch_GetErrorFallsThrough(t *testing.T) {
