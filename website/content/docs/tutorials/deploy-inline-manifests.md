@@ -35,8 +35,11 @@ By the end, you will have:
 {{< callout context="note" title="Custom RBAC" icon="outline/lock" >}}
 The OCM Deployer applies the kro `ResourceGraphDefinition`s, so the OCM controller's
 `ServiceAccount` needs `resourcegraphdefinitions.kro.run`. kro then creates the objects the
-RGDs define (the `Podinfo` instance, the OCM `Resource`, the Deployment and Service), managed
-by kro's own `ServiceAccount`. Apply the [Custom RBAC]({{< relref "custom-rbac.md" >}}) guide
+RGDs define (the `Podinfo` instance, the OCM `Resource`, the Deployment and Service), and its
+own `ServiceAccount` needs permissions for those kinds (`podinfos.kro.run`,
+`resources.delivery.ocm.software`, Deployments, Services). The dev-friendly kro install used
+here grants them broadly; [kro's access control guide](https://kro.run/docs/advanced/access-control)
+shows the least-privilege setup. Apply the [Custom RBAC]({{< relref "custom-rbac.md" >}}) guide
 once, then verify the OCM controller `ServiceAccount` (not your admin user):
 
 ```bash
@@ -222,8 +225,10 @@ EOF
 
 ### Write the app RGD
 
-This RGD registers the `Podinfo` API and renders the workload. kro processes the resources
-in order and templates values from the instance schema.
+This RGD registers the `Podinfo` API and renders the workload. kro templates values from the
+instance schema and reconciles resources in dependency order, which it infers from the CEL
+references between them. `deployment` and `service` only reference the schema, so they are
+independent and reconcile in parallel.
 
 ```bash
 cat > rgd-podinfo.yaml << 'EOF'
@@ -238,7 +243,7 @@ spec:
     spec:
       image: string
       message: string | default="Hello from OCM and kro"
-      replicas: integer | default=1
+      replicas: integer | default=1 minimum=0
   resources:
     - id: deployment
       readyWhen:
@@ -302,7 +307,7 @@ spec:
     kind: System
     spec:
       message: string | default="Hello from OCM and kro"
-      replicas: integer | default=1
+      replicas: integer | default=1 minimum=0
   resources:
     - id: resourceImage
       readyWhen:
@@ -394,10 +399,12 @@ and add the credentials to the resources as described in the collapsible below.
 <details>
 <summary>Using a private registry</summary>
 
-Create a pull secret from a token with `read:packages`:
+Create a pull secret from a token with `read:packages`, in the same namespace as the bootstrap
+resources:
 
 ```bash
 kubectl create secret docker-registry ghcr-secret \
+  --namespace default \
   --docker-username=$GITHUB_USERNAME \
   --docker-password="$(gh auth token)" \
   --docker-server=ghcr.io
@@ -449,6 +456,8 @@ Rebuild and transfer the component after editing the RGDs.
 The bootstrap resources are OCM controller objects: a `Repository` and `Component` fetch the
 component from your registry, then a `Resource` + `Deployer` pair per RGD applies it to the
 cluster. That is six objects for two RGDs, boilerplate that grows with every RGD you deliver.
+All namespaced objects are pinned to the `default` namespace, so their cross-references resolve
+no matter which namespace your kubectl context currently points at.
 
 ```bash
 cat > bootstrap.yaml << 'EOF'
@@ -456,6 +465,7 @@ apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository
 metadata:
   name: system-repository
+  namespace: default
 spec:
   repositorySpec:
     baseUrl: $OCM_REPO
@@ -466,11 +476,12 @@ apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
 metadata:
   name: system-component
+  namespace: default
 spec:
   component: ocm.software/ocm-k8s-toolkit/system
   repositoryRef:
     name: system-repository
-  semver: "1.0.0"
+  semver: ">=1.0.0 <2.0.0"
   interval: 1m
 ---
 apiVersion: delivery.ocm.software/v1alpha1
@@ -519,6 +530,10 @@ spec:
 EOF
 ```
 
+Note `semver` on the `Component`: it is a constraint, not a pin. `>=1.0.0 <2.0.0` accepts any
+compatible `1.x` release, so publishing a newer component version is all it takes for the
+controllers to pick it up on the next interval.
+
 Apply them. `envsubst` fills in `$OCM_REPO`:
 
 ```bash
@@ -551,6 +566,7 @@ apiVersion: kro.run/v1alpha1
 kind: System
 metadata:
   name: system
+  namespace: default
 spec:
   message: "Hello from OCM and kro"
   replicas: 1
@@ -710,7 +726,10 @@ resources:
       kind: Deployer
       metadata: { name: app-rgd }
       spec:
-        resourceRef: { name: ${appResource.metadata.name} }
+        resourceRef:
+          name: ${appResource.metadata.name}
+          # Deployer is cluster-scoped, so the namespace of the namespaced Resource is required
+          namespace: ${schema.metadata.namespace}
     readyWhen:
       - ${appDeployer.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
 ```
