@@ -97,6 +97,10 @@ func TestGetBlobFromPath_RelativeDirectory(t *testing.T) {
 	b, err := filesystem.GetBlobFromPath(context.Background(), "testFolder", opt)
 	r.NoError(err)
 	r.NotNil(b)
+
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(reader.Close()) }()
 }
 
 // PATTERN FILTERING: Include/exclude pattern functionality
