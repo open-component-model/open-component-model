@@ -94,24 +94,8 @@ section at the end shows how.
 <summary>Architecture diagram</summary>
 
 ```mermaid
-%%{init: {"theme":"base", "flowchart": {"wrappingWidth": 320}}}%%
+%%{init: {"theme":"base", "themeVariables": {"edgeLabelBackground":"#ffffff"}, "flowchart": {"wrappingWidth": 320}}}%%
 flowchart TB
-    subgraph legend[Legend]
-        direction TB
-        subgraph conns[ ]
-            direction LR
-            l1a[ ] -- referenced by / data flow --> l1b[ ]
-            l2a[ ] == creates ==> l2b[ ]
-            l3a[ ] eLegDot@-. instantiated as .-> l3b[ ]
-            l4a[ ] eKroLeg@-- kro-native: templated directly --> l4b[ ]
-        end
-        subgraph boxes[ ]
-            direction TB
-            pillOcm[OCM content] ~~~ pillRec[reconciled by controllers] ~~~ pillK8s[Kubernetes object] ~~~ pillTpl[RGD template]
-        end
-        conns ~~~ boxes
-    end
-
     subgraph background[ ]
         direction TB
         subgraph ocmRepo[OCM Repository]
@@ -156,36 +140,40 @@ flowchart TB
         k8sDeployerB ==> rgdSystem
         rgdPodinfo ==> crdPodinfo
         rgdSystem ==> crdSystem
-        crdSystem eInstSys@-. instantiated as .-> instanceSystem
-        crdPodinfo eInstPod@-. instantiated as .-> podinfoInstance
+        crdSystem eInstSys@-.-> instanceSystem
+        crdPodinfo eInstPod@-.-> podinfoInstance
         rgdPodinfo eKnative@-- kro-native: templated directly --> workload
     end
 
-    eKroLeg@{stroke-dasharray: 5 5}
     eKnative@{stroke-dasharray: 5 5}
-    eLegDot@{stroke-width: 2px}
     eInstSys@{stroke-width: 2px}
     eInstPod@{stroke-width: 2px}
 
     classDef ocm fill:#e8def8,stroke:#8e68d0,color:#1a1a1a
     classDef reconciledBy fill:#def2e4,stroke:#4d8a4d,color:#1a1a1a
     classDef k8sObject fill:#d7e4fb,stroke:#3c63c8,color:#1a1a1a
-    classDef templateOf fill:#fdf0d5,stroke:#c8891c,color:#1a1a1a
     classDef cluster fill:#f3f4f6,stroke:#6b7280,color:#1a1a1a
-    classDef anchor fill:#eceff3,stroke:#9aa4b2,color:#1a1a1a
-    classDef ghost fill:transparent,stroke:transparent,color:transparent
 
-    class l1a,l1b,l2a,l2b,l3a,l3b,l4a,l4b anchor;
     class ocmRepo,ocmCV,ocmResImage,ocmResPodinfo,ocmResSystem ocm;
     class k8sCluster cluster;
     class bootstrap,kro,instanceSystem reconciledBy;
     class k8sRepo,k8sComponent,k8sResPodinfo,k8sDeployerA,k8sResSystem,k8sDeployerB,rgdPodinfo,rgdSystem,crdPodinfo,crdSystem,k8sResImg,podinfoInstance,workload k8sObject;
-    class pillOcm ocm;
-    class pillRec reconciledBy;
-    class pillK8s k8sObject;
-    class pillTpl templateOf;
-    class conns,boxes ghost;
+
+    linkStyle default color:#1a1a1a
 ```
+
+<div style="display:inline-block;background:#fff;border:1px solid #d0d5dd;border-radius:8px;padding:10px 14px;font-size:14px;color:#1a1a1a;line-height:2">
+<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center">
+<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1.5px solid #8e68d0;background:#e8def8"></span>OCM content</span>
+<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1.5px solid #4d8a4d;background:#def2e4"></span>reconciled by controllers</span>
+<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1.5px solid #3c63c8;background:#d7e4fb"></span>Kubernetes object</span>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center">
+<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><svg width="36" height="12" aria-hidden="true"><line x1="0" y1="6" x2="30" y2="6" stroke="#333333" stroke-width="3.2"></line><polygon points="36,6 30,3 30,9" fill="#333333"></polygon></svg>creates</span>
+<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><svg width="36" height="12" aria-hidden="true"><line x1="0" y1="6" x2="30" y2="6" stroke="#333333" stroke-width="1"></line><polygon points="36,6 30,3 30,9" fill="#333333"></polygon></svg>references / data flow</span>
+<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><svg width="36" height="12" aria-hidden="true"><line x1="0" y1="6" x2="30" y2="6" stroke="#333333" stroke-width="1.4" stroke-dasharray="3 3"></line><polygon points="36,6 30,3 30,9" fill="#333333"></polygon></svg>instantiated as</span>
+</div>
+</div>
 
 </details>
 
