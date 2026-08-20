@@ -35,7 +35,7 @@ By the end, you will have:
 {{< callout context="note" title="Custom RBAC" icon="outline/lock" >}}
 The OCM Deployer needs permission to manage kro `ResourceGraphDefinition`s and the objects
 an RGD creates (Deployments, Services). Apply the [Custom RBAC]({{< relref "custom-rbac.md" >}})
-guide once, then verify it against the controller ServiceAccount (not your admin user):
+guide once, then verify it against the controller `ServiceAccount` (not your admin user):
 
 ```bash
 kubectl auth can-i create resourcegraphdefinitions.kro.run \
