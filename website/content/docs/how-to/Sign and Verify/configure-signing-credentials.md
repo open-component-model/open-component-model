@@ -193,7 +193,7 @@ If your keyring contains multiple keys, pin the one to use by adding `keyFingerp
 
 The dry run signs in memory without persisting the signature, so it's a quick way to confirm OCM can locate your keys. Match the command to the algorithm you configured above:
 
-{{< tabs "signing-algorithm" >}}
+{{< tabs "signing-algorithm-test" >}}
 {{< tab "RSA" >}}
 **RSA** (uses the default RSA handler, no signing configuration needed):
 

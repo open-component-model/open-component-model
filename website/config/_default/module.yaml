@@ -112,6 +112,12 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/github/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/github/v1
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../bindings/go/rsa/spec/credentials/v1/schemas
     target: static/main/schemas/bindings/go/credentials/rsa/v1
     sites:
