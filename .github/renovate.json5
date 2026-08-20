@@ -14,7 +14,6 @@
   'git-submodules': {
     enabled: true,
   },
-  // config:recommended transitively pulls in :ignoreModulesAndTests, which
   'updateNotScheduled': true, // Update branches that have already been created
   'minimumReleaseAge': '28 days',
   'branchPrefix': 'renovate/',
@@ -44,10 +43,10 @@
     },
     {
       // Collapse digest-only re-pins (same tag, new SHA) for Actions and
-      // Docker base images into one weekly PR. gomod is excluded so Go
-      // module digests keep their own per-module PRs (no cross-module PR,
-      // go.sum post-upgrade step intact). Placed before the golang digest
-      // rules so their 'Golang versions' groupName wins (last write wins).
+      // Docker base images into one weekly PR, regardless of image name
+      // or file location. gomod is excluded so Go module digests keep
+      // their own per-module PRs (no cross-module PR, go.sum post-upgrade
+      // step intact).
       matchManagers: [
         'github-actions',
         'dockerfile',
@@ -61,26 +60,12 @@
       ],
     },
     {
+      // Actual Go toolchain version bumps (go.mod `go 1.X`, setup-go, etc.).
+      // Docker image digests for `golang` are handled by 'Digest pins' above.
       matchDatasources: ["golang-version"],
       rangeStrategy: "bump",
       groupName: "Golang versions",
       groupSlug: "golang-versions",
-      schedule: [
-        '* * * * 0' // At every minute on Sunday it is allowed to create branches
-      ],
-    },
-    {
-      matchDatasources: ['docker'],
-      matchPackageNames: ['golang'],
-      matchFileNames: ['kubernetes/controller/Dockerfile'],
-      groupName: 'Golang versions',
-      groupSlug: 'golang-versions',
-    },
-    {
-      matchManagers: ['github-actions'],
-      matchDepNames: ['go'],
-      groupName: 'Golang versions',
-      groupSlug: 'golang-versions',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ],
@@ -127,16 +112,6 @@
       groupSlug: 'google-golang-repos',
       matchPackageNames: [
         'google.golang.org/{/,}**'
-      ],
-      schedule: [
-        '* * * * 0' // At every minute on Sunday it is allowed to create branches
-      ]
-    },
-    {
-      groupName: 'Sigstore Repositories',
-      groupSlug: 'sigstore',
-      matchPackageNames: [
-        'github.com/sigstore/{/,}**'
       ],
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
@@ -197,6 +172,14 @@
       matchDepNames: [
         'github.com/go-ini/ini',
       ],
+      enabled: false,
+    },
+    {
+      // Renamed to github.com/ThalesGroup/crypto11 at v1.5.0. Pinned to v1.2.5
+      // on the old path (indirect via cosign). Bumps past v1.4.x fail the
+      // go.sum artifact step with a module-path mismatch (#2966, #3379).
+      matchManagers: ['gomod'],
+      matchDepNames: ['github.com/ThalesIgnite/crypto11'],
       enabled: false,
     },
     {
@@ -285,19 +268,6 @@
         '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
       ],
       versioningTemplate: 'semver',
-    },
-    // Track pinned pip install commands in GitHub Actions workflows (e.g. pip install foo==1.2.3)
-    {
-      customType: 'regex',
-      managerFilePatterns: [
-        '/.github/workflows/**/*.yml',
-        '/.github/workflows/**/*.yaml',
-      ],
-      matchStrings: [
-        'pip install (?<depName>\\S+)==(?<currentValue>\\S+)',
-      ],
-      datasourceTemplate: 'pypi',
-      versioningTemplate: 'pep440',
     },
   ],
   postUpgradeTasks: {

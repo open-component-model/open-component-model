@@ -18,7 +18,7 @@ import (
 // cfg carries the declarative transfer settings. A nil cfg and empty enum
 // fields resolve to the defaults: no recursion,
 // [transferv1alpha1.CopyModeLocalBlobResources], and
-// [transferv1alpha1.UploadAsDefault].
+// [transferv1alpha1.UploadAsLocalBlob].
 //
 // Each [Mapping] pairs source components with a target repository and a
 // resolver, enabling N:M routing where different sources feed different
@@ -40,7 +40,7 @@ func BuildGraphDefinition(
 		resolved.CopyMode = transferv1alpha1.CopyModeLocalBlobResources
 	}
 	if resolved.UploadType == "" {
-		resolved.UploadType = transferv1alpha1.UploadAsDefault
+		resolved.UploadType = transferv1alpha1.UploadAsLocalBlob
 	}
 
 	roots, err := collectTransferRoots(ctx, mappings)

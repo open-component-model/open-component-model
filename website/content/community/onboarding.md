@@ -127,14 +127,15 @@ and lives in its [own repository](https://github.com/open-component-model/ocm-sp
 
 The reference implementation of the specification in Go, located in
 [`bindings/go/`](https://github.com/open-component-model/open-component-model/tree/main/bindings/go). The `bindings/`
-directory is structured to welcome implementations in other languages in the future. This library provides the core
+directory is structured to welcome implementations in other languages in the future. The library ships as a single Go
+module (`ocm.software/open-component-model/bindings/go`) split into logical packages and provides the core
 types and operations (creating, signing, resolving, transferring component versions) that the CLI and controllers build
 on.
 
 {{< card-grid >}}
-{{< link-card title="Module Overview" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/README.md" description="Available modules, their purpose, and how to import them." >}}
+{{< link-card title="Package Overview" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/README.md#packages" description="Available packages, their purpose, and how to import them." >}}
 {{< link-card title="Guided Tour (Examples)" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/examples/README.md" description="Progressive learning path with runnable Go tests." >}}
-{{< link-card title="Contributing to Go Bindings" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/CONTRIBUTING.md" description="Workspace setup, testing, module lifecycle, and releases." >}}
+{{< link-card title="Contributing to Go Bindings" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/CONTRIBUTING.md" description="Package structure, testing, code generation, and releasing." >}}
 {{< /card-grid >}}
 
 ### OCM CLI
