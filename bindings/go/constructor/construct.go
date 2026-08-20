@@ -423,14 +423,15 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 
 		if c.opts.ResourceDigestProcessorProvider != nil {
 			digestProcessor, digestProcessorErr := c.opts.GetDigestProcessor(ctx, res)
-			if digestProcessorErr != nil {
+			switch {
+			case digestProcessorErr != nil:
 				logger.WarnContext(ctx, "error getting digest processor for access type, the resource is added without a digest",
 					"access_type", res.Access.GetType(),
 					"error", digestProcessorErr)
-			} else if digestProcessor == nil {
+			case digestProcessor == nil:
 				logger.WarnContext(ctx, "no digest processor available for access type, the resource is added without a digest",
 					"access_type", res.Access.GetType())
-			} else {
+			default:
 				logger.Debug("processing resource digest")
 				var creds ocmruntime.Typed
 				if c.opts.Resolver != nil {
