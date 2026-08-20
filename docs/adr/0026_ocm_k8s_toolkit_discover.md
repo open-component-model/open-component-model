@@ -166,14 +166,14 @@ so at most one vertex can match and nothing else needs to be walked.
 
 The two selectors have different envelopes for the optimization:
 
-- **`componentSelector`**: `matchLabels` and `expression` are allowed alongside `matchIdentity`. The
+- `componentSelector`: `matchLabels` and `expression` are allowed alongside `matchIdentity`. The
   post-filter (`filterByComponentSelector`) evaluates them against the target's own descriptor. The
   short-circuit fires from the target's own `Discover` call, which runs only after `Resolve` has already stored
   the descriptor on the vertex, so the target is guaranteed to be in the discovered set. Cancelled siblings are
   irrelevant: their descriptors have different identities, so the component-level post-filter would drop them
   anyway.
 
-- **`referenceSelector`**: `matchLabels` and `expression` must be empty, and `matchIdentity` must contain
+- `referenceSelector`: `matchLabels` and `expression` must be empty, and `matchIdentity` must contain
   exactly `componentName` and `version` (no other keys). Reference labels and per-edge identity attributes
   (local `name`, extra identity) live on edges, and the same target can be reached via multiple parents. The
   early-exit signal propagates through the discoverer's `errgroup` and cancels sibling goroutines, some of
@@ -198,7 +198,7 @@ Selectors have three fields, all ANDed. An empty selector matches everything.
   optimization.
 - `matchLabels`: string-equality on labels whose value is a string. OCM labels may hold arbitrary JSON; non-string
   values are not comparable this way and are silently non-matching.
-- **`expression`**: a CEL boolean predicate. A CEL binding is a named value the expression can reference; for
+- `expression`: a CEL boolean predicate. A CEL binding is a named value the expression can reference; for
   selectors the controller binds `identity` to the element's identity map and `labels` to its label map, so users
   write `identity.version` or `labels["tier"]`. `expression` covers structured labels, cross-field predicates, and
   semver ranges (`semverCheck(v, c)`). Missing attribute or label references evaluate to `false` rather than raising,
