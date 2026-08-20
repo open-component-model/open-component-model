@@ -52,7 +52,7 @@ func (r *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 	if r.ReferenceCache == nil {
 		return r.Repository.Resolve(ctx, reference)
 	}
-	ref, err := r.Repository.ParseReference(reference)
+	ref, err := r.ParseReference(reference)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
@@ -76,7 +76,7 @@ func (r *Repository) Untag(ctx context.Context, reference string) error {
 		return err
 	}
 	if r.ReferenceCache != nil {
-		ref, err := r.Repository.ParseReference(reference)
+		ref, err := r.ParseReference(reference)
 		if err != nil {
 			return err
 		}
@@ -96,7 +96,7 @@ func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		return err
 	}
 	if r.ReferenceCache != nil {
-		ref, err := r.Repository.ParseReference(reference)
+		ref, err := r.ParseReference(reference)
 		if err != nil {
 			return err
 		}
