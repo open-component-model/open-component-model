@@ -398,6 +398,51 @@ func TestConstructWithResourceDigest(t *testing.T) {
 	assert.Len(t, mockTargetRepo.addedVersions, 1)
 }
 
+func TestConstructWithAccessTypeWithoutDigestProcessor(t *testing.T) {
+	// An access type unknown to OCM has no digest processor available. This must not fail the
+	// construction, the resource is added without a digest instead.
+	mockDigestProvider := &mockDigestProcessorProvider{
+		err: fmt.Errorf("failed to get plugin for typ %q", "MyCustomAccessType/v1"),
+	}
+
+	constructor := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: external
+        type: blob
+        access:
+          type: MyCustomAccessType/v1
+          url: my.custom.domain.com/access
+`)
+
+	mockTargetRepo := newMockTargetRepository()
+
+	opts := Options{
+		TargetRepositoryProvider:        &mockTargetRepositoryProvider{repo: mockTargetRepo},
+		ResourceDigestProcessorProvider: mockDigestProvider,
+	}
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
+
+	require.NoError(t, constructorInstance.Construct(context.Background()))
+	descs := collectDescriptors(t, graph)
+	require.Len(t, descs, 1)
+
+	desc := descs[0]
+	verifyBasicComponent(t, desc)
+
+	resource := desc.Component.Resources[0]
+	assert.Equal(t, "test-resource", resource.Name)
+	assert.Equal(t, descriptor.ExternalRelation, resource.Relation)
+	require.NotNil(t, resource.Access)
+	assert.Equal(t, "MyCustomAccessType/v1", resource.Access.GetType().String())
+	assert.Nil(t, resource.Digest, "a resource without a digest processor must be stored without a digest")
+
+	assert.Len(t, mockTargetRepo.addedLocalResources, 0)
+	assert.Len(t, mockTargetRepo.addedVersions, 1)
+}
+
 func TestConstructWithInvalidInputMethod(t *testing.T) {
 	constructor := setupTestComponent(t, `
       - name: test-resource
