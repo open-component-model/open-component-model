@@ -2,6 +2,7 @@ package file
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/gabriel-vasile/mimetype"
 
@@ -57,7 +58,7 @@ func GetV1FileBlob(file v1.File, workingDirectory string) (blob.ReadOnlyBlob, er
 	mediaType := file.MediaType
 	if mediaType == "" {
 		// see https://github.com/gabriel-vasile/mimetype/blob/master/supported_mimes.md for supported types
-		mime, _ := mimetype.DetectFile(file.Path)
+		mime, _ := mimetype.DetectFile(filepath.Join(workingDirectory, file.Path))
 		mediaType = mime.String()
 	}
 
