@@ -2,6 +2,7 @@ package cache
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,6 +11,20 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
 	"ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
+)
+
+// RemotePolicy controls when the cache contacts the upstream registry
+// on a cache hit.
+type RemotePolicy string
+
+const (
+	// RemotePolicyIfNotPresent returns cached content without contacting
+	// the registry. The local cache directory is trusted.
+	RemotePolicyIfNotPresent RemotePolicy = "IfNotPresent"
+
+	// RemotePolicyAlways contacts the registry on every cache hit to
+	// verify the caller is authorised. Mirrors Kubernetes imagePullPolicy:Always.
+	RemotePolicyAlways RemotePolicy = "Always"
 )
 
 // Options controls the behaviour of both the [BlobCache] and the
@@ -55,6 +70,10 @@ type Options struct {
 	// size without a breaking signature change. nil falls back to
 	// [DefaultAccept] in [NewBlobCache]. Ignored by [ReferenceCache].
 	Accept func(desc ociImageSpecV1.Descriptor) bool
+
+	// RemotePolicy controls whether the upstream registry is contacted
+	// on a cache hit. Defaults to [RemotePolicyIfNotPresent].
+	RemotePolicy RemotePolicy
 }
 
 // Defaults returns an [Options] populated with sane caching limits:
@@ -66,10 +85,11 @@ type Options struct {
 // Dir is left zero — callers must set it explicitly.
 func Defaults() *Options {
 	return &Options{
-		MaxEntries:  256,
-		TTL:         10 * time.Minute,
-		MaxBlobSize: 4 << 20,
-		Accept:      DefaultAccept,
+		MaxEntries:   256,
+		TTL:          10 * time.Minute,
+		MaxBlobSize:  4 << 20,
+		Accept:       DefaultAccept,
+		RemotePolicy: RemotePolicyIfNotPresent,
 	}
 }
 
@@ -91,6 +111,14 @@ func (o Options) applyDefaults() (Options, error) {
 	}
 	if o.Accept == nil {
 		o.Accept = d.Accept
+	}
+	switch o.RemotePolicy {
+	case "":
+		o.RemotePolicy = d.RemotePolicy
+	case RemotePolicyIfNotPresent, RemotePolicyAlways:
+		// ok
+	default:
+		return Options{}, fmt.Errorf("cache: unsupported RemotePolicy %q", o.RemotePolicy)
 	}
 	return o, nil
 }

@@ -217,7 +217,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 			}
 		}
 		if b.referenceCacheOpts != nil {
-			if rc := b.getOrCreateReferenceCache(identity, ociCredentials); rc != nil {
+			if rc := b.getOrCreateReferenceCache(identity); rc != nil {
 				resolverOpts = append(resolverOpts, urlresolver.WithReferenceCache(rc))
 			}
 		}
@@ -291,20 +291,18 @@ func (b *CachingComponentVersionRepositoryProvider) newSharedBlobCache() *cache.
 	return c
 }
 
-// getOrCreateReferenceCache returns the ReferenceCache for the given credential
-// scope, creating and persisting it on first use.
+// getOrCreateReferenceCache returns the ReferenceCache for the given repository
+// scope, creating and persisting it on first use. The scope is based solely on
+// repository identity (host[:port]/path); credentials are excluded because
+// short-lived tokens would create new scopes and kill cache reuse. Use
+// [RemotePolicyAlways] to require remote authorisation on every cache hit.
 //
 // Concurrent first-use callers for the same scope are collapsed via
-// [singleflight.Group] so exactly one [cache.NewReferenceCache] runs
-// (which creates directories, walks the disk snapshot, and reseeds
-// the LRU). All waiters observe the shared result. Subsequent calls
-// skip the singleflight and read the published cache from
-// [CachingComponentVersionRepositoryProvider.referenceCaches] directly.
+// [singleflight.Group] so exactly one [cache.NewReferenceCache] runs.
 func (b *CachingComponentVersionRepositoryProvider) getOrCreateReferenceCache(
 	identity *v1.OCIRegistryIdentity,
-	creds *v2.OCICredentials,
 ) *cache.ReferenceCache {
-	scope := cache.ScopeKey(identity, creds)
+	scope := cache.RepositoryKey(identity)
 	if v, ok := b.referenceCaches.Load(scope); ok {
 		return v.(*cache.ReferenceCache)
 	}

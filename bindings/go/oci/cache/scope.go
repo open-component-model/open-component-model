@@ -5,33 +5,25 @@ import (
 	"encoding/hex"
 	"strings"
 
-	credv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 )
 
-// ScopeKey returns a stable, filesystem-safe string that uniquely
-// identifies the (registry identity, credential) pair. It is used to
-// derive an isolated cache subdirectory so that blobs and manifests
-// fetched under one credential set cannot be served to a caller
-// holding different credentials.
+// RepositoryKey returns a stable, filesystem-safe string that uniquely
+// identifies a registry repository by its location only, without any
+// credential material. It is used to derive an isolated cache
+// subdirectory per repository so blobs and manifests from different
+// repositories do not collide.
 //
 // The key is a 16-hex-character SHA-256 prefix of:
 //
-//	"<hostname>[:<port>]<path>|<credential-discriminator>"
+//	"<hostname>[:<port>]<path>"
 //
-// The credential discriminator is the username (basic auth), or the
-// access or refresh token (bearer auth). When no credentials are
-// provided the discriminator is empty, producing a stable "anonymous"
-// scope that maps to a predictable subdirectory rather than mixing
-// with any authenticated scope.
-//
-// The full credential material is fed into the SHA-256 input so two
-// distinct tokens that happen to share a common prefix never collapse
-// into the same scope. Only the hash, never the raw credential
-// material, is written to disk or used as a directory name.
-func ScopeKey(identity *identityv1.OCIRegistryIdentity, creds *credv1.OCICredentials) string {
+// Credential material is deliberately excluded: short-lived tokens
+// would create new scope keys and kill cache reuse. Use
+// [RemotePolicyAlways] instead when remote authorisation must be
+// verified on every cache hit.
+func RepositoryKey(identity *identityv1.OCIRegistryIdentity) string {
 	var b strings.Builder
-
 	if identity != nil {
 		b.WriteString(identity.Hostname)
 		if identity.Port != "" {
@@ -40,20 +32,6 @@ func ScopeKey(identity *identityv1.OCIRegistryIdentity, creds *credv1.OCICredent
 		}
 		b.WriteString(identity.Path)
 	}
-
-	b.WriteByte('|')
-
-	if creds != nil {
-		switch {
-		case creds.Username != "":
-			b.WriteString(creds.Username)
-		case creds.AccessToken != "":
-			b.WriteString(creds.AccessToken)
-		case creds.RefreshToken != "":
-			b.WriteString(creds.RefreshToken)
-		}
-	}
-
 	sum := sha256.Sum256([]byte(b.String()))
 	return hex.EncodeToString(sum[:8])
 }

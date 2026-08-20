@@ -28,6 +28,7 @@ type fakeReadOnly struct {
 	blobs   map[digest.Digest][]byte
 	media   map[digest.Digest]string
 	fetches atomic.Int64
+	exists  atomic.Int64
 }
 
 func newFakeReadOnly() *fakeReadOnly {
@@ -55,10 +56,19 @@ func (s *fakeReadOnly) Fetch(_ context.Context, target ociImageSpecV1.Descriptor
 }
 
 func (s *fakeReadOnly) Exists(_ context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
+	s.exists.Add(1)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, ok := s.blobs[target.Digest]
 	return ok, nil
+}
+
+// remove deletes a blob from the fake store, simulating registry removal.
+func (s *fakeReadOnly) remove(dgst digest.Digest) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.blobs, dgst)
+	delete(s.media, dgst)
 }
 
 var _ content.ReadOnlyStorage = (*fakeReadOnly)(nil)

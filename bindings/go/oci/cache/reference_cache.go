@@ -243,19 +243,22 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref reg
 		return upstream.Resolve(ctx, ref.Reference)
 	}
 	k := c.buildKey(ref)
-	if v, ok := c.lru.Get(k); ok {
-		c.logger.DebugContext(ctx, "refcache: hit",
-			slog.String("namespace", k.namespace),
-			slog.String("reference", k.reference),
-			slog.String("digest", v.Descriptor.Digest.String()))
-		return v.Descriptor, nil
-	}
-	// Collapse concurrent misses for the same key into one upstream
-	// round-trip so a burst of identical resolves does not stampede the
-	// registry.
-	v, err, _ := c.sf.Do(k.namespace+"\x00"+ref.Reference, func() (any, error) {
+	if c.opts.RemotePolicy == RemotePolicyIfNotPresent {
 		if v, ok := c.lru.Get(k); ok {
+			c.logger.DebugContext(ctx, "refcache: hit",
+				slog.String("namespace", k.namespace),
+				slog.String("reference", k.reference),
+				slog.String("digest", v.Descriptor.Digest.String()))
 			return v.Descriptor, nil
+		}
+	}
+	// Collapse concurrent misses (or Always-policy calls) for the same
+	// key into one upstream round-trip.
+	v, err, _ := c.sf.Do(k.namespace+"\x00"+ref.Reference, func() (any, error) {
+		if c.opts.RemotePolicy == RemotePolicyIfNotPresent {
+			if v, ok := c.lru.Get(k); ok {
+				return v.Descriptor, nil
+			}
 		}
 		desc, err := upstream.Resolve(ctx, ref.Reference)
 		if err != nil {

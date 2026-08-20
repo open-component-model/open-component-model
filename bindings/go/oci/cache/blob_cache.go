@@ -212,6 +212,17 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		c.logger.DebugContext(ctx, "blobcache: get failed, falling through",
 			slog.String("digest", target.Digest.String()), slog.String("err", err.Error()))
 	} else if hit {
+		if c.opts.RemotePolicy == RemotePolicyAlways {
+			ok, err := upstream.Exists(ctx, target)
+			if err != nil {
+				_ = f.Close()
+				return nil, fmt.Errorf("blobcache: verify remote access: %w", err)
+			}
+			if !ok {
+				_ = f.Close()
+				return nil, fmt.Errorf("blobcache: remote does not contain or allow access to %s", target.Digest)
+			}
+		}
 		c.logger.DebugContext(ctx, "blobcache: hit",
 			slog.String("digest", target.Digest.String()), slog.Int64("size", target.Size))
 		return f, nil
