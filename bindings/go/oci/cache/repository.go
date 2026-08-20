@@ -52,11 +52,11 @@ func (r *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 	if r.ReferenceCache == nil {
 		return r.Repository.Resolve(ctx, reference)
 	}
-	normalized := reference
-	if ref, err := r.Repository.ParseReference(reference); err == nil {
-		normalized = ref.Reference
+	ref, err := r.Repository.ParseReference(reference)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, err
 	}
-	return r.ReferenceCache.Resolve(ctx, r.Repository, r.referenceNamespace(), normalized)
+	return r.ReferenceCache.Resolve(ctx, r.Repository, r.referenceNamespace(), ref.Reference)
 }
 
 // referenceNamespace returns a stable per-repository identifier used
@@ -92,11 +92,11 @@ func (r *Repository) Untag(ctx context.Context, reference string) error {
 		return err
 	}
 	if r.ReferenceCache != nil {
-		normalized := reference
-		if ref, err := r.Repository.ParseReference(reference); err == nil {
-			normalized = ref.Reference
+		ref, err := r.Repository.ParseReference(reference)
+		if err != nil {
+			return err
 		}
-		r.ReferenceCache.Invalidate(r.referenceNamespace(), normalized)
+		r.ReferenceCache.Invalidate(r.referenceNamespace(), ref.Reference)
 	}
 	return nil
 }
@@ -112,11 +112,11 @@ func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		return err
 	}
 	if r.ReferenceCache != nil {
-		normalized := reference
-		if ref, err := r.Repository.ParseReference(reference); err == nil {
-			normalized = ref.Reference
+		ref, err := r.Repository.ParseReference(reference)
+		if err != nil {
+			return err
 		}
-		r.ReferenceCache.Add(r.referenceNamespace(), normalized, desc)
+		r.ReferenceCache.Add(r.referenceNamespace(), ref.Reference, desc)
 	}
 	return nil
 }

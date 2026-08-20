@@ -50,10 +50,10 @@ func TestRepository_Resolve_DelegatesToReferenceCache(t *testing.T) {
 	inner := &remote.Repository{
 		Reference: registry.Reference{Registry: "ghcr.io", Repository: "owner/repo"},
 	}
-	rc.Add("ghcr.io/owner/repo", "ref:1", desc)
+	rc.Add("ghcr.io/owner/repo", "ref-1", desc)
 
 	repo := &Repository{Repository: inner, ReferenceCache: rc}
-	got, err := repo.Resolve(t.Context(), "ref:1")
+	got, err := repo.Resolve(t.Context(), "ref-1")
 	require.NoError(t, err)
 	assert.Equal(t, desc, got)
 }
