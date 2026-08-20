@@ -86,6 +86,18 @@ type ReferenceCache struct {
 	// calls for the same namespace do not interleave file writes.
 	mu sync.Mutex
 
+	// evictedRefsMu protects namespacesWithEvictedRefs.
+	//
+	// The LRU eviction callback runs synchronously during LRU
+	// mutations, so it must not call writeNamespace: writeNamespace
+	// reads the LRU and would deadlock on the LRU's internal lock.
+	evictedRefsMu sync.Mutex
+
+	// namespacesWithEvictedRefs contains namespaces whose persisted
+	// snapshot may still contain references evicted from the in-memory
+	// LRU.
+	namespacesWithEvictedRefs map[string]struct{}
+
 	// sf collapses concurrent upstream resolves for the same
 	// (namespace, reference) into a single round-trip.
 	sf singleflight.Group
@@ -120,12 +132,14 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 	}
 
 	c := &ReferenceCache{
-		opts:   opts,
-		logger: slog.Default().With(slog.String("dir", opts.Dir)),
+		opts:                      opts,
+		logger:                    slog.Default().With(slog.String("dir", opts.Dir)),
+		namespacesWithEvictedRefs: make(map[string]struct{}),
 	}
 	c.lru = expirable.NewLRU(
 		opts.MaxEntries,
 		func(k referenceKey, _ referenceEntry) {
+			c.markNamespaceWithEvictedRef(k.namespace)
 			c.logger.Debug("refcache: evicted",
 				slog.String("namespace", k.namespace),
 				slog.String("reference", k.reference))
@@ -142,6 +156,18 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 			slog.Int("loaded", loaded),
 			slog.Duration("duration", time.Since(startRefs)))
 	}
+
+	// Flush namespaces dirtied by load-time capacity eviction so stale
+	// snapshot files do not survive a restart when MaxEntries is
+	// smaller than the number of persisted entries.
+	for namespace := range c.drainNamespacesWithEvictedRefs() {
+		if err := c.writeNamespace(namespace); err != nil {
+			c.logger.Warn("refcache: write snapshot after load eviction failed",
+				slog.String("namespace", namespace),
+				slog.String("err", err.Error()))
+		}
+	}
+
 	return c, nil
 }
 
@@ -149,17 +175,30 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 // in-memory LRU and persists the namespace's snapshot file so a
 // future run pointing at the same Dir reseeds the mapping.
 //
-// Add is best-effort with respect to disk: if the rewrite fails, the
+// When adding to a full LRU causes a capacity eviction, Add also
+// rewrites the snapshot file of the evicted entry's namespace so the
+// on-disk state stays consistent with memory.
+//
+// Add is best-effort with respect to disk: if a rewrite fails, the
 // in-memory entry is still added and a warning is logged. The caller
 // never sees an error from this method.
 func (c *ReferenceCache) Add(ref registry.Reference, desc ociImageSpecV1.Descriptor) {
 	k := c.buildKey(ref)
+
 	c.lru.Add(k, referenceEntry{Descriptor: desc, SavedAt: time.Now()})
-	if err := c.writeNamespace(k.namespace); err != nil {
-		c.logger.Warn("refcache: write snapshot failed",
-			slog.String("namespace", k.namespace),
-			slog.String("reference", k.reference),
-			slog.String("err", err.Error()))
+
+	// Collect namespaces dirtied by capacity eviction triggered above,
+	// then always include the current namespace.
+	namespaces := c.drainNamespacesWithEvictedRefs()
+	namespaces[k.namespace] = struct{}{}
+
+	for namespace := range namespaces {
+		if err := c.writeNamespace(namespace); err != nil {
+			c.logger.Warn("refcache: write snapshot failed",
+				slog.String("namespace", namespace),
+				slog.String("reference", k.reference),
+				slog.String("err", err.Error()))
+		}
 	}
 }
 
@@ -229,6 +268,27 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref reg
 		return ociImageSpecV1.Descriptor{}, err
 	}
 	return v.(ociImageSpecV1.Descriptor), nil
+}
+
+// markNamespaceWithEvictedRef records namespace as having at least one
+// reference evicted from the LRU. Safe to call from the LRU eviction
+// callback because it only touches evictedRefsMu, not the LRU.
+func (c *ReferenceCache) markNamespaceWithEvictedRef(namespace string) {
+	c.evictedRefsMu.Lock()
+	defer c.evictedRefsMu.Unlock()
+
+	c.namespacesWithEvictedRefs[namespace] = struct{}{}
+}
+
+// drainNamespacesWithEvictedRefs atomically returns and clears the set
+// of namespaces that had LRU-capacity evictions since the last drain.
+func (c *ReferenceCache) drainNamespacesWithEvictedRefs() map[string]struct{} {
+	c.evictedRefsMu.Lock()
+	defer c.evictedRefsMu.Unlock()
+
+	namespaces := c.namespacesWithEvictedRefs
+	c.namespacesWithEvictedRefs = make(map[string]struct{})
+	return namespaces
 }
 
 // buildKey constructs the in-memory cache key from the parsed registry.Reference.

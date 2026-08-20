@@ -436,3 +436,43 @@ func TestWriteFileAtomic_TempDirMissing(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create temp file")
 }
+
+func TestReferenceCache_Add_RewritesEvictedNamespaceSnapshot(t *testing.T) {
+	r := require.New(t)
+	dir := filepath.Join(t.TempDir(), "refcache")
+
+	refA, err := registry.ParseReference("ghcr.io/a/repo:v1")
+	r.NoError(err)
+	refB, err := registry.ParseReference("ghcr.io/b/repo:v1")
+	r.NoError(err)
+
+	descA := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("a")),
+		Size:      1,
+	}
+	descB := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("b")),
+		Size:      1,
+	}
+
+	c1, err := NewReferenceCache(Options{Dir: dir, MaxEntries: 1})
+	r.NoError(err)
+
+	c1.Add(refA, descA)
+	c1.Add(refB, descB) // triggers capacity eviction of A
+
+	_, ok := c1.Lookup(refA)
+	r.False(ok, "A must be evicted from memory")
+
+	c2, err := NewReferenceCache(Options{Dir: dir, MaxEntries: 1})
+	r.NoError(err)
+
+	_, ok = c2.Lookup(refA)
+	assert.False(t, ok, "capacity-evicted reference must not survive restart")
+
+	gotB, ok := c2.Lookup(refB)
+	r.True(ok)
+	assert.Equal(t, descB, gotB)
+}
