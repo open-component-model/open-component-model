@@ -1,6 +1,16 @@
 name: "Website: Verify Scripts"
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/website-verify-scripts.yml'
+      - 'website/assets/js/**'
+      - 'website/scripts/**'
+      - 'website/eslint.config.*'
+      - 'website/package.json'
+      - 'website/package-lock.json'
   pull_request:
     branches:
       - main
