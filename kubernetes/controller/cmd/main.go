@@ -30,6 +30,7 @@ import (
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmcredspec "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
+	ocicache "ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	ocicredspec "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
@@ -216,7 +217,11 @@ func main() {
 	pm := manager.NewPluginManager(ctx)
 
 	ocirepository.MustAddLegacyToScheme(ocirepository.Scheme)
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(ocirepository.Scheme))
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(
+		provider.WithScheme(ocirepository.Scheme),
+		provider.WithBlobCacheOptions(&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}),
+		provider.WithReferenceCacheOptions(&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}),
+	)
 	if err := pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider); err != nil {
 		setupLog.Error(err, "failed to register internal component version repository plugin")
 		os.Exit(1)
