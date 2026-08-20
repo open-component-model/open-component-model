@@ -198,14 +198,15 @@ Selectors have three fields, all ANDed. An empty selector matches everything.
   optimization.
 - `matchLabels`: string-equality on labels whose value is a string. OCM labels may hold arbitrary JSON; non-string
   values are not comparable this way and are silently non-matching.
-- `expression`: a CEL boolean predicate. A CEL binding is a named value the expression can reference; for
-  selectors the controller binds `identity` to the element's identity map and `labels` to its label map, so users
-  write `identity.version` or `labels["tier"]`. `expression` covers structured labels, cross-field predicates, and
-  semver ranges (`semverCheck(v, c)`). Missing attribute or label references evaluate to `false` rather than raising,
-  so users don't have to guard every access with `has()`. Without this behaviour, mismatches would return an error
-  instead of "dropping the filter". For example, resources can have different fields depending on their type. Thus,
-  a component version with heterogeneous resources can be filtered with a single `expression` without having to guard
-  every path.
+- `expression`: a CEL boolean predicate. A CEL binding is a named value the expression can reference; for selectors
+  the controller binds `identity` to the element's identity map and `labels` to its label map, so users write
+  `identity.version` or `labels["tier"]`. `expression` covers what the map fields cannot: structured (non-string)
+  label values, semver ranges via `semverCheck(v, c)`, and predicates that relate more than one field, e.g.
+  `labels["tier"] == "platform" && identity.version.startsWith("2.")`. Missing attribute or label references evaluate
+  to `false` rather than raising, so users don't have to guard every access with `has()`. Without this behaviour,
+  mismatches would return an error instead of "dropping the filter". For example, resources can have different fields
+  depending on their type. Thus, a component version with heterogeneous resources can be filtered with a single
+  `expression` without having to guard every path.
 
 Why bother with `matchIdentity` and `matchLabels` when `expression` can express the same queries? Convenience.
 `matchIdentity` and `matchLabels` are familiar shapes from other CRDs, and they let users write simple queries
