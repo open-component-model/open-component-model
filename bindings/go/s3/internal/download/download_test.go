@@ -11,12 +11,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	goruntime "runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
@@ -426,62 +424,6 @@ func TestDownload_StreamsIntoTempDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, content, onDisk)
 	assert.Equal(t, content, readBlob(t, res.Blob))
-}
-
-func TestDownload_CloseRemovesTempFile(t *testing.T) {
-	tempDir := t.TempDir()
-	srv := newFakeS3(t, s3Object{body: []byte("payload")})
-
-	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(tempDir))
-	require.NoError(t, err)
-	require.Len(t, filesIn(t, tempDir), 1)
-
-	require.NoError(t, res.Blob.Close())
-	assert.Empty(t, filesIn(t, tempDir), "closing the blob must remove the temporary file")
-
-	assert.NoError(t, res.Blob.Close(), "closing twice must not fail")
-}
-
-// A blob dropped without being closed must not keep its file for the lifetime of the
-// process.
-func TestDownload_AbandonedBlobIsReclaimed(t *testing.T) {
-	tempDir := t.TempDir()
-	srv := newFakeS3(t, s3Object{body: []byte("payload")})
-
-	func() {
-		_, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(tempDir))
-		require.NoError(t, err)
-		require.Len(t, filesIn(t, tempDir), 1)
-	}()
-
-	// The cleanup runs asynchronously once the blob is unreachable, so collect and poll.
-	require.Eventually(t, func() bool {
-		goruntime.GC()
-		entries, err := os.ReadDir(tempDir)
-		return err == nil && len(entries) == 0
-	}, 10*time.Second, 20*time.Millisecond, "an abandoned download must not leave its temporary file behind")
-}
-
-// The cleanup must not pull the file out from under a read still in progress.
-func TestDownload_OpenReaderSurvivesCollection(t *testing.T) {
-	content := []byte("payload that is read after the blob goes out of scope")
-	srv := newFakeS3(t, s3Object{body: content})
-
-	rc := func() io.ReadCloser {
-		res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(t.TempDir()))
-		require.NoError(t, err)
-
-		rc, err := res.Blob.ReadCloser()
-		require.NoError(t, err)
-		return rc
-	}()
-	t.Cleanup(func() { _ = rc.Close() })
-
-	goruntime.GC()
-
-	got, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	assert.Equal(t, content, got)
 }
 
 func TestDownload_MaxDownloadSize(t *testing.T) {

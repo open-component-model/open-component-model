@@ -186,13 +186,9 @@ func Test_DownloadResource(t *testing.T) {
 	require.NoError(t, rc.Close())
 	require.Equal(t, content, got)
 
-	closer, ok := b.(io.Closer)
-	require.True(t, ok, "the downloaded blob must be closeable so callers can release its file")
-	require.NoError(t, closer.Close())
-
 	entries, err = os.ReadDir(tempFolder)
 	require.NoError(t, err)
-	require.Empty(t, entries, "closing the blob must remove the downloaded file")
+	require.Len(t, entries, 1, "the downloaded file is owned by the caller and must outlive the download")
 }
 
 func Test_ProcessResourceDigest(t *testing.T) {

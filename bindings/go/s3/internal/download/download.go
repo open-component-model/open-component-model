@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net/url"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
@@ -37,8 +39,8 @@ const (
 
 // Result is the outcome of a [Download].
 type Result struct {
-	// Blob is the object body, backed by a file on disk that the blob owns; see [Blob].
-	Blob *Blob
+	// Blob is the object body, backed by a file on disk.
+	Blob *filesystem.Blob
 	// VersionID is the object version that was read, as reported by S3. It is
 	// [UnversionedVersionID] for an unversioned object and empty for stores that do
 	// not report a version, so it identifies immutable content only when it is neither.
@@ -68,11 +70,8 @@ type Request struct {
 // Download fetches the object described by req and returns its body as a blob
 // backed by a file on disk, along with the object version that was read. Objects
 // are streamed rather than buffered, so memory use stays flat regardless of object
-// size; the file is created under the directory given by [WithTempDir] and outlives
-// this call.
-//
-// The returned [Blob] owns that file: callers should [Blob.Close] it once they are
-// done, and an unclosed blob has its file removed when it becomes unreachable.
+// size; the file is created under the directory given by [WithTempDir], outlives
+// this call and is owned by the caller.
 //
 // The credentials and maximum size are supplied via options; see [WithCredentials]
 // and [WithMaxDownloadSize].
@@ -147,9 +146,9 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 
 	b, err := storeObject(file, body, maxDownloadSize, req)
 	if err != nil {
-		// Nothing else owns the file until the blob does, so a download that does not
-		// produce one takes its file with it.
-		_ = os.Remove(file.Name())
+		if err := os.Remove(file.Name()); err != nil {
+			slog.WarnContext(ctx, "error removing temporary file after failed download", "file", file.Name(), "err", err)
+		}
 		return nil, err
 	}
 	b.SetMediaType(mediaType)
@@ -157,11 +156,11 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 	return &Result{Blob: b, VersionID: aws.ToString(out.VersionId)}, nil
 }
 
-// storeObject streams body into file and returns a blob backed by it, which from then
-// on owns the file. It closes file whether or not it succeeds, but never removes it:
-// the caller does that, so that the one thing it can do about a failure is done in one
-// place rather than at every error return.
-func storeObject(file *os.File, body io.Reader, maxDownloadSize int64, req Request) (*Blob, error) {
+// storeObject streams body into file and returns a blob backed by it. It closes file
+// whether or not it succeeds, but never removes it: the caller does that, so that the
+// one thing it can do about a failure is done in one place rather than at every error
+// return.
+func storeObject(file *os.File, body io.Reader, maxDownloadSize int64, req Request) (*filesystem.Blob, error) {
 	path := file.Name()
 
 	written, err := io.Copy(file, body)
@@ -176,7 +175,7 @@ func storeObject(file *os.File, body io.Reader, maxDownloadSize int64, req Reque
 		return nil, fmt.Errorf("s3 object %s/%s exceeds maximum allowed size of %d bytes", req.BucketName, req.ObjectKey, maxDownloadSize)
 	}
 
-	b, err := newBlob(path)
+	b, err := filesystem.GetBlobFromOSPath(path)
 	if err != nil {
 		return nil, fmt.Errorf("error creating blob for s3 object %s/%s from %s: %w", req.BucketName, req.ObjectKey, path, err)
 	}

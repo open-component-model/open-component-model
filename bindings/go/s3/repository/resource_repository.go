@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
@@ -79,16 +80,15 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 // S3Bucket access spec.
 //
 // The object is streamed into a file under the configured TempFolder, and the
-// returned blob reads from that file, which outlives this call. The blob owns that
-// file: callers should close it (it implements io.Closer) once they are done, and an
-// unclosed blob has its file removed when it becomes unreachable.
+// returned blob reads from that file, which outlives this call and is owned by the
+// caller.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := r.convertAccess(resource)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := r.download(ctx, spec, credentials)
+	result, err := r.download(ctx, spec, credentials, r.filesystemConfig.TempFolder)
 	if err != nil {
 		return nil, err
 	}
@@ -115,12 +115,12 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S
 	return spec, nil
 }
 
-// download streams the object described by spec into the configured temp folder and
-// returns it as a file-backed blob owning that file.
-func (r *ResourceRepository) download(ctx context.Context, spec *v1.S3Bucket, credentials runtime.Typed) (*download.Result, error) {
+// download streams the object described by spec into tempDir and returns it as a
+// file-backed blob. The file outlives this call and is owned by the caller.
+func (r *ResourceRepository) download(ctx context.Context, spec *v1.S3Bucket, credentials runtime.Typed, tempDir string) (*download.Result, error) {
 	opts := []download.Option{
 		download.WithCredentials(credentials),
-		download.WithTempDir(r.filesystemConfig.TempFolder),
+		download.WithTempDir(tempDir),
 	}
 	if r.maxDownloadSize != nil {
 		opts = append(opts, download.WithMaxDownloadSize(*r.maxDownloadSize))
@@ -170,17 +170,20 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		return nil, err
 	}
 
-	result, err := r.download(ctx, spec, credentials)
+	tempDir, err := os.MkdirTemp(r.filesystemConfig.TempFolder, "ocm-s3-digest-*")
+	if err != nil {
+		return nil, fmt.Errorf("error creating temporary directory for digest processing: %w", err)
+	}
+	defer func() {
+		if rmErr := os.RemoveAll(tempDir); rmErr != nil {
+			slog.WarnContext(ctx, "failed to remove temporary directory after digest processing", "path", tempDir, "err", rmErr)
+		}
+	}()
+
+	result, err := r.download(ctx, spec, credentials, tempDir)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource for digest processing: %w", err)
 	}
-	// The blob never leaves this function, so its file is released right away instead
-	// of waiting for the caller or the cleanup to reclaim it.
-	defer func() {
-		if closeErr := result.Blob.Close(); closeErr != nil {
-			slog.WarnContext(ctx, "failed to remove temporary file after digest processing", "err", closeErr)
-		}
-	}()
 
 	raw, ok := result.Blob.Digest()
 	if !ok {

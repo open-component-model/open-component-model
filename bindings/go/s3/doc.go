@@ -22,14 +22,11 @@
 //	if err != nil {
 //	    return err
 //	}
-//	defer b.(io.Closer).Close()
 //
 // Objects are streamed into a file under the TempFolder of the supplied filesystem
 // config (a nil config selects the OS temporary directory) rather than buffered, so
-// memory use does not scale with object size. The returned blob owns that file:
-// closing it removes the file, and a blob dropped without being closed has its file
-// removed once it becomes unreachable, so downloads do not pile up in a long-running
-// process.
+// memory use does not scale with object size. That file outlives the call and is
+// owned by the caller, who decides when it is removed.
 //
 // Integrity uses OCM's own SHA-256 over the content (see ProcessResourceDigest), not
 // the S3 ETag, which is not a reliable whole-object hash for multipart objects.
