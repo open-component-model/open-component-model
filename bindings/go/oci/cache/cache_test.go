@@ -17,6 +17,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/registry"
 )
 
 func newTestCache(t *testing.T, opts Options) *BlobCache {
@@ -299,7 +300,7 @@ func TestCache_New_LoadReferencesMalformed(t *testing.T) {
 	// Malformed snapshot is logged but does not abort construction.
 	c, err := NewReferenceCache(Options{Dir: dir})
 	require.NoError(t, err)
-	_, hit := c.Lookup("ns", "x")
+	_, hit := c.Lookup(registry.Reference{Registry: "ghcr.io", Repository: "ns", Reference: "x"})
 	assert.False(t, hit)
 }
 

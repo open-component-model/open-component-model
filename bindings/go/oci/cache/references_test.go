@@ -16,6 +16,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/registry"
 )
 
 // resolverFn adapts a function to the upstream resolver interface
@@ -52,11 +53,14 @@ func TestReferenceCache_Resolve_HitAfterFirstCall(t *testing.T) {
 		return desc, nil
 	})
 
-	got, err := c.Resolve(t.Context(), upstream, "ns", "ghcr.io/owner/repo:v1")
+	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
+	require.NoError(t, err)
+
+	got, err := c.Resolve(t.Context(), upstream, ref)
 	require.NoError(t, err)
 	assert.Equal(t, desc, got)
 
-	got2, err := c.Resolve(t.Context(), upstream, "ns", "ghcr.io/owner/repo:v1")
+	got2, err := c.Resolve(t.Context(), upstream, ref)
 	require.NoError(t, err)
 	assert.Equal(t, desc, got2)
 
@@ -73,29 +77,37 @@ func TestReferenceCache_Invalidate_RemovesEntryAndSurvivesRestart(t *testing.T) 
 
 	c1, err := NewReferenceCache(Options{Dir: dir})
 	require.NoError(t, err)
-	c1.Add("ns", "v1", desc)
-	_, ok := c1.Lookup("ns", "v1")
+
+	ref, err := registry.ParseReference("ghcr.io/ns:v1")
+	require.NoError(t, err)
+
+	c1.Add(ref, desc)
+	_, ok := c1.Lookup(ref)
 	require.True(t, ok)
 
-	c1.Invalidate("ns", "v1")
-	_, ok = c1.Lookup("ns", "v1")
+	c1.Invalidate(ref)
+	_, ok = c1.Lookup(ref)
 	assert.False(t, ok, "entry must be gone from the in-memory LRU")
 
 	// A restart must not resurrect the invalidated mapping.
 	c2, err := NewReferenceCache(Options{Dir: dir})
 	require.NoError(t, err)
-	_, ok = c2.Lookup("ns", "v1")
+	_, ok = c2.Lookup(ref)
 	assert.False(t, ok, "invalidated mapping must not survive a restart")
 }
 
 func TestReferenceCache_Invalidate_UnknownEntryIsNoOp(t *testing.T) {
 	c := newTestRefCache(t, Options{})
-	c.Invalidate("ns", "never-added")
+	ref, err := registry.ParseReference("ghcr.io/ns:never-added")
+	require.NoError(t, err)
+	c.Invalidate(ref)
 }
 
 func TestReferenceCache_Invalidate_NilReceiver(t *testing.T) {
 	var c *ReferenceCache
-	c.Invalidate("ns", "ref")
+	ref, err := registry.ParseReference("ghcr.io/ns:ref")
+	require.NoError(t, err)
+	c.Invalidate(ref)
 }
 
 func TestReferenceCache_Load_DropsExpiredEntries(t *testing.T) {
@@ -108,11 +120,15 @@ func TestReferenceCache_Load_DropsExpiredEntries(t *testing.T) {
 
 	c1, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
 	require.NoError(t, err)
-	c1.Add("ns", "v1", desc)
+
+	ref, err := registry.ParseReference("ghcr.io/ns:v1")
+	require.NoError(t, err)
+
+	c1.Add(ref, desc)
 
 	// Backdate the persisted entry beyond the TTL by rewriting its
 	// snapshot file with an old savedAt.
-	snapPath := c1.pathForNamespace("ns")
+	snapPath := c1.pathForNamespace("ghcr.io/ns")
 	raw, err := os.ReadFile(snapPath)
 	require.NoError(t, err)
 	var snap referenceFileSnapshot
@@ -127,7 +143,7 @@ func TestReferenceCache_Load_DropsExpiredEntries(t *testing.T) {
 	// A restart must honour the TTL and drop the stale mapping.
 	c2, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
 	require.NoError(t, err)
-	_, ok := c2.Lookup("ns", "v1")
+	_, ok := c2.Lookup(ref)
 	assert.False(t, ok, "entry older than TTL must be dropped on reload")
 }
 
@@ -141,11 +157,15 @@ func TestReferenceCache_Load_KeepsFreshEntriesWithinTTL(t *testing.T) {
 
 	c1, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
 	require.NoError(t, err)
-	c1.Add("ns", "v1", desc)
+
+	ref, err := registry.ParseReference("ghcr.io/ns:v1")
+	require.NoError(t, err)
+
+	c1.Add(ref, desc)
 
 	c2, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
 	require.NoError(t, err)
-	got, ok := c2.Lookup("ns", "v1")
+	got, ok := c2.Lookup(ref)
 	require.True(t, ok, "a fresh entry within TTL must survive a restart")
 	assert.Equal(t, desc, got)
 }
@@ -168,12 +188,15 @@ func TestReferenceCache_Resolve_CollapsesConcurrentMisses(t *testing.T) {
 		return desc, nil
 	})
 
+	ref, err := registry.ParseReference("ghcr.io/ns:v1")
+	require.NoError(t, err)
+
 	const N = 8
 	var wg sync.WaitGroup
 	results := make([]ociImageSpecV1.Descriptor, N)
 	for i := range N {
 		wg.Go(func() {
-			got, err := c.Resolve(t.Context(), upstream, "ns", "v1")
+			got, err := c.Resolve(t.Context(), upstream, ref)
 			require.NoError(t, err)
 			results[i] = got
 		})
@@ -202,19 +225,28 @@ func TestReferenceCache_Resolve_NamespacesIsolateCollisions(t *testing.T) {
 		Digest:    digest.FromBytes([]byte("b")),
 		Size:      1,
 	}
-	c.Add("ghcr.io/foo", "v1", descA)
-	c.Add("ghcr.io/bar", "v1", descB)
 
-	gotA, hitA := c.Lookup("ghcr.io/foo", "v1")
+	refA, err := registry.ParseReference("ghcr.io/foo:v1")
+	require.NoError(t, err)
+
+	refB, err := registry.ParseReference("ghcr.io/bar:v1")
+	require.NoError(t, err)
+
+	c.Add(refA, descA)
+	c.Add(refB, descB)
+
+	gotA, hitA := c.Lookup(refA)
 	require.True(t, hitA)
 	assert.Equal(t, descA, gotA)
 
-	gotB, hitB := c.Lookup("ghcr.io/bar", "v1")
+	gotB, hitB := c.Lookup(refB)
 	require.True(t, hitB)
 	assert.Equal(t, descB, gotB)
 
 	// And lookups in the wrong namespace miss.
-	_, hitMiss := c.Lookup("ghcr.io/other", "v1")
+	refOther, err := registry.ParseReference("ghcr.io/other:v1")
+	require.NoError(t, err)
+	_, hitMiss := c.Lookup(refOther)
 	assert.False(t, hitMiss)
 }
 
@@ -225,9 +257,12 @@ func TestReferenceCache_Resolve_ErrorNotCached(t *testing.T) {
 		return ociImageSpecV1.Descriptor{}, errors.New("upstream boom")
 	})
 
-	_, err := c.Resolve(t.Context(), upstream, "ns", "fail:v1")
+	ref, err := registry.ParseReference("ghcr.io/ns:ref-fail")
+	require.NoError(t, err)
+
+	_, err = c.Resolve(t.Context(), upstream, ref)
 	require.Error(t, err)
-	_, hit := c.Lookup("ns", "fail:v1")
+	_, hit := c.Lookup(ref)
 	assert.False(t, hit)
 }
 
@@ -237,7 +272,11 @@ func TestReferenceCache_Resolve_NilReceiver_Passthrough(t *testing.T) {
 	upstream := resolverFn(func(_ context.Context, _ string) (ociImageSpecV1.Descriptor, error) {
 		return want, nil
 	})
-	got, err := c.Resolve(t.Context(), upstream, "ns", "x:y")
+
+	ref, err := registry.ParseReference("ghcr.io/ns:x-y")
+	require.NoError(t, err)
+
+	got, err := c.Resolve(t.Context(), upstream, ref)
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 }
@@ -253,7 +292,11 @@ func TestReferenceCache_PersistsAcrossRestart(t *testing.T) {
 
 	c1, err := NewReferenceCache(Options{Dir: dir})
 	require.NoError(t, err)
-	c1.Add("ns", "ghcr.io/owner/repo:v1", desc)
+
+	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
+	require.NoError(t, err)
+
+	c1.Add(ref, desc)
 
 	// The cache scopes to <Dir>/refs/ and shards by namespace; verify
 	// that the namespace's snapshot file landed there.
@@ -265,7 +308,7 @@ func TestReferenceCache_PersistsAcrossRestart(t *testing.T) {
 	c2, err := NewReferenceCache(Options{Dir: dir})
 	require.NoError(t, err)
 
-	got, ok := c2.Lookup("ns", "ghcr.io/owner/repo:v1")
+	got, ok := c2.Lookup(ref)
 	require.True(t, ok, "reference must be reseeded after restart")
 	assert.Equal(t, desc, got)
 }
@@ -278,15 +321,20 @@ func TestReferenceCache_RoundtripsArbitraryChars(t *testing.T) {
 		Size:      1,
 	}
 	// Tabs, newlines, quotes, unicode — all safe in a JSON snapshot.
-	weird := "ghcr.io/owner/repo:tag\nwith\ttabs/\"quotes\"/€"
+	weird := "tag\nwith\ttabs/\"quotes\"/€"
+	ref := registry.Reference{
+		Registry:   "ghcr.io",
+		Repository: "ns",
+		Reference:  weird,
+	}
 
 	c1, err := NewReferenceCache(Options{Dir: dir})
 	require.NoError(t, err)
-	c1.Add("ns", weird, desc)
+	c1.Add(ref, desc)
 
 	c2, err := NewReferenceCache(Options{Dir: dir})
 	require.NoError(t, err)
-	got, ok := c2.Lookup("ns", weird)
+	got, ok := c2.Lookup(ref)
 	require.True(t, ok)
 	assert.Equal(t, desc, got)
 }
@@ -327,8 +375,11 @@ func TestReferenceCache_Add_LRUStaysConsistentWhenWriteFails(t *testing.T) {
 	require.NoError(t, os.RemoveAll(c.opts.Dir))
 	require.NoError(t, os.WriteFile(c.opts.Dir, nil, 0o600))
 
-	c.Add("ns", "ref:fail", desc)
-	got, ok := c.Lookup("ns", "ref:fail")
+	ref, err := registry.ParseReference("ghcr.io/ns:ref-fail")
+	require.NoError(t, err)
+
+	c.Add(ref, desc)
+	got, ok := c.Lookup(ref)
 	require.True(t, ok, "in-memory entry must survive a disk-write failure")
 	assert.Equal(t, desc, got)
 }
@@ -341,7 +392,12 @@ func TestReferenceCache_Add_ConcurrentWritersAllVisible(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range 4 {
 		wg.Go(func() {
-			c.Add("ns", string(rune('a'+i)), ociImageSpecV1.Descriptor{
+			ref := registry.Reference{
+				Registry:   "ghcr.io",
+				Repository: "ns",
+				Reference:  string(rune('a' + i)),
+			}
+			c.Add(ref, ociImageSpecV1.Descriptor{
 				Digest: digest.FromBytes([]byte{byte('a' + i)}),
 				Size:   1,
 			})
@@ -349,7 +405,12 @@ func TestReferenceCache_Add_ConcurrentWritersAllVisible(t *testing.T) {
 	}
 	wg.Wait()
 	for i := range 4 {
-		_, ok := c.Lookup("ns", string(rune('a'+i)))
+		ref := registry.Reference{
+			Registry:   "ghcr.io",
+			Repository: "ns",
+			Reference:  string(rune('a' + i)),
+		}
+		_, ok := c.Lookup(ref)
 		assert.True(t, ok)
 	}
 }

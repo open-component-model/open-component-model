@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/sync/singleflight"
+	"oras.land/oras-go/v2/registry"
 )
 
 // referenceSubdir is the directory under [Options.Dir] that the
@@ -148,21 +149,16 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 // in-memory LRU and persists the namespace's snapshot file so a
 // future run pointing at the same Dir reseeds the mapping.
 //
-// The namespace argument scopes the entry to a particular repository
-// so two unrelated repositories that happen to use the same short
-// reference do not collide. Pass an empty string when the reference
-// is already globally unique; otherwise use a stable
-// repository-level identifier such as "<registry>/<repository>".
-//
 // Add is best-effort with respect to disk: if the rewrite fails, the
 // in-memory entry is still added and a warning is logged. The caller
 // never sees an error from this method.
-func (c *ReferenceCache) Add(namespace, reference string, desc ociImageSpecV1.Descriptor) {
-	c.lru.Add(referenceKey{namespace, reference}, referenceEntry{Descriptor: desc, SavedAt: time.Now()})
-	if err := c.writeNamespace(namespace); err != nil {
+func (c *ReferenceCache) Add(ref registry.Reference, desc ociImageSpecV1.Descriptor) {
+	k := c.buildKey(ref)
+	c.lru.Add(k, referenceEntry{Descriptor: desc, SavedAt: time.Now()})
+	if err := c.writeNamespace(k.namespace); err != nil {
 		c.logger.Warn("refcache: write snapshot failed",
-			slog.String("namespace", namespace),
-			slog.String("reference", reference),
+			slog.String("namespace", k.namespace),
+			slog.String("reference", k.reference),
 			slog.String("err", err.Error()))
 	}
 }
@@ -173,15 +169,16 @@ func (c *ReferenceCache) Add(namespace, reference string, desc ociImageSpecV1.De
 // the entry is not cached. Callers must invalidate whenever a tag is
 // re-pointed or deleted upstream, because OCI tags are mutable and the
 // cache otherwise keeps serving the old descriptor until TTL expiry.
-func (c *ReferenceCache) Invalidate(namespace, reference string) {
+func (c *ReferenceCache) Invalidate(ref registry.Reference) {
 	if c == nil {
 		return
 	}
-	c.lru.Remove(referenceKey{namespace, reference})
-	if err := c.writeNamespace(namespace); err != nil {
+	k := c.buildKey(ref)
+	c.lru.Remove(k)
+	if err := c.writeNamespace(k.namespace); err != nil {
 		c.logger.Warn("refcache: write snapshot after invalidate failed",
-			slog.String("namespace", namespace),
-			slog.String("reference", reference),
+			slog.String("namespace", k.namespace),
+			slog.String("reference", k.reference),
 			slog.String("err", err.Error()))
 	}
 }
@@ -189,8 +186,8 @@ func (c *ReferenceCache) Invalidate(namespace, reference string) {
 // Lookup returns the cached descriptor for the (namespace, reference)
 // pair and whether it was found. See [ReferenceCache.Add] for the
 // namespace contract.
-func (c *ReferenceCache) Lookup(namespace, reference string) (ociImageSpecV1.Descriptor, bool) {
-	v, ok := c.lru.Get(referenceKey{namespace, reference})
+func (c *ReferenceCache) Lookup(ref registry.Reference) (ociImageSpecV1.Descriptor, bool) {
+	v, ok := c.lru.Get(c.buildKey(ref))
 	return v.Descriptor, ok
 }
 
@@ -202,35 +199,44 @@ func (c *ReferenceCache) Lookup(namespace, reference string) (ociImageSpecV1.Des
 // See [ReferenceCache.Add] for the namespace contract. A nil receiver
 // is supported: the call falls straight through to upstream so
 // resolver decorators can compose without nil-checks.
-func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, namespace, reference string) (ociImageSpecV1.Descriptor, error) {
+func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref registry.Reference) (ociImageSpecV1.Descriptor, error) {
 	if c == nil {
-		return upstream.Resolve(ctx, reference)
+		return upstream.Resolve(ctx, ref.Reference)
 	}
-	if v, ok := c.lru.Get(referenceKey{namespace, reference}); ok {
+	k := c.buildKey(ref)
+	if v, ok := c.lru.Get(k); ok {
 		c.logger.DebugContext(ctx, "refcache: hit",
-			slog.String("namespace", namespace),
-			slog.String("reference", reference),
+			slog.String("namespace", k.namespace),
+			slog.String("reference", k.reference),
 			slog.String("digest", v.Descriptor.Digest.String()))
 		return v.Descriptor, nil
 	}
 	// Collapse concurrent misses for the same key into one upstream
 	// round-trip so a burst of identical resolves does not stampede the
 	// registry.
-	v, err, _ := c.sf.Do(namespace+"\x00"+reference, func() (any, error) {
-		if v, ok := c.lru.Get(referenceKey{namespace, reference}); ok {
+	v, err, _ := c.sf.Do(k.namespace+"\x00"+ref.Reference, func() (any, error) {
+		if v, ok := c.lru.Get(k); ok {
 			return v.Descriptor, nil
 		}
-		desc, err := upstream.Resolve(ctx, reference)
+		desc, err := upstream.Resolve(ctx, ref.Reference)
 		if err != nil {
 			return ociImageSpecV1.Descriptor{}, err
 		}
-		c.Add(namespace, reference, desc)
+		c.Add(ref, desc)
 		return desc, nil
 	})
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
 	return v.(ociImageSpecV1.Descriptor), nil
+}
+
+// buildKey constructs the in-memory cache key from the parsed registry.Reference.
+func (c *ReferenceCache) buildKey(ref registry.Reference) referenceKey {
+	return referenceKey{
+		namespace: ref.Registry + "/" + ref.Repository,
+		reference: ref.Reference,
+	}
 }
 
 // pathForNamespace returns the absolute path of the snapshot file

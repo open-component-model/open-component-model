@@ -50,7 +50,7 @@ func TestRepository_Resolve_DelegatesToReferenceCache(t *testing.T) {
 	inner := &remote.Repository{
 		Reference: registry.Reference{Registry: "ghcr.io", Repository: "owner/repo"},
 	}
-	rc.Add("ghcr.io/owner/repo", "ref-1", desc)
+	rc.Add(registry.Reference{Registry: "ghcr.io", Repository: "owner/repo", Reference: "ref-1"}, desc)
 
 	repo := &Repository{Repository: inner, ReferenceCache: rc}
 	got, err := repo.Resolve(t.Context(), "ref-1")
@@ -71,39 +71,16 @@ func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 	repo := &Repository{Repository: inner, ReferenceCache: rc}
 
 	// 1. Add as normalized tag to cache
-	rc.Add("ghcr.io/owner/repo", "v1", desc)
+	rc.Add(registry.Reference{
+		Registry:   "ghcr.io",
+		Repository: "owner/repo",
+		Reference:  "v1",
+	}, desc)
 
 	// 2. Resolve using fully-qualified reference (should hit, since ParseReference normalizes it to "v1")
 	gotFull, err := repo.Resolve(t.Context(), "ghcr.io/owner/repo:v1")
 	require.NoError(t, err)
 	assert.Equal(t, desc, gotFull)
-}
-
-func TestRepository_referenceNamespace(t *testing.T) {
-	tests := []struct {
-		name string
-		repo *remote.Repository
-		want string
-	}{
-		{"nil repo", nil, ""},
-		{"empty reference", &remote.Repository{}, ""},
-		{
-			"only registry",
-			&remote.Repository{Reference: registry.Reference{Registry: "ghcr.io"}},
-			"",
-		},
-		{
-			"fully qualified",
-			&remote.Repository{Reference: registry.Reference{Registry: "ghcr.io", Repository: "owner/repo"}},
-			"ghcr.io/owner/repo",
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			r := &Repository{Repository: tc.repo}
-			assert.Equal(t, tc.want, r.referenceNamespace())
-		})
-	}
 }
 
 func TestRepository_Unwrap_ReturnsEmbedded(t *testing.T) {
@@ -172,15 +149,20 @@ func TestRepository_Untag_SuccessInvalidatesCache(t *testing.T) {
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
 	repo := &Repository{Repository: inner, ReferenceCache: rc}
-	ns := repo.referenceNamespace()
+
+	ref := registry.Reference{
+		Registry:   inner.Reference.Registry,
+		Repository: inner.Reference.Repository,
+		Reference:  "latest",
+	}
 
 	desc := ociImageSpecV1.Descriptor{Digest: digest.FromBytes([]byte("x")), Size: 1}
-	rc.Add(ns, "latest", desc)
-	_, ok := rc.Lookup(ns, "latest")
+	rc.Add(ref, desc)
+	_, ok := rc.Lookup(ref)
 	require.True(t, ok)
 
 	require.NoError(t, repo.Untag(t.Context(), "latest"))
-	_, ok = rc.Lookup(ns, "latest")
+	_, ok = rc.Lookup(ref)
 	assert.False(t, ok, "successful Untag must invalidate the cached mapping")
 }
 
@@ -193,13 +175,18 @@ func TestRepository_Untag_FailureKeepsCache(t *testing.T) {
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
 	repo := &Repository{Repository: inner, ReferenceCache: rc}
-	ns := repo.referenceNamespace()
+
+	ref := registry.Reference{
+		Registry:   inner.Reference.Registry,
+		Repository: inner.Reference.Repository,
+		Reference:  "latest",
+	}
 
 	desc := ociImageSpecV1.Descriptor{Digest: digest.FromBytes([]byte("x")), Size: 1}
-	rc.Add(ns, "latest", desc)
+	rc.Add(ref, desc)
 
 	require.Error(t, repo.Untag(t.Context(), "latest"))
-	_, ok := rc.Lookup(ns, "latest")
+	_, ok := rc.Lookup(ref)
 	assert.True(t, ok, "a failed Untag must not invalidate the cached mapping")
 }
 
@@ -239,10 +226,15 @@ func TestRepository_Tag_SuccessRefreshesCache(t *testing.T) {
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
 	repo := &Repository{Repository: inner, ReferenceCache: rc}
-	ns := repo.referenceNamespace()
+
+	ref := registry.Reference{
+		Registry:   inner.Reference.Registry,
+		Repository: inner.Reference.Repository,
+		Reference:  "latest",
+	}
 
 	require.NoError(t, repo.Tag(t.Context(), desc, "latest"))
-	got, ok := rc.Lookup(ns, "latest")
+	got, ok := rc.Lookup(ref)
 	require.True(t, ok, "successful Tag must populate the reference cache")
 	assert.Equal(t, desc, got)
 }
@@ -256,7 +248,12 @@ func TestRepository_Tag_FailureLeavesCacheEmpty(t *testing.T) {
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
 	repo := &Repository{Repository: inner, ReferenceCache: rc}
-	ns := repo.referenceNamespace()
+
+	ref := registry.Reference{
+		Registry:   inner.Reference.Registry,
+		Repository: inner.Reference.Repository,
+		Reference:  "latest",
+	}
 
 	desc := ociImageSpecV1.Descriptor{
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,
@@ -264,6 +261,6 @@ func TestRepository_Tag_FailureLeavesCacheEmpty(t *testing.T) {
 		Size:      1,
 	}
 	require.Error(t, repo.Tag(t.Context(), desc, "latest"))
-	_, ok := rc.Lookup(ns, "latest")
+	_, ok := rc.Lookup(ref)
 	assert.False(t, ok, "a failed Tag must not populate the reference cache")
 }

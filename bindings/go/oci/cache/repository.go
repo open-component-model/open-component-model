@@ -56,23 +56,7 @@ func (r *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
-	return r.ReferenceCache.Resolve(ctx, r.Repository, r.referenceNamespace(), ref.Reference)
-}
-
-// referenceNamespace returns a stable per-repository identifier used
-// to scope reference-cache keys. It pulls registry + repository from
-// the embedded *remote.Repository so two repositories that share the
-// same short reference do not collide. Falls back to an empty
-// namespace if either component is unset.
-func (r *Repository) referenceNamespace() string {
-	if r.Repository == nil {
-		return ""
-	}
-	ref := r.Reference
-	if ref.Registry == "" || ref.Repository == "" {
-		return ""
-	}
-	return ref.Registry + "/" + ref.Repository
+	return r.ReferenceCache.Resolve(ctx, r.Repository, ref)
 }
 
 // Unwrap returns the embedded [*remote.Repository] so consumers that
@@ -96,7 +80,7 @@ func (r *Repository) Untag(ctx context.Context, reference string) error {
 		if err != nil {
 			return err
 		}
-		r.ReferenceCache.Invalidate(r.referenceNamespace(), ref.Reference)
+		r.ReferenceCache.Invalidate(ref)
 	}
 	return nil
 }
@@ -116,7 +100,7 @@ func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		if err != nil {
 			return err
 		}
-		r.ReferenceCache.Add(r.referenceNamespace(), ref.Reference, desc)
+		r.ReferenceCache.Add(ref, desc)
 	}
 	return nil
 }

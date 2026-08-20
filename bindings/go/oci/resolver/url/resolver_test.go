@@ -11,6 +11,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
@@ -539,7 +540,11 @@ func TestURLPathResolver_StoreResolve_HitsNormalizedCache(t *testing.T) {
 		Digest:    digest.FromBytes([]byte("resolver-cached-descriptor")),
 		Size:      26,
 	}
-	rc.Add("example.com/test-component", "v1.0.0", desc)
+	rc.Add(registry.Reference{
+		Registry:   "example.com",
+		Repository: "test-component",
+		Reference:  "v1.0.0",
+	}, desc)
 
 	// Create CachingResolver configured with the reference cache
 	resolver, err := url.New(
