@@ -27,10 +27,8 @@ import (
 )
 
 // fakeS3 is an httptest server answering GetObject with a canned object, so that the
-// repository is exercised over the real AWS SDK rather than a stubbed client. It
-// serves only what the repository itself needs to be tested — a body and the version
-// the store reports — because everything the download does with the response is
-// covered in the download package.
+// repository is exercised over the real AWS SDK rather than a stubbed client. It serves
+// only a body and a version; the rest of the response is covered in the download package.
 type fakeS3 struct {
 	*httptest.Server
 
@@ -86,9 +84,9 @@ func (f *fakeS3) recorded() []s3Request {
 	return append([]s3Request(nil), f.requests...)
 }
 
-// fakeCredentials are static credentials for [fakeS3]. Their value is irrelevant — the
-// fake verifies no signature — but supplying them keeps the AWS default credential
-// chain, and the instance-metadata lookups it makes, out of the tests.
+// fakeCredentials are static credentials for [fakeS3]. Their value is irrelevant, since
+// the fake verifies no signature, but supplying them keeps the AWS default credential
+// chain and its instance-metadata lookups out of the tests.
 func fakeCredentials() *credv1.S3Credentials {
 	return &credv1.S3Credentials{
 		Type:            credv1.S3CredentialsVersionedType,
@@ -210,9 +208,8 @@ func Test_ProcessResourceDigest(t *testing.T) {
 	require.Empty(t, entries, "digest processing must clean up the object it downloaded")
 }
 
-// A hand-written digest in a constructor cannot know the normalisation algorithm and
-// need not restate the hash, so unset fields are filled in and spelling is ignored —
-// matching the github binding.
+// A hand-written digest cannot know the normalisation algorithm and need not restate the
+// hash, so unset fields are filled in and spelling is ignored, matching the github binding.
 func Test_ProcessResourceDigest_VerifiesLeniently(t *testing.T) {
 	content := []byte("digest me")
 	value := godigest.FromBytes(content).Encoded()
@@ -356,15 +353,13 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 			}
 			require.NoError(t, err)
 
-			// The processed access is a copy: the caller's resource is never pinned in place.
 			original := v1.S3Bucket{}
 			require.NoError(t, accessspec.Scheme.Convert(resource.Access, &original))
 			require.Equal(t, tt.specVersion, original.Version, "the caller's resource must not be pinned in place")
 
 			if tt.wantRaw {
-				// A rewritten access is handed back in the raw form a constructor parsed,
-				// because the v2 descriptor encoder cannot encode a typed access it has no
-				// scheme for. An access we do not rewrite is returned exactly as it came in.
+				// A rewritten access is handed back raw, because the v2 descriptor encoder
+				// cannot encode a typed access it has no scheme for.
 				require.IsType(t, &runtime.Raw{}, res.Access)
 			}
 

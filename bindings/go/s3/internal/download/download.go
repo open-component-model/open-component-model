@@ -119,9 +119,8 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 	}
 
 	// A store that reports no length, or lies about it, is caught while streaming. The
-	// extra byte separates an object that exceeds the limit from one that just reaches
-	// it; at MaxInt64 there is nothing to exceed, and incrementing would overflow to a
-	// negative bound that io.LimitReader reads as "no bytes at all".
+	// extra byte separates exceeding the limit from reaching it; MaxInt64 cannot be
+	// exceeded and incrementing it would overflow into a negative, empty bound.
 	body := io.Reader(out.Body)
 	if maxDownloadSize > 0 {
 		limit := maxDownloadSize
@@ -157,9 +156,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 }
 
 // storeObject streams body into file and returns a blob backed by it. It closes file
-// whether or not it succeeds, but never removes it: the caller does that, so that the
-// one thing it can do about a failure is done in one place rather than at every error
-// return.
+// whether or not it succeeds, but never removes it; the caller does that in one place.
 func storeObject(file *os.File, body io.Reader, maxDownloadSize int64, req Request) (*filesystem.Blob, error) {
 	path := file.Name()
 
@@ -194,10 +191,9 @@ func httpConfig(cfg *httpv1alpha1.Config) *httpv1alpha1.Config {
 		out = &httpv1alpha1.Config{}
 	}
 
-	// Retrying is left to the SDK, which retries the whole operation, re-signs every
-	// attempt and classifies S3's error codes. Retrying here as well would multiply the
-	// two attempt counts. Per-host entries override the global policy, so they are
-	// switched off too.
+	// Retrying is left to the SDK: it retries the whole operation, re-signs every attempt
+	// and classifies S3's error codes, and retrying here too would multiply both counts.
+	// Per-host entries override the global policy, so they are switched off as well.
 	out.Retry = &httpv1alpha1.RetryConfig{MaxRetries: new(disableRetry)}
 	for host, hostCfg := range out.Hosts {
 		if hostCfg == nil {
@@ -265,15 +261,13 @@ func sdkRetryAttempts(cfg *httpv1alpha1.Config, endpoint string) int {
 	}
 }
 
-// staticCredentials turns resolved S3 credentials into a static provider, or returns
-// nil to leave the AWS default credential chain in charge — which is how an in-cluster
-// setup reaches S3, resolving a short-lived STS triple from IRSA, an instance role or
-// an SSO profile without any key material in the OCM configuration.
+// staticCredentials turns resolved S3 credentials into a static provider, or returns nil
+// to leave the AWS default credential chain in charge, which is how an in-cluster setup
+// reaches S3 without key material in the OCM configuration.
 //
-// Credentials that set any field at all are handed to the SDK as given, including a
-// combination it will refuse. Validating the fields here would duplicate the SDK's own
-// rules; what must not happen is dropping them silently, because the request then goes
-// out on whatever the default chain resolves, under a different identity.
+// Credentials that set any field at all are handed to the SDK as given, even a combination
+// it will refuse: validating them here would duplicate the SDK's rules, and dropping them
+// silently would send the request under whatever identity the default chain resolves.
 func staticCredentials(creds *credv1.S3Credentials) *credentials.StaticCredentialsProvider {
 	if creds == nil || (creds.AccessKeyID == "" && creds.SecretAccessKey == "" && creds.SessionToken == "") {
 		return nil
@@ -296,9 +290,8 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 		httpClient = ocmhttp.New(ocmhttp.WithConfig(httpConfig(o.HTTPConfig)))
 	}
 
-	// Retrying happens in the SDK alone; see [httpConfig]. The ocm retry configuration
-	// drives it, so one setting means one thing, and an unset one leaves the SDK on its
-	// own default rather than silently adopting the transport's.
+	// Retrying happens in the SDK alone, driven by the ocm retry configuration; see
+	// [httpConfig]. An unset one leaves the SDK on its own default.
 	loadOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(region),
 		config.WithHTTPClient(httpClient),

@@ -203,12 +203,9 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 			Value:                  resolvedValue,
 		}
 	} else {
-		// A hand-written resource.Digest in a component constructor cannot know the
-		// normalisation algorithm — the blob is never normalised — and need not restate
-		// the hash. An unset field means "fill it in with what we compute"; only a field
-		// pinned to a *different* algorithm is a genuine conflict. Spelling is not a
-		// conflict either: comparisons ignore case, so "sha-256" or an uppercase hex value
-		// verifies instead of failing while an absent field would have been accepted.
+		// A hand-written digest cannot know the normalisation algorithm and need not
+		// restate the hash, so only a field pinned to a different algorithm is a conflict.
+		// Spelling is not one either, hence the case-insensitive comparisons.
 		if resource.Digest.HashAlgorithm != "" && !strings.EqualFold(resource.Digest.HashAlgorithm, hashAlgorithmSHA256) {
 			return nil, fmt.Errorf("hash algorithm mismatch: expected %s, got %s", hashAlgorithmSHA256, resource.Digest.HashAlgorithm)
 		}
@@ -228,14 +225,12 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	// Pinning the access to the version that was read satisfies the
 	// [repository.ResourceDigestProcessor] requirement that a processed access "MUST
 	// always reference the content described by the digest and cannot be mutated".
-	// See "Object versions and unversioned buckets" in the package documentation of
-	// the s3 module for what an unpinned access does and does not risk.
+	// See "Object versions and unversioned buckets" in the package documentation.
 	switch pinned, served := pinningVersion(spec.Version), pinningVersion(result.VersionID); {
 	case pinned != "":
-		// The version is sent as the versionId of the request, so a store answering with
-		// a different one did not serve the object the access names, and the digest would
-		// describe content found at neither version. A store reporting no version at all
-		// cannot be checked and is taken at its word.
+		// The version is sent as the request's versionId, so a store answering with a
+		// different one did not serve the object the access names. One reporting no
+		// version cannot be checked and is taken at its word.
 		if served != "" && served != pinned {
 			return nil, fmt.Errorf("s3 object %s/%s was requested at version %q but the store served version %q",
 				spec.BucketName, spec.ObjectKey, spec.Version, result.VersionID)
@@ -243,8 +238,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	case served != "":
 		spec.Version = served
 
-		// Hand the pinned access back in the raw form a constructor parsed. The v2
-		// descriptor encoder passes a [runtime.Raw] straight through but has to look a
+		// The v2 descriptor encoder passes a [runtime.Raw] straight through but looks a
 		// typed access up in its own scheme, where S3Bucket is not registered.
 		raw := &runtime.Raw{}
 		if err := accessspec.Scheme.Convert(spec, raw); err != nil {
@@ -253,8 +247,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		resource.Access = raw
 	default:
 		// Logged rather than rejected: an unpinned access risks availability rather than
-		// integrity, and erroring would make digests unusable for every unversioned
-		// bucket — which is the default on AWS.
+		// integrity, and erroring would make digests unusable for every unversioned bucket.
 		slog.WarnContext(ctx, "s3 object carries no version, so its access cannot be pinned to the digested content and may later resolve to a different object",
 			slog.String("bucket", spec.BucketName),
 			slog.String("objectKey", spec.ObjectKey))
@@ -264,10 +257,9 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 }
 
 // pinningVersion returns versionID when it identifies immutable content, and the empty
-// string when it does not. An unversioned bucket reports either no version at all or the
-// placeholder [download.UnversionedVersionID], and neither survives an overwrite — which
-// holds whether the value was reported by the store or written by the author, so both are
-// screened through here.
+// string when it does not. An unversioned bucket reports either no version or the
+// placeholder [download.UnversionedVersionID], neither of which survives an overwrite,
+// whether the store reported it or an author wrote it into the spec.
 func pinningVersion(versionID string) string {
 	if versionID == download.UnversionedVersionID {
 		return ""

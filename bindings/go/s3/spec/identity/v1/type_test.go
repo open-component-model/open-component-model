@@ -160,8 +160,6 @@ func TestFromIdentity(t *testing.T) {
 	}
 }
 
-// TestIdentity_RoundTrip verifies that ToIdentity followed by FromIdentity
-// returns an equivalent struct (and vice versa).
 func TestIdentity_RoundTrip(t *testing.T) {
 	t.Run("struct -> identity -> struct", func(t *testing.T) {
 		original := &S3BucketIdentity{
@@ -327,10 +325,8 @@ func TestIdentityFromObject_BucketNameRequired(t *testing.T) {
 	assert.Contains(t, err.Error(), "bucketName is required")
 }
 
-// TestIdentityFromObject_MatchesOnlyUnversionedConsumer pins the exact-match
-// semantics: consumer identity types are compared by exact string, so only the
-// unversioned spelling resolves. This mirrors OCIRegistry, HelmChartRepository and
-// Wget, where the versioned spelling does not match either.
+// Consumer identity types are compared by exact string, so only the unversioned spelling
+// resolves — as in OCIRegistry, HelmChartRepository and Wget.
 func TestIdentityFromObject_MatchesOnlyUnversionedConsumer(t *testing.T) {
 	lookup, err := IdentityFromObject("my-bucket", "path/to/object.tar.gz", "")
 	require.NoError(t, err)

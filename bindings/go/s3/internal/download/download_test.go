@@ -48,9 +48,8 @@ type s3Object struct {
 	// store failing mid-object. It implies chunked, since a length cannot be declared
 	// for a body that is never finished.
 	abortAfter *int
-	// suppressBody serves the headers of an object but none of it, so that a caller
-	// deciding from the reported length alone can be told apart from one that reads
-	// first.
+	// suppressBody serves the headers of an object but none of it, telling a caller that
+	// decides from the reported length apart from one that reads first.
 	suppressBody bool
 	// declaredLength overrides the Content-Length header. Nil reports the true length
 	// of body.
@@ -72,9 +71,8 @@ type s3Request struct {
 
 // fakeS3 is an httptest server answering S3 GetObject requests with a canned object,
 // so that the download is exercised over the wire it actually uses: the request is
-// signed, addressed and parsed by the real AWS SDK, and only the store is fake.
-// Requests are not authenticated, because what is under test is the download rather
-// than S3's own auth.
+// signed, addressed and parsed by the real AWS SDK, and only the store is fake. It
+// authenticates nothing; what is under test is the download, not S3's auth.
 type fakeS3 struct {
 	*httptest.Server
 
@@ -142,9 +140,8 @@ func (f *fakeS3) serve(w http.ResponseWriter, r *http.Request) {
 		length = *f.object.declaredLength
 	}
 
-	// Flushing before the body is written is what makes the response chunked: the
-	// headers go out before the server knows how much follows, so it cannot declare a
-	// length. An unflushed response has its Content-Length filled in automatically.
+	// Flushing before the body is written is what makes the response chunked: the headers
+	// go out before the length is known. An unflushed one has its Content-Length filled in.
 	if f.object.chunked || f.object.abortAfter != nil {
 		w.WriteHeader(http.StatusOK)
 		w.(http.Flusher).Flush()
@@ -180,9 +177,9 @@ func checksumCRC32(body []byte) string {
 	return base64.StdEncoding.EncodeToString(sum)
 }
 
-// fakeCredentials are static credentials for [fakeS3]. Their value is irrelevant — the
-// fake verifies no signature — but supplying them keeps the AWS default credential
-// chain, and the instance-metadata lookups it makes, out of the tests.
+// fakeCredentials are static credentials for [fakeS3]. Their value is irrelevant, since
+// the fake verifies no signature, but supplying them keeps the AWS default credential
+// chain and its instance-metadata lookups out of the tests.
 func fakeCredentials() *credv1.S3Credentials {
 	return &credv1.S3Credentials{
 		Type:            credv1.S3CredentialsVersionedType,
@@ -191,9 +188,8 @@ func fakeCredentials() *credv1.S3Credentials {
 	}
 }
 
-// downloadFrom downloads req from srv. The fake serves no bucket subdomains, so the
-// request is addressed path-style, and static credentials keep the AWS default
-// credential chain — and the instance-metadata lookups it makes — out of the test.
+// downloadFrom downloads req from srv with [fakeCredentials]. The fake serves no bucket
+// subdomains, so the request is addressed path-style.
 func downloadFrom(t *testing.T, srv *fakeS3, req Request, opts ...Option) (*Result, error) {
 	t.Helper()
 
@@ -444,9 +440,8 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 		{name: "unset uses the default", unset: true},
 		{name: "the largest limit does not overflow into a truncated read", maxSize: math.MaxInt64},
 		{
-			// The store announces the object and sends none of it, so a download that read
-			// the body before consulting the reported length would fail on the truncated
-			// transfer rather than on the limit.
+			// The store announces the object and sends none of it, so a download consulting
+			// the body first would fail on the truncated transfer rather than on the limit.
 			name:    "oversized object is rejected from its reported length",
 			maxSize: 5,
 			object:  s3Object{declaredLength: new(int64(1 << 30)), suppressBody: true},
@@ -684,9 +679,8 @@ func TestNewClient(t *testing.T) {
 		require.NotNil(t, client.Options().Credentials)
 	})
 
-	// A half-filled credential cannot sign a request, and the SDK says so. What matters
-	// here is that it reaches the SDK at all: dropping it would send the request under
-	// whatever identity the default credential chain happens to resolve.
+	// What matters is that a half-filled credential reaches the SDK at all: dropping it
+	// would send the request under whatever identity the default chain resolves.
 	t.Run("partial credentials reach the SDK, which rejects them", func(t *testing.T) {
 		for _, tt := range []struct {
 			name  string
