@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	Type = "S3Bucket"
+	Type           = "S3Bucket"
 	LowerCamelType = "s3Bucket"
 )
 
