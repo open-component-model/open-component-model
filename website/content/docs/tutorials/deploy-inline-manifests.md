@@ -33,9 +33,11 @@ By the end, you will have:
 - An OCI registry you can push to, for example [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages)
 
 {{< callout context="note" title="Custom RBAC" icon="outline/lock" >}}
-The OCM Deployer needs permission to manage kro `ResourceGraphDefinition`s and the objects
-an RGD creates (Deployments, Services). Apply the [Custom RBAC]({{< relref "custom-rbac.md" >}})
-guide once, then verify it against the controller `ServiceAccount` (not your admin user):
+The OCM Deployer applies the kro `ResourceGraphDefinition`s, so the OCM controller's
+`ServiceAccount` needs `resourcegraphdefinitions.kro.run`. kro then creates the objects the
+RGDs define (the `Podinfo` instance, the OCM `Resource`, the Deployment and Service), managed
+by kro's own `ServiceAccount`. Apply the [Custom RBAC]({{< relref "custom-rbac.md" >}}) guide
+once, then verify the OCM controller `ServiceAccount` (not your admin user):
 
 ```bash
 kubectl auth can-i create resourcegraphdefinitions.kro.run \
@@ -726,5 +728,5 @@ manages everything downstream.
 ## Next steps
 
 - [Deploy an Application from a Helm Chart with OCM and kro]({{< relref "deploy-helm-chart-bootstrap.md" >}}) compares this with the Helm approach
-- [kro Resource Graph Definitions](https://kro.dev/docs/concepts/resource-graph-definitions/) for composing more applications
+- [kro Resource Graph Definitions](https://kro.run/docs/getting-started/deploy-a-resource-graph-definition/) for composing more applications
 - [Configure Credentials for Controllers]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}) for private registries
