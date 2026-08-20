@@ -70,15 +70,10 @@ func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 	}
 	repo := &Repository{Repository: inner, ReferenceCache: rc}
 
-	// 1. Add as fully-qualified reference
-	rc.Add("ghcr.io/owner/repo", "ghcr.io/owner/repo:v1", desc)
+	// 1. Add as normalized tag to cache
+	rc.Add("ghcr.io/owner/repo", "v1", desc)
 
-	// 2. Lookup using short tag (should hit, since both normalize to "v1")
-	gotShort, ok := rc.Lookup("ghcr.io/owner/repo", "v1")
-	require.True(t, ok)
-	assert.Equal(t, desc, gotShort)
-
-	// 3. Resolve using fully-qualified reference (should hit)
+	// 2. Resolve using fully-qualified reference (should hit, since ParseReference normalizes it to "v1")
 	gotFull, err := repo.Resolve(t.Context(), "ghcr.io/owner/repo:v1")
 	require.NoError(t, err)
 	assert.Equal(t, desc, gotFull)
