@@ -122,9 +122,6 @@ tasks:
         - name: cli
           type: executable
           version: {{ .VERSION }}
-          labels:
-            - name: downloadName
-              value: ocm
           extraIdentity:
             os: {{ .GOOS }}
             architecture: {{ .GOARCH }}
@@ -172,7 +169,8 @@ tasks:
       echo "Component version found: $VERSION"
       
       {{ .TASKFILE_DIR }}/tmp/bin/ocm download resource {{ .REFERENCE }}:$VERSION \
-        --identity name=cli,os={{ .GOOS }},architecture={{ .GOARCH }}
+        --identity name=cli,os={{ .GOOS }},architecture={{ .GOARCH }} \
+        --output ./ocm
       
       chmod +x ./ocm
       ./ocm version
