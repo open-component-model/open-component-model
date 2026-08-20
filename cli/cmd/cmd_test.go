@@ -1455,6 +1455,91 @@ resources:
 	r.Equal("foobar", string(downloaded), "expected downloaded resource content to match test file content")
 }
 
+func Test_Download_Resource_Filename(t *testing.T) {
+	tmp := t.TempDir()
+
+	testFilePath := filepath.Join(tmp, "test-file.txt")
+	require.NoError(t, os.WriteFile(testFilePath, []byte("foobar"), 0o600))
+
+	constructorYAML := fmt.Sprintf(`
+name: ocm.software/download-filename-test
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: plain
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+  - name: variant
+    type: blob
+    extraIdentity:
+      architecture: amd64
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	require.NoError(t, os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	require.NoError(t, err, "could not construct component version")
+
+	ref := archiveFilePath + "//ocm.software/download-filename-test:1.0.0"
+
+	for _, tc := range []struct {
+		name     string
+		identity string
+		wantFile string
+	}{
+		{
+			name:     "fallback uses the resource name",
+			identity: "name=plain",
+			wantFile: "plain",
+		},
+		{
+			name:     "fallback uses resource name even with extra identity",
+			identity: "name=variant,architecture=amd64",
+			wantFile: "variant",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			workDir := t.TempDir()
+			t.Chdir(workDir)
+
+			_, err := test.OCM(t, test.WithArgs("download", "resource", ref, "--identity", tc.identity))
+			r.NoError(err)
+
+			data, err := os.ReadFile(filepath.Join(workDir, tc.wantFile))
+			r.NoError(err, "expected output file %q", tc.wantFile)
+			r.Equal("foobar", string(data))
+		})
+	}
+
+	t.Run("--output overrides the resource-name fallback", func(t *testing.T) {
+		r := require.New(t)
+		explicitTarget := filepath.Join(t.TempDir(), "explicit-output.bin")
+
+		_, err := test.OCM(t, test.WithArgs("download", "resource",
+			ref,
+			"--identity", "name=plain",
+			"--output", explicitTarget,
+		))
+		r.NoError(err)
+
+		data, err := os.ReadFile(explicitTarget)
+		r.NoError(err, "expected file at explicit --output path")
+		r.Equal("foobar", string(data))
+	})
+}
+
 func Test_Sign_And_Verify_Component_Version(t *testing.T) {
 	r := require.New(t)
 	tmp := t.TempDir()

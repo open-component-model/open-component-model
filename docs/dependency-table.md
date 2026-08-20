@@ -21,4 +21,4 @@
 | 6 | `wget` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime` |
 | 7 | `github` | `blob`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `plugin`, `repository`, `runtime` |
 | 7 | `helm` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `oci`, `plugin`, `repository`, `runtime` |
-| 8 | `transfer` | `blob`, `configuration`, `credentials`, `ctf`, `dag`, `descriptor/runtime`, `descriptor/v2`, `github`, `helm`, `oci`, `repository`, `runtime`, `signing`, `transform`, `wget` |
+| 8 | `transfer` | `blob`, `configuration`, `credentials`, `ctf`, `dag`, `descriptor/runtime`, `descriptor/v2`, `github`, `helm`, `http`, `oci`, `repository`, `runtime`, `signing`, `transform`, `wget` |

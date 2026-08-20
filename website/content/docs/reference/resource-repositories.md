@@ -194,6 +194,74 @@ whatever the server returned. See
 
 ---
 
+## GitHub Resource Repository
+
+Handles source archives of a pinned commit in a GitHub (or GitHub Enterprise) repository.
+
+### Supported Access Types
+
+| Access Type                                                        |
+|--------------------------------------------------------------------|
+| [`GitHub/v1`]({{< relref "input-and-access-types.md" >}}#githubv1) |
+
+### Capabilities
+
+| Operation         | Supported |
+|-------------------|-----------|
+| Download          | Yes       |
+| Upload            | No        |
+| Digest Processing | Yes       |
+
+{{< callout context="note" >}}
+Upload is not supported: the `GitHub/v1` access type is a read-only source reference. Content is pushed to GitHub
+through git, not through OCM.
+{{< /callout >}}
+
+### Credential Resolution
+
+The credential consumer identity is derived from the `repoUrl` field in the access specification. The identity type is
+`GitHubRepository`.
+
+**Example:** For a resource with `repoUrl: https://github.com/open-component-model/ocm`:
+
+| Attribute  | Value                       |
+|------------|-----------------------------|
+| `type`     | `GitHubRepository`          |
+| `hostname` | `github.com`                |
+| `scheme`   | `https`                     |
+| `path`     | `open-component-model/ocm`  |
+
+The identity is derived from `repoUrl` on GitHub Enterprise hosts too. Credentials are optional: without them requests
+are anonymous, subject to GitHub's per-IP rate limit, and private repositories answer 404. When credentials resolve,
+their `token` property (a GitHub or GitHub Enterprise access token) authenticates against the GitHub REST API.
+
+{{< callout context="caution" >}}
+`apiHostname` does not change the consumer identity. When the REST API lives on a host other than the repository, the
+identity still carries the `repoUrl` host, so configure the consumer for that host rather than for `apiHostname`. The
+resolved token is then sent to the `apiHostname` host.
+{{< /callout >}}
+
+See [Credential Consumer Identities: GitHubRepository]({{< relref "credential-consumer-identities.md" >}}#githubrepository)
+for matching rules.
+
+### Download Behavior
+
+Downloads the source archive of the commit pinned in the access via the GitHub REST API. The archive is returned as an
+in-memory gzipped tar blob.
+
+### Digest Processing
+
+If the access has only a `ref`, the GitHub digest processor resolves it to a `commit` and writes that commit onto the
+resource. This works like an OCI tag that is pinned to a digest. It then downloads the archive at that commit and
+hashes it: `SHA-256` over the archive bytes, normalisation `genericBlobDigest/v1`.
+If the access already has a `commit`, the ref is not resolved again. A branch can move on, or be deleted after a merge,
+and that must not break a component version that has not changed.
+
+The digest is checked on both paths. If the resource already declares one, the computed value must match it. The hash
+and normalisation algorithms are only compared when they are set: an empty field is filled in with the computed value.
+
+---
+
 ## External Resource Repositories (Plugins)
 
 External plugins declare supported access types in their capability specification and implement the same three

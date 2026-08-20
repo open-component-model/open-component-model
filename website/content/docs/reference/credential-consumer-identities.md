@@ -42,6 +42,7 @@ The following types are defined by the core OCM modules:
 | [`OCIRegistry`](#ociregistry)                 | Authenticating against OCI registries           |
 | [`HelmChartRepository`](#helmchartrepository) | Authenticating against Helm chart repositories  |
 | [`Wget`](#wget)                               | Authenticating against plain HTTP/HTTPS servers |
+| [`GitHubRepository`](#githubrepository)       | Authenticating against the GitHub REST API      |
 | [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys         |
 
 ---
@@ -294,6 +295,58 @@ so the symptom is a `401` from the server rather than a configuration error.
 For migrating a Wget consumer entry from OCM v1, covering the renamed identity type, the `pathprefix` to `path`
 conversion, and the inverted authentication precedence, see
 [Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#credential-changes" >}}).
+
+---
+
+## GitHubRepository
+
+Used when OCM resolves or downloads a resource with a `GitHub/v1` access — resolving a ref to a commit or fetching a
+commit's source archive via the GitHub REST API. The identity is derived from the access's `repoUrl`. Credentials are
+optional; see the note on anonymous access under
+[`GitHubCredentials/v1`]({{< relref "credential-types.md#githubcredentialsv1" >}}).
+
+### Identity Attributes
+
+| Attribute  | Required | Description                                                                                       |
+|------------|----------|---------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `GitHubRepository`                                                                        |
+| `hostname` | Yes      | Repository hostname (e.g. `github.com`, a GitHub Enterprise host)                                 |
+| `path`     | No       | Repository path (e.g. `open-component-model/open-component-model`). If omitted, matches any path. |
+| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme.                                     |
+| `port`     | No       | Port number as string. If omitted, the scheme's default applies (`https` → `443`, `http` → `80`). |
+
+### Credential Properties
+
+| Property | Description                                |
+|----------|--------------------------------------------|
+| `token`  | GitHub or GitHub Enterprise access token   |
+
+### Examples
+
+**github.com:**
+
+```yaml
+- identity:
+    type: GitHubRepository
+    hostname: github.com
+    path: open-component-model/open-component-model
+  credentials:
+    - type: GitHubCredentials/v1
+      token: ghp_example_token
+```
+
+**GitHub Enterprise host:**
+
+```yaml
+- identity:
+    type: GitHubRepository
+    hostname: git.example.corp
+  credentials:
+    - type: GitHubCredentials/v1
+      token: ghe_example_token
+```
+
+Omitting `path` matches every repository on that host.
 
 ---
 
