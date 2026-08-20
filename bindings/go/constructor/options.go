@@ -40,6 +40,8 @@ type Options struct {
 	// to get the digest processor for the component specification when processing resources by reference to amend
 	// digest information.
 	// The ResourceDigestProcessorProvider is OPTIONAL, if not provided, the constructor library will not resolve digests.
+	// Resources whose access type has no digest processor are added without a digest and only cause a warning,
+	// so that component versions can reference access types unknown to the constructor.
 	ResourceDigestProcessorProvider
 
 	// While constructing a component version, the constructor library will use the given credential provider
