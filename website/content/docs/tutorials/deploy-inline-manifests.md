@@ -83,9 +83,12 @@ single `System` instance, and the chain converges to a running Podinfo.
 rewrites its reference. The system RGD injects that rewritten reference into the `Podinfo`
 instance, so the workload always pulls from the registry the component was delivered to.
 
-This tutorial composes a single application. The pattern scales the same way: keep each
-application as its own RGD and reference more of them from the system RGD, so one instance
-drives the whole graph. See [kro Resource Graph Definitions](https://kro.dev/docs/concepts/resource-graph-definitions/).
+Here you build one app, but the shape is bigger. Each app is a reusable building block, a
+**leaf** that knows how to run one thing. The system RGD is the composer that stacks leaves
+into a product: with one app there is one leaf, with a real product there are many, and a
+single instance drives them all. For one app you could fold both RGDs into one; keeping them
+split is what lets the pattern grow. The [Scaling to a whole product](#scaling-to-a-whole-product)
+section at the end shows how.
 
 <details>
 <summary>Architecture diagram</summary>
@@ -622,6 +625,18 @@ tunnel is ready and return nothing.
 Change the message or replica count by editing `instance.yaml` and re-applying. kro
 reconciles the running workload.
 
+{{< callout context="caution" title="Going to production: kro needs explicit permissions" icon="outline/lock" >}}
+This tutorial uses a dev-friendly kro install with broad permissions. A hardened cluster is
+stricter, and RBAC is fixed up front. That matters here, because your RGDs register **new**
+kinds at runtime. kro can create the CRD, but the moment it creates an *instance* of that
+kind, a least-privilege role denies it.
+
+Grant kro's service account the kinds its RGDs create and manage. For this tutorial that is
+`podinfos.kro.run` (the instance), `resources.delivery.ocm.software` (the localized image),
+and `deployments` + `services` (the workload). The OCM controller separately needs
+`resourcegraphdefinitions.kro.run`, which you set up in Prerequisites.
+{{< /callout >}}
+
 ## Clean up
 
 Delete the instance before the RGDs. Deleting an RGD while its instances still exist can
@@ -662,6 +677,63 @@ kubectl logs -n ocm-k8s-toolkit-system deploy/ocm-k8s-toolkit-controller-manager
 - Used a system RGD to compose an app RGD and inject a localized image
 - Delivered both RGDs with the OCM controllers, no Helm or GitOps tooling
 - Confirmed the workload runs the localized image and your message
+
+## Scaling to a whole product
+
+One app is the small case. Real products are bigger: many apps and services, shipped and
+versioned together. The good news is you already have the building block.
+
+What you wrote is an **app RGD**. It gives one application a typed Kubernetes API, the
+`Podinfo` kind, with a schema and status. It knows how to run one thing and nothing else.
+That self-contained piece is a **leaf**. A real product has many leaves: a database, a
+gateway, a handful of services.
+
+On top sits the **system RGD**. Its job is composition: it creates one instance of each leaf,
+passes values between them, and orders them so nothing starts before what it depends on. You
+already built a tiny version. Our system RGD created a single `Podinfo` instance. Add more
+leaves and reference them, and one `System` instance drives the entire product.
+
+One thing is still hand-written: the delivery plumbing in `bootstrap.yaml`. Today you list a
+`Resource` + `Deployer` pair for every RGD yourself. For a dozen apps that is a wall of
+boilerplate, and every version bump means editing that file again.
+
+The pattern that scales moves the plumbing *into* an RGD. An **installer RGD** templates those
+`Resource` + `Deployer` pairs itself, one per app, all sharing a single `Component` you pass
+in by name:
+
+```yaml
+resources:
+  - id: appResource
+    template:
+      apiVersion: delivery.ocm.software/v1alpha1
+      kind: Resource
+      metadata: { name: app-rgd }
+      spec:
+        componentRef:
+          name: ${schema.spec.componentRef}   # one component, passed in
+        resource:
+          byReference:
+            resource: { name: rgd-podinfo }
+  - id: appDeployer
+    template:
+      apiVersion: delivery.ocm.software/v1alpha1
+      kind: Deployer
+      metadata: { name: app-rgd }
+      spec:
+        resourceRef: { name: ${appResource.metadata.name} }
+    readyWhen:
+      - ${appDeployer.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+```
+
+Now `bootstrap.yaml` shrinks to almost nothing. It delivers the installer RGD once, and the
+running instance takes over its own delivery. Bump the component version and the whole graph
+reconciles. No more editing bootstrap files by hand.
+
+This is not a new tool. It is the same `delivery.ocm.software/Resource` you already used for
+the localized image, now applied to delivery itself. One limit stays honest: an RGD cannot
+deliver the RGD that defines its own kind, because it would have to be running before its own
+instance exists. So app RGDs are still delivered by `bootstrap.yaml`, and the installer
+manages everything downstream.
 
 ## Next steps
 
