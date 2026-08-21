@@ -67,7 +67,7 @@ func GetV1FileBlob(file v1.File, workingDirectory string) (blob.ReadOnlyBlob, er
 			return nil, err
 		}
 		if cErr != nil {
-			return nil, err
+			return nil, cErr
 		}
 		mediaType = mime.String()
 		err = readCloser.Close()
