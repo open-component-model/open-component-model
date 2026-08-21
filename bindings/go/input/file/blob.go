@@ -62,7 +62,11 @@ func GetV1FileBlob(file v1.File, workingDirectory string) (blob.ReadOnlyBlob, er
 		}
 		// see https://github.com/gabriel-vasile/mimetype/blob/master/supported_mimes.md for supported types
 		mime, err := mimetype.DetectReader(readCloser)
+		cErr := readCloser.Close()
 		if err != nil {
+			return nil, err
+		}
+		if cErr != nil {
 			return nil, err
 		}
 		mediaType = mime.String()
