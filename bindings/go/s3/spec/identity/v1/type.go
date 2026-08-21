@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -95,8 +94,8 @@ func FromIdentity(id runtime.Identity) *S3BucketIdentity {
 // IdentityFromObject derives the credential consumer identity for an S3 object from
 // its bucket, key and optional endpoint. Without an endpoint the identity carries only
 // the object path, because AWS is reached at a well-known host; with one, the endpoint's
-// URL attributes are added so consumer entries can be scoped to that store. The
-// unversioned [Type] is used, consistent with the other consumer identities.
+// scheme, hostname and port are added so consumer entries can be scoped to that store.
+// The unversioned [Type] is used, consistent with the other consumer identities.
 //
 // An S3 key is an opaque string in which "//", ".", "..", "%", "?" and "#" are
 // ordinary characters naming real, distinct objects, so it is carried into the
@@ -118,11 +117,10 @@ func IdentityFromObject(bucketName, objectKey, endpoint string) (runtime.Identit
 			return nil, fmt.Errorf("error parsing s3 endpoint to identity: %w", err)
 		}
 		identity = id
-		// Only the endpoint is URL-parsed; the location is appended to its base path.
-		if prefix := identity[runtime.IdentityAttributePath]; prefix != "" {
-			loc = strings.TrimSuffix(prefix, "/") + "/" + loc
-		}
 	}
+	// The endpoint contributes its URL attributes but not its path: the path names the
+	// object as bucketName/objectKey, as ocmv1 resolves it, so a consumer entry stays
+	// the same wherever the store is reached.
 	identity[runtime.IdentityAttributePath] = loc
 
 	identity.SetType(Type)

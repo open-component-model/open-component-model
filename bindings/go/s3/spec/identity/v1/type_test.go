@@ -251,6 +251,31 @@ func TestIdentityFromObject(t *testing.T) {
 			},
 		},
 		{
+			name:       "endpoint path takes no part in the object path",
+			bucketName: "my-bucket",
+			objectKey:  "path/to/object.tar.gz",
+			endpoint:   "https://gw.example.com/gateway",
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "gw.example.com",
+				runtime.IdentityAttributeScheme:   "https",
+				runtime.IdentityAttributePath:     "my-bucket/path/to/object.tar.gz",
+			},
+		},
+		{
+			name:       "endpoint path with a trailing slash takes no part either",
+			bucketName: "my-bucket",
+			objectKey:  "object",
+			endpoint:   "https://minio.internal:9000/gateway/",
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "minio.internal",
+				runtime.IdentityAttributeScheme:   "https",
+				runtime.IdentityAttributePort:     "9000",
+				runtime.IdentityAttributePath:     "my-bucket/object",
+			},
+		},
+		{
 			name:       "empty object key identifies the bucket",
 			bucketName: "my-bucket",
 			want: runtime.Identity{
@@ -297,14 +322,14 @@ func TestIdentityFromObject_KeysAreNotCleaned(t *testing.T) {
 	}
 }
 
-func TestIdentityFromObject_EndpointKeepsItsBasePath(t *testing.T) {
+func TestIdentityFromObject_EndpointBasePathIsNotPartOfTheIdentity(t *testing.T) {
 	got, err := IdentityFromObject("my-bucket", "object", "https://gateway.example.com/s3")
 	require.NoError(t, err)
 	assert.Equal(t, runtime.Identity{
 		runtime.IdentityAttributeType:     Type.String(),
 		runtime.IdentityAttributeHostname: "gateway.example.com",
 		runtime.IdentityAttributeScheme:   "https",
-		runtime.IdentityAttributePath:     "s3/my-bucket/object",
+		runtime.IdentityAttributePath:     "my-bucket/object",
 	}, got)
 }
 
@@ -345,6 +370,42 @@ func TestIdentityFromObject_MatchesOnlyUnversionedConsumer(t *testing.T) {
 				runtime.IdentityAttributePath: "my-bucket/path/to/object.tar.gz",
 			}
 			assert.Equal(t, tt.want, lookup.Clone().Match(consumer.Clone()))
+		})
+	}
+}
+
+// A consumer entry names the object as bucketName/objectKey, whatever base path the
+// endpoint carries: an entry that had to spell out the endpoint's path prefix would
+// neither be portable between stores nor match what ocmv1 resolves.
+func TestIdentityFromObject_ConsumerEntryIsIndependentOfEndpointPath(t *testing.T) {
+	for _, endpoint := range []string{
+		"https://gw.example.com",
+		"https://gw.example.com/gateway",
+		"https://gw.example.com/gateway/nested/",
+	} {
+		t.Run(endpoint, func(t *testing.T) {
+			lookup, err := IdentityFromObject("my-bucket", "object.tar.gz", endpoint)
+			require.NoError(t, err)
+
+			for _, tt := range []struct {
+				name string
+				path string
+			}{
+				{name: "exact object", path: "my-bucket/object.tar.gz"},
+				{name: "any object in the bucket", path: "my-bucket/*"},
+				{name: "no path at all", path: ""},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					consumer := runtime.Identity{
+						runtime.IdentityAttributeType:     Type.String(),
+						runtime.IdentityAttributeHostname: "gw.example.com",
+					}
+					if tt.path != "" {
+						consumer[runtime.IdentityAttributePath] = tt.path
+					}
+					assert.True(t, lookup.Clone().Match(consumer.Clone()))
+				})
+			}
 		})
 	}
 }
