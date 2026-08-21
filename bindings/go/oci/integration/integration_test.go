@@ -1805,3 +1805,76 @@ func assertOwnershipReferrerAnnotations(t *testing.T, ctx context.Context, resol
 	assert.Equal(t, subject.Digest, manifest.Subject.Digest,
 		"referrer subject digest must match the resolved subject manifest digest")
 }
+
+func Test_Integration_DeleteComponentVersion(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	password := generateRandomPassword(t, passwordLength)
+	htpasswd := generateHtpasswd(t, testUsername, password)
+
+	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
+		registry.WithHtpasswd(htpasswd),
+		testcontainers.WithEnv(map[string]string{
+			"REGISTRY_STORAGE_DELETE_ENABLED": "true",
+			"REGISTRY_VALIDATION_DISABLED":    "true",
+		}),
+		testcontainers.WithLogger(log.TestLogger(t)),
+	)
+	r := require.New(t)
+	r.NoError(err)
+	t.Cleanup(func() {
+		r.NoError(testcontainers.TerminateContainer(registryContainer))
+	})
+
+	registryAddress, err := registryContainer.HostAddress(ctx)
+	r.NoError(err)
+
+	client := createAuthClient(registryAddress, testUsername, password)
+
+	resolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(registryAddress),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+
+	repo, err := oci.NewRepository(
+		oci.WithResolver(resolver),
+		oci.WithTempDir(t.TempDir()),
+	)
+	r.NoError(err)
+
+	const componentName = "ocm.software/test-component"
+
+	// Create a test component descriptor
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "test-provider"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    componentName,
+					Version: "1.0.0",
+				},
+			},
+		},
+	}
+
+	// 1. Add component version
+	r.NoError(repo.AddComponentVersion(ctx, desc))
+
+	// Ensure it exists
+	desc2, err := repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.NoError(err)
+	r.Equal(desc.Component.Name, desc2.Component.Name)
+
+	// 2. Delete component version
+	deleter, ok := any(repo).(repository.ComponentVersionDeleter)
+	r.True(ok)
+	r.NoError(deleter.DeleteComponentVersion(ctx, componentName, "1.0.0"))
+
+	// 3. Verify it is gone
+	_, err = repo.GetComponentVersion(ctx, componentName, "1.0.0")
+	r.ErrorIs(err, repository.ErrNotFound)
+}

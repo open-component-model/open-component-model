@@ -190,6 +190,76 @@ func (s *repository) updateReferrersIndex(ctx context.Context, idx v1.Index, sub
 	return nil
 }
 
+func (s *repository) removeReferrer(ctx context.Context, idx v1.Index, subject, referrer ociImageSpecV1.Descriptor) error {
+	referrersTag, err := buildReferrersTag(subject)
+	if err != nil {
+		return err
+	}
+
+	oldIndexDesc, oldReferrers, err := s.referrersFromArtifactIndex(ctx, idx, referrersTag)
+	if err != nil {
+		return err
+	}
+
+	// Remove referrer from the list
+	var updated []ociImageSpecV1.Descriptor
+	changed := false
+	for _, r := range oldReferrers {
+		if r.Digest == referrer.Digest {
+			changed = true
+			continue
+		}
+		updated = append(updated, r)
+	}
+
+	if !changed {
+		return nil
+	}
+
+	hadPriorIndex := !content.Equal(oldIndexDesc, ociImageSpecV1.Descriptor{})
+
+	if len(updated) == 0 {
+		// No referrers left! Remove the referrers tag completely
+		if hadPriorIndex {
+			if err := idx.RemoveTag(s.repo, referrersTag); err != nil && !errors.Is(err, v1.ErrArtifactNotFound) {
+				return fmt.Errorf("unable to remove empty referrers tag %q: %w", referrersTag, err)
+			}
+			if err := s.archive.DeleteBlob(ctx, oldIndexDesc.Digest.String()); err != nil {
+				slog.DebugContext(ctx, "failed to delete stale referrers index blob",
+					"digest", oldIndexDesc.Digest.String(), "referrersTag", referrersTag, "error", err)
+			}
+		}
+		return nil
+	}
+
+	newIndexDesc, newIndexJSON, err := generateIndex(updated)
+	if err != nil {
+		return err
+	}
+	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(bytes.NewReader(newIndexJSON)), newIndexDesc)); err != nil {
+		return fmt.Errorf("unable to save referrers index for referrers tag %q: %w", referrersTag, err)
+	}
+
+	if hadPriorIndex {
+		if err := idx.RemoveTag(s.repo, referrersTag); err != nil && !errors.Is(err, v1.ErrArtifactNotFound) {
+			return fmt.Errorf("unable to remove prior referrers tag %q: %w", referrersTag, err)
+		}
+	}
+
+	if err := s.applyTag(ctx, idx, newIndexDesc, referrersTag); err != nil {
+		return fmt.Errorf("unable to retag referrers index for referrers tag %q: %w", referrersTag, err)
+	}
+
+	if hadPriorIndex {
+		if err := s.archive.DeleteBlob(ctx, oldIndexDesc.Digest.String()); err != nil {
+			slog.DebugContext(ctx, "failed to delete stale referrers index blob",
+				"digest", oldIndexDesc.Digest.String(), "referrersTag", referrersTag, "error", err)
+		}
+	}
+
+	return nil
+}
+
 // referrerFromManifest inspects a pushed manifest for a subject field and, if
 // present, returns the subject together with the referrer descriptor enriched
 // the way the Referrers API response requires: artifactType set (falling back

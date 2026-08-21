@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -51,6 +52,7 @@ import (
 var (
 	_            ComponentVersionRepository          = (*Repository)(nil)
 	_            repository.OwnershipAwareRepository = (*Repository)(nil)
+	_            repository.ComponentVersionDeleter  = (*Repository)(nil)
 	versionRegex                                     = regexp.MustCompile(compref.VersionRegex)
 )
 
@@ -1025,6 +1027,76 @@ func (repo *Repository) RemoveComponentVersionAlias(ctx context.Context, compone
 			fmt.Errorf("alias %q for component %q not found: %w", alias, component, err))
 	} else if err != nil {
 		return fmt.Errorf("failed to remove alias %q for component %q: %w", alias, component, err)
+	}
+
+	return nil
+}
+
+func (repo *Repository) DeleteComponentVersion(ctx context.Context, component, version string) (err error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	done := log.Operation(ctx, "delete component version",
+		slog.String("component", component),
+		slog.String("version", version))
+	defer func() {
+		done(err)
+	}()
+
+	reference, store, err := repo.getStore(ctx, component, version)
+	if err != nil {
+		return err
+	}
+
+	// 1. Resolve target version to get top-level manifest descriptor
+	base, err := store.Resolve(ctx, reference)
+	if err != nil {
+		if errors.Is(err, errdef.ErrNotFound) {
+			return errors.Join(repository.ErrNotFound,
+				fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+		}
+		return fmt.Errorf("failed to resolve component version %s/%s: %w", component, version, err)
+	}
+
+	// 2. Validate it's a valid OCM component version for the requested component
+	if _, err := validate.ComponentVersionDescriptor(ctx, store, base, component, reference); err != nil {
+		return fmt.Errorf("reference %q is not a valid OCM component version: %w", reference, err)
+	}
+
+	// 3. Perform Untag (always required)
+	untagger, ok := store.(content.Untagger)
+	if !ok {
+		return repository.ErrDeleteUnsupported
+	}
+
+	tag := version
+	if ref, parseErr := looseref.ParseReference(reference); parseErr == nil && ref.Tag != "" {
+		tag = ref.Tag
+	}
+
+	if err := untagger.Untag(ctx, tag); err != nil {
+		if errors.Is(err, errdef.ErrNotFound) {
+			return errors.Join(repository.ErrNotFound,
+				fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+		}
+		if strings.Contains(err.Error(), "405") || strings.Contains(err.Error(), "not allowed") {
+			return repository.ErrDeleteUnsupported
+		}
+		return fmt.Errorf("failed to untag component version %s/%s: %w", component, version, err)
+	}
+
+	// 4. Perform physical manifest delete (if supported by store)
+	if deleter, ok := store.(content.Deleter); ok {
+		if err := deleter.Delete(ctx, base); err != nil && !errors.Is(err, errdef.ErrNotFound) {
+			return fmt.Errorf("failed to delete component version manifest: %w", err)
+		}
+	}
+
+	// 5. Trigger Prune for stores that support reachability-based pruning (e.g. CTF)
+	if pruner, ok := store.(interface {
+		Prune(ctx context.Context) error
+	}); ok {
+		if err := pruner.Prune(ctx); err != nil {
+			return fmt.Errorf("failed to prune orphaned blobs: %w", err)
+		}
 	}
 
 	return nil
