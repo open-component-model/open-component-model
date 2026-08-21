@@ -27,8 +27,8 @@ export function buildTitleRegex(allowedTypes) {
  * "constructor" or "toString" returns undefined instead of the corresponding
  * Object.prototype value. This makes every bracket lookup on the map safe.
  *
- * @param {Record<string,string>} source
- * @returns {Record<string,string>}
+ * @param {Record<string,string|string[]>} source
+ * @returns {Record<string,string|string[]>}
  */
 export function nullProtoMap(source) {
   return Object.assign(Object.create(null), source);
@@ -39,8 +39,8 @@ export function nullProtoMap(source) {
  *
  * @param {string} prTitle - The pull request title.
  * @param {object} maps
- * @param {Record<string,string>} maps.typeToLabel - type -> label.
- * @param {Record<string,string>} maps.scopeToLabel - scope -> label.
+ * @param {Record<string,string|string[]>} maps.typeToLabel - type -> label or labels.
+ * @param {Record<string,string|string[]>} maps.scopeToLabel - scope -> label or labels.
  * @param {string} maps.breakingLabel - label added for breaking changes.
  * @returns {{ valid: boolean, labels: string[] }} valid is false when the title
  *   does not follow the Conventional Commit format; labels is then empty.
@@ -62,17 +62,34 @@ export function deriveLabels(prTitle, { typeToLabel, scopeToLabel, breakingLabel
   const { type, scope, breaking } = match.groups;
   const labels = [];
 
+  // A type or scope may map to a single label or a list of labels. Push each
+  // configured string and ignore anything else (nullProtoMap already prevents
+  // inherited prototype members from resolving here).
+  const add = (value) => {
+    if (typeof value === "string") {
+      labels.push(value);
+    } else if (Array.isArray(value)) {
+      for (const label of value) {
+        if (typeof label === "string") {
+          labels.push(label);
+        }
+      }
+    }
+  };
+
   if (breaking) {
     labels.push(breakingLabel);
   }
-  if (type && types[type]) {
-    labels.push(types[type]);
+  if (type) {
+    add(types[type]);
   }
-  if (scope && scopes[scope]) {
-    labels.push(scopes[scope]);
+  if (scope) {
+    add(scopes[scope]);
   }
 
-  return { valid: true, labels };
+  // De-duplicate while preserving order: a type's label list and a scope can
+  // both contribute the same label (e.g. kind/chore).
+  return { valid: true, labels: [...new Set(labels)] };
 }
 
 /**
