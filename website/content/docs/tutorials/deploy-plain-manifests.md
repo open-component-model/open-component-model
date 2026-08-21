@@ -80,6 +80,9 @@ with them.
 <details>
 <summary>Architecture diagram</summary>
 
+(Continues from [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}), which
+shows the `Repository` → `Component` → `Resource` → `Deployer` chain that gets the RGD here.)
+
 ```mermaid
 flowchart TB
     subgraph kro[kro]

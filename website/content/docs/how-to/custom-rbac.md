@@ -157,10 +157,14 @@ rules:
 Everything above grants RBAC to the **OCM controller's** `ServiceAccount`. If your `Deployer` targets a kro
 `ResourceGraphDefinition` (RGD), there is a second, separate RBAC concern: **kro's own** `ServiceAccount`.
 
-An RGD can define a brand-new schema-based kind (for example, a `Podinfo` or `Bootstrap` kind). kro registers
-the CRD for that kind without any special permissions. But the moment kro (or the RGD) creates an *instance*
-of that kind, or any other object the RGD manages, kro's `ServiceAccount` needs RBAC for it, no differently
-than the OCM controller needs RBAC for the resources its `Deployer` applies.
+An RGD can define a brand-new schema-based kind (for example, a `Podinfo` or `Bootstrap` kind). Registering
+that kind's CRD is covered by kro's own installation role: in [aggregation mode](https://kro.run/docs/advanced/access-control),
+the base role already includes access to `ResourceGraphDefinition`s and `CustomResourceDefinition`s; the
+dev-friendly `unrestricted` mode used in the [setup guide]({{< relref "/docs/getting-started/setup-controller-environment.md" >}})
+grants everything broadly. Neither mode's *base* role covers what happens next: the moment kro (or the RGD)
+creates an *instance* of that new kind, or any other object the RGD manages, kro's `ServiceAccount` needs RBAC
+for that specific kind, no differently than the OCM controller needs RBAC for the resources its `Deployer`
+applies.
 
 This catches people off guard because the dev-friendly kro install (as used in the [setup guide]({{< relref
 "/docs/getting-started/setup-controller-environment.md" >}})) grants broad, cluster-wide permissions, so the
@@ -183,10 +187,19 @@ rules:
     verbs:
       - create
       - delete
+      - get
       - list
       - patch
       - update
       - watch
+  - apiGroups:
+      - kro.run
+    resources:
+      - podinfos/status
+    verbs:
+      - get
+      - patch
+      - update
   - apiGroups:
       - delivery.ocm.software
     resources:

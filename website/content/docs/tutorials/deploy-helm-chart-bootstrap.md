@@ -80,6 +80,9 @@ refer back to it as you work through the steps.
 <details>
 <summary>View Resource Overview Diagram</summary>
 
+(Continues from [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}), which
+shows the `Repository` → `Component` → `Resource` → `Deployer` chain that gets the RGD here.)
+
 ```mermaid
 flowchart TB
     subgraph kro[kro]
