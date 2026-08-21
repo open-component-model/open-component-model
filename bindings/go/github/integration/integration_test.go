@@ -135,10 +135,20 @@ func assertOCMArchive(t *testing.T, downloaded blob.ReadOnlyBlob) {
 	assert.True(t, readmeFound, "the archive must contain the repository's README.md under the commit-prefixed root")
 }
 
+func requireCIToken(t *testing.T) {
+	t.Helper()
+	if os.Getenv("CI") != "" && os.Getenv("GITHUB_TOKEN") == "" {
+		t.Fatal("GITHUB_TOKEN must be set in CI: without it these requests go out anonymous " +
+			"and are rate limited at 60 per hour for the runner's shared IP")
+	}
+}
+
 func Test_Integration_GitHub(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
+
+	requireCIToken(t)
 
 	t.Run("resource", func(t *testing.T) {
 		processor := digest.NewDigestProcessor()
