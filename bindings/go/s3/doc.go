@@ -35,6 +35,30 @@
 // (environment, shared config, IAM instance/task roles). The legacy ocmv1 names
 // awsAccessKeyID, awsSecretAccessKey and token are accepted as well.
 //
+// # Input method
+//
+// The same object can instead be pulled into a component version while it is built.
+// [ocm.software/open-component-model/bindings/go/s3/input.InputMethod] implements the
+// constructor's resource input method for the "S3Bucket" input type, described by a
+// [ocm.software/open-component-model/bindings/go/s3/spec/input/v1.S3Bucket] spec that
+// mirrors the fields of the access spec:
+//
+//	resources:
+//	- name: my-object
+//	  type: blob
+//	  input:
+//	    type: S3Bucket/v1
+//	    bucketName: my-bucket
+//	    objectKey: path/to/blob.txt
+//
+// It downloads the object over the same path a resource download uses and hands it to
+// the constructor as local blob data, so the finished component version carries the
+// bytes and no longer resolves anything against the bucket. That is the difference to
+// the access type, which leaves the object where it is and fetches it on every read.
+//
+// The input derives its credential consumer identity exactly as the access type does,
+// so one consumer entry serves a bucket whether its objects are referenced or taken in.
+//
 // # Object versions
 //
 // ProcessResourceDigest pins the access to the versionId the object was read at. A
@@ -123,4 +147,7 @@
 // Matching is exact, so neither an all-lower-case s3bucket nor the ocmv1 "s3" access
 // type resolves; such descriptors have to have their access type rewritten. Field
 // names within the spec are matched case-insensitively, as JSON decoding is.
+//
+// The input type resolves under the same four names in its own scheme, so a
+// constructor spells an input exactly as a descriptor spells an access.
 package s3
