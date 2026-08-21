@@ -2,7 +2,6 @@ package filesystem_test
 
 import (
 	"archive/tar"
-	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -26,7 +25,7 @@ func TestGetBlobFromPath_SingleFile(t *testing.T) {
 
 	// Test: create blob from single file (should be raw, not TAR)
 	opt := filesystem.DirOptions{Reproducible: true}
-	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	b, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.NoError(err)
 	r.NotNil(b)
 
@@ -50,7 +49,7 @@ func TestGetBlobFromPath_SimpleDirectory(t *testing.T) {
 
 	// Test: create blob from directory (should be TAR archive)
 	opt := filesystem.DirOptions{Reproducible: true}
-	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
 	r.NoError(err)
 	r.NotNil(b)
 
@@ -78,6 +77,29 @@ func TestGetBlobFromPath_SimpleDirectory(t *testing.T) {
 
 	r.Equal("content1", foundFiles["file1.txt"])
 	r.Equal("content2", foundFiles["file2.txt"])
+}
+
+func TestGetBlobFromPath_RelativeDirectory(t *testing.T) {
+	r := require.New(t)
+
+	// Change working directory to explicitly not be in the working directory we pass via options
+	wd := t.TempDir()
+	t.Chdir(wd)
+
+	// Setup: create directory with multiple files
+	tmpDir := t.TempDir()
+	createTestFile(t, filepath.Join(tmpDir, "testFolder"), "file.txt", "content")
+
+	// Test: create blob from directory (should be TAR archive)
+	opt := filesystem.DirOptions{Reproducible: true}
+	opt.WorkingDir = tmpDir
+	b, err := filesystem.GetBlobFromPath(t.Context(), "testFolder", opt)
+	r.NoError(err)
+	r.NotNil(b)
+
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(reader.Close()) }()
 }
 
 // PATTERN FILTERING: Include/exclude pattern functionality
@@ -138,7 +160,7 @@ func TestGetBlobFromPath_PatternSemantics(t *testing.T) {
 
 			// Test with patterns
 			opt := filesystem.DirOptions{IncludePatterns: tt.includePatterns, ExcludePatterns: tt.excludePatterns, Reproducible: true}
-			resultBlob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+			resultBlob, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
 			if tt.expectError {
 				r.Error(err)
 				return
@@ -161,13 +183,13 @@ func TestGetBlobFromPath_SingleFileWithPatterns(t *testing.T) {
 
 	// Test: patterns with single file should error
 	opt := filesystem.DirOptions{IncludePatterns: []string{"*.txt"}}
-	_, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	_, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.Error(err)
 	r.Contains(err.Error(), "include/exclude patterns are not supported for single files")
 
 	// Test: exclude patterns with single file should also error
 	opt = filesystem.DirOptions{ExcludePatterns: []string{"*.log"}}
-	_, err = filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	_, err = filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.Error(err)
 	r.Contains(err.Error(), "include/exclude patterns are not supported for single files")
 }
@@ -185,7 +207,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 	// Test: preserve directory structure
 	opt := filesystem.DirOptions{Reproducible: true, PreserveDir: true}
-	b, err := filesystem.GetBlobFromPath(context.Background(), targetDir, opt)
+	b, err := filesystem.GetBlobFromPath(t.Context(), targetDir, opt)
 	r.NoError(err)
 
 	// Verify: entries are prefixed with directory name
@@ -236,7 +258,7 @@ func TestGetBlobFromPath_Compression(t *testing.T) {
 
 	// Test: compression enabled
 	opt := filesystem.DirOptions{Compress: true, MediaType: filesystem.DefaultTarMediaType}
-	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	b, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.NoError(err)
 
 	// Verify: content is gzip compressed
@@ -261,7 +283,7 @@ func TestGetBlobFromPath_MediaTypeHandling(t *testing.T) {
 		createTestFile(t, tmpDir, "file.txt", "content")
 
 		opt := filesystem.DirOptions{MediaType: "application/custom-tar"}
-		b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+		b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
 		r.NoError(err)
 
 		mt, ok := b.(blob.MediaTypeAware)
@@ -275,7 +297,7 @@ func TestGetBlobFromPath_MediaTypeHandling(t *testing.T) {
 		testFile := createTestFile(t, tmpDir, "single.txt", "content")
 
 		opt := filesystem.DirOptions{MediaType: "text/plain"}
-		b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+		b, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 		r.NoError(err)
 
 		mt, ok := b.(blob.MediaTypeAware)
@@ -297,7 +319,7 @@ func TestGetBlobFromPath_ReproducibleBuilds(t *testing.T) {
 
 	// Test: create blob with reproducible option
 	opt := filesystem.DirOptions{Reproducible: true}
-	blob1, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	blob1, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.NoError(err)
 
 	data1, err := readAllFromBlob(blob1)
@@ -308,7 +330,7 @@ func TestGetBlobFromPath_ReproducibleBuilds(t *testing.T) {
 	r.NoError(os.Chtimes(testFile, newTime, newTime))
 
 	// Test: create blob again after timestamp change
-	blob2, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	blob2, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.NoError(err)
 
 	data2, err := readAllFromBlob(blob2)
@@ -363,7 +385,7 @@ func TestGetBlobFromPath_ErrorCases(t *testing.T) {
 			r := require.New(t)
 
 			path, opt := tt.setupFunc(t)
-			_, err := filesystem.GetBlobFromPath(context.Background(), path, opt)
+			_, err := filesystem.GetBlobFromPath(t.Context(), path, opt)
 
 			if tt.expectError {
 				r.Error(err)
@@ -393,7 +415,7 @@ func TestGetBlobFromPath_SymlinkRejection(t *testing.T) {
 	}
 
 	// Test: symlinks should be rejected during blob reading
-	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, filesystem.DirOptions{})
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{})
 	r.NoError(err, "blob creation should succeed initially")
 
 	// Verify: error occurs when reading blob content
@@ -412,7 +434,7 @@ func TestGetBlobFromPath_IncludeDirectoryOnly(t *testing.T) {
 
 	// Only include the directory itself
 	opt := filesystem.DirOptions{IncludePatterns: []string{"sub/dir"}, Reproducible: true}
-	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
 	r.NoError(err)
 	r.NotNil(b)
 
@@ -452,7 +474,7 @@ func TestGetBlobFromPath_PatternNormalization(t *testing.T) {
 
 	for _, inc := range cases {
 		opt := filesystem.DirOptions{IncludePatterns: inc, Reproducible: true}
-		resultBlob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+		resultBlob, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
 		r.NoError(err)
 		files := extractTarContents(t, resultBlob)
 		r.Contains(files, "sub/dir/file.txt")
