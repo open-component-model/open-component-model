@@ -881,9 +881,9 @@ func TestHostKeys(t *testing.T) {
 		expect []string
 	}{
 		{name: "empty host matches nothing", host: "", expect: nil},
-		{name: "bare hostname", host: "example.com", expect: []string{"example.com"}},
-		{name: "host with port falls back to hostname", host: "example.com:9000", expect: []string{"example.com:9000", "example.com"}},
-		{name: "ipv6 with port", host: "[::1]:9000", expect: []string{"[::1]:9000", "::1"}},
+		{name: "a host without a port has only its own key", host: "example.com", expect: []string{"example.com"}},
+		{name: "a host with a port falls back to the entry covering all its ports", host: "example.com:9000", expect: []string{"example.com:9000", "example.com"}},
+		{name: "a bracketed ipv6 host falls back to its unbracketed spelling", host: "[::1]:9000", expect: []string{"[::1]:9000", "::1"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -916,7 +916,7 @@ func TestConfig_ResolveHost(t *testing.T) {
 		assert.Equal(t, httpspec.HostConfig{}, nilCfg.ResolveHost("example.com"))
 	})
 
-	t.Run("unknown host yields global values", func(t *testing.T) {
+	t.Run("a host with no entry of its own yields the global values", func(t *testing.T) {
 		resolved := cfg.ResolveHost("other.com")
 		assert.Equal(t, httpspec.Timeout(30*time.Second), *resolved.Timeout)
 		require.NotNil(t, resolved.Retry)
@@ -944,7 +944,9 @@ func TestConfig_ResolveHost(t *testing.T) {
 		assert.Equal(t, httpspec.Timeout(30*time.Second), *resolved.Timeout, "global preserved where host is nil")
 	})
 
-	t.Run("host:port entry wins over bare hostname", func(t *testing.T) {
+	// Which of the two entries wins is [httpspec.HostKeys]'s business and is pinned by
+	// TestHostKeys; what matters here is that every field of the winning one is merged.
+	t.Run("the winning entry's fields merge onto the globals", func(t *testing.T) {
 		resolved := cfg.ResolveHost("example.com:9000")
 		require.NotNil(t, resolved.Retry)
 		assert.Equal(t, 7, *resolved.Retry.MaxRetries)
