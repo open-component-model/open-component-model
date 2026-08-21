@@ -12,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/github/internal/download"
 	githubaccess "ocm.software/open-component-model/bindings/go/github/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	ghcreds "ocm.software/open-component-model/bindings/go/github/spec/credentials"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -137,4 +138,8 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 // reference; content reaches GitHub through git, not through OCM.
 func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ runtime.Typed) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("github repositories do not support upload operations")
+}
+
+func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
+	return ghcreds.Scheme
 }
