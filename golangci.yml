@@ -434,6 +434,7 @@ linters:
           allow:
             - "ocm.software/open-component-model/bindings/go/blob"
             - "ocm.software/open-component-model/bindings/go/configuration"
+            - "ocm.software/open-component-model/bindings/go/constructor"
             - "ocm.software/open-component-model/bindings/go/credentials"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/http"
