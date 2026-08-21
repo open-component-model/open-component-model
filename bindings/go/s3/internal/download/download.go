@@ -206,41 +206,16 @@ func httpConfig(cfg *httpv1alpha1.Config) *httpv1alpha1.Config {
 	return out
 }
 
-// hostKeys returns the per-host configuration keys to try for endpoint, most specific
-// first. It mirrors the host matching of the ocm HTTP client, where an entry keyed by
-// host:port wins over one keyed by the bare hostname.
-//
-// TODO: drop this once http config exposes per-host resolution. Until then, this duplicates
-// that behavior here.
-func hostKeys(endpoint string) []string {
-	if endpoint == "" {
-		return nil
-	}
-
-	u, err := url.Parse(endpoint)
-	if err != nil || u.Host == "" {
-		return nil
-	}
-	if name := u.Hostname(); name != u.Host {
-		return []string{u.Host, name}
-	}
-
-	return []string{u.Host}
-}
-
-// effectiveRetry manually resolve and merge related host retry configuration.
+// effectiveRetry returns the retry policy cfg puts in effect for endpoint. An endpoint
+// that names no host, and one the SDK targets by default (AWS), resolve to the global
+// policy.
 func effectiveRetry(cfg *httpv1alpha1.Config, endpoint string) *httpv1alpha1.RetryConfig {
-	if cfg == nil {
-		return nil
+	var host string
+	if u, err := url.Parse(endpoint); err == nil {
+		host = u.Host
 	}
 
-	for _, key := range hostKeys(endpoint) {
-		if hostCfg := cfg.Hosts[key]; hostCfg != nil {
-			return httpv1alpha1.MergeRetryConfig(cfg.Retry, hostCfg.Retry)
-		}
-	}
-
-	return cfg.Retry
+	return cfg.ResolveHost(host).Retry
 }
 
 // sdkRetryAttempts translates the ocm retry configuration that applies to endpoint into

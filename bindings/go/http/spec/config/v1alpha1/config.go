@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"time"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -344,6 +345,44 @@ func (c *Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+// HostKeys returns the [Config.Hosts] keys to try for host, most specific first:
+// the full "host:port" and, when it carries a port, the bare hostname. host is a
+// URL host such as [net/url.URL.Host]; an empty one matches no entry.
+func HostKeys(host string) []string {
+	if host == "" {
+		return nil
+	}
+	if name := (&url.URL{Host: host}).Hostname(); name != host {
+		return []string{host, name}
+	}
+	return []string{host}
+}
+
+// ResolveHost returns the configuration in effect for host, with the per-host
+// overrides of the first matching [HostKeys] entry merged onto the global values.
+// A host without an entry, and an empty or nil Config, yield the global values.
+func (c *Config) ResolveHost(host string) HostConfig {
+	if c == nil {
+		return HostConfig{}
+	}
+
+	var timeout *TimeoutConfig
+	var tls *TLSConfig
+	var retry *RetryConfig
+	for _, key := range HostKeys(host) {
+		if hc := c.Hosts[key]; hc != nil {
+			timeout, tls, retry = &hc.TimeoutConfig, &hc.TLSConfig, hc.Retry
+			break
+		}
+	}
+
+	return HostConfig{
+		TimeoutConfig: MergeTimeoutConfig(&c.TimeoutConfig, timeout),
+		TLSConfig:     MergeTLSConfig(&c.TLSConfig, tls),
+		Retry:         MergeRetryConfig(c.Retry, retry),
+	}
 }
 
 // ResolveHTTPConfig resolves the HTTP configuration from a central generic V1

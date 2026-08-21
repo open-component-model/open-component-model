@@ -222,10 +222,6 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		resource.Digest.Value = resolvedValue
 	}
 
-	// Pinning the access to the version that was read satisfies the
-	// [repository.ResourceDigestProcessor] requirement that a processed access "MUST
-	// always reference the content described by the digest and cannot be mutated".
-	// See "Object versions and unversioned buckets" in the package documentation.
 	switch pinned, served := pinningVersion(spec.Version), pinningVersion(result.VersionID); {
 	case pinned != "":
 		// The version is sent as the request's versionId, so a store answering with a
@@ -256,10 +252,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	return resource, nil
 }
 
-// pinningVersion returns versionID when it identifies immutable content, and the empty
-// string when it does not. An unversioned bucket reports either no version or the
-// placeholder [download.UnversionedVersionID], neither of which survives an overwrite,
-// whether the store reported it or an author wrote it into the spec.
+// pinningVersion returns versionID unless it is the unversioned placeholder, which pins nothing.
 func pinningVersion(versionID string) string {
 	if versionID == download.UnversionedVersionID {
 		return ""
