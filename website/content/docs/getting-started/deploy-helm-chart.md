@@ -1,6 +1,6 @@
 ---
 title: "Deploy Helm Charts"
-description: "Deploy a Helm chart from an OCM component version with OCM Controllers, kro, and Flux."
+description: "Manually deploy a Helm chart from an OCM component version with OCM Controllers, kro, and a GitOps deployer such as Flux."
 icon: "🚀"
 weight: 26
 toc: true

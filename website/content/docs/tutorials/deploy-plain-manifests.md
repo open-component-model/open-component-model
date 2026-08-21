@@ -1,6 +1,6 @@
 ---
-title: Deploy an Application from Inline Manifests with OCM and kro
-description: "Package an application as an OCM component and deploy it to Kubernetes with kro, using plain manifests and no Helm."
+title: Deploy an Application from Plain Manifests with OCM and kro
+description: "Package plain Kubernetes manifests as an OCM component and deploy them with kro ResourceGraphDefinitions — no Helm chart, no GitOps deployer."
 icon: "⚙️"
 weight: 62
 toc: true
@@ -26,21 +26,22 @@ By the end, you will have:
 
 ## Prerequisites
 
+{{< callout context="note" title="Set up your environment" icon="outline/settings-check" >}}
+Before starting, make sure you have set up your environment as described in the [setup guide]({{< relref "setup-controller-environment.md" >}}).
+{{< /callout >}}
+
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with the OCM
   Controllers and kro installed (no GitOps deployer needed)
+- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured so the OCM controller can manage
+  `ResourceGraphDefinitions`, and so kro can create the `Podinfo` instance, the OCM `Resource`,
+  and the Deployment and Service it renders — see [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}})
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}})
 - `envsubst` (part of `gettext`; on macOS install it with `brew install gettext`)
 - An OCI registry you can push to, for example [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages)
 
-{{< callout context="note" title="Custom RBAC" icon="outline/lock" >}}
-The OCM Deployer applies the kro `ResourceGraphDefinition`s, so the OCM controller's
-`ServiceAccount` needs `resourcegraphdefinitions.kro.run`. kro then creates the objects the
-RGDs define (the `Podinfo` instance, the OCM `Resource`, the Deployment and Service), and its
-own `ServiceAccount` needs permissions for those kinds (`podinfos.kro.run`,
-`resources.delivery.ocm.software`, Deployments, Services). The dev-friendly kro install used
-here grants them broadly; [kro's access control guide](https://kro.run/docs/advanced/access-control)
-shows the least-privilege setup. Apply the [Custom RBAC]({{< relref "custom-rbac.md" >}}) guide
-once, then verify the OCM controller `ServiceAccount` (not your admin user):
+{{< callout context="note" title="Verify the OCM controller's RBAC" icon="outline/lock" >}}
+Once you've applied the [Custom RBAC]({{< relref "custom-rbac.md" >}}) guide, confirm the OCM
+controller `ServiceAccount` (not your admin user) can manage RGDs:
 
 ```bash
 kubectl auth can-i create resourcegraphdefinitions.kro.run \
@@ -61,124 +62,49 @@ export OCM_REPO=ghcr.io/$GITHUB_USERNAME/ocm-tutorial
 
 ## How it works
 
-You deliver **two** RGDs inside one OCM component:
+You deliver **two** RGDs inside one OCM component: an app RGD that gives Podinfo a reusable
+API, and a system RGD that composes it with the localized image. The OCM controllers deliver
+both the same way described in [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}):
+a `Repository` and `Component` fetch the component, and one `Resource` + `Deployer` pair per
+RGD applies it to the cluster. You then create a single `System` instance, and the chain
+converges to a running Podinfo.
 
-- **The app RGD (`podinfo`)** defines a reusable API for your application. It registers a
-  `Podinfo` custom resource and renders a Deployment and a Service. Its schema exposes
-  `image`, `message`, and `replicas`. This is the building block a developer owns.
-- **The system RGD (`system`)** composes the application. It reads the localized image from
-  the OCM component and creates a `Podinfo` instance wired with that image and your message.
-
-This split is deliberate, and it is the real payoff of dropping Helm. The app RGD turns your
-application into a first-class Kubernetes API: a `Podinfo` kind with a typed schema, so
-operators run `kubectl get podinfo`, set fields with validation, and read status like any
-built-in resource. It stays generic, with no OCM coupling. The system RGD holds the
-OCM-specific wiring, reading the localized image and composing the app into an instance. A
-Helm chart gives you templated YAML and a release object; these two RGDs give you a queryable
-API plus a composition layer. That power has a cost: you define the API yourself and deliver
-two RGDs instead of one chart, so for a one-off install of someone else's chart a HelmRelease
-is still simpler.
-
-The OCM controllers deliver both RGDs. A `Repository` and `Component` fetch the component,
-and one `Resource` + `Deployer` pair per RGD applies it to the cluster. You then create a
-single `System` instance, and the chain converges to a running Podinfo.
-
-**Localization** is what keeps the image correct. When you transfer the component with
-`--copy-resources --upload-as ociArtifact`, OCM copies the image into your registry and
-rewrites its reference. The system RGD injects that rewritten reference into the `Podinfo`
+**Localization** keeps the image correct once it lands in kro's hands. [Transfer preserves
+artifact integrity, and localization adapts the reference at deploy time]({{< relref "docs/concepts/transfer-concept.md#localization" >}}).
+Here, that means the system RGD injects the rewritten image reference into the `Podinfo`
 instance, so the workload always pulls from the registry the component was delivered to.
 
-Here you build one app, but the shape is bigger. Each app is a reusable building block, a
-**leaf** that knows how to run one thing. The system RGD is the composer that stacks leaves
-into a product: with one app there is one leaf, with a real product there are many, and a
-single instance drives them all. For one app you could fold both RGDs into one; keeping them
-split is what lets the pattern grow. The [Scaling to a whole product](#scaling-to-a-whole-product)
-section at the end shows how.
+The diagram below picks up once both RGDs are already applied, and shows what kro itself does
+with them.
 
 <details>
 <summary>Architecture diagram</summary>
 
 ```mermaid
-%%{init: {"theme":"base", "themeVariables": {"edgeLabelBackground":"#ffffff"}, "flowchart": {"wrappingWidth": 320}}}%%
 flowchart TB
-    subgraph background[ ]
-        direction TB
-        subgraph ocmRepo[OCM Repository]
-            subgraph ocmCV[OCM Component Version: system]
-                direction RL
-                ocmResImage[Resource: Image]
-                ocmResPodinfo[Resource: RGD podinfo]
-                ocmResSystem[Resource: RGD system]
-            end
+    subgraph kro[kro]
+        rgdPodinfo[RGD: podinfo]
+        crdPodinfo[CRD: Podinfo]
+        rgdSystem[RGD: system]
+        crdSystem[CRD: System]
+        rgdPodinfo -->|registers| crdPodinfo
+        rgdSystem -->|registers| crdSystem
+        subgraph instanceSystem[Instance: System]
+            k8sResImg[Resource: Image]
+            podinfoInstance[Podinfo instance]
+            k8sResImg -->|image reference, localized| podinfoInstance
         end
-
-        subgraph k8sCluster[Kubernetes Cluster]
-            subgraph bootstrap[OCM Controllers]
-                k8sRepo[Repository]
-                k8sComponent[Component]
-                k8sResPodinfo[Resource: RGD podinfo]
-                k8sDeployerA[Deployer A]
-                k8sResSystem[Resource: RGD system]
-                k8sDeployerB[Deployer B]
-            end
-            subgraph kro[kro]
-                rgdPodinfo[RGD: podinfo]
-                crdPodinfo[CRD: Podinfo]
-                rgdSystem[RGD: system]
-                crdSystem[CRD: System]
-                subgraph instanceSystem[Instance: System]
-                    k8sResImg[Resource: Image]
-                    podinfoInstance[Podinfo instance]
-                    k8sResImg -- image reference localized --> podinfoInstance
-                end
-            end
-            podinfoInstance ==> workload["Workload: Deployment + Service"]
-        end
-
-        ocmRepo --> k8sRepo
-        k8sRepo ==> k8sComponent
-        k8sComponent ==> k8sResPodinfo
-        k8sComponent ==> k8sResSystem
-        k8sResPodinfo --> k8sDeployerA
-        k8sResSystem --> k8sDeployerB
-        k8sDeployerA ==> rgdPodinfo
-        k8sDeployerB ==> rgdSystem
-        rgdPodinfo ==> crdPodinfo
-        rgdSystem ==> crdSystem
-        crdSystem eInstSys@-.-> instanceSystem
-        crdPodinfo eInstPod@-.-> podinfoInstance
-        rgdPodinfo eKnative@-- kro-native: templated directly --> workload
     end
+    crdSystem -.->|instantiated as| instanceSystem
+    crdPodinfo -.->|instantiated as| podinfoInstance
+    podinfoInstance ==>|kro-native: templated directly| workload["Workload: Deployment + Service"]
 
-    eKnative@{stroke-dasharray: 5 5}
-    eInstSys@{stroke-width: 2px}
-    eInstPod@{stroke-width: 2px}
-
-    classDef ocm fill:#e8def8,stroke:#8e68d0,color:#1a1a1a
     classDef reconciledBy fill:#def2e4,stroke:#4d8a4d,color:#1a1a1a
     classDef k8sObject fill:#d7e4fb,stroke:#3c63c8,color:#1a1a1a
-    classDef cluster fill:#f3f4f6,stroke:#6b7280,color:#1a1a1a
 
-    class ocmRepo,ocmCV,ocmResImage,ocmResPodinfo,ocmResSystem ocm;
-    class k8sCluster cluster;
-    class bootstrap,kro,instanceSystem reconciledBy;
-    class k8sRepo,k8sComponent,k8sResPodinfo,k8sDeployerA,k8sResSystem,k8sDeployerB,rgdPodinfo,rgdSystem,crdPodinfo,crdSystem,k8sResImg,podinfoInstance,workload k8sObject;
-
-    linkStyle default color:#1a1a1a
+    class kro,instanceSystem reconciledBy;
+    class rgdPodinfo,rgdSystem,crdPodinfo,crdSystem,k8sResImg,podinfoInstance,workload k8sObject;
 ```
-
-<div style="display:inline-block;background:#fff;border:1px solid #d0d5dd;border-radius:8px;padding:10px 14px;font-size:14px;color:#1a1a1a;line-height:2">
-<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center">
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1.5px solid #8e68d0;background:#e8def8"></span>OCM content</span>
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1.5px solid #4d8a4d;background:#def2e4"></span>reconciled by controllers</span>
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1.5px solid #3c63c8;background:#d7e4fb"></span>Kubernetes object</span>
-</div>
-<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center">
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><svg width="36" height="12" aria-hidden="true"><line x1="0" y1="6" x2="30" y2="6" stroke="#333333" stroke-width="3.2"></line><polygon points="36,6 30,3 30,9" fill="#333333"></polygon></svg>creates</span>
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><svg width="36" height="12" aria-hidden="true"><line x1="0" y1="6" x2="30" y2="6" stroke="#333333" stroke-width="1"></line><polygon points="36,6 30,3 30,9" fill="#333333"></polygon></svg>references / data flow</span>
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><svg width="36" height="12" aria-hidden="true"><line x1="0" y1="6" x2="30" y2="6" stroke="#333333" stroke-width="1.4" stroke-dasharray="3 3"></line><polygon points="36,6 30,3 30,9" fill="#333333"></polygon></svg>instantiated as</span>
-</div>
-</div>
 
 </details>
 
@@ -341,6 +267,32 @@ spec:
 EOF
 ```
 
+### Why two RGDs, and when Helm is still simpler
+
+You just wrote two RGDs instead of one. That split is deliberate:
+
+- **The app RGD (`podinfo`)** is the reusable API. It registers the `Podinfo` custom resource
+  and renders the Deployment and Service you just wrote. Its schema exposes `image`,
+  `message`, and `replicas`. This is the building block a developer owns, and it stays
+  generic, with no OCM coupling.
+- **The system RGD (`system`)** is the OCM-specific wiring. It reads the localized image from
+  the OCM component and creates a `Podinfo` instance wired with that image and your message.
+
+Whether this split is worth it depends on what you're shipping. If your application already
+ships as a Helm chart, or you're doing a one-off install of someone else's chart, a
+`HelmRelease` is simpler to write: see [Deploy an Application from a Helm Chart with OCM and kro]({{< relref "deploy-helm-chart-bootstrap.md" >}}).
+The plain-manifest RGDs pay off when you own the application: the app RGD turns it into a
+first-class Kubernetes API, so operators run `kubectl get podinfo`, set fields with
+validation, and read status like any built-in resource, all without needing to know OCM is
+behind it. Keeping the system RGD separate is what lets that API stay reusable.
+
+Here you built one app, but the shape is bigger. Each app RGD is a reusable building block, a
+**leaf** that knows how to run one thing. The system RGD is the composer that stacks leaves
+into a product: with one app there is one leaf, with a real product there are many, and a
+single instance drives them all. For one app you could fold both RGDs into one; keeping them
+split is what lets the pattern grow. The [Scaling to a whole product](#scaling-to-a-whole-product)
+section at the end shows how.
+
 ## Build and transfer
 
 Build the component version locally (`cv` is short for component version). This reads
@@ -358,10 +310,11 @@ On success it prints a summary table:
  ocm.software/ocm-k8s-toolkit/system │ 1.0.0   │ ocm.software
 ```
 
-Transfer it to your registry. `--copy-resources --upload-as ociArtifact` copies the image
-into your registry as a pullable OCI artifact and rewrites its reference. Both flags matter:
-`--copy-resources` copies the referenced resources, and `--upload-as ociArtifact` is what
-makes the image land as a pullable artifact instead of an internal blob.
+Transfer it to your registry. `--copy-resources` copies the image into your registry instead
+of leaving the component pointing back at `ghcr.io/stefanprodan`, and `--upload-as ociArtifact`
+is what makes it land as a pullable artifact instead of an internal blob; see [Resource
+Handling: References vs. Copies]({{< relref "docs/concepts/transfer-concept.md#resource-handling-references-vs-copies" >}})
+for why that distinction exists.
 
 ```bash
 ocm transfer cv --copy-resources --upload-as ociArtifact \
@@ -388,17 +341,15 @@ Only the registry and path changed. The original tag stays in the reference. At 
 time the system RGD resolves this to a digest-pinned reference (`...@sha256:...`), which is
 what the running pod uses. You will see that digest form in the verification step below.
 
-{{< callout context="note" title="Make the package readable by the cluster" icon="outline/lock" >}}
-A freshly pushed ghcr.io package is **private**. For this tutorial, make the package public
-in your GitHub package settings so the cluster can pull it without credentials.
+A freshly pushed ghcr.io package is private. To make it public, go to the `packages` tab in
+your GitHub repository `https://github.com/$GITHUB_USERNAME?tab=packages`, select the package
+`component-descriptors/ocm.software/ocm-k8s-toolkit/system`, and under "Package settings"
+change the visibility to `public`. This lets the cluster pull it without credentials.
 
-To keep it private instead, see [Configure Credentials for Controllers]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}})
-and add the credentials to the resources as described in the collapsible below.
-{{< /callout >}}
+Alternatively, if you want to keep your package private, configure credentials for the OCM
+Controllers and kro:
 
-<details>
-<summary>Using a private registry</summary>
-
+{{< details "Using a private registry" >}}
 Create a pull secret from a token with `read:packages`, in the same namespace as the bootstrap
 resources:
 
@@ -447,7 +398,8 @@ Then wire it into three places:
 
 Rebuild and transfer the component after editing the RGDs.
 
-</details>
+For more details, see [Configure Credentials for Controllers]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}).
+{{< /details >}}
 
 ## Deploy the application
 
@@ -481,7 +433,7 @@ spec:
   component: ocm.software/ocm-k8s-toolkit/system
   repositoryRef:
     name: system-repository
-  semver: ">=1.0.0 <2.0.0"
+  semver: 1.0.0
   interval: 1m
 ---
 apiVersion: delivery.ocm.software/v1alpha1
@@ -529,10 +481,6 @@ spec:
     namespace: default
 EOF
 ```
-
-Note `semver` on the `Component`: it is a constraint, not a pin. `>=1.0.0 <2.0.0` accepts any
-compatible `1.x` release, so publishing a newer component version is all it takes for the
-controllers to pick it up on the next interval.
 
 Apply them. `envsubst` fills in `$OCM_REPO`:
 
@@ -631,16 +579,13 @@ tunnel is ready and return nothing.
 Change the message or replica count by editing `instance.yaml` and re-applying. kro
 reconciles the running workload.
 
-{{< callout context="caution" title="Going to production: kro needs explicit permissions" icon="outline/lock" >}}
-This tutorial uses a dev-friendly kro install with broad permissions. A hardened cluster is
-stricter, and RBAC is fixed up front. That matters here, because your RGDs register **new**
-kinds at runtime. kro can create the CRD, but the moment it creates an *instance* of that
-kind, a least-privilege role denies it.
-
-Grant kro's service account the kinds its RGDs create and manage. For this tutorial that is
+{{< callout context="caution" title="Going to production: tighten kro's RBAC" icon="outline/lock" >}}
+This tutorial uses a dev-friendly kro install with broad permissions (see [Prerequisites](#prerequisites)).
+A hardened cluster locks that down; see [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}})
+for why kro needs its own grant, separate from the `resourcegraphdefinitions.kro.run` grant the
+OCM controller already needs. For this tutorial, grant kro's service account
 `podinfos.kro.run` (the instance), `resources.delivery.ocm.software` (the localized image),
-and `deployments` + `services` (the workload). The OCM controller separately needs
-`resourcegraphdefinitions.kro.run`, which you set up in Prerequisites.
+and `deployments` + `services` (the workload).
 {{< /callout >}}
 
 ## Clean up
@@ -657,7 +602,7 @@ kro keeps the `Podinfo` and `System` CRDs after the RGDs are gone. Remove them i
 clean cluster:
 
 ```bash
-kubectl delete crd podinfoes.kro.run systems.kro.run
+kubectl delete crd podinfos.kro.run systems.kro.run
 ```
 
 ## Troubleshooting

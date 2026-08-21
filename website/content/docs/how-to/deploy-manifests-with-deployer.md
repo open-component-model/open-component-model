@@ -1,6 +1,6 @@
 ---
 title: "Deploy Manifests with Deployer"
-description: "Deploy raw Kubernetes manifests from an OCM component version using the Deployer controller."
+description: "Apply raw Kubernetes manifests to the cluster with the OCM Deployer alone — no kro, no Helm chart, no GitOps tool."
 icon: "🚀"
 weight: 35
 toc: true

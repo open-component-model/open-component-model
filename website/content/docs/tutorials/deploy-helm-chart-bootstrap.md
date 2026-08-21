@@ -1,6 +1,6 @@
 ---
 title: Deploy an Application from a Helm Chart with OCM and kro
-description: "Deploy a Helm Chart using a ResourceGraphDefinition delivered with OCM."
+description: "Bootstrap a Helm chart deployment with OCM and kro, delivered through a GitOps deployer (Flux or Argo CD), for repeatable installs."
 icon: "⚙️"
 weight: 61
 toc: true
@@ -31,7 +31,7 @@ Before starting, make sure you have set up your environment as described in the 
 {{< /callout >}}
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with OCM Controllers, kro, and a deployer (Flux or Argo CD) installed
-- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions`
+- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions` (also see [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}) if you're running a hardened cluster)
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
 - `envsubst` installed (pre-installed on most Linux/macOS systems; part of `gettext`)
@@ -72,105 +72,46 @@ This ensures your deployment always uses images from the current registry, not h
 
 ## Architecture Overview
 
-The following diagram shows the complete resource flow. You can refer back to it as you work through the steps.
+The OCM controllers fetch the component and apply the RGD the same way described in
+[Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}). The
+diagram below picks up from there: it shows what kro does once it has the RGD, and you can
+refer back to it as you work through the steps.
 
 <details>
 <summary>View Resource Overview Diagram</summary>
 
 ```mermaid
-%%{init: {"theme":"base", "themeVariables": {"edgeLabelBackground":"#ffffff"}, "flowchart": {"wrappingWidth": 300}}}%%
 flowchart TB
-    subgraph background[ ]
-        direction TB
-        subgraph ocmRepo[OCM Repository]
-            subgraph ocmCV[OCM Component Version]
-                direction RL
-                subgraph ocmResourceHelm[OCM Resource: HelmChart]
-                end
-                subgraph ocmResourceImage[OCM Resource: Image]
-                end
-                subgraph ocmResourceRGD[OCM Resource: RGD]
-                end
+    subgraph kro[kro]
+        rgdBootstrap[RGD: Bootstrap]
+        crdBootstrap[CRD: Bootstrap]
+        rgdBootstrap -->|registers| crdBootstrap
+        subgraph instanceBootstrap[Instance: Bootstrap]
+            subgraph ocmControllers[OCM Controllers]
+                k8sResourceHelm[Resource: HelmChart]
+                k8sResourceImage[Resource: Image]
             end
+            subgraph deployer[Deployer]
+                source[Source]
+                helmRelease[Release]
+            end
+            k8sResourceImage -->|image reference, localized| helmRelease
+            k8sResourceHelm --> source --> helmRelease
         end
-
-        subgraph k8sCluster[Kubernetes Cluster]
-            subgraph bootstrap[OCM Controllers]
-                k8sRepo[OCMRepository]
-                k8sComponent[Component]
-                k8sResourceRGD[Resource: RGD]
-                k8sDeployer[Deployer]
-            end
-            subgraph kro[kro]
-                subgraph rgd[RGD: Bootstrap]
-                    rgdResourceHelm[Resource: HelmChart]
-                    rgdResourceImage[Resource: Image]
-                    rgdSource[Deployer: Source]
-                    rgdHelmRelease[Deployer: Release]
-                end
-                crdBootstrap[CRD: Bootstrap]
-                subgraph instanceBootstrap[Instance: Bootstrap]
-                    subgraph ocmControllers[OCM Controllers]
-                        k8sResourceHelm[Resource: HelmChart]
-                        k8sResourceImage[Resource: Image]
-                    end
-                    subgraph deployer[Deployer]
-                        source[Source]
-                        helmRelease[Release]
-                    end
-                    k8sResourceImage -- localization reference --> helmRelease
-                end
-            end
-            helmRelease ==> deployment[Deployment: Helm chart]
-        end
-
-        ocmRepo --> k8sRepo
-        k8sRepo ==> k8sComponent
-        k8sComponent ==> k8sResourceRGD
-        k8sComponent ==> k8sResourceHelm
-        k8sComponent ==> k8sResourceImage
-        k8sResourceRGD --> k8sDeployer
-        k8sDeployer ==> rgd
-        rgd ==> crdBootstrap
-        crdBootstrap eInstOf@-.-> instanceBootstrap
-        k8sResourceHelm --> source
-        source --> helmRelease
     end
+    crdBootstrap -.->|instantiated as| instanceBootstrap
+    helmRelease ==>|renders| deployment[Deployment: Helm chart]
 
-    eInstOf@{stroke-width: 2px}
-
-    classDef ocm fill:#e8def8,stroke:#8e68d0,color:#1a1a1a
     classDef reconciledBy fill:#def2e4,stroke:#4d8a4d,color:#1a1a1a
     classDef k8sObject fill:#d7e4fb,stroke:#3c63c8,color:#1a1a1a
-    classDef templateOf fill:#fdf0d5,stroke:#c8891c,color:#1a1a1a
-    classDef cluster fill:#f3f4f6,stroke:#6b7280,color:#1a1a1a
 
-    class ocmRepo,ocmCV,ocmResourceHelm,ocmResourceImage,ocmResourceRGD ocm;
-    class k8sCluster cluster;
-    class bootstrap,kro,ocmControllers,deployer reconciledBy;
-    class k8sRepo,k8sComponent,k8sResourceRGD,k8sDeployer,rgd,crdBootstrap,instanceBootstrap,k8sResourceHelm,k8sResourceImage,source,helmRelease,deployment k8sObject;
-    class rgdResourceHelm,rgdResourceImage,rgdSource,rgdHelmRelease templateOf;
-
-    linkStyle default color:#1a1a1a
+    class kro,ocmControllers,deployer,instanceBootstrap reconciledBy;
+    class rgdBootstrap,crdBootstrap,k8sResourceHelm,k8sResourceImage,source,helmRelease,deployment k8sObject;
 ```
-
-<div style="display:inline-block;background:#fff;border:1px solid #d0d5dd;border-radius:8px;padding:10px 14px;font-size:14px;color:#1a1a1a;line-height:2">
-<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center">
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1.5px solid #8e68d0;background:#e8def8"></span>OCM content</span>
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1.5px solid #4d8a4d;background:#def2e4"></span>reconciled by controllers</span>
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1.5px solid #3c63c8;background:#d7e4fb"></span>Kubernetes object</span>
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1.5px solid #c8891c;background:#fdf0d5"></span>RGD template</span>
-</div>
-<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center">
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><svg width="36" height="12" aria-hidden="true"><line x1="0" y1="6" x2="30" y2="6" stroke="#333333" stroke-width="3.2"></line><polygon points="36,6 30,3 30,9" fill="#333333"></polygon></svg>creates</span>
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><svg width="36" height="12" aria-hidden="true"><line x1="0" y1="6" x2="30" y2="6" stroke="#333333" stroke-width="1"></line><polygon points="36,6 30,3 30,9" fill="#333333"></polygon></svg>references / data flow</span>
-<span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><svg width="36" height="12" aria-hidden="true"><line x1="0" y1="6" x2="30" y2="6" stroke="#333333" stroke-width="1.4" stroke-dasharray="3 3"></line><polygon points="36,6 30,3 30,9" fill="#333333"></polygon></svg>instantiated as</span>
-</div>
-</div>
 
 </details>
 
-The diagram shows the complete flow: OCM component resources are fetched by the controllers, the Deployer applies the RGD, kro creates a CRD from it, and finally instantiating that CRD deploys the Helm chart with localized image references.
+kro creates a CRD from the RGD, and instantiating that CRD deploys the Helm chart with localized image references.
 
 ## Create and Publish a Component Version
 
@@ -230,8 +171,10 @@ As you can see, the resource `resource-graph-definition` is of type `blob` and c
 following content:
 
 {{< details "ResourceGraphDefinition (resourceGraphDefinition.yaml)" >}}
-The `resourceChart` and `resourceImage` resources are identical for both deployers.
-Choose your deployer tab for the deployer-specific resources:
+The `resourceChart` and `resourceImage` resources are identical for both deployers. Both use
+`additionalStatusFields`/`toOCI()` to expose the registry, repository, and digest under
+`status.additional`; see [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md#additional-status-fields" >}})
+for how that mechanism works. Choose your deployer tab for the deployer-specific resources:
 
 {{< tabs "bootstrap-rgd-deployer" >}}
 {{< tab "Flux" >}}
@@ -726,6 +669,16 @@ The image reference points to your registry with a digest. Localization worked!
 {{< /step >}}
 {{< /steps >}}
 
+{{< callout context="caution" title="Going to production: tighten kro's RBAC" icon="outline/lock" >}}
+This tutorial uses a dev-friendly kro install with broad permissions (see [Prerequisites](#prerequisites)).
+A hardened cluster locks that down; see [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}})
+for why kro needs its own grant, separate from the `resourcegraphdefinitions.kro.run` grant the
+OCM controller already needs. For this tutorial, grant kro's service account
+`bootstraps.kro.run` (the instance) and `resources.delivery.ocm.software` (the chart and image),
+plus `ocirepositories.source.toolkit.fluxcd.io` and `helmreleases.helm.toolkit.fluxcd.io` for
+Flux, or `applications.argoproj.io` for Argo CD.
+{{< /callout >}}
+
 ## Troubleshooting
 
 ### Authentication Errors (401 Unauthorized)
@@ -776,7 +729,7 @@ This pattern allows developers to ship deployment instructions alongside their s
 
 ## Next Steps
 
-- [Deploy an Application from Inline Manifests with OCM and kro]({{< relref "deploy-inline-manifests.md" >}}) covers the same delivery without a Helm chart, using plain manifests and kro
+- [Deploy an Application from Plain Manifests with OCM and kro]({{< relref "deploy-plain-manifests.md" >}}) covers the same delivery without a Helm chart, using plain manifests and kro
 - [How-to: Air-Gap Transfer]({{< relref "air-gap-transfer.md" >}}) — Transfer components to disconnected environments
 - [How-to: Configure Credentials for Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}) — Set up private registry access
 - [Concept: OCM Controllers]({{< relref "ocm-controllers.md" >}}) — Understand the controller architecture
