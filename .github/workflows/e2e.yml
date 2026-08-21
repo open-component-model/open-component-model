@@ -98,7 +98,7 @@ jobs:
           install -m 0755 ${{ env.LOCATION }}/tmp/cli/bin/ocm-linux-${ARCH} /usr/local/bin/ocm
 
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@6a650dba1b4ae9945185c4bb3cc3f386aaf71b3d # v2.9.2
+        uses: fluxcd/flux2/action@16602fa989daa99762f1c6d1186ae2ad1c735815 # v2.9.3
 
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
