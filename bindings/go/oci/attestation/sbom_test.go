@@ -359,6 +359,35 @@ func TestDiscoverSBOMs(t *testing.T) {
 		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
 	})
 
+	t.Run("matches operating system features regardless of their order", func(t *testing.T) {
+		store := newStore(t)
+		windows := ociImageSpecV1.Platform{
+			OS: "windows", Architecture: "amd64",
+			OSFeatures: []string{"win32k", "hyperv"},
+		}
+		img := image(t, store, windows, ociImageSpecV1.MediaTypeImageManifest)
+		att := attestationFor(t, store, img, repository.PredicateTypeSPDX)
+		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest", img, att)
+
+		reordered := windows
+		reordered.OSFeatures = []string{"hyperv", "win32k"}
+		want := attestation.ToRepositoryPlatform(reordered)
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(want))
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+		assert.Equal(t, []string{"hyperv", "win32k"}, want.OSFeatures, "matching must not reorder the requested features")
+
+		subset := windows
+		subset.OSFeatures = []string{"hyperv"}
+		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(attestation.ToRepositoryPlatform(subset)))
+		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
+
+		superset := windows
+		superset.OSFeatures = []string{"hyperv", "win32k", "nested"}
+		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(attestation.ToRepositoryPlatform(superset)))
+		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
+	})
+
 	t.Run("resolves a digest pinned reference", func(t *testing.T) {
 		store := newStore(t)
 		img := image(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, ociImageSpecV1.MediaTypeImageManifest)

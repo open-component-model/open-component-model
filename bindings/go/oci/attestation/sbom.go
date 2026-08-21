@@ -258,11 +258,23 @@ func platformMatches(have ociImageSpecV1.Platform, want repository.Platform) boo
 		return false
 	case want.OSVersion != "" && want.OSVersion != have.OSVersion:
 		return false
-	case len(want.OSFeatures) > 0 && !slices.Equal(want.OSFeatures, have.OSFeatures):
+	case len(want.OSFeatures) > 0 && !osFeaturesMatch(have.OSFeatures, want.OSFeatures):
 		return false
 	default:
 		return true
 	}
+}
+
+// osFeaturesMatch compares two OS feature sets independently of the order they are
+// listed in, since the OCI image specification does not define one.
+func osFeaturesMatch(have, want []string) bool {
+	if len(have) != len(want) {
+		return false
+	}
+	haveSorted, wantSorted := slices.Clone(have), slices.Clone(want)
+	slices.Sort(haveSorted)
+	slices.Sort(wantSorted)
+	return slices.Equal(haveSorted, wantSorted)
 }
 
 func isIndex(mediaType string) bool {
