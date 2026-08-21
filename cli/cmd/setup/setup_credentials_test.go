@@ -36,7 +36,7 @@ func TestCredentialTypeSchemePopulatedByBuiltinRegister(t *testing.T) {
 	pm := manager.NewPluginManager(context.Background())
 	require.NoError(t, builtin.Register(pm, &filesystemv1alpha1.Config{}, &httpv1alpha1.Config{}, slog.Default()))
 
-	scheme := pm.CredentialRepositoryRegistry.GetCredentialTypeScheme()
+	scheme := pm.CredentialTypeRegistry.GetCredentialTypeScheme()
 	require.NotNil(t, scheme)
 
 	tests := []struct {
@@ -208,7 +208,7 @@ func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
 			}
 
 			graph, err := credentials.ToGraph(ctx, cfg, credentials.Options{
-				CredentialTypeSchemeProvider: pm.CredentialRepositoryRegistry,
+				CredentialTypeSchemeProvider: pm.CredentialTypeRegistry,
 			})
 			require.NoError(t, err)
 

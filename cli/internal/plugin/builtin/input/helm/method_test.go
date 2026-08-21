@@ -4,11 +4,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -16,7 +16,7 @@ import (
 func TestRegister(t *testing.T) {
 	ctx := t.Context()
 	registry := input.NewInputRepositoryRegistry(ctx)
-	credentialsRegistry := credentialrepository.NewCredentialRepositoryRegistry(ctx)
+	credentialsRegistry := credentialtyperepository.NewCredentialTypeRegistry(ctx)
 	cfg := &filesystemv1alpha1.Config{
 		TempFolder: t.TempDir(),
 	}

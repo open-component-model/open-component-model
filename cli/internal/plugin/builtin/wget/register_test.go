@@ -7,7 +7,7 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
@@ -28,7 +28,7 @@ func TestRegister_InputMethodUsesConfiguredTempFolder(t *testing.T) {
 		inputRegistry,
 		resource.NewResourceRegistry(ctx),
 		digestprocessor.NewDigestProcessorRegistry(ctx),
-		credentialrepository.NewCredentialRepositoryRegistry(ctx),
+		credentialtyperepository.NewCredentialTypeRegistry(ctx),
 		&httpv1alpha1.Config{},
 		&filesystemv1alpha1.Config{TempFolder: tempFolder},
 	))
