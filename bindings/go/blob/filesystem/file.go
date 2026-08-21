@@ -91,16 +91,20 @@ func GetBlobInWorkingDirectory(path, workingDir string) (*Blob, error) {
 // If the path is absolute, it checks if the path is valid within the working directory.
 // If the path is relative, it resolves it against the working directory and prevents escaping the working directory.
 // If the path cannot be resolved or is invalid, it returns an error.
-func ensurePathInWorkingDirectory(path, workingDirectory string) (_ string, err error) {
+func ensurePathInWorkingDirectory(path, workingDirectory string) (_ string, retErr error) {
 	if filepath.IsAbs(path) {
-		if path, err = filepath.Rel(workingDirectory, path); err != nil {
-			return "", fmt.Errorf("failed to create relative path for %q based on working directory %q: %w", path, workingDirectory, err)
+		if path, retErr = filepath.Rel(workingDirectory, path); retErr != nil {
+			return "", fmt.Errorf("failed to create relative path for %q based on working directory %q: %w", path, workingDirectory, retErr)
 		}
 	}
 
-	_, err = os.OpenInRoot(workingDirectory, path)
+	resolved, err := os.OpenInRoot(workingDirectory, path)
 	if err != nil {
 		return "", fmt.Errorf("failed to open path %q in root %q: %w", path, workingDirectory, err)
+	}
+	err = resolved.Close()
+	if err != nil {
+		return "", fmt.Errorf("failed to close path validation handle for %q in root %q: %w", path, workingDirectory, err)
 	}
 
 	return filepath.Join(workingDirectory, path), nil
