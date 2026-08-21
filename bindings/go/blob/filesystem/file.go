@@ -102,11 +102,10 @@ func ensurePathInWorkingDirectory(path, workingDirectory string) (_ string, retE
 	if err != nil {
 		return "", fmt.Errorf("failed to open path %q in root %q: %w", path, workingDirectory, err)
 	}
-	defer func() {
-		if cErr := resolved.Close(); retErr == nil && cErr != nil {
-			retErr = fmt.Errorf("failed to close path validation handle for %q: %w", path, cErr)
-		}
-	}()
+	err = resolved.Close()
+	if err != nil {
+		return "", fmt.Errorf("failed to close path validation handle for %q in root %q: %w", path, workingDirectory, err)
+	}
 
 	return filepath.Join(workingDirectory, path), nil
 }
