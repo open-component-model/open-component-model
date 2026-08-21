@@ -224,7 +224,7 @@ add component-version --%[1]s ./archive --%[2]s %[3]s.yaml
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
 	enum.Var(cmd.Flags(), FlagExternalComponentVersionCopyPolicy, ExternalComponentVersionCopyPolicies(), "policy to apply when a component reference to a component version outside of the constructor or target repository is encountered")
-	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
+	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources. A resource referenced via an access type will not have its digest computed, and any digest declared in the constructor is recorded without being verified against the referenced content.")
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the component descriptors")
 	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current construction state of the component graph`)
@@ -316,6 +316,12 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
+	if skipReferenceDigestProcessing && constructorDeclaresResourceDigest(constructorSpec) {
+		slog.WarnContext(cmd.Context(),
+			"digest processing is skipped, but the constructor declares one or more resource digests; these digests are recorded into the component descriptor without being verified against the referenced content",
+		)
+	}
+
 	output, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
@@ -403,6 +409,21 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	}
 
 	return typed, nil
+}
+
+// constructorDeclaresResourceDigest reports whether any constructor resource declares a
+// digest. Declared resource digests are only verified against the referenced content when
+// digest processing runs; when it is skipped they are recorded into the descriptor
+// unverified, so the caller warns about this contradiction.
+func constructorDeclaresResourceDigest(spec *constructorruntime.ComponentConstructor) bool {
+	for _, component := range spec.Components {
+		for _, resource := range component.Resources {
+			if resource.Digest != nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func GetComponentConstructor(file *file.Flag) (*constructorruntime.ComponentConstructor, error) {
