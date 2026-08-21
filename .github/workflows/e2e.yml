@@ -20,6 +20,10 @@ on:
         description: "Controller image version/tag (matches the built artifact)."
         type: string
         required: true
+      cli_artifact:
+        description: "Artifact name containing the ocm v2 CLI binaries (from build_cli)."
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -56,7 +60,7 @@ jobs:
         run: echo "IMAGE_NAME=${REGISTRY}/${OWNER,,}/kubernetes/controller" >> "$GITHUB_ENV"
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.REF }}
@@ -64,11 +68,10 @@ jobs:
             ${{ env.LOCATION }}
             Taskfile.yml
             .env
-            website/static/install.sh
           persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ env.LOCATION }}/go.mod
           cache-dependency-path: ${{ env.LOCATION }}/go.sum
@@ -82,16 +85,25 @@ jobs:
       - name: Set up docker
         uses: docker/setup-docker-action@77e84dbf09b47d1e29270283c22f16145aa85ca1 # v5
 
+      - name: Download ocm CLI artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ inputs.cli_artifact }}
+          path: ${{ env.LOCATION }}/tmp/cli
+
       - name: Setup ocm
-        run: bash website/static/install.sh
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          install -m 0755 ${{ env.LOCATION }}/tmp/cli/bin/ocm-linux-${ARCH} /usr/local/bin/ocm
 
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@dcc7def046cba2fe8d15d9737a4c250100f62fe0 # v2.9.0
+        uses: fluxcd/flux2/action@16602fa989daa99762f1c6d1186ae2ad1c735815 # v2.9.3
 
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.2
+          version: v4.2.3
 
       - name: Download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -134,8 +146,8 @@ jobs:
           kubectl -n ocm-k8s-toolkit-system get pods -o wide
           echo "::endgroup::"
 
-          echo "::group::Controller logs (last 80 lines)"
-          kubectl -n ocm-k8s-toolkit-system logs deploy/ocm-k8s-toolkit-controller-manager --tail=80 --all-containers || true
+          echo "::group::Controller logs (last 300 lines)"
+          kubectl -n ocm-k8s-toolkit-system logs deploy/ocm-k8s-toolkit-controller-manager --tail=300 --all-containers || true
           echo "::endgroup::"
 
           echo "::group::Namespace events"

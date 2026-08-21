@@ -5,8 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/oci/looseref"
 
+	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 )
@@ -126,7 +127,11 @@ func TestNewFromOCIRepoV1(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo, err := NewFromOCIRepoV1(t.Context(), tt.repository, nil)
+			resolver, err := NewResolver(t.Context(), nil, tt.repository)
+			var repo *oci.Repository
+			if err == nil {
+				repo, err = oci.NewRepository(oci.WithResolver(resolver))
+			}
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.errContains != "" {
@@ -253,7 +258,7 @@ func TestBuildResolver_SubPathExtraction(t *testing.T) {
 				SubPath: tt.subPath,
 			}
 
-			resolver, err := buildResolver(nil, repository)
+			resolver, err := NewResolver(t.Context(), nil, repository)
 			require.NoError(t, err)
 			require.NotNil(t, resolver)
 

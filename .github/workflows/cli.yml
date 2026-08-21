@@ -110,7 +110,7 @@ jobs:
           ref: ${{ env.REF }}
 
       - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum  # Cache dependencies by go.sum
@@ -197,7 +197,7 @@ jobs:
       # Attest built binaries with provenance metadata, but only if we're not on a PR
       - name: Attest binaries
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-path: "${{ env.LOCATION }}/tmp/bin/ocm-*"

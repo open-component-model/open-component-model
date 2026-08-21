@@ -1455,6 +1455,91 @@ resources:
 	r.Equal("foobar", string(downloaded), "expected downloaded resource content to match test file content")
 }
 
+func Test_Download_Resource_Filename(t *testing.T) {
+	tmp := t.TempDir()
+
+	testFilePath := filepath.Join(tmp, "test-file.txt")
+	require.NoError(t, os.WriteFile(testFilePath, []byte("foobar"), 0o600))
+
+	constructorYAML := fmt.Sprintf(`
+name: ocm.software/download-filename-test
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: plain
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+  - name: variant
+    type: blob
+    extraIdentity:
+      architecture: amd64
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	require.NoError(t, os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	require.NoError(t, err, "could not construct component version")
+
+	ref := archiveFilePath + "//ocm.software/download-filename-test:1.0.0"
+
+	for _, tc := range []struct {
+		name     string
+		identity string
+		wantFile string
+	}{
+		{
+			name:     "fallback uses the resource name",
+			identity: "name=plain",
+			wantFile: "plain",
+		},
+		{
+			name:     "fallback uses resource name even with extra identity",
+			identity: "name=variant,architecture=amd64",
+			wantFile: "variant",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			workDir := t.TempDir()
+			t.Chdir(workDir)
+
+			_, err := test.OCM(t, test.WithArgs("download", "resource", ref, "--identity", tc.identity))
+			r.NoError(err)
+
+			data, err := os.ReadFile(filepath.Join(workDir, tc.wantFile))
+			r.NoError(err, "expected output file %q", tc.wantFile)
+			r.Equal("foobar", string(data))
+		})
+	}
+
+	t.Run("--output overrides the resource-name fallback", func(t *testing.T) {
+		r := require.New(t)
+		explicitTarget := filepath.Join(t.TempDir(), "explicit-output.bin")
+
+		_, err := test.OCM(t, test.WithArgs("download", "resource",
+			ref,
+			"--identity", "name=plain",
+			"--output", explicitTarget,
+		))
+		r.NoError(err)
+
+		data, err := os.ReadFile(explicitTarget)
+		r.NoError(err, "expected file at explicit --output path")
+		r.Equal("foobar", string(data))
+	})
+}
+
 func Test_Sign_And_Verify_Component_Version(t *testing.T) {
 	r := require.New(t)
 	tmp := t.TempDir()
@@ -1565,18 +1650,100 @@ resources:
 	))
 	r.NoError(err, "could not construct component version")
 
-	signerSpecFilePath := filepath.Join(tmp, "sigstore-signer-spec.yaml")
-	r.NoError(os.WriteFile(signerSpecFilePath,
-		[]byte("type: SigstoreSigningConfiguration/v1alpha1\n"), 0o600))
+	ocmConfigFilePath := filepath.Join(tmp, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(ocmConfigFilePath, []byte(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
+`), 0o600))
 
 	reference := archiveFilePath + "//" + name + ":" + version
 	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
 		reference,
 		"--signature", "sigstore-wiring-test",
-		"--signer-spec", signerSpecFilePath,
+		"--config", ocmConfigFilePath,
 	))
 	r.Error(err)
 	r.Contains(err.Error(), "OIDC identity token required")
+}
+
+func Test_Sign_Signer_Selected_By_Signature(t *testing.T) {
+	t.Setenv("SIGSTORE_ID_TOKEN", "")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/signer-per-signature", "1.0.0"
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(fmt.Sprintf(`
+name: %[1]s
+version: %[2]s
+provider:
+  name: ocm.software
+resources:
+  - name: my-resource
+    type: blob
+    input:
+      type: utf8/v1
+      text: "signer selection test"
+`, name, version)), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	r.NoError(err, "could not construct component version")
+
+	// this should win
+	ocmConfigFilePath := filepath.Join(tmp, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(ocmConfigFilePath, []byte(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signature: release
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: RSASigningConfiguration/v1alpha1
+`), 0o600))
+
+	reference := archiveFilePath + "//" + name + ":" + version
+
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", "release",
+		"--config", ocmConfigFilePath,
+	))
+	r.ErrorContains(err, "OIDC identity token required")
+
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", "internal",
+		"--config", ocmConfigFilePath,
+	))
+	r.ErrorContains(err, "private key not found")
+}
+
+func Test_Sign_With_Deprecated_Signer_Spec_Flag_Fails(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	signerSpecFilePath := filepath.Join(tmp, "signer-spec.yaml")
+	r.NoError(os.WriteFile(signerSpecFilePath,
+		[]byte("type: RSASigningConfiguration/v1alpha1\n"), 0o600))
+
+	_, err := test.OCM(t, test.WithArgs("sign", "component-version",
+		filepath.Join(tmp, "transport-archive")+"//ocm.software/whatever:1.0.0",
+		"--signer-spec", signerSpecFilePath,
+	))
+	r.Error(err)
+	r.Contains(err.Error(), "--signer-spec is no longer supported")
+	r.Contains(err.Error(), "signing.config.ocm.software/v1alpha1")
 }
 
 // Test_Add_Component_Version_Docker_Credentials tests the use of docker credentials in the add cv command

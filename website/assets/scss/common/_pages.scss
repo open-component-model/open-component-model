@@ -190,6 +190,60 @@ body:has(.sr-root) {
 }
 
 /* ============================================
+   Docs ToC: collapsible tab outlines
+   ============================================ */
+/* assets/js/toc.js rebuilds the ToC so that headings inside tabs and steps show
+   up as well. Entries for tab panes get a disclosure button in front of their
+   label and only the shown tab is expanded, so the ToC does not grow longer
+   than the page it describes. Scoped to .page-links to cover the desktop
+   column and the mobile "On this page" details alike. */
+.page-links {
+  .toc-tab {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  /* min-width lets long tab names wrap instead of pushing the caret out. */
+  .toc-tab > a {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .toc-tab-toggle {
+    flex: 0 0 auto;
+    padding: 0.125rem 0;      /* matches .page-links a */
+    border: 0;
+    background: none;
+    color: inherit;
+    font-size: $font-size-base * 0.9375; /* matches .page-links a, for the em below */
+  }
+
+  /* Same chevron as the theme's details/summary marker, but masked so that it
+     takes the current text colour in both colour modes. The height is one line
+     box of the label, which keeps it on the first line of a wrapped name. */
+  .toc-tab-toggle::before {
+    display: block;
+    width: 0.875rem;
+    height: 1.5em;
+    background-color: currentcolor;
+    content: "";
+    mask: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='black' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M5 14l6-6-6-6'/%3e%3c/svg%3e") no-repeat center / 0.875rem;
+    transition: transform 0.35s ease;
+  }
+
+  .toc-tab-toggle[aria-expanded="true"]::before {
+    transform: rotate(90deg);
+  }
+
+  /* .page-links sets display on its links, so make sure a collapsed outline
+     stays collapsed. */
+  [hidden] {
+    display: none;
+  }
+}
+
+/* ============================================
    Docs ToC (right column) compact sizing
    ============================================ */
 .docs-toc {
