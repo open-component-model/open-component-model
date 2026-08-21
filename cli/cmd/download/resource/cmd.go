@@ -94,7 +94,6 @@ When --output is not provided, the output filename is the resource name.`,
 	}
 
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
-	cmd.Flags().String(FlagOutput, "", "output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name.")
 	cmd.Flags().String(FlagOutput, "", "output location to download to. If no transformer is specified, and no "+
 		"format was discovered that can be written to a directory, the resource will be written to a file. "+
 		"With --sbom this is the directory the SBOMs are written into, defaulting to the values of the "+
