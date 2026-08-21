@@ -156,10 +156,8 @@ func buildRoutingTransport(cfg *httpv1alpha1.Config, inner func(*httpv1alpha1.Ti
 		if hc == nil {
 			continue
 		}
-		merged := httpv1alpha1.MergeTimeoutConfig(&cfg.TimeoutConfig, &hc.TimeoutConfig)
-		mergedRetry := httpv1alpha1.MergeRetryConfig(cfg.Retry, hc.Retry)
-		mergedTLS := httpv1alpha1.MergeTLSConfig(&cfg.TLSConfig, &hc.TLSConfig)
-		hosts[host] = inner(&merged, mergedRetry, &mergedTLS)
+		merged := cfg.ResolveHost(host)
+		hosts[host] = inner(&merged.TimeoutConfig, merged.Retry, &merged.TLSConfig)
 		if merged.Timeout != nil {
 			hostTimeouts[host] = time.Duration(*merged.Timeout)
 		}
