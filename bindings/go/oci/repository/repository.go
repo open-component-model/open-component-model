@@ -69,7 +69,12 @@ func NewStoreFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Reposi
 	return ocictf.NewFromCTF(archive), nil
 }
 
-// NewFromOCIRepoV1 creates a new [*oci.Repository] instance from an OCI repository v1 specification.
+// NewResolver creates a new [*urlresolver.CachingResolver] that can be used to create [*oci.Repository] instances from an OCI repository v1 specification.
+//
+// Extra resolver options (resolverOptions) are appended after the provider's
+// own resolver configuration, so callers can layer in cross-repository
+// concerns such as a manifest blob cache via [urlresolver.WithBlobCache]
+// without each repo having to construct its own.
 //
 // # Path Handling vs Old OCM
 //
@@ -82,18 +87,7 @@ func NewStoreFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Reposi
 //     https://github.com/open-component-model/ocm/blob/2b819e6/api/oci/extensions/repositories/ocireg/type.go#L104
 //   - Validate() uses HostInfo() to extract host, discarding any path
 //     https://github.com/open-component-model/ocm/blob/2b819e6/api/oci/extensions/repositories/ocireg/type.go#L138
-//
-// New OCM: Explicit BaseUrl + SubPath fields, consistent parsing, auto-extraction support
-func NewFromOCIRepoV1(_ context.Context, repository *ocirepospecv1.Repository, client remote.Client, options ...oci.RepositoryOption) (*oci.Repository, error) {
-	resolver, err := buildResolver(client, repository)
-	if err != nil {
-		return nil, fmt.Errorf("could not create OCI resolver for OCI repository %q: %w", repository.BaseUrl, err)
-	}
-
-	return oci.NewRepository(append(options, oci.WithResolver(resolver))...)
-}
-
-func buildResolver(client remote.Client, repository *ocirepospecv1.Repository) (*urlresolver.CachingResolver, error) {
+func NewResolver(_ context.Context, client remote.Client, repository *ocirepospecv1.Repository, extra ...urlresolver.Option) (*urlresolver.CachingResolver, error) {
 	if repository.BaseUrl == "" {
 		return nil, fmt.Errorf("a base url is required")
 	}
@@ -128,6 +122,7 @@ func buildResolver(client remote.Client, repository *ocirepospecv1.Repository) (
 	}
 
 	opts = append(opts, urlresolver.WithBaseClient(client))
+	opts = append(opts, extra...)
 
 	resolver, err := urlresolver.New(opts...)
 	if err != nil {
@@ -135,4 +130,24 @@ func buildResolver(client remote.Client, repository *ocirepospecv1.Repository) (
 	}
 
 	return resolver, nil
+}
+
+// NewFromOCIRepoV1 creates a new [*oci.Repository] instance from an OCI
+// repository v1 specification.
+//
+// Deprecated: Build the resolver explicitly with [NewResolver] (which
+// accepts [urlresolver.Option]s such as [urlresolver.WithBlobCache])
+// and pass it to [oci.NewRepository] directly:
+//
+//	resolver, err := NewResolver(client, repo)
+//	if err != nil { return nil, err }
+//	return oci.NewRepository(append(opts, oci.WithResolver(resolver))...)
+//
+// This wrapper is kept only for backwards compatibility.
+func NewFromOCIRepoV1(ctx context.Context, repository *ocirepospecv1.Repository, client remote.Client, options ...oci.RepositoryOption) (*oci.Repository, error) {
+	resolver, err := NewResolver(ctx, client, repository)
+	if err != nil {
+		return nil, fmt.Errorf("could not create OCI resolver for OCI repository %q: %w", repository.BaseUrl, err)
+	}
+	return oci.NewRepository(append(options, oci.WithResolver(resolver))...)
 }
