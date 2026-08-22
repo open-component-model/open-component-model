@@ -1,18 +1,18 @@
 ---
 title: "Deploy Helm Charts"
-description: "Deploy a Helm chart from an OCM component version with OCM Controllers, kro, and Flux."
+description: "Manually deploy a Helm chart from an OCM component version with OCM Controllers, kro, and a GitOps deployer (Flux or Argo CD)."
 icon: "🚀"
 weight: 26
 toc: true
 ---
 
 This tutorial walks you through deploying a Helm chart from an OCM component version to a Kubernetes cluster,
-using the OCM Controllers with kro and Flux.
+using the OCM Controllers with kro and a GitOps deployer (Flux or Argo CD).
 
 ## What You'll Learn
 
 - Create and publish an OCM component version that references a Helm chart
-- Define a ResourceGraphDefinition to orchestrate OCM and Flux resources
+- Define a ResourceGraphDefinition to orchestrate OCM and Flux or Argo CD resources
 - Deploy the Helm chart to your cluster using the OCM Controllers
 
 ## Estimated time
@@ -23,11 +23,11 @@ using the OCM Controllers with kro and Flux.
 
 You as a developer create an application, packaged as a Helm chart, and publish it as OCM component version in an OCI registry.
 Then, you as an operator deploy the Helm chart into a Kubernetes cluster using the OCM Controllers.
-You define a ResourceGraphDefinition that tells kro how to orchestrate the OCM and Flux resources to deploy the Helm chart.
+You define a ResourceGraphDefinition that tells kro how to orchestrate the OCM and Flux or Argo CD resources to deploy the Helm chart.
 
 ## Prerequisites
 
-- [Controller environment]({{< relref "setup-controller-environment.md" >}}) set up (OCM Controllers, kro and Flux in a Kubernetes cluster)
+- [Controller environment]({{< relref "setup-controller-environment.md" >}}) set up (OCM Controllers, kro, and a deployer (Flux or Argo CD) in a Kubernetes cluster)
 - [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions`
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
