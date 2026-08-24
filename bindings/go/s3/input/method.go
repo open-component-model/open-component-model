@@ -15,7 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/s3/spec/input"
-	v1 "ocm.software/open-component-model/bindings/go/s3/spec/input/v1"
+	"ocm.software/open-component-model/bindings/go/s3/spec/input/v1"
 )
 
 var _ constructor.ResourceInputMethod = (*InputMethod)(nil)
