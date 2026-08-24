@@ -44,7 +44,7 @@ var _ interface {
 //  3. Detects the media type using mimetype.DetectFile if not explicitly provided
 //  4. Wraps the blob with InputFileBlob to provide media type awareness
 //  5. Applies gzip compression with [compression.Compress] if the Compress flag is set
-func GetV1FileBlob(file v1.File, workingDirectory string) (blob.ReadOnlyBlob, error) {
+func GetV1FileBlob(file v1.File, workingDirectory string) (data blob.ReadOnlyBlob, err error) {
 	if file.Path == "" {
 		return nil, fmt.Errorf("file path must not be empty")
 	}
@@ -57,32 +57,30 @@ func GetV1FileBlob(file v1.File, workingDirectory string) (blob.ReadOnlyBlob, er
 	mediaType := file.MediaType
 
 	if mediaType == "" {
-		readCloser, err := b.ReadCloser()
-		if err != nil {
-			return nil, fmt.Errorf("error opening reader for blob '%s': %v", file.Path, err)
+		readCloser, rErr := b.ReadCloser()
+		if rErr != nil {
+			return nil, fmt.Errorf("error opening reader for blob '%s': %w", file.Path, rErr)
 		}
 		defer func() {
-			if cErr := readCloser.Close(); cErr != nil {
-				if err == nil {
-					err = fmt.Errorf("error closing reader for blob '%s': %v", file.Path, cErr)
-				}
+			if cErr := readCloser.Close(); cErr != nil && err == nil {
+				data, err = nil, fmt.Errorf("error closing reader for blob '%s': %w", file.Path, cErr)
 			}
 		}()
 
 		// see https://github.com/gabriel-vasile/mimetype/blob/master/supported_mimes.md for supported types
-		mime, err := mimetype.DetectReader(readCloser)
-		if err != nil {
-			return nil, fmt.Errorf("error detecting media type for blob '%s': %v", file.Path, err)
+		mime, dErr := mimetype.DetectReader(readCloser)
+		if dErr != nil {
+			return nil, fmt.Errorf("error detecting media type for blob '%s': %w", file.Path, dErr)
 		}
 
 		mediaType = mime.String()
 	}
 
-	data := blob.ReadOnlyBlob(&InputFileBlob{b, mediaType})
+	data = blob.ReadOnlyBlob(&InputFileBlob{b, mediaType})
 
 	if file.Compress {
 		data = compression.Compress(data)
 	}
 
-	return data, err
+	return data, nil
 }
