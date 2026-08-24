@@ -44,13 +44,20 @@
           "$ref": "#/$defs/nonEmptyString"
         },
         "value": {
+          "description": "Value of the label. May be an arbitrary JSON-compatible value (string, number, boolean, null, object, or array).",
           "oneOf": [
             {
               "description": "Value of the label",
               "$ref": "#/$defs/nonEmptyString"
             },
             {
-              "type": "object",
+              "type": [
+                "object",
+                "array",
+                "number",
+                "boolean",
+                "null"
+              ],
               "description": "an arbitrarily complex structured value"
             }
           ]
