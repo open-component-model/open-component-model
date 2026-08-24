@@ -173,7 +173,19 @@ func buildxIndex(t *testing.T, store spec.Store, predicateTypes ...string) (ref 
 }
 
 func linuxARM64() repository.SBOMOption {
-	return repository.WithSBOMPlatform(ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"})
+	return repository.WithSBOMPlatform(repository.Platform{OS: "linux", Architecture: "arm64"})
+}
+
+// want expresses a fixture platform as the technology agnostic platform a discovery
+// request is made in.
+func want(p ociImageSpecV1.Platform) repository.Platform {
+	return repository.Platform{
+		OS:           p.OS,
+		Architecture: p.Architecture,
+		Variant:      p.Variant,
+		OSVersion:    p.OSVersion,
+		OSFeatures:   p.OSFeatures,
+	}
 }
 
 func TestFixtureMatchesRealBuildKitOutput(t *testing.T) {
@@ -234,7 +246,7 @@ func TestDiscoverSBOMs(t *testing.T) {
 
 		got := sboms[0]
 		assert.Equal(t, repository.PredicateTypeSPDX, got.PredicateType)
-		assert.Equal(t, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"}, got.Platform)
+		assert.Equal(t, repository.Platform{OS: "linux", Architecture: "arm64"}, got.Platform)
 		var predicate map[string]any
 		require.NoError(t, json.Unmarshal(got.Data, &predicate))
 		assert.Equal(t, "SPDX-2.3", predicate["spdxVersion"])
@@ -280,7 +292,7 @@ func TestDiscoverSBOMs(t *testing.T) {
 		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref)
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
-		assert.Equal(t, host, sboms[0].Platform)
+		assert.Equal(t, want(host), sboms[0].Platform)
 	})
 
 	t.Run("layers platform requests attribute by attribute", func(t *testing.T) {
@@ -294,11 +306,11 @@ func TestDiscoverSBOMs(t *testing.T) {
 		)
 
 		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref,
-			repository.WithSBOMPlatform(ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}),
-			repository.WithSBOMPlatform(ociImageSpecV1.Platform{Architecture: "arm64"}))
+			repository.WithSBOMPlatform(repository.Platform{OS: "linux", Architecture: "amd64"}),
+			repository.WithSBOMPlatform(repository.Platform{Architecture: "arm64"}))
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
-		assert.Equal(t, arm64.Digest, sboms[0].Digest)
+		assert.Equal(t, arm64.Digest.String(), sboms[0].Digest)
 		assert.Equal(t, "linux", sboms[0].Platform.OS)
 	})
 
@@ -315,7 +327,7 @@ func TestDiscoverSBOMs(t *testing.T) {
 		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, linuxARM64())
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
-		assert.Equal(t, arm64.Digest, sboms[0].Digest)
+		assert.Equal(t, arm64.Digest.String(), sboms[0].Digest)
 	})
 
 	t.Run("constrains the operating system version and features", func(t *testing.T) {
@@ -329,18 +341,18 @@ func TestDiscoverSBOMs(t *testing.T) {
 		att := attestationFor(t, store, img, repository.PredicateTypeSPDX)
 		ref := tagIndex(t, store, ociImageSpecV1.MediaTypeImageIndex, "latest", img, att)
 
-		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(windows))
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(want(windows)))
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
 
 		other := windows
 		other.OSVersion = "10.0.17763.7314"
-		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(other))
+		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(want(other)))
 		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
 
 		other = windows
 		other.OSFeatures = []string{"hyperv"}
-		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(other))
+		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(want(other)))
 		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
 	})
 
@@ -356,19 +368,19 @@ func TestDiscoverSBOMs(t *testing.T) {
 
 		reordered := windows
 		reordered.OSFeatures = []string{"hyperv", "win32k"}
-		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(reordered))
+		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(want(reordered)))
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
 		assert.Equal(t, []string{"hyperv", "win32k"}, reordered.OSFeatures, "matching must not reorder the requested features")
 
 		subset := windows
 		subset.OSFeatures = []string{"hyperv"}
-		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(subset))
+		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(want(subset)))
 		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
 
 		superset := windows
 		superset.OSFeatures = []string{"hyperv", "win32k", "nested"}
-		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(superset))
+		_, err = attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(want(superset)))
 		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
 	})
 
@@ -434,7 +446,7 @@ func TestDiscoverSBOMs_AllPlatforms(t *testing.T) {
 		sboms, err := attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithAllSBOMPlatforms())
 		require.NoError(t, err, "one unattested platform must not sink the whole run")
 		require.Len(t, sboms, 1)
-		assert.Equal(t, arm64.Digest, sboms[0].Digest)
+		assert.Equal(t, arm64.Digest.String(), sboms[0].Digest)
 	})
 
 	t.Run("reports when no platform in the index is attested", func(t *testing.T) {
@@ -508,7 +520,7 @@ func TestDiscoverSBOMs_Errors(t *testing.T) {
 		store := newStore(t)
 		ref := buildxIndex(t, store)
 		_, err := attestation.DiscoverSBOMs(t.Context(), store, ref, repository.WithSBOMPlatform(
-			ociImageSpecV1.Platform{OS: attestation.PlatformUnknown, Architecture: attestation.PlatformUnknown}))
+			repository.Platform{OS: attestation.PlatformUnknown, Architecture: attestation.PlatformUnknown}))
 		require.ErrorIs(t, err, attestation.ErrPlatformNotFound)
 	})
 

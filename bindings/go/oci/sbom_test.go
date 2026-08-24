@@ -160,7 +160,7 @@ func TestRepository_DiscoverSBOM(t *testing.T) {
 		res := sbomResource(reference, runtime.Identity{"architecture": "arm64", "os": "linux"})
 
 		sboms, err := repo.DiscoverSBOM(t.Context(), res,
-			repository.WithSBOMPlatform(ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}))
+			repository.WithSBOMPlatform(repository.Platform{OS: "linux", Architecture: "amd64"}))
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
 		assert.Equal(t, "linux/amd64", documentName(t, sboms[0]))
@@ -173,7 +173,7 @@ func TestRepository_DiscoverSBOM(t *testing.T) {
 		res := sbomResource(reference, nil)
 
 		sboms, err := repo.DiscoverSBOM(t.Context(), res,
-			repository.WithSBOMPlatform(ociImageSpecV1.Platform{Architecture: "amd64"}))
+			repository.WithSBOMPlatform(repository.Platform{Architecture: "amd64"}))
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
 		assert.Equal(t, "linux/amd64", documentName(t, sboms[0]))
@@ -186,7 +186,7 @@ func TestRepository_DiscoverSBOM(t *testing.T) {
 		res := sbomResource(reference, runtime.Identity{"os": "linux"})
 
 		sboms, err := repo.DiscoverSBOM(t.Context(), res,
-			repository.WithSBOMPlatform(ociImageSpecV1.Platform{Architecture: "arm64"}))
+			repository.WithSBOMPlatform(repository.Platform{Architecture: "arm64"}))
 		require.NoError(t, err)
 		require.Len(t, sboms, 1)
 		assert.Equal(t, "linux/arm64", documentName(t, sboms[0]))

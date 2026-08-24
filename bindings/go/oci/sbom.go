@@ -25,7 +25,7 @@ func (repo *Repository) DiscoverSBOM(ctx context.Context, res *descriptor.Resour
 
 	// user set value should overwrite the platform request.
 	if platform := identity.PlatformFromIdentity(res.ToIdentity()); platform != nil {
-		opts = append([]repository.SBOMOption{repository.WithSBOMPlatform(*platform)}, opts...)
+		opts = append([]repository.SBOMOption{repository.WithSBOMPlatform(identity.ToRepositoryPlatform(*platform))}, opts...)
 	}
 
 	reference, err := repo.ociImageReference(res.Access)

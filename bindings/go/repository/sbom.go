@@ -6,8 +6,6 @@ import (
 	goruntime "runtime"
 	"strings"
 
-	"github.com/opencontainers/go-digest"
-	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -36,7 +34,7 @@ type SBOMDiscoverer interface {
 // SBOM is one SBOM document discovered for a resource.
 type SBOM struct {
 	// Platform of the artifact this SBOM describes. Zero when the source carries none.
-	Platform ociImageSpecV1.Platform
+	Platform Platform
 	// ID identifies the document within the resource. It is the only field guaranteed
 	// to be unique across the SBOMs of one resource.
 	ID string
@@ -48,29 +46,20 @@ type SBOM struct {
 	PredicateType string
 	// Data is the SBOM document itself.
 	Data []byte
-	// Digest information of the SBOM.
-	Digest digest.Digest
+	// Digest of the artifact this SBOM describes, empty when the source carries none.
+	// It is shared by every SBOM describing the same artifact, so it does not identify
+	// the document. Use ID for that.
+	Digest string
 }
 
 // String names the document without its contents, so that formatting an SBOM with
 // %v or %q cannot spill the whole document into a log line or an error message.
 func (s SBOM) String() string {
 	name := cmp.Or(s.Name, s.ID, "unnamed sbom")
-	if platform := stringPlatform(s.Platform); platform != "" {
+	if platform := s.Platform.String(); platform != "" {
 		return name + " (" + platform + ")"
 	}
 	return name
-}
-
-// stringPlatform renders the platform the conventional way, "os/architecture/variant".
-func stringPlatform(p ociImageSpecV1.Platform) string {
-	set := make([]string, 0, 3)
-	for _, attribute := range []string{p.OS, p.Architecture, p.Variant} {
-		if attribute != "" {
-			set = append(set, attribute)
-		}
-	}
-	return strings.Join(set, "/")
 }
 
 // MediaType returns the media type matching PredicateType.
@@ -85,10 +74,33 @@ func (s SBOM) MediaType() string {
 	}
 }
 
+// Platform is the build target of an artifact. It mirrors the OCI platform attributes
+// without depending on the image spec to avoid infesting the repository layer with oci technology
+// specific imports.
+type Platform struct {
+	OS           string
+	Architecture string
+	Variant      string
+	OSVersion    string
+	OSFeatures   []string
+}
+
+// String renders the platform the conventional way, "os/architecture/variant",
+// leaving out the attributes that are not set. Empty for the zero platform.
+func (p Platform) String() string {
+	set := make([]string, 0, 3)
+	for _, attribute := range []string{p.OS, p.Architecture, p.Variant} {
+		if attribute != "" {
+			set = append(set, attribute)
+		}
+	}
+	return strings.Join(set, "/")
+}
+
 // SBOMOptions configures SBOM discovery.
 type SBOMOptions struct {
 	// Platform narrows the discovery to one platform. Ignored when AllPlatforms is set.
-	Platform ociImageSpecV1.Platform
+	Platform Platform
 	// AllPlatforms widens the discovery to every platform the resource offers.
 	AllPlatforms bool
 	// PredicateTypes narrows the discovery to documents of these types.
@@ -108,9 +120,23 @@ func WithAllSBOMPlatforms() SBOMOption {
 
 // WithSBOMPlatform narrows the discovery to a platform. It refines attribute by
 // attribute, so a caller can override a single attribute of an already set platform.
-func WithSBOMPlatform(platform ociImageSpecV1.Platform) SBOMOption {
+func WithSBOMPlatform(platform Platform) SBOMOption {
 	return func(o *SBOMOptions) {
-		o.Platform = platform
+		if platform.Architecture != "" {
+			o.Platform.Architecture = platform.Architecture
+		}
+		if platform.OS != "" {
+			o.Platform.OS = platform.OS
+		}
+		if platform.Variant != "" {
+			o.Platform.Variant = platform.Variant
+		}
+		if platform.OSVersion != "" {
+			o.Platform.OSVersion = platform.OSVersion
+		}
+		if len(platform.OSFeatures) > 0 {
+			o.Platform.OSFeatures = platform.OSFeatures
+		}
 	}
 }
 
@@ -130,7 +156,7 @@ func WithSBOMPredicateTypes(types ...string) SBOMOption {
 func NewSBOMOptions(opts ...SBOMOption) *SBOMOptions {
 	o := &SBOMOptions{
 		// Do not default OS otherwise, we'll restrict artifacts not on the current os.
-		Platform: ociImageSpecV1.Platform{
+		Platform: Platform{
 			Architecture: goruntime.GOARCH,
 		},
 		PredicateTypes: []string{PredicateTypeSPDX},

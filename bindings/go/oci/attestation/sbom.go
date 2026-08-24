@@ -29,6 +29,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
 
+	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
@@ -183,14 +184,17 @@ func sbomsFromAttestation(
 		}
 		_ = json.Unmarshal(envelope.Predicate, &named)
 
-		platform := ociImageSpecV1.Platform{}
+		var platform repository.Platform
 		if image.Platform != nil {
-			platform = *image.Platform
+			platform = identity.ToRepositoryPlatform(*image.Platform)
 		}
 
 		sboms = append(sboms, repository.SBOM{
-			Platform:      platform,
-			Digest:        image.Digest,
+			Platform: platform,
+			// the in-toto layer digest is the only value unique across the SBOMs of
+			// one resource, the image digest is shared by all of them.
+			ID:            layer.Digest.String(),
+			Digest:        image.Digest.String(),
 			PredicateType: predicateType,
 			Name:          named.Name,
 			Data:          envelope.Predicate,
@@ -203,7 +207,7 @@ func sbomsFromAttestation(
 // selectPlatforms picks the image entries to inspect. When all is set every entry
 // that has a platform is returned and "want" is ignored. Otherwise, the first entry
 // matching "want" is returned on its own.
-func selectPlatforms(images []ociImageSpecV1.Descriptor, want ociImageSpecV1.Platform, all bool) []ociImageSpecV1.Descriptor {
+func selectPlatforms(images []ociImageSpecV1.Descriptor, want repository.Platform, all bool) []ociImageSpecV1.Descriptor {
 	var selected []ociImageSpecV1.Descriptor
 	for _, image := range images {
 		if image.Platform == nil {
@@ -221,7 +225,7 @@ func selectPlatforms(images []ociImageSpecV1.Descriptor, want ociImageSpecV1.Pla
 }
 
 // platformMatches returns if "want" is satisfied.
-func platformMatches(have ociImageSpecV1.Platform, want ociImageSpecV1.Platform) bool {
+func platformMatches(have ociImageSpecV1.Platform, want repository.Platform) bool {
 	switch {
 	case want.Architecture != "" && want.Architecture != have.Architecture:
 		return false

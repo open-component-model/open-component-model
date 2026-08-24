@@ -8,6 +8,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -103,4 +104,16 @@ func Adopt(desc *ociImageSpecV1.Descriptor, src descriptor.Artifact) error {
 	}
 
 	return nil
+}
+
+// ToRepositoryPlatform converts an OCI platform to its technology-agnostic repository.SBOM equivalent,
+// so that the repository layer does not have to depend on the image spec.
+func ToRepositoryPlatform(platform ociImageSpecV1.Platform) repository.Platform {
+	return repository.Platform{
+		OS:           platform.OS,
+		Architecture: platform.Architecture,
+		Variant:      platform.Variant,
+		OSVersion:    platform.OSVersion,
+		OSFeatures:   platform.OSFeatures,
+	}
 }
