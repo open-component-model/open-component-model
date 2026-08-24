@@ -46,30 +46,6 @@ var (
 	ErrPlatformNotFound = errors.New("platform not present in index")
 )
 
-// SBOM is one SBOM document discovered inside a build attestation.
-type SBOM struct {
-	// Platform of the image this SBOM describes. Never the unknown/unknown placeholder
-	// carried by the attestation manifest itself.
-	Platform ociImageSpecV1.Platform
-	// Subject is the image manifest the attestation points at.
-	Subject ociImageSpecV1.Descriptor
-	// Manifest is the attestation manifest holding the statement.
-	Manifest ociImageSpecV1.Descriptor
-	// Layer is the in-toto statement layer within Manifest.
-	Layer ociImageSpecV1.Descriptor
-	// PredicateType names the kind of document Predicate holds, for example
-	// PredicateTypeSPDX.
-	PredicateType string
-	// Name is the document's own name, for example "sbom" or "sbom-<stage>" under
-	// BuildKit's naming convention. Empty for producers that do not name their
-	// documents, so it is not a reliable identifier on its own.
-	Name string
-	// Statement is the complete in-toto statement, byte for byte as stored.
-	Statement []byte
-	// Predicate is the SBOM document itself
-	Predicate json.RawMessage
-}
-
 // DiscoverSBOMs resolves reference in store and returns every SBOM attestation attached
 // to the images matching the requested platform, or to every platform in the index when
 // WithAllSBOMPlatforms is given.
@@ -78,7 +54,7 @@ type SBOM struct {
 // - ErrNotAnIndex if the reference is a plain manifest
 // - ErrPlatformNotFound if there was no platform for the given value
 // - ErrNoAttestation if there was no SBOM.
-func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts ...repository.SBOMOption) ([]SBOM, error) {
+func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts ...repository.SBOMOption) ([]repository.SBOM, error) {
 	o := repository.NewSBOMOptions(opts...)
 
 	parsed, err := looseref.ParseReference(reference)
@@ -115,7 +91,7 @@ func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts
 		return nil, fmt.Errorf("%w: %q", ErrPlatformNotFound, reference)
 	}
 
-	var sboms []SBOM
+	var sboms []repository.SBOM
 	var attested int
 	for _, image := range selected {
 		var manifests []ociImageSpecV1.Descriptor
@@ -159,13 +135,13 @@ func sbomsFromAttestation(
 	store spec.Store,
 	o *repository.SBOMOptions,
 	image, attestation ociImageSpecV1.Descriptor,
-) ([]SBOM, error) {
+) ([]repository.SBOM, error) {
 	var manifest ociImageSpecV1.Manifest
 	if err := fetchJSON(ctx, store, attestation, &manifest); err != nil {
 		return nil, fmt.Errorf("reading attestation manifest %s failed: %w", attestation.Digest, err)
 	}
 
-	var sboms []SBOM
+	var sboms []repository.SBOM
 	for _, layer := range manifest.Layers {
 		if layer.MediaType != MediaTypeInTotoStatement {
 			continue
@@ -212,15 +188,12 @@ func sbomsFromAttestation(
 			platform = *image.Platform
 		}
 
-		sboms = append(sboms, SBOM{
+		sboms = append(sboms, repository.SBOM{
 			Platform:      platform,
-			Subject:       image,
-			Manifest:      attestation,
-			Layer:         layer,
+			Digest:        image.Digest,
 			PredicateType: predicateType,
 			Name:          named.Name,
-			Statement:     statement,
-			Predicate:     envelope.Predicate,
+			Data:          envelope.Predicate,
 		})
 	}
 
@@ -230,7 +203,7 @@ func sbomsFromAttestation(
 // selectPlatforms picks the image entries to inspect. When all is set every entry
 // that has a platform is returned and "want" is ignored. Otherwise, the first entry
 // matching "want" is returned on its own.
-func selectPlatforms(images []ociImageSpecV1.Descriptor, want repository.Platform, all bool) []ociImageSpecV1.Descriptor {
+func selectPlatforms(images []ociImageSpecV1.Descriptor, want ociImageSpecV1.Platform, all bool) []ociImageSpecV1.Descriptor {
 	var selected []ociImageSpecV1.Descriptor
 	for _, image := range images {
 		if image.Platform == nil {
@@ -248,7 +221,7 @@ func selectPlatforms(images []ociImageSpecV1.Descriptor, want repository.Platfor
 }
 
 // platformMatches returns if "want" is satisfied.
-func platformMatches(have ociImageSpecV1.Platform, want repository.Platform) bool {
+func platformMatches(have ociImageSpecV1.Platform, want ociImageSpecV1.Platform) bool {
 	switch {
 	case want.Architecture != "" && want.Architecture != have.Architecture:
 		return false

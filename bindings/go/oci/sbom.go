@@ -16,7 +16,7 @@ import (
 )
 
 // DiscoverSBOM returns the SBOM attestations attached to the OCI artifact.
-func (repo *Repository) DiscoverSBOM(ctx context.Context, res *descriptor.Resource, opts ...repository.SBOMOption) ([]attestation.SBOM, error) {
+func (repo *Repository) DiscoverSBOM(ctx context.Context, res *descriptor.Resource, opts ...repository.SBOMOption) ([]repository.SBOM, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 
 	if res.Access == nil || res.Access.GetType().IsEmpty() {
@@ -25,7 +25,7 @@ func (repo *Repository) DiscoverSBOM(ctx context.Context, res *descriptor.Resour
 
 	// user set value should overwrite the platform request.
 	if platform := identity.PlatformFromIdentity(res.ToIdentity()); platform != nil {
-		opts = append([]repository.SBOMOption{repository.WithSBOMPlatform(attestation.ToRepositoryPlatform(*platform))}, opts...)
+		opts = append([]repository.SBOMOption{repository.WithSBOMPlatform(*platform)}, opts...)
 	}
 
 	reference, err := repo.ociImageReference(res.Access)

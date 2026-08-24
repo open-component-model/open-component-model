@@ -71,8 +71,8 @@ func PlatformFromIdentity(id runtime.Identity) *ociImageSpecV1.Platform {
 
 // Adopt modifies the provided OCI descriptor to represent an artifact.
 // It sets the platform fields based on the resource's extra identity attributes
-// and adds a annotations.ArtifactOCIAnnotation to indicate that the descriptor
-// is a annotations.ArtifactKindResource.
+// and adds an annotations.ArtifactOCIAnnotation to indicate that the descriptor
+// is an annotations.ArtifactKindResource.
 func Adopt(desc *ociImageSpecV1.Descriptor, src descriptor.Artifact) error {
 	var kind annotations.ArtifactKind
 	switch src.(type) {

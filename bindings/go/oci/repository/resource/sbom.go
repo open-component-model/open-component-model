@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/oci/attestation"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -23,5 +22,5 @@ func (p *ResourceRepository) DiscoverSBOM(ctx context.Context, resource *descrip
 	if err != nil {
 		return nil, fmt.Errorf("discovering sbom for resource %q failed: %w", resource.ToIdentity(), err)
 	}
-	return attestation.ToRepositorySBOMs(sboms), nil
+	return sboms, nil
 }
