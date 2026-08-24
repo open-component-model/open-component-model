@@ -2,6 +2,7 @@ package file
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/gabriel-vasile/mimetype"
 
@@ -55,25 +56,24 @@ func GetV1FileBlob(file v1.File, workingDirectory string) (blob.ReadOnlyBlob, er
 	}
 
 	mediaType := file.MediaType
+
 	if mediaType == "" {
 		readCloser, err := b.ReadCloser()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error opening reader for blob '%s': %v", file.Path, err)
 		}
 		// see https://github.com/gabriel-vasile/mimetype/blob/master/supported_mimes.md for supported types
 		mime, err := mimetype.DetectReader(readCloser)
-		cErr := readCloser.Close()
 		if err != nil {
 			return nil, err
 		}
-		if cErr != nil {
-			return nil, cErr
-		}
+		defer func() {
+			err = readCloser.Close()
+			if err != nil {
+				slog.Warn("error closing reader for blob", "path", file.Path, "error", err)
+			}
+		}()
 		mediaType = mime.String()
-		err = readCloser.Close()
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	data := blob.ReadOnlyBlob(&InputFileBlob{b, mediaType})
