@@ -441,3 +441,97 @@ func TestScheme_ResolvesAllFileInputAliases(t *testing.T) {
 		})
 	}
 }
+
+// TestGetV1FileBlob_MediaTypeDetection covers the branch where the media type is not set
+// explicitly and therefore has to be detected from the file content.
+func TestGetV1FileBlob_MediaTypeDetection(t *testing.T) {
+	tests := []struct {
+		name              string
+		fileName          string
+		fileData          []byte
+		compress          bool
+		expectedMediaType string
+	}{
+		{
+			name:              "text file",
+			fileName:          "test.txt",
+			fileData:          []byte("Hello, World!"),
+			expectedMediaType: "text/plain; charset=utf-8",
+		},
+		{
+			name:              "json file",
+			fileName:          "test.json",
+			fileData:          []byte(`{"key": "value"}`),
+			expectedMediaType: "application/json",
+		},
+		{
+			name:              "gzip file",
+			fileName:          "test.gz",
+			fileData:          gzipped(t, []byte("Hello, World!")),
+			expectedMediaType: "application/gzip",
+		},
+		{
+			name:              "text file with compression",
+			fileName:          "test.txt",
+			fileData:          []byte("Hello, World!"),
+			compress:          true,
+			expectedMediaType: "text/plain; charset=utf-8+gzip",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			tempDir := t.TempDir()
+			filePath := filepath.Join(tempDir, tt.fileName)
+			r.NoError(os.WriteFile(filePath, tt.fileData, 0o600))
+
+			fileSpec := v1.File{
+				Type:     runtime.NewUnversionedType("file"),
+				Path:     filePath,
+				Compress: tt.compress,
+			}
+
+			b, err := file.GetV1FileBlob(fileSpec, tempDir)
+			r.NoError(err)
+			r.NotNil(b)
+
+			mediaTypeAware, ok := b.(blob.MediaTypeAware)
+			r.True(ok, "blob must expose its media type")
+			mediaType, known := mediaTypeAware.MediaType()
+			r.True(known)
+			r.Equal(tt.expectedMediaType, mediaType)
+
+			// The blob must still be readable after media type detection.
+			reader, err := b.ReadCloser()
+			r.NoError(err)
+			defer func() { r.NoError(reader.Close()) }()
+
+			data, err := io.ReadAll(reader)
+			r.NoError(err)
+			if tt.compress {
+				gzReader, err := gzip.NewReader(bytes.NewReader(data))
+				r.NoError(err)
+				defer func() { r.NoError(gzReader.Close()) }()
+				data, err = io.ReadAll(gzReader)
+				r.NoError(err)
+			}
+			r.Equal(tt.fileData, data)
+		})
+	}
+}
+
+// gzipped returns the gzip compressed representation of data.
+func gzipped(t *testing.T, data []byte) []byte {
+	t.Helper()
+	r := require.New(t)
+
+	var buf bytes.Buffer
+	writer := gzip.NewWriter(&buf)
+	_, err := writer.Write(data)
+	r.NoError(err)
+	r.NoError(writer.Close())
+
+	return buf.Bytes()
+}

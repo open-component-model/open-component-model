@@ -1,6 +1,7 @@
 package file
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -41,7 +42,7 @@ var _ interface {
 // The function performs the following steps:
 //  1. Validates that the file path is not empty
 //  2. Reads the file from the filesystem using filesystem.GetBlobInWorkingDirectory
-//  3. Detects the media type using mimetype.DetectFile if not explicitly provided
+//  3. Detects the media type from the file content if not explicitly provided
 //  4. Wraps the blob with InputFileBlob to provide media type awareness
 //  5. Applies gzip compression with [compression.Compress] if the Compress flag is set
 func GetV1FileBlob(file v1.File, workingDirectory string) (blob.ReadOnlyBlob, error) {
@@ -56,22 +57,7 @@ func GetV1FileBlob(file v1.File, workingDirectory string) (blob.ReadOnlyBlob, er
 
 	mediaType := file.MediaType
 	if mediaType == "" {
-		readCloser, err := b.ReadCloser()
-		if err != nil {
-			return nil, err
-		}
-		// see https://github.com/gabriel-vasile/mimetype/blob/master/supported_mimes.md for supported types
-		mime, err := mimetype.DetectReader(readCloser)
-		cErr := readCloser.Close()
-		if err != nil {
-			return nil, err
-		}
-		if cErr != nil {
-			return nil, cErr
-		}
-		mediaType = mime.String()
-		err = readCloser.Close()
-		if err != nil {
+		if mediaType, err = detectMediaType(b); err != nil {
 			return nil, err
 		}
 	}
@@ -83,4 +69,23 @@ func GetV1FileBlob(file v1.File, workingDirectory string) (blob.ReadOnlyBlob, er
 	}
 
 	return data, nil
+}
+
+// detectMediaType determines the media type of the given blob by inspecting its content.
+func detectMediaType(b *filesystem.Blob) (_ string, err error) {
+	readCloser, err := b.ReadCloser()
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		err = errors.Join(err, readCloser.Close())
+	}()
+
+	// see https://github.com/gabriel-vasile/mimetype/blob/master/supported_mimes.md for supported types
+	mime, err := mimetype.DetectReader(readCloser)
+	if err != nil {
+		return "", err
+	}
+
+	return mime.String(), nil
 }
