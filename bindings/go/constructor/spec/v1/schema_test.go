@@ -226,6 +226,23 @@ func TestComponentConstructorSchema(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			// Parity with the descriptor schema (value: true) and the OCM spec:
+			// any JSON-compatible value is allowed, including empty string,
+			// boolean and null.
+			name: "valid label with scalar values (empty string, bool, null)",
+			json: `{
+				"name": "github.com/acme.org/component",
+				"version": "1.0.0",
+				"provider": { "name": "acme" },
+				"labels": [
+					{ "name": "empty", "value": "" },
+					{ "name": "enabled", "value": true },
+					{ "name": "absent", "value": null }
+				]
+			}`,
+			wantErr: false,
+		},
+		{
 			name: "example component constructor from ocm docs",
 			json: `{
   "components": [

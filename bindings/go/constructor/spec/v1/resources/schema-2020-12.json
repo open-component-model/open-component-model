@@ -45,22 +45,7 @@
         },
         "value": {
           "description": "Value of the label. May be an arbitrary JSON-compatible value (string, number, boolean, null, object, or array).",
-          "oneOf": [
-            {
-              "description": "Value of the label",
-              "$ref": "#/$defs/nonEmptyString"
-            },
-            {
-              "type": [
-                "object",
-                "array",
-                "number",
-                "boolean",
-                "null"
-              ],
-              "description": "an arbitrarily complex structured value"
-            }
-          ]
+          "$comment": "Matches the descriptor schema (value: true) and the OCM spec, which permits any JSON-compatible YAML value."
         },
         "version": {
           "description": "Version of the label",
