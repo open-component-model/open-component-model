@@ -8,7 +8,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci/attestation"
+	"ocm.software/open-component-model/bindings/go/oci/internal/attestation"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/repository"

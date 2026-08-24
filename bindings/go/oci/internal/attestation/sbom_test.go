@@ -16,8 +16,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/attestation"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/internal/attestation"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/repository"

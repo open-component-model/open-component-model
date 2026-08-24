@@ -2,7 +2,7 @@
 //
 // At the moment, the implementation in here only supports BuildKit specific structure.
 //
-// BuilKit provides the following OCI layering structure:
+// BuildKit provides the following OCI layering structure:
 //
 //	index
 //	├── manifests[0]  platform: linux/arm64                  the image
