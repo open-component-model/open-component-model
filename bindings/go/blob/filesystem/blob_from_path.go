@@ -55,12 +55,14 @@ func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.Rea
 		return nil, fmt.Errorf("path must not be empty")
 	}
 
-	// Ensure the path is within the working directory if specified
+	// Resolve path from within the working directory if specified
 	// Provides full path-traversal protection
 	if opt.WorkingDir != "" {
-		if _, err := ensurePathInWorkingDirectory(path, opt.WorkingDir); err != nil {
+		resolved, err := ensurePathInWorkingDirectory(path, opt.WorkingDir)
+		if err != nil {
 			return nil, fmt.Errorf("error ensuring path %q in working directory %q: %w", path, opt.WorkingDir, err)
 		}
+		path = resolved
 	}
 
 	// Check if path is a valid directory or single file.

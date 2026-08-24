@@ -504,6 +504,63 @@ components:
 	})
 }
 
+func Test_Integration_AddComponentVersion_UnknownAccessType(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	componentName := "ocm.software/unknown-access-component"
+	componentVersion := "v1.0.0"
+
+	// The access type is not known to the CLI, so no digest processor can be resolved for it.
+	// Adding the component version must still succeed and keep the access as specified.
+	constructorContent := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mycustomresource
+    version: v1.0.0
+    type: blob
+    access:
+      type: MyCustomAccessType/v1
+      url: my.custom.domain.com/access
+`, componentName, componentVersion)
+
+	tempDir := t.TempDir()
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	ctfDir := filepath.Join(tempDir, "ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "add cv with an access type unknown to ocm should succeed")
+
+	fs, err := filesystem.NewFS(ctfDir, os.O_RDONLY)
+	r.NoError(err)
+	archive := ctf.NewFileSystemCTF(fs)
+	repo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err)
+
+	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(desc.Component.Resources, 1)
+
+	resource := desc.Component.Resources[0]
+	r.Equal("mycustomresource", resource.Name)
+	r.Equal(descriptor.ExternalRelation, resource.Relation)
+	r.NotNil(resource.Access)
+	r.Equal("MyCustomAccessType/v1", resource.Access.GetType().String())
+	r.Nil(resource.Digest, "a resource without a digest processor must be stored without a digest")
+}
+
 func Test_Integration_HelmInput_LocalPath(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)

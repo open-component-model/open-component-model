@@ -363,6 +363,7 @@ jobs:
       - name: Run Tests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_USER: ${{ github.actor }}
           MODULE: ${{ matrix.module }}
         run: task "${MODULE}:test/integration"

@@ -203,6 +203,7 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 		return nil, nil, nil, fmt.Errorf("failed to get manifest: %w", err)
 	}
 
+	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor manifest config", log.DescriptorLogAttr(manifest.Config))
 	componentConfigRaw, err := store.Fetch(ctx, manifest.Config)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get component config: %w", err)
@@ -217,7 +218,9 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 	}
 
 	// Read component descriptor
-	descriptorRaw, err := store.Fetch(ctx, *cfg.ComponentDescriptorLayer)
+	descriptorLayer := *cfg.ComponentDescriptorLayer
+	slogcontext.Log(ctx, slog.LevelDebug, "fetching component descriptor layer", log.DescriptorLogAttr(descriptorLayer))
+	descriptorRaw, err := store.Fetch(ctx, descriptorLayer)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
 	}
@@ -225,7 +228,7 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 		err = errors.Join(err, descriptorRaw.Close())
 	}()
 
-	desc, err = ocidescriptor.SingleFileDecodeDescriptor(descriptorRaw, cfg.ComponentDescriptorLayer.MediaType, unmarshal)
+	desc, err = ocidescriptor.SingleFileDecodeDescriptor(descriptorRaw, descriptorLayer.MediaType, unmarshal)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
 	}
