@@ -1,4 +1,4 @@
-// Package v1 implements the "ocm.software/artefact-references" label
+// Package v1alpha1 implements the "ocm.software/artefact-references" label
 // https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/06-conventions.md#artefact-linking-label
 //
 //	resources:
@@ -14,18 +14,19 @@
 //	      architecture: amd64
 //	    labels:
 //	      - name: ocm.software/artefact-references
-//	        version: v1
+//	        version: v1alpha1
 //	        value:
-//	          identity:
-//	            name: my-image
-//	            version: 1.2.3
-//	            foo: bar
-package v1
+//	          - identity:
+//	              name: my-image
+//	              version: 1.2.3
+//	              foo: bar
+package v1alpha1
 
 import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -38,13 +39,24 @@ const (
 	// LabelName is the name under which artefact references are stored on an element.
 	LabelName = "ocm.software/artefact-references"
 	// Version is the specification version of the label value implemented here.
-	Version = "v1"
+	Version = "v1alpha1"
 )
 
-// Reference is the decoded value of the artefact references label. Its Identity selects
+// Reference is one entry of the artefact references label value. Its Identity selects
 // the artefact being described.
 type Reference struct {
 	Identity runtime.Identity `json:"identity"`
+}
+
+// References is the decoded value of the artefact references label. The spec models it
+// as a list, so one element may describe several subjects.
+type References []Reference
+
+// Describes checks whether any of the references points to the subject artefact.
+func (r References) Describes(subject runtime.Identity) bool {
+	return slices.ContainsFunc(r, func(reference Reference) bool {
+		return reference.Describes(subject)
+	})
 }
 
 // Describes checks whether the reference points to the subject artefact. The following
@@ -79,7 +91,7 @@ func extraIdentityOf(identity runtime.Identity) runtime.Identity {
 }
 
 // FromLabels decodes the artefact reference label out of labels.
-func FromLabels(labels []descriptor.Label) (Reference, bool, error) {
+func FromLabels(labels []descriptor.Label) (References, bool, error) {
 	for _, label := range labels {
 		if label.Name != LabelName {
 			continue
@@ -87,13 +99,13 @@ func FromLabels(labels []descriptor.Label) (Reference, bool, error) {
 		if label.Version != "" && label.Version != Version {
 			continue
 		}
-		var ref Reference
-		if err := label.GetValue(&ref); err != nil {
-			return Reference{}, false, fmt.Errorf("interpreting label %q failed: %w", LabelName, err)
+		var refs References
+		if err := label.GetValue(&refs); err != nil {
+			return nil, false, fmt.Errorf("interpreting label %q failed: %w", LabelName, err)
 		}
-		return ref, true, nil
+		return refs, true, nil
 	}
-	return Reference{}, false, nil
+	return nil, false, nil
 }
 
 // FindDescribingResources returns every resource in desc whose artefact reference label
@@ -102,11 +114,11 @@ func FindDescribingResources(desc *descriptor.Descriptor, target runtime.Identit
 	var matches []*descriptor.Resource
 	for i := range desc.Component.Resources {
 		resource := &desc.Component.Resources[i]
-		ref, ok, err := FromLabels(resource.Labels)
+		refs, ok, err := FromLabels(resource.Labels)
 		if err != nil {
 			return nil, fmt.Errorf("resource %q: %w", resource.ToIdentity(), err)
 		}
-		if !ok || !ref.Describes(target) {
+		if !ok || !refs.Describes(target) {
 			continue
 		}
 		matches = append(matches, resource)
