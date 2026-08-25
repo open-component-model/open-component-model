@@ -18,8 +18,7 @@
 | 5 | `sigstore` | `credentials`, `descriptor/runtime`, `runtime`, `signing` |
 | 6 | `input/dir`, `input/file`, `input/utf8` | `blob`, `constructor`, `runtime` |
 | 6 | `plugin` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `repository`, `runtime`, `signing` |
-| 6 | `s3` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `http`, `repository`, `runtime` |
-| 6 | `wget` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime` |
+| 6 | `s3`, `wget` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime` |
 | 7 | `github` | `blob`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `plugin`, `repository`, `runtime` |
 | 7 | `helm` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `oci`, `plugin`, `repository`, `runtime` |
-| 8 | `transfer` | `blob`, `configuration`, `credentials`, `ctf`, `dag`, `descriptor/runtime`, `descriptor/v2`, `github`, `helm`, `http`, `oci`, `repository`, `runtime`, `signing`, `transform`, `wget` |
+| 8 | `transfer` | `blob`, `configuration`, `credentials`, `ctf`, `dag`, `descriptor/runtime`, `descriptor/v2`, `github`, `helm`, `http`, `oci`, `repository`, `runtime`, `s3`, `signing`, `transform`, `wget` |
