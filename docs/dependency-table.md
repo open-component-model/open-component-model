@@ -13,12 +13,12 @@
 | 3 | `repository` | `blob`, `configuration`, `credentials`, `descriptor/runtime`, `runtime` |
 | 3 | `transform` | `cel`, `credentials`, `dag`, `runtime` |
 | 4 | `oci` | `blob`, `configuration`, `credentials`, `ctf`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime` |
-| 4 | `s3` | `blob`, `configuration`, `credentials`, `descriptor/runtime`, `http`, `repository`, `runtime` |
 | 4 | `signing` | `configuration`, `descriptor/normalisation`, `descriptor/runtime`, `runtime` |
 | 5 | `constructor` | `blob`, `credentials`, `ctf`, `dag`, `descriptor/normalisation`, `descriptor/runtime`, `descriptor/v2`, `oci`, `repository`, `runtime` |
 | 5 | `sigstore` | `credentials`, `descriptor/runtime`, `runtime`, `signing` |
 | 6 | `input/dir`, `input/file`, `input/utf8` | `blob`, `constructor`, `runtime` |
 | 6 | `plugin` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `repository`, `runtime`, `signing` |
+| 6 | `s3` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `http`, `repository`, `runtime` |
 | 6 | `wget` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime` |
 | 7 | `github` | `blob`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `plugin`, `repository`, `runtime` |
 | 7 | `helm` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `oci`, `plugin`, `repository`, `runtime` |
