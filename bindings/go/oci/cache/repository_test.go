@@ -47,13 +47,16 @@ func TestRepository_Resolve_DelegatesToReferenceCache(t *testing.T) {
 	// Use a fully-qualified Reference so the wrapper computes a stable
 	// per-repository namespace; the cache pre-populate must use the
 	// same namespace ("registry/repository") to be considered a hit.
+	// The reference itself is a digest, the only form the cache may
+	// answer without upstream.
 	inner := &remote.Repository{
 		Reference: registry.Reference{Registry: "ghcr.io", Repository: "owner/repo"},
 	}
-	rc.Add(registry.Reference{Registry: "ghcr.io", Repository: "owner/repo", Reference: "ref-1"}, desc)
+	ref := desc.Digest.String()
+	rc.Add(registry.Reference{Registry: "ghcr.io", Repository: "owner/repo", Reference: ref}, desc)
 
 	repo := &Repository{Repository: inner, ReferenceCache: rc}
-	got, err := repo.Resolve(t.Context(), "ref-1")
+	got, err := repo.Resolve(t.Context(), ref)
 	require.NoError(t, err)
 	assert.Equal(t, desc, got)
 }
@@ -70,15 +73,15 @@ func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 	}
 	repo := &Repository{Repository: inner, ReferenceCache: rc}
 
-	// 1. Add as normalized tag to cache
+	// 1. Add as normalized digest reference to cache
 	rc.Add(registry.Reference{
 		Registry:   "ghcr.io",
 		Repository: "owner/repo",
-		Reference:  "v1",
+		Reference:  desc.Digest.String(),
 	}, desc)
 
-	// 2. Resolve using fully-qualified reference (should hit, since ParseReference normalizes it to "v1")
-	gotFull, err := repo.Resolve(t.Context(), "ghcr.io/owner/repo:v1")
+	// 2. Resolve using fully-qualified reference (should hit, since ParseReference normalizes it to the bare digest)
+	gotFull, err := repo.Resolve(t.Context(), "ghcr.io/owner/repo@"+desc.Digest.String())
 	require.NoError(t, err)
 	assert.Equal(t, desc, gotFull)
 }

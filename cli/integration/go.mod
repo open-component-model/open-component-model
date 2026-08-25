@@ -13,7 +13,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/registry v0.43.0
 	golang.org/x/crypto v0.54.0
 	helm.sh/helm/v4 v4.2.3
-	ocm.software/open-component-model/bindings/go v0.0.7
+	ocm.software/open-component-model/bindings/go v0.0.8
 	ocm.software/open-component-model/cli v0.13.0
 	oras.land/oras-go/v2 v2.6.2
 )
