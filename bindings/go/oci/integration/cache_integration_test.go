@@ -19,7 +19,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 )
@@ -57,13 +56,7 @@ func classifyRegistryPath(path string) string {
 	}
 }
 
-func (c *registryCalls) record(r *http.Request, status int) {
-	// A 401 is the auth challenge every fresh client pays once per host
-	// before it knows which scheme to use. It carries no content and says
-	// nothing about caching, so it is protocol overhead, not traffic.
-	if status == http.StatusUnauthorized {
-		return
-	}
+func (c *registryCalls) record(r *http.Request) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.count == nil {
@@ -72,25 +65,6 @@ func (c *registryCalls) record(r *http.Request, status int) {
 	kind := classifyRegistryPath(r.URL.Path)
 	c.count[r.Method+" "+kind]++
 	c.log = append(c.log, r.Method+" "+r.URL.Path)
-}
-
-// statusRecorder captures the response status so [registryCalls.record] can
-// tell served requests from auth challenges.
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *statusRecorder) WriteHeader(status int) {
-	w.status = status
-	w.ResponseWriter.WriteHeader(status)
-}
-
-func (w *statusRecorder) Write(b []byte) (int, error) {
-	if w.status == 0 {
-		w.status = http.StatusOK
-	}
-	return w.ResponseWriter.Write(b)
 }
 
 func (c *registryCalls) reset() {
@@ -126,15 +100,11 @@ func (c *registryCalls) dump() []string {
 // startProxiedRegistry boots the containerized distribution registry used by
 // the other integration tests and puts a counting reverse proxy in front of
 // it. Callers talk to the returned URL, so every request is observable.
-func startProxiedRegistry(t *testing.T, ctx context.Context) (string, *ocicredsv1.OCICredentials, *registryCalls) {
+func startProxiedRegistry(t *testing.T, ctx context.Context) (string, *registryCalls) {
 	t.Helper()
 	r := require.New(t)
 
-	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
-
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
-		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{
 			"REGISTRY_VALIDATION_DISABLED": "true",
 		}),
@@ -154,18 +124,12 @@ func startProxiedRegistry(t *testing.T, ctx context.Context) (string, *ocicredsv
 	calls := &registryCalls{}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		rec := &statusRecorder{ResponseWriter: w}
-		proxy.ServeHTTP(rec, req)
-		calls.record(req, rec.status)
+		calls.record(req)
+		proxy.ServeHTTP(w, req)
 	}))
 	t.Cleanup(srv.Close)
 
-	creds := &ocicredsv1.OCICredentials{
-		Type:     ocicredsv1.OCICredentialsVersionedType,
-		Username: testUsername,
-		Password: password,
-	}
-	return srv.URL, creds, calls
+	return srv.URL, calls
 }
 
 // cachingProvider builds a provider wired exactly the way the CLI and the
@@ -181,9 +145,9 @@ func cachingProvider(cacheDir string, policy cache.RemotePolicy) *provider.Cachi
 	)
 }
 
-func repoFor(t *testing.T, ctx context.Context, prov *provider.CachingComponentVersionRepositoryProvider, baseURL string, creds *ocicredsv1.OCICredentials) repository.ComponentVersionRepository {
+func repoFor(t *testing.T, ctx context.Context, prov *provider.CachingComponentVersionRepositoryProvider, baseURL string) repository.ComponentVersionRepository {
 	t.Helper()
-	repo, err := prov.GetComponentVersionRepository(ctx, &ocirepospecv1.Repository{BaseUrl: baseURL}, creds)
+	repo, err := prov.GetComponentVersionRepository(ctx, &ocirepospecv1.Repository{BaseUrl: baseURL}, nil)
 	require.NoError(t, err)
 	return repo
 }
@@ -219,20 +183,20 @@ func Test_Integration_OCICache_ReReadAvoidsRegistry(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)
 
-	baseURL, creds, calls := startProxiedRegistry(t, ctx)
+	baseURL, calls := startProxiedRegistry(t, ctx)
 
 	const component, version = "ocm.software/cache-test", "v1.0.0"
 
 	// Seed the registry through an uncached provider so the cached providers
 	// below start cold.
 	seedProv := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	seedRepo := repoFor(t, ctx, seedProv, baseURL, creds)
+	seedRepo := repoFor(t, ctx, seedProv, baseURL)
 	r.NoError(seedRepo.AddComponentVersion(ctx, cacheTestDescriptor(component, version, "original")))
 
 	t.Run("baseline: without the cache a re-read hits the registry again", func(t *testing.T) {
 		r := require.New(t)
 		prov := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-		repo := repoFor(t, ctx, prov, baseURL, creds)
+		repo := repoFor(t, ctx, prov, baseURL)
 
 		calls.reset()
 		_, err := repo.GetComponentVersion(ctx, component, version)
@@ -253,7 +217,7 @@ func Test_Integration_OCICache_ReReadAvoidsRegistry(t *testing.T) {
 	t.Run("IfNotPresent: a re-read on the same provider downloads nothing", func(t *testing.T) {
 		r := require.New(t)
 		prov := cachingProvider(cacheDir, cache.RemotePolicyIfNotPresent)
-		repo := repoFor(t, ctx, prov, baseURL, creds)
+		repo := repoFor(t, ctx, prov, baseURL)
 
 		calls.reset()
 		got, err := repo.GetComponentVersion(ctx, component, version)
@@ -278,7 +242,7 @@ func Test_Integration_OCICache_ReReadAvoidsRegistry(t *testing.T) {
 		// invocation looks like: in-memory state is gone, only the disk
 		// cache survives.
 		prov := cachingProvider(cacheDir, cache.RemotePolicyIfNotPresent)
-		repo := repoFor(t, ctx, prov, baseURL, creds)
+		repo := repoFor(t, ctx, prov, baseURL)
 
 		calls.reset()
 		got, err := repo.GetComponentVersion(ctx, component, version)
@@ -293,7 +257,7 @@ func Test_Integration_OCICache_ReReadAvoidsRegistry(t *testing.T) {
 	t.Run("IfNotPresent: a moved tag is not served stale", func(t *testing.T) {
 		r := require.New(t)
 		prov := cachingProvider(cacheDir, cache.RemotePolicyIfNotPresent)
-		repo := repoFor(t, ctx, prov, baseURL, creds)
+		repo := repoFor(t, ctx, prov, baseURL)
 
 		// Warm the cache.
 		got, err := repo.GetComponentVersion(ctx, component, version)
@@ -321,16 +285,16 @@ func Test_Integration_OCICache_RemotePolicyAlways(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)
 
-	baseURL, creds, calls := startProxiedRegistry(t, ctx)
+	baseURL, calls := startProxiedRegistry(t, ctx)
 
 	const component, version = "ocm.software/cache-test-always", "v1.0.0"
 
 	seedProv := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	seedRepo := repoFor(t, ctx, seedProv, baseURL, creds)
+	seedRepo := repoFor(t, ctx, seedProv, baseURL)
 	r.NoError(seedRepo.AddComponentVersion(ctx, cacheTestDescriptor(component, version, "original")))
 
 	prov := cachingProvider(t.TempDir(), cache.RemotePolicyAlways)
-	repo := repoFor(t, ctx, prov, baseURL, creds)
+	repo := repoFor(t, ctx, prov, baseURL)
 
 	calls.reset()
 	_, err := repo.GetComponentVersion(ctx, component, version)
