@@ -16,8 +16,10 @@
 // # Handler Configuration Types
 //
 // The handler registers two config types in its runtime.Scheme:
-//   - SigstoreSigningConfiguration/v1alpha1 — passed via --signer-spec
-//   - SigstoreVerificationConfiguration/v1alpha1 — passed via --verifier-spec
+//   - SigstoreSigningConfiguration/v1alpha1 — set as the "signer" of a
+//     signing.config.ocm.software/v1alpha1 OCM configuration entry
+//   - SigstoreVerificationConfiguration/v1alpha1 — set as the "verifier" of the
+//     same entry
 //
 // # Algorithm Versioning
 //
