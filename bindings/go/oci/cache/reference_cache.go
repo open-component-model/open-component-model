@@ -243,7 +243,7 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref reg
 		return upstream.Resolve(ctx, ref.Reference)
 	}
 	k := c.buildKey(ref)
-	servableFromCache := c.opts.RemotePolicy == RemotePolicyIfNotPresent && isImmutableReference(ref)
+	servableFromCache := c.opts.RemotePolicy == RemotePolicyIfNotPresent && ref.ValidateReferenceAsDigest() == nil
 	if servableFromCache {
 		if v, ok := c.lru.Get(k); ok {
 			c.logger.DebugContext(ctx, "refcache: hit",
@@ -272,18 +272,6 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref reg
 		return ociImageSpecV1.Descriptor{}, err
 	}
 	return v.(ociImageSpecV1.Descriptor), nil
-}
-
-// isImmutableReference reports whether ref names its target by digest.
-// A digest is content-addressed: the mapping from reference to
-// descriptor can never change, so a cached answer stays correct
-// forever. A tag is mutable — upstream can re-point it at any moment
-// and nothing local observes that — so a cached tag mapping is only
-// ever a guess. [ReferenceCache.Resolve] therefore serves tags from
-// upstream under every policy and reserves the
-// [RemotePolicyIfNotPresent] shortcut for digests.
-func isImmutableReference(ref registry.Reference) bool {
-	return ref.ValidateReferenceAsDigest() == nil
 }
 
 // markNamespaceWithEvictedRef records namespace as having at least one
