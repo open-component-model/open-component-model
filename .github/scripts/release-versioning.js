@@ -66,7 +66,6 @@ export default async function computeRcVersion({ core }) {
         allTags.split("\n").filter(Boolean),
         rcTag
     );
-    const changelogRange = previousTag ? `${previousTag}..HEAD` : "";
 
     core.setOutput("new_tag", rcTag);
     core.setOutput("new_version", rcVersion);
@@ -77,10 +76,9 @@ export default async function computeRcVersion({ core }) {
     core.setOutput("controller_module_rc_tag", controllerModuleRcTag);
     core.setOutput("controller_module_promotion_tag", controllerModulePromotionTag);
     core.setOutput("website_module_promotion_tag", websiteModulePromotionTag);
-    core.setOutput("changelog_range", changelogRange);
+    core.setOutput("previous_tag", previousTag);
 
     core.info(`Previous release tag: ${previousTag || "(none — first release)"}`);
-    core.info(`Changelog range: ${changelogRange || "(full history)"}`);
 
     await core.summary
         .addHeading("Release Version Computation")
@@ -95,7 +93,6 @@ export default async function computeRcVersion({ core }) {
             ["Controller Module Release Tag", controllerModulePromotionTag],
             ["Website Module Release Tag", websiteModulePromotionTag],
             ["Previous Release Tag", previousTag || "(none — first release)"],
-            ["Changelog Range", changelogRange || "(full history)"],
         ])
         .write();
 }
