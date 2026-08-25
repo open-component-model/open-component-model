@@ -26,7 +26,7 @@ require (
 	k8s.io/apimachinery v0.36.3
 	k8s.io/client-go v0.36.3
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
-	ocm.software/open-component-model/bindings/go v0.0.6
+	ocm.software/open-component-model/bindings/go v0.0.8
 	oras.land/oras-go/v2 v2.6.2
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/release-utils v0.12.4
