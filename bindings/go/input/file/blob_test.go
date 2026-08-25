@@ -441,3 +441,140 @@ func TestScheme_ResolvesAllFileInputAliases(t *testing.T) {
 		})
 	}
 }
+
+// TestGetV1FileBlob_MediaTypeDetection covers the media type detection branch,
+// i.e. a v1.File without an explicit MediaType.
+func TestGetV1FileBlob_MediaTypeDetection(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		fileData []byte
+		expected string
+	}{
+		{
+			name:     "text file",
+			fileName: "test.txt",
+			fileData: []byte("Hello, World!"),
+			expected: "text/plain; charset=utf-8",
+		},
+		{
+			name:     "json file",
+			fileName: "test.json",
+			fileData: []byte(`{"key": "value"}`),
+			expected: "application/json",
+		},
+		{
+			name:     "binary file",
+			fileName: "test.bin",
+			fileData: []byte{0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE, 0xFD, 0xFC},
+			expected: "application/octet-stream",
+		},
+		{
+			name:     "empty file",
+			fileName: "empty.txt",
+			fileData: nil,
+			expected: "text/plain",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			tempDir := t.TempDir()
+			filePath := filepath.Join(tempDir, tt.fileName)
+			r.NoError(os.WriteFile(filePath, tt.fileData, 0o600))
+
+			fileSpec := v1.File{
+				Type: runtime.NewUnversionedType("file"),
+				Path: filePath,
+			}
+
+			b, err := file.GetV1FileBlob(fileSpec, tempDir)
+			r.NoError(err)
+			r.NotNil(b)
+
+			mediaTypeAware, ok := b.(blob.MediaTypeAware)
+			r.True(ok)
+			mediaType, known := mediaTypeAware.MediaType()
+			r.True(known)
+			r.Equal(tt.expected, mediaType)
+
+			reader, err := b.ReadCloser()
+			r.NoError(err)
+			defer func() {
+				r.NoError(reader.Close())
+			}()
+			data, err := io.ReadAll(reader)
+			r.NoError(err)
+			r.Equal(string(tt.fileData), string(data))
+		})
+	}
+}
+
+// TestGetV1FileBlob_MediaTypeDetectionRepeated calls the detection branch
+// repeatedly on the same file. A reader that is closed more than once surfaces
+// here as an "file already closed" error from GetV1FileBlob.
+func TestGetV1FileBlob_MediaTypeDetectionRepeated(t *testing.T) {
+	r := require.New(t)
+
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "test.txt")
+	r.NoError(os.WriteFile(filePath, []byte("Hello, World!"), 0o600))
+
+	fileSpec := v1.File{
+		Type: runtime.NewUnversionedType("file"),
+		Path: filePath,
+	}
+
+	for i := range 5 {
+		b, err := file.GetV1FileBlob(fileSpec, tempDir)
+		r.NoErrorf(err, "call %d", i)
+		r.NotNil(b)
+	}
+}
+
+// TestGetV1FileBlob_MediaTypeDetectionWithCompression covers detection combined
+// with gzip compression, where the detected type is used as the base type of
+// the compressed blob.
+func TestGetV1FileBlob_MediaTypeDetectionWithCompression(t *testing.T) {
+	r := require.New(t)
+
+	fileData := bytes.Repeat([]byte("compress me. "), 100)
+
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "test.txt")
+	r.NoError(os.WriteFile(filePath, fileData, 0o600))
+
+	fileSpec := v1.File{
+		Type:     runtime.NewUnversionedType("file"),
+		Path:     filePath,
+		Compress: true,
+	}
+
+	b, err := file.GetV1FileBlob(fileSpec, tempDir)
+	r.NoError(err)
+	r.NotNil(b)
+
+	mediaTypeAware, ok := b.(blob.MediaTypeAware)
+	r.True(ok)
+	mediaType, known := mediaTypeAware.MediaType()
+	r.True(known)
+	r.Equal("text/plain; charset=utf-8+gzip", mediaType)
+
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() {
+		r.NoError(reader.Close())
+	}()
+
+	gzReader, err := gzip.NewReader(reader)
+	r.NoError(err)
+	defer func() {
+		r.NoError(gzReader.Close())
+	}()
+
+	decompressed, err := io.ReadAll(gzReader)
+	r.NoError(err)
+	r.Equal(fileData, decompressed)
+}
