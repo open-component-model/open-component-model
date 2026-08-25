@@ -81,7 +81,7 @@ If the component has multiple signatures, specify which one to verify:
 ocm verify cv --signature prod ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 
-> 👉 Without the `--signature` flag, OCM uses the configuration named `default`.
+> 👉 Without the `--signature` flag, **every** signature on the descriptor is verified, not just one named `default`. Each is verified under its own name, so each needs a matching consumer entry.
 
 {{< /step >}}
 
@@ -190,11 +190,11 @@ Give the entry a `signature` field to scope it to a single signature; without on
 {{< /callout >}}
 
 {{< callout context="note" >}}
-`signature: default` matches the default name `ocm verify` looks for. If the signature was created with `--signature <name>`, set the same value in the consumer identity and pass `--signature <name>` on the command line.
+`signature: default` applies to a signature *named* `default`; it is not a catch-all for an omitted `--signature` flag. If the signature was created with `--signature <name>`, set the same value in the consumer identity.
 {{< /callout >}}
 
 {{< callout context="caution" >}}
-Consumer identities are matched **exactly**. Credentials are looked up under the name of the signature being verified, so a `signature: default` entry does not serve a signature named `prod`, and an entry with no `signature` field at all matches nothing. Give every signature its own consumer entry — otherwise a run without `--signature` fails on the signatures that have no matching credential.
+Consumer identities are matched **exactly**. Credentials are looked up under the name of the signature being verified, so a `signature: default` entry does not serve a signature named `prod`, and an entry with no `signature` field at all matches nothing. Give every signature its own consumer entry, otherwise a run without `--signature` fails on the signatures that have no matching credential.
 {{< /callout >}}
 
 {{< /step >}}
@@ -237,7 +237,7 @@ ocm verify cv \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
-Without `--signature`, OCM uses the configuration named `default`.
+Without `--signature`, **every** signature on the descriptor is verified. Configuration and credentials are resolved separately for each one, under that signature's own name.
 
 {{< /step >}}
 {{< /steps >}}
@@ -406,7 +406,7 @@ time=2026-05-19T18:49:13.856+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCES
 
 ### Verify a specific signature
 
-If the component carries multiple signatures (e.g. an RSA signature and a Sigstore signature), select one by **name** with `--signature`. The name is whatever was set at sign time — `default` if no `--signature` flag was passed:
+If the component carries multiple signatures (e.g. an RSA signature and a Sigstore signature), select one by **name** with `--signature`. The name is whatever was set at sign time — `default` if no `--signature` flag was passed *when signing*. Omitting the flag here verifies every signature rather than picking one:
 
 ```bash
 ocm verify cv \
