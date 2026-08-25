@@ -97,9 +97,9 @@ func TestReferenceCache_IfNotPresent_HitAvoidsUpstream(t *testing.T) {
 	ref, err := registry.ParseReference("ghcr.io/owner/repo@" + digest.FromString("payload").String())
 	require.NoError(t, err)
 
-	var resolves int
+	var resolves atomic.Int64
 	up := resolverFn(func(_ context.Context, _ string) (ociImageSpecV1.Descriptor, error) {
-		resolves++
+		resolves.Add(1)
 		return desc, nil
 	})
 
@@ -109,7 +109,7 @@ func TestReferenceCache_IfNotPresent_HitAvoidsUpstream(t *testing.T) {
 	_, err = c.Resolve(t.Context(), up, ref)
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, resolves, "IfNotPresent must not call upstream on a digest hit")
+	assert.EqualValues(t, 1, resolves.Load(), "IfNotPresent must not call upstream on a digest hit")
 }
 
 // TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream pins that
@@ -122,9 +122,9 @@ func TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream(t *testing.T) {
 	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
 	require.NoError(t, err)
 
-	var resolves int
+	var resolves atomic.Int64
 	up := resolverFn(func(_ context.Context, _ string) (ociImageSpecV1.Descriptor, error) {
-		resolves++
+		resolves.Add(1)
 		return desc, nil
 	})
 
@@ -134,7 +134,7 @@ func TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream(t *testing.T) {
 	_, err = c.Resolve(t.Context(), up, ref)
 	require.NoError(t, err)
 
-	assert.Equal(t, 2, resolves, "a tag must be resolved upstream on every call")
+	assert.EqualValues(t, 2, resolves.Load(), "a tag must be resolved upstream on every call")
 }
 
 func TestReferenceCache_Always_AlwaysCallsUpstream(t *testing.T) {

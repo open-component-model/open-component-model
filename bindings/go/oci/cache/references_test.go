@@ -50,9 +50,9 @@ func TestReferenceCache_Resolve_HitAfterFirstCall(t *testing.T) {
 		Size:      int64(len(manifest)),
 	}
 
-	var calls int
+	var calls atomic.Int64
 	upstream := resolverFn(func(_ context.Context, _ string) (ociImageSpecV1.Descriptor, error) {
-		calls++
+		calls.Add(1)
 		return desc, nil
 	})
 
@@ -67,7 +67,7 @@ func TestReferenceCache_Resolve_HitAfterFirstCall(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, desc, got2)
 
-	assert.Equal(t, 1, calls, "second Resolve must hit reference cache")
+	assert.EqualValues(t, 1, calls.Load(), "second Resolve must hit reference cache")
 }
 
 // TestReferenceCache_Resolve_TagResolvesUpstreamEveryTime pins the
@@ -88,10 +88,9 @@ func TestReferenceCache_Resolve_TagResolvesUpstreamEveryTime(t *testing.T) {
 		Size:      6,
 	}
 
-	var calls int
+	var calls atomic.Int64
 	upstream := resolverFn(func(_ context.Context, _ string) (ociImageSpecV1.Descriptor, error) {
-		calls++
-		if calls == 1 {
+		if calls.Add(1) == 1 {
 			return first, nil
 		}
 		return second, nil
@@ -108,7 +107,7 @@ func TestReferenceCache_Resolve_TagResolvesUpstreamEveryTime(t *testing.T) {
 	got2, err := c.Resolve(t.Context(), upstream, ref)
 	require.NoError(t, err)
 	assert.Equal(t, second, got2, "a moved tag must not be served from cache")
-	assert.Equal(t, 2, calls)
+	assert.EqualValues(t, 2, calls.Load())
 }
 
 func TestReferenceCache_Invalidate_RemovesEntryAndSurvivesRestart(t *testing.T) {
