@@ -98,6 +98,11 @@ jobs:
                     type: DockerConfig/v1
                     dockerConfigFile: /.docker/config.json
                     propagateConsumerIdentity: true
+            # Keyless Sigstore: no endpoints set, so the handler uses public-good
+            # Fulcio and Rekor with trust roots discovered via TUF.
+            - type: signing.config.ocm.software/v1alpha1
+              signer:
+                type: SigstoreSigningConfiguration/v1alpha1
           EOF
 
       # The CLI image ENTRYPOINT is `/ocm`; args after the image name go straight to the CLI.
@@ -150,8 +155,6 @@ jobs:
           WORKSPACE: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          # Write a minimal SigstoreSigningConfiguration to a file for the CLI to read.
-          echo 'type: SigstoreSigningConfiguration/v1alpha1' > "${WORKSPACE}/sigstore-sign.yaml"
           # readlink -f required: cosign-installer may expose a symlink; bind-mount needs a real path.
           COSIGN_BIN="$(readlink -f "$(command -v cosign)")"
 
@@ -173,7 +176,6 @@ jobs:
               "$CLI_IMAGE_REF" \
                 sign component-version \
                 --config "/.ocmconfig" \
-                --signer-spec "${WORKSPACE}/sigstore-sign.yaml" \
                 "$ref"
             echo "::endgroup::"
           done
