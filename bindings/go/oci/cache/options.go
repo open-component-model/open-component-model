@@ -20,12 +20,6 @@ type RemotePolicy string
 const (
 	// RemotePolicyIfNotPresent returns cached content without contacting
 	// the registry. The local cache directory is trusted.
-	//
-	// This governs authorisation, not freshness: tag resolution always
-	// reaches the registry because a tag is mutable and no local signal
-	// reports that it moved. Only digest references — which are
-	// content-addressed and therefore immutable — are served from the
-	// [ReferenceCache] without a round-trip.
 	RemotePolicyIfNotPresent RemotePolicy = "IfNotPresent"
 
 	// RemotePolicyAlways contacts the registry on every cache hit to
