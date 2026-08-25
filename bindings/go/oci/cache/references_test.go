@@ -56,7 +56,7 @@ func TestReferenceCache_Resolve_HitAfterFirstCall(t *testing.T) {
 		return desc, nil
 	})
 
-	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
+	ref, err := registry.ParseReference("ghcr.io/owner/repo@" + desc.Digest.String())
 	require.NoError(t, err)
 
 	got, err := c.Resolve(t.Context(), upstream, ref)
@@ -68,6 +68,46 @@ func TestReferenceCache_Resolve_HitAfterFirstCall(t *testing.T) {
 	assert.Equal(t, desc, got2)
 
 	assert.EqualValues(t, 1, calls.Load(), "second Resolve must hit reference cache")
+}
+
+// TestReferenceCache_Resolve_TagResolvesUpstreamEveryTime pins the
+// mutability contract: a tag can be re-pointed upstream at any moment,
+// so every Resolve of a tag must ask the registry what it currently
+// points at, and the answer must be the current one.
+func TestReferenceCache_Resolve_TagResolvesUpstreamEveryTime(t *testing.T) {
+	c := newTestRefCache(t, Options{})
+
+	first := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("first")),
+		Size:      5,
+	}
+	second := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("second")),
+		Size:      6,
+	}
+
+	var calls atomic.Int64
+	upstream := resolverFn(func(_ context.Context, _ string) (ociImageSpecV1.Descriptor, error) {
+		if calls.Add(1) == 1 {
+			return first, nil
+		}
+		return second, nil
+	})
+
+	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
+	require.NoError(t, err)
+
+	got, err := c.Resolve(t.Context(), upstream, ref)
+	require.NoError(t, err)
+	assert.Equal(t, first, got)
+
+	// The tag now points somewhere else upstream.
+	got2, err := c.Resolve(t.Context(), upstream, ref)
+	require.NoError(t, err)
+	assert.Equal(t, second, got2, "a moved tag must not be served from cache")
+	assert.EqualValues(t, 2, calls.Load())
 }
 
 func TestReferenceCache_Invalidate_RemovesEntryAndSurvivesRestart(t *testing.T) {
