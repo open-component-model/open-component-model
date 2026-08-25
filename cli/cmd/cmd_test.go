@@ -1862,6 +1862,90 @@ configurations:
 	r.ErrorContains(err, `no signing handler plugin registered for type "NonExistentVerificationConfiguration/v1alpha1"`)
 }
 
+func Test_Verify_Credentials_Are_Resolved_Per_Signature(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/credentials-per-signature", "1.0.0"
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(fmt.Sprintf(`
+name: %[1]s
+version: %[2]s
+provider:
+  name: ocm.software
+resources:
+  - name: my-resource
+    type: blob
+    input:
+      type: utf8/v1
+      text: "credential selection test"
+`, name, version)), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	r.NoError(err, "could not construct component version")
+
+	privateKeyPath, _ := writeKeyAndChain(t, t.TempDir(), mustKey(t))
+	reference := archiveFilePath + "//" + name + ":" + version
+
+	scopedTo := func(path string, signatures ...string) string {
+		var b []byte
+		b = append(b, "\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: credentials.config.ocm.software\n  consumers:\n"...)
+		for _, signature := range signatures {
+			b = fmt.Appendf(b, `  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: %[1]q
+    credentials:
+    - type: Credentials/v1
+      properties:
+        private_key_pem_file: %[2]q
+`, signature, privateKeyPath)
+		}
+		r.NoError(os.WriteFile(path, b, 0o600))
+		return path
+	}
+
+	prodOnly := scopedTo(filepath.Join(tmp, "prod-only.yaml"), "prod")
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference, "--signature", "prod", "--config", prodOnly,
+	))
+	r.NoError(err)
+
+	defaultOnly := scopedTo(filepath.Join(tmp, "default-only.yaml"), "default")
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", defaultOnly,
+	))
+	r.ErrorContains(err, "missing public key",
+		"a credential scoped to another signature name must not be used")
+
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", prodOnly,
+	))
+	r.NoError(err)
+
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference, "--signature", "dev",
+		"--config", scopedTo(filepath.Join(tmp, "dev-only.yaml"), "dev"),
+	))
+	r.NoError(err)
+
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", prodOnly,
+	))
+	r.ErrorContains(err, "missing public key",
+		"verifying every signature must fail while dev has no credential entry")
+
+	both := scopedTo(filepath.Join(tmp, "both.yaml"), "prod", "dev")
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", both,
+	))
+	r.NoError(err, "one entry per signature name verifies every signature")
+}
+
 // signCfgCredentials returns the credential configuration entries shared by the
 // signing tests, holding the RSA private key for both signature names.
 func signCfgCredentials(privateKeyPath string) []byte {

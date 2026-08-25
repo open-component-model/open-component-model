@@ -33,6 +33,7 @@ Verify component version(s) inside an OCM repository based on signatures.
 ## Behavior
 
 - --signature selects a single signature by name; without it, every signature on the descriptor is verified
+- Credentials are resolved per signature under that signature's name, so every signature needs its own consumer entry
 - Signatures are verified concurrently (--concurrency-limit); the command exits non-zero on the first failure
 - Default verifier: RSASSA-PSS, resolves the public key from credentials in .ocmconfig
 - The verifier is configured in the OCM configuration (signing.config.ocm.software/v1alpha1), not on the command line
@@ -56,6 +57,13 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 #
 # Used when the signature was created with signatureEncodingPolicy: Plain (the default).
 # Supply the matching RSA public key.
+#
+# The consumer identity is looked up with "signature" set to the name of the
+# signature being verified, and identities are matched exactly. A "signature:
+# default" entry therefore does NOT serve a signature named "prod", and an entry
+# with no "signature" field at all matches nothing. Add one consumer entry per
+# signature name; without --signature every signature on the descriptor is
+# verified and each resolves its own credentials.
 
     type: generic.config.ocm.software/v1
     configurations:

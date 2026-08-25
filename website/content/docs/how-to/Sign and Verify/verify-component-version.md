@@ -193,6 +193,10 @@ Give the entry a `signature` field to scope it to a single signature; without on
 `signature: default` matches the default name `ocm verify` looks for. If the signature was created with `--signature <name>`, set the same value in the consumer identity and pass `--signature <name>` on the command line.
 {{< /callout >}}
 
+{{< callout context="caution" >}}
+Consumer identities are matched **exactly**. Credentials are looked up under the name of the signature being verified, so a `signature: default` entry does not serve a signature named `prod`, and an entry with no `signature` field at all matches nothing. Give every signature its own consumer entry — otherwise a run without `--signature` fails on the signatures that have no matching credential.
+{{< /callout >}}
+
 {{< /step >}}
 
 {{< step >}}
@@ -267,8 +271,8 @@ Verify a [Sigstore](https://www.sigstore.dev/) keyless signature made by a perso
 If you've done classical key-based verification, here's what changes:
 
 | Aspect                  | RSA                                                    | Sigstore                                                        |
-| ----------------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
-| Before you start        | Obtain the signer's public key, configure `.ocmconfig` | Nothing — declare expected identity in `.ocmconfig`              |
+|-------------------------|--------------------------------------------------------|-----------------------------------------------------------------|
+| Before you start        | Obtain the signer's public key, configure `.ocmconfig` | Nothing — declare expected identity in `.ocmconfig`             |
 | What proves trust       | Signature decrypts with the public key you have        | Signature ties back to an OIDC identity you've decided to trust |
 | What the verifier needs | The signer's public key (rotated and re-distributed)   | The expected OIDC identity and issuer — no long-lived key       |
 
