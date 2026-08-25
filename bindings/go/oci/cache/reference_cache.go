@@ -243,7 +243,8 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref reg
 		return upstream.Resolve(ctx, ref.Reference)
 	}
 	k := c.buildKey(ref)
-	if c.opts.RemotePolicy == RemotePolicyIfNotPresent {
+	servableFromCache := c.opts.RemotePolicy == RemotePolicyIfNotPresent && isImmutableReference(ref)
+	if servableFromCache {
 		if v, ok := c.lru.Get(k); ok {
 			c.logger.DebugContext(ctx, "refcache: hit",
 				slog.String("namespace", k.namespace),
@@ -252,10 +253,10 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref reg
 			return v.Descriptor, nil
 		}
 	}
-	// Collapse concurrent misses (or Always-policy calls) for the same
-	// key into one upstream round-trip.
+	// Collapse concurrent misses (or calls that must reach upstream) for
+	// the same key into one upstream round-trip.
 	v, err, _ := c.sf.Do(k.namespace+"\x00"+ref.Reference, func() (any, error) {
-		if c.opts.RemotePolicy == RemotePolicyIfNotPresent {
+		if servableFromCache {
 			if v, ok := c.lru.Get(k); ok {
 				return v.Descriptor, nil
 			}
@@ -271,6 +272,18 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref reg
 		return ociImageSpecV1.Descriptor{}, err
 	}
 	return v.(ociImageSpecV1.Descriptor), nil
+}
+
+// isImmutableReference reports whether ref names its target by digest.
+// A digest is content-addressed: the mapping from reference to
+// descriptor can never change, so a cached answer stays correct
+// forever. A tag is mutable — upstream can re-point it at any moment
+// and nothing local observes that — so a cached tag mapping is only
+// ever a guess. [ReferenceCache.Resolve] therefore serves tags from
+// upstream under every policy and reserves the
+// [RemotePolicyIfNotPresent] shortcut for digests.
+func isImmutableReference(ref registry.Reference) bool {
+	return ref.ValidateReferenceAsDigest() == nil
 }
 
 // markNamespaceWithEvictedRef records namespace as having at least one
