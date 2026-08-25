@@ -11,7 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.36
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.2
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
-	github.com/gabriel-vasile/mimetype v1.4.14
+	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/gobwas/glob v0.2.3
 	github.com/google/cel-go v0.29.2
 	github.com/google/go-github/v89 v89.0.0
