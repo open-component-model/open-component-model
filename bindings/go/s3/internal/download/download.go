@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	// defaultRegion is used when neither the request nor the AWS environment names one.
-	// AWS requires a region even when a custom endpoint is targeted; S3-compatible stores
-	// usually ignore it.
+	// defaultRegion applies when neither the request nor the AWS environment names one.
+	// AWS needs a region even for a custom endpoint. Most S3-compatible stores ignore
+	// it.
 	defaultRegion = "us-east-1"
 
 	tempFilePattern = "ocm-s3-download-*"
@@ -50,9 +50,9 @@ type Result struct {
 
 // Request describes a single S3 object download.
 type Request struct {
-	// Region is the bucket region. Optional: an empty one is resolved by the AWS SDK
-	// from AWS_REGION or the shared config, falling back to [defaultRegion], which is
-	// what lets a custom endpoint work without naming a region.
+	// Region is the bucket region. It is optional: if it is empty, the AWS SDK reads
+	// AWS_REGION or the shared config, and falls back to [defaultRegion]. This is why a
+	// custom endpoint works without a region.
 	Region string
 	// BucketName is the bucket holding the object.
 	BucketName string
@@ -267,9 +267,9 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 	loadOpts := []func(*config.LoadOptions) error{
 		config.WithHTTPClient(httpClient),
 	}
-	// A region named in the specification wins. Leaving it out lets the SDK resolve one
-	// the way every other AWS tool does, from AWS_REGION or the shared config profile;
-	// [defaultRegion] only fills in when that finds nothing either.
+	// A region in the specification has priority. If it is absent, the SDK resolves one
+	// as every other AWS tool does, from AWS_REGION or the shared config profile.
+	// [defaultRegion] applies only if that finds nothing either.
 	if req.Region != "" {
 		loadOpts = append(loadOpts, config.WithRegion(req.Region))
 	}

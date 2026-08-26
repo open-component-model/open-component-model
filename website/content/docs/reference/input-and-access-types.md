@@ -207,23 +207,25 @@ resolution, redirects, download tuning, and credential configuration.
 
 ### `S3Bucket/v1` {#s3bucketv1-input}
 
-Downloads a single object from an S3 or S3-compatible bucket while the component version is constructed and embeds it
-as a local blob. Use it when the bytes should travel with the component version — an air-gapped delivery, or a bucket
-that the consumer of the component version cannot reach — rather than being fetched from the bucket on every read.
+Downloads a single object from an S3 or S3-compatible bucket while OCM constructs the component version, and stores it
+as a local blob. Use this input type when the content must travel with the component version. Two examples are an
+air-gapped delivery, and a bucket that the user of the component version cannot reach. The access type is the
+alternative: it leaves the object in the bucket and reads it on every download.
 
-Alternative type names `s3Bucket/v1`, `S3Bucket`, and `s3Bucket` are also accepted; `S3Bucket/v1` is canonical. The
-fields are identical to those of the [`S3Bucket/v1` access type](#s3bucketv1-access), so the same object can be
-expressed either by value or by reference.
+`S3Bucket/v1` is the canonical type name. OCM also accepts `s3Bucket/v1`, `S3Bucket` and `s3Bucket`. The fields are the
+same as the fields of the
+[`S3Bucket/v1` access type]({{< relref "input-and-access-types.md" >}}#s3bucketv1-access). You can therefore give the
+same object by value or by reference.
 
-| Field          | Type    | Required | Description                                                                                                                                                                  |
-|----------------|---------|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `bucketName`   | string  | yes      | Name of the bucket holding the object.                                                                                                                                       |
-| `objectKey`    | string  | yes      | Key (path) of the object within the bucket.                                                                                                                                  |
-| `region`       | string  | no       | Region of the bucket. If omitted, the AWS SDK resolves one from `AWS_REGION` or the shared AWS config, falling back to `us-east-1`. Usually ignored by S3-compatible stores. |
-| `mediaType`    | string  | no       | Media type of the object. If omitted, the object's `Content-Type` is used, falling back to `application/octet-stream`.                                                       |
-| `version`      | string  | no       | S3 object version (`versionId`) to read. If omitted, the latest version is read.                                                                                             |
-| `endpoint`     | string  | no       | Base endpoint of an S3-compatible store such as MinIO, Ceph or R2 (e.g. `https://minio.internal:9000`). If omitted, AWS S3 is targeted.                                      |
-| `usePathStyle` | boolean | no       | Address the bucket in the path (`<endpoint>/<bucket>/<key>`) instead of in the host. Required by most self-hosted S3-compatible stores. Defaults to `false`.                 |
+| Field          | Type    | Required | Description                                                                                                                                                        |
+|----------------|---------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `bucketName`   | string  | yes      | Name of the bucket that holds the object.                                                                                                                          |
+| `objectKey`    | string  | yes      | Key (path) of the object in the bucket.                                                                                                                            |
+| `region`       | string  | no       | Region of the bucket. If you omit it, the AWS SDK reads `AWS_REGION` or the shared AWS config, and falls back to `us-east-1`. Most S3-compatible stores ignore it. |
+| `mediaType`    | string  | no       | Media type of the object. If you omit it, OCM uses the `Content-Type` of the object, and falls back to `application/octet-stream`.                                 |
+| `version`      | string  | no       | S3 object version (`versionId`) to read. If you omit it, OCM reads the latest version.                                                                             |
+| `endpoint`     | string  | no       | Base endpoint of an S3-compatible store such as MinIO, Ceph or R2, for example `https://minio.internal:9000`. If you omit it, OCM uses AWS S3.                     |
+| `usePathStyle` | boolean | no       | Put the bucket in the path (`<endpoint>/<bucket>/<key>`) instead of in the host. Most self-hosted S3-compatible stores need this. Default: `false`.                |
 
 ```yaml
 resources:
@@ -238,7 +240,7 @@ resources:
       mediaType: application/vnd.apache.parquet
 ```
 
-Against an S3-compatible store, name the endpoint and switch to path-style addressing:
+For an S3-compatible store, set the endpoint and use path-style addressing:
 
 ```yaml
 resources:
@@ -254,17 +256,17 @@ resources:
 ```
 
 {{< callout context="note" >}}
-The specification carries no credentials, and no field of it can. Authentication is configured through the
-[credential system]({{< relref "credential-consumer-identities.md" >}}#s3bucket), which resolves an `S3Bucket` consumer
-entry from `.ocmconfig`. When no entry matches, the AWS default credential chain applies — environment variables,
-shared AWS config, and IAM instance or task roles — so an in-cluster build authenticates without key material in the
-OCM configuration.
+The specification carries no credentials, and no field of it can carry them. Configure authentication in the
+[credential system]({{< relref "credential-consumer-identities.md" >}}#s3bucket). It resolves an `S3Bucket` consumer
+entry from `.ocmconfig`. If no entry matches, the AWS default credential chain applies: environment variables, the
+shared AWS config, and IAM instance or task roles. An in-cluster build therefore needs no key material in the OCM
+configuration.
 {{< /callout >}}
 
-The object is streamed to a file under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration
-type rather than buffered in memory, so object size does not drive memory use.
+OCM streams the object to a file under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration
+type. It does not hold the object in memory, so the size of the object does not change the memory use.
 
-Coming from OCM v1? The `s3` access method is not accepted under any of its old names — see
+OCM v2 does not accept the OCM v1 `s3` access method under any of its old names. See
 [Migrating from OCM v1](#s3-migration-from-ocm-v1).
 
 ## Access Types
@@ -486,23 +488,23 @@ tuning, and credential configuration, see
 
 ### `S3Bucket/v1` {#s3bucketv1-access}
 
-References a single object in an S3 or S3-compatible bucket. The bytes stay in the bucket and are fetched when the
-resource is downloaded and when its digest is computed. It addresses one object, not a whole repository: S3 as a
-component version repository is a separate concern and not covered by this type.
+References a single object in an S3 or S3-compatible bucket. The content stays in the bucket. OCM reads it when it
+downloads the resource, and when it computes the digest of the resource. The type addresses one object, not a whole
+repository. It does not make S3 a component version repository.
 
-Alternative type names `s3Bucket/v1`, `S3Bucket`, and `s3Bucket` are also accepted; `S3Bucket/v1` is canonical.
-Matching is exact, so neither an all-lowercase `s3bucket` nor the OCM v1 `s3` access type resolves; see
+`S3Bucket/v1` is the canonical type name. OCM also accepts `s3Bucket/v1`, `S3Bucket` and `s3Bucket`. Matching is exact:
+an all-lowercase `s3bucket` does not resolve, and the OCM v1 `s3` access type does not resolve. See
 [Migrating from OCM v1](#s3-migration-from-ocm-v1).
 
-| Field          | Type    | Required | Description                                                                                                                                                                  |
-|----------------|---------|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `bucketName`   | string  | yes      | Name of the bucket holding the object.                                                                                                                                       |
-| `objectKey`    | string  | yes      | Key (path) of the object within the bucket.                                                                                                                                  |
-| `region`       | string  | no       | Region of the bucket. If omitted, the AWS SDK resolves one from `AWS_REGION` or the shared AWS config, falling back to `us-east-1`. Usually ignored by S3-compatible stores. |
-| `mediaType`    | string  | no       | Media type of the referenced object. If omitted, the object's `Content-Type` is used, falling back to `application/octet-stream`.                                            |
-| `version`      | string  | no       | S3 object version (`versionId`) to read. If omitted, the latest version is read.                                                                                             |
-| `endpoint`     | string  | no       | Base endpoint of an S3-compatible store such as MinIO, Ceph or R2 (e.g. `https://minio.internal:9000`). If omitted, AWS S3 is targeted.                                      |
-| `usePathStyle` | boolean | no       | Address the bucket in the path (`<endpoint>/<bucket>/<key>`) instead of in the host. Required by most self-hosted S3-compatible stores. Defaults to `false`.                 |
+| Field          | Type    | Required | Description                                                                                                                                                        |
+|----------------|---------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `bucketName`   | string  | yes      | Name of the bucket that holds the object.                                                                                                                          |
+| `objectKey`    | string  | yes      | Key (path) of the object in the bucket.                                                                                                                            |
+| `region`       | string  | no       | Region of the bucket. If you omit it, the AWS SDK reads `AWS_REGION` or the shared AWS config, and falls back to `us-east-1`. Most S3-compatible stores ignore it. |
+| `mediaType`    | string  | no       | Media type of the object. If you omit it, OCM uses the `Content-Type` of the object, and falls back to `application/octet-stream`.                                 |
+| `version`      | string  | no       | S3 object version (`versionId`) to read. If you omit it, OCM reads the latest version.                                                                             |
+| `endpoint`     | string  | no       | Base endpoint of an S3-compatible store such as MinIO, Ceph or R2, for example `https://minio.internal:9000`. If you omit it, OCM uses AWS S3.                     |
+| `usePathStyle` | boolean | no       | Put the bucket in the path (`<endpoint>/<bucket>/<key>`) instead of in the host. Most self-hosted S3-compatible stores need this. Default: `false`.                |
 
 ```yaml
 resources:
@@ -518,7 +520,7 @@ resources:
       mediaType: application/vnd.apache.parquet
 ```
 
-Against an S3-compatible store, name the endpoint and switch to path-style addressing:
+For an S3-compatible store, set the endpoint and use path-style addressing:
 
 ```yaml
 resources:
@@ -535,45 +537,45 @@ resources:
 ```
 
 {{< callout context="note" >}}
-The specification carries no credentials, and no field of it can — unlike a URL-based access type, it offers no place
-to hide userinfo or a presigned query string, so nothing secret is persisted in the component descriptor.
-Authentication is configured through the
-[credential system]({{< relref "credential-consumer-identities.md" >}}#s3bucket), which resolves an `S3Bucket` consumer
-entry from `.ocmconfig`. When no entry matches, the AWS default credential chain applies — environment variables,
+The specification carries no credentials, and no field of it can carry them. A URL-based access type has places to
+hide userinfo or a presigned query string; this type has none, so OCM writes no secret into the component descriptor.
+Configure authentication in the
+[credential system]({{< relref "credential-consumer-identities.md" >}}#s3bucket). It resolves an `S3Bucket` consumer
+entry from `.ocmconfig`. If no entry matches, the AWS default credential chain applies: environment variables, the
 shared AWS config, and IAM instance or task roles.
 {{< /callout >}}
 
 #### Object versions and integrity
 
-Integrity rests on OCM's own SHA-256 over the content, computed with the `genericBlobDigest/v1` normalisation, not on
-the S3 `ETag` — which is not a whole-object hash for multipart uploads. When the resource already carries a digest, the
-computed value is verified against it and a mismatch fails the operation.
+Integrity comes from the OCM SHA-256 digest over the content, computed with the `genericBlobDigest/v1` normalisation.
+OCM does not use the S3 `ETag`, because the `ETag` is not a whole-object hash for a multipart upload. If the resource
+already has a digest, OCM compares the computed digest with it. A difference fails the operation.
 
-Digest processing also pins the access to the object version it read, so a later fetch resolves the same immutable
-object. Pinning only takes effect where there is a version to pin:
+Digest processing also pins the access to the object version that it read, so a later read gets the same object. A pin
+is only possible if the object has a version:
 
-- On a **versioned bucket**, the `versionId` reported for the object is written back into `version`. A `version`
-  already set in the specification is sent with the request and must come back unchanged.
-- On an **unversioned bucket** — the AWS default — S3 reports the placeholder `null`, which survives an overwrite and
-  therefore pins nothing. It is never written into the specification. The resource digest still detects a replaced
-  object, so verification fails rather than the wrong content being accepted silently.
+- On a **versioned bucket**, OCM writes the reported `versionId` of the object into `version`. If the specification
+  already sets `version`, OCM sends it with the request, and the response must return the same value.
+- On an **unversioned bucket**, which is the AWS default, S3 reports the placeholder `null`. The placeholder does not
+  change after an overwrite, so it pins nothing, and OCM never writes it into the specification. The resource digest
+  still detects a replaced object, so verification fails. OCM does not accept the wrong content.
 
-Enable bucket versioning, or set `version` explicitly, where reproducibility matters.
+If you need reproducibility, enable bucket versioning, or set `version`.
 
 {{< callout context="note" >}}
-Upload is not supported: the S3 resource repository is download-only, so OCM never writes an object into a bucket
-and never produces an `S3Bucket/v1` access itself.
+The S3 resource repository does not support upload. OCM never writes an object into a bucket, and never creates an
+`S3Bucket/v1` access.
 {{< /callout >}}
 
 #### Migrating from OCM v1 {#s3-migration-from-ocm-v1}
 
-OCM v1 had its own S3 access method, and it is **not** compatible with `S3Bucket/v1`. Access type names are matched by
-exact string, so none of the v1 spellings — `s3`, `s3/v1`, `s3/v2`, `S3`, `S3/v1`, `S3/v2` — resolves in OCM v2. A
-component descriptor produced by OCM v1 has to have its access specifications rewritten; there is no compatibility
-shim, and nothing converts them on the fly.
+OCM v1 had its own S3 access method. It is **not** compatible with `S3Bucket/v1`. OCM matches access type names as
+exact strings, so no OCM v1 spelling resolves in OCM v2: `s3`, `s3/v1`, `s3/v2`, `S3`, `S3/v1` and `S3/v2`. You must
+rewrite the access specifications of a component descriptor that OCM v1 created. There is no compatibility layer, and
+OCM does not convert them at read time.
 
-**Type name and fields.** The OCM v1 `v2` format already used `bucketName` and `objectKey`, so for it only the type
-name changes. The `v1` format additionally renamed two fields:
+**Type name and fields.** The OCM v1 `v2` format already used `bucketName` and `objectKey`. For that format, only the
+type name changes. The `v1` format used two other field names as well:
 
 | OCM v1 (`s3/v1`) | OCM v1 (`s3/v2`) | OCM v2 (`S3Bucket/v1`) |
 |------------------|------------------|------------------------|
@@ -605,10 +607,10 @@ access:
   mediaType: application/vnd.apache.parquet
 ```
 
-**Behavior.** Both versions are download-only. OCM v1 reached AWS S3 only; `endpoint` and `usePathStyle` are new in
-OCM v2 and make S3-compatible stores such as MinIO, Ceph and R2 usable. Integrity was, and remains, OCM's own SHA-256
-over the content rather than the S3 `ETag`.
+**Behavior.** Both versions support download only. OCM v1 reached AWS S3 only. The fields `endpoint` and
+`usePathStyle` are new in OCM v2, and they make S3-compatible stores such as MinIO, Ceph and R2 usable. Integrity comes
+from the OCM SHA-256 digest over the content, in OCM v1 and in OCM v2. It does not come from the S3 `ETag`.
 
-**Credentials.** The consumer identity changed as well — the identity type, the attribute that carries the object
-location, and the credential property names all differ. See
+**Credentials.** The consumer identity also changed. The identity type, the attribute that holds the object location,
+and the credential property names are all different. See
 [Credential Consumer Identities: Migrating from OCM v1]({{< relref "credential-consumer-identities.md" >}}#s3bucket-migration-from-ocm-v1).

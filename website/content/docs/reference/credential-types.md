@@ -222,9 +222,9 @@ is set, and a client certificate has no effect on a plain `http://` URL.
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/s3/v1/S3Credentials.schema.json" >}}
 
-All fields are optional because credentials themselves are optional for S3: an entry that leaves all three empty is
-treated as no credentials at all, and the AWS default credential chain takes over. An entry that sets any of them is
-passed to the AWS SDK as given.
+All fields are optional, because credentials are optional for S3. If an entry leaves all three fields empty, OCM treats
+it as no credentials, and the AWS default credential chain takes over. If an entry sets any of them, OCM passes the
+entry to the AWS SDK unchanged.
 
 ### Example
 
@@ -270,14 +270,14 @@ consumers:
 ```
 
 {{< callout context="note" >}}
-The OCM v1 property names `awsAccessKeyID`, `awsSecretAccessKey` and `token` are still accepted, but only inside an
-untyped [`Credentials/v1`](#directcredentialsv1) entry, where they are mapped to `accessKeyId`, `secretAccessKey` and
+OCM still accepts the OCM v1 property names `awsAccessKeyID`, `awsSecretAccessKey` and `token`, but only in an untyped
+[`Credentials/v1`](#directcredentialsv1) entry. There, OCM maps them to `accessKeyId`, `secretAccessKey` and
 `sessionToken`. `S3Credentials/v1` accepts the new names only.
 {{< /callout >}}
 
 ### Used With
 
-[`S3Bucket`]({{< relref "credential-consumer-identities.md#s3bucket" >}}) consumer identities, covering both the
+[`S3Bucket`]({{< relref "credential-consumer-identities.md#s3bucket" >}}) consumer identities. They cover both the
 [`S3Bucket/v1` access type]({{< relref "input-and-access-types.md#s3bucketv1-access" >}}) and the
 [`S3Bucket/v1` input type]({{< relref "input-and-access-types.md#s3bucketv1-input" >}}).
 

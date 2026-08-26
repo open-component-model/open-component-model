@@ -1,7 +1,7 @@
 // Package input implements the constructor input method for the S3Bucket type. It
-// downloads a single object from an S3 or S3-compatible bucket while a component
-// version is constructed and hands it to the constructor as a local blob, so the
-// finished component version carries the content instead of a reference to the bucket.
+// downloads a single object from an S3 or S3-compatible bucket while OCM constructs a
+// component version. It gives the object to the constructor as a local blob, so the
+// finished component version holds the content, not a reference to the bucket.
 package input
 
 import (
@@ -23,17 +23,17 @@ var _ constructor.ResourceInputMethod = (*InputMethod)(nil)
 // InputMethod implements the [constructor.ResourceInputMethod] interface for S3-based
 // inputs.
 type InputMethod struct {
-	// HTTPConfig configures the HTTP client the S3 client sends its requests through,
-	// and its retry section additionally drives the SDK's attempt count. Nil uses the
-	// shared client's defaults.
+	// HTTPConfig configures the HTTP client that the S3 client sends its requests
+	// through. Its retry section also sets the attempt count of the SDK. Nil uses the
+	// defaults of the shared client.
 	HTTPConfig *httpv1alpha1.Config
 	// MaxDownloadSize caps the number of bytes read from an object. Nil uses the
 	// download package default, which is unlimited.
 	MaxDownloadSize *int64
-	// TempFolder is the directory the downloaded object is streamed into. When empty,
-	// the OS temporary directory is used. The file backing the returned blob is created
-	// here and outlives ProcessResource, because it holds the content the constructor
-	// stores as a local blob.
+	// TempFolder is the directory that the package streams the downloaded object into.
+	// When it is empty, the package uses the OS temporary directory. The file behind the
+	// returned blob is created here and outlives ProcessResource, because it holds the
+	// content that the constructor stores as a local blob.
 	TempFolder string
 }
 
@@ -42,8 +42,8 @@ func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
 }
 
 // GetResourceCredentialConsumerIdentity resolves the credential consumer identity for
-// an S3 input. It derives the same identity as the S3Bucket access type, so a consumer
-// entry configured for a bucket resolves for both.
+// an S3 input. It derives the same identity as the S3Bucket access type, so one
+// consumer entry for a bucket resolves for both.
 func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
 	spec, err := i.convertInput(resource)
 	if err != nil {
@@ -53,11 +53,12 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	return identityv1.IdentityFromObject(spec.BucketName, spec.ObjectKey, spec.Endpoint)
 }
 
-// ProcessResource downloads the object described by the S3Bucket input specification
-// and returns it as local blob data to be stored in the component version.
+// ProcessResource downloads the object of the S3Bucket input specification and returns
+// it as local blob data. The constructor stores that data in the component version.
 //
-// The object is streamed into a file under [InputMethod.TempFolder], and the returned
-// blob reads from that file, which outlives this call and is owned by the caller.
+// The package streams the object into a file under [InputMethod.TempFolder]. The
+// returned blob reads from that file. The file outlives this call, and the caller owns
+// it.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	spec, err := i.convertInput(resource)
 	if err != nil {

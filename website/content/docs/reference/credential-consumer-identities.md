@@ -301,37 +301,41 @@ conversion, and the inverted authentication precedence, see
 
 ## S3Bucket
 
-Used when OCM reads an object from an S3 or S3-compatible bucket through the
-[`S3Bucket/v1` access type]({{< relref "input-and-access-types.md#s3bucketv1-access" >}}) and the
-[`S3Bucket/v1` input type]({{< relref "input-and-access-types.md#s3bucketv1-input" >}}). The identity is derived from
-`bucketName`, `objectKey` and the optional `endpoint`; the access type and the input type derive it identically, so a
-single consumer entry covers both.
+Used when OCM reads an object from an S3 or S3-compatible bucket. This applies to the
+[`S3Bucket/v1` access type]({{< relref "input-and-access-types.md#s3bucketv1-access" >}}) and to the
+[`S3Bucket/v1` input type]({{< relref "input-and-access-types.md#s3bucketv1-input" >}}). OCM derives the identity from
+`bucketName`, `objectKey` and the optional `endpoint`. The access type and the input type derive it the same way, so
+one consumer entry covers both.
 
-Credentials are optional. When no consumer entry matches, no credentials are handed to the AWS SDK and its default
-credential chain applies — environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`),
-the shared AWS config files, and IAM instance or task roles. That is the intended path for in-cluster and CI setups,
-where short-lived role credentials are preferable to static keys in `.ocmconfig`.
+Credentials are optional. If no consumer entry matches, OCM gives no credentials to the AWS SDK. The SDK then uses its
+default credential chain:
+
+- the environment variables `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN`
+- the shared AWS config files
+- IAM instance roles and task roles
+
+Use this path for in-cluster and CI setups. Short-lived role credentials are safer than static keys in `.ocmconfig`.
 
 ### Identity Attributes
 
-| Attribute  | Required | Description                                                                                                                                   |
-|------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `S3Bucket`                                                                                                                            |
-| `path`     | No       | Object location as `<bucketName>/<objectKey>`. Supports glob patterns (`*` matches one path segment). If omitted, matches any object.         |
-| `hostname` | No       | Host of the `endpoint` (e.g. `minio.internal`). Only derived for an S3-compatible store; **must be omitted for AWS S3**.                      |
-| `scheme`   | No       | Scheme of the `endpoint` (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                       |
-| `port`     | No       | Port of the `endpoint` as string. During matching, default ports are applied when `scheme` is set: `https` defaults to `443`, `http` to `80`. |
+| Attribute  | Required | Description                                                                                                                                           |
+|------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `S3Bucket`                                                                                                                                    |
+| `path`     | No       | Object location as `<bucketName>/<objectKey>`. Glob patterns are allowed. `*` matches one path segment. If you omit it, the entry matches any object. |
+| `hostname` | No       | Host of the `endpoint`, for example `minio.internal`. OCM derives it only for an S3-compatible store. **Do not set it for AWS S3.**                   |
+| `scheme`   | No       | Scheme of the `endpoint`: `https` or `http`. If you omit it, the entry matches any scheme. If you set it, it must match exactly.                      |
+| `port`     | No       | Port of the `endpoint`, as a string. If `scheme` is set, matching applies the default port: `443` for `https`, `80` for `http`.                       |
 
-**Example derivation (AWS S3).** For an access or input specification with `bucketName: acme-artifacts` and
-`objectKey: datasets/reference/1.0.0/reference.parquet` and no `endpoint`, the lookup identity is:
+**Example derivation (AWS S3).** An access or input specification sets `bucketName: acme-artifacts` and
+`objectKey: datasets/reference/1.0.0/reference.parquet`, and sets no `endpoint`. OCM derives this lookup identity:
 
 | Attribute | Value                                                       |
 |-----------|-------------------------------------------------------------|
 | `type`    | `S3Bucket`                                                  |
 | `path`    | `acme-artifacts/datasets/reference/1.0.0/reference.parquet` |
 
-**Example derivation (S3-compatible store).** With `endpoint: https://minio.internal:9000` added, the endpoint
-contributes its URL attributes while the path keeps naming the object:
+**Example derivation (S3-compatible store).** Add `endpoint: https://minio.internal:9000`. The endpoint supplies the
+URL attributes. The path still names the object:
 
 | Attribute  | Value                                                       |
 |------------|-------------------------------------------------------------|
@@ -353,34 +357,41 @@ contributes its URL attributes while the path keeps naming the object:
 
 Use [`S3Credentials/v1`]({{< relref "credential-types.md#s3credentialsv1" >}}) for the typed field reference.
 
-An entry that sets none of the three is treated as no credentials at all and leaves the AWS default credential chain in
-charge. An entry that sets any of them is passed to the AWS SDK as given, so an incomplete pair fails at the SDK rather
-than falling back to the default chain.
+If an entry sets none of the three properties, OCM treats it as no credentials, and the AWS default credential chain
+applies. If an entry sets any of them, OCM passes the entry to the AWS SDK unchanged. An incomplete pair therefore
+fails in the SDK. It does not fall back to the default chain.
 
 ### Matching Behavior
 
-The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob, URL (scheme, hostname, port with
-default-port handling), then exact equality on the remaining attributes. Two consequences are specific to S3:
+The same three chained checks as [`OCIRegistry`](#ociregistry) apply:
 
-- **AWS entries must not set `hostname`.** Hostnames are compared for equality and an AWS lookup identity carries
-  none, so an entry with `hostname: s3.amazonaws.com` never matches. Scope AWS entries by `path` instead, or by
-  nothing at all.
-- **`*` does not cross `/`.** Object keys usually contain slashes, so `path: acme-artifacts/*` matches
-  `acme-artifacts/build.zip` but not `acme-artifacts/datasets/reference.parquet`. To cover a whole bucket, either
-  spell out the depth (`acme-artifacts/*/*/*`) or omit `path` and scope the entry some other way.
+1. Glob match on the path.
+2. URL match on scheme, hostname and port, with default-port handling.
+3. Exact match on the remaining attributes.
+
+Two results of this are specific to S3:
+
+- **Do not set `hostname` in an AWS entry.** The matcher compares hostnames for equality, and an AWS lookup identity
+  has no hostname. An entry with `hostname: s3.amazonaws.com` therefore never matches. Scope AWS entries by `path`,
+  or do not scope them at all.
+- **`*` does not cross `/`.** Most object keys contain slashes. `path: acme-artifacts/*` matches
+  `acme-artifacts/build.zip`, but it does not match `acme-artifacts/datasets/reference.parquet`. To cover a whole
+  bucket, write the full depth (`acme-artifacts/*/*/*`), or omit `path` and scope the entry another way.
 
 {{< callout context="caution" >}}
-The identity type is matched by exact string and is **unversioned**, so it must be written as `type: S3Bucket`. Neither
+Write the identity type as `type: S3Bucket`. OCM matches the type as an exact string, and the type is **unversioned**.
 `S3Bucket/v1` (the name of the
-[access and input type]({{< relref "input-and-access-types.md#s3bucketv1-access" >}})) nor the `S3` used by OCM v1 will
-match. A non-matching entry fails silently in a particular way here: no credentials are resolved, so the AWS default
-credential chain takes over and the request goes out under whatever it finds — often nothing. The symptom is an
-access-denied or missing-credentials error from AWS rather than a configuration error.
+[access and input type]({{< relref "input-and-access-types.md#s3bucketv1-access" >}})) does not match. The `S3` type of
+OCM v1 does not match either.
+
+A wrong type gives no error message. OCM resolves no credentials, the AWS default credential chain takes over, and the
+request uses what that chain finds, which is often nothing. AWS then reports an access-denied error or a
+missing-credentials error, not a configuration error.
 {{< /callout >}}
 
 ### Examples
 
-**All objects in every bucket** — the simplest form, and often enough when one account owns everything OCM reads:
+**All objects in every bucket.** Use this form when one account owns everything that OCM reads:
 
 ```yaml
 - identity:
@@ -404,7 +415,7 @@ access-denied or missing-credentials error from AWS rather than a configuration 
       sessionToken: <session-token>
 ```
 
-**A self-hosted MinIO on a custom port**, distinguished from AWS by its endpoint attributes:
+**A self-hosted MinIO on a custom port.** The endpoint attributes separate it from AWS:
 
 ```yaml
 - identity:
@@ -420,7 +431,7 @@ access-denied or missing-credentials error from AWS rather than a configuration 
 
 ### Migrating from OCM v1 {#s3bucket-migration-from-ocm-v1}
 
-OCM v1 consumer entries for S3 are **not** resolved by OCM v2 and have to be rewritten. Three things changed:
+OCM v2 does **not** resolve OCM v1 consumer entries for S3. You must rewrite them. Four things changed:
 
 | Aspect                | OCM v1                                          | OCM v2                                                 |
 |-----------------------|-------------------------------------------------|--------------------------------------------------------|
@@ -452,11 +463,11 @@ OCM v1 consumer entries for S3 are **not** resolved by OCM v2 and have to be rew
       secretAccessKey: <secret-access-key>
 ```
 
-The old **property** names survive as aliases, but only in an untyped
-[`Credentials/v1`]({{< relref "credential-types.md#directcredentialsv1" >}}) entry: `awsAccessKeyID`,
-`awsSecretAccessKey` and `token` are read there and mapped to `accessKeyId`, `secretAccessKey` and `sessionToken`. A
-typed `S3Credentials/v1` entry accepts the new names only. The old **identity** is not aliased — `type: S3` with a
-`pathprefix` never matches, whichever credential type it carries.
+The old **property** names are still accepted, but only in an untyped
+[`Credentials/v1`]({{< relref "credential-types.md#directcredentialsv1" >}}) entry. There, OCM reads `awsAccessKeyID`,
+`awsSecretAccessKey` and `token`, and maps them to `accessKeyId`, `secretAccessKey` and `sessionToken`. A typed
+`S3Credentials/v1` entry accepts the new names only. The old **identity** has no alias. `type: S3` with a `pathprefix`
+never matches, whichever credential type it carries.
 
 For the matching access specification changes, see
 [Input and Access Types: Migrating from OCM v1]({{< relref "input-and-access-types.md" >}}#s3-migration-from-ocm-v1).
