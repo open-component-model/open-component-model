@@ -194,6 +194,78 @@ whatever the server returned. See
 
 ---
 
+## S3 Resource Repository
+
+Handles resources stored as a single object in an S3 or S3-compatible bucket (AWS S3, MinIO, Ceph RGW, Cloudflare R2).
+
+### Supported Access Types
+
+| Access Type                                                                   |
+|-------------------------------------------------------------------------------|
+| [`S3Bucket/v1`]({{< relref "input-and-access-types.md" >}}#s3bucketv1-access) |
+
+### Capabilities
+
+| Operation         | Supported |
+|-------------------|-----------|
+| Download          | Yes       |
+| Upload            | No        |
+| Digest Processing | Yes       |
+
+{{< callout context="note" >}}
+The repository is download-only, matching OCM v1. OCM never writes an object into a bucket, so no `S3Bucket/v1` access
+specification is ever produced by an upload.
+{{< /callout >}}
+
+### Credential Resolution
+
+The credential consumer identity is derived from `bucketName`, `objectKey` and the optional `endpoint` of the access
+specification. The identity type is `S3Bucket`.
+
+**Example:** For a resource with `bucketName: acme-artifacts` and
+`objectKey: datasets/reference/1.0.0/reference.parquet` and no `endpoint`:
+
+| Attribute | Value                                                       |
+|-----------|-------------------------------------------------------------|
+| `type`    | `S3Bucket`                                                  |
+| `path`    | `acme-artifacts/datasets/reference/1.0.0/reference.parquet` |
+
+An `endpoint` adds its `scheme`, `hostname` and `port`; AWS S3 contributes no hostname, because it is the default
+target. The [`S3Bucket/v1` input type]({{< relref "input-and-access-types.md" >}}#s3bucketv1-input) derives the identity
+the same way, so one consumer entry covers construction and later downloads.
+
+Credentials are optional: when no consumer entry matches, the AWS default credential chain applies — environment
+variables, the shared AWS config, and IAM instance or task roles.
+
+See [Credential Consumer Identities: S3Bucket]({{< relref "credential-consumer-identities.md" >}}#s3bucket) for matching
+rules.
+
+### Download Behavior
+
+Performs a `GetObject` for the bucket and key named in the access specification, pinned to `version` when it is set.
+The body is streamed to a file under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration
+type rather than buffered in memory, and there is no size limit by default. The media type of the blob is taken from
+`mediaType`, falling back to the object's `Content-Type` and then to `application/octet-stream`.
+
+Requests go through the shared OCM HTTP client, so timeouts, TLS settings, and per-host overrides come from the
+[HTTP client configuration]({{< relref "http-client-configuration.md" >}}). Retrying is left to the AWS SDK, which
+retries the whole operation and re-signs each attempt; the configured `retry.maxRetries` drives its attempt count.
+Because the request host for AWS is resolved by the SDK, a per-host retry entry only takes effect for a custom
+`endpoint` — for AWS the global setting applies.
+
+### Digest Processing
+
+The S3 digest processor downloads the referenced object and hashes it with SHA-256, using the `genericBlobDigest/v1`
+normalisation. The S3 `ETag` is deliberately not used: it is not a whole-object hash for multipart uploads. When the
+resource already carries a digest, the computed value is verified against it and a mismatch fails the operation.
+
+Digest processing additionally pins the access specification to the object version that was read, so a later fetch
+resolves the same immutable object. On an unversioned bucket S3 reports the placeholder `null`, which pins nothing and
+is never written back. See
+[Input and Access Types: Object versions and integrity]({{< relref "input-and-access-types.md" >}}#object-versions-and-integrity).
+
+---
+
 ## GitHub Resource Repository
 
 Handles source archives of a pinned commit in a GitHub (or GitHub Enterprise) repository.
