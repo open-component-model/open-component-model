@@ -523,20 +523,33 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
 	}
 
-	var candidates []descriptor.Artifact
+	var exactCandidates, subsetCandidates []descriptor.Artifact
 	switch kind {
 	case annotations.ArtifactKindResource:
 		for _, res := range desc.Component.Resources {
-			if identity.Match(res.ToIdentity(), runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
-				candidates = append(candidates, &res)
+			resIdentity := res.ToIdentity()
+			if identity.Match(resIdentity, runtime.IdentityMatchingChainFn(runtime.IdentityEqual)) {
+				exactCandidates = append(exactCandidates, &res)
+			} else if identity.Match(resIdentity, runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
+				subsetCandidates = append(subsetCandidates, &res)
 			}
 		}
 	case annotations.ArtifactKindSource:
 		for _, src := range desc.Component.Sources {
-			if identity.Match(src.ToIdentity(), runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
-				candidates = append(candidates, &src)
+			srcIdentity := src.ToIdentity()
+			if identity.Match(srcIdentity, runtime.IdentityMatchingChainFn(runtime.IdentityEqual)) {
+				exactCandidates = append(exactCandidates, &src)
+			} else if identity.Match(srcIdentity, runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
+				subsetCandidates = append(subsetCandidates, &src)
 			}
 		}
+	}
+	// Prefer exact matches; fall back to subset matches only when no exact match exists.
+	// This ensures resources sharing name+version but differing by extraIdentity are
+	// always resolved by exact identity, while partial lookups (no version) still work.
+	candidates := exactCandidates
+	if len(candidates) == 0 {
+		candidates = subsetCandidates
 	}
 	if len(candidates) != 1 {
 		return nil, nil, fmt.Errorf("found %d candidates while looking for %s %q, but expected exactly one", len(candidates), kind, identity)
