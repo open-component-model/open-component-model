@@ -343,7 +343,10 @@ jobs:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json) }}
     env:
-      TESTCONTAINER_DOCKER_NETWORK: integration-testcontainers
+      # All packages of one `go test ./...` share a single testcontainers reaper, which
+      # reaps and removes itself 10s after the last package disconnects — the next package
+      # then blocks 60s on the removed container and fails. Outlive the suite instead.
+      RYUK_RECONNECTION_TIMEOUT: 30m
     steps:
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
@@ -358,8 +361,6 @@ jobs:
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
-      - name: Create Docker network for running Testcontainers
-        run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
       - name: Run Tests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
