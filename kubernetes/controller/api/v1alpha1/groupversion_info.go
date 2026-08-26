@@ -13,6 +13,7 @@ var (
 	GroupVersion = schema.GroupVersion{Group: "delivery.ocm.software", Version: "v1alpha1"}
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
+	//nolint: staticcheck // this is a dependency bump, not a clean up
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
 
 	// AddToScheme adds the types in this group-version to the given scheme.

@@ -12,6 +12,13 @@ import (
 	"ocm.software/ocm/cmds/ocm/app"
 )
 
+// Shared string constants used across the generator.
+const (
+	rootCmdName   = "ocm"
+	rootDocName   = "ocm-cli"
+	indexFileName = "_index.md"
+)
+
 // Lists commands that should be excluded from generated docs.
 var commandDenyList = []string{
 	"bootstrap",
@@ -24,7 +31,7 @@ var commandDenyList = []string{
 	"help",
 	"install",
 	"oci",
-	"ocm",
+	rootCmdName,
 	"toi",
 	"version",
 }
@@ -66,7 +73,7 @@ func run(dir string) error {
 	}
 
 	cmdToLink := buildCmdToLink("docs/reference/ocm-cli")
-	if err := genMarkdownTreeCustom(cmd, dir, "ocm-cli", cmdToLink); err != nil {
+	if err := genMarkdownTreeCustom(cmd, dir, rootDocName, cmdToLink); err != nil {
 		return fmt.Errorf("error generating markdown: %w", err)
 	}
 

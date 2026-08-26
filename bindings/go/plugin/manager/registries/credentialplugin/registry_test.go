@@ -9,6 +9,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	credentialpluginv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentialplugin/v1"
+	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -137,6 +139,54 @@ func TestRegistry_RegisterDuplicatePlugin(t *testing.T) {
 	err := reg.RegisterInternalCredentialPlugin(plugin)
 	r.Error(err)
 	r.Contains(err.Error(), "failed to register provider type")
+}
+
+func TestRegistry_AddPlugin(t *testing.T) {
+	dummyType := runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+
+	makeSpec := func() runtime.Typed {
+		return &credentialpluginv1.CapabilitySpec{
+			Type:                           runtime.NewUnversionedType(string(credentialpluginv1.CredentialPluginType)),
+			SupportedCredentialPluginTypes: []mtypes.Type{{Type: dummyType}},
+		}
+	}
+
+	t.Run("success", func(t *testing.T) {
+		r := require.New(t)
+		reg := NewRegistry(t.Context())
+		r.NoError(reg.AddPlugin(mtypes.Plugin{ID: "plugin-a"}, makeSpec()))
+	})
+
+	t.Run("duplicate plugin ID is rejected", func(t *testing.T) {
+		r := require.New(t)
+		reg := NewRegistry(t.Context())
+		r.NoError(reg.AddPlugin(mtypes.Plugin{ID: "plugin-a"}, makeSpec()))
+
+		err := reg.AddPlugin(mtypes.Plugin{ID: "plugin-a"}, makeSpec())
+		r.Error(err)
+		r.Contains(err.Error(), "plugin with ID plugin-a already registered")
+	})
+
+	t.Run("duplicate type across plugins is rejected", func(t *testing.T) {
+		r := require.New(t)
+		reg := NewRegistry(t.Context())
+		r.NoError(reg.AddPlugin(mtypes.Plugin{ID: "plugin-a"}, makeSpec()))
+
+		err := reg.AddPlugin(mtypes.Plugin{ID: "plugin-b"}, makeSpec())
+		r.Error(err)
+		r.Contains(err.Error(), "already registered with ID: plugin-a")
+	})
+
+	t.Run("non-convertible spec is rejected", func(t *testing.T) {
+		r := require.New(t)
+		reg := NewRegistry(t.Context())
+		// A spec whose type is not registered in credentialpluginv1.Scheme cannot
+		// be converted to CapabilitySpec.
+		bogus := &runtime.Raw{Type: runtime.NewVersionedType("Unknown", "v1")}
+		err := reg.AddPlugin(mtypes.Plugin{ID: "plugin-a"}, bogus)
+		r.Error(err)
+		r.Contains(err.Error(), "failed to convert object")
+	})
 }
 
 type mockCredentialPlugin struct {

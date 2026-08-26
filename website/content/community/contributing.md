@@ -127,7 +127,7 @@ commit signing yet, follow the [GitHub signing guide](https://docs.github.com/en
 - **Discuss large changes** - If you are planning significant or potentially controversial changes, please discuss them
   with the maintainers first - either in a GitHub issue, on
   [Slack](https://kubernetes.slack.com/archives/C05UWBE8R1D), or in the
-  [community call](/community/#community-calls).
+  [community call](/community/#community-call).
 {{< /step >}}
 
 {{< step >}}
@@ -245,4 +245,4 @@ license.
 ## Code of Conduct
 
 We want OCM to be a welcoming and harassment-free experience for everyone. All participants are expected to follow the
-[NeoNephos Code of Conduct](https://github.com/neonephos/.github/blob/main/CODE_OF_CONDUCT.md).
+[Linux Foundation EU Code of Conduct](https://linuxfoundation.eu/policies/code-of-conduct).

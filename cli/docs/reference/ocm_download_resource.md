@@ -18,10 +18,11 @@ Download a resource from a component version located in an Open Component Model 
 This command fetches a specific resource from the given OCM component version reference and stores it at the specified output location. 
 It supports optional transformation of the resource using a registered transformer plugin.
 
-If no transformer is specified, the resource is written directly in its original format. If the media type is known,
-the appropriate file extension will be added to the output file name if no output location is given.
+If no transformer is specified, the resource is written directly in its original format.
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
+
+When --output is not provided, the output filename is the resource name.
 
 ```
 ocm download resource [flags]
@@ -32,6 +33,9 @@ ocm download resource [flags]
 ```
  # Download a resource with identity 'name=example' and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
+
+  # Download a resource with identity 'name=example' and 'architecture=amd64' and write to default output
+  ocm download resource ghcr.io/org/component:v1 --identity name=example,architecture=amd64
 
   # Download a resource and specify an output file
   ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
@@ -47,14 +51,14 @@ ocm download resource [flags]
                                  (must be one of [auto disable]) (default auto)
   -h, --help                     help for resource
       --identity string          resource identity to download
-      --output string            output location to download to. If no transformer is specified, and no format was discovered that can be written to a directory, the resource will be written to a file.
+      --output string            output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name.
       --transformer string       transformer to use for the output. If not specified, the resource will be written as is. 
 ```
 
 ### Options inherited from parent commands
 
 ```
-      --config string                      supply configuration by a given configuration file.
+      --config stringArray                 supply configuration by a given configuration file.
                                            By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
                                            1. The path specified in the OCM_CONFIG environment variable
                                            2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
@@ -65,13 +69,14 @@ ocm download resource [flags]
                                            - $HOME/.ocm/config
                                            - $HOME/.ocmconfig
                                            3. The current working directory:
-                                           - $PWD/ocm/config
+                                           - $PWD/.ocm/config
                                            - $PWD/.ocmconfig
                                            4. The directory of the current executable:
-                                           - $EXE_DIR/ocm/config
+                                           - $EXE_DIR/.ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
-                                           Using the option, this configuration file be used instead of the lookup above.
+                                           Later entries have higher priority.
+                                           Using the option, the specified configuration file(s) will be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output

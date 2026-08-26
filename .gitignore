@@ -39,6 +39,8 @@ output/
 
 # github action node modules
 .github/scripts/node_modules/
+.github/scripts/.eslintcache
+
 
 # Task files and generation with tmp folders
 **/tmp

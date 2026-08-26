@@ -13,11 +13,11 @@ import (
 )
 
 // ResourceStream is a lazy handle to OCI content.
-// It implements content.ReadOnlyStorage so it can be passed
-// directly to oras.CopyGraph or consumed blob-by-blob.
+// It implements content.ReadOnlyGraphStorage so it can be passed directly to
+// oras.ExtendedCopyGraph (or oras.CopyGraph) or consumed blob-by-blob.
 // No data is fetched until Fetch or Materialize is called.
 type ResourceStream interface {
-	content.ReadOnlyStorage
+	content.ReadOnlyGraphStorage
 
 	// Root returns the top-level descriptor (manifest or index).
 	Root() ocispec.Descriptor

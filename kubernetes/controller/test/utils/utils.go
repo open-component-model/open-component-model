@@ -1,8 +1,13 @@
 package utils
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,11 +15,34 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2"
+	ocistore "oras.land/oras-go/v2/content/oci"
 )
+
+const (
+	componentNamePrefix = "ocm.software/ocm-k8s-toolkit/examples/"
+	// signingVersion is the version stamped on every signed fixture today. Sign
+	// requires an exact name:version reference; transfer does not.
+	signingVersion = "1.0.0"
+)
+
+// OCMBinary returns the ocm CLI executable. Override via OCM_CLI when running
+// against a non-standard binary path.
+func OCMBinary() string {
+	if v := os.Getenv("OCM_CLI"); v != "" {
+		return v
+	}
+	return "ocm"
+}
 
 // Run executes the provided command within this context.
 func Run(cmd *exec.Cmd) ([]byte, error) {
-	cmd.Dir = os.Getenv("PROJECT_DIR")
+	if cmd.Dir == "" {
+		cmd.Dir = os.Getenv("PROJECT_DIR")
+	}
 
 	cmd.Env = append(cmd.Env, os.Environ()...)
 	cmd.Env = append(cmd.Env, "GO110MODULE=on")
@@ -101,64 +129,184 @@ func WaitForResource(ctx context.Context, condition, timeout string, resource ..
 // PrepareOCMComponent creates an OCM component from a component-constructor file.
 // After creating the OCM component, the component is transferred to imageRegistry.
 func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, imageRegistry, signingKey string) error {
+	ocm := OCMBinary()
+
 	By("creating ocm component for " + name)
 	tmpDir := GinkgoT().TempDir()
-
 	ctfDir := filepath.Join(tmpDir, "ctf")
-	cmdArgs := []string{
-		"add",
-		"componentversions",
-		"--create",
-		"--file", ctfDir,
-		componentConstructorPath,
+
+	exampleDir := filepath.Dir(componentConstructorPath)
+	if _, err := os.Stat(filepath.Join(exampleDir, "kustomize")); err == nil {
+		if err := buildKustomizeOCILayout(ctx, exampleDir); err != nil {
+			return fmt.Errorf("could not build kustomize oci layout: %w", err)
+		}
 	}
 
-	cmd := exec.CommandContext(ctx, "ocm", cmdArgs...)
-	_, err := Run(cmd)
-	if err != nil {
+	cmd := exec.CommandContext(ctx, ocm,
+		"add", "cv",
+		"--repository", ctfDir,
+		"--constructor", componentConstructorPath,
+	)
+	// OCM's dir/v1 input resolves paths relative to the process CWD (not the
+	// constructor's working directory), so run add cv from the example dir.
+	cmd.Dir = exampleDir
+	if _, err := Run(cmd); err != nil {
 		return fmt.Errorf("could not create ocm component: %w", err)
 	}
 
+	componentName := componentNamePrefix + filepath.Base(filepath.Dir(componentConstructorPath))
+	transferRef := fmt.Sprintf("ctf::%s//%s", ctfDir, componentName)
+
 	if signingKey != "" {
 		By("signing ocm component for " + name)
-		cmd = exec.CommandContext(ctx,
-			"ocm",
-			"sign",
-			"componentversions",
-			"--signature",
-			"ocm.software",
-			"--private-key",
-			signingKey,
-			ctfDir,
+		ocmConfigPath := filepath.Join(tmpDir, ".ocmconfig")
+		if err := writeSigningConfig(ocmConfigPath, signingKey, signingKey+".pub"); err != nil {
+			return fmt.Errorf("could not write signing ocmconfig: %w", err)
+		}
+
+		signRef := fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, signingVersion)
+		cmd = exec.CommandContext(ctx, ocm,
+			"sign", "cv",
+			signRef,
+			"--signature", "ocm.software",
+			"--config", ocmConfigPath,
 		)
-		_, err := Run(cmd)
-		if err != nil {
-			return fmt.Errorf("could not create ocm component: %w", err)
+		if _, err := Run(cmd); err != nil {
+			return fmt.Errorf("could not sign ocm component: %w", err)
 		}
 	}
 
 	By("transferring ocm component for " + name)
-	// Note: The option '--overwrite' is necessary, when a digest of a resource is changed or unknown (which is the case
-	// in our default test)
-	cmdArgs = []string{
-		"transfer",
-		"ctf",
-		"--overwrite",
-		"--enforce",
-		"--copy-resources",
-		"--omit-access-types",
-		"gitHub",
-		ctfDir,
-		imageRegistry,
+	cmd = exec.CommandContext(ctx, ocm, "transfer", "cv", transferRef, imageRegistry)
+
+	if strings.Contains(name, "nested") {
+		cmd.Args = append(cmd.Args, "--recursive")
 	}
 
-	cmd = exec.CommandContext(ctx, "ocm", cmdArgs...)
-	_, err = Run(cmd)
-	if err != nil {
+	if strings.Contains(name, "localization") {
+		cmd.Args = append(cmd.Args, "--copy-resources", "--upload-as", "ociArtifact")
+	}
+
+	if _, err := Run(cmd); err != nil {
 		return fmt.Errorf("could not transfer ocm component: %w", err)
 	}
 
 	return nil
+}
+
+// buildKustomizeOCILayout packages exampleDir/kustomize into an OCI image
+// layout at exampleDir/oci-layout so the constructor's dir/v1 input can embed
+// it as a native OCI manifest. The layer carries the flux content media type
+// so a Flux OCIRepository can consume the artifact after transfer.
+func buildKustomizeOCILayout(ctx context.Context, exampleDir string) error {
+	layoutDir := filepath.Join(exampleDir, "oci-layout")
+	if err := os.RemoveAll(layoutDir); err != nil {
+		return fmt.Errorf("clean layout dir: %w", err)
+	}
+	if err := os.MkdirAll(layoutDir, 0o755); err != nil {
+		return fmt.Errorf("create layout dir: %w", err)
+	}
+
+	store, err := ocistore.New(layoutDir)
+	if err != nil {
+		return fmt.Errorf("open oci store: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tarGzipDir(&buf, filepath.Join(exampleDir, "kustomize")); err != nil {
+		return fmt.Errorf("tar kustomize: %w", err)
+	}
+
+	layerDesc := ocispec.Descriptor{
+		MediaType: "application/vnd.cncf.flux.content.v1.tar+gzip",
+		Digest:    digest.FromBytes(buf.Bytes()),
+		Size:      int64(buf.Len()),
+	}
+	if err := store.Push(ctx, layerDesc, bytes.NewReader(buf.Bytes())); err != nil {
+		return fmt.Errorf("push layer: %w", err)
+	}
+
+	manifestDesc, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1,
+		"application/vnd.cncf.flux.config.v1+json",
+		oras.PackManifestOptions{Layers: []ocispec.Descriptor{layerDesc}},
+	)
+	if err != nil {
+		return fmt.Errorf("pack manifest: %w", err)
+	}
+	if err := store.Tag(ctx, manifestDesc, "latest"); err != nil {
+		return fmt.Errorf("tag manifest: %w", err)
+	}
+	return nil
+}
+
+// tarGzipDir writes a gzip'd tar of dir's contents (paths relative to dir) to w.
+// Uses os.Root to avoid symlink TOCTOU.
+func tarGzipDir(w io.Writer, dir string) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
+	gw := gzip.NewWriter(w)
+	tw := tar.NewWriter(gw)
+	walkErr := fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == "." {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		hdr, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		hdr.Name = filepath.ToSlash(path)
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		f, err := root.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = io.Copy(tw, f)
+		return err
+	})
+	if cerr := tw.Close(); walkErr == nil {
+		walkErr = cerr
+	}
+	if cerr := gw.Close(); walkErr == nil {
+		walkErr = cerr
+	}
+	return walkErr
+}
+
+// writeSigningConfig writes an .ocmconfig that resolves the RSA credential
+// for the "ocm.software" signature from a pair of PEM files.
+func writeSigningConfig(path, privateKeyPEM, publicKeyPEM string) error {
+	content := fmt.Sprintf(`type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: ocm.software
+        credentials:
+          - type: Credentials/v1
+            properties:
+              private_key_pem_file: %s
+              public_key_pem_file: %s
+`, privateKeyPEM, publicKeyPEM)
+	return os.WriteFile(path, []byte(content), 0o600)
 }
 
 // DumpLogs dumps pod logs and resource status for the given namespace and resource type.
@@ -204,22 +352,30 @@ func DumpLogs(namespace, resourceType string) {
 // Returns:
 // - An error if the field value does not match the expected value or if the command fails.
 func CompareResourceField(ctx context.Context, resource, fieldSelector, expected string) error {
+	result, err := GetResourceField(ctx, resource, fieldSelector)
+	if err != nil {
+		return err
+	}
+
+	if result != expected {
+		return fmt.Errorf("expected %s, got %s", expected, result)
+	}
+
+	return nil
+}
+
+// GetResourceField returns the value of a resource field selected by a JSONPath expression.
+// Wrapping single quotes emitted by kubectl are stripped.
+func GetResourceField(ctx context.Context, resource, fieldSelector string) (string, error) {
 	args := []string{"get"}
 	args = append(args, strings.Split(resource, " ")...)
 	args = append(args, "-o", "jsonpath="+fieldSelector)
 	cmd := exec.CommandContext(ctx, "kubectl", args...)
 	output, err := Run(cmd)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	// Sanitize output
-	result := strings.TrimSpace(string(output))
-	result = strings.ReplaceAll(result, "'", "")
-
-	if strings.TrimSpace(result) != expected {
-		return fmt.Errorf("expected %s, got %s", expected, string(output))
-	}
-
-	return nil
+	result := strings.Trim(strings.TrimSpace(string(output)), "'")
+	return result, nil
 }

@@ -22,8 +22,6 @@ var convertScheme = runtime.NewScheme()
 
 func init() {
 	convertScheme.MustRegisterWithAlias(&OCICredentials{},
-		DockerConfigVersionedType,
-		runtime.NewUnversionedType(DockerConfigType),
 		OCICredentialsVersionedType,
 		runtime.NewUnversionedType(OCICredentialsType),
 	)

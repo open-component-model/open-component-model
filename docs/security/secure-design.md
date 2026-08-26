@@ -117,7 +117,15 @@ When HTTP/2 is disabled, the TLS configuration is set to `NextProtos: []string{"
 
 ### Certificate Verification
 
-No `InsecureSkipVerify` usage exists in the codebase (verify with `git grep InsecureSkipVerify`). TLS certificate verification uses Go's standard library defaults, which require valid certificates.
+TLS certificate verification is **enabled by default** and uses Go's standard library defaults, which require valid certificates. `InsecureSkipVerify` is available as an **explicit opt-in only** via the HTTP client configuration (`insecureSkipVerify` field in `http.config.ocm.software/v1alpha1`), configurable globally or per host.
+
+When `InsecureSkipVerify=true` is active:
+
+- A warning is emitted at transport construction time via `slog.Warn`.
+- A per-request `slog.WarnContext` warning is emitted on first connection to each host.
+- Connections are vulnerable to man-in-the-middle attacks; this option is intended for development and testing with self-signed certificates only.
+
+No hardcoded `InsecureSkipVerify: true` exists in the codebase (verify with `rg 'InsecureSkipVerify\s*:\s*true'`).
 
 ## Input Validation
 

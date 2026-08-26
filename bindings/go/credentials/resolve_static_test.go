@@ -91,3 +91,69 @@ func TestStaticCredentialsResolver(t *testing.T) {
 		r.Equal("testuser", creds2["username"])
 	})
 }
+
+func TestStaticTypedCredentialsResolver(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+
+	dockerIdentity := runtime.Identity{"type": "OCIRegistry", "hostname": "docker.io"}
+	quayIdentity := runtime.Identity{"type": "OCIRegistry", "hostname": "quay.io"}
+
+	typed := func(username, password string) *v1.DirectCredentials {
+		return &v1.DirectCredentials{
+			Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+			Properties: map[string]string{"username": username, "password": password},
+		}
+	}
+
+	resolver := credentials.NewStaticTypedCredentialsResolver(map[string]runtime.Typed{
+		dockerIdentity.String(): typed("dockeruser", "dockerpass"),
+		quayIdentity.String():   typed("quayuser", "quaypass"),
+	})
+
+	tests := []struct {
+		name         string
+		identity     runtime.Identity
+		wantUsername string
+		wantErr      error
+	}{
+		{
+			name:         "resolves docker credentials",
+			identity:     dockerIdentity,
+			wantUsername: "dockeruser",
+		},
+		{
+			name:         "resolves quay credentials",
+			identity:     quayIdentity,
+			wantUsername: "quayuser",
+		},
+		{
+			name:    "not found returns ErrNotFound",
+			identity: runtime.Identity{"type": "OCIRegistry", "hostname": "unknown.io"},
+			wantErr: credentials.ErrNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := resolver.Resolve(ctx, tt.identity)
+			if tt.wantErr != nil {
+				r.ErrorIs(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			dc := result.(*v1.DirectCredentials)
+			r.Equal(tt.wantUsername, dc.Properties["username"])
+		})
+	}
+
+	t.Run("returned credentials are independent copies", func(t *testing.T) {
+		first, err := resolver.Resolve(ctx, dockerIdentity)
+		r.NoError(err)
+		first.(*v1.DirectCredentials).Properties["username"] = "mutated"
+
+		second, err := resolver.Resolve(ctx, dockerIdentity)
+		r.NoError(err)
+		r.Equal("dockeruser", second.(*v1.DirectCredentials).Properties["username"])
+	})
+}

@@ -14,6 +14,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/cli/cmd/configuration"
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
@@ -80,7 +81,16 @@ func PluginManager(cmd *cobra.Command) error {
 
 	ocmContext := ocmctx.FromContext(cmd.Context())
 	filesystemConfig := ocmContext.FilesystemConfig()
-	if err := builtin.Register(pluginManager, filesystemConfig, slog.Default()); err != nil {
+	httpConfig, err := httpv1alpha1.ResolveHTTPConfig(ocmContext.Configuration())
+	if err != nil {
+		return fmt.Errorf("could not get http configuration: %w", err)
+	}
+	slog.DebugContext(cmd.Context(), "http config resolved",
+		slog.String("timeout", timeoutString(httpConfig.Timeout)),
+		slog.String("tlsHandshakeTimeout", timeoutString(httpConfig.TLSHandshakeTimeout)),
+		slog.Any("hosts", httpConfig.Hosts),
+	)
+	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, slog.Default()); err != nil {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 
@@ -111,6 +121,7 @@ func CredentialGraph(cmd *cobra.Command) error {
 		RepositoryPluginProvider:       pluginManager.CredentialRepositoryRegistry,
 		CredentialPluginProvider:       pluginManager.CredentialPluginRegistry,
 		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
+		CredentialTypeSchemeProvider:   pluginManager.CredentialRepositoryRegistry,
 	}
 
 	var credCfg *credentialsRuntime.Config
@@ -133,4 +144,26 @@ func CredentialGraph(cmd *cobra.Command) error {
 	cmd.SetContext(ocmctx.WithCredentialGraph(cmd.Context(), graph))
 
 	return nil
+}
+
+func Syscalls(cmd *cobra.Command) {
+	if ocmctx.FromContext(cmd.Context()).Syscalls() != nil {
+		return
+	}
+	cmd.SetContext(ocmctx.WithSyscalls(cmd.Context(),
+		&ocmctx.Syscalls{
+			Stat:        os.Stat,
+			Getenv:      os.Getenv,
+			UserHomeDir: os.UserHomeDir,
+			Getwd:       os.Getwd,
+			Executable:  os.Executable,
+		},
+	))
+}
+
+func timeoutString(t *httpv1alpha1.Timeout) string {
+	if t == nil {
+		return "<nil>"
+	}
+	return time.Duration(*t).String()
 }

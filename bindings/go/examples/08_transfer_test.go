@@ -1,0 +1,352 @@
+// Step 8: Transferring Component Versions
+//
+// What you'll learn:
+//   - Building a transfer graph that describes how to move a component version
+//   - Executing the graph to transfer a component from one CTF repository to another
+//   - Using transfer.Mapping with transfer.NewRepositoryResolver to describe a source-to-target transfer
+//   - Driving recursive transfer of component references via transferv1alpha1.Config
+//   - Verifying the transferred component version and its resource payload in the target repository
+//   - Applying custom HTTP timeouts to the repository provider used during transfer
+
+package examples
+
+import (
+	"bytes"
+	"io"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/opencontainers/go-digest"
+	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/ctf"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/oci"
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
+	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/transfer"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+)
+
+// TestExample_TransferCTFtoCTF demonstrates transferring a component version
+// with a local blob resource from one CTF repository to another.
+//
+// The transfer works in two phases:
+//  1. Build a transformation graph that describes the transfer plan
+//  2. Execute the graph to perform the actual data movement
+func TestExample_TransferCTFtoCTF(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	component := "acme.org/transfer-example"
+	version := "1.0.0"
+	resourceContent := []byte("payload to transfer")
+
+	// --- Set up the source CTF repository with a component version ---
+
+	sourcePath := t.TempDir()
+	sourceSpec := newCTFSpecAt(t, sourcePath)
+	sourceRepo := ctfSpecToRepo(t, sourceSpec)
+
+	res := &descriptor.Resource{
+		Relation: descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "my-resource", Version: version},
+		},
+		Type: "plainText",
+		Access: &v2.LocalBlob{
+			LocalReference: digest.FromBytes(resourceContent).String(),
+			MediaType:      "text/plain",
+		},
+	}
+
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "acme.org"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version},
+			},
+			Resources: []descriptor.Resource{*res},
+		},
+	}
+
+	b := inmemory.New(bytes.NewReader(resourceContent))
+	newRes, err := sourceRepo.AddLocalResource(ctx, component, version, res, b)
+	r.NoError(err)
+	desc.Component.Resources[0] = *newRes
+	r.NoError(sourceRepo.AddComponentVersion(ctx, desc))
+
+	// --- Build the transfer graph ---
+
+	// The target is another CTF repository (writable so the transfer can store data).
+	targetSpec := newCTFSpecAt(t, t.TempDir())
+	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
+
+	// transfer.Mapping pairs the source components with a target repository and a resolver.
+	// transfer.NewRepositoryResolver wraps the source repo directly, so no custom resolver is needed.
+	// A nil cfg uses the defaults; see TestExample_Transfer_WithTransferConfig
+	// below for driving transfer settings explicitly.
+	tgd, err := transfer.BuildGraphDefinition(ctx, nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: component, Version: version}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+		},
+	)
+	r.NoError(err)
+	r.NotEmpty(tgd.Transformations)
+
+	// --- Execute the transfer ---
+
+	repoProvider := provider.NewComponentVersionRepositoryProvider(
+		provider.WithTempDir(t.TempDir()),
+	)
+	resourceRepo := resource.NewResourceRepository(nil)
+
+	builder := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
+	graph, err := builder.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	// --- Verify the component version arrived in the target ---
+
+	targetRepo := ctfSpecToRepo(t, targetSpec)
+	got, err := targetRepo.GetComponentVersion(ctx, component, version)
+	r.NoError(err)
+	r.Equal(component, got.Component.Name)
+	r.Equal(version, got.Component.Version)
+	r.Len(got.Component.Resources, 1)
+	r.Equal("my-resource", got.Component.Resources[0].Name)
+
+	// Also verify the resource payload was transferred correctly.
+	readBlob, _, err := targetRepo.GetLocalResource(ctx, component, version, map[string]string{
+		"name":    "my-resource",
+		"version": version,
+	})
+	r.NoError(err)
+	rc, err := readBlob.ReadCloser()
+	r.NoError(err)
+	defer rc.Close()
+	data, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.Equal(resourceContent, data)
+}
+
+// TestExample_Transfer_WithTransferConfig demonstrates driving a transfer with
+// a [transferv1alpha1.Config]. Here Recursive: RecursiveInfinite causes the
+// parent component's references to be walked and transferred along with it,
+// so both parent and child appear in the target repository.
+func TestExample_Transfer_WithTransferConfig(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	parent := "acme.org/recursive-parent"
+	child := "acme.org/recursive-child"
+	version := "1.0.0"
+
+	// --- Set up source CTF: a child component and a parent that references it ---
+
+	sourceSpec := newCTFSpecAt(t, t.TempDir())
+	sourceRepo := ctfSpecToRepo(t, sourceSpec)
+
+	childDesc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "acme.org"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: child, Version: version},
+			},
+		},
+	}
+	r.NoError(sourceRepo.AddComponentVersion(ctx, childDesc))
+
+	parentDesc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "acme.org"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: parent, Version: version},
+			},
+			References: []descriptor.Reference{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: "child-ref", Version: version},
+					},
+					Component: child,
+				},
+			},
+		},
+	}
+	r.NoError(sourceRepo.AddComponentVersion(ctx, parentDesc))
+
+	// --- Build the transfer graph with the transfer config ---
+
+	targetSpec := newCTFSpecAt(t, t.TempDir())
+	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
+
+	cfg := &transferv1alpha1.Config{
+		Recursive: transferv1alpha1.RecursiveInfinite,
+	}
+	tgd, err := transfer.BuildGraphDefinition(ctx, cfg,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: parent, Version: version}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+		},
+	)
+	r.NoError(err)
+	r.NotEmpty(tgd.Transformations)
+
+	// --- Execute the transfer ---
+
+	repoProvider := provider.NewComponentVersionRepositoryProvider(
+		provider.WithTempDir(t.TempDir()),
+	)
+	resourceRepo := resource.NewResourceRepository(nil)
+
+	builder := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
+	graph, err := builder.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	// --- Verify both parent and child arrived in the target ---
+
+	targetRepo := ctfSpecToRepo(t, targetSpec)
+
+	gotParent, err := targetRepo.GetComponentVersion(ctx, parent, version)
+	r.NoError(err)
+	r.Equal(parent, gotParent.Component.Name)
+	r.Len(gotParent.Component.References, 1)
+	r.Equal(child, gotParent.Component.References[0].Component)
+
+	gotChild, err := targetRepo.GetComponentVersion(ctx, child, version)
+	r.NoError(err)
+	r.Equal(child, gotChild.Component.Name)
+	r.Equal(version, gotChild.Component.Version)
+}
+
+// TestExample_Transfer_WithHTTPConfig demonstrates performing a CTF-to-CTF
+// transfer using a repository provider that applies custom HTTP timeouts.
+//
+// In production you would set these timeouts to match your network constraints.
+// Here we set explicit values to demonstrate the wiring pattern.
+func TestExample_Transfer_WithHTTPConfig(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	component := "acme.org/transfer-http-example"
+	version := "1.0.0"
+	resourceContent := []byte("payload to transfer with http config")
+
+	// --- Set up source CTF repository ---
+
+	sourceSpec := newCTFSpecAt(t, t.TempDir())
+	sourceRepo := ctfSpecToRepo(t, sourceSpec)
+
+	res := &descriptor.Resource{
+		Relation: descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "my-resource", Version: version},
+		},
+		Type: "plainText",
+		Access: &v2.LocalBlob{
+			LocalReference: digest.FromBytes(resourceContent).String(),
+			MediaType:      "text/plain",
+		},
+	}
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "acme.org"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version},
+			},
+			Resources: []descriptor.Resource{*res},
+		},
+	}
+	b := inmemory.New(bytes.NewReader(resourceContent))
+	newRes, err := sourceRepo.AddLocalResource(ctx, component, version, res, b)
+	r.NoError(err)
+	desc.Component.Resources[0] = *newRes
+	r.NoError(sourceRepo.AddComponentVersion(ctx, desc))
+
+	// --- Resolve HTTP config from an OCM config with custom timeouts ---
+
+	const yamlConfig = `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    timeout: 60s
+    tlsHandshakeTimeout: 10s
+`
+	var cfg genericv1.Config
+	r.NoError(genericv1.Scheme.Decode(strings.NewReader(yamlConfig), &cfg))
+	httpCfg, err := httpv1alpha1.ResolveHTTPConfig(&cfg)
+	r.NoError(err)
+
+	// --- Build and execute the transfer using a provider with HTTP config ---
+
+	targetSpec := newCTFSpecAt(t, t.TempDir())
+	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
+
+	tgd, err := transfer.BuildGraphDefinition(ctx, nil,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: component, Version: version}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+		},
+	)
+	r.NoError(err)
+
+	repoProvider := provider.NewComponentVersionRepositoryProvider(
+		provider.WithHTTPConfig(httpCfg),
+		provider.WithTempDir(t.TempDir()),
+	)
+	resourceRepo := resource.NewResourceRepository(nil)
+
+	builder := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
+	graph, err := builder.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	// --- Verify ---
+
+	targetRepo := ctfSpecToRepo(t, targetSpec)
+	got, err := targetRepo.GetComponentVersion(ctx, component, version)
+	r.NoError(err)
+	r.Equal(component, got.Component.Name)
+	r.Equal(version, got.Component.Version)
+}
+
+// --- helpers ---
+
+// newCTFSpecAt creates a CTF repository specification for the given directory path.
+func newCTFSpecAt(t *testing.T, path string) *ctfrepospec.Repository {
+	t.Helper()
+	return &ctfrepospec.Repository{
+		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath: path,
+	}
+}
+
+// ctfSpecToRepo opens an existing CTF repository from a spec.
+func ctfSpecToRepo(t *testing.T, spec *ctfrepospec.Repository) *oci.Repository {
+	t.Helper()
+	r := require.New(t)
+	fs, err := filesystem.NewFS(spec.FilePath, os.O_RDWR|os.O_CREATE)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo, err := oci.NewRepository(ocictf.WithCTF(store), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+	return repo
+}

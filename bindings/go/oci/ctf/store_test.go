@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/errdef"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -635,3 +636,81 @@ func TestConcurrentBlobOperations(t *testing.T) {
 		wg.Wait()
 	})
 }
+
+func TestUntag(t *testing.T) {
+	archive := setupTestCTF(t)
+	provider := NewFromCTF(archive)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:v1.0.0")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	blob := inmemory.New(strings.NewReader("manifest content"))
+	digestStr, known := blob.Digest()
+	require.True(t, known)
+	require.NoError(t, archive.SaveBlob(ctx, blob))
+
+	idx := v1.NewIndex()
+	idx.AddArtifact(v1.ArtifactMetadata{Repository: "test-repo", Tag: "v1.0.0", Digest: digestStr})
+	idx.AddArtifact(v1.ArtifactMetadata{Repository: "test-repo", Tag: "latest", Digest: digestStr})
+	require.NoError(t, archive.SetIndex(ctx, idx))
+
+	require.NoError(t, store.(*repository).Untag(ctx, "latest"))
+
+	var tags []string
+	require.NoError(t, store.(*repository).Tags(ctx, "", func(ts []string) error {
+		tags = ts
+		return nil
+	}))
+	assert.ElementsMatch(t, []string{"v1.0.0"}, tags, "only the semver tag should remain")
+
+	_, err = store.Resolve(ctx, "latest")
+	assert.Error(t, err, "removed tag must not resolve")
+
+	// Untag only removes the tag pointer — the blob itself must remain.
+	blobs, err := archive.ListBlobs(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, blobs, digestStr, "underlying blob must survive untagging")
+}
+
+func TestUntag_NotFound(t *testing.T) {
+	archive := setupTestCTF(t)
+	provider := NewFromCTF(archive)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:v1.0.0")
+	require.NoError(t, err)
+
+	err = store.(*repository).Untag(t.Context(), "nonexistent")
+	assert.ErrorIs(t, err, errdef.ErrNotFound)
+}
+
+func TestUntag_LastTag_KeepsBlob(t *testing.T) {
+	// Per the content.Untagger contract, untagging is purely nominal: even when
+	// the removed tag was the only index entry for the manifest, the blob stays.
+	archive := setupTestCTF(t)
+	provider := NewFromCTF(archive)
+	ctx := t.Context()
+
+	content := []byte("manifest content")
+	manifestDigest := digest.FromBytes(content)
+	require.NoError(t, archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(content))))
+
+	idx := v1.NewIndex()
+	idx.AddArtifact(v1.ArtifactMetadata{
+		Repository: "test-repo",
+		Tag:        "latest",
+		Digest:     manifestDigest.String(),
+		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
+	})
+	require.NoError(t, archive.SetIndex(ctx, idx))
+
+	store, err := provider.StoreForReference(ctx, "test-repo:latest")
+	require.NoError(t, err)
+	require.NoError(t, store.(*repository).Untag(ctx, "latest"))
+
+	_, err = store.Resolve(ctx, "latest")
+	assert.Error(t, err, "removed tag must not resolve")
+
+	blobs, err := archive.ListBlobs(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, blobs, manifestDigest.String(), "blob must not be deleted by untagging")
+}
+

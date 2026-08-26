@@ -119,7 +119,7 @@
                             <button class="btn btn-link nav-link p-0 dropdown-toggle btn-dropdown" id="doks-versions"
                                 data-bs-toggle="dropdown" aria-expanded="false" data-bs-display="static"
                                 aria-label="Toggle version menu">
-                                Versions
+                                {{ $.Site.Version.Name }}{{ if $.Site.Version.IsDefault }} (latest){{ end }}
                                 <span class="dropdown-caret">
                                     <svg xmlns="http://www.w3.org/2000/svg"
                                         class="icon icon-tabler icon-tabler-chevron-down" width="20" height="20"
@@ -136,12 +136,12 @@
                                 {{ with .Site.Home.Rotate "version" }}
                                   {{ range . }}
                                     {{ $isCurrent := eq .Site.Version.Name $currentVersionName }}
-                                    {{/* Default detection via Hugo: use .Site.Version.IsDefault */}}
                                     {{ $isDefault := .Site.Version.IsDefault }}
+                                    {{ $name := .Site.Version.Name }}
                                     <li>
                                       <a class="dropdown-item{{ if $isCurrent }} current{{ end }}" {{ if $isCurrent }}aria-current="true" {{ end }}
                                          href="{{ .RelPermalink }}">
-                                        {{ .Site.Version.Name }}{{ if $isDefault }} <span class="version-flag">(default)</span>{{ end }}
+                                        {{ $name }}{{ if $isDefault }} <span class="version-flag">(latest)</span>{{ end }}
                                       </a>
                                     </li>
                                   {{ end }}

@@ -22,6 +22,7 @@ type barVisualizer[T any] struct {
 	dotFrame       int
 	errorFormatter func(T, error) string
 	logBuffer      *progress.SyncBuffer
+	buf            strings.Builder
 }
 
 // NewVisualizer is a [progress.VisualizerFactory] that creates an animated
@@ -68,7 +69,9 @@ func (v *barVisualizer[T]) Begin(name string) {
 	})
 }
 
-// HandleEvent receives a progress update and refreshes the display.
+// HandleEvent receives a progress update and mutates state.
+// Rendering is driven solely by the animation ticker to avoid flicker from
+// multiple concurrent render paths racing each other.
 func (v *barVisualizer[T]) HandleEvent(event progress.Event[T]) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -79,12 +82,10 @@ func (v *barVisualizer[T]) HandleEvent(event progress.Event[T]) {
 				return
 			}
 			v.events[i] = event
-			v.renderLocked()
 			return
 		}
 	}
 	v.events = append(v.events, event)
-	v.renderLocked()
 }
 
 // End stops the animation and renders the final status.
@@ -98,8 +99,9 @@ func (v *barVisualizer[T]) End(err error) {
 		close(v.done)
 	}
 
-	v.clearLines()
-	v.drainLogBuffer()
+	v.buf.Reset()
+	v.writeClearLines()
+	v.writeLogBuffer()
 
 	hasFailures := false
 	for _, event := range v.events {
@@ -110,19 +112,20 @@ func (v *barVisualizer[T]) End(err error) {
 	}
 
 	if err != nil || hasFailures {
-		WriteFailedLine(v.out, v.header)
+		WriteFailedLine(&v.buf, v.header)
 	} else {
-		WriteCompletedLine(v.out, v.header)
+		WriteCompletedLine(&v.buf, v.header)
 	}
 
-	v.renderEvents()
+	v.writeEvents()
 	if v.total > 0 {
-		v.renderBar()
+		v.writeBar()
 	}
+	_, _ = io.WriteString(v.out, v.buf.String())
 
 	for _, event := range v.events {
 		if event.State == progress.Failed {
-			v.renderFailureSummary()
+			v.writeFailureSummary()
 			return
 		}
 	}
@@ -147,12 +150,8 @@ func (v *barVisualizer[T]) fixedLines() int {
 	return lines
 }
 
-func (v *barVisualizer[T]) clearLines() {
-	for i := 0; i < v.fixedLines(); i++ {
-		fmt.Fprint(v.out, CursorUp+ClearLine)
-	}
-}
-
+// renderLocked builds the entire frame into v.buf and flushes it in one write
+// to avoid partial-frame flicker from multiple syscalls.
 func (v *barVisualizer[T]) renderLocked() {
 	select {
 	case <-v.done:
@@ -160,34 +159,42 @@ func (v *barVisualizer[T]) renderLocked() {
 	default:
 	}
 
-	v.clearLines()
-	v.drainLogBuffer()
-	v.renderHeader()
-	v.renderEvents()
+	v.buf.Reset()
+	v.writeClearLines()
+	v.writeLogBuffer()
+	v.writeHeader()
+	v.writeEvents()
 	if v.total > 0 {
-		v.renderBar()
+		v.writeBar()
+	}
+	_, _ = io.WriteString(v.out, v.buf.String())
+}
+
+func (v *barVisualizer[T]) writeClearLines() {
+	for i := 0; i < v.fixedLines(); i++ {
+		v.buf.WriteString(CursorUp + ClearLine)
 	}
 }
 
-func (v *barVisualizer[T]) drainLogBuffer() {
+func (v *barVisualizer[T]) writeLogBuffer() {
 	if v.logBuffer == nil || v.logBuffer.Len() == 0 {
 		return
 	}
 	raw := v.logBuffer.DrainString()
 	for _, line := range strings.Split(strings.TrimRight(raw, "\n"), "\n") {
 		if line != "" {
-			fmt.Fprintf(v.out, "%s%s\n", line, Reset)
+			fmt.Fprintf(&v.buf, "%s%s\n", line, Reset)
 		}
 	}
 }
 
-func (v *barVisualizer[T]) renderHeader() {
+func (v *barVisualizer[T]) writeHeader() {
 	if v.header != "" {
-		WriteRunningLine(v.out, v.header, v.spinnerFrame, v.dotFrame)
+		WriteRunningLine(&v.buf, v.header, v.spinnerFrame, v.dotFrame)
 	}
 }
 
-func (v *barVisualizer[T]) renderEvents() {
+func (v *barVisualizer[T]) writeEvents() {
 	start := 0
 	if len(v.events) > v.maxLogs {
 		start = len(v.events) - v.maxLogs
@@ -195,15 +202,15 @@ func (v *barVisualizer[T]) renderEvents() {
 	visible := v.events[start:]
 
 	for _, event := range visible {
-		fmt.Fprintln(v.out, v.formatItem(event))
+		fmt.Fprintln(&v.buf, v.formatItem(event))
 	}
 
 	for i := 0; i < v.maxLogs-len(visible); i++ {
-		fmt.Fprintln(v.out)
+		fmt.Fprintln(&v.buf)
 	}
 }
 
-func (v *barVisualizer[T]) renderBar() {
+func (v *barVisualizer[T]) writeBar() {
 	completed, failed, cancelled := 0, 0, 0
 	for _, event := range v.events {
 		switch event.State {
@@ -231,7 +238,7 @@ func (v *barVisualizer[T]) renderBar() {
 		status += fmt.Sprintf(" %s(%d cancelled)%s", DarkGray, cancelled, Reset)
 	}
 
-	fmt.Fprintf(v.out, "  %s[%s%s%s%s%s]%s %s%3d%%%s %s\n",
+	fmt.Fprintf(&v.buf, "  %s[%s%s%s%s%s]%s %s%3d%%%s %s\n",
 		Bold+DarkGray, white, strings.Repeat("█", filled),
 		DarkGray, strings.Repeat("░", empty), Bold+DarkGray,
 		Reset, Bold+white, pct, Reset, status)
@@ -259,7 +266,7 @@ func (v *barVisualizer[T]) formatItem(item progress.Event[T]) string {
 	return fmt.Sprintf("    %s%s%s %s", color, symbol, Reset, displayName)
 }
 
-func (v *barVisualizer[T]) renderFailureSummary() {
+func (v *barVisualizer[T]) writeFailureSummary() {
 	fmt.Fprint(v.out, "\nErrors:\n")
 	for _, event := range v.events {
 		if event.State != progress.Failed {

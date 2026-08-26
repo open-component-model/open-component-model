@@ -32,7 +32,7 @@ function mockGitHub(overrides = {}) {
         updateRelease: overrides.updateRelease || (() => ({ data: { id: 1, html_url: "https://example.com/release/1" } })),
         listReleaseAssets: overrides.listReleaseAssets || (() => ({ data: [] })),
         deleteReleaseAsset: overrides.deleteReleaseAsset || (() => {}),
-        uploadReleaseAsset: overrides.uploadReleaseAsset || (() => {}),
+        uploadReleaseAsset: overrides.uploadReleaseAsset || ((opts) => ({ data: { state: "uploaded", size: opts.data.length } })),
       },
     },
   };
@@ -61,58 +61,47 @@ function mockCore() {
 
 // Returns fallback when file does not exist
 {
-  const result = prepareReleaseNotes("/nonexistent/path.md", "rc-tag", "final-tag");
+  const result = prepareReleaseNotes("/nonexistent/path.md", "rc-tag");
   assert.strictEqual(result, "Promoted from rc-tag");
 }
 
 // Returns fallback when file is empty
 {
   const dir = tmpDir({ "empty.md": "" });
-  const result = prepareReleaseNotes(path.join(dir, "empty.md"), "rc-tag", "final-tag");
+  const result = prepareReleaseNotes(path.join(dir, "empty.md"), "rc-tag");
   assert.strictEqual(result, "Promoted from rc-tag");
 }
 
-// Rewrites git-cliff header line for controller tags
+// Prepends the promotion provenance and keeps the rendered changelog verbatim
 {
-  const dir = tmpDir({ "notes.md": "## [kubernetes/controller/v0.1.0-rc.1] - 2025-01-01\n\n- Some change" });
-  const result = prepareReleaseNotes(
-    path.join(dir, "notes.md"),
-    "kubernetes/controller/v0.1.0-rc.1",
-    "kubernetes/controller/v0.1.0",
-  );
+  const body = "## [0.1.0] - 2025-01-01\n\n- Some change\n\ncurl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.1.0 bash";
+  const dir = tmpDir({ "notes.md": body });
   const today = new Date().toISOString().split("T")[0];
-  assert.ok(
-    result.startsWith(`## [kubernetes/controller/v0.1.0] - promoted from [kubernetes/controller/v0.1.0-rc.1] on ${today}`),
-    `Expected header rewrite, got: ${result.split("\n")[0]}`,
-  );
-  assert.ok(result.includes("- Some change"), "Body should be preserved");
-}
-
-// Rewrites git-cliff header line for CLI tags
-{
-  const dir = tmpDir({ "notes.md": "## [cli/v0.17.0-rc.1] - 2025-02-02\n\n- Fix bug" });
-  const result = prepareReleaseNotes(
-    path.join(dir, "notes.md"),
-    "cli/v0.17.0-rc.1",
-    "cli/v0.17.0",
-  );
-  const today = new Date().toISOString().split("T")[0];
-  assert.ok(
-    result.startsWith(`## [cli/v0.17.0] - promoted from [cli/v0.17.0-rc.1] on ${today}`),
-    `Expected header rewrite for CLI, got: ${result.split("\n")[0]}`,
+  const result = prepareReleaseNotes(path.join(dir, "notes.md"), "v0.1.0-rc.1");
+  assert.strictEqual(
+    result,
+    `> Promoted from \`v0.1.0-rc.1\` on ${today}\n\n${body}`,
+    "Expected provenance line followed by the git-cliff output as-is",
   );
 }
 
-// Prepends header when notes don't match the RC header pattern
+// Truncates body when it exceeds GitHub's 125000-char release body limit
 {
-  const dir = tmpDir({ "notes.md": "Just some plain notes\n\n- Fix bug" });
-  const today = new Date().toISOString().split("T")[0];
-  const result = prepareReleaseNotes(path.join(dir, "notes.md"), "rc-tag", "final-tag");
-  assert.ok(
-    result.startsWith(`## [final-tag] - promoted from [rc-tag] on ${today}`),
-    `Expected prepended header, got: ${result.split("\n")[0]}`,
-  );
-  assert.ok(result.includes("- Fix bug"), "Original body should be preserved");
+  const oversize = "## [0.7.0] - 2026-05-08\n\n" + "x".repeat(130000);
+  const dir = tmpDir({ "huge.md": oversize });
+  const result = prepareReleaseNotes(path.join(dir, "huge.md"), "v0.7.0-rc.1");
+  assert.strictEqual(result.length, 120000, `Expected exact MAX_RELEASE_BODY_LENGTH (120000), got: ${result.length}`)
+  assert.ok(result.endsWith("complete history.*"), "Expected truncation notice as suffix");
+  assert.ok(result.includes("## [0.7.0] - 2026-05-08"), "Expected header to remain intact");
+  assert.ok(result.startsWith("> Promoted from `v0.7.0-rc.1`"), "Expected provenance line to survive truncation");
+}
+
+// Does not truncate body when within limit
+{
+  const fits = "## [0.7.0] - 2026-05-08\n\nSmall body";
+  const dir = tmpDir({ "small.md": fits });
+  const result = prepareReleaseNotes(path.join(dir, "small.md"), "v0.7.0-rc.1");
+  assert.ok(!result.includes("Release notes truncated"), "Expected no truncation notice for small body");
 }
 
 // ----------------------------------------------------------
@@ -131,14 +120,14 @@ function mockCore() {
   const result = await getOrCreateRelease(gh, mockContext, {
     newReleaseTag: "v1.0.0",
     newReleaseVersion: "1.0.0",
-    componentName: "OCM Controller",
+    componentName: "OCM",
     notes: "notes",
     isLatest: true,
   });
   assert.strictEqual(result.id, 42);
   assert.strictEqual(calls.length, 1);
   assert.strictEqual(calls[0].opts.make_latest, "true");
-  assert.strictEqual(calls[0].opts.name, "OCM Controller 1.0.0");
+  assert.strictEqual(calls[0].opts.name, "OCM 1.0.0");
 }
 
 // Updates existing release when tag already exists
@@ -154,14 +143,14 @@ function mockCore() {
   const result = await getOrCreateRelease(gh, mockContext, {
     newReleaseTag: "v1.0.0",
     newReleaseVersion: "1.0.0",
-    componentName: "OCM CLI",
+    componentName: "OCM",
     notes: "notes",
     isLatest: false,
   });
   assert.strictEqual(result.id, 10);
   assert.strictEqual(calls.length, 1);
   assert.strictEqual(calls[0].opts.make_latest, "false");
-  assert.strictEqual(calls[0].opts.name, "OCM CLI 1.0.0");
+  assert.strictEqual(calls[0].opts.name, "OCM 1.0.0");
 }
 
 // Rethrows non-404 errors
@@ -187,7 +176,7 @@ function mockCore() {
   const uploaded = [];
   const gh = mockGitHub({
     listReleaseAssets: async () => ({ data: [] }),
-    uploadReleaseAsset: async (opts) => uploaded.push(opts.name),
+    uploadReleaseAsset: async (opts) => { uploaded.push(opts.name); return { data: { state: "uploaded", size: opts.data.length } }; },
   });
   const count = await uploadAssets(gh, mockContext, mockCore(), 1, dir);
   assert.deepStrictEqual(uploaded, ["chart-1.0.0.tgz"]);
@@ -202,7 +191,7 @@ function mockCore() {
   const gh = mockGitHub({
     listReleaseAssets: async () => ({ data: [{ name: "chart-1.0.0.tgz", id: 99 }] }),
     deleteReleaseAsset: async (opts) => deleted.push(opts.asset_id),
-    uploadReleaseAsset: async (opts) => uploaded.push(opts.name),
+    uploadReleaseAsset: async (opts) => { uploaded.push(opts.name); return { data: { state: "uploaded", size: opts.data.length } }; },
   });
   const count = await uploadAssets(gh, mockContext, mockCore(), 1, dir);
   assert.deepStrictEqual(deleted, [99]);
@@ -216,7 +205,7 @@ function mockCore() {
   const uploaded = [];
   const gh = mockGitHub({
     listReleaseAssets: async () => ({ data: [] }),
-    uploadReleaseAsset: async (opts) => uploaded.push(opts.name),
+    uploadReleaseAsset: async (opts) => { uploaded.push(opts.name); return { data: { state: "uploaded", size: opts.data.length } }; },
   });
   const count = await uploadAssets(gh, mockContext, mockCore(), 1, dir);
   assert.strictEqual(count, 2);
@@ -231,11 +220,24 @@ function mockCore() {
   const uploaded = [];
   const gh = mockGitHub({
     listReleaseAssets: async () => ({ data: [] }),
-    uploadReleaseAsset: async (opts) => uploaded.push(opts.name),
+    uploadReleaseAsset: async (opts) => { uploaded.push(opts.name); return { data: { state: "uploaded", size: opts.data.length } }; },
   });
   const count = await uploadAssets(gh, mockContext, mockCore(), 1, dir);
   assert.strictEqual(count, 1);
   assert.deepStrictEqual(uploaded, ["chart.tgz"]);
+}
+
+// Throws when the server reports a truncated or unfinished upload
+{
+  const dir = tmpDir({ "chart.tgz": "data" });
+  const gh = mockGitHub({
+    listReleaseAssets: async () => ({ data: [] }),
+    uploadReleaseAsset: async () => ({ data: { state: "uploaded", size: 1 } }),
+  });
+  await assert.rejects(
+    () => uploadAssets(gh, mockContext, mockCore(), 1, dir),
+    /upload unverified/,
+  );
 }
 
 // ----------------------------------------------------------
@@ -251,7 +253,7 @@ function mockCore() {
     newReleaseTag: "v1.0.0",
     rcTag: "v1.0.0-rc.1",
     newReleaseVersion: "1.0.0",
-    componentName: "OCM Controller",
+    componentName: "OCM",
     imageRepo: "ghcr.io/org/img",
     chartRepo: "ghcr.io/org/chart",
     imageDigest: "sha256:abc123def456789012345",
@@ -272,34 +274,13 @@ function mockCore() {
     newReleaseTag: "v1.0.0",
     rcTag: "v1.0.0-rc.1",
     newReleaseVersion: "1.0.0",
-    componentName: "OCM CLI",
+    componentName: "OCM",
     imageRepo: "",
     chartRepo: "",
     imageDigest: "",
     isLatest: false,
     highestPreviousReleaseVersion: "",
     uploadedCount: 0,
-    releaseUrl: "https://example.com",
-  });
-  assert.ok(written, "summary.write() should have been called");
-}
-
-// Latest set but not release version (e.g., promoting an RC that is highest overall)
-{
-  let written = false;
-  const core = mockCore();
-  core.summary.write = async () => { written = true; };
-  await writeSummary(core, {
-    newReleaseTag: "v1.0.0",
-    rcTag: "v1.0.0-rc.1",
-    newReleaseVersion: "1.0.0",
-    componentName: "OCM Controller",
-    imageRepo: "ghcr.io/org/img",
-    chartRepo: "ghcr.io/org/chart",
-    imageDigest: "sha256:abc123def456789012345",
-    isLatest: true,
-    highestPreviousReleaseVersion: "1.1.0",
-    uploadedCount: 1,
     releaseUrl: "https://example.com",
   });
   assert.ok(written, "summary.write() should have been called");

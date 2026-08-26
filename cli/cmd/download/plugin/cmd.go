@@ -59,11 +59,11 @@ This command fetches a specific plugin resource from the given OCM component ver
 The plugin binary can be identified by resource name and version, with optional extra identity parameters for platform-specific binaries.
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
-		Example: ` # Download a plugin binary with resource name 'helminput' and version 'v0.0.0-main'
-  ocm download plugin ghcr.io/open-component-model/plugins//ocm.software/plugins/helminput:0.0.0-main
+		Example: ` # Download a plugin binary with resource name '<my-plugin-component>' and version '<version>'
+  ocm download plugin <oci-repository>//<my-plugin-component>:<version>
 
   # Download a platform-specific plugin binary with extra identity parameters with specified output location.
-  ocm download plugin ghcr.io/open-component-model/plugins//ocm.software/plugins/helminput:0.0.0-main --extra-identity os=linux,arch=amd64 --output ./plugins/ocm-plugin-linux-amd64`,
+  ocm download plugin <oci-repository>//<my-plugin-component>:<version> --extra-identity os=linux,arch=amd64 --output ./plugins/ocm-plugin-linux-amd64`,
 		RunE:              DownloadPlugin,
 		DisableAutoGenTag: true,
 	}
@@ -213,7 +213,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("downloading plugin resource for identity %q failed: %w", resourceIdentity, err)
 	}
 
-	// ocm.software/plugins/[helminput]
+	// ocm.software/plugins/[my-plugin]
 	pluginFileName := path.Base(ref.Component)
 	output = filepath.Join(output, pluginFileName)
 

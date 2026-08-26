@@ -2,13 +2,18 @@ package provider_test
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
+
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -155,4 +160,80 @@ func Test_JSON_Schema_For_Repository_Specification(t *testing.T) {
 			r.Equal(tc.expectedJSONSchema, schema, "schema does not match expected for type %s", tc.inputType.String())
 		})
 	}
+}
+
+// TestWithHTTPConfig_CustomConfigIsUsed verifies that a custom HTTP config is
+// used by the OCI provider for registry traffic by confirming the test server
+// is actually contacted when a repository operation is performed.
+func TestWithHTTPConfig_CustomConfigIsUsed(t *testing.T) {
+	var serverHit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverHit = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	timeout := httpv1alpha1.NewTimeout(5 * time.Second)
+	cfg := &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout}}
+	prov := provider.NewComponentVersionRepositoryProvider(
+		provider.WithHTTPConfig(cfg),
+	)
+	require.NotNil(t, prov)
+
+	repoSpec := &ocirepospecv1.Repository{
+		BaseUrl: srv.URL,
+		SubPath: "test/repo",
+	}
+	repo, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
+	require.NoError(t, err)
+	// ListComponentVersions triggers HTTP traffic to the registry.
+	_, _ = repo.ListComponentVersions(t.Context(), "example.org/component")
+	require.True(t, serverHit, "expected HTTP request to reach test server")
+}
+
+// TestWithHTTPConfig_NilFallsBackToDefault verifies that when no HTTPConfig
+// option is supplied the provider uses ocmhttp defaults (built on top of
+// oras-go's retry transport) and can serve CTF-based repositories without panic.
+func TestWithHTTPConfig_NilFallsBackToDefault(t *testing.T) {
+	prov := provider.NewComponentVersionRepositoryProvider()
+	require.NotNil(t, prov)
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	require.NoError(t, err)
+
+	repoSpec := &ctfrepospecv1.Repository{
+		FilePath:   fs.String(),
+		AccessMode: ctfrepospecv1.AccessModeReadWrite,
+	}
+	repo, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
+	require.NoError(t, err)
+	require.NotNil(t, repo)
+}
+
+// TestWithHTTPConfig_ShortTimeoutCausesError starts a server that hangs and
+// verifies that a provider configured with a very short overall timeout
+// returns an error when performing an OCI registry operation.
+func TestWithHTTPConfig_ShortTimeoutCausesError(t *testing.T) {
+	// Server that sleeps longer than our timeout.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	timeout := httpv1alpha1.NewTimeout(10 * time.Millisecond)
+	cfg := &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout}}
+	prov := provider.NewComponentVersionRepositoryProvider(
+		provider.WithHTTPConfig(cfg),
+	)
+
+	repoSpec := &ocirepospecv1.Repository{
+		BaseUrl: srv.URL,
+		SubPath: "test/repo",
+	}
+	repo, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
+	require.NoError(t, err)
+	// ListComponentVersions triggers HTTP traffic — should time out.
+	_, err = repo.ListComponentVersions(t.Context(), "example.org/component")
+	require.Error(t, err)
 }

@@ -143,7 +143,7 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 		entry.KeyFile = credentials.KeyFile
 	}
 
-	chartRepo, err := repo.NewChartRepository(entry, download.GetterProviders())
+	chartRepo, err := repo.NewChartRepository(entry, download.GetterProviders(nil, download.HTTPConfigGetterOpts{}))
 	if err != nil {
 		return "", fmt.Errorf("error creating chart repository: %w", err)
 	}

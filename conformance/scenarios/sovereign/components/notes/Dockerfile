@@ -1,5 +1,5 @@
 # Multi-stage build for sovereign-notes application
-FROM --platform=${BUILDPLATFORM} golang:1.26-alpine@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26-alpine@sha256:28d89ee9cc0ff9fec75c82ca201e6bf7fdf9a679d4b7b24dfa04f2bb766bb468 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -25,7 +25,7 @@ RUN CMD_DIR=$(if [ "${VERSION}" = "1.0.0" ]; then echo "sovereign-notes-v1"; els
     -o sovereign-notes ./cmd/${CMD_DIR}
 
 # Final stage
-FROM alpine:3.23@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 
 # Install CA certificates and create non-root user
 RUN apk --no-cache add ca-certificates \

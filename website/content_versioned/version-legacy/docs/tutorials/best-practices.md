@@ -30,7 +30,7 @@ This schema is available at [https://ocm.software/schemas/configuration-schema.y
 To use this schema in your IDE, you can add the following line to your component constructor file:
 
 ```yaml
-# yaml-language-server: $schema=https://ocm.software/latest/schemas/bindings/go/constructor/schema-2020-12.json
+# yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 ```
 
 This line tells the YAML language server to use the OCM schema for validation and auto-completion.

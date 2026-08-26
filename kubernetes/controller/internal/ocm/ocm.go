@@ -2,6 +2,7 @@ package ocm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -10,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
@@ -137,4 +139,32 @@ func GetLatestValidVersion(ctx context.Context, versions []string, semvers strin
 	}
 
 	return matchedVersions[len(matchedVersions)-1], nil
+}
+
+// ApplyDowngradePolicy returns the candidate version unless it is older than
+// the previously reconciled version and Spec.DowngradePolicy denies it.
+func ApplyDowngradePolicy(component *v1alpha1.Component, candidate *semver.Version) (string, error) {
+	// we didn't yet reconcile anything, return whatever the retrieved version is.
+	if component.Status.Component.Version == "" {
+		return candidate.Original(), nil
+	}
+
+	currentSemver, err := semver.NewVersion(component.Status.Component.Version)
+	if err != nil {
+		return "", reconcile.TerminalError(fmt.Errorf("failed to check reconciled version: %w", err))
+	}
+
+	if candidate.GreaterThanEqual(currentSemver) {
+		return candidate.Original(), nil
+	}
+
+	switch component.Spec.DowngradePolicy {
+	case v1alpha1.DowngradePolicyDeny:
+		return "", reconcile.TerminalError(fmt.Errorf("component version cannot be downgraded from version %s "+
+			"to version %s", currentSemver.Original(), candidate.Original()))
+	case v1alpha1.DowngradePolicyAllow:
+		return candidate.Original(), nil
+	default:
+		return "", reconcile.TerminalError(errors.New("unknown downgrade policy: " + string(component.Spec.DowngradePolicy)))
+	}
 }

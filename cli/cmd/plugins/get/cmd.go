@@ -39,7 +39,7 @@ func New() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		Long:  ``,
 		Example: `  # Get information about specified plugin from a plugin registry.
-  ocm plugin registry get helminput`,
+  ocm plugin registry get <oci-repository>//<my-plugin-component>`,
 		RunE:              GetPlugin,
 		DisableAutoGenTag: true,
 	}

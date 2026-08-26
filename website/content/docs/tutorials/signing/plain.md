@@ -156,10 +156,9 @@ configurations:
           algorithm: RSASSA-PSS
           signature: default
         credentials:
-          - type: Credentials/v1
-            properties:
-              private_key_pem_file: /tmp/ocm-signing-tutorial/keys/private-key.pem
-              public_key_pem_file: /tmp/ocm-signing-tutorial/keys/public-key.pem  
+          - type: RSACredentials/v1
+            privateKeyPEMFile: /tmp/ocm-signing-tutorial/keys/private-key.pem
+            publicKeyPEMFile: /tmp/ocm-signing-tutorial/keys/public-key.pem  
 EOF
 ```
 
@@ -182,7 +181,7 @@ ocm sign cv ./transport-archive//github.com/acme.org/helloworld:1.0.0
 <summary>Expected output</summary>
 
 ```text
-time=2026-03-17T15:32:55.707+01:00 level=INFO msg="no signer spec file provided, using default" algorithm=RSASSA-PSS encodingPolicy=Plain
+time=2026-03-17T15:32:55.707+01:00 level=INFO msg="no signer configured, using default" algorithm=RSASSA-PSS encodingPolicy=Plain
 digest:
   hashAlgorithm: SHA-256
   normalisationAlgorithm: jsonNormalisation/v4alpha1
@@ -238,7 +237,7 @@ ocm verify cv ./transport-archive//github.com/acme.org/helloworld:1.0.0
 <summary>Expected output</summary>
 
 ```text
-time=2026-03-12T22:06:37.357+01:00 level=INFO msg="no verifier specification file given, using default RSASSA-PSS"
+time=2026-03-12T22:06:37.357+01:00 level=INFO msg="no verifier configured, using default RSASSA-PSS" signature=default
 time=2026-03-12T22:06:37.357+01:00 level=INFO msg="verifying signature" name=default
 time=2026-03-12T22:06:37.358+01:00 level=INFO msg="signature verification completed" name=default duration=798.25µs
 time=2026-03-12T22:06:37.358+01:00 level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"
@@ -317,3 +316,5 @@ rm -rf /tmp/ocm-signing-tutorial
 ## Related Documentation
 
 - [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) - Understand the theory behind OCM signing
+- [Tutorial: Certificate Chains (PEM)]({{< relref "docs/tutorials/signing/pem.md" >}}) - Same RSA key pair, but with an X.509 chain instead of a bare public key
+- [Tutorial: Sigstore (Keyless)]({{< relref "docs/tutorials/signing/sigstore.md" >}}) - Identity-based signing — no keys to manage

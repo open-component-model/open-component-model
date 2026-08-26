@@ -1,6 +1,16 @@
 name: "Website: Verify Scripts"
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/website-verify-scripts.yml'
+      - 'website/assets/js/**'
+      - 'website/scripts/**'
+      - 'website/eslint.config.*'
+      - 'website/package.json'
+      - 'website/package-lock.json'
   pull_request:
     branches:
       - main
@@ -8,6 +18,7 @@ on:
     paths:
       - '.github/workflows/website-verify-scripts.yml'
       - 'website/assets/js/**'
+      - 'website/scripts/**'
       - 'website/eslint.config.*'
       - 'website/package.json'
       - 'website/package-lock.json'
@@ -16,19 +27,19 @@ permissions:
   contents: read
 
 jobs:
-  lint:
+  verify:
     runs-on: ubuntu-24.04-arm
-    name: Lint
+    name: Lint & Test
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 25.5.0
+          node-version-file: website/package.json
 
       - name: Install dependencies
         working-directory: website
@@ -37,3 +48,7 @@ jobs:
       - name: Lint scripts
         working-directory: website
         run: npm run lint:scripts
+
+      - name: Run scripts tests
+        working-directory: website
+        run: npm test

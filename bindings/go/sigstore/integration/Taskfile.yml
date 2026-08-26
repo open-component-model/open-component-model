@@ -49,8 +49,11 @@ tasks:
     cmds:
       - |
         echo "Removing sslip.io scaffolding entries from /etc/hosts..."
-        sudo sed -i '' '/\.172\.18\.255\.1\.sslip\.io/d' /etc/hosts
-        sudo sed -i '' '/registry\.local/d' /etc/hosts
+        # Avoid `sed -i` — its in-place flag differs between BSD sed (macOS default) and GNU sed
+        # (Homebrew gnubin). Write to a tmp file, then `cp` (not `mv`) back to preserve the
+        # original root:wheel ownership and permissions of /etc/hosts.
+        tmp=$(mktemp) && sudo sed '/\.172\.18\.255\.1\.sslip\.io/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
+        tmp=$(mktemp) && sudo sed '/registry\.local/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
 
   scaffolding:setup:
     desc: "Create kind cluster and deploy sigstore scaffolding (~5 min, skips if already running)"
@@ -59,6 +62,8 @@ tasks:
     requires:
       vars: [SCAFFOLDING_VERSION]
     preconditions:
+      - sh: sed --version 2>&1 | grep -q 'GNU sed'
+        msg: "GNU sed is required (macOS ships BSD sed). Install it: brew install gnu-sed, then add $(brew --prefix gnu-sed)/libexec/gnubin to PATH"
       - sh: '! docker ps -a --format "{{`{{.Names}}`}}" 2>/dev/null | grep -q "^registry.local$" || kind get clusters 2>/dev/null | grep -q "^kind$"'
         msg: |
           Orphaned 'registry.local' container found without a cluster. Clean up first:
@@ -82,6 +87,22 @@ tasks:
         cd /tmp && ./setup-kind.sh
       - |
         curl -fLo /tmp/setup-scaffolding-from-release.sh "{{.SCAFFOLDING_URL}}/setup-scaffolding-from-release.sh"
+        # Patch setup-scaffolding-from-release.sh for its untested Rekor v2 (tiles) path. Upstream
+        # ships it but pins Rekor v1 in CI, so these bugs never fire there. Same sed-patching
+        # technique as upstream's own actions/setup:
+        # https://github.com/sigstore/scaffolding/blob/main/actions/setup/action.yml#L114-L116
+        # Remove once upstream fixes the script.
+        #
+        # 1. First Rekor apply carries raw <placeholder> Secret values; base64 validation fails
+        #    under set -e. Make it non-fatal (the second apply, with real keys, is the one that counts).
+        # 2. rekor-system has no provisioning Job on tiles; `wait jobs --all` errors "no matching
+        #    resources". Guard with a no-job check (upstream added this guard only for fulcio).
+        # 3. Same guard for ctlog-system.
+        tmp=$(mktemp) && sed \
+          -e 's@kubectl apply -f "${REKOR}"@kubectl apply -f "${REKOR}" || true@' \
+          -e 's@kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@kubectl -n rekor-system get job 2>\&1 | grep '"'"'No resources found'"'"' || kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@' \
+          -e 's@kubectl wait --timeout 5m -n ctlog-system --for=condition=Complete jobs --all@kubectl -n ctlog-system get job 2>\&1 | grep '"'"'No resources found'"'"' || kubectl wait --timeout 5m -n ctlog-system --for=condition=Complete jobs --all@' \
+          /tmp/setup-scaffolding-from-release.sh > "$tmp" && mv "$tmp" /tmp/setup-scaffolding-from-release.sh
         chmod u+x /tmp/setup-scaffolding-from-release.sh
         cd /tmp && ./setup-scaffolding-from-release.sh --release-version {{.SCAFFOLDING_VERSION}}
       - |
@@ -126,7 +147,9 @@ tasks:
           URL="${URL%/}:{{.SIGSTORE_BRIDGE_PORT}}"
           TOKEN=$(curl -sSf "$URL")
           [[ -n "$TOKEN" ]] || { echo "empty token from gettoken" >&2; exit 1; }
-          sed -i '' "s|^export SIGSTORE_OIDC_TOKEN=.*|export SIGSTORE_OIDC_TOKEN='${TOKEN}'|" {{.SIGSTORE_ENV_FILE}}
+          # Avoid `sed -i` — its in-place flag differs between BSD sed (macOS default) and GNU
+          # sed (Homebrew gnubin). Write to a tmp file and move it back.
+          tmp=$(mktemp) && sed "s|^export SIGSTORE_OIDC_TOKEN=.*|export SIGSTORE_OIDC_TOKEN='${TOKEN}'|" {{.SIGSTORE_ENV_FILE}} > "$tmp" && mv "$tmp" {{.SIGSTORE_ENV_FILE}}
           echo "Token refreshed. Re-source: source {{.SIGSTORE_ENV_FILE}}"
         platforms: [darwin]
       - cmd: |

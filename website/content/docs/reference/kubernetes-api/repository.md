@@ -1,7 +1,7 @@
 ---
 title: Repository
 description: "API reference for the Repository custom resource (delivery.ocm.software/v1alpha1)"
-weight: 2
+weight: 1
 toc: false
 ---
 

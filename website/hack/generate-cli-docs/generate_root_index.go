@@ -22,11 +22,11 @@ func genIndexForRootHelpTopics(dir string) (err error) {
 		return fmt.Errorf("failed to gather help topics: %w", err)
 	}
 
-	filename := filepath.Join(dir, "_index.md")
+	filename := filepath.Join(dir, indexFileName)
 
 	f, err := os.Create(filename)
 	if err != nil {
-		return fmt.Errorf("failed to create index file %q: %v", filename, err)
+		return fmt.Errorf("failed to create index file %q: %w", filename, err)
 	}
 	defer func() {
 		if cerr := f.Close(); cerr != nil {
@@ -34,12 +34,12 @@ func genIndexForRootHelpTopics(dir string) (err error) {
 		}
 	}()
 
-	f.WriteString(fmt.Sprintf(fmTmpl, "help", "help", "docs/reference/ocm-cli/help/"))
-	f.WriteString("### Additional Topics\n\n")
+	fmt.Fprintf(f, fmTmpl, "help", "help", "docs/reference/ocm-cli/help/")
+	fmt.Fprint(f, "### Additional Topics\n\n")
 
 	for _, topic := range topics {
 		relref := toRelref(fmt.Sprintf("docs/reference/ocm-cli/help/%s.md", topic))
-		f.WriteString(fmt.Sprintf("* [%s](%s) &mdash; %s\n", topic, relref, topic))
+		fmt.Fprintf(f, "* [%s](%s) &mdash; %s\n", topic, relref, topic)
 	}
 
 	return nil

@@ -30,6 +30,8 @@
   packageRules: [
     {
       matchFileNames: ['kubernetes/controller/chart/**'],
+      groupName: 'Kubernetes Controller chart',
+      groupSlug: 'kubernetes-controller-chart',
       enabled: true,
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
@@ -40,26 +42,30 @@
       automerge: true,
     },
     {
-      matchDatasources: ["golang-version"],
-      rangeStrategy: "bump",
-      groupName: "Golang versions",
-      groupSlug: "golang-versions",
+      // Collapse digest-only re-pins (same tag, new SHA) for Actions and
+      // Docker base images into one weekly PR, regardless of image name
+      // or file location. gomod is excluded so Go module digests keep
+      // their own per-module PRs (no cross-module PR, go.sum post-upgrade
+      // step intact).
+      matchManagers: [
+        'github-actions',
+        'dockerfile',
+        'docker-compose',
+      ],
+      matchUpdateTypes: ['digest', 'pinDigest'],
+      groupName: 'Digest pins',
+      groupSlug: 'digest-pins',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ],
     },
     {
-      matchDatasources: ['docker'],
-      matchPackageNames: ['golang'],
-      matchFileNames: ['kubernetes/controller/Dockerfile'],
-      groupName: 'Golang versions',
-      groupSlug: 'golang-versions',
-    },
-    {
-      matchManagers: ['github-actions'],
-      matchDepNames: ['go'],
-      groupName: 'Golang versions',
-      groupSlug: 'golang-versions',
+      // Actual Go toolchain version bumps (go.mod `go 1.X`, setup-go, etc.).
+      // Docker image digests for `golang` are handled by 'Digest pins' above.
+      matchDatasources: ["golang-version"],
+      rangeStrategy: "bump",
+      groupName: "Golang versions",
+      groupSlug: "golang-versions",
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ],
@@ -112,16 +118,6 @@
       ]
     },
     {
-      groupName: 'Sigstore Repositories',
-      groupSlug: 'sigstore',
-      matchPackageNames: [
-        'github.com/sigstore/{/,}**'
-      ],
-      schedule: [
-        '* * * * 0' // At every minute on Sunday it is allowed to create branches
-      ]
-    },
-    {
       groupName: 'spf13 repositories',
       groupSlug: 'spf13',
       matchPackageNames: [
@@ -159,18 +155,86 @@
       ]
     },
     {
+      // github.com/go-ini/ini renamed its module path to gopkg.in/ini.v1 at
+      // v1.67.1 (the same commit is tagged on both paths). We still carry a
+      // legacy `require github.com/go-ini/ini v1.67.0`, pulled in transitively
+      // by yq/v4 and ocm.software/ocm (OCM v1). Any bump on the OLD path is
+      // structurally impossible: v1.67.1+ declare `module gopkg.in/ini.v1`, so
+      // `go get github.com/go-ini/ini@v1.67.3` fails with "module declares its
+      // path as gopkg.in/ini.v1 but was required as github.com/go-ini/ini".
+      // That failure breaks the go.sum artifact step for the whole PR (#3098).
+      // Freeze it here; the canonical gopkg.in/ini.v1 path keeps updating.
+      // Do NOT remove without confirming both transitive importers have dropped
+      // the legacy path.
       matchManagers: [
         'gomod',
       ],
+      matchDepNames: [
+        'github.com/go-ini/ini',
+      ],
+      enabled: false,
+    },
+    {
+      // Renamed to github.com/ThalesGroup/crypto11 at v1.5.0. Pinned to v1.2.5
+      // on the old path (indirect via cosign). Bumps past v1.4.x fail the
+      // go.sum artifact step with a module-path mismatch (#2966, #3379).
+      matchManagers: ['gomod'],
+      matchDepNames: ['github.com/ThalesIgnite/crypto11'],
+      enabled: false,
+    },
+    {
+      matchManagers: [
+        'gomod',
+      ],
+      // With the monolithic bindings/go module, this group now only fires for
+      // cli/ and kubernetes/controller/ consuming the published bindings/go tag.
       groupName: 'OCM Monorepo Go Module Dependencies',
       groupSlug: 'ocm-monorepo',
       matchPackageNames: [
         'ocm.software/open-component-model/**',
       ],
+      // Combine minor and patch updates into a single PR.
+      separateMinorPatch: false,
       'schedule': [
         '* 22,0-6 * * *' // At every minute past hour 22 and every hour from 0 through 6.
       ],
       minimumReleaseAge: null,
+    },
+    {
+      // The internal org workflows repo is tracked on @main intentionally
+      // (see .github/workflows/stale.yaml). Disable Renovate so it does not
+      // re-pin the ref to a SHA and then bump it on every upstream commit.
+      matchManagers: ['github-actions'],
+      matchDepNames: ['open-component-model/.github'],
+      enabled: false,
+    },
+    {
+      // Batch non-major controller bumps. The chart subtree is excluded so the
+      // dedicated 'Kubernetes Controller chart' group above is not overwritten
+      // by this later rule (Renovate merges matching rules in order; last write
+      // wins on conflicting fields like groupName).
+      matchFileNames: [
+        'kubernetes/controller/**',
+        '!kubernetes/controller/chart/**',
+      ],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'Kubernetes Controller dependencies (non-major)',
+      groupSlug: 'kubernetes-controller-deps',
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
+      // Batch all bumps (incl. majors) for the Hugo CLI-docs generator module.
+      // separateMinorPatch overridden so minor+patch share one branch; majors
+      // still get their own branches via separateMultipleMajor (global).
+      matchFileNames: ['website/hack/generate-cli-docs/**'],
+      groupName: 'Website CLI-docs generator dependencies',
+      groupSlug: 'website-cli-docs-deps',
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
     },
   ],
   customDatasources: {
@@ -205,19 +269,6 @@
       ],
       versioningTemplate: 'semver',
     },
-    // Track pinned pip install commands in GitHub Actions workflows (e.g. pip install foo==1.2.3)
-    {
-      customType: 'regex',
-      managerFilePatterns: [
-        '/.github/workflows/**/*.yml',
-        '/.github/workflows/**/*.yaml',
-      ],
-      matchStrings: [
-        'pip install (?<depName>\\S+)==(?<currentValue>\\S+)',
-      ],
-      datasourceTemplate: 'pypi',
-      versioningTemplate: 'pep440',
-    },
   ],
   postUpgradeTasks: {
     commands: [
@@ -229,4 +280,13 @@
     ],
     executionMode: 'branch',
   },
+  // Prevent a transient npm registry hiccup from aborting the whole run.
+  // See renovatebot/renovate#26196.
+  hostRules: [
+    {
+      matchHost: 'registry.npmjs.org',
+      timeout: 120000,
+      abortOnError: false,
+    },
+  ],
 }

@@ -164,6 +164,9 @@
                 "resolver": {
                     "type": "object",
                     "properties": {
+                        "cacheTTL": {
+                            "type": "integer"
+                        },
                         "subscriberBufferSize": {
                             "type": "integer"
                         },
@@ -237,6 +240,9 @@
         "rbacHelpers": {
             "type": "object",
             "properties": {
+                "aggregateToDefaultRoles": {
+                    "type": "boolean"
+                },
                 "enable": {
                     "type": "boolean"
                 }

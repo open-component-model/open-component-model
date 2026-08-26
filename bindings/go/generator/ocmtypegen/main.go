@@ -72,11 +72,11 @@ func main() {
 		if len(types) == 0 {
 			continue
 		}
-		slog.Debug("Generating", "pkg", pkgName, "dir", pkgDir, "types", types) //nolint:gosec // G706 - values from internal AST parsing, not user-controlled
+		slog.Debug("Generating", "pkg", pkgName, "dir", pkgDir, "types", types)
 
 		err = generateCode(pkgDir, pkgName, types)
 		if err != nil {
-			slog.Error("Error generating", "pkg", pkgName, "dir", pkgDir, "error", err) //nolint:gosec // G706 - values from internal AST parsing
+			slog.Error("Error generating", "pkg", pkgName, "dir", pkgDir, "error", err)
 		}
 	}
 }
@@ -121,7 +121,7 @@ func scanSinglePackage(folder string) (string, []string, error) {
 
 				structType, ok := typeSpec.Type.(*ast.StructType)
 				if !ok || !hasRuntimeTypeField(structType) {
-					slog.Info("skipping type", "name", typeSpec.Name.Name, "reason", "not a struct with runtime.Type field") //nolint:gosec // G706 - type name from parsed Go AST
+					slog.Info("skipping type", "name", typeSpec.Name.Name, "reason", "not a struct with runtime.Type field")
 					continue
 				}
 

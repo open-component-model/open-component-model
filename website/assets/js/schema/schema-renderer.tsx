@@ -1,4 +1,5 @@
 import {render} from "preact";
+import type {ComponentChildren} from "preact";
 import {useState, useEffect} from "preact/hooks";
 import {jsonSchemaToModel} from "./json-schema-converter.ts";
 import {crdYamlToModels, isYamlUrl} from "./crd-yaml-converter.ts";
@@ -67,16 +68,16 @@ function FieldRow({field, depth = 0, parentPath = ""}: {field: SchemaFieldType; 
             <tr className="sr-field-row" id={fieldPath}>
                 <td className={`sr-field-name sr-depth-${Math.min(depth, 8)}`}>
                     <div className="sr-field-name-inner">
-            <span className="sr-expand-space">
-              {expandable && (
-                  <button className="sr-expand-btn" type="button"
-                           aria-expanded={expanded}
-                           aria-label={`${expanded ? "Collapse" : "Expand"} ${field.name}`}
-                           onClick={() => setExpanded(!expanded)}>
-                       {expanded ? "−" : "+"}
-                   </button>
-              )}
-            </span>
+                        <span className="sr-expand-space">
+                            {expandable && (
+                                <button className="sr-expand-btn" type="button"
+                                    aria-expanded={expanded}
+                                    aria-label={`${expanded ? "Collapse" : "Expand"} ${field.name}`}
+                                    onClick={() => setExpanded(!expanded)}>
+                                    {expanded ? "−" : "+"}
+                                </button>
+                            )}
+                        </span>
                         <code className="sr-field-code">{field.name}</code>
                         <a className="sr-field-anchor" href={`#${fieldPath}`}>#</a>
                         {field.required && <span className="badge sr-badge--required">required</span>}
@@ -85,6 +86,18 @@ function FieldRow({field, depth = 0, parentPath = ""}: {field: SchemaFieldType; 
                 </td>
                 <td className="sr-field-type">
                     <span className={`sr-type-badge ${typeClass(field.type)}`}>{field.type}</span>
+                    {(field.constValues.length > 0 || field.deprecatedConstValues.length > 0) && (
+                        <div className="sr-const-values" aria-label={`${field.name} allowed values`}>
+                            {field.constValues.map((value) => (
+                                <code key={value} className="sr-const-value">{value}</code>
+                            ))}
+                            {field.deprecatedConstValues.map((value) => (
+                                <code key={value} className="sr-const-value sr-const-value--deprecated">
+                                    <span className="visually-hidden">deprecated: </span>{value}
+                                </code>
+                            ))}
+                        </div>
+                    )}
                 </td>
                 <td className="sr-field-desc sr-field-desc--col">
                     {descContent}
@@ -138,8 +151,10 @@ function VariantRows({variants, depth, parentPath = ""}: {variants: FieldVariant
     );
 }
 
-function FieldTable({title, description, fields}: {title: string; description: string; fields: SchemaFieldType[]}) {
-    if (!fields?.length) return null;
+function FieldTable({title, description, fields, footer}: {title: string; description: string; fields: SchemaFieldType[]; footer?: ComponentChildren}) {
+    if (!fields?.length) {
+        return null;
+    }
     return (
         <div className="sr-section">
             <h3 id={slugify(title)}>{title}<a className="sr-anchor" href={`#${slugify(title)}`}>#</a></h3>
@@ -147,38 +162,62 @@ function FieldTable({title, description, fields}: {title: string; description: s
             <div className="sr-table-wrap">
                 <table className="sr-table">
                     <thead>
-                    <tr>
-                        <th>Field</th>
-                        <th>Type</th>
-                        <th className="sr-col-hidden">Description</th>
-                    </tr>
+                        <tr>
+                            <th>Field</th>
+                            <th>Type</th>
+                            <th className="sr-col-hidden">Description</th>
+                        </tr>
                     </thead>
                     <tbody>
-                    {fields.map((f) => <FieldRow key={f.name} field={f}/>)}
+                        {fields.map((f) => <FieldRow key={f.name} field={f}/>)}
                     </tbody>
                 </table>
             </div>
+            {footer}
         </div>
     );
 }
 
+function fieldsHaveDeprecated(fields: SchemaFieldType[] | null): boolean {
+    return !!fields?.some((field) =>
+        field.deprecatedConstValues.length > 0 ||
+        fieldsHaveDeprecated(field.properties) ||
+        !!field.variants?.some((variant) => fieldsHaveDeprecated(variant.properties)),
+    );
+}
+
 function SchemaView({model, schemaUrl}: {model: SchemaModelType; schemaUrl: string}) {
+    const hasDeprecated = model.sections.some((section) => fieldsHaveDeprecated(section.fields));
+    // Render the footer inside the last populated section so it sits directly below
+    // the table, rather than after the section's (shared, large) bottom margin.
+    const lastWithFields = model.sections.reduce(
+        (last, section, i) => (section.fields?.length ? i : last), -1);
+    const footer = (
+        <div className="sr-footer">
+            {hasDeprecated && (
+                <p className="sr-footer__note">
+                    <span className="sr-footer__dashed">Dashed outline</span> marks a
+                    deprecated value — still accepted, but avoid in new configurations.
+                </p>
+            )}
+            <ul>
+                <li>
+                    <a href={schemaUrl} target="_blank" rel="noopener noreferrer">
+                        View raw schema source
+                    </a>
+                </li>
+            </ul>
+        </div>
+    );
     return (
         <>
             <SchemaHeader meta={model.meta}/>
-            {model.sections.map((section) => (
+            {model.sections.map((section, i) => (
                 <FieldTable key={section.title} title={section.title}
-                            description={section.description} fields={section.fields}/>
+                    description={section.description} fields={section.fields}
+                    footer={i === lastWithFields ? footer : undefined}/>
             ))}
-            <div className="sr-footer">
-                <ul>
-                    <li>
-                        <a href={schemaUrl} target="_blank" rel="noopener noreferrer">
-                            View raw schema source
-                        </a>
-                    </li>
-                </ul>
-            </div>
+            {lastWithFields === -1 && footer}
         </>
     );
 }
@@ -211,7 +250,9 @@ function SchemaRenderer({schemaUrl}: {schemaUrl: string}) {
 
         fetch(schemaUrl, {signal: controller.signal})
             .then((res) => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
                 return res.text();
             })
             .then((text) => {
@@ -219,7 +260,9 @@ function SchemaRenderer({schemaUrl}: {schemaUrl: string}) {
                 setState("done");
             })
             .catch((err) => {
-                if (err.name === "AbortError") return;
+                if (err.name === "AbortError") {
+                    return;
+                }
                 setError(err.message);
                 setState("error");
             })
@@ -232,7 +275,9 @@ function SchemaRenderer({schemaUrl}: {schemaUrl: string}) {
     }, [schemaUrl]);
 
     useEffect(() => {
-        if (state !== "done") return;
+        if (state !== "done") {
+            return;
+        }
         document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
     }, [state]);
 
@@ -256,7 +301,7 @@ function SchemaRenderer({schemaUrl}: {schemaUrl: string}) {
 
             {state === "done" && models.map((model, i) => (
                 <SchemaView key={`${model.meta.kind}-${model.meta.apiVersions[0] ?? i}`}
-                            model={model} schemaUrl={schemaUrl}/>
+                    model={model} schemaUrl={schemaUrl}/>
             ))}
         </div>
     );

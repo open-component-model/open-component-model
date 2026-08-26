@@ -6,7 +6,7 @@ import (
 
 // Store defines the interface for interacting with an OCI store.
 type Store interface {
-	content.ReadOnlyStorage
+	content.ReadOnlyGraphStorage
 	content.Pusher
 	content.TagResolver
 }

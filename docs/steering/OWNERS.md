@@ -27,15 +27,17 @@ This page contains all active and inactive TSC members.
 | Jakob Möller      | SAP SE          | [jakobmoellerdev](https://github.com/jakobmoellerdev) |
 | Gerald Morrison   | SAP SE          | [morri-son](https://github.com/morri-son)             |
 | Fabian Burth      | SAP SE          | [fabianburth](https://github.com/fabianburth)         |
-| Frederic Wilhelm  | SAP SE          | [frewilhelm](https://github.com/frewilhelm)           |
+| Jonas Brand       | SAP SE          | [8R0WNI3](https://github.com/8R0WNI3)                 |
 | Philipp Heil      | SAP SE          | [zkdev](https://github.com/zkdev)                     |
 | Gergely Bräutigam | Kubermatic GmbH | [skarlso](https://github.com/skarlso)                 |
+| Ilja Weis         | BWI             | [iljaweis](https://github.com/iljaweis)               |
 
 ## Emeritus Members
 
-| Name             | Organization | GitHub Handle                         |
-|------------------|--------------|---------------------------------------|
-| Christian Cwienk | SAP SE       | [ccwienk](https://github.com/ccwienk) |
+| Name             | Organization | GitHub Handle                               |
+|------------------|--------------|---------------------------------------------|
+| Christian Cwienk | SAP SE       | [ccwienk](https://github.com/ccwienk)       |
+| Frederic Wilhelm | SAP SE       | [frewilhelm](https://github.com/frewilhelm) |
 
 ## Security Officer
 

@@ -22,6 +22,10 @@ spec:
             byReference:
               resource:
                 name: kustomize-resource
+          additionalStatusFields:
+            gitRepoURL: resource.access.repoUrl
+            gitCommit: resource.access.commit
+    # Deployment using FluxCD
     - id: gitrepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1
@@ -31,9 +35,9 @@ spec:
           namespace: default
         spec:
           interval: 5m
-          url: ${resourceKustomization.status.resource.access.repoUrl}
+          url: ${resourceKustomization.status.additional.gitRepoURL}
           ref:
-            commit: ${resourceKustomization.status.resource.access.commit}
+            commit: ${resourceKustomization.status.additional.gitCommit}
     - id: kustomization
       template:
         apiVersion: kustomize.toolkit.fluxcd.io/v1
@@ -60,13 +64,62 @@ spec:
               target:
                 kind: Deployment
                 name: .*
+            # Drop podinfo's HPA: the e2e cluster has no metrics-server, so the HPA can never
+            # become healthy and only adds noise to the deployment validation.
             - patch: |
-                - op: replace
-                  path: /spec/minReplicas
-                  value: 1
-                - op: replace
-                  path: /spec/maxReplicas
-                  value: 1
+                apiVersion: autoscaling/v2
+                kind: HorizontalPodAutoscaler
+                metadata:
+                  name: podinfo
+                $patch: delete
               target:
                 kind: HorizontalPodAutoscaler
                 name: .*
+    # Deployment using ArgoCD
+    - id: argocdApplication
+      template:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: "${schema.spec.prefix}"
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: default
+          source:
+            repoURL: ${resourceKustomization.status.additional.gitRepoURL}
+            targetRevision: ${resourceKustomization.status.additional.gitCommit}
+            path: "kustomize"
+            kustomize:
+              patches:
+                - patch: |
+                    - op: replace
+                      path: /metadata/name
+                      value: kustomize-simple-podinfo
+                    - op: add
+                      path: /spec/template/metadata/labels/app.kubernetes.io~1name
+                      value: kustomize-simple-podinfo
+                  target:
+                    kind: Deployment
+                    name: podinfo
+                # Drop podinfo's HPA: the e2e cluster has no metrics-server, so the HPA reports
+                # ScalingActive=False and ArgoCD (>= v3.5.0) marks the Application Degraded.
+                - patch: |
+                    apiVersion: autoscaling/v2
+                    kind: HorizontalPodAutoscaler
+                    metadata:
+                      name: podinfo
+                    $patch: delete
+                  target:
+                    kind: HorizontalPodAutoscaler
+                    name: podinfo
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: default-argocd
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true

@@ -226,6 +226,31 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 			expected: "v1.0.0",
 		},
 		{
+			name: "cnudie component version without annotation (pre-OCM gardener)",
+			ref:  "example.com/repo",
+			tag:  "v1.0.0",
+			store: &mockStore{
+				resolveFunc: func(ctx context.Context, ref string) (ociImageSpecV1.Descriptor, error) {
+					return ociImageSpecV1.Descriptor{
+						MediaType: ociImageSpecV1.MediaTypeImageManifest,
+					}, nil
+				},
+				fetchFunc: func(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+					data, err := json.Marshal(&ociImageSpecV1.Manifest{
+						MediaType: ociImageSpecV1.MediaTypeImageManifest,
+						Config: ociImageSpecV1.Descriptor{
+							MediaType: componentConfig.LegacyMediaType,
+						},
+					})
+					if err != nil {
+						return nil, fmt.Errorf("failed to marshal manifest: %w", err)
+					}
+					return io.NopCloser(bytes.NewReader(data)), nil
+				},
+			},
+			expected: "v1.0.0",
+		},
+		{
 			name: "old component version with annotation present (not fallback case)",
 			ref:  "example.com/repo",
 			tag:  "v1.0.0",

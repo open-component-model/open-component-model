@@ -35,20 +35,20 @@ ocm get component-version {reference} [flags]
 ```
 Getting a single component version:
 
-get component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
-get cv ./path/to/ctf//ocm.software/ocmcli:0.23.0
-get cv ./path/to/ctf/component-descriptors/ocm.software/ocmcli:0.23.0
+get component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
+get cv ./path/to/ctf//ocm.software/cli:0.12.0
+get cv ./path/to/ctf/component-descriptors/ocm.software/cli:0.12.0
 
 Listing many component versions:
 
-get component-versions ghcr.io/open-component-model/ocm//ocm.software/ocmcli
-get cvs ghcr.io/open-component-model/ocm//ocm.software/ocmcli --output json
-get cvs ghcr.io/open-component-model/ocm//ocm.software/ocmcli -oyaml
+get component-versions ghcr.io/open-component-model//ocm.software/cli
+get cvs ghcr.io/open-component-model//ocm.software/cli --output json
+get cvs ghcr.io/open-component-model//ocm.software/cli -oyaml
 
 Specifying types and schemes:
 
-get cv ctf::github.com/locally-checked-out-repo//ocm.software/ocmcli:0.23.0
-get cvs oci::http://localhost:8080//ocm.software/ocmcli
+get cv ctf::github.com/locally-checked-out-repo//ocm.software/cli:0.12.0
+get cvs oci::http://localhost:8080//ocm.software/cli
 ```
 
 ### Options
@@ -69,7 +69,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 ### Options inherited from parent commands
 
 ```
-      --config string                      supply configuration by a given configuration file.
+      --config stringArray                 supply configuration by a given configuration file.
                                            By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
                                            1. The path specified in the OCM_CONFIG environment variable
                                            2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
@@ -80,13 +80,14 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
                                            - $HOME/.ocm/config
                                            - $HOME/.ocmconfig
                                            3. The current working directory:
-                                           - $PWD/ocm/config
+                                           - $PWD/.ocm/config
                                            - $PWD/.ocmconfig
                                            4. The directory of the current executable:
-                                           - $EXE_DIR/ocm/config
+                                           - $EXE_DIR/.ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
-                                           Using the option, this configuration file be used instead of the lookup above.
+                                           Later entries have higher priority.
+                                           Using the option, the specified configuration file(s) will be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output

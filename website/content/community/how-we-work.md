@@ -55,9 +55,10 @@ Anyone can propose work for an upcoming sprint. The process is:
 ## Meetings
 
 {{<callout context="note" title="Joining meetings" icon="outline/info-circle">}}
-We are working on making all meeting links publicly discoverable. In the meantime, reach out on
-[Zulip](/community/#zulip) or
-[Slack](/community/#slack) to receive a calendar invite.
+All public meetings are listed on the
+[OCM community calendar on LFX](https://zoom-lfx.platform.linuxfoundation.org/meetings/open-component-model?view=month).
+Open the page for join links, or subscribe to the feed in your own
+calendar app and every change shows up automatically.
 {{</callout>}}
 
 | Meeting | Cadence | Purpose |
@@ -68,7 +69,7 @@ We are working on making all meeting links publicly discoverable. In the meantim
 | Refinement | Weekly (Thursday) | Discuss items in "Needs Refinement" on the [Next Sprint](https://github.com/orgs/open-component-model/projects/10/views/21) view, clarify scope, and story-point |
 | Warroom | Every workday | Synchronous coordination on tasks or open topics |
 | [Community Call]({{< relref "_index.md" >}}) | First Wednesday of the month | Project updates, demos, and open Q&A with the broader community |
-| TSC Meeting | First Monday of the month | Governance decisions, SIG approvals ([meeting notes](https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes)) |
+| TSC Meeting | First Wednesday of the month | Governance decisions, SIG approvals ([meeting notes](https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes)) |
 
 ## Decision-Making
 

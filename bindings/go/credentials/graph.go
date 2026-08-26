@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
@@ -61,9 +62,14 @@ type Graph struct {
 // provider, or nil if no provider is configured.
 func (g *Graph) credentialTypeScheme() *runtime.Scheme {
 	if g.credentialTypeSchemeProvider == nil {
+		slog.Warn("no credential type scheme provider configured, typed credential ingestion will fallback to DirectCredentials")
 		return nil
 	}
-	return g.credentialTypeSchemeProvider.GetCredentialTypeScheme()
+	credentialTypeScheme := g.credentialTypeSchemeProvider.GetCredentialTypeScheme()
+	if credentialTypeScheme == nil {
+		slog.Warn("credential type scheme provider returned nil, typed credential ingestion will fallback to DirectCredentials")
+	}
+	return credentialTypeScheme
 }
 
 // Compile-time interface check.
@@ -96,6 +102,10 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (runtime
 
 		err = errors.Join(ErrUnknown, err)
 		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
+	}
+
+	if _, ok := creds.(*v1.DirectCredentials); ok {
+		slog.Warn("resolved credentials for identity using direct credential resolution, consider configuring a CredentialTypeSchemeProvider", "identity", identity.String())
 	}
 
 	return creds, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
@@ -25,16 +26,18 @@ func NewCredentialRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 		consumerTypeRegistrations:           make(map[runtime.Type]runtime.Type),
 		internalCredentialRepositoryPlugins: make(map[runtime.Type]credentials.RepositoryPlugin),
 		scheme:                              runtime.NewScheme(),
+		credentialTypeScheme:                runtime.NewScheme(),
 	}
 }
 
 // RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
 type RepositoryRegistry struct {
-	ctx          context.Context
-	mu           sync.Mutex
-	capabilities map[string]credentialsv1.CapabilitySpec
-	registry     map[runtime.Type]mtypes.Plugin
-	scheme       *runtime.Scheme
+	ctx                  context.Context
+	mu                   sync.Mutex
+	capabilities         map[string]credentialsv1.CapabilitySpec
+	registry             map[runtime.Type]mtypes.Plugin
+	scheme               *runtime.Scheme
+	credentialTypeScheme *runtime.Scheme
 
 	constructedPlugins        map[string]*constructedPlugin // running plugins
 	consumerTypeRegistrations map[runtime.Type]runtime.Type
@@ -42,8 +45,24 @@ type RepositoryRegistry struct {
 	internalCredentialRepositoryPlugins map[runtime.Type]credentials.RepositoryPlugin
 }
 
+// RepositoryScheme returns the scheme used for credential repository spec types.
 func (r *RepositoryRegistry) RepositoryScheme() *runtime.Scheme {
 	return r.scheme
+}
+
+// GetCredentialTypeScheme returns the runtime scheme containing all registered
+// credential types, including built-in and plugin-declared custom types.
+func (r *RepositoryRegistry) GetCredentialTypeScheme() *runtime.Scheme {
+	return r.credentialTypeScheme
+}
+
+// Register merges a pre-built scheme of built-in credential types into the registry.
+// Call this during startup to make built-in types (e.g. OCICredentials, HelmHTTPCredentials)
+// known before any plugin is loaded.
+func (r *RepositoryRegistry) Register(scheme *runtime.Scheme) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.credentialTypeScheme.MustRegisterScheme(scheme)
 }
 
 // AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
@@ -70,7 +89,35 @@ func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, spec runtime.Typed)
 		r.registry[typ.Type] = plugin
 	}
 
+	if err := r.registerCustomCredentialTypes(capability); err != nil {
+		return fmt.Errorf("failed to register custom credential types: %w", err)
+	}
+
 	return nil
+}
+
+func (r *RepositoryRegistry) registerCustomCredentialTypes(capability credentialsv1.CapabilitySpec) error {
+	var errs []error
+	for _, t := range capability.CustomCredentialTypes {
+		typed := &runtime.Raw{}
+		typed.SetType(t.Type)
+		allTypes := append([]runtime.Type{t.Type}, t.Aliases...)
+		conflict := false
+		for _, alias := range allTypes {
+			if r.credentialTypeScheme.IsRegistered(alias) {
+				errs = append(errs, fmt.Errorf("credential type %s already registered", alias))
+				conflict = true
+			}
+		}
+		if conflict {
+			continue
+		}
+		if err := r.credentialTypeScheme.RegisterWithAlias(typed, allTypes...); err != nil {
+			slog.ErrorContext(r.ctx, "failed to build scheme for plugin credential type", "type", t.Type, "error", err)
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (credentials.RepositoryPlugin, error) {

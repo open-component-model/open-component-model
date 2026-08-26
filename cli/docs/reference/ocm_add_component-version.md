@@ -46,6 +46,26 @@ Example:
             type: ociArtifact
             imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
 
+Ownership:
+
+Ownership attaches ownership information (i.e. the component name and version) 
+to a resource. This enables a consumer who encounters the resource in a storage
+system to trace it back to the component that owns it. A resource opts in by 
+setting "options.ownershipPolicy" to "Always" (the default is "Never"):
+
+  resources:
+    - name: my-image
+      type: ociImage
+      version: ${COMPONENT_VERSION}
+      options:
+        ownershipPolicy: Always
+      access:
+        type: ociArtifact
+        imageReference: ${REGISTRY_URL}/my-app:${IMAGE_TAG}
+
+The policy is a construction-time directive and is not persisted to the 
+component descriptor.
+
 Repository Reference Format:
 	[type::]{repository}
 
@@ -114,7 +134,7 @@ add component-version --repository ./archive --constructor component-constructor
 ### Options inherited from parent commands
 
 ```
-      --config string                      supply configuration by a given configuration file.
+      --config stringArray                 supply configuration by a given configuration file.
                                            By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
                                            1. The path specified in the OCM_CONFIG environment variable
                                            2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
@@ -125,13 +145,14 @@ add component-version --repository ./archive --constructor component-constructor
                                            - $HOME/.ocm/config
                                            - $HOME/.ocmconfig
                                            3. The current working directory:
-                                           - $PWD/ocm/config
+                                           - $PWD/.ocm/config
                                            - $PWD/.ocmconfig
                                            4. The directory of the current executable:
-                                           - $EXE_DIR/ocm/config
+                                           - $EXE_DIR/.ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
-                                           Using the option, this configuration file be used instead of the lookup above.
+                                           Later entries have higher priority.
+                                           Using the option, the specified configuration file(s) will be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output

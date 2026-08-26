@@ -127,14 +127,15 @@ and lives in its [own repository](https://github.com/open-component-model/ocm-sp
 
 The reference implementation of the specification in Go, located in
 [`bindings/go/`](https://github.com/open-component-model/open-component-model/tree/main/bindings/go). The `bindings/`
-directory is structured to welcome implementations in other languages in the future. This library provides the core
+directory is structured to welcome implementations in other languages in the future. The library ships as a single Go
+module (`ocm.software/open-component-model/bindings/go`) split into logical packages and provides the core
 types and operations (creating, signing, resolving, transferring component versions) that the CLI and controllers build
 on.
 
 {{< card-grid >}}
-{{< link-card title="Module Overview" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/README.md" description="Available modules, their purpose, and how to import them." >}}
+{{< link-card title="Package Overview" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/README.md#packages" description="Available packages, their purpose, and how to import them." >}}
 {{< link-card title="Guided Tour (Examples)" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/examples/README.md" description="Progressive learning path with runnable Go tests." >}}
-{{< link-card title="Contributing to Go Bindings" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/CONTRIBUTING.md" description="Workspace setup, testing, module lifecycle, and releases." >}}
+{{< link-card title="Contributing to Go Bindings" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/CONTRIBUTING.md" description="Package structure, testing, code generation, and releasing." >}}
 {{< /card-grid >}}
 
 ### OCM CLI
@@ -171,7 +172,7 @@ SLAs, supports assisted rescoring, and provides a Delivery Dashboard UI for both
 teams. It is designed for public and sovereign cloud scenarios where trust-but-verify assurance is required.
 
 {{< card-grid >}}
-{{< link-card title="ODG Documentation" href="https://open-component-model.github.io/delivery-service/" description="Getting started, data model, extensions, and HTTP API reference." >}}
+{{< link-card title="ODG Documentation" href="https://open-component-model.github.io/open-delivery-gear/" description="Getting started, data model, extensions, and HTTP API reference." >}}
 {{< /card-grid >}}
 
 <!-- markdownlint-enable MD034 -->
@@ -205,7 +206,7 @@ label across our repositories.
 
 {{<callout context="tip" title="Say Hello" icon="outline/heart-handshake">}}
 The easiest way to get started is to say hello. Join our monthly
-[community call](/community/#community-calls) or ask for an invite to the
+[community call](/community/#community-call) or ask for an invite to the
 [daily standup](/community/how-we-work/#meetings) - it is a casual sync, not mandatory, and not necessarily work-related.
 You can reach us on [Slack](/community/#slack) or [Zulip](/community/#zulip) anytime.
 {{</callout>}}

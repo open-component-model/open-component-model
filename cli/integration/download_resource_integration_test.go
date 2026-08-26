@@ -346,6 +346,71 @@ configurations:
 			})
 		}
 	})
+
+	t.Run("download resource sourced from wget input", func(t *testing.T) {
+		r := require.New(t)
+
+		content := []byte("hello from wget download")
+		fileSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(content)
+		}))
+		t.Cleanup(fileSrv.Close)
+
+		name, version := "ocm.software/wget-download-component", "v1.0.0"
+
+		// The wget input downloads the resource from the HTTP server at add time and stores
+		// it as a local blob, which `download resource` then retrieves.
+		constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: remote-blob
+    version: v1.0.0
+    type: blob
+    input:
+      type: wget
+      url: %s/artifact.bin
+      mediaType: application/octet-stream
+`, name, version, fileSrv.URL)
+
+		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+		r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+		addCMD := cmd.New()
+		addCMD.SetArgs([]string{
+			"add",
+			"component-version",
+			"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+			"--constructor", constructorPath,
+			"--config", cfgPath,
+		})
+		r.NoError(addCMD.ExecuteContext(t.Context()), "add component-version with wget input should succeed")
+
+		output := filepath.Join(t.TempDir(), "downloaded-blob")
+		downloadCMD := cmd.New()
+		downloadCMD.SetArgs([]string{
+			"download",
+			"resource",
+			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
+			"--identity", "name=remote-blob,version=v1.0.0",
+			"--output", output,
+			"--config", cfgPath,
+		})
+		r.NoError(downloadCMD.ExecuteContext(t.Context()), "download resource sourced from wget input should succeed")
+
+		outputBlob, err := filesystem.GetBlobFromOSPath(output)
+		r.NoError(err)
+		dataStream, err := outputBlob.ReadCloser()
+		r.NoError(err)
+		t.Cleanup(func() { r.NoError(dataStream.Close()) })
+		data, err := io.ReadAll(dataStream)
+		r.NoError(err)
+		r.Equal(content, data, "downloaded resource should match the wget-sourced content")
+	})
 }
 
 func Test_Integration_HelmTransformer(t *testing.T) {

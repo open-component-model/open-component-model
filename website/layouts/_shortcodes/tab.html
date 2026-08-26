@@ -1,0 +1,22 @@
+<!--
+  Local override of @thulite/doks-core tab shortcode
+  (based on https://github.com/alex-shpak/hugo-book/blob/master/layouts/shortcodes/tab.html).
+
+  Must be invoked with percent notation inside `tabs` — see tabs.html for why.
+  Registers this tab's name and rendered content in the parent's scratch so
+  tabs.html can emit the pane markup (with duplicate-heading dedup) and the
+  nav buttons in the correct order. The "tab-pane-label" in each pane is
+  hidden by default and only shown by the <noscript> styles
+  (head/custom-head.html) so that panes stack as labeled sections without JS.
+-->
+{{- if .Parent -}}
+{{- $name := .Get 0 -}}
+{{- /* Must mirror the group-id fallback in tabs.html. */ -}}
+{{- $group := printf "tabs-%s" (.Parent.Get 0 | default (printf "group-%d" .Parent.Ordinal)) -}}
+{{- if not (.Parent.Scratch.Get $group) -}}
+  {{- .Parent.Scratch.Set $group slice -}}
+{{- end -}}
+{{- .Parent.Scratch.Add $group (dict "Name" $name "Content" .Inner) -}}
+{{- else -}}
+{{- errorf "%q: 'tab' shortcode must be inside 'tabs' shortcode" .Page.Path -}}
+{{- end -}}

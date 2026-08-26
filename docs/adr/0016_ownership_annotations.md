@@ -27,7 +27,7 @@ This is the **"asset-to-owner" problem**: given an OCI artifact, find the compon
 * The [OCM OCI spec (section 6.3)](https://github.com/open-component-model/ocm-spec/blob/e9273b126045b96e11cc9caf056363728c76bec8/doc/04-extensions/03-storage-backends/oci.md#63-asset-annotations) already defines the annotation keys — we should follow it
 * Annotations must not break digest verification or signatures
 * Ownership metadata must survive air-gapped transfers
-* The solution must work with both the current manifest-based format and the index-based format from [ADR 0012](./0012_oci_format_compatibility.md)
+* The solution must work with both the current manifest-based format and the index-based format from [ADR 0013](./0013_oci_format_compatibility.md)
 
 ---
 
@@ -454,7 +454,7 @@ The ORAS Go library ([`oras.land/oras-go`](https://github.com/oras-project/oras-
 
 ### Support in Legacy OCM CLI
 
-Ownership annotations are a new feature. New features are developed in the new OCM tooling (`open-component-model/open-component-model`), which is the most recent and actively developed version of OCM. The legacy CLI (`open-component-model/ocm`) is in maintenance mode and will not receive this feature. It will gain **read support** for the new index-based format ([ADR 0012](./0012_oci_format_compatibility.md)), which naturally preserves any annotations already present on resource manifests.
+Ownership annotations are a new feature. New features are developed in the new OCM tooling (`open-component-model/open-component-model`), which is the most recent and actively developed version of OCM. The legacy CLI (`open-component-model/ocm`) is in maintenance mode and will not receive this feature. It will gain **read support** for the new index-based format ([ADR 0013](./0013_oci_format_compatibility.md)), which naturally preserves any annotations already present on resource manifests.
 
 **Decision**: Implement only in the new OCM tooling.
 

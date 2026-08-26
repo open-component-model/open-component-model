@@ -12,7 +12,8 @@
 //  4. [04_repository_test.go] — Storing and retrieving component versions
 //  5. [05_signing_test.go] — Digests, RSA signing, and verification
 //  6. [06_oci_test.go] — Full OCI registry round-trips (requires Docker)
-//  7. [07_transfer_test.go] — Transferring component versions between repositories
+//  7. [07_http_config_test.go] — HTTP client configuration: timeouts and per-host overrides
+//  8. [08_transfer_test.go] — Transferring component versions between repositories
 //
 // Every example is a runnable test. Run them all with:
 //

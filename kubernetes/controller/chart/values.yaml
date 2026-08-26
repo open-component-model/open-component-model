@@ -12,7 +12,7 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest@sha256:72e5531e565284d90d0dd16ac0be7d28e7046742f001b29f4ff94b69d91ce24c
+    tag: latest@sha256:302eb14ae7bd7ad3d18e94185691591c29fce2f021aaaa52108ecee595f6d5de
     # -- Image pull policy
     pullPolicy: IfNotPresent
   ## Controller concurrency settings
@@ -27,6 +27,8 @@ manager:
     workerQueueLength: 1000
     # -- Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric.
     subscriberBufferSize: 100
+    # -- The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.
+    cacheTTL: 30
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache
@@ -109,6 +111,8 @@ manager:
 rbacHelpers:
   # -- Install convenience admin/editor/viewer roles for CRDs
   enable: false
+  # -- Install ClusterRoles that aggregate OCM resource permissions into the built-in `admin`, `edit` and `view` cluster roles
+  aggregateToDefaultRoles: true
 ## Custom Resource Definitions
 crd:
   # -- Install CRDs with the chart

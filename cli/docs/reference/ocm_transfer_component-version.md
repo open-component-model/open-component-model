@@ -1,6 +1,6 @@
 ---
 title: ocm transfer component-version
-description: Transfer a component version between OCM repositories.
+description: Transfer one or more component versions between OCM repositories.
 suppressTitle: true
 toc: true
 sidebar:
@@ -9,35 +9,49 @@ sidebar:
 
 ## ocm transfer component-version
 
-Transfer a component version between OCM repositories
+Transfer one or more component versions between OCM repositories
 
 ### Synopsis
 
-Transfer a single component version from a source repository to
+Transfer component version(s) from a source repository to
 a target repository using an internally generated transformation graph.
 
-This command constructs a TransformationGraphDefinition consisting of:
-  1. CTFGetComponentVersion -> OCIGetComponentVersion
-  2. CTFAddComponentVersion -> OCIAddComponentVersion
-  3. GetOCIArtifact -> OCIAddLocalResource / AddOCIArtifact
-  4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact
+When a version is included in the source reference, exactly that version is transferred.
+When the version is omitted, all versions of the component are discovered and transferred.
+Use --semver-constraint to restrict which versions are selected, and --latest to transfer
+only the newest matching version.
 
-We support OCI and CTF as well as Helm repositories as transfer sources.
+OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
-The graph is built accordingly based on the provided references.
-By default, only the component version itself is transferred, but with --copy-resources, all resources are also copied and transformed if necessary.
 
-The graph is validated, and then executed unless --dry-run is set.
+By default, only the component version itself is transferred. Use --copy-resources to also
+copy (and, when needed, transform) the resources it references. --upload-as controls whether
+those resources land as OCI artifacts or as local blobs in the target. --recursive walks the
+component's references and transfers them too.
 
-Alternatively, --transfer-spec can be used to provide a previously saved TransformationGraphDefinition
-from a file (or stdin with "-"), enabling a two-step workflow:
-  1. Generate the spec with all desired flags (--recursive, --copy-resources, --upload-as),
-     then review: transfer cv --dry-run -o yaml --copy-resources --recursive {reference} {target} > spec.yaml
-  2. Edit the spec as needed, then execute: transfer cv --transfer-spec spec.yaml
+Driving defaults from the OCM configuration:
+  A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
+  (passed via --config) sets defaults for --recursive, --copy-resources, and --upload-as.
+  Explicit command-line flags always override the values from the configuration.
 
-Flags like --recursive, --copy-resources, and --upload-as are baked into the generated spec during
-step 1. When --transfer-spec is used in step 2, these flags are ignored because the spec already
-contains the full graph definition. Only --dry-run and --output remain meaningful in step 2.
+Two-step workflow (generate, review, replay):
+  --dry-run builds and validates the graph without executing it, and with -o yaml|json prints
+  the resulting TransformationGraphDefinition. --transfer-spec then replays a saved definition
+  from a file (or stdin with "-"):
+    1. Generate the spec:  transfer cv --dry-run -o yaml --copy-resources -r {reference} {target} > spec.yaml
+    2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
+  All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer
+  configuration entry are baked into the spec during step 1 and are therefore ignored in
+  step 2 - the spec is the full graph definition. Only --dry-run and --output remain
+  meaningful when replaying a spec.
+
+How the graph is built:
+  Internally the command assembles a TransformationGraphDefinition from these node types,
+  selected based on the source/target references:
+    1. CTFGetComponentVersion -> OCIGetComponentVersion
+    2. CTFAddComponentVersion -> OCIAddComponentVersion
+    3. GetOCIArtifact -> OCIAddLocalResource / AddOCIArtifact
+    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact
 
 ```
 ocm transfer component-version {reference} {target} [flags]
@@ -52,10 +66,19 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghc
 # Transfer from one OCI registry to another
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
-# Transfer from one OCI to another using localBlobs
+# Transfer all versions of a component (omit version from reference)
+transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm
+
+# Transfer all versions matching a semver constraint
+transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --semver-constraint ">= 1.0.0, < 2.0.0"
+
+# Transfer only the latest version
+transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
+
+# Transfer from one OCI to another using localBlobs (default)
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as localBlob
 
-# Transfer from one OCI to another using OCI artifacts (default)
+# Transfer from one OCI to another using OCI artifacts
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
 
 # Transfer a component version containing Helm charts (access-type: helm/v1) as an OCI artifact
@@ -67,6 +90,17 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghc
 # Recursively transfer a component version and all its references
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --copy-resources
 
+# Drive defaults from the OCM configuration. With --config ./ocmconfig.yaml containing:
+#   type: generic.config.ocm.software/v1
+#   configurations:
+#   - type: transfer.config.ocm.software/v1alpha1
+#     recursive: -1
+#     copyMode: allResources
+#     uploadType: ociArtifact
+# the following invocation transfers recursively with all resources copied as OCI artifacts.
+# Any explicit flag still overrides the corresponding configuration value.
+transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+
 # Two-step transfer: generate a spec with all desired flags, then review and execute
 transfer component-version --dry-run -o yaml --copy-resources -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
 # (review/edit spec.yaml as needed, e.g. change the target registry)
@@ -76,21 +110,23 @@ transfer component-version --transfer-spec spec.yaml
 ### Options
 
 ```
-      --copy-resources         copy all resources in the component version
-      --dry-run                build and validate the graph but do not execute
-  -h, --help                   help for component-version
-  -o, --output enum            output format of the component descriptors
-                               (must be one of [json ndjson yaml]) (default yaml)
-  -r, --recursive              recursively discover and transfer component versions
-      --transfer-spec string   path to a transfer specification file (use "-" for stdin)
-  -u, --upload-as enum         Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
-                               (must be one of [default localBlob ociArtifact]) (default default)
+      --copy-resources             copy all resources in the component version
+      --dry-run                    build and validate the graph but do not execute
+  -h, --help                       help for component-version
+      --latest                     if set, only the latest version of the component is transferred; only used when no version is specified in the reference
+  -o, --output enum                output format of the component descriptors
+                                   (must be one of [json ndjson yaml]) (default yaml)
+  -r, --recursive                  recursively discover and transfer component versions
+      --semver-constraint string   semantic version constraint restricting which versions to transfer (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
+      --transfer-spec string       path to a transfer specification file (use "-" for stdin)
+  -u, --upload-as enum             Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
+                                   (must be one of [localBlob ociArtifact]) (default localBlob)
 ```
 
 ### Options inherited from parent commands
 
 ```
-      --config string                      supply configuration by a given configuration file.
+      --config stringArray                 supply configuration by a given configuration file.
                                            By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
                                            1. The path specified in the OCM_CONFIG environment variable
                                            2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
@@ -101,13 +137,14 @@ transfer component-version --transfer-spec spec.yaml
                                            - $HOME/.ocm/config
                                            - $HOME/.ocmconfig
                                            3. The current working directory:
-                                           - $PWD/ocm/config
+                                           - $PWD/.ocm/config
                                            - $PWD/.ocmconfig
                                            4. The directory of the current executable:
-                                           - $EXE_DIR/ocm/config
+                                           - $EXE_DIR/.ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
-                                           Using the option, this configuration file be used instead of the lookup above.
+                                           Later entries have higher priority.
+                                           Using the option, the specified configuration file(s) will be used instead of the lookup above.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output

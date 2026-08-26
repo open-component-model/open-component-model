@@ -3,7 +3,6 @@ on:
   schedule:
     - cron: '7 1 * * *'
   workflow_dispatch:
-    inputs:
 
 permissions:
   contents: read
@@ -14,5 +13,4 @@ jobs:
       issues: write
       pull-requests: write
       contents: read
-    uses: open-component-model/.github/.github/workflows/stale.yml@d532b6400ca2d9574c4214f0701421fffb60052d # main
-    secrets: inherit
+    uses: open-component-model/.github/.github/workflows/stale.yml@main # zizmor: ignore[unpinned-uses] intentional: trusted internal org workflow, tracked on main to avoid per-commit digest bumps

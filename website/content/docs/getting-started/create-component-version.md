@@ -70,8 +70,9 @@ echo "My first local Resource for an OCM component" > my-local-resource.txt
 
 Create a `component-constructor.yaml` file that describes your component and its resources:
 
-```yaml
-# yaml-language-server: $schema=https://ocm.software/latest/schemas/bindings/go/constructor/schema-2020-12.json
+```shell
+cat > component-constructor.yaml << 'EOF'
+# yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 - name: github.com/acme.org/helloworld # Must at least be a DNS domain as per RFC 1123.
   version: 1.0.0 # Version conforming to SemVer 2.0.
@@ -89,6 +90,7 @@ components:
       access: # Reference externally
         type: OCIImage/v1
         imageReference: ghcr.io/stefanprodan/podinfo:6.9.1
+EOF
 ```
 
 ### Referencing Artifacts
@@ -97,11 +99,11 @@ OCM supports various ways to include resource artifacts in your components via `
 
 Use **`input`** to embed content directly, or **`access`** to reference external artifacts.
 
-|              | `resource.input` (by value)               | `resource.access` (by reference)             |
-|--------------|-------------------------------------------|----------------------------------------------|
-| **Storage**  | Content embedded in Component Version     | Only reference is stored                     |
-| **Use case** | Local files, directories, co-located data | Remote images, charts, resolution at runtime |
-| **Transfer** | Content travels with component            | Must be accessible at destination            |
+|              | `resource.input` (by value)               | `resource.access` (by reference)                                          |
+|--------------|-------------------------------------------|---------------------------------------------------------------------------|
+| **Storage**  | Content embedded in Component Version     | Only reference is stored                                                  |
+| **Use case** | Local files, directories, co-located data | Remote images, charts, resolution at runtime                              |
+| **Transfer** | Content travels with component            | Content fetched from source at use time (unless embedded during transfer) |
 
 For a complete list of supported types, see [Input and Access Types]({{< relref "/docs/reference/input-and-access-types.md" >}}).
 
@@ -204,7 +206,7 @@ Output:
 This creates a `transport-archive` directory containing your component version.
 
 {{< details "What's inside the CTF archive?" >}}
-The CTF archive is a Content Addressable Storage (CAS) archive that maps descriptors and resources to digests:
+The CTF archive is a [Content Addressable Storage (CAS)](https://en.wikipedia.org/wiki/Content-addressable_storage) archive — each blob's filename is derived from the SHA-256 digest of its content (e.g., `sha256.<digest>`), so lookups happen by digest rather than by path. The `artifact-index.json` maps component coordinates (repository + tag) to the digest of the corresponding blob:
 
 ```text
 transport-archive/
@@ -363,7 +365,7 @@ ocm get cv <repository>//<component>:<version>
 OCM uses a double-slash (`//`) notation to separate the repository from the component path:
 
 - Local Archive (CTF): `./transport-archive//github.com/acme.org/helloworld:1.0.0`
-- Remote Registry (OCI): `ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.17.0`
+- Remote Registry (OCI): `ghcr.io/open-component-model//ocm.software/cli:0.12.0`
 
 {{< tabs "explore-repos" >}}
 
@@ -423,40 +425,37 @@ meta:
 ### List available versions in an OCI Registry
 
 ```shell
-ocm get cv ghcr.io/open-component-model/ocm//ocm.software/ocmcli
+ocm get cv ghcr.io/open-component-model//ocm.software/cli
 ```
 
 Output:
 
 ```text
- COMPONENT           │ VERSION       │ PROVIDER     
-─────────────────────┼───────────────┼──────────────
- ocm.software/ocmcli │ 0.36.0-rc.1   │ ocm.software 
-                     │ 0.35.0        │              
-                     │ 0.35.0-rc.3   │              
-                     │ 0.35.0-rc.2   │              
-                     │ 0.35.0-rc.1   │
-...
+ COMPONENT        │ VERSION     │ PROVIDER     
+──────────────────┼─────────────┼──────────────
+ ocm.software/cli │ 0.13.0-rc.1 │ ocm.software 
+                  │ 0.12.0      │              
+                  │ 0.11.0      │              
 ```
 
 #### Get a specific version
 
 ```shell
-ocm get cv ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.35.0
+ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0
 ```
 
 Output:
 
 ```text
-COMPONENT            │ VERSION │ PROVIDER     
-─────────────────────┼─────────┼──────────────
- ocm.software/ocmcli │ 0.35.0  │ ocm.software
+ COMPONENT        │ VERSION │ PROVIDER     
+──────────────────┼─────────┼──────────────
+ ocm.software/cli │ 0.12.0  │ ocm.software 
 ```
 
 #### View the full component descriptor
 
 ```shell
-ocm get cv ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.35.0 -o yaml
+ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0 -o yaml
 ```
 
 #### Explore nested components recursively
@@ -464,7 +463,7 @@ ocm get cv ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.35.0 -o yaml
 Components can reference other components. Use `--recursive` to see the full tree:
 
 ```shell
-ocm get cv ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.35.0 --recursive -o tree
+ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0 --recursive -o tree
 ```
 
 {{< /tab >}}

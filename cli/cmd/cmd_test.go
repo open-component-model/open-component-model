@@ -30,6 +30,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	componentversion "ocm.software/open-component-model/cli/cmd/add/component-version"
+	"ocm.software/open-component-model/cli/cmd/configuration"
 	"ocm.software/open-component-model/cli/cmd/internal/test"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
@@ -1454,6 +1455,91 @@ resources:
 	r.Equal("foobar", string(downloaded), "expected downloaded resource content to match test file content")
 }
 
+func Test_Download_Resource_Filename(t *testing.T) {
+	tmp := t.TempDir()
+
+	testFilePath := filepath.Join(tmp, "test-file.txt")
+	require.NoError(t, os.WriteFile(testFilePath, []byte("foobar"), 0o600))
+
+	constructorYAML := fmt.Sprintf(`
+name: ocm.software/download-filename-test
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: plain
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+  - name: variant
+    type: blob
+    extraIdentity:
+      architecture: amd64
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	require.NoError(t, os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	require.NoError(t, err, "could not construct component version")
+
+	ref := archiveFilePath + "//ocm.software/download-filename-test:1.0.0"
+
+	for _, tc := range []struct {
+		name     string
+		identity string
+		wantFile string
+	}{
+		{
+			name:     "fallback uses the resource name",
+			identity: "name=plain",
+			wantFile: "plain",
+		},
+		{
+			name:     "fallback uses resource name even with extra identity",
+			identity: "name=variant,architecture=amd64",
+			wantFile: "variant",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			workDir := t.TempDir()
+			t.Chdir(workDir)
+
+			_, err := test.OCM(t, test.WithArgs("download", "resource", ref, "--identity", tc.identity))
+			r.NoError(err)
+
+			data, err := os.ReadFile(filepath.Join(workDir, tc.wantFile))
+			r.NoError(err, "expected output file %q", tc.wantFile)
+			r.Equal("foobar", string(data))
+		})
+	}
+
+	t.Run("--output overrides the resource-name fallback", func(t *testing.T) {
+		r := require.New(t)
+		explicitTarget := filepath.Join(t.TempDir(), "explicit-output.bin")
+
+		_, err := test.OCM(t, test.WithArgs("download", "resource",
+			ref,
+			"--identity", "name=plain",
+			"--output", explicitTarget,
+		))
+		r.NoError(err)
+
+		data, err := os.ReadFile(explicitTarget)
+		r.NoError(err, "expected file at explicit --output path")
+		r.Equal("foobar", string(data))
+	})
+}
+
 func Test_Sign_And_Verify_Component_Version(t *testing.T) {
 	r := require.New(t)
 	tmp := t.TempDir()
@@ -1564,18 +1650,324 @@ resources:
 	))
 	r.NoError(err, "could not construct component version")
 
-	signerSpecFilePath := filepath.Join(tmp, "sigstore-signer-spec.yaml")
-	r.NoError(os.WriteFile(signerSpecFilePath,
-		[]byte("type: SigstoreSigningConfiguration/v1alpha1\n"), 0o600))
+	ocmConfigFilePath := filepath.Join(tmp, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(ocmConfigFilePath, []byte(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
+`), 0o600))
 
 	reference := archiveFilePath + "//" + name + ":" + version
 	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
 		reference,
 		"--signature", "sigstore-wiring-test",
-		"--signer-spec", signerSpecFilePath,
+		"--config", ocmConfigFilePath,
 	))
 	r.Error(err)
 	r.Contains(err.Error(), "OIDC identity token required")
+}
+
+func Test_Sign_Signer_Selected_By_Signature(t *testing.T) {
+	t.Setenv("SIGSTORE_ID_TOKEN", "")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/signer-per-signature", "1.0.0"
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(fmt.Sprintf(`
+name: %[1]s
+version: %[2]s
+provider:
+  name: ocm.software
+resources:
+  - name: my-resource
+    type: blob
+    input:
+      type: utf8/v1
+      text: "signer selection test"
+`, name, version)), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	r.NoError(err, "could not construct component version")
+
+	// this should win
+	ocmConfigFilePath := filepath.Join(tmp, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(ocmConfigFilePath, []byte(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signature: release
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: RSASigningConfiguration/v1alpha1
+`), 0o600))
+
+	reference := archiveFilePath + "//" + name + ":" + version
+
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", "release",
+		"--config", ocmConfigFilePath,
+	))
+	r.ErrorContains(err, "OIDC identity token required")
+
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", "internal",
+		"--config", ocmConfigFilePath,
+	))
+	r.ErrorContains(err, "private key not found")
+}
+
+func Test_Sign_With_Deprecated_Signer_Spec_Flag_Fails(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	signerSpecFilePath := filepath.Join(tmp, "signer-spec.yaml")
+	r.NoError(os.WriteFile(signerSpecFilePath,
+		[]byte("type: RSASigningConfiguration/v1alpha1\n"), 0o600))
+
+	_, err := test.OCM(t, test.WithArgs("sign", "component-version",
+		filepath.Join(tmp, "transport-archive")+"//ocm.software/whatever:1.0.0",
+		"--signer-spec", signerSpecFilePath,
+	))
+	r.Error(err)
+	r.Contains(err.Error(), "--signer-spec is no longer supported")
+	r.Contains(err.Error(), "signing.config.ocm.software/v1alpha1")
+}
+
+func Test_Verify_With_Deprecated_Verifier_Spec_Flag_Fails(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	verifierSpecFilePath := filepath.Join(tmp, "verifier-spec.yaml")
+	r.NoError(os.WriteFile(verifierSpecFilePath,
+		[]byte("type: RSASigningConfiguration/v1alpha1\n"), 0o600))
+
+	_, err := test.OCM(t, test.WithArgs("verify", "component-version",
+		filepath.Join(tmp, "transport-archive")+"//ocm.software/whatever:1.0.0",
+		"--verifier-spec", verifierSpecFilePath,
+	))
+	r.Error(err)
+	r.Contains(err.Error(), "--verifier-spec is no longer supported")
+	r.Contains(err.Error(), "signing.config.ocm.software/v1alpha1")
+}
+
+func Test_Verify_Verifier_Selected_By_Signature(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/verifier-per-signature", "1.0.0"
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(fmt.Sprintf(`
+name: %[1]s
+version: %[2]s
+provider:
+  name: ocm.software
+resources:
+  - name: my-resource
+    type: blob
+    input:
+      type: utf8/v1
+      text: "verifier selection test"
+`, name, version)), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	r.NoError(err, "could not construct component version")
+
+	// Sign twice so the descriptor carries two differently named signatures.
+	privateKeyPath, _ := writeKeyAndChain(t, t.TempDir(), mustKey(t))
+	signConfigFilePath := filepath.Join(tmp, "sign.ocmconfig.yaml")
+	r.NoError(os.WriteFile(signConfigFilePath, []byte(fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: release
+    credentials:
+    - type: Credentials/v1
+      properties:
+        private_key_pem_file: %[1]q
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: internal
+    credentials:
+    - type: Credentials/v1
+      properties:
+        private_key_pem_file: %[1]q
+`, privateKeyPath)), 0o600))
+
+	reference := archiveFilePath + "//" + name + ":" + version
+	for _, signature := range []string{"release", "internal"} {
+		_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+			reference,
+			"--signature", signature,
+			"--config", signConfigFilePath,
+		))
+		r.NoError(err, "could not sign component version with signature %q", signature)
+	}
+
+	verifyConfigFilePath := filepath.Join(tmp, "verify.ocmconfig.yaml")
+	r.NoError(os.WriteFile(verifyConfigFilePath, append([]byte(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signature: release
+  verifier:
+    type: RSASigningConfiguration/v1alpha1
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: NonExistentVerificationConfiguration/v1alpha1
+`), signCfgCredentials(privateKeyPath)...), 0o600))
+
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference,
+		"--signature", "release",
+		"--config", verifyConfigFilePath,
+	))
+	r.NoError(err, "the working RSA verifier must be selected for the release signature")
+
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference,
+		"--signature", "internal",
+		"--config", verifyConfigFilePath,
+	))
+	r.ErrorContains(err, `no signing handler plugin registered for type "NonExistentVerificationConfiguration/v1alpha1"`,
+		"the unscoped entry must be the fallback for every other signature")
+
+	// Without --signature both signatures are verified concurrently, each
+	// resolving its own verifier.
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference,
+		"--config", verifyConfigFilePath,
+	))
+	r.ErrorContains(err, `no signing handler plugin registered for type "NonExistentVerificationConfiguration/v1alpha1"`)
+}
+
+func Test_Verify_Credentials_Are_Resolved_Per_Signature(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/credentials-per-signature", "1.0.0"
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(fmt.Sprintf(`
+name: %[1]s
+version: %[2]s
+provider:
+  name: ocm.software
+resources:
+  - name: my-resource
+    type: blob
+    input:
+      type: utf8/v1
+      text: "credential selection test"
+`, name, version)), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	r.NoError(err, "could not construct component version")
+
+	privateKeyPath, _ := writeKeyAndChain(t, t.TempDir(), mustKey(t))
+	reference := archiveFilePath + "//" + name + ":" + version
+
+	scopedTo := func(path string, signatures ...string) string {
+		var b []byte
+		b = append(b, "\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: credentials.config.ocm.software\n  consumers:\n"...)
+		for _, signature := range signatures {
+			b = fmt.Appendf(b, `  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: %[1]q
+    credentials:
+    - type: Credentials/v1
+      properties:
+        private_key_pem_file: %[2]q
+`, signature, privateKeyPath)
+		}
+		r.NoError(os.WriteFile(path, b, 0o600))
+		return path
+	}
+
+	prodOnly := scopedTo(filepath.Join(tmp, "prod-only.yaml"), "prod")
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference, "--signature", "prod", "--config", prodOnly,
+	))
+	r.NoError(err)
+
+	defaultOnly := scopedTo(filepath.Join(tmp, "default-only.yaml"), "default")
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", defaultOnly,
+	))
+	r.ErrorContains(err, "missing public key",
+		"a credential scoped to another signature name must not be used")
+
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", prodOnly,
+	))
+	r.NoError(err)
+
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference, "--signature", "dev",
+		"--config", scopedTo(filepath.Join(tmp, "dev-only.yaml"), "dev"),
+	))
+	r.NoError(err)
+
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", prodOnly,
+	))
+	r.ErrorContains(err, "missing public key",
+		"verifying every signature must fail while dev has no credential entry")
+
+	both := scopedTo(filepath.Join(tmp, "both.yaml"), "prod", "dev")
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", both,
+	))
+	r.NoError(err, "one entry per signature name verifies every signature")
+}
+
+// signCfgCredentials returns the credential configuration entries shared by the
+// signing tests, holding the RSA private key for both signature names.
+func signCfgCredentials(privateKeyPath string) []byte {
+	return fmt.Appendf(nil, `- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: release
+    credentials:
+    - type: Credentials/v1
+      properties:
+        private_key_pem_file: %[1]q
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: internal
+    credentials:
+    - type: Credentials/v1
+      properties:
+        private_key_pem_file: %[1]q
+`, privateKeyPath)
 }
 
 // Test_Add_Component_Version_Docker_Credentials tests the use of docker credentials in the add cv command
@@ -2029,4 +2421,287 @@ resources:
 
 	// Verify referenced component is still accessible
 	_ = referencedDesc
+}
+
+func Test_Get_Config(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		configsYAML    []string
+		expectedOutput string
+		expectedError  bool
+	}{
+		{
+			name: "no config - only default temp folder is output",
+			args: []string{"get", "config"},
+			expectedOutput: fmt.Sprintf(`configurations:
+- tempFolder: %s
+  type: filesystem.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
+`, os.TempDir()),
+		},
+		{
+			name: "filesystem config - yaml output",
+			args: []string{"get", "config"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /work
+type: generic.config.ocm.software/v1
+`,
+		},
+		{
+			name: "filesystem config - merge multiple files",
+			args: []string{"get", "config"},
+			// Config file combination covers: a value that gets overriden, a value that is preserved, and a value that is added from the second file
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/overridden
+  workingDirectory: /work
+- type: http.config.ocm.software/v1alpha1
+  timeout: 60s
+`, `
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /work
+- timeout: 1m0s
+  type: http.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
+`,
+		},
+		{
+			name: "filesystem config - json output",
+			args: []string{"get", "config", "--output=json"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `{
+  "type": "generic.config.ocm.software/v1",
+  "configurations": [
+    {
+      "type": "filesystem.config.ocm.software/v1alpha1",
+      "tempFolder": "/tmp/custom",
+      "workingDirectory": "/work"
+    }
+  ]
+}`,
+		},
+		{
+			name: "filesystem config - ndjson output",
+			args: []string{"get", "config", "--output=ndjson"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /work`},
+			expectedOutput: `{"type":"generic.config.ocm.software/v1","configurations":[{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/tmp/custom","workingDirectory":"/work"}]}`,
+		},
+		{
+			name: "multiple config types",
+			args: []string{"get", "config"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/test
+- type: http.config.ocm.software/v1alpha1
+  timeout: 60s`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/test
+  type: filesystem.config.ocm.software/v1alpha1
+- timeout: 1m0s
+  type: http.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
+`,
+		},
+		{
+			name: "all config types populated",
+			args: []string{"get", "config"},
+			configsYAML: []string{`
+type: generic.config.ocm.software/v1
+configurations:
+- type: filesystem.config.ocm.software/v1alpha1
+  tempFolder: /tmp/custom
+  workingDirectory: /workspace
+- type: http.config.ocm.software/v1alpha1
+  timeout: 45s
+- type: resolvers.config.ocm.software/v1alpha1
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      filePath: /some/archive
+    componentNamePattern: "ocm.software/*"
+    versionConstraint: ">=1.0.0"
+- type: extract.oci.artifact.ocm.software/v1alpha1
+  rules:
+  - filename: output.tar
+    layerSelectors:
+    - matchProperties:
+        layer.mediaType: application/vnd.oci.image.layer.v1.tar+gzip
+      matchExpressions:
+      - key: layer.index
+        operator: In
+        values: ["0"]
+- type: ocm.config.ocm.software/v1
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      filePath: /legacy/archive
+    prefix: ocm.software/legacy
+- type: transfer.config.ocm.software/v1alpha1
+  recursive: -1
+  copyMode: allResources
+  uploadType: ociArtifact
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry/v1
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: user
+        password: pass
+`},
+			expectedOutput: `configurations:
+- tempFolder: /tmp/custom
+  type: filesystem.config.ocm.software/v1alpha1
+  workingDirectory: /workspace
+- timeout: 45s
+  type: http.config.ocm.software/v1alpha1
+- resolvers:
+  - prefix: ocm.software/legacy
+    repository:
+      filePath: /legacy/archive
+      type: CommonTransportFormat/v1
+  type: ocm.config.ocm.software/v1
+- resolvers:
+  - componentNamePattern: ocm.software/*
+    repository:
+      filePath: /some/archive
+      type: CommonTransportFormat/v1
+    versionConstraint: '>=1.0.0'
+  type: resolvers.config.ocm.software/v1alpha1
+- copyMode: allResources
+  recursive: -1
+  type: transfer.config.ocm.software/v1alpha1
+  uploadType: ociArtifact
+- rules:
+  - filename: output.tar
+    layerSelectors:
+    - matchExpressions:
+      - key: layer.index
+        operator: In
+        values:
+        - "0"
+      matchProperties:
+        layer.mediaType: application/vnd.oci.image.layer.v1.tar+gzip
+  type: extract.oci.artifact.ocm.software/v1alpha1
+- consumers:
+  - credentials:
+    - properties:
+        password: pass
+        username: user
+      type: Credentials/v1
+    identities:
+    - hostname: ghcr.io
+      type: OCIRegistry/v1
+  type: credentials.config.ocm.software
+type: generic.config.ocm.software/v1`,
+		},
+
+		{
+			name:          "invalid output format",
+			args:          []string{"get", "config", "--output=invalid"},
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			args := tt.args
+
+			tmp := t.TempDir()
+			if len(tt.configsYAML) > 0 {
+				for i, configYAML := range tt.configsYAML {
+					configFilePath := filepath.Join(tmp, fmt.Sprintf("config%d.yaml", i))
+					r.NoError(os.WriteFile(configFilePath, []byte(configYAML), 0o600))
+					args = append(args, "--config", configFilePath)
+				}
+			}
+
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err := test.OCM(t, test.WithArgs(args...), test.WithOutput(result), test.WithErrorOutput(logs))
+
+			if tt.expectedError {
+				r.Error(err, "expected error but got none")
+				return
+			}
+
+			r.NoError(err, "failed to run command")
+
+			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()))
+		})
+	}
+}
+
+func TestGetOCMConfigForCommand(t *testing.T) {
+	t.Run("explicit config flag with non-existent file returns error", func(t *testing.T) {
+		r := require.New(t)
+		path := filepath.Join(t.TempDir(), "nonexistent", "path", "config.yaml")
+		_, err := test.OCM(t, test.WithArgs([]string{"--" + configuration.OCMConfigCommandArgument, path}...))
+		r.Error(err, "expected error but got none")
+		r.Contains(err.Error(), path)
+	})
+
+	t.Run("explicit config flag with existing file succeeds", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t, test.WithArgs([]string{"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-1"}...))
+		r.NoError(err)
+		cfg, err := configuration.GetOCMConfigForCommand(cmd)
+		r.NoError(err)
+		r.NotNil(cfg)
+	})
+
+	t.Run("no config flag uses default discovery", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t)
+		r.NoError(err)
+		_, err = configuration.GetOCMConfigForCommand(cmd)
+		r.Error(err, "expected error but got none")
+		r.Contains(err.Error(), "config not found in any known locations, see --help for details on how to supply configuration files")
+	})
+
+	t.Run("multiple config flags merges configurations", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t, test.WithArgs([]string{
+			"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-1",
+			"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-2",
+		}...))
+		r.NoError(err)
+		cfg, err := configuration.GetOCMConfigForCommand(cmd)
+		r.NoError(err)
+		// .ocmconfig-1 has 5 configurations, .ocmconfig-2 has 1
+		r.Len(cfg.Configurations, 6)
+	})
 }

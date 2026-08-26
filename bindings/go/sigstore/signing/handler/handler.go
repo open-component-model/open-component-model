@@ -70,6 +70,7 @@ func (h *Handler) Sign(
 	if err := cfg.Validate(); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("invalid signing config: %w", err)
 	}
+	algorithm := cfg.GetSignatureAlgorithm()
 
 	if strings.HasPrefix(cfg.Issuer, "http://") {
 		slog.WarnContext(ctx, "Issuer uses HTTP (non-TLS); this is insecure outside of test environments")
@@ -145,14 +146,16 @@ func (h *Handler) Sign(
 	if certInfo.Identity == "" {
 		slog.WarnContext(ctx, "signing certificate contains no SAN identity (email or URI)")
 	}
-	slog.DebugContext(ctx, "signing certificate identity", "issuer", certInfo.Issuer, "identity", certInfo.Identity)
+	slog.DebugContext(ctx, "sigstore sign: bundle written", "identity", certInfo.Identity, "issuer", certInfo.Issuer)
 
 	// MediaType is fixed: this handler produces/verifies Sigstore bundles v0.3+json (cosign >=3.0).
+	// SignatureInfo.Issuer is intentionally unset: the OIDC issuer is embedded in the Fulcio
+	// certificate inside the bundle, and OCM's Issuer field carries RFC2253 DN semantics
+	// (used by RSA/PEM) that don't apply to keyless Sigstore signatures.
 	return descruntime.SignatureInfo{
-		Algorithm: v1alpha1.AlgorithmSigstore,
+		Algorithm: string(algorithm),
 		MediaType: v1alpha1.MediaTypeSigstoreBundle,
 		Value:     base64.StdEncoding.EncodeToString(bundleJSON),
-		Issuer:    certInfo.Issuer,
 	}, nil
 }
 
@@ -170,8 +173,8 @@ func (h *Handler) Verify(
 		return fmt.Errorf("convert config: %w", err)
 	}
 
-	if signed.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
-		return fmt.Errorf("unsupported media type %q for sigstore verification", signed.Signature.MediaType)
+	if err := validateSignatureEnvelope(signed.Signature); err != nil {
+		return fmt.Errorf("verify: %w", err)
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -257,8 +260,19 @@ func (h *Handler) Verify(
 		extraArgs = append(extraArgs, "--trusted-root", trustedRootPath)
 	}
 	if cfg.PrivateInfrastructure {
-		extraArgs = append(extraArgs, "--private-infrastructure")
+		// --insecure-ignore-tlog replaces --private-infrastructure, which cosign deprecated in
+		// v3.1.0 and removes in v4. It is a pure alias, available since cosign v2.0.
+		extraArgs = append(extraArgs, "--insecure-ignore-tlog")
 	}
+
+	slog.InfoContext(ctx, "sigstore verify: enforcing identity constraints",
+		"certificate_identity", cfg.CertificateIdentity,
+		"certificate_identity_regexp", cfg.CertificateIdentityRegexp,
+		"certificate_oidc_issuer", cfg.CertificateOIDCIssuer,
+		"certificate_oidc_issuer_regexp", cfg.CertificateOIDCIssuerRegexp,
+		"private_infrastructure", cfg.PrivateInfrastructure,
+		"trusted_root", trustedRootPath,
+	)
 
 	if err := h.runner.Verify(ctx, dataPath, bundlePath, extraArgs, os.Environ()); err != nil {
 		return err
@@ -293,12 +307,31 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 	signature descruntime.Signature,
 	_ runtime.Typed,
 ) (runtime.Identity, error) {
-	if signature.Signature.MediaType != v1alpha1.MediaTypeSigstoreBundle {
-		return nil, fmt.Errorf("unsupported media type %q for sigstore verification", signature.Signature.MediaType)
+	if err := validateSignatureEnvelope(signature.Signature); err != nil {
+		return nil, fmt.Errorf("verifying credential identity: %w", err)
 	}
 	id := credentialIdentity(verifierv1.VersionedType)
 	id[verifierv1.IdentityAttributeSignature] = signature.Name
 	return id, nil
+}
+
+// validateSignatureEnvelope checks the signature carries a known OCM Sigstore
+// algorithm and an acceptable bundle MediaType. Empty Algorithm is rejected
+// (not defaulted): an OCM signature without a declared algorithm is foreign
+// or malformed.
+func validateSignatureEnvelope(sig descruntime.SignatureInfo) error {
+	if sig.Algorithm == "" {
+		return fmt.Errorf("signature.Algorithm is required for sigstore verification")
+	}
+	switch v1alpha1.SignatureAlgorithm(sig.Algorithm) {
+	case v1alpha1.AlgorithmSigstoreV1Alpha1, v1alpha1.AlgorithmSigstoreLegacy:
+	default:
+		return fmt.Errorf("%w: %q", v1alpha1.ErrUnknownAlgorithm, sig.Algorithm)
+	}
+	if sig.MediaType != v1alpha1.MediaTypeSigstoreBundle {
+		return fmt.Errorf("unsupported media type %q for sigstore verification", sig.MediaType)
+	}
+	return nil
 }
 
 func credentialIdentity(identityType runtime.Type) runtime.Identity {

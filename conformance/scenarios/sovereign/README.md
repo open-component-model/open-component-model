@@ -4,7 +4,7 @@ This conformance scenario validates one of our core value statements: **modeling
 
 ## Overview
 
-Implements the reference scenario defined in [ADR-0013](../../../docs/adr/0013_sovereign_cloud_reference_scenario.md) to demonstrate:
+Implements the reference scenario defined in [ADR-0015](../../../docs/adr/0015_sovereign_cloud_reference_scenario.md) to demonstrate:
 
 - Real multi-service application with genuine dependencies
 - Component modeling and construction

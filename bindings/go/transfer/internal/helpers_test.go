@@ -86,7 +86,8 @@ func TestChooseAddLocalResourceType_CTF(t *testing.T) {
 func TestIsOCICompliantManifest(t *testing.T) {
 	assert.True(t, isOCICompliantManifest(ocispecv1.MediaTypeImageManifest))
 	assert.True(t, isOCICompliantManifest(ocispecv1.MediaTypeImageIndex))
-	assert.False(t, isOCICompliantManifest("application/vnd.docker.distribution.manifest.v2+json"))
+	assert.True(t, isOCICompliantManifest(mediaTypeDockerManifest))
+	assert.True(t, isOCICompliantManifest(mediaTypeDockerManifestList))
 	assert.False(t, isOCICompliantManifest(""))
 }
 

@@ -8,9 +8,19 @@ set -euo pipefail
 # Default install directory per the XDG Base Directory Specification:
 # https://specifications.freedesktop.org/basedir/latest/
 DEFAULT_BIN_DIR="${HOME}/.local/bin"
-BIN_DIR=${1:-"${DEFAULT_BIN_DIR}"}
+# The install directory is taken from the positional argument, then OCM_BIN_DIR (env),
+# then the default. The binary name defaults to 'ocm' and can be overridden with
+# OCM_BIN_NAME to keep multiple versions side by side.
+BIN_DIR="${1:-${OCM_BIN_DIR:-${DEFAULT_BIN_DIR}}}"
+if [[ "${BIN_DIR}" != "/" ]]; then
+    BIN_DIR="${BIN_DIR%/}"
+fi
+BIN_FILE="${OCM_BIN_NAME:-ocm}"
+if [[ "${BIN_FILE}" == */* || "${BIN_FILE}" == "." || "${BIN_FILE}" == ".." ]]; then
+    printf 'OCM_BIN_NAME must be a filename without path separators\n' >&2
+    exit 1
+fi
 GITHUB_REPO="open-component-model/open-component-model"
-TAG_PREFIX="cli/"
 
 usage() {
     cat <<EOF
@@ -19,16 +29,22 @@ Usage: install-cli.sh [BIN_DIR]
 Install the OCM CLI v2.
 
 Arguments:
-  BIN_DIR    Installation directory (default: ~/.local/bin)
+  BIN_DIR    Directory to install the binary into (default: ~/.local/bin).
 
 Environment variables:
-  OCM_VERSION       Install a specific version (e.g., OCM_VERSION=1.0.0)
+  OCM_VERSION       Install a specific version (e.g., OCM_VERSION=1.0.0) or the latest version of a major.minor series (e.g., OCM_VERSION=0.9)
+  OCM_BIN_DIR       Directory to install the binary into (default: ~/.local/bin).
+                    Overridden by the positional argument when both are set.
+  OCM_BIN_NAME      Install the binary under a custom name (default: ocm).
+                    Use a version suffix to keep multiple versions side by side.
   OCM_SKIP_VERIFY   Skip attestation verification (set to "true")
 
 Examples:
   curl -sfL https://ocm.software/install-cli.sh | bash
   curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=1.0.0 bash
-  curl -sfL https://ocm.software/install-cli.sh | bash -s -- /usr/local/bin
+  curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.9 bash
+  curl -sfL https://ocm.software/install-cli.sh | OCM_BIN_DIR=/usr/local/bin bash
+  curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.12 OCM_BIN_NAME=ocm-v0.12 OCM_BIN_DIR=~/.local/bin bash
 EOF
     exit 0
 }
@@ -102,10 +118,18 @@ ensure_path() {
             ;;
     esac
 
+    local shell_rc
+    if [[ "${OS}" == "darwin" ]]; then
+        shell_rc="${HOME}/.zshrc"
+    else
+        shell_rc="${HOME}/.profile"
+    fi
+
     warn "${BIN_DIR} is not in your PATH."
-    warn "Add it by running:"
+    warn "Add it by adding this line to your shell profile"
+    warn "(e.g. ~/.zshrc for zsh, or ~/.bashrc / ~/.profile for bash / sh):"
     warn ""
-    warn '  echo "export PATH=${BIN_DIR}:$PATH" >> ~/.profile && source ~/.profile'
+    warn "  echo 'export PATH=\"\$PATH:${BIN_DIR}\"' >> \"${shell_rc}\" && source \"${shell_rc}\""
     warn ""
 }
 
@@ -134,19 +158,48 @@ setup_tmp() {
 
 # Extract a stable CLI version from a releases JSON file.
 # Returns the version string (e.g. "0.3.0") or empty if none found.
+# The trailing `"` in the regex anchors the match to the JSON quote, so it
+# implicitly excludes pre-releases like `"v0.8.0-rc.1"`. We then `sort -V` and
+# pick the highest semver rather than relying on GitHub's API order, which is
+# created_at-desc and would mis-rank a back-patched release on an older minor
+# (e.g. a v0.7.1 hotfix created after v0.8.0 has shipped).
 extract_stable_version() {
     grep '"tag_name":' "$1" \
-        | grep -E "\"${TAG_PREFIX}v[0-9]+\.[0-9]+\.[0-9]+\"" \
-        | head -1 \
-        | sed -E "s|.*\"${TAG_PREFIX}v([^\"]+)\".*|\1|" \
+        | grep -E "\"v[0-9]+\.[0-9]+\.[0-9]+\"" \
+        | sed -E "s|.*\"v([^\"]+)\".*|\1|" \
+        | sort -V \
+        | tail -1 \
         || true # grep returns non-zero when no lines match; prevent set -e from killing the subshell
+}
+
+# Extract the latest stable version matching a MAJOR.MINOR prefix from a releases JSON file.
+extract_stable_version_for_minor() {
+    local minor_prefix="$1"
+    grep '"tag_name":' "$2" \
+        | grep -E "\"v${minor_prefix}\.[0-9]+\"" \
+        | sed -E "s|.*\"v([^\"]+)\".*|\1|" \
+        | sort -V \
+        | tail -1 \
+        || true
 }
 
 # Find version from Github metadata
 get_release_version() {
-    if [[ -z "${OCM_VERSION:-}" ]]; then
-        # Use the list endpoint so we can filter by TAG_PREFIX; /releases/latest may
-        # point to a non-CLI release (e.g. a website or docs tag published more recently).
+    if [[ -n "${OCM_VERSION:-}" ]]; then
+        # If OCM_VERSION is a partial minor (e.g. "0.9"), resolve to the latest patch release.
+        if [[ "${OCM_VERSION}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100"
+            info "Downloading metadata ${METADATA_URL}"
+            download "${TMP_METADATA}" "${METADATA_URL}"
+
+            local resolved
+            resolved=$(extract_stable_version_for_minor "${OCM_VERSION}" "${TMP_METADATA}")
+            [[ -n "${resolved}" ]] || fatal "No stable release found for ${OCM_VERSION}.x"
+            OCM_VERSION="${resolved}"
+        fi
+    else
+        # Use the list endpoint so we can filter for the canonical CLI tag; /releases/latest
+        # may point to a non-CLI release (e.g. a website or docs tag published more recently).
         METADATA_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100"
         info "Downloading metadata ${METADATA_URL}"
         download "${TMP_METADATA}" "${METADATA_URL}"
@@ -154,11 +207,8 @@ get_release_version() {
         OCM_VERSION=$(extract_stable_version "${TMP_METADATA}")
     fi
 
-    if [[ -n "${OCM_VERSION}" ]]; then
-        info "Using ${OCM_VERSION} as release"
-    else
-        fatal "Unable to determine release version"
-    fi
+    [[ -n "${OCM_VERSION}" ]] || fatal "Unable to determine release version"
+    info "Using ${OCM_VERSION} as release"
 }
 
 # Download file from URL
@@ -179,9 +229,16 @@ download() {
 }
 
 # Download binary from Github URL
-# Assets follow the naming scheme: ocm-{OS}-{ARCH} (no version, no archive)
+# Assets follow the naming scheme: ocm-{OS}-{ARCH} (no version, no archive).
+# The `cli/` tag prefix was dropped in v0.8.0; older versions still live under it.
+# Legacy iff major==0 AND minor<8 - any 1.x+ release uses the modern bare tag.
 download_binary() {
-    BIN_URL="https://github.com/${GITHUB_REPO}/releases/download/${TAG_PREFIX}v${OCM_VERSION}/ocm-${OS}-${ARCH}"
+    local major minor tag_prefix=''
+    IFS='.' read -r major minor _ <<< "${OCM_VERSION}"
+    if (( major == 0 && minor < 8 )); then
+        tag_prefix='cli/'
+    fi
+    BIN_URL="https://github.com/${GITHUB_REPO}/releases/download/${tag_prefix}v${OCM_VERSION}/ocm-${OS}-${ARCH}"
     info "Downloading binary ${BIN_URL}"
     download "${TMP_BIN}" "${BIN_URL}"
 }
@@ -189,6 +246,8 @@ download_binary() {
 # Print manual verification instructions when automatic verification is unavailable
 print_verify_instructions() {
     local reason="$1"
+    local quoted_binary_path
+    printf -v quoted_binary_path '%q' "${BIN_DIR}/${BIN_FILE}"
 
     local hash_cmd="sha256sum"
     if ! command -v sha256sum &> /dev/null; then
@@ -203,18 +262,18 @@ print_verify_instructions() {
     warn "  Reason: ${reason}"
     warn ""
     warn "  After installation completes, verify the binary at:"
-    warn "    ${BIN_DIR}/ocm"
+    warn "    ${BIN_DIR}/${BIN_FILE}"
     warn ""
     warn "  Option A — Verify with GitHub CLI (recommended):"
     warn "    1. Install gh: https://cli.github.com/"
     warn "    2. Authenticate against GitHub.com: gh auth login --hostname github.com"
     warn "    3. Verify the installed binary:"
-    warn "       gh attestation verify ${BIN_DIR}/ocm --repo ${GITHUB_REPO}"
+    warn "       gh attestation verify ${quoted_binary_path} --repo ${GITHUB_REPO}"
     warn ""
     warn "  Option B — Verify with cosign (no GitHub auth needed):"
     cat >&2 <<COSIGN_EOF
 
-    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)"
+    DIGEST="sha256:\$(${hash_cmd} ${quoted_binary_path} | cut -d' ' -f1)"
     curl -sfL \\
       "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
       | jq -r '.attestations[0].bundle' > attestation.jsonl
@@ -225,19 +284,19 @@ print_verify_instructions() {
       --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
       --certificate-identity-regexp \\
         '^https://github\\.com/${GITHUB_REPO}/\\.github/workflows/cli\\.yml@refs/(heads/(main|releases/v[0-9]+\\.[0-9]+)|tags/cli/v[0-9]+\\.[0-9]+\\.[0-9]+)' \\
-      ${BIN_DIR}/ocm
+      ${quoted_binary_path}
 
 COSIGN_EOF
     warn ""
     warn "  Option C — Manual SHA-256 hash check (integrity only):"
     cat >&2 <<HASH_EOF
 
-    DIGEST="sha256:\$(${hash_cmd} ${BIN_DIR}/ocm | cut -d' ' -f1)"
+    DIGEST="sha256:\$(${hash_cmd} ${quoted_binary_path} | cut -d' ' -f1)"
     curl -sfL \\
       "https://api.github.com/repos/${GITHUB_REPO}/attestations/\${DIGEST}" \\
       | jq -r '.attestations[0].bundle.dsseEnvelope.payload' \\
       | base64 --decode | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
-    # Compare the listed hash with: ${hash_cmd} ${BIN_DIR}/ocm
+    # Compare the listed hash with: ${hash_cmd} ${quoted_binary_path}
 
 HASH_EOF
     warn ""
@@ -274,10 +333,10 @@ verify_binary() {
 
 # Setup permissions and move binary
 setup_binary() {
-    info "Installing ocm to ${BIN_DIR}/ocm"
+    info "Installing ocm to ${BIN_DIR}/${BIN_FILE}"
 
     if [[ -w "${BIN_DIR}" ]]; then
-        install -m 755 "${TMP_BIN}" "${BIN_DIR}/ocm"
+        install -m 755 "${TMP_BIN}" "${BIN_DIR}/${BIN_FILE}"
     else
         fatal "Cannot write to ${BIN_DIR}. Run with a writable directory: curl ... | bash -s -- ~/.local/bin"
     fi
@@ -296,5 +355,5 @@ setup_binary() {
     ensure_bin_dir
     setup_binary
     ensure_path
-    info "OCM CLI v${OCM_VERSION} installed successfully"
+    info "OCM CLI v${OCM_VERSION} installed to ${BIN_DIR}/${BIN_FILE}"
 }

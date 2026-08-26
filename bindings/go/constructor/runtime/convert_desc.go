@@ -113,6 +113,14 @@ func ConvertFromDescriptorResource(resource *descriptor.Resource) *Resource {
 		target.SourceRefs = ConvertFromDescriptorSourceRefs(resource.SourceRefs)
 	}
 
+	if resource.Digest != nil {
+		target.Digest = &Digest{
+			HashAlgorithm:          resource.Digest.HashAlgorithm,
+			NormalisationAlgorithm: resource.Digest.NormalisationAlgorithm,
+			Value:                  resource.Digest.Value,
+		}
+	}
+
 	target.AccessOrInput = ConvertAccessFromDescriptor(resource.Access)
 	return target
 }
@@ -131,6 +139,14 @@ func ConvertToDescriptorResource(resource *Resource) *descriptor.Resource {
 
 	if resource.SourceRefs != nil {
 		target.SourceRefs = ConvertToDescriptorSourceRefs(resource.SourceRefs)
+	}
+
+	if resource.Digest != nil {
+		target.Digest = &descriptor.Digest{
+			HashAlgorithm:          resource.Digest.HashAlgorithm,
+			NormalisationAlgorithm: resource.Digest.NormalisationAlgorithm,
+			Value:                  resource.Digest.Value,
+		}
 	}
 
 	target.Access = ConvertAccessToDescriptor(resource.AccessOrInput)

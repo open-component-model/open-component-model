@@ -3,13 +3,15 @@ package resource
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -30,6 +32,13 @@ type Options struct {
 	// UserAgent is the User-Agent string to be used in HTTP requests by all the
 	// repositories provided by the provider.
 	UserAgent string
+
+	// HTTPConfig is the HTTP client configuration (timeouts, per-host overrides)
+	// used to build the repositories's internal HTTP client. When nil, default
+	// transport timeouts and retry behaviour are used.
+	// Accepts the serialisable config type so that external plugins can
+	// round-trip it over the wire and reconstruct an equivalent client.
+	HTTPConfig *httpv1alpha1.Config
 }
 
 type Option func(*Options)
@@ -41,13 +50,27 @@ func WithUserAgent(userAgent string) Option {
 	}
 }
 
+// WithHTTPConfig sets the HTTP client configuration used for OCI registry
+// traffic. The repository builds its internal client from cfg on construction,
+// applying timeouts and per-host overrides.
+// When nil, the default ocmhttp transport timeouts and retry behaviour are used.
+func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+	return func(o *Options) {
+		o.HTTPConfig = cfg
+	}
+}
+
 type ResourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
 	userAgent        string
+	httpClient       *http.Client
 }
 
 // make sure that ResourceRepository implements the oci ResourceRepository interface
-var _ repository.ResourceRepository = (*ResourceRepository)(nil)
+var (
+	_ repository.ResourceRepository       = (*ResourceRepository)(nil)
+	_ repository.OwnershipAwareRepository = (*ResourceRepository)(nil)
+)
 
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	options := &Options{}
@@ -62,6 +85,10 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 	return &ResourceRepository{
 		filesystemConfig: filesystemConfig,
 		userAgent:        options.UserAgent,
+		httpClient: ocmhttp.New(
+			ocmhttp.WithConfig(options.HTTPConfig),
+			ocmhttp.WithUserAgent(options.UserAgent),
+		),
 	}
 }
 
@@ -146,6 +173,32 @@ func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return b, nil
 }
 
+// AddOwnership attaches ownership information (i.e. the
+// component name and version) to a resource. The ownership is attached as a
+// referrer manifest pointing at the resource.
+// Caution: EXPERIMENTAL
+func (p *ResourceRepository) AddOwnership(ctx context.Context, component, version string, resource *descriptor.Resource, credentials runtime.Typed) error {
+	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	if err != nil {
+		return err
+	}
+	resource = resource.DeepCopy()
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	resource.Access = obj
+
+	if err := repo.AddOwnership(ctx, component, version, resource, credentials); err != nil {
+		return fmt.Errorf("error attaching ownership referrer: %w", err)
+	}
+	return nil
+}
+
 func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
 	repo, err := p.resolveOCIImageRepo(resource, credentials)
 	if err != nil {
@@ -159,7 +212,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 }
 
 func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *ocicredsv1.OCICredentials) (*oci.Repository, error) {
-	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent)
+	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -181,6 +234,7 @@ func createRepository(
 	credentials *ocicredsv1.OCICredentials,
 	filesystemConfig *filesystemv1alpha1.Config,
 	userAgent string,
+	httpClient *http.Client,
 ) (*oci.Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
@@ -191,7 +245,7 @@ func createRepository(
 	urlResolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(urlString),
 		urlresolver.WithBaseClient(&auth.Client{
-			Client: retry.DefaultClient,
+			Client: httpClient,
 			Header: map[string][]string{
 				"User-Agent": {userAgent},
 			},

@@ -539,6 +539,87 @@ var _ = Describe("ocm utility", func() {
 			ocmConfig[0].Policy = v1alpha1.ConfigurationPolicyDoNotPropagate
 			Expect(config).To(Equal(ocmConfig))
 		})
+
+		It("mixes a direct secret with a referenced object", func(ctx SpecContext) {
+			configMap := corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: corev1.SchemeGroupVersion.String(),
+					Kind:       "ConfigMap",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ConfigMap,
+					Namespace: Namespace,
+				},
+			}
+			bldr.WithObjects(&configMap)
+
+			repoConfig := []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+						APIVersion: configMap.APIVersion,
+						Kind:       configMap.Kind,
+						Name:       configMap.Name,
+						Namespace:  configMap.Namespace,
+					},
+					Policy: v1alpha1.ConfigurationPolicyPropagate,
+				},
+			}
+			repo := v1alpha1.Repository{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: v1alpha1.GroupVersion.String(),
+					Kind:       v1alpha1.KindRepository,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: Namespace,
+					Name:      Repository,
+				},
+				Spec: v1alpha1.RepositorySpec{
+					OCMConfig: repoConfig,
+				},
+				Status: v1alpha1.RepositoryStatus{
+					EffectiveOCMConfig: repoConfig,
+				},
+			}
+			bldr.WithObjects(&repo)
+
+			directSecret := v1alpha1.OCMConfiguration{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+					APIVersion: corev1.SchemeGroupVersion.String(),
+					Kind:       "Secret",
+					Name:       Secret,
+					Namespace:  Namespace,
+				},
+				Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+			}
+			repoRef := v1alpha1.OCMConfiguration{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+					APIVersion: repo.APIVersion,
+					Kind:       repo.Kind,
+					Name:       repo.Name,
+					Namespace:  repo.Namespace,
+				},
+				Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+			}
+			comp := v1alpha1.Component{
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repo.Name,
+					},
+					OCMConfig: []v1alpha1.OCMConfiguration{directSecret, repoRef},
+				},
+			}
+			bldr.WithObjects(&comp)
+
+			clnt = bldr.Build()
+			config, err := GetEffectiveConfig(ctx, clnt, &comp, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			// the direct secret is returned verbatim, followed by the repo's
+			// propagated entry re-stamped with the referencing entry's policy
+			propagatedFromRepo := repoConfig[0]
+			propagatedFromRepo.Policy = v1alpha1.ConfigurationPolicyDoNotPropagate
+			Expect(config).To(Equal([]v1alpha1.OCMConfiguration{directSecret, propagatedFromRepo}))
+		})
 	})
 
 	Context("get latest valid component version and regex filter", func() {
@@ -619,6 +700,92 @@ var _ = Describe("ocm utility", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(versionLatest.Equal(version1))
+		})
+	})
+
+	Context("apply downgrade policy", func() {
+		// componentWith builds a Component with the given previously-reconciled
+		// version and downgrade policy. An empty currentVersion models the
+		// first-reconcile case.
+		componentWith := func(currentVersion string, policy v1alpha1.DowngradePolicy) *v1alpha1.Component {
+			return &v1alpha1.Component{
+				Spec: v1alpha1.ComponentSpec{DowngradePolicy: policy},
+				Status: v1alpha1.ComponentStatus{
+					Component: v1alpha1.ComponentInfo{Version: currentVersion},
+				},
+			}
+		}
+
+		It("returns the candidate on first reconcile regardless of policy", func() {
+			candidate, err := semver.NewVersion("1.0.0")
+			Expect(err).ToNot(HaveOccurred())
+
+			got, err := ApplyDowngradePolicy(componentWith("", v1alpha1.DowngradePolicyDeny), candidate)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(got).To(Equal("1.0.0"))
+		})
+
+		It("preserves the candidate's original string including build metadata", func() {
+			candidate, err := semver.NewVersion("1.2.3-rc.1+build.5")
+			Expect(err).ToNot(HaveOccurred())
+
+			got, err := ApplyDowngradePolicy(componentWith("", ""), candidate)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(got).To(Equal("1.2.3-rc.1+build.5"))
+		})
+
+		It("accepts an equal candidate", func() {
+			candidate, err := semver.NewVersion("1.0.0")
+			Expect(err).ToNot(HaveOccurred())
+
+			got, err := ApplyDowngradePolicy(componentWith("1.0.0", v1alpha1.DowngradePolicyDeny), candidate)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(got).To(Equal("1.0.0"))
+		})
+
+		It("accepts a greater candidate", func() {
+			candidate, err := semver.NewVersion("2.0.0")
+			Expect(err).ToNot(HaveOccurred())
+
+			got, err := ApplyDowngradePolicy(componentWith("1.0.0", v1alpha1.DowngradePolicyDeny), candidate)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(got).To(Equal("2.0.0"))
+		})
+
+		It("denies a downgrade with policy Deny", func() {
+			candidate, err := semver.NewVersion("0.9.0")
+			Expect(err).ToNot(HaveOccurred())
+
+			_, err = ApplyDowngradePolicy(componentWith("1.0.0", v1alpha1.DowngradePolicyDeny), candidate)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot be downgraded from version 1.0.0 to version 0.9.0"))
+		})
+
+		It("allows a downgrade with policy Allow", func() {
+			candidate, err := semver.NewVersion("0.9.0")
+			Expect(err).ToNot(HaveOccurred())
+
+			got, err := ApplyDowngradePolicy(componentWith("1.0.0", v1alpha1.DowngradePolicyAllow), candidate)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(got).To(Equal("0.9.0"))
+		})
+
+		It("rejects an unknown downgrade policy", func() {
+			candidate, err := semver.NewVersion("0.9.0")
+			Expect(err).ToNot(HaveOccurred())
+
+			_, err = ApplyDowngradePolicy(componentWith("1.0.0", v1alpha1.DowngradePolicy("bogus")), candidate)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("unknown downgrade policy: bogus"))
+		})
+
+		It("returns a terminal error if the previously-reconciled version is malformed", func() {
+			candidate, err := semver.NewVersion("1.0.0")
+			Expect(err).ToNot(HaveOccurred())
+
+			_, err = ApplyDowngradePolicy(componentWith("not-a-version", v1alpha1.DowngradePolicyDeny), candidate)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to check reconciled version"))
 		})
 	})
 })

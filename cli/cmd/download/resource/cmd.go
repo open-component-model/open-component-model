@@ -6,9 +6,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"maps"
-	"mime"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -19,7 +17,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
-	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -54,12 +51,16 @@ func New() *cobra.Command {
 This command fetches a specific resource from the given OCM component version reference and stores it at the specified output location. 
 It supports optional transformation of the resource using a registered transformer plugin.
 
-If no transformer is specified, the resource is written directly in its original format. If the media type is known,
-the appropriate file extension will be added to the output file name if no output location is given.
+If no transformer is specified, the resource is written directly in its original format.
 
-Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
+Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
+
+When --output is not provided, the output filename is the resource name.`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
+
+  # Download a resource with identity 'name=example' and 'architecture=amd64' and write to default output
+  ocm download resource ghcr.io/org/component:v1 --identity name=example,architecture=amd64
 
   # Download a resource and specify an output file
   ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
@@ -71,8 +72,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 	}
 
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
-	cmd.Flags().String(FlagOutput, "", "output location to download to. If no transformer is specified, and no "+
-		"format was discovered that can be written to a directory, the resource will be written to a file.")
+	cmd.Flags().String(FlagOutput, "", "output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
 	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
 		"policy to apply when extracting a resource. "+
@@ -80,15 +80,6 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 			"If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.")
 
 	return cmd
-}
-
-func init() {
-	if err := errors.Join(
-		mime.AddExtensionType(".tar.gz", layout.MediaTypeOCIImageLayoutTarGzipV1),
-		mime.AddExtensionType(".tar", layout.MediaTypeOCIImageLayoutTarV1),
-	); err != nil {
-		panic(err)
-	}
 }
 
 func DownloadResource(cmd *cobra.Command, args []string) error {
@@ -161,7 +152,7 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
 	}
 
-	finalOutputPath, err := processResourceOutput(output, res, data, requestedIdentity.String(), logger)
+	finalOutputPath, err := processResourceOutput(output, res, logger)
 	if err != nil {
 		return err
 	}
@@ -255,34 +246,15 @@ func isTar(mediaType string) bool {
 	}, mediaType) || strings.HasSuffix(mediaType, "+tar")
 }
 
-func processResourceOutput(output string, resource *descriptor.Resource, data blob.ReadOnlyBlob, identity string, logger *slog.Logger) (string, error) {
-	// Check for downloadName label
-	for _, label := range resource.Labels {
-		if label.Name == "downloadName" {
-			var downloadName string
-			if err := label.GetValue(&downloadName); err != nil {
-				return "", fmt.Errorf("interpreting downloadName label value failed: %w", err)
-			}
-			if downloadName = filepath.Clean(downloadName); filepath.IsAbs(downloadName) {
-				return "", fmt.Errorf("downloadName label value %q must not be an absolute path for security reasons", downloadName)
-			}
-			logger.Info("using downloadName label for file download location", slog.String("output", downloadName))
-			return downloadName, nil
-		}
+func processResourceOutput(output string, resource *descriptor.Resource, logger *slog.Logger) (string, error) {
+	if output != "" {
+		logger.Debug("using explicit --output", slog.String("output", output))
+		return output, nil
 	}
 
-	if output == "" {
-		output = identity
-		// if we have media type aware data, we try to append the file extension based on the media type
-		if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
-			if mediaType, known := mediaTypeAware.MediaType(); known {
-				if extensions, err := mime.ExtensionsByType(mediaType); err == nil && len(extensions) > 0 {
-					output += extensions[0]
-				}
-			}
-		}
-		logger.Warn("no output location specified, using resource identity as output file name", slog.String("output", output))
-	}
+	// Fallback: resource name.
+	output = resource.Name
+	logger.Debug("no output location specified, using resource name as output file name", slog.String("output", output))
 
 	return output, nil
 }
