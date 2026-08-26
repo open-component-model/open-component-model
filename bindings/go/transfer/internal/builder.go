@@ -14,15 +14,13 @@ import (
 	ocitransformer "ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	s3transformer "ocm.software/open-component-model/bindings/go/s3/transformation"
-	s3v1alpha1 "ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	wgettransformer "ocm.software/open-component-model/bindings/go/wget/transformation"
 	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
 
 // NewDefaultBuilder creates a builder.Builder pre-configured with all standard OCI, CTF,
-// Helm, wget, s3, and GitHub transformers.
+// Helm, wget, and GitHub transformers.
 // It accepts the repository provider, resource repository, and credential resolver interfaces
 // that are needed by the transformers to interact with repositories.
 func NewDefaultBuilder(
@@ -36,7 +34,6 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(ociaccess.Scheme)
 	transformerScheme.MustRegisterScheme(helmv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(wgetv1alpha1.Scheme)
-	transformerScheme.MustRegisterScheme(s3v1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(githubv1alpha1.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
@@ -114,13 +111,6 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 	}
 
-	// S3 transformer
-	downloadS3 := &s3transformer.DownloadS3Resource{
-		Scheme:             transformerScheme,
-		ResourceRepository: resourceRepo,
-		CredentialProvider: credentialProvider,
-	}
-
 	// GitHub transformers
 	getGitHubCommit := &githubtransformer.GetGitHubCommit{
 		Scheme:             transformerScheme,
@@ -149,7 +139,6 @@ func NewDefaultBuilder(
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).
-		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }
