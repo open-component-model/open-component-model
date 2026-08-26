@@ -44,13 +44,14 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@stylistic/eslint-plugin": "5.10.0",
     "@types/node": "25.9.5",
-    "eslint": "10.8.1",
+    "eslint": "10.9.0",
     "globals": "17.11.0",
     "hugo-extended": "0.164.0",
     "jiti": "2.7.0",
     "js-yaml": "5.3.0",
-    "sass-embedded": "1.102.0",
+    "sass-embedded": "1.103.1",
     "shx": "0.4.0",
     "typescript-eslint": "8.67.0"
   },

@@ -1455,6 +1455,91 @@ resources:
 	r.Equal("foobar", string(downloaded), "expected downloaded resource content to match test file content")
 }
 
+func Test_Download_Resource_Filename(t *testing.T) {
+	tmp := t.TempDir()
+
+	testFilePath := filepath.Join(tmp, "test-file.txt")
+	require.NoError(t, os.WriteFile(testFilePath, []byte("foobar"), 0o600))
+
+	constructorYAML := fmt.Sprintf(`
+name: ocm.software/download-filename-test
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: plain
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+  - name: variant
+    type: blob
+    extraIdentity:
+      architecture: amd64
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	require.NoError(t, os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	require.NoError(t, err, "could not construct component version")
+
+	ref := archiveFilePath + "//ocm.software/download-filename-test:1.0.0"
+
+	for _, tc := range []struct {
+		name     string
+		identity string
+		wantFile string
+	}{
+		{
+			name:     "fallback uses the resource name",
+			identity: "name=plain",
+			wantFile: "plain",
+		},
+		{
+			name:     "fallback uses resource name even with extra identity",
+			identity: "name=variant,architecture=amd64",
+			wantFile: "variant",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			workDir := t.TempDir()
+			t.Chdir(workDir)
+
+			_, err := test.OCM(t, test.WithArgs("download", "resource", ref, "--identity", tc.identity))
+			r.NoError(err)
+
+			data, err := os.ReadFile(filepath.Join(workDir, tc.wantFile))
+			r.NoError(err, "expected output file %q", tc.wantFile)
+			r.Equal("foobar", string(data))
+		})
+	}
+
+	t.Run("--output overrides the resource-name fallback", func(t *testing.T) {
+		r := require.New(t)
+		explicitTarget := filepath.Join(t.TempDir(), "explicit-output.bin")
+
+		_, err := test.OCM(t, test.WithArgs("download", "resource",
+			ref,
+			"--identity", "name=plain",
+			"--output", explicitTarget,
+		))
+		r.NoError(err)
+
+		data, err := os.ReadFile(explicitTarget)
+		r.NoError(err, "expected file at explicit --output path")
+		r.Equal("foobar", string(data))
+	})
+}
+
 func Test_Sign_And_Verify_Component_Version(t *testing.T) {
 	r := require.New(t)
 	tmp := t.TempDir()
@@ -1659,6 +1744,230 @@ func Test_Sign_With_Deprecated_Signer_Spec_Flag_Fails(t *testing.T) {
 	r.Error(err)
 	r.Contains(err.Error(), "--signer-spec is no longer supported")
 	r.Contains(err.Error(), "signing.config.ocm.software/v1alpha1")
+}
+
+func Test_Verify_With_Deprecated_Verifier_Spec_Flag_Fails(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	verifierSpecFilePath := filepath.Join(tmp, "verifier-spec.yaml")
+	r.NoError(os.WriteFile(verifierSpecFilePath,
+		[]byte("type: RSASigningConfiguration/v1alpha1\n"), 0o600))
+
+	_, err := test.OCM(t, test.WithArgs("verify", "component-version",
+		filepath.Join(tmp, "transport-archive")+"//ocm.software/whatever:1.0.0",
+		"--verifier-spec", verifierSpecFilePath,
+	))
+	r.Error(err)
+	r.Contains(err.Error(), "--verifier-spec is no longer supported")
+	r.Contains(err.Error(), "signing.config.ocm.software/v1alpha1")
+}
+
+func Test_Verify_Verifier_Selected_By_Signature(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/verifier-per-signature", "1.0.0"
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(fmt.Sprintf(`
+name: %[1]s
+version: %[2]s
+provider:
+  name: ocm.software
+resources:
+  - name: my-resource
+    type: blob
+    input:
+      type: utf8/v1
+      text: "verifier selection test"
+`, name, version)), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	r.NoError(err, "could not construct component version")
+
+	// Sign twice so the descriptor carries two differently named signatures.
+	privateKeyPath, _ := writeKeyAndChain(t, t.TempDir(), mustKey(t))
+	signConfigFilePath := filepath.Join(tmp, "sign.ocmconfig.yaml")
+	r.NoError(os.WriteFile(signConfigFilePath, []byte(fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: release
+    credentials:
+    - type: Credentials/v1
+      properties:
+        private_key_pem_file: %[1]q
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: internal
+    credentials:
+    - type: Credentials/v1
+      properties:
+        private_key_pem_file: %[1]q
+`, privateKeyPath)), 0o600))
+
+	reference := archiveFilePath + "//" + name + ":" + version
+	for _, signature := range []string{"release", "internal"} {
+		_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+			reference,
+			"--signature", signature,
+			"--config", signConfigFilePath,
+		))
+		r.NoError(err, "could not sign component version with signature %q", signature)
+	}
+
+	verifyConfigFilePath := filepath.Join(tmp, "verify.ocmconfig.yaml")
+	r.NoError(os.WriteFile(verifyConfigFilePath, append([]byte(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signature: release
+  verifier:
+    type: RSASigningConfiguration/v1alpha1
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: NonExistentVerificationConfiguration/v1alpha1
+`), signCfgCredentials(privateKeyPath)...), 0o600))
+
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference,
+		"--signature", "release",
+		"--config", verifyConfigFilePath,
+	))
+	r.NoError(err, "the working RSA verifier must be selected for the release signature")
+
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference,
+		"--signature", "internal",
+		"--config", verifyConfigFilePath,
+	))
+	r.ErrorContains(err, `no signing handler plugin registered for type "NonExistentVerificationConfiguration/v1alpha1"`,
+		"the unscoped entry must be the fallback for every other signature")
+
+	// Without --signature both signatures are verified concurrently, each
+	// resolving its own verifier.
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference,
+		"--config", verifyConfigFilePath,
+	))
+	r.ErrorContains(err, `no signing handler plugin registered for type "NonExistentVerificationConfiguration/v1alpha1"`)
+}
+
+func Test_Verify_Credentials_Are_Resolved_Per_Signature(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/credentials-per-signature", "1.0.0"
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(fmt.Sprintf(`
+name: %[1]s
+version: %[2]s
+provider:
+  name: ocm.software
+resources:
+  - name: my-resource
+    type: blob
+    input:
+      type: utf8/v1
+      text: "credential selection test"
+`, name, version)), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+	r.NoError(err, "could not construct component version")
+
+	privateKeyPath, _ := writeKeyAndChain(t, t.TempDir(), mustKey(t))
+	reference := archiveFilePath + "//" + name + ":" + version
+
+	scopedTo := func(path string, signatures ...string) string {
+		var b []byte
+		b = append(b, "\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: credentials.config.ocm.software\n  consumers:\n"...)
+		for _, signature := range signatures {
+			b = fmt.Appendf(b, `  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: %[1]q
+    credentials:
+    - type: Credentials/v1
+      properties:
+        private_key_pem_file: %[2]q
+`, signature, privateKeyPath)
+		}
+		r.NoError(os.WriteFile(path, b, 0o600))
+		return path
+	}
+
+	prodOnly := scopedTo(filepath.Join(tmp, "prod-only.yaml"), "prod")
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference, "--signature", "prod", "--config", prodOnly,
+	))
+	r.NoError(err)
+
+	defaultOnly := scopedTo(filepath.Join(tmp, "default-only.yaml"), "default")
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", defaultOnly,
+	))
+	r.ErrorContains(err, "missing public key",
+		"a credential scoped to another signature name must not be used")
+
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", prodOnly,
+	))
+	r.NoError(err)
+
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference, "--signature", "dev",
+		"--config", scopedTo(filepath.Join(tmp, "dev-only.yaml"), "dev"),
+	))
+	r.NoError(err)
+
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", prodOnly,
+	))
+	r.ErrorContains(err, "missing public key",
+		"verifying every signature must fail while dev has no credential entry")
+
+	both := scopedTo(filepath.Join(tmp, "both.yaml"), "prod", "dev")
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference, "--config", both,
+	))
+	r.NoError(err, "one entry per signature name verifies every signature")
+}
+
+// signCfgCredentials returns the credential configuration entries shared by the
+// signing tests, holding the RSA private key for both signature names.
+func signCfgCredentials(privateKeyPath string) []byte {
+	return fmt.Appendf(nil, `- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: release
+    credentials:
+    - type: Credentials/v1
+      properties:
+        private_key_pem_file: %[1]q
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: internal
+    credentials:
+    - type: Credentials/v1
+      properties:
+        private_key_pem_file: %[1]q
+`, privateKeyPath)
 }
 
 // Test_Add_Component_Version_Docker_Credentials tests the use of docker credentials in the add cv command

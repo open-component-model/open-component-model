@@ -1,6 +1,9 @@
 package resource
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -8,6 +11,7 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
@@ -181,7 +185,7 @@ func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 			}
 			credentials := ocicredsv1.OCICredentials{}
 
-			repo, err := createRepository(spec, &credentials, tt.filesystemConfig, "test")
+			repo, err := createRepository(spec, &credentials, tt.filesystemConfig, "test", http.DefaultClient)
 
 			if tt.expectError {
 				r.Error(err, "expected error")
@@ -190,6 +194,76 @@ func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 				r.NoError(err, "should not error")
 				r.NotNil(repo, "repository should not be nil")
 			}
+		})
+	}
+}
+
+func TestNewResourceRepositoryHTTPConfig_InsecureSkipVerify(t *testing.T) {
+	var serverHit bool
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverHit = true
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+
+	host := strings.TrimPrefix(server.URL, "https://")
+	tr := true
+
+	tests := []struct {
+		name                 string
+		httpConfig           *httpv1alpha1.Config
+		expectHit            bool
+		expectErrMsgContains string
+	}{
+		{
+			name:                 "without config the self-signed cert is rejected",
+			expectErrMsgContains: "certificate",
+		},
+		{
+			name: "per-host insecureSkipVerify reaches the registry",
+			httpConfig: &httpv1alpha1.Config{
+				Hosts: map[string]*httpv1alpha1.HostConfig{
+					host: {
+						TLSConfig: httpv1alpha1.TLSConfig{
+							InsecureSkipVerify: &tr,
+						},
+					},
+				},
+			},
+			expectHit: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			serverHit = false
+
+			raw := &runtime.Raw{}
+			require.NoError(t, ociaccess.Scheme.Convert(
+				&v1.OCIImage{
+					Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+					ImageReference: "https://" + host + "/test/img:v1.0.0",
+				},
+				raw,
+			))
+
+			res := &descriptor.Resource{
+				Type:   "ociArtifact",
+				Access: raw,
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+			}
+
+			repo := NewResourceRepository(nil, WithHTTPConfig(tt.httpConfig))
+			_, err := repo.DownloadResource(t.Context(), res, nil)
+			if tt.expectErrMsgContains != "" {
+				require.ErrorContains(t, err, tt.expectErrMsgContains)
+			}
+			require.Equal(t, tt.expectHit, serverHit, "expected HTTP request to reach test server")
 		})
 	}
 }

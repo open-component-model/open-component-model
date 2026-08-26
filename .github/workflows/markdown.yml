@@ -1,6 +1,14 @@
 name: Markdown
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.md'
+      - '.github/workflows/markdown.yml'
+      - '.github/config/linkspector-all.yaml'
+      - '.github/config/linkspector-changed.yaml'
   pull_request:
     branches:
       - main

@@ -38,14 +38,17 @@ flowchart TB
         OCI["OCI Resource Repository"]
         Helm["Helm Resource Repository"]
         Wget["Wget Resource Repository"]
+        GitHub["GitHub Resource Repository"]
     end
 
     CD -->|"OCIImage/v1 access"| OCI
     CD -->|"Helm/v1 access"| Helm
     CD -->|"Wget/v1 access"| Wget
+    CD -->|"GitHub/v1 access"| GitHub
     OCI --> Registry["OCI Registry"]
     Helm --> HelmRepo["Helm Chart Repository"]
     Wget --> HTTP["HTTP/HTTPS Server"]
+    GitHub --> GitHubAPI["GitHub REST API"]
 ```
 
 ## How It Works

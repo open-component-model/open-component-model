@@ -10,9 +10,6 @@ components:
       - name: cli
         type: executable
         version: "${VERSION}"
-        labels:
-          - name: downloadName
-            value: ocm
         relation: external
         extraIdentity:
           os: linux
@@ -24,9 +21,6 @@ components:
       - name: cli
         type: executable
         version: "${VERSION}"
-        labels:
-          - name: downloadName
-            value: ocm
         relation: external
         extraIdentity:
           os: linux
@@ -38,9 +32,6 @@ components:
       - name: cli
         type: executable
         version: "${VERSION}"
-        labels:
-          - name: downloadName
-            value: ocm
         relation: external
         extraIdentity:
           os: darwin
@@ -52,9 +43,6 @@ components:
       - name: cli
         type: executable
         version: "${VERSION}"
-        labels:
-          - name: downloadName
-            value: ocm
         relation: external
         extraIdentity:
           os: darwin
@@ -66,9 +54,6 @@ components:
       - name: cli
         type: executable
         version: "${VERSION}"
-        labels:
-          - name: downloadName
-            value: ocm.exe
         relation: external
         extraIdentity:
           os: windows
@@ -80,9 +65,6 @@ components:
       - name: cli
         type: executable
         version: "${VERSION}"
-        labels:
-          - name: downloadName
-            value: ocm.exe
         relation: external
         extraIdentity:
           os: windows

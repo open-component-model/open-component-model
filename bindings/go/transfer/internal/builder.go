@@ -7,6 +7,7 @@ import (
 	githubv1alpha1 "ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
 	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -26,6 +27,7 @@ func NewDefaultBuilder(
 	repoProvider repository.ComponentVersionRepositoryProvider,
 	resourceRepo repository.ResourceRepository,
 	credentialProvider credentials.Resolver,
+	httpConfig *httpv1alpha1.Config,
 ) *builder.Builder {
 	transformerScheme := runtime.NewScheme()
 	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
@@ -85,7 +87,10 @@ func NewDefaultBuilder(
 		// from the CLI or upstream.
 		//
 		// Filesystem config can be empty here because a streaming transfer does not need working dir or temp dir.
-		Repository:         resource.NewResourceRepository(&filesystemv1alpha1.Config{}),
+		Repository: resource.NewResourceRepository(
+			&filesystemv1alpha1.Config{},
+			resource.WithHTTPConfig(httpConfig),
+		),
 		CredentialProvider: credentialProvider,
 	}
 

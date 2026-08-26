@@ -4,15 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sync"
 
+	"golang.org/x/sync/singleflight"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/credentials"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
+	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	v2 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	repoSpec "ocm.software/open-component-model/bindings/go/oci/spec/repository"
@@ -59,6 +66,45 @@ type CachingComponentVersionRepositoryProvider struct {
 	// (such as the extracted directory representation of a tar
 	// or tar.gz ctf archive).
 	tempDir string
+
+	// blobCacheOpts, when non-nil, enables a shared content-addressable blob
+	// cache. All credential scopes share one BlobCache because blobs are
+	// immutable and identified by digest — a digest unambiguously identifies
+	// content regardless of who fetched it. Only tag→digest resolution is
+	// access-controlled; once you hold a digest you are authorised.
+	//
+	// Note: while an attacker who *guesses* a digest could observe its
+	// existence in the cache, they must first obtain the digest via a
+	// [cache.ReferenceCache.Resolve] under credentials that entitle them
+	// to see the tag — which IS credential-scoped. When we grow the
+	// blob cache to cover resource layers, callers with weaker
+	// credentials must not be able to learn digests from a stronger
+	// scope, so revisit this decision if the cache starts holding
+	// layer blobs (see open-component-model#2833 discussion).
+	blobCacheOpts *cache.Options
+
+	// referenceCacheOpts, when non-nil, enables per-scope reference caches.
+	// Tag resolution IS access-controlled (a private registry won't return a
+	// descriptor for a tag you can't read), so each credential scope gets its
+	// own ReferenceCache to prevent one scope from reading tag mappings
+	// resolved under a different credential set.
+	referenceCacheOpts *cache.Options
+
+	// sharedBlobCache is the single process-wide BlobCache shared across all
+	// credential scopes. Initialised lazily on first use via [sync.OnceValue].
+	sharedBlobCache func() *cache.BlobCache
+
+	// referenceCaches stores one *cache.ReferenceCache per credential scope key.
+	referenceCaches sync.Map // string → *cache.ReferenceCache
+
+	// referenceCacheInit serialises the constructor calls per scope
+	// key so a burst of first-use callers for the same scope does not
+	// each build (and discard) their own [cache.ReferenceCache]. The
+	// winner is published into referenceCaches; every other caller
+	// finds it there via Load without re-running the (expensive)
+	// on-disk reseed. Mirrors the pattern used by storeCache.loadOrStore
+	// (see open-component-model/ocm-project#694).
+	referenceCacheInit singleflight.Group
 }
 
 var _ repository.ComponentVersionRepositoryProvider = (*CachingComponentVersionRepositoryProvider)(nil)
@@ -79,7 +125,7 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		options.Scheme = repoSpec.Scheme
 	}
 
-	provider := &CachingComponentVersionRepositoryProvider{
+	prov := &CachingComponentVersionRepositoryProvider{
 		creator:    options.UserAgent,
 		scheme:     options.Scheme,
 		storeCache: &storeCache{store: make(map[string]*ocictf.Store)},
@@ -87,10 +133,15 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 			ocmhttp.WithConfig(options.HTTPConfig),
 			ocmhttp.WithUserAgent(options.UserAgent),
 		),
-		tempDir: options.TempDir,
+		tempDir:            options.TempDir,
+		blobCacheOpts:      options.BlobCacheOptions,
+		referenceCacheOpts: options.ReferenceCacheOptions,
 	}
-
-	return provider
+	// Wire the shared blob cache constructor now that prov exists so the
+	// closure can read its final field values. sync.OnceValue guarantees
+	// the constructor runs at most once across all callers.
+	prov.sharedBlobCache = sync.OnceValue(prov.newSharedBlobCache)
+	return prov
 }
 
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositoryScheme() *runtime.Scheme {
@@ -159,14 +210,32 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 			}
 		}
 
-		return ocirepository.NewFromOCIRepoV1(ctx, obj, &auth.Client{
+		var resolverOpts []urlresolver.Option
+		if b.blobCacheOpts != nil {
+			if bc := b.getOrCreateBlobCache(); bc != nil {
+				resolverOpts = append(resolverOpts, urlresolver.WithBlobCache(bc))
+			}
+		}
+		if b.referenceCacheOpts != nil {
+			if rc := b.getOrCreateReferenceCache(identity); rc != nil {
+				resolverOpts = append(resolverOpts, urlresolver.WithReferenceCache(rc))
+			}
+		}
+
+		resolver, err := ocirepository.NewResolver(ctx, &auth.Client{
 			Client:     b.httpClient,
 			Cache:      auth.NewCache(),
 			Credential: credentials.CredentialFunc(identity, ociCredentials),
 			Header: map[string][]string{
 				"User-Agent": {b.creator},
 			},
-		}, opts...)
+		}, obj, resolverOpts...)
+		if err != nil {
+			return nil, fmt.Errorf("error creating oci repository resolver: %w", err)
+		}
+		opts = append(opts, oci.WithResolver(resolver))
+
+		return oci.NewRepository(opts...)
 	case *ctfrepospecv1.Repository:
 		loadFunc := func(path string) (*ocictf.Store, error) {
 			return ocirepository.NewStoreFromCTFRepoV1(ctx, obj, opts...)
@@ -189,6 +258,90 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 	default:
 		return nil, fmt.Errorf("unsupported repository specification type %T", obj)
 	}
+}
+
+// getOrCreateBlobCache returns the process-wide shared BlobCache, initialising
+// it on first use. All credential scopes share one BlobCache because blobs are
+// content-addressed by digest — a digest uniquely and immutably identifies
+// content, so sharing across scopes cannot serve unexpected data. Deduplication
+// is therefore safe and avoids redundant disk storage when the same blob is
+// fetched by different callers.
+func (b *CachingComponentVersionRepositoryProvider) getOrCreateBlobCache() *cache.BlobCache {
+	return b.sharedBlobCache()
+}
+
+// newSharedBlobCache is the once-only constructor for the process-wide
+// blob cache; wired through [sync.OnceValue] in
+// [NewComponentVersionRepositoryProvider].
+func (b *CachingComponentVersionRepositoryProvider) newSharedBlobCache() *cache.BlobCache {
+	opts := *b.blobCacheOpts
+	if opts.Dir == "" {
+		base := b.tempDir
+		if base == "" {
+			base = os.TempDir()
+		}
+		opts.Dir = filepath.Join(base, "ocm-oci-cas")
+	}
+	c, err := cache.NewBlobCache(opts)
+	if err != nil {
+		slog.Warn("provider: failed to initialise shared blob cache, continuing without caching",
+			slog.String("err", err.Error()))
+		return nil
+	}
+	return c
+}
+
+// getOrCreateReferenceCache returns the ReferenceCache for the given repository
+// scope, creating and persisting it on first use. The scope is based solely on
+// repository identity (host[:port]/path); credentials are excluded because
+// short-lived tokens would create new scopes and kill cache reuse. Use
+// [RemotePolicyAlways] to require remote authorisation on every cache hit.
+//
+// Concurrent first-use callers for the same scope are collapsed via
+// [singleflight.Group] so exactly one [cache.NewReferenceCache] runs.
+func (b *CachingComponentVersionRepositoryProvider) getOrCreateReferenceCache(
+	identity *v1.OCIRegistryIdentity,
+) *cache.ReferenceCache {
+	scope := cache.RepositoryKey(identity)
+	if v, ok := b.referenceCaches.Load(scope); ok {
+		return v.(*cache.ReferenceCache)
+	}
+
+	v, err, _ := b.referenceCacheInit.Do(scope, func() (any, error) {
+		// Re-check under the singleflight so the leader picks up any
+		// concurrently-published cache instead of building another.
+		if existing, ok := b.referenceCaches.Load(scope); ok {
+			return existing, nil
+		}
+
+		opts := *b.referenceCacheOpts
+		if opts.Dir == "" {
+			base := b.tempDir
+			if base == "" {
+				base = os.TempDir()
+			}
+			opts.Dir = filepath.Join(base, "ocm-oci-refcache", scope)
+		} else {
+			opts.Dir = filepath.Join(opts.Dir, scope)
+		}
+
+		c, err := cache.NewReferenceCache(opts)
+		if err != nil {
+			return nil, err
+		}
+		b.referenceCaches.Store(scope, c)
+		return c, nil
+	})
+	if err != nil {
+		slog.Warn("provider: failed to initialise reference cache for scope, continuing without caching",
+			slog.String("scope", scope),
+			slog.String("err", err.Error()))
+		return nil
+	}
+	if v == nil {
+		return nil
+	}
+	return v.(*cache.ReferenceCache)
 }
 
 // getConvertedTypedSpec is a helper function that converts any runtime.Typed specification

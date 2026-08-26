@@ -18,10 +18,11 @@ Download a resource from a component version located in an Open Component Model 
 This command fetches a specific resource from the given OCM component version reference and stores it at the specified output location. 
 It supports optional transformation of the resource using a registered transformer plugin.
 
-If no transformer is specified, the resource is written directly in its original format. If the media type is known,
-the appropriate file extension will be added to the output file name if no output location is given.
+If no transformer is specified, the resource is written directly in its original format.
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
+
+When --output is not provided, the output filename is the resource name.
 
 ```
 ocm download resource [flags]
@@ -50,7 +51,7 @@ ocm download resource [flags]
                                  (must be one of [auto disable]) (default auto)
   -h, --help                     help for resource
       --identity string          resource identity to download
-      --output string            output location to download to. If no transformer is specified, and no format was discovered that can be written to a directory, the resource will be written to a file.
+      --output string            output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name.
       --transformer string       transformer to use for the output. If not specified, the resource will be written as is. 
 ```
 

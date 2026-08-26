@@ -14,9 +14,14 @@
     tab name (RSA "Prerequisites" -> #prerequisites, Sigstore "Prerequisites"
     -> #prerequisites-sigstore). The first occurrence keeps the plain ID so
     existing published links stay valid.
-  - After dedup, headings from every tab are registered in Page.Scratch
-    "toc-extra" so the TOC partial can include them regardless of which tab
-    is active (see layouts/_partials/sidebar/docs-toc-*.html).
+  - Headings inside a tab never reach Hugo's .TableOfContents, because each
+    tab is rendered outside the page's own markdown AST. The TOC is rebuilt
+    from the rendered panes in assets/js/toc.js instead.
+  - Element IDs are derived from the group ID, so a group ID must be unique
+    within a page: reusing one emits duplicate element IDs, the deep link
+    resolves to the first group, and the rebuilt TOC lists its panes twice.
+    Hugo renders page content in several passes, so this cannot be caught
+    with page-scoped state in the shortcode.
 -->
 
 {{ if .Inner }}{{ end }}
@@ -61,19 +66,6 @@
     {{- $seen = merge $seen (dict $headingID $tab.Name) -}}
   {{- end -}}
 {{- end }}
-{{- /* Collect headings from this tab into toc-extra, after dedup has finalised all IDs. */ -}}
-{{- $.Page.Scratch.Add "toc-extra" (slice (dict "type" "group" "name" $tab.Name)) -}}
-{{- range findRE `<h[2-6][^>]*id="[^"]+"` $content -}}
-  {{- $level := replaceRE `<h([2-6]).*` "$1" . | int -}}
-  {{- $id := replaceRE `.*\bid="([^"]+)".*` "$1" . -}}
-  {{- $textMatches := findRE (printf `<h[2-6][^>]*id="%s"[^>]*>[^<]+` $id) $content -}}
-  {{- with index $textMatches 0 -}}
-    {{- $text := replaceRE `<h[2-6][^>]*>` "" . | strings.TrimSpace -}}
-    {{- if $text -}}
-      {{- $.Page.Scratch.Add "toc-extra" (slice (dict "type" "heading" "level" $level "id" $id "text" $text)) -}}
-    {{- end -}}
-  {{- end -}}
-{{- end -}}
 <div data-pane="{{ $tab.Name | lower }}" class="tab-pane fade{{ if not $index }} show active{{ end }}" id="{{ printf "%s-%d" $group $index }}" role="tabpanel" aria-labelledby="{{ printf "%s-%d" $group $index }}-tab" tabindex="0">
 <p class="tab-pane-label" aria-hidden="true">{{ $tab.Name }}</p>
 {{ $content | safeHTML -}}

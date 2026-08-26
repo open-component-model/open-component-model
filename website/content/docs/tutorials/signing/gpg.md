@@ -213,11 +213,8 @@ configurations:
   - type: signing.config.ocm.software/v1alpha1
     signer:
       type: GPGSigningConfiguration/v1alpha1
-EOF
-
-# Verifier spec: ocm verify still takes its handler from a file
-cat > /tmp/ocm-gpg-tutorial/verifier-spec.yaml << 'EOF'
-type: GPGSigningConfiguration/v1alpha1
+    verifier:
+      type: GPGSigningConfiguration/v1alpha1
 EOF
 ```
 
@@ -282,12 +279,11 @@ You should see a `signatures:` section with algorithm `GPG` and a PGP signature 
 
 ### Verify the signature
 
-Verify the signature using the public key, passing the verifier spec:
+Verify the signature using the public key. The GPG handler comes from the `verifier` field of the same config entry:
 
 ```bash
 ocm verify cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 \
-  --config /tmp/ocm-gpg-tutorial/.ocmconfig \
-  --verifier-spec /tmp/ocm-gpg-tutorial/verifier-spec.yaml
+  --config /tmp/ocm-gpg-tutorial/.ocmconfig
 ```
 
 <details>
@@ -314,7 +310,7 @@ Congratulations! You've successfully:
 - ✅ Generated a GPG key pair for signing and verification
 - ✅ Exported the keys to ASCII-armored files
 - ✅ Configured OCM to use your keys via `.ocmconfig`
-- ✅ Configured the GPG signer to select the GPG handler
+- ✅ Configured the GPG signer and verifier to select the GPG handler
 - ✅ Signed a component version with your GPG private key
 - ✅ Verified the signature using the public key
 
@@ -327,7 +323,7 @@ Now that you understand the workflow, here are key practices for production envi
 - **Rotate keys periodically** — OCM supports multiple signatures per component version to ease key transitions.
 - **Distribute public keys securely** — Publish your public key to a key server (e.g. `keys.openpgp.org`) or share via a trusted channel.
 - **Verify before deployment** — Make signature verification a mandatory step in your deployment pipeline.
-- **Pin key fingerprints**: use `keyFingerprint` on the signer to constrain signing. Set it in `verifier-spec.yaml` to constrain verification.
+- **Pin key fingerprints**: use `keyFingerprint` on the signer to constrain signing. Set it on the `verifier` to constrain verification.
 
 ## Check Your Understanding
 

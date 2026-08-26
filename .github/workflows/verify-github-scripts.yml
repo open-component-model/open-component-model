@@ -1,6 +1,12 @@
 name: "GitHub Scripts: Verify"
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/verify-github-scripts.yml'
+      - '.github/scripts/**'
   pull_request:
     branches:
       - main
