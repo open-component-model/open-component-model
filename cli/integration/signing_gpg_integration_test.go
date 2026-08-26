@@ -67,13 +67,11 @@ configurations:
 - type: signing.config.ocm.software/v1alpha1
   signer:
     type: GPGSigningConfiguration/v1alpha1
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1
 `, registry.Host, registry.Port, registry.User, registry.Password, privKeyPath, pubKeyPath)
 	cfgPath := filepath.Join(dir, "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
-
-	gpgSpec := "type: GPGSigningConfiguration/v1alpha1\n"
-	gpgSpecPath := filepath.Join(dir, "gpg-spec.yaml")
-	r.NoError(os.WriteFile(gpgSpecPath, []byte(gpgSpec), os.ModePerm))
 
 	client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
 
@@ -118,7 +116,6 @@ configurations:
 			"verify", "cv",
 			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--config", cfgPath,
-			"--verifier-spec", gpgSpecPath,
 		}
 
 		// dry-run: signature not persisted — verify must fail
@@ -198,6 +195,9 @@ configurations:
     - type: Credentials/v1
       properties:
         publicKeyPGPFile: %[5]q
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1
 `, registry.Host, registry.Port, registry.User, registry.Password, otherPubKeyPath)
 		wrongKeyCfgPath := filepath.Join(otherDir, "ocmconfig-wrongkey.yaml")
 		r.NoError(os.WriteFile(wrongKeyCfgPath, []byte(wrongKeyCfg), os.ModePerm))
@@ -207,7 +207,6 @@ configurations:
 			"verify", "cv",
 			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--config", wrongKeyCfgPath,
-			"--verifier-spec", gpgSpecPath,
 		})
 		r.Error(verifyCMD.ExecuteContext(t.Context()), "verify must fail with mismatched public key")
 	})
