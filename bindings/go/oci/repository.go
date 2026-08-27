@@ -523,34 +523,35 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
 	}
 
-	var exactCandidates, subsetCandidates []descriptor.Artifact
+	findCandidates := func(artifacts []descriptor.Artifact) []descriptor.Artifact {
+		var exact, subset []descriptor.Artifact
+		for _, a := range artifacts {
+			meta := a.GetElementMeta()
+			id := meta.ToIdentity()
+			if identity.Match(id, runtime.IdentityMatchingChainFn(runtime.IdentityEqual)) {
+				exact = append(exact, a)
+			} else if identity.Match(id, runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
+				subset = append(subset, a)
+			}
+		}
+		if len(exact) > 0 {
+			return exact
+		}
+		return subset
+	}
+
+	var artifacts []descriptor.Artifact
 	switch kind {
 	case annotations.ArtifactKindResource:
-		for _, res := range desc.Component.Resources {
-			resIdentity := res.ToIdentity()
-			if identity.Match(resIdentity, runtime.IdentityMatchingChainFn(runtime.IdentityEqual)) {
-				exactCandidates = append(exactCandidates, &res)
-			} else if identity.Match(resIdentity, runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
-				subsetCandidates = append(subsetCandidates, &res)
-			}
+		for i := range desc.Component.Resources {
+			artifacts = append(artifacts, &desc.Component.Resources[i])
 		}
 	case annotations.ArtifactKindSource:
-		for _, src := range desc.Component.Sources {
-			srcIdentity := src.ToIdentity()
-			if identity.Match(srcIdentity, runtime.IdentityMatchingChainFn(runtime.IdentityEqual)) {
-				exactCandidates = append(exactCandidates, &src)
-			} else if identity.Match(srcIdentity, runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
-				subsetCandidates = append(subsetCandidates, &src)
-			}
+		for i := range desc.Component.Sources {
+			artifacts = append(artifacts, &desc.Component.Sources[i])
 		}
 	}
-	// Prefer exact matches; fall back to subset matches only when no exact match exists.
-	// This ensures resources sharing name+version but differing by extraIdentity are
-	// always resolved by exact identity, while partial lookups (no version) still work.
-	candidates := exactCandidates
-	if len(candidates) == 0 {
-		candidates = subsetCandidates
-	}
+	candidates := findCandidates(artifacts)
 	if len(candidates) != 1 {
 		return nil, nil, fmt.Errorf("found %d candidates while looking for %s %q, but expected exactly one", len(candidates), kind, identity)
 	}
