@@ -1,5 +1,5 @@
-// Package v1alpha1 implements the "ocm.software/artefact-references" label
-// https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/06-conventions.md#artefact-linking-label
+// Package v1alpha1 implements the "ocm.software/artifact-references" label
+// https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/06-conventions.md#artifact-linking-label
 //
 //	resources:
 //	  - name: my-image
@@ -13,7 +13,7 @@
 //	    extraIdentity:
 //	      architecture: amd64
 //	    labels:
-//	      - name: ocm.software/artefact-references
+//	      - name: ocm.software/artifact-references
 //	        version: v1alpha1
 //	        value:
 //	          - identity:
@@ -33,33 +33,33 @@ import (
 )
 
 // ErrNotFound used to signal that there are no references.
-var ErrNotFound = errors.New("no resource references the artefact")
+var ErrNotFound = errors.New("no resource references the artifact")
 
 const (
-	// LabelName is the name under which artefact references are stored on an element.
-	LabelName = "ocm.software/artefact-references"
+	// LabelName is the name under which artifact references are stored on an element.
+	LabelName = "ocm.software/artifact-references"
 	// Version is the specification version of the label value implemented here.
 	Version = "v1alpha1"
 )
 
-// Reference is one entry of the artefact references label value. Its Identity selects
-// the artefact being described.
+// Reference is one entry of the artifact references label value. Its Identity selects
+// the artifact being described.
 type Reference struct {
 	Identity runtime.Identity `json:"identity"`
 }
 
-// References is the decoded value of the artefact references label. The spec models it
+// References is the decoded value of the artifact references label. The spec models it
 // as a list, so one element may describe several subjects.
 type References []Reference
 
-// Describes checks whether any of the references points to the subject artefact.
+// Describes checks whether any of the references points to the subject artifact.
 func (r References) Describes(subject runtime.Identity) bool {
 	return slices.ContainsFunc(r, func(reference Reference) bool {
 		return reference.Describes(subject)
 	})
 }
 
-// Describes checks whether the reference points to the subject artefact. The following
+// Describes checks whether the reference points to the subject artifact. The following
 // rules are used for matches as described by the spec:
 //
 //   - name is required and MUST be equal.
@@ -90,7 +90,7 @@ func extraIdentityOf(identity runtime.Identity) runtime.Identity {
 	return extra
 }
 
-// FromLabels decodes the artefact reference label out of labels.
+// FromLabels decodes the artifact reference label out of labels.
 func FromLabels(labels []descriptor.Label) (References, bool, error) {
 	for _, label := range labels {
 		if label.Name != LabelName {
@@ -108,7 +108,7 @@ func FromLabels(labels []descriptor.Label) (References, bool, error) {
 	return nil, false, nil
 }
 
-// FindDescribingResources returns every resource in desc whose artefact reference label
+// FindDescribingResources returns every resource in desc whose artifact reference label
 // selects the target, ordered by appearance.
 func FindDescribingResources(desc *descriptor.Descriptor, target runtime.Identity) ([]*descriptor.Resource, error) {
 	var matches []*descriptor.Resource
