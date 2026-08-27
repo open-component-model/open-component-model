@@ -154,7 +154,7 @@ func TestOCIImageLayer_RejectedAsUploadTarget(t *testing.T) {
 func TestOCIImageLayer_MissingReferenceNamesField(t *testing.T) {
 	repo := NewResourceRepository(nil)
 	_, err := repo.ProcessResourceDigest(t.Context(), layerResource(t, ""), nil)
-	require.ErrorContains(t, err, `no reference set in field "ref"`)
+	require.ErrorContains(t, err, `set it in field "ref"`)
 }
 
 func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {

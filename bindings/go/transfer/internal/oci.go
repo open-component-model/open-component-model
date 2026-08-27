@@ -207,3 +207,43 @@ func ociUploadAsArtifact(toSpec runtime.Typed, addResourceID string, getResource
 	}
 	return addResourceTransform, nil
 }
+
+// processOCIImageLayer emits the transformation nodes for an OCIImageLayer resource. A
+// layer addresses one blob inside an OCI repository rather than a whole artifact, so it
+// is always transferred by value: the blob is downloaded to a file (GetOCIArtifact, whose
+// download path handles the layer access) and then embedded as a local blob in the target
+// (AddLocalResource). There is no OCI-artifact representation to push, so the requested
+// upload type does not apply here.
+func processOCIImageLayer(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
+	resourceIdentity := resource.ToIdentity()
+	resourceID := identityToTransformationID(resourceIdentity)
+	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
+	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
+
+	unstructured, err := runtime.UnstructuredFromMixedData(map[string]any{
+		"resource": resource,
+	})
+	if err != nil {
+		return fmt.Errorf("cannot create unstructured spec for GetOCIArtifact transformation: %w", err)
+	}
+
+	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
+		TransformationMeta: meta.TransformationMeta{
+			Type: ociv1alpha1.GetOCIArtifactV1alpha1,
+			ID:   getResourceID,
+		},
+		Spec: unstructured,
+	})
+
+	// A layer carries no repository or tag that would name it in the target, so the
+	// resource name is used, as it is for other by-value resources.
+	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, staticReferenceName(resource.Name))
+	if err != nil {
+		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
+	}
+	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
+
+	resourceTransformIDs[i] = addResourceID
+
+	return nil
+}
