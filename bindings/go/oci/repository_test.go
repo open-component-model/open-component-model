@@ -1645,8 +1645,12 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 				desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, testdata)
 				r.NoError(store.Push(ctx, desc, bytes.NewReader(testdata)))
 			},
-			// Exists resolves by digest alone, so the wrong size is only caught on download.
+			// Exists resolves by digest alone, so the wrong size is tolerated here and
+			// only caught on download.
 			check: func(resource *descriptor.Resource) error {
+				r := require.New(t)
+				r.NotNil(resource.Digest, "digest should have been applied from the access")
+				r.Equal(dig.Encoded(), resource.Digest.Value)
 				return nil
 			},
 		},
@@ -1702,8 +1706,12 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 			}
 
 			res, err := repo.ProcessResourceDigest(ctx, tt.resource)
-			if tt.err != nil && !tt.err(t, err) {
-				return
+			if tt.err != nil {
+				if !tt.err(t, err) {
+					return
+				}
+			} else {
+				r.NoError(err)
 			}
 
 			if tt.check != nil {
