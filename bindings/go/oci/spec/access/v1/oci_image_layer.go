@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/opencontainers/go-digest"
@@ -43,17 +44,17 @@ type OCIImageLayer struct {
 	Size int64 `json:"size"`
 }
 
-// Validate parses the reference with looseref so that the scheme-prefixed form
-// (http://host/repo) the binding accepts for plain-HTTP registries is not rejected.
+// Validate checks that digest, size and reference are set, and that a reference
+// carrying a digest carries the same one as the digest field.
 func (t *OCIImageLayer) Validate() error {
 	if err := t.Digest.Validate(); err != nil {
 		return fmt.Errorf("invalid digest %q: %w", t.Digest, err)
 	}
 	if t.Size < 0 {
-		return fmt.Errorf("size %d is invalid, must be greater than 0", t.Size)
+		return fmt.Errorf("size %d is invalid, must not be negative", t.Size)
 	}
 	if t.Reference == "" {
-		return fmt.Errorf("no reference set in field %q", "ref")
+		return errors.New(`reference is empty, set it in field "ref"`)
 	}
 	ref, err := looseref.ParseReference(t.Reference)
 	if err != nil {
