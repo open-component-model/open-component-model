@@ -3,6 +3,8 @@ package file
 import (
 	"fmt"
 
+	"k8s.io/utils/ptr"
+
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/input/file"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
@@ -17,7 +19,7 @@ func Register(inputRegistry *input.RepositoryRegistry, filesystemConfig *filesys
 
 func RegisterFileInputV1(inputRegistry *input.RepositoryRegistry, filesystemConfig *filesystemv1alpha1.Config) error {
 	method := &file.InputMethod{
-		WorkingDirectory: filesystemConfig.WorkingDirectory,
+		WorkingDirectory: ptr.Deref(filesystemConfig.WorkingDirectory, ""),
 	}
 
 	if err := inputRegistry.RegisterInternalResourceInputPlugin(method); err != nil {

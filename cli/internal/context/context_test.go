@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"k8s.io/utils/ptr"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -21,10 +22,10 @@ func TestWithFilesystemConfig(t *testing.T) {
 		{
 			name: "basic filesystem config",
 			config: &filesystemv1alpha1.Config{
-				TempFolder: "/tmp/test",
+				TempFolder: ptr.To("/tmp/test"),
 			},
 			expected: &filesystemv1alpha1.Config{
-				TempFolder: "/tmp/test",
+				TempFolder: ptr.To("/tmp/test"),
 			},
 		},
 		{
@@ -75,7 +76,7 @@ func TestFilesystemConfigConcurrentAccess(t *testing.T) {
 
 	// Create context with filesystem config
 	initialConfig := &filesystemv1alpha1.Config{
-		TempFolder: "/tmp/initial",
+		TempFolder: ptr.To("/tmp/initial"),
 	}
 	ctx := WithFilesystemConfig(context.Background(), initialConfig)
 
@@ -87,7 +88,7 @@ func TestFilesystemConfigConcurrentAccess(t *testing.T) {
 			ocmCtx := FromContext(ctx)
 			fsCfg := ocmCtx.FilesystemConfig()
 			r.NotNil(fsCfg, "filesystem config should be available")
-			r.Equal("/tmp/initial", fsCfg.TempFolder, "temp folder should be consistent")
+			r.Equal(ptr.To("/tmp/initial"), fsCfg.TempFolder, "temp folder should be consistent")
 		}()
 	}
 
@@ -118,7 +119,7 @@ func TestContextWithMultipleConfigurations(t *testing.T) {
 
 	// Add filesystem config
 	fsConfig := &filesystemv1alpha1.Config{
-		TempFolder: "/tmp/multi",
+		TempFolder: ptr.To("/tmp/multi"),
 	}
 	ctx = WithFilesystemConfig(ctx, fsConfig)
 
@@ -133,7 +134,7 @@ func TestContextWithMultipleConfigurations(t *testing.T) {
 
 	retrievedFsConfig := ocmCtx.FilesystemConfig()
 	r.NotNil(retrievedFsConfig, "filesystem config should be available")
-	r.Equal("/tmp/multi", retrievedFsConfig.TempFolder, "filesystem config should be correct")
+	r.Equal(ptr.To("/tmp/multi"), retrievedFsConfig.TempFolder, "filesystem config should be correct")
 }
 
 func TestContextOverwriteFilesystemConfig(t *testing.T) {
@@ -141,25 +142,25 @@ func TestContextOverwriteFilesystemConfig(t *testing.T) {
 
 	// Create initial context with filesystem config
 	initialConfig := &filesystemv1alpha1.Config{
-		TempFolder: "/tmp/initial",
+		TempFolder: ptr.To("/tmp/initial"),
 	}
 	ctx := WithFilesystemConfig(context.Background(), initialConfig)
 
 	// Verify initial config
 	ocmCtx := FromContext(ctx)
 	fsCfg := ocmCtx.FilesystemConfig()
-	r.Equal("/tmp/initial", fsCfg.TempFolder, "initial config should be set")
+	r.Equal(ptr.To("/tmp/initial"), fsCfg.TempFolder, "initial config should be set")
 
 	// Overwrite with new config
 	newConfig := &filesystemv1alpha1.Config{
-		TempFolder: "/tmp/overwrite",
+		TempFolder: ptr.To("/tmp/overwrite"),
 	}
 	ctx = WithFilesystemConfig(ctx, newConfig)
 
 	// Verify overwrite
 	ocmCtx = FromContext(ctx)
 	fsCfg = ocmCtx.FilesystemConfig()
-	r.Equal("/tmp/overwrite", fsCfg.TempFolder, "config should be overwritten")
+	r.Equal(ptr.To("/tmp/overwrite"), fsCfg.TempFolder, "config should be overwritten")
 }
 
 func TestContextRetrieveOrCreateOCMContext(t *testing.T) {
@@ -190,8 +191,8 @@ func TestFilesystemConfigIsolation(t *testing.T) {
 	r := require.New(t)
 
 	// Create two separate contexts with different filesystem configs
-	config1 := &filesystemv1alpha1.Config{TempFolder: "/tmp/ctx1"}
-	config2 := &filesystemv1alpha1.Config{TempFolder: "/tmp/ctx2"}
+	config1 := &filesystemv1alpha1.Config{TempFolder: ptr.To("/tmp/ctx1")}
+	config2 := &filesystemv1alpha1.Config{TempFolder: ptr.To("/tmp/ctx2")}
 
 	ctx1 := WithFilesystemConfig(context.Background(), config1)
 	ctx2 := WithFilesystemConfig(context.Background(), config2)
@@ -203,8 +204,8 @@ func TestFilesystemConfigIsolation(t *testing.T) {
 	fsCfg1 := ocmCtx1.FilesystemConfig()
 	fsCfg2 := ocmCtx2.FilesystemConfig()
 
-	r.Equal("/tmp/ctx1", fsCfg1.TempFolder, "context 1 should have correct config")
-	r.Equal("/tmp/ctx2", fsCfg2.TempFolder, "context 2 should have correct config")
+	r.Equal(ptr.To("/tmp/ctx1"), fsCfg1.TempFolder, "context 1 should have correct config")
+	r.Equal(ptr.To("/tmp/ctx2"), fsCfg2.TempFolder, "context 2 should have correct config")
 	r.NotEqual(fsCfg1.TempFolder, fsCfg2.TempFolder, "contexts should be isolated")
 }
 

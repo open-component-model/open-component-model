@@ -241,7 +241,7 @@ func persistentPreRunE(cmd *cobra.Command, _ []string) error {
 	// If the working directory isn't set yet, default to the constructorFile file's dir.
 	cfg := hooks.Config{}
 	ctx := cmd.Context()
-	if fsCfg := ocmctx.FromContext(ctx).FilesystemConfig(); fsCfg == nil || fsCfg.WorkingDirectory == "" {
+	if fsCfg := ocmctx.FromContext(ctx).FilesystemConfig(); fsCfg == nil || fsCfg.WorkingDirectory == nil || *fsCfg.WorkingDirectory == "" {
 		path := constructorFile.String()
 		// if our flag is not absolute, make it absolute to pass into potential plugins
 		if path, err = filepath.Abs(path); err != nil {

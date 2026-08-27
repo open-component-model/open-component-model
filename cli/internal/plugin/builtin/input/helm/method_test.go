@@ -17,8 +17,9 @@ func TestRegister(t *testing.T) {
 	ctx := t.Context()
 	registry := input.NewInputRepositoryRegistry(ctx)
 	credentialsRegistry := credentialrepository.NewCredentialRepositoryRegistry(ctx)
+	tempFolder := t.TempDir()
 	cfg := &filesystemv1alpha1.Config{
-		TempFolder: t.TempDir(),
+		TempFolder: &tempFolder,
 	}
 
 	require.NoError(t, Register(registry, credentialsRegistry, cfg, &httpv1alpha1.Config{}))

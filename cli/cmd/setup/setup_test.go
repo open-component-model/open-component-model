@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/utils/ptr"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -153,7 +154,7 @@ func TestSetupTempFolderFilesystemConfig(t *testing.T) {
 
 			fsCfg := ocmContext.FilesystemConfig()
 			r.NotNil(fsCfg, "filesystem config should be available")
-			r.Equal(tt.expectedTempFolder, fsCfg.TempFolder, "temp folder should match expected")
+			r.Equal(tt.expectedTempFolder, ptr.Deref(fsCfg.TempFolder, ""), "temp folder should match expected")
 
 			// Verify config merging behavior
 			if tt.expectedConfigMerge {
@@ -169,7 +170,7 @@ func TestSetupTempFolderFilesystemConfig(t *testing.T) {
 						fsConfig := &filesystemv1alpha1.Config{}
 						err := genericv1.Scheme.Convert(cfg, fsConfig)
 						r.NoError(err, "should convert to filesystem config")
-						r.Equal(tt.expectedTempFolder, fsConfig.TempFolder, "merged config should have correct temp folder")
+						r.Equal(tt.expectedTempFolder, ptr.Deref(fsConfig.TempFolder, ""), "merged config should have correct temp folder")
 						break
 					}
 				}
@@ -277,7 +278,7 @@ func TestSetupWorkingDirFilesystemConfig(t *testing.T) {
 
 			fsCfg := ocmContext.FilesystemConfig()
 			r.NotNil(fsCfg, "filesystem config should be available")
-			r.Equal(tt.expectedWorkingDir, fsCfg.WorkingDirectory, "working-directory should match expected")
+			r.Equal(tt.expectedWorkingDir, ptr.Deref(fsCfg.WorkingDirectory, ""), "working-directory should match expected")
 
 			// Verify config merging behavior
 			if tt.expectedConfigMerge {
@@ -293,7 +294,7 @@ func TestSetupWorkingDirFilesystemConfig(t *testing.T) {
 						fsConfig := &filesystemv1alpha1.Config{}
 						err := genericv1.Scheme.Convert(cfg, fsConfig)
 						r.NoError(err, "should convert to filesystem config")
-						r.Equal(tt.expectedWorkingDir, fsConfig.WorkingDirectory, "merged config should have correct working directory")
+						r.Equal(tt.expectedWorkingDir, ptr.Deref(fsConfig.WorkingDirectory, ""), "merged config should have correct working directory")
 						break
 					}
 				}
@@ -444,7 +445,7 @@ func TestAddFilesystemConfigToCentralConfig(t *testing.T) {
 			name:          "add to empty config",
 			initialConfig: &genericv1.Config{},
 			fsCfg: &filesystemv1alpha1.Config{
-				TempFolder: "/tmp/test",
+				TempFolder: ptr.To("/tmp/test"),
 			},
 			expectedError: false,
 			expectedCount: 1,
@@ -466,7 +467,7 @@ func TestAddFilesystemConfigToCentralConfig(t *testing.T) {
 				return config
 			}(),
 			fsCfg: &filesystemv1alpha1.Config{
-				TempFolder: "/tmp/test",
+				TempFolder: ptr.To("/tmp/test"),
 			},
 			expectedError: false,
 			expectedCount: 2,
@@ -475,7 +476,7 @@ func TestAddFilesystemConfigToCentralConfig(t *testing.T) {
 			name:          "nil central config",
 			initialConfig: nil,
 			fsCfg: &filesystemv1alpha1.Config{
-				TempFolder: "/tmp/test",
+				TempFolder: ptr.To("/tmp/test"),
 			},
 			expectedError: true,
 			expectedCount: 0,
@@ -554,8 +555,8 @@ func TestFilesystemConfigIntegration(t *testing.T) {
 
 			// Verify the config is available and correct
 			r.NotNil(fsCfg, "filesystem config should be available in command")
-			r.Equal(customTempDir, fsCfg.TempFolder, "temp folder should be set from CLI flag")
-			r.Equal(workingDir, fsCfg.WorkingDirectory, "working directory should be set from CLI flag")
+			r.Equal(customTempDir, ptr.Deref(fsCfg.TempFolder, ""), "temp folder should be set from CLI flag")
+			r.Equal(workingDir, ptr.Deref(fsCfg.WorkingDirectory, ""), "working directory should be set from CLI flag")
 			return nil
 		},
 	}
