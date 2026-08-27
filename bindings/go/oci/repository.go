@@ -523,23 +523,6 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
 	}
 
-	findCandidates := func(artifacts []descriptor.Artifact) []descriptor.Artifact {
-		var exact, subset []descriptor.Artifact
-		for _, a := range artifacts {
-			meta := a.GetElementMeta()
-			id := meta.ToIdentity()
-			if identity.Match(id, runtime.IdentityMatchingChainFn(runtime.IdentityEqual)) {
-				exact = append(exact, a)
-			} else if identity.Match(id, runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
-				subset = append(subset, a)
-			}
-		}
-		if len(exact) > 0 {
-			return exact
-		}
-		return subset
-	}
-
 	var artifacts []descriptor.Artifact
 	switch kind {
 	case annotations.ArtifactKindResource:
@@ -551,7 +534,7 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 			artifacts = append(artifacts, &desc.Component.Sources[i])
 		}
 	}
-	candidates := findCandidates(artifacts)
+	candidates := descriptor.FindArtifactsByIdentity(identity, artifacts)
 	if len(candidates) != 1 {
 		return nil, nil, fmt.Errorf("found %d candidates while looking for %s %q, but expected exactly one", len(candidates), kind, identity)
 	}
