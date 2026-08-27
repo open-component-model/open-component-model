@@ -288,6 +288,15 @@ func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descript
 	}
 }
 
+// layerDescriptor is the OCI descriptor an OCIImageLayer access addresses.
+func layerDescriptor(access *accessv1.OCIImageLayer) ociImageSpecV1.Descriptor {
+	return ociImageSpecV1.Descriptor{
+		MediaType: access.MediaType,
+		Digest:    access.Digest,
+		Size:      access.Size,
+	}
+}
+
 func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImageLayer) (*descriptor.Resource, error) {
 	if err := typed.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid OCI image layer access: %w", err)
@@ -298,14 +307,9 @@ func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *des
 		return nil, err
 	}
 
-	// A layer is always addressed by digest, so its descriptor is fully known here.
-	// Exists checks the blob endpoint; Resolve would query the manifest one and 404.
-	desc := ociImageSpecV1.Descriptor{
-		MediaType: typed.MediaType,
-		Digest:    typed.Digest,
-		Size:      typed.Size,
-	}
-	exists, err := src.Exists(ctx, desc)
+	// Exists resolves by digest alone: it confirms the blob is present but checks
+	// neither the declared size nor the media type. Size is checked on download.
+	exists, err := src.Exists(ctx, layerDescriptor(typed))
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify existence of layer %q in %q: %w", typed.Digest, typed.Reference, err)
 	}
@@ -772,9 +776,17 @@ func (repo *Repository) AddOwnership(ctx context.Context, component, version str
 	if err != nil {
 		return err
 	}
+	if store == nil {
+		slogcontext.Log(ctx, slog.LevelDebug, "resource access has no manifest subject; skipping ownership referrer",
+			slog.String("accessType", resource.Access.GetType().String()))
+		return nil
+	}
 	return repo.buildAndPushOwnershipReferrer(ctx, store, subject, resource, component, version)
 }
 
+// resolveOwnershipSubject returns the store and manifest the ownership referrer should
+// point at. It returns a nil store for access types that address a plain blob, which
+// cannot be the subject of a referrer manifest.
 func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, version string, resource *descriptor.Resource) (spec.Store, ociImageSpecV1.Descriptor, error) {
 	typed, err := repo.scheme.NewObject(resource.Access.GetType())
 	if err != nil {
@@ -810,20 +822,7 @@ func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, 
 		}
 		return store, subject, nil
 	case *accessv1.OCIImageLayer:
-		if err := typed.Validate(); err != nil {
-			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid OCI image layer access: %w", err)
-		}
-		store, err := repo.resolver.StoreForReference(ctx, typed.Reference)
-		if err != nil {
-			return nil, ociImageSpecV1.Descriptor{}, err
-		}
-		// A referrer needs a manifest to point at and a bare blob is not one, so the
-		// subject returned here is deliberately skipped by buildAndPushOwnershipReferrer.
-		return store, ociImageSpecV1.Descriptor{
-			MediaType: typed.MediaType,
-			Digest:    typed.Digest,
-			Size:      typed.Size,
-		}, nil
+		return nil, ociImageSpecV1.Descriptor{}, nil
 	default:
 		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported resource access type for ownership referrer: %T", typed)
 	}
@@ -1167,18 +1166,9 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			return nil, err
 		}
 
-		graph, ok := src.(content.ReadOnlyGraphStorage)
-		if !ok {
-			return nil, fmt.Errorf("store %T does not support predecessor walks", src)
-		}
-		// Addressed by digest, so unlike the OCIImage case above nothing needs resolving.
 		return &ocistream.OCILayerResourceStream{
-			ReadOnlyGraphStorage: graph,
-			Descriptor: ociImageSpecV1.Descriptor{
-				MediaType: typed.MediaType,
-				Digest:    typed.Digest,
-				Size:      typed.Size,
-			},
+			ReadOnlyGraphStorage: src,
+			Descriptor:           layerDescriptor(typed),
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)

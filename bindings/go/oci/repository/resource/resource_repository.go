@@ -201,7 +201,7 @@ func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *
 }
 
 // accessToBaseURL derives the registry base URL from any access type this repository
-// serves. They all carry a plain OCI reference, only in differently named fields.
+// serves. Each carries an OCI reference, in a differently named field.
 func accessToBaseURL(access runtime.Typed) (string, error) {
 	var reference string
 	var field string
@@ -213,10 +213,8 @@ func accessToBaseURL(access runtime.Typed) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported access type %s: expected OCI image or OCI image layer", access.GetType())
 	}
-	// Unknown keys are dropped on deserialization, so an access that spells the
-	// reference field wrong arrives here empty. Name the field it belongs in.
 	if reference == "" {
-		return "", fmt.Errorf("access type %s has no reference set in field %q", access.GetType(), field)
+		return "", fmt.Errorf("access type %s has an empty reference, set it in field %q", access.GetType(), field)
 	}
 	ref, err := looseref.ParseReference(reference)
 	if err != nil {
@@ -226,8 +224,7 @@ func accessToBaseURL(access runtime.Typed) (string, error) {
 	return ref.RegistryWithScheme(), nil
 }
 
-// validateUploadTarget rejects access types that can be read but not written to. An
-// upload pins its reference to the manifest it pushes; a layer names an existing blob.
+// validateUploadTarget rejects access types that can be read but not written to.
 func validateUploadTarget(access runtime.Typed) error {
 	if _, ok := access.(*v1.OCIImageLayer); ok {
 		return fmt.Errorf("unsupported access type %s as upload target: expected OCI image", access.GetType())
@@ -277,8 +274,8 @@ func createRepository(
 var _ ocistream.ResourceRepository = (*ResourceRepository)(nil)
 
 // resolveRepository resolves the inner *oci.Repository for the given resource access and
-// credentials, and returns the access materialized into its registered Go type so callers
-// handing it on do not have to convert it twice. Errors if that type is not registered.
+// credentials. It also returns the access materialized into its registered Go type, which
+// callers hand on to the inner repository so its type switch can match it.
 func (p *ResourceRepository) resolveRepository(resource *descriptor.Resource, credentials runtime.Typed) (*oci.Repository, runtime.Typed, error) {
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)

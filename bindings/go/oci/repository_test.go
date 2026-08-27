@@ -1583,6 +1583,74 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 			},
 		},
 		{
+			// The reference documented for OCIImageLayer is a bare repository, with the
+			// layer addressed by the digest field alone.
+			name: "oci image layer with a reference that carries no digest",
+			resource: &descriptor.Resource{
+				Relation: descriptor.ExternalRelation,
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &v1.OCIImageLayer{
+					Reference: "test-registry/test-layer",
+					MediaType: ociImageSpecV1.MediaTypeImageLayer,
+					Digest:    dig,
+					Size:      int64(len(testdata)),
+				},
+			},
+			setup: func(t *testing.T) {
+				ctx := t.Context()
+				r := require.New(t)
+				store, err := store.StoreForReference(ctx, "test-registry/test-layer")
+				r.NoError(err, "Failed to get store for test registry")
+
+				desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, testdata)
+				r.NoError(store.Push(ctx, desc, bytes.NewReader(testdata)))
+			},
+			check: func(resource *descriptor.Resource) error {
+				r := require.New(t)
+				r.NotNil(resource.Digest, "digest should have been applied from the access")
+				r.Equal(dig.Encoded(), resource.Digest.Value)
+				return nil
+			},
+		},
+		{
+			name: "oci image layer with a size that does not match the blob",
+			resource: &descriptor.Resource{
+				Relation: descriptor.ExternalRelation,
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &v1.OCIImageLayer{
+					Reference: "test-registry/test-layer",
+					MediaType: ociImageSpecV1.MediaTypeImageLayer,
+					Digest:    dig,
+					Size:      int64(len(testdata)) + 1,
+				},
+			},
+			setup: func(t *testing.T) {
+				ctx := t.Context()
+				r := require.New(t)
+				store, err := store.StoreForReference(ctx, "test-registry/test-layer")
+				r.NoError(err, "Failed to get store for test registry")
+
+				desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, testdata)
+				r.NoError(store.Push(ctx, desc, bytes.NewReader(testdata)))
+			},
+			// Exists resolves by digest alone, so the wrong size is only caught on download.
+			check: func(resource *descriptor.Resource) error {
+				return nil
+			},
+		},
+		{
 			name: "oci image layer that is not present in the repository",
 			resource: &descriptor.Resource{
 				Relation: descriptor.ExternalRelation,
@@ -1622,7 +1690,7 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 				},
 			},
 			err: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.ErrorContains(t, err, `no reference set in field "ref"`)
+				return assert.ErrorContains(t, err, `set it in field "ref"`)
 			},
 		},
 	}
@@ -1697,6 +1765,29 @@ func TestRepository_DownloadResourceOCIImageLayer(t *testing.T) {
 	mediaType, ok := aware.MediaType()
 	r.True(ok)
 	r.Equal(ociImageSpecV1.MediaTypeImageLayer, mediaType)
+
+	t.Run("without a media type the blob keeps its default", func(t *testing.T) {
+		r := require.New(t)
+		untyped := res.DeepCopy()
+		untyped.Access.(*v1.OCIImageLayer).MediaType = ""
+
+		downloaded, err := repo.DownloadResource(ctx, untyped)
+		r.NoError(err)
+		aware, ok := downloaded.(blob.MediaTypeAware)
+		r.True(ok)
+		mediaType, ok := aware.MediaType()
+		r.True(ok)
+		r.Equal("application/octet-stream", mediaType, "an empty media type must not overwrite the default")
+	})
+
+	t.Run("a size that does not match the blob is rejected", func(t *testing.T) {
+		r := require.New(t)
+		wrongSize := res.DeepCopy()
+		wrongSize.Access.(*v1.OCIImageLayer).Size = int64(len(testdata)) + 1
+
+		_, err := repo.DownloadResource(ctx, wrongSize)
+		r.ErrorContains(err, "the descriptor declares")
+	})
 }
 
 func TestRepository_AddComponentVersionAlias(t *testing.T) {
@@ -2973,4 +3064,16 @@ func TestRepository_AddOwnership_OCIImageLayerSubjectSkipped(t *testing.T) {
 	_, body, err := pack.OwnershipReferrer(ctx, desc, resource, component, version)
 	r.NoError(err)
 	r.Nil(body, "a layer subject must yield no ownership referrer")
+
+	// The media type on a layer access is not trusted to decide this: a layer is a
+	// blob whatever it claims to be, so it is skipped without consulting the store.
+	manifestTyped := resource.DeepCopy()
+	manifestTyped.Access.(*v1.OCIImageLayer).MediaType = ociImageSpecV1.MediaTypeImageManifest
+	r.NoError(repo.AddOwnership(ctx, component, version, manifestTyped, nil))
+
+	// Pushing a referrer always writes the empty config/layer blob first, so its
+	// absence proves nothing was pushed against the layer.
+	pushed, err := layerStore.Exists(ctx, ociImageSpecV1.DescriptorEmptyJSON)
+	r.NoError(err)
+	r.False(pushed, "no ownership referrer may be pushed against a layer")
 }
