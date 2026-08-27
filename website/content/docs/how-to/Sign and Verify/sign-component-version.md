@@ -250,7 +250,7 @@ These are in the same file. Just append this signature in that relevant configur
 {{< /callout >}}
 
 {{< callout context="note" >}}
-Verification still takes the handler from a spec file, not from `.ocmconfig`. Keep a `verifier-spec.yaml` holding the same `type: GPGSigningConfiguration/v1alpha1` for the [verify how-to → GPG tab]({{< relref "verify-component-version.md" >}}).
+Verification reads its handler from the same entry, under `verifier` instead of `signer`. Add it now so the [verify how-to → GPG tab]({{< relref "verify-component-version.md" >}}) works against this config.
 {{< /callout >}}
 
 {{< /step >}}

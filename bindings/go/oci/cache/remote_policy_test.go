@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -93,6 +94,31 @@ func TestReferenceCache_IfNotPresent_HitAvoidsUpstream(t *testing.T) {
 	c := newTestRefCache(t, Options{RemotePolicy: RemotePolicyIfNotPresent})
 
 	desc := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Size: 1}
+	ref, err := registry.ParseReference("ghcr.io/owner/repo@" + digest.FromString("payload").String())
+	require.NoError(t, err)
+
+	var resolves atomic.Int64
+	up := resolverFn(func(_ context.Context, _ string) (ociImageSpecV1.Descriptor, error) {
+		resolves.Add(1)
+		return desc, nil
+	})
+
+	_, err = c.Resolve(t.Context(), up, ref)
+	require.NoError(t, err)
+
+	_, err = c.Resolve(t.Context(), up, ref)
+	require.NoError(t, err)
+
+	assert.EqualValues(t, 1, resolves.Load(), "IfNotPresent must not call upstream on a digest hit")
+}
+
+// TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream pins that
+// the IfNotPresent shortcut governs authorisation, not freshness: a tag
+// is mutable, so it is resolved upstream even when a mapping is cached.
+func TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream(t *testing.T) {
+	c := newTestRefCache(t, Options{RemotePolicy: RemotePolicyIfNotPresent})
+
+	desc := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Size: 1}
 	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
 	require.NoError(t, err)
 
@@ -108,7 +134,7 @@ func TestReferenceCache_IfNotPresent_HitAvoidsUpstream(t *testing.T) {
 	_, err = c.Resolve(t.Context(), up, ref)
 	require.NoError(t, err)
 
-	assert.EqualValues(t, 1, resolves.Load(), "IfNotPresent must not call upstream on hit")
+	assert.EqualValues(t, 2, resolves.Load(), "a tag must be resolved upstream on every call")
 }
 
 func TestReferenceCache_Always_AlwaysCallsUpstream(t *testing.T) {
