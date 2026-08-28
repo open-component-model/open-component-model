@@ -2,6 +2,7 @@ package versioncheck
 
 import (
 	"fmt"
+	"slices"
 
 	generic "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -62,7 +63,8 @@ func LookupConfig(cfg *generic.Config) (*Config, error) {
 		return nil, fmt.Errorf("failed to filter versioncheck config: %w", err)
 	}
 
-	for _, entry := range filtered.Configurations {
+	// Iterate backwards due to last wins semantics
+	for _, entry := range slices.Backward(filtered.Configurations) {
 		var config Config
 		if err := configScheme.Convert(entry, &config); err != nil {
 			return nil, fmt.Errorf("failed to decode versioncheck config: %w", err)

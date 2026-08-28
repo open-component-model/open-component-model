@@ -61,6 +61,27 @@ func TestLookupConfig_PolicyAuto(t *testing.T) {
 	}
 }
 
+func TestLookupConfig_MergePolicies(t *testing.T) {
+	rawAuto := &runtime.Raw{
+		Type: runtime.NewVersionedType(ConfigType, ConfigVersion),
+		Data: []byte(`{"type":"versioncheck.cli.config.ocm.software/v1alpha1","policy":"auto"}`),
+	}
+	rawDisable := &runtime.Raw{
+		Type: runtime.NewVersionedType(ConfigType, ConfigVersion),
+		Data: []byte(`{"type":"versioncheck.cli.config.ocm.software/v1alpha1","policy":"disable"}`),
+	}
+
+	cfg, err := LookupConfig(&generic.Config{
+		Configurations: []*runtime.Raw{rawAuto, rawDisable},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Policy != PolicyDisable {
+		t.Errorf("expected Policy = %q, got %q", PolicyDisable, cfg.Policy)
+	}
+}
+
 func TestLookupConfig_InvalidPolicy(t *testing.T) {
 	raw := &runtime.Raw{
 		Type: runtime.NewVersionedType(ConfigType, ConfigVersion),
