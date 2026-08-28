@@ -3,6 +3,8 @@ package helm
 import (
 	"fmt"
 
+	"k8s.io/utils/ptr"
+
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helminput "ocm.software/open-component-model/bindings/go/helm/input"
 	helm "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
@@ -17,7 +19,7 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	httpConfig *httpv1alpha1.Config,
 ) error {
 	method := &helminput.InputMethod{
-		TempFolder: filesystemConfig.TempFolder,
+		TempFolder: ptr.Deref(filesystemConfig.TempFolder, ""),
 		HTTPConfig: httpConfig,
 	}
 

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"k8s.io/utils/ptr"
+
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
@@ -70,7 +72,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	}
 
 	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(
-		helmdigest.NewDigestProcessor(filesystemConfig.TempFolder),
+		helmdigest.NewDigestProcessor(ptr.Deref(filesystemConfig.TempFolder, "")),
 	); err != nil {
 		return fmt.Errorf("could not register helm digest processor plugin: %w", err)
 	}

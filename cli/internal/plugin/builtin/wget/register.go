@@ -3,6 +3,8 @@ package wget
 import (
 	"fmt"
 
+	"k8s.io/utils/ptr"
+
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	httpclient "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -24,7 +26,7 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	filesystemConfig *filesystemv1alpha1.Config,
 ) error {
 	method := &wgetinput.InputMethod{
-		TempFolder: filesystemConfig.TempFolder,
+		TempFolder: ptr.Deref(filesystemConfig.TempFolder, ""),
 		HTTPConfig: httpConfig,
 	}
 
