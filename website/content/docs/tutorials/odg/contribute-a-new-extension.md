@@ -32,6 +32,7 @@ An ODG extension plugs into the delivery pipeline by declaring its configuration
 {{< steps >}}
 
 {{< step >}}
+
 ### Set up your local development environment
 
 For instructions on how to setup a local development environment, please refer
@@ -39,6 +40,7 @@ to [Deploying the Open Delivery Gear Locally]({{< relref "docs/how-to/odg/deploy
 {{< /step >}}
 
 {{< step >}}
+
 ### Understand the ArtefactMetadata model
 
 For information on the `ArtefactMetadata` model and how to extend it, please
@@ -46,6 +48,7 @@ refer to [Correlating metadata to OCM]({{< relref "docs/concepts/odg/correlating
 {{< /step >}}
 
 {{< step >}}
+
 ### Define the extensions configuration
 
 Configuration for each extension should be provided via the interface defined
@@ -71,6 +74,7 @@ as an example for this chapter.
 {{< /step >}}
 
 {{< step >}}
+
 ### Define the findings configuration
 
 If the extension emits findings (see [Correlating metadata to OCM]({{< relref "docs/concepts/odg/correlating-metadata-to-ocm/" >}}) for information on the
@@ -90,6 +94,7 @@ as an example for this chapter.
 {{< /step >}}
 
 {{< step >}}
+
 ### Choose the anatomy and integration level
 
 When adding an extension to the Open Delivery Gear, different flavours
@@ -117,6 +122,7 @@ specifying the level of integration are supported:
 {{< /step >}}
 
 {{< step >}}
+
 ### Configure extension triggers
 
 The Open Delivery Gear currently features two kinds of triggers:
@@ -157,6 +163,7 @@ artefact-enumerator might look like.
 {{< /step >}}
 
 {{< step >}}
+
 ### Implement the general flow
 
 The general flow for extensions which are intended to submit
@@ -195,6 +202,7 @@ be used which already contains functionality for the below described points:
 {{< /step >}}
 
 {{< step >}}
+
 ### Register with the artefact-enumerator
 
 If the artefact-enumerator was chosen as trigger in the [Configure extension triggers](#configure-extension-triggers) step,
@@ -210,6 +218,7 @@ which extensions require `BacklogItems` to be created.
 {{< /step >}}
 
 {{< step >}}
+
 ### Register with the issue-replicator
 
 In order to enable the
@@ -222,6 +231,7 @@ configured accordingly.
 {{< /step >}}
 
 {{< step >}}
+
 ### Add the Helm chart
 
 If the extension should be deployed as part of the Open Delivery Gear
@@ -242,6 +252,7 @@ as reference and adjust them accordingly.
 {{< /step >}}
 
 {{< step >}}
+
 ### Provide the OCI image
 
 In case the extension does not require any additional installations, the
@@ -250,6 +261,7 @@ The core image contains all the necessary components and extensions.
 {{< /step >}}
 
 {{< step >}}
+
 ### Add the Python package
 
 The default extensions image built from `Dockerfile.extensions` installs the

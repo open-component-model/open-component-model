@@ -45,15 +45,15 @@ On a local machine these files are created manually.
 The [ODG Core repository](https://github.com/open-component-model/odg-core) features blueprints and default configuration files already.
 They can just be adjusted, as ODG will use them by default.
 
-- [Configuring your Extensions](https://github.com/open-component-model/odg-core/blob/master/odg/extensions_cfg.yaml)
-- [Configuring your supported Findings](https://github.com/open-component-model/odg-core/blob/master/odg/findings_cfg.yaml)
+- [Configuring your Extensions](https://github.com/open-component-model/odg-core/blob/master/src/odg/extensions_cfg.yaml)
+- [Configuring your supported Findings](https://github.com/open-component-model/odg-core/blob/master/src/odg/findings_cfg.yaml)
 
 An in-depth documentation for all the available configuration options is [here](https://github.com/open-component-model/odg-core/blob/master/charts/bootstrapping/values.documentation.yaml).
 
 ### Configure secrets
 
 ODG features a typed Secret system. There is an opinion on how a secret has to be structured and named.
-The [secrets directory](https://github.com/open-component-model/odg-core/tree/master/secrets) features templates for supported secret types. To make them effective, the `.template` string has to be dropped from the filename.
+The [secrets directory](https://github.com/open-component-model/odg-core/tree/master/src/secrets) features templates for supported secret types. To make them effective, the `.template` string has to be dropped from the filename.
 
 Also for the secret structure and semantics, [there is detailed documentation](https://github.com/open-component-model/odg-core/blob/c8b4f4fe055b8719a0dd849026678f6ab8127d76/charts/bootstrapping/values.documentation.yaml#L1558).
 

@@ -984,3 +984,7 @@ checkboxes
 ODG's
 rescored
 Rescanning
+ArtefactMetadata
+CronJobs
+Rescan
+rescan

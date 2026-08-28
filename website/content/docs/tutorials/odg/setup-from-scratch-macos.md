@@ -40,6 +40,7 @@ Throughout this tutorial:
 {{< steps >}}
 
 {{< step >}}
+
 ### Install the tooling
 
 ```bash
@@ -75,6 +76,7 @@ gh auth login   # GitHub.com → ... → Login with a web browser
 {{< /step >}}
 
 {{< step >}}
+
 ### Install the OCM CLI
 
 Follow the steps outlined here:
@@ -91,6 +93,7 @@ gh attestation verify "$HOME/.local/bin/ocm" \
 {{< /step >}}
 
 {{< step >}}
+
 ### Clone the repository
 
 ```bash
@@ -100,6 +103,7 @@ cd open-delivery-gear
 {{< /step >}}
 
 {{< step >}}
+
 ### Configure secrets and values
 
 ODG needs two things to start: A **GitHub App** (server-to-server access) and
@@ -248,6 +252,7 @@ No special permissions are needed on the local folder.
 {{< /step >}}
 
 {{< step >}}
+
 ### Start the cluster
 
 ```bash
@@ -272,6 +277,7 @@ On success, log in to the dashboard at `http://localhost:3000` with GitHub.
 {{< /step >}}
 
 {{< step >}}
+
 ### Access the cluster with kubectl
 
 The setup writes a kubeconfig to `local-setup/kind/kubeconfig`. Add this to your
