@@ -88,7 +88,12 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, err
 	}
 
-	result, err := r.download(ctx, spec, credentials, r.filesystemConfig.TempFolder)
+	var tempFolder string
+	if r.filesystemConfig.TempFolder != nil {
+		tempFolder = *r.filesystemConfig.TempFolder
+	}
+
+	result, err := r.download(ctx, spec, credentials, tempFolder)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +175,12 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		return nil, err
 	}
 
-	tempDir, err := os.MkdirTemp(r.filesystemConfig.TempFolder, "ocm-s3-digest-*")
+	tempFolder := ""
+	if r.filesystemConfig.TempFolder != nil {
+		tempFolder = *r.filesystemConfig.TempFolder
+	}
+
+	tempDir, err := os.MkdirTemp(tempFolder, "ocm-s3-digest-*")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary directory for digest processing: %w", err)
 	}

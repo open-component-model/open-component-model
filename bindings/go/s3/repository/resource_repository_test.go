@@ -161,7 +161,7 @@ func Test_DownloadResource(t *testing.T) {
 	content := []byte("hello from s3")
 	tempFolder := t.TempDir()
 	srv := newFakeS3(t, content, "")
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 
 	b, err := repo.DownloadResource(context.Background(),
 		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"})),
@@ -193,7 +193,7 @@ func Test_ProcessResourceDigest(t *testing.T) {
 	content := []byte("digest me")
 	tempFolder := t.TempDir()
 	srv := newFakeS3(t, content, "")
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder})
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 
 	res, err := repo.ProcessResourceDigest(context.Background(),
 		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
@@ -251,7 +251,8 @@ func Test_ProcessResourceDigest_VerifiesLeniently(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			srv := newFakeS3(t, content, "")
-			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
+			tempFolder := t.TempDir()
+			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 
 			resource := s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"}))
 			resource.Digest = tt.digest
@@ -342,7 +343,8 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			srv := newFakeS3(t, []byte("digest me"), tt.versionID)
-			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
+			tempFolder := t.TempDir()
+			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 
 			resource := s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k", Version: tt.specVersion}))
 			res, err := repo.ProcessResourceDigest(context.Background(), resource, fakeCredentials())
