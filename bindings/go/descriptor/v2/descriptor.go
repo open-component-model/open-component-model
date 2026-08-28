@@ -498,7 +498,7 @@ type NestedDigest struct {
 	ResourceDigests []ResourceDigest `json:"resourceDigests,omitempty"`
 }
 
-// ResourceDigest defines artefact digest information for resources aggregated within NestedDigest.
+// ResourceDigest defines artifact digest information for resources aggregated within NestedDigest.
 // +k8s:deepcopy-gen=true
 type ResourceDigest struct {
 	Name          string           `json:"name"`
