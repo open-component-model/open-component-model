@@ -62,16 +62,6 @@ func (s SBOM) String() string {
 	return name
 }
 
-// String names the document without its contents, so that formatting an SBOM with
-// %v or %q cannot spill the whole document into a log line or an error message.
-func (s SBOM) String() string {
-	name := cmp.Or(s.Name, s.ID, "unnamed sbom")
-	if platform := s.Platform.String(); platform != "" {
-		return name + " (" + platform + ")"
-	}
-	return name
-}
-
 // MediaType returns the media type matching PredicateType.
 func (s SBOM) MediaType() string {
 	switch s.PredicateType {
