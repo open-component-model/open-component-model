@@ -9,10 +9,12 @@ toc: true
 
 Establish a `psql` connection to the ODG database for executing custom SQL queries.
 
-## Outcome
+## You'll end up with
 
 - An interactive `psql` shell connected to the ODG database
 - The ability to execute arbitrary SQL commands against ODG
+
+**Estimated time:** ~5 minutes
 
 ## Prerequisites
 
@@ -59,7 +61,7 @@ You now have an active `psql` session. Explore the database schema using command
 (5 rows)
 ```
 
-### Querying vulnerabilities for a component
+### Query vulnerabilities for a component
 
 Use the `\x` command to enable extended `psql` display mode for improved readability of query results in the terminal.
 
@@ -116,3 +118,19 @@ component_name | ocm.software/ocmcli
 ### More advanced queries
 
 To effectively query ODG at the SQL level, you need to understand the underlying data model. See [Correlating metadata to OCM]({{< relref "docs/concepts/odg/correlating-metadata-to-ocm/" >}}) for details.
+
+## Troubleshooting
+
+### Symptom: `kubectl exec` is denied
+
+**Cause:** The kubeconfig does not have `create` permission on the `pods/exec` subresource.
+
+**Fix:** Request a kubeconfig with the appropriate RBAC permissions for the ODG namespace.
+
+## Next steps
+
+- [Change the SLAs for vulnerability findings]({{< relref "docs/how-to/odg/change-the-slas-for-vulnerability-findings/" >}})
+
+## Related documentation
+
+- [Correlating metadata to OCM]({{< relref "docs/concepts/odg/correlating-metadata-to-ocm/" >}})

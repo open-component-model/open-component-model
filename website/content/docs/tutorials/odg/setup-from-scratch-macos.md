@@ -5,12 +5,42 @@ weight: 2
 toc: true
 ---
 
-This is a detailed, opinionated walkthrough of setting up an Open Delivery Gear
+This tutorial is a detailed, opinionated walkthrough of setting up an [Open Delivery Gear]({{< relref "docs/concepts/odg/odg-system-architecture/" >}})
 (ODG) cluster locally on an **Apple Silicon Mac** with the [Colima](https://colima.run/) container runtime, from zero to a running cluster.
-For the concise reference, see
-[Deploying the Open Delivery Gear Locally]({{< relref "docs/how-to/odg/deploying-the-open-delivery-gear-locally/" >}}).
 
-## 1. Install the tooling
+## What You'll Learn
+
+- How to install and configure all required tooling on macOS (Colima, kind, OCM CLI, Helm)
+- How to configure GitHub App credentials and OIDC login for the ODG dashboard
+- How to start a local ODG cluster and access it with `kubectl`
+
+## How It Works
+
+The setup uses [kind](https://kind.sigs.k8s.io/) to run a Kubernetes cluster inside Docker (managed by Colima), bootstrapped via a `make kind-up` target that applies all ODG Helm charts. A `secrets-local.yaml` file supplies GitHub App and OAuth credentials at cluster creation time.
+
+**Estimated time:** ~20 minutes
+
+## Prerequisites
+
+- Apple Silicon Mac (M1/M2/M3)
+- [Homebrew](https://brew.sh/) installed
+- A GitHub account with permission to create GitHub Apps
+- For the concise reference, see [Deploying the Open Delivery Gear Locally]({{< relref "docs/how-to/odg/deploying-the-open-delivery-gear-locally/" >}})
+
+## Scenario
+
+Throughout this tutorial:
+
+- The local dashboard will be available at `http://localhost:3000`
+- The Postgres volume will be mounted at `~/odg-postgres-data`
+- The kind cluster will be named `kind-odg-local`
+
+## Tutorial Steps
+
+{{< steps >}}
+
+{{< step >}}
+### Install the tooling
 
 ```bash
 brew install kubectl k9s colima docker docker-compose kind helm wget yq
@@ -27,48 +57,63 @@ Start Colima:
 colima start --mount-type=virtiofs
 ```
 
-> **Note:** `docker ps` should now work. Run a test container:
-> ```bash
-> docker run hello-world
-> # "This message shows that your installation appears to be working correctly."
-> ```
-> **Note:** The OCM installer uses `gh` to verify the install.
-> ```bash
-> brew install gh
-> gh auth login   # GitHub.com → ... → Login with a web browser
-> ```
+{{< callout type="note" >}}
+`docker ps` should now work. Run a test container:
+```bash
+docker run hello-world
+# "This message shows that your installation appears to be working correctly."
+```
+{{< /callout >}}
 
-## 2. Install the OCM CLI
+{{< callout type="note" >}}
+The OCM installer uses `gh` to verify the install.
+```bash
+brew install gh
+gh auth login   # GitHub.com → ... → Login with a web browser
+```
+{{< /callout >}}
+{{< /step >}}
+
+{{< step >}}
+### Install the OCM CLI
 
 Follow the steps outlined here:
 [OCM install guide](https://ocm.software/docs/getting-started/install-the-ocm-cli/).
 
-> **Note:** To verify the binary manually (requires `gh`):
-> ```bash
-> gh attestation verify "$HOME/.local/bin/ocm" \
->   --repo open-component-model/open-component-model
-> # Verification succeeded!
-> ```
+{{< callout type="note" >}}
+To verify the binary manually (requires `gh`):
+```bash
+gh attestation verify "$HOME/.local/bin/ocm" \
+  --repo open-component-model/open-component-model
+# Verification succeeded!
+```
+{{< /callout >}}
+{{< /step >}}
 
-## 3. Clone the repository
+{{< step >}}
+### Clone the repository
 
 ```bash
 git clone git@github.com:open-component-model/open-delivery-gear.git
 cd open-delivery-gear
 ```
+{{< /step >}}
 
-## 4. Configure secrets and values
+{{< step >}}
+### Configure secrets and values
 
 ODG needs two things to start: A **GitHub App** (server-to-server access) and
 **OIDC login** for the dashboard. Both go into `secrets-local.yaml`. We skip
 private registry config here — the main ODG images are public.
 
-> **Note:** The main cluster config lives in `local-setup/kind/values.yaml`. You
-> don't need to edit it, but the
-> [values documentation](https://github.com/open-component-model/odg-core/blob/master/charts/bootstrapping/values.documentation.yaml)
-> describes every field.
+{{< callout type="note" >}}
+The main cluster config lives in `local-setup/kind/values.yaml`. You
+don't need to edit it, but the
+[values documentation](https://github.com/open-component-model/odg-core/blob/master/charts/bootstrapping/values.documentation.yaml)
+describes every field.
+{{< /callout >}}
 
-### Create the GitHub App
+#### Create the GitHub App
 
 ODG uses a GitHub App for server-to-server access (reading repos, creating
 issues/PRs, checking security alerts).
@@ -98,7 +143,7 @@ issues/PRs, checking security alerts).
    `installation_id`, e.g.
    `http://localhost:3000/?code=...&installation_id=151722591&setup_action=install`.
 
-### Fill in `secrets-local.yaml`
+#### Fill in `secrets-local.yaml`
 
 Copy the example and edit it — the setup script picks it up automatically:
 
@@ -176,7 +221,7 @@ requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url:
 http://delivery-service.odg.svc.cluster.local:8080/auth?...&api_url=https://api.github.com
 ```
 
-### Create `values-local.yaml`
+#### Create `values-local.yaml`
 
 Colima auto-mounts `$HOME` but not paths like `/var/`, so the Postgres volume
 fails on its default `/var/delivery-db` mount. Point it at a subfolder in your home directory instead:
@@ -191,32 +236,43 @@ persistence:
   containerPath: "/var/delivery-db"
 ```
 
-> **Note:** Without it, `delivery-db-0` crash-loops because it can't create its data
-> directory:
-> ```text
-> delivery-db-0   0/1   CrashLoopBackOff
-> mkdir: can't create directory '/data/pgdata': Permission denied
-> ```
-> No special permissions are needed on the local folder.
+{{< callout type="note" >}}
+Without it, `delivery-db-0` crash-loops because it can't create its data
+directory:
+```text
+delivery-db-0   0/1   CrashLoopBackOff
+mkdir: can't create directory '/data/pgdata': Permission denied
+```
+No special permissions are needed on the local folder.
+{{< /callout >}}
+{{< /step >}}
 
-## 5. Start the cluster
+{{< step >}}
+### Start the cluster
 
 ```bash
 make kind-up
 ```
 
-> **Note:** On errors, run `make kind-down` before retrying. Use it to shut down the
-> cluster too.
-> **Note:** If you see `Error: failed to render components: ... no roots found in the dag`,
-> set an explicit version. Find the current one on the
-> [releases page](https://github.com/open-component-model/open-delivery-gear/releases):
-> ```bash
-> ODG_VERSION=0.26.0 make kind-up
-> ```
+{{< callout type="note" >}}
+On errors, run `make kind-down` before retrying. Use it to shut down the
+cluster too.
+{{< /callout >}}
+
+{{< callout type="note" >}}
+If you see `Error: failed to render components: ... no roots found in the dag`,
+set an explicit version. Find the current one on the
+[releases page](https://github.com/open-component-model/open-delivery-gear/releases):
+```bash
+ODG_VERSION=0.26.0 make kind-up
+```
+{{< /callout >}}
 
 On success, log in to the dashboard at `http://localhost:3000` with GitHub.
+{{< /step >}}
 
-## 6. Access the cluster with kubectl
+{{< step >}}
+### Access the cluster with kubectl
 
 The setup writes a kubeconfig to `local-setup/kind/kubeconfig`. Add this to your
 `~/.zshrc` so the context is always available:
@@ -236,3 +292,61 @@ kubectl get pods
 # delivery-db-0                         1/1     Running     0          34m
 # delivery-service-...                  1/1     Running     0          34m
 ```
+{{< /step >}}
+
+{{< /steps >}}
+
+## What you've learned
+
+- How to install Colima, kind, the OCM CLI, and all supporting tools on macOS
+- How to create a GitHub App and populate `secrets-local.yaml` with its credentials
+- How to configure Postgres persistence for Colima's `virtiofs` mount constraints
+- How to start and stop the ODG cluster with `make kind-up` / `make kind-down`
+- How to set up `KUBECONFIG` and verify pods are running with `kubectl`
+
+## Check your understanding
+
+- [ ] Why must the Postgres `hostPath` point to a directory under `$HOME` on Colima?
+- [ ] What does the `github-app` subject type in `role_bindings` control?
+- [ ] What command should you run before retrying `make kind-up` after an error?
+
+{{< details "Answers & Explanations">}}
+**1. Why must the Postgres `hostPath` point to a directory under `$HOME` on Colima?**
+Colima's `virtiofs` mount only auto-mounts `$HOME`. Paths like `/var/` are not accessible inside the VM, so the Postgres pod would fail to create its data directory and enter `CrashLoopBackOff`.
+
+**2. What does the `github-app` subject type in `role_bindings` control?**
+It grants ODG extensions (such as the artefact enumerator and cache manager) permission to authenticate against GitHub using the GitHub App. Without it, those extensions receive 401 Unauthorized errors when calling the delivery-service auth endpoint.
+
+**3. What command should you run before retrying `make kind-up` after an error?**
+`make kind-down` — this tears down the existing (partially created) cluster so the next `make kind-up` starts from a clean state.
+{{< /details >}}
+
+## Troubleshooting
+
+**Symptom:** `delivery-db-0` is in `CrashLoopBackOff` with `Permission denied` on `/data/pgdata`.
+**Cause:** The Postgres `hostPath` is set to `/var/delivery-db`, which Colima cannot mount.
+**Fix:** Set `persistence.hostPath` in `values-local.yaml` to a path under `$HOME`, e.g. `/Users/<your-username>/odg-postgres-data`.
+
+---
+
+**Symptom:** `make kind-up` fails with `no roots found in the dag`.
+**Cause:** The default version resolution failed (network issue or no tagged release found).
+**Fix:** Pin an explicit version: `ODG_VERSION=0.26.0 make kind-up`.
+
+---
+
+**Symptom:** Extensions log `401 Client Error: Unauthorized` when calling the delivery-service.
+**Cause:** The GitHub App slug is not listed as a subject in `role_bindings` in `secrets-local.yaml`.
+**Fix:** Add a `github-app` subject entry with your app's slug under the appropriate role in `oauth-cfg.role_bindings`.
+
+## Next steps
+
+- [Deploying the Open Delivery Gear Locally]({{< relref "docs/how-to/odg/deploying-the-open-delivery-gear-locally/" >}})
+- [Setting up a hybrid dev setup]({{< relref "docs/how-to/odg/setting-up-a-hybrid-dev-setup/" >}})
+- [Contribute a new Extension]({{< relref "docs/tutorials/odg/contribute-a-new-extension/" >}})
+
+## Related documentation
+
+- [ODG System Architecture]({{< relref "docs/concepts/odg/odg-system-architecture/" >}})
+- [Reacting upon OCM events]({{< relref "docs/concepts/odg/reacting-upon-ocm-events/" >}})
+- [Lifecycling GitHub issues]({{< relref "docs/concepts/odg/lifecycling-github-issues/" >}})

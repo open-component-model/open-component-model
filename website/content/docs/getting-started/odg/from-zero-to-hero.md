@@ -15,7 +15,9 @@ At the end of this guide you will understand:
 - How ODG implements a Kubernetes-native architecture to enable an extension-based approach
 - How to run ODG locally and start building your own extensions!
 
-> **Note:** Is there something you wish to improve during your journey? We highly appreciate feedback, whether via [GitHub Issue](https://github.com/open-component-model/open-delivery-gear/issues) or directly via [Pull Request](https://github.com/open-component-model/open-delivery-gear/tree/main/docs/website/contents).
+{{< callout type="note" >}}
+Is there something you wish to improve during your journey? We highly appreciate feedback, whether via [GitHub Issue](https://github.com/open-component-model/open-delivery-gear/issues) or directly via [Pull Request](https://github.com/open-component-model/open-delivery-gear/tree/main/docs/website/contents).
+{{< /callout >}}
 
 ---
 
@@ -31,8 +33,9 @@ Let's start by elaborating on the fundamentals and core principles of OCM.
 
 ## About modelling software
 
-> **Note:** Already familiar with OCM?
-> Please skip to [Security and Compliance Automation with ODG](#security-and-compliance-automation-with-odg)
+{{< callout type="note" >}}
+Already familiar with OCM? Please skip to [Security and Compliance Automation with ODG](#security-and-compliance-automation-with-odg).
+{{< /callout >}}
 
 ODG is built upon the semantic model of OCM.
 The following sections elaborate on the semantic model of OCM, and provide motivation and explanation for the rationale behind it.
