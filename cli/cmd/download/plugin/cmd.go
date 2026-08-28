@@ -200,7 +200,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no resource found matching identity %v", resourceIdentity)
 	}
 	if len(toDownload) > 1 {
-		logger.Warn("multiple resources match identity, using first match", slog.Int("count", len(toDownload)))
+		return fmt.Errorf("found multiple resources matching identity", slog.Int("count", len(toDownload)))
 	}
 	res := &toDownload[0]
 
