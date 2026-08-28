@@ -1,8 +1,6 @@
 package oidc
 
 import (
-	"k8s.io/utils/ptr"
-
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialplugin"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
@@ -22,8 +20,12 @@ func Register(
 	repositoryRegistry.Register(oidcidentitytoken.Scheme)
 	repositoryRegistry.Register(trustedroot.Scheme)
 
+	var tempDir string
+	if filesystemConfig.TempFolder != nil {
+		tempDir = *filesystemConfig.TempFolder
+	}
 	return signingHandlerRegistry.RegisterInternalComponentSignatureHandler(
-		handler.New(handler.WithTempDir(ptr.Deref(filesystemConfig.TempFolder, ""))),
+		handler.New(handler.WithTempDir(tempDir)),
 	)
 }
 
