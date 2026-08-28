@@ -23,6 +23,10 @@ actions:
     label: "Deploy"
     description: "Automate deployments with OCM Controllers and Flux. Seamless GitOps."
     link: "deploy-helm-chart.md"
+  - icon: "certificate"
+    label: "Comply"
+    description: "Continuously scan components and track findings against SLAs with Open Delivery Gear."
+    link: "docs/getting-started/odg/_index.md"
 
 hero_image: "svg/ocm-logo-icon-colour.svg"
 benefits:

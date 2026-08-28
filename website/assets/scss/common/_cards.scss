@@ -359,7 +359,7 @@
 /* Large screens - switch to single row layout (1100px+) */
 @media (min-width: 1100px) {
   .ocm-card-grid--action {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
   }
   
   .ocm-card-grid--benefit {
