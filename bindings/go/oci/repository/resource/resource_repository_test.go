@@ -78,6 +78,7 @@ func TestAddOwnership_RawAccessType(t *testing.T) {
 func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 	r := require.New(t)
 
+	tempFolder := "/tmp/test"
 	tests := []struct {
 		name             string
 		filesystemConfig *filesystemv1alpha1.Config
@@ -86,7 +87,7 @@ func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 		{
 			name: "with filesystem config",
 			filesystemConfig: &filesystemv1alpha1.Config{
-				TempFolder: "/tmp/test",
+				TempFolder: &tempFolder,
 			},
 			expectError: false,
 		},
