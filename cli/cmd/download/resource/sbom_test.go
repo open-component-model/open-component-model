@@ -77,7 +77,7 @@ func setupComponent(t *testing.T, specs ...resourceSpec) string {
 		}
 
 		if spec.describes != nil {
-			value, err := json.Marshal(artifactref.Reference{Identity: spec.describes})
+			value, err := json.Marshal(artifactref.References{{Identity: spec.describes}})
 			r.NoError(err)
 			resource.Labels = []descriptor.Label{{
 				Name:    artifactref.LabelName,
