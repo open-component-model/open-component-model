@@ -43,7 +43,7 @@ information is used.
 
 Compliance snapshots are used to store the state of components which are
 intended to be processed periodically, e.g. scanned, reported, etc. (see
-[artefact-enumerator extension](/docs/concepts/odg/02-artefact-enumerator/) for more
+[artefact-enumerator extension]({{< relref "docs/concepts/odg/reacting-upon-ocm-events/" >}}) for more
 details). To prevent GitHub issues being created for components which are not
 of interest (e.g. if a scan and issue update were triggered manually), the
 **issue-replicator requires compliance snapshots** to be present for the
@@ -51,7 +51,7 @@ artefact group. If there is not at least one "active" compliance snapshot for
 the artefact group, it is considered to be not of interest (anymore), and all
 associated GitHub issues (if there are any) will be closed. However, please
 note that compliance snapshots are not intended to be managed manually but only
-via the [artefact-enumerator extension](/docs/concepts/odg/02-artefact-enumerator/).
+via the [artefact-enumerator extension]({{< relref "docs/concepts/odg/reacting-upon-ocm-events/" >}}).
 
 <img src="/odg/issues-overview.svg" alt="Issues Overview">
 
@@ -73,7 +73,7 @@ is tried, but if one lookup yields an empty list `[]`, this is interpreted as
 
 2. *Extension*
 
-   The [responsibles extension](/docs/concepts/odg/04-responsibles/) tries to
+   The [responsibles extension]({{< relref "docs/concepts/odg/overwriting-ocm-component-responsibles/" >}}) tries to
    resolve responsibles by examining configured `rules` for the components of
    interest. If a rule matches, the responsibles retrieved via the configured
    `strategies` are uploaded as `ArtefactMetadata` of type

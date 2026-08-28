@@ -115,4 +115,4 @@ component_name | ocm.software/ocmcli
 
 ### More advanced queries
 
-To effectively query ODG at the SQL level, you need to understand the underlying data model. See [Correlating metadata to OCM](/docs/concepts/odg/01-data-model/) for details.
+To effectively query ODG at the SQL level, you need to understand the underlying data model. See [Correlating metadata to OCM]({{< relref "docs/concepts/odg/correlating-metadata-to-ocm/" >}}) for details.

@@ -8,12 +8,12 @@ toc: true
 ## Setup Local Development Environment
 
 For instructions on how to setup a local development environment, please refer
-to [Deploying the Open Delivery Gear Locally](/docs/how-to/odg/01-local-setup/).
+to [Deploying the Open Delivery Gear Locally]({{< relref "docs/how-to/odg/deploying-the-open-delivery-gear-locally/" >}}).
 
 ## Model
 
 For information on the `ArtefactMetadata` model and how to extend it, please
-refer to [Correlating metadata to OCM](/docs/concepts/odg/01-data-model/).
+refer to [Correlating metadata to OCM]({{< relref "docs/concepts/odg/correlating-metadata-to-ocm/" >}}).
 
 ## Extensions Configuration
 
@@ -38,7 +38,7 @@ a mounted ConfigMap (more on that topic in [helm-chart](#helm-chart)).
 
 ## Findings Configuration
 
-If the extension emits findings (see [Correlating metadata to OCM](/docs/concepts/odg/01-data-model/) for information on the
+If the extension emits findings (see [Correlating metadata to OCM]({{< relref "docs/concepts/odg/correlating-metadata-to-ocm/" >}}) for information on the
 supported datatypes), it will also be necessary to add the new finding type to
 the findings configuration (see `odg.findings_cfg` module for the model
 definition and `odg/findings_cfg.yaml` for the example used for the local
@@ -86,14 +86,14 @@ The Open Delivery Gear currently features two kinds of triggers:
    Kubernetes Cronjob with a well-defined `schedule`. If running as a Cronjob,
    the extension might have to be able to retrieve the information for which
    artefacts it should run. This is relevant as the
-   [Correlating metadata to OCM](/docs/concepts/odg/01-data-model/) requires the data to be always correlated to a certain
+   [Correlating metadata to OCM]({{< relref "docs/concepts/odg/correlating-metadata-to-ocm/" >}}) requires the data to be always correlated to a certain
    `artefact`. This information should be passed to the extension using the
    [extensions-configuration](#extensions-configuration).
 
 2. *Artefact-Enumerator*
 
    Another common trigger is the artefact-enumerator (see
-   [artefact-enumerator extension](/docs/concepts/odg/02-artefact-enumerator/)). The
+   [artefact-enumerator extension]({{< relref "docs/concepts/odg/reacting-upon-ocm-events/" >}})). The
    artefact-enumerator itself is a Kubernetes Cronjob as described before which
    retrieves a list of artefacts via the [extensions-configuration](#extensions-configuration). For
    these artefacts, it periodically checks if there are any updates or the
@@ -115,7 +115,7 @@ The Open Delivery Gear currently features two kinds of triggers:
 ### General Flow
 
 The general flow for extensions which are intended to submit
-[Correlating metadata to OCM](/docs/concepts/odg/01-data-model/) via the ODG API is usually very similar. In case of
+[Correlating metadata to OCM]({{< relref "docs/concepts/odg/correlating-metadata-to-ocm/" >}}) via the ODG API is usually very similar. In case of
 findings, there is a well-defined overview of the supported states of a finding
 (see Fig. 1).
 
@@ -162,7 +162,7 @@ to the artefact-enumerator (see [open-component-model/odg-core@68d6f5b](https://
 ## Issue-Replicator
 
 In order to enable the
-[issue-replicator extension](/docs/concepts/odg/03-issue-replicator/) to also report
+[issue-replicator extension]({{< relref "docs/concepts/odg/lifecycling-github-issues/" >}}) to also report
 findings for the new extension, it must be defined how the findings should be
 templated into a GitHub issue. Therefore, a minor change must be added to the
 issue-replicator (see [open-component-model/odg-core@adb7239](https://github.com/open-component-model/odg-core/commit/adb723957c2f6ec115ac702463f94802b35ed6df)).

@@ -16,7 +16,7 @@ artefact + datatype. The first matching rule "wins". In case no rule matches,
 no responsible objects are uploaded.
 
 The hereby determined responsibles are then used by the
-[issue-replicator extension](/docs/concepts/odg/03-issue-replicator/) as option
+[issue-replicator extension]({{< relref "docs/concepts/odg/lifecycling-github-issues/" >}}) as option
 for the GitHub issue assignees. Please refer to the documentation of the
 issue-replicator for more details on the **precedence behaviour** of
 responsibles.

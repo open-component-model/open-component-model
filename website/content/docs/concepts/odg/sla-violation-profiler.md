@@ -148,7 +148,7 @@ The extension produces records of type `sla_violation` and datasource
         (e.g. any `finding/*` datatype supported by the ODG data model)
       - `artefact`: the `ComponentArtefactId` the finding was attached to
 
-See [Correlating metadata to OCM](/docs/concepts/odg/01-data-model/) for the surrounding
+See [Correlating metadata to OCM]({{< relref "docs/concepts/odg/correlating-metadata-to-ocm/" >}}) for the surrounding
 `ArtefactMetadata` model.
 
 ## Idempotency and Re-runs
@@ -158,5 +158,5 @@ The extension is designed to run as a scheduled job. Because existing
 suppress re-evaluation, re-runs process only those versions that have not yet
 been profiled. To re-evaluate a version after its underlying data has changed,
 the existing `sla_violation` record must first be removed from the delivery
-database. See [Run custom SQL commands in ODG](/docs/how-to/odg/08-run-sql-statements/) for instructions
+database. See [Run custom SQL commands in ODG]({{< relref "docs/how-to/odg/run-custom-sql-commands-in-odg/" >}}) for instructions
 on how to connect to the ODG database and execute SQL commands directly.

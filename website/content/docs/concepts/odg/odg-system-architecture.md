@@ -1,5 +1,5 @@
 ---
-title: "ODG's System Architecture"
+title: "ODG System Architecture"
 description: "Architectural overview of ODG's core components, extension mechanisms, and scheduling."
 weight: 1
 toc: true
@@ -386,7 +386,7 @@ All persistent state resides in the **ODG Database**, accessed exclusively throu
 ### For Extensions
 
 - See [Scanner Extensions](#scanner-extensions) for architecture overview
-- See [Contribute a new Extension](/docs/tutorials/odg/00-contributing-extension/) for development guide
+- See [Contribute a new Extension]({{< relref "docs/tutorials/odg/contribute-a-new-extension/" >}}) for development guide
 
 ### For Operators
 

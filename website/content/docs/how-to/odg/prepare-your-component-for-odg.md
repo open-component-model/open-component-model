@@ -6,7 +6,7 @@ toc: true
 ---
 
 This guide is for component authors who want to get the most out of ODG
-scanning. By adding a small set of [OCM labels](/docs/reference/odg/18-ocm-labels/)
+scanning. By adding a small set of [OCM labels]({{< relref "docs/reference/odg/ocm-label-index/" >}})
 to your component descriptor, you can control scan behaviour, ensure findings
 are routed to the right team, and provide context that helps ODG produce more
 accurate results.
@@ -30,12 +30,12 @@ labels:
         teamname: my-org/my-team
 ```
 
-See the [label reference](/docs/reference/odg/18-ocm-labels/#odgocmsoftwareresponsibles-v1)
+See the [label reference]({{< relref "docs/reference/odg/ocm-label-index/#odgocmsoftwareresponsibles-v1" >}})
 for all supported types (`githubUser`, `codeowners`, etc.).
 
 > **Note:** The responsibles extension can override or extend these assignments at runtime
 > via configurable rules. See
-> [Overwriting OCM component responsibles](/docs/concepts/odg/04-responsibles/) for details.
+> [Overwriting OCM component responsibles]({{< relref "docs/concepts/odg/overwriting-ocm-component-responsibles/" >}}) for details.
 
 ## Provide Risk Profile Context
 
@@ -58,7 +58,7 @@ labels:
 
 Only set the fields that are meaningful for your component; omitted fields are
 treated as unknown and do not affect rescoring. See the
-[label reference](/docs/reference/odg/18-ocm-labels/#securityocmsoftwarerisk-profile-v1)
+[label reference]({{< relref "docs/reference/odg/ocm-label-index/#securityocmsoftwarerisk-profile-v1" >}})
 for all fields and allowed values.
 
 ## Skip Binary or Source Scans
@@ -82,5 +82,5 @@ labels:
 ```
 
 See the
-[label reference](/docs/reference/odg/18-ocm-labels/#odgocmsoftwarebinary-scan-policy-v1)
+[label reference]({{< relref "docs/reference/odg/ocm-label-index/#odgocmsoftwarebinary-scan-policy-v1" >}})
 for all fields and allowed values.

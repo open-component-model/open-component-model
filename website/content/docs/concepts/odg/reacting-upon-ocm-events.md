@@ -29,7 +29,7 @@ directly via ODG API or cluster API. In general, creating backlog
 items is the same trigger as used by the artefact-enumerator, however, certain
 extensions might require the artefacts to be configured here in order to
 process them (e.g.
-[Lifecycling GitHub Issues](/docs/concepts/odg/03-issue-replicator/)). Artefacts
+[Lifecycling GitHub Issues]({{< relref "docs/concepts/odg/lifecycling-github-issues/" >}})). Artefacts
 may be configured in two different ways, as referenced
 [OCM components](#ocm-components) or as
 [runtime artefacts](#runtime-artefact).
@@ -65,7 +65,7 @@ remaining open GitHub issues must be closed. Therefore, for each artefact, a
 respective compliance snapshot is being created. Already existing compliance
 snapshots of artefacts which are not "of interest" anymore are kept for an
 extra grace period to allow other extensions (e.g. the
-[issue-replicator](/docs/concepts/odg/03-issue-replicator/)) to react upon those
+[issue-replicator]({{< relref "docs/concepts/odg/lifecycling-github-issues/" >}})) to react upon those
 changes (e.g. to close related GitHub issues).
 
 ## Examples

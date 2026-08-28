@@ -8,7 +8,7 @@ toc: true
 This is a detailed, opinionated walkthrough of setting up an Open Delivery Gear
 (ODG) cluster locally on an **Apple Silicon Mac** with the [Colima](https://colima.run/) container runtime, from zero to a running cluster.
 For the concise reference, see
-[Deploying the Open Delivery Gear Locally](/docs/how-to/odg/01-local-setup/).
+[Deploying the Open Delivery Gear Locally]({{< relref "docs/how-to/odg/deploying-the-open-delivery-gear-locally/" >}}).
 
 ## 1. Install the tooling
 

@@ -153,7 +153,7 @@ the `datasource` and the `type` share a global namespace. When it comes to the
    of a reporting via GitHub issues, the `responsibles` detected by the
    extension can be also added to the `meta` field to overwrite the default
    fallback (see
-   [Lifecycling GitHub Issues](/docs/concepts/odg/03-issue-replicator/)). The
+   [Lifecycling GitHub Issues]({{< relref "docs/concepts/odg/lifecycling-github-issues/" >}})). The
    relationship of findings and an [artefact](#artefact) is typically n:1.
 
 3. *Informational Types*
