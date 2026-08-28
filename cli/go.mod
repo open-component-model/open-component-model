@@ -17,7 +17,7 @@ require (
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
-	ocm.software/open-component-model/bindings/go v0.0.9-0.20260827142523-f75dc6c167a6
+	ocm.software/open-component-model/bindings/go v0.0.10
 	sigs.k8s.io/yaml v1.6.0
 )
 

@@ -420,8 +420,8 @@ k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af h1:zLXA2Irn14q2/06WMkxViy
 k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af/go.mod h1:V/QaCUYDa+0QpcHhVVc5l99Uz56wEMEXBSj9oCDkNDY=
 k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 h1:jVkFFVfXdXP74B/zbO3hM3hpSFD0xvhQ5U686DPurkE=
 k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3/go.mod h1:M2s5JB1lIYP3jzZdorPLHXIPJzt9vv2muW5a6L9DtNM=
-ocm.software/open-component-model/bindings/go v0.0.9-0.20260827142523-f75dc6c167a6 h1:prfOe0bpHkExx3Hbs9MQ+Z2UKT2zfcYHyRun1SIVge4=
-ocm.software/open-component-model/bindings/go v0.0.9-0.20260827142523-f75dc6c167a6/go.mod h1:SM8VoWqGoQ/jne/HxoZYsovRTDMbSJOg1hexGGb8L9o=
+ocm.software/open-component-model/bindings/go v0.0.10 h1:sxaWTZMO0Pf1td6nZu7WVEApzOCEgSy/y3LUA+pbFyI=
+ocm.software/open-component-model/bindings/go v0.0.10/go.mod h1:SM8VoWqGoQ/jne/HxoZYsovRTDMbSJOg1hexGGb8L9o=
 oras.land/oras-go/v2 v2.6.2 h1:N04RXngAp1LJKTG6ifz3xHPipasEkWr+hFmInja5YKo=
 oras.land/oras-go/v2 v2.6.2/go.mod h1:PlTtg4JTDJkDe8yVHpM2wz7/YDc00GVas+i4jAW2TZ4=
 pgregory.net/rapid v1.2.0 h1:keKAYRcjm+e1F0oAuU5F5+YPAWcyxNNRK2wud503Gnk=
