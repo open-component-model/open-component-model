@@ -72,10 +72,8 @@ ocm download resource [flags]
                                  (must be one of [auto disable]) (default auto)
   -h, --help                     help for resource
       --identity string          resource identity to download
-      --output string            output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name. With --sbom this is a single file, and standard output is used when it is not given.
-      --sbom                     download the SBOMs describing the resource instead of the resource itself, combining every SBOM found into a single document
-      --sbom-format enum         format to write the combined SBOM in. Only valid together with --sbom.
-                                 (must be one of [cyclonedx spdx]) (default spdx)
+      --output string            output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name.With --sbom this is a single file, and standard output is used when it is not given.
+      --sbom                     experimental: download the SBOMs describing the resource instead of the resource itself, writing every SBOM found to its own file in the output directory. What is discovered, how it is written out and this flag itself may change in a future release
       --transformer string       transformer to use for the output. If not specified, the resource will be written as is. 
 ```
 
