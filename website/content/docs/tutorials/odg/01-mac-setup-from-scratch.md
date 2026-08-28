@@ -10,7 +10,6 @@ This is a detailed, opinionated walkthrough of setting up an Open Delivery Gear
 For the concise reference, see
 [Deploying the Open Delivery Gear Locally](/docs/how-to/odg/01-local-setup/).
 
-
 ## 1. Install the tooling
 
 ```bash
@@ -33,7 +32,6 @@ colima start --mount-type=virtiofs
 > docker run hello-world
 > # "This message shows that your installation appears to be working correctly."
 > ```
-
 > **Note:** The OCM installer uses `gh` to verify the install.
 > ```bash
 > brew install gh
@@ -44,7 +42,6 @@ colima start --mount-type=virtiofs
 
 Follow the steps outlined here:
 [OCM install guide](https://ocm.software/docs/getting-started/install-the-ocm-cli/).
-
 
 > **Note:** To verify the binary manually (requires `gh`):
 > ```bash
@@ -81,7 +78,7 @@ issues/PRs, checking security alerts).
 2. Fill in the form:
 
    | Field | Value |
-   |---|---|
+   | --- | --- |
    | GitHub App name | Something unique, e.g. `yourname-odg-local` |
    | Homepage URL | `http://localhost:3000` |
    | Callback URL | `http://localhost:3000` |
@@ -127,7 +124,7 @@ secrets:
 ```
 
 | Field | Where to find it |
-|---|---|
+| --- | --- |
 | `app_id` | App settings → "App ID" (`https://github.com/settings/apps/`) |
 | `installation_id` | Installation URL: `https://github.com/settings/installations/...` |
 | `org` | Your username if installed on your account |
@@ -156,7 +153,7 @@ secrets:
 ```
 
 | Field | Where to find it |
-|---|---|
+| --- | --- |
 | `client_id` | GitHub App settings → "Client ID" |
 | `client_secret` | GitHub App settings → generate a client secret |
 
@@ -165,21 +162,19 @@ Possible **role types** for `role_bindings` are `admin`, `reader` and `writer`.
 Possible **subject types** for `role_bindings`:
 
 | Subject type | Meaning | Example |
-|---|---|---|
+| --- | --- | --- |
 | `github-user` | GitHub username (regex) | `alice` |
 | `github-org` | Members of an org | `my-org` |
 | `github-team` | Members of a team, `org/team-slug` | `my-org/platform-team` |
 | `github-app` | GitHub App slug (regex) | `yourname-odg-local` |
 
-
 The `github-app` permission allows extensions such as the artefact enumerator and cache manager to
 authenticate against GitHub. Otherwise you might find such errors:
 
-```
+```text
 requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url:
 http://delivery-service.odg.svc.cluster.local:8080/auth?...&api_url=https://api.github.com
 ```
-
 
 ### Create `values-local.yaml`
 
@@ -198,7 +193,7 @@ persistence:
 
 > **Note:** Without it, `delivery-db-0` crash-loops because it can't create its data
 > directory:
-> ```
+> ```text
 > delivery-db-0   0/1   CrashLoopBackOff
 > mkdir: can't create directory '/data/pgdata': Permission denied
 > ```
@@ -212,7 +207,6 @@ make kind-up
 
 > **Note:** On errors, run `make kind-down` before retrying. Use it to shut down the
 > cluster too.
-
 > **Note:** If you see `Error: failed to render components: ... no roots found in the dag`,
 > set an explicit version. Find the current one on the
 > [releases page](https://github.com/open-component-model/open-delivery-gear/releases):

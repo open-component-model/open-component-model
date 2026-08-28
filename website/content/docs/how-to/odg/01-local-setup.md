@@ -11,16 +11,20 @@ please feel free to [open an issue](https://github.com/open-component-model/open
 so that we can improve this process or documentation.
 
 ## Prerequisites
+
 To get started, you first of all need to install the required toolchain:
+
 - [Kubectl](https://kubernetes.io/docs/tasks/tools)
 - [KinD](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
 - [Helm](https://helm.sh/docs/intro/install)
 - [OCM CLI](https://github.com/open-component-model/open-component-model#ocm-cli)
 
 ## Configuration
+
 To customise ODG according to your needs, you have to adjust the [values file](https://github.com/open-component-model/open-delivery-gear/blob/main/local-setup/kind/values.yaml).
 There are already reasonable defaults available for most entries, however,
 following entries must still be provided:
+
 - OCI registry credentials to access desired component descriptors and
 resources via `secrets.oci-registry` (in case they are not publicly available)
 - GitHub credentials via `.secrets.github` or `.secrets.github-app` (both to
@@ -36,6 +40,7 @@ repositories)
     `secrets.oauth-cfg`  
 
 ## Start-Up
+
 To create a local Kubernetes cluster and deploy ODG, you have to run
 `make kind-up`. If you want to deploy a specific version of ODG, you have to
 set the environment variable `ODG_VERSION`. Otherwise, the OCM CLI is used to
@@ -50,18 +55,21 @@ the ODG cluster. Also, it will forward the delivery-service to
 > set via the `ODG_VERSION` environment variable.
 
 ## Configuration Update
+
 To update the ODG deployment in case your local configuration has changed, just
 run the `make kind-update` command. This will upgrade the existing Helm charts
 and re-apply your configuration settings without the need to re-create your
 KinD cluster.
 
 ## Termination
+
 If you wish to stop ODG and delete the KinD cluster, you have to run
 `make kind-down`. However, this will _not_ delete the database storage since it
 is permanently stored on the host machine. To also clear the database storage,
 you have to delete the `/var/delivery-db` directory.
 
 ## Extensions
+
 ODG extensions can be dynamically added to your installation. Therefore, the
 configuration of the extensions must be done via `extensions_cfg` in the
 [values file](https://github.com/open-component-model/open-delivery-gear/blob/main/local-setup/kind/values.yaml).

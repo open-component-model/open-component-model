@@ -47,7 +47,7 @@ findings_report:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `schedule` | string | `0 2 * * *` | Cron schedule for running the cronjob (daily at 2 AM by default). |
 | `successful_jobs_history_limit` | int | `1` | Number of successful job executions to retain in history. |
 | `failed_jobs_history_limit` | int | `1` | Number of failed job executions to retain in history. |
@@ -58,7 +58,7 @@ findings_report:
 Each entry in the `mappings` list supports the following fields:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `type` | string | yes | Finding type to report on (e.g., `finding/malware`, `finding/vulnerability`). |
 | `component` | object | yes | Component specification. See component fields below. |
 | `github_repository` | string | yes | GitHub repository where report is published (e.g., `github.com/org/repo`). |
@@ -74,7 +74,7 @@ Each entry in the `mappings` list supports the following fields:
 The `component` object contains:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `component_name` | string | yes | OCM component name to report on. |
 | `ocm_repo_url` | string | no | Override default OCM repository lookup. |
 | `time_range.days_from` | int | yes | Start of time range (negative = days in past). |
@@ -117,7 +117,7 @@ The extension generates two types of files:
 2. **Detailed reports** (`dirname/`): One file per component version with full finding details
 
 **Example structure:**
-```
+```text
 reports/
 ├── malware-report.md              # Overview (filename)
 └── malware-reports/               # Detailed reports (dirname)
@@ -130,6 +130,7 @@ reports/
 
 When `auto_merge: true`, the extension automatically merges the pull request
 that updates the report. This is useful for:
+
 - Automated compliance dashboards
 - Continuous reporting pipelines
 - Read-only report repositories

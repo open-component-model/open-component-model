@@ -34,7 +34,7 @@ artefact_enumerator:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `compliance_snapshot_grace_period` | int (seconds) | `86400` | Grace period for compliance snapshots before triggering re-evaluation. |
 | `schedule` | string | `*/5 * * * *` | Cron schedule for running the cronjob (every 5 minutes by default). |
 | `successful_jobs_history_limit` | int | `1` | Number of successful job executions to retain in history. |
@@ -46,7 +46,7 @@ artefact_enumerator:
 Each entry in the `components` list supports the following fields:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `component_name` | string | yes | Name of the OCM component (e.g., `ocm.software/open-delivery-gear`). |
 | `version` | string or object | yes | Component version. Use `greatest` or `null` for latest, a specific version string, or a source object to read from GitHub. |
 | `ocm_repo_url` | string | no | Override the default OCM repository lookup via `ocm_repo_mappings`. |
@@ -57,7 +57,7 @@ Each entry in the `components` list supports the following fields:
 When `version` is an object with a `source` key, it supports:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `source.type` | string | yes | Type of version location. Currently supports `github`. |
 | `source.repo` | string | yes | GitHub repository name (e.g., `github.com/org-name/repo-name`). |
 | `source.relpath` | list | yes | Relative path from repository root to the version file. Can include submodule specifications. |
@@ -156,5 +156,6 @@ Setting this to a higher value allows tracking findings across multiple componen
 which is useful for understanding trends and ensuring older versions meet compliance requirements.
 
 **Examples:**
+
 - `max_versions_limit: 1` - track only the latest version
 - `max_versions_limit: 3` - track the three most recent versions

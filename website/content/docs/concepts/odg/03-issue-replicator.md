@@ -35,7 +35,7 @@ respective backlog item. However, the `artefact` defined in this backlog item
 **must** contain (at least) all grouping relevant properties! The not grouping
 relevant properties of the backlog item are only used in case the findings
 configuration has a respective `filter` configured. To find all artefacts
-associated to the group, all [compliance snapshots](#issue-replicator-compliance-snapshots)
+associated to the group, all [compliance snapshots](#compliance-snapshots)
 with matching artefact group properties are retrieved and their `artefact`
 information is used.
 

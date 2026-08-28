@@ -70,7 +70,7 @@ responsibles:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `interval` | int (seconds) | `43200` | Maximum time before component responsibles are re-determined. |
 | `rules` | list | `[]` | Responsibility assignment rules. See rule fields below. |
 
@@ -79,7 +79,7 @@ responsibles:
 Each entry in the `rules` list supports:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `name` | string | no | Rule name for logging and debugging purposes. |
 | `assignee_mode` | string | no | How to handle existing GitHub issue assignees. Options: `null`, `extend`, `overwrite`, `skip`. |
 | `filters` | list | yes | Conditions that must match for this rule to apply. |
@@ -212,7 +212,7 @@ Assign responsibility to a specific GitHub user:
 Controls how determined responsibles interact with existing GitHub issue assignees:
 
 | Mode | Behaviour |
-|------|----------|
+| --- | --- |
 | `null` | Use the default mode from finding configuration (`findings[].issues.default_assignee_mode`). |
 | `extend` | Add determined responsibles to existing issue assignees (union). |
 | `overwrite` | Replace all existing assignees with determined responsibles. |

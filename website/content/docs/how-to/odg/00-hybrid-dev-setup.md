@@ -26,14 +26,13 @@ An environment, capable of running ODG code (packages, libraries, ...) connected
 Pull the [ODG Core repository](https://github.com/open-component-model/odg-core).
 Install dependencies using `uv`.
 
-```
+```shell
 uv sync
 ```
 
 **Hint**: if you are not using virtual environments, you have to additionally provide the `--break-system-packages` flag
 
 ### Configuration and Secrets
-
 
 Configuration and Secrets are expected to be available via local file paths.
 In a Kubernetes environment, this is implemented using mounted ConfigMaps and Secrets.
@@ -65,7 +64,7 @@ ODG code connects in two ways with a running instance: on Kubernetes level and w
 To connect ODG code to a running cluster, you need to obtain a valid `kubeconfig` (with static credentials) and put it into a local file.
 ODG will pick it up when referencing via `--kubeconfig` parameter on startup.
 
-```
+```shell
 python3 -m my-odg-extension --kubeconfig /path/to/kubeconfig
 ```
 
@@ -85,7 +84,7 @@ EOF
 
 On ODG code startup, provide the URL to the ODG API with `--delivery-service-url` parameter.
 
-```
+```shell
 python3 -m my-odg-extension --delivery-service-url 'https://delivery-service.demo.ci.gardener.cloud'
 ```
 

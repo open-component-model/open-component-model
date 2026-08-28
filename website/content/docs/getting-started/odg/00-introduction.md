@@ -69,7 +69,6 @@ ODG allows subscription to OCM components, which upon new version release trigge
 As the assessment information is correlated using OCM coordinates, the same benefits (especially transportability) are inherited.
 Thus, ODG implements an end-to-end trust-but-verify scenario.
 
-
 ### Architecture
 
 ODG employs an asynchronous architecture with eventual consistency, implemented as Kubernetes-native deployments. It leverages core Kubernetes concepts such as desired state, reconciliation loops, and custom resources, whilst providing multiple interaction points including custom HTTP APIs, a web UI, and native Kubernetes operations.

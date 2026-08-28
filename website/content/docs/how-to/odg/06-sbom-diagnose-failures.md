@@ -29,12 +29,14 @@ SBOM generation.
 ### Missing AWS Credentials for S3 Artefacts
 
 If you see errors related to S3 access, ensure that:
+
 - The appropriate AWS secret is configured in the `mappings` section
 - The `aws_secret_name` matches the secret name in your ODG instance
 
 ### Unsupported Artefact Types
 
 The SBOM-Generator currently supports:
+
 - `ociRegistry` resources (container images)
 - `localBlob/v1` resources
 - `s3` resources (tar archives)
@@ -44,6 +46,7 @@ Other resource types will not be scanned.
 ### Timeout Issues
 
 If generation times out:
+
 - Check the `interval` configuration
 - Verify that the artefact is accessible
 - Review network connectivity to the artefact source

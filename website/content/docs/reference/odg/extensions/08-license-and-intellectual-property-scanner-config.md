@@ -47,7 +47,7 @@ blackduck:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `interval` | int (seconds) | `86400` | Maximum time before a component is re-processed. |
 | `label_rules` | list | `[]` | Label rules for categorizing findings. See label rule fields below. |
 | `mappings` | list | `[]` | Per-prefix component mappings. See mapping fields below. |
@@ -57,7 +57,7 @@ blackduck:
 Each entry in the `mappings` list supports the following fields:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `prefix` | string | yes | Component name prefix. Use `''` (empty string) to match all components. |
 | `targets` | list | yes | List of BlackDuck instances to upload results to. See target fields below. |
 | `deduplicate_across_component_versions` | bool | `true` | If true, deduplicate scans of the same artefact across component versions. |
@@ -69,7 +69,7 @@ Each entry in the `mappings` list supports the following fields:
 Each entry in the `label_rules` list supports the following fields:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `name` | string | yes | Descriptive name for this labeling rule. |
 | `selector` | object | yes | Selector criteria for matching findings. See selector fields below. |
 
@@ -78,7 +78,7 @@ Each entry in the `label_rules` list supports the following fields:
 Each `selector` object supports the following fields (all optional, supports regex patterns):
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `host` | string | no | Regex pattern to match against BlackDuck host. `null` matches any host. |
 | `policy_violation_id` | string | no | Regex pattern to match against policy violation IDs. `null` matches any ID. |
 | `license_name` | string | no | Regex pattern to match against license names. `null` matches any license. |
@@ -88,7 +88,7 @@ Each `selector` object supports the following fields (all optional, supports reg
 Each entry in the `targets` list supports:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `group_id` | string | yes | The BlackDuck group ID. |
 | `host` | string | yes | The hostname of the BlackDuck instance. |
 | `distribution_mode_overwrite` | string | no | Override distribution mode: `EXTERNAL`, `INTERNAL`, `OPENSOURCE`, `SAAS`. |
@@ -101,6 +101,7 @@ All selector fields support regex patterns and use `null` as a wildcard (matches
 A finding matches a rule when ALL non-null selector fields match their patterns.
 
 **Examples:**
+
 - `license_name: 'GPL.*'` matches GPL-2.0, GPL-3.0, LGPL
 - `host: 'blackduck\\.prod\\..*'` matches any production BlackDuck instance
 - All fields `null` creates a catch-all rule
@@ -113,12 +114,14 @@ different processing policies.
 #### Prefix Matching
 
 The `prefix` field uses simple string prefix matching:
+
 - `prefix: 'acme.org'` matches `acme.org/product` and `acme.org/another-product`
 - `prefix: ''` (empty string) matches all components (use as a catch-all)
 
 ### `targets`
 
 A single component can be uploaded to multiple BlackDuck instances. This is useful for:
+
 - Uploading to both production and compliance BlackDuck instances
 - Cross-regional compliance reporting
 - Multi-tenant scenarios
@@ -141,6 +144,7 @@ When `true`, if the same artefact version appears in multiple component versions
 BlackDuck scans are deduplicated. This reduces redundant processing and API calls.
 
 **Example:**
+
 - Component v1.0.0 includes artefact `library:1.2.3`
 - Component v1.1.0 also includes artefact `library:1.2.3`
 - With deduplication enabled: only one BlackDuck scan for `library:1.2.3`

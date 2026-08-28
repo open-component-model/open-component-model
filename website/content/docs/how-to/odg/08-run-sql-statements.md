@@ -31,6 +31,7 @@ kubectl exec --namespace <odg-namespace> -it delivery-db-0 -- sh
 ```
 
 This spawns a shell in the pod using the Kubernetes API and container runtime, creating an interactive session that streams:
+
 - Your terminal's STDIN to the container's process
 - The container's STDOUT/STDERR to your terminal
 

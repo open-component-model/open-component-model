@@ -28,7 +28,7 @@ ghas:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `on_unsupported` | string | `warning` | Behaviour when artefact kind/type/access is unsupported. Options: `fail`, `ignore`, `warning`. |
 | `schedule` | string | `0 0 * * *` | Cron schedule for running the cronjob (daily at midnight by default). |
 | `successful_jobs_history_limit` | int | `1` | Number of successful job executions to retain in history. |
@@ -40,7 +40,7 @@ ghas:
 Each entry in the `github_instances` list supports the following fields:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `hostname` | string | yes | Hostname of the GitHub instance (e.g., `github.com`, `github.enterprise.com`). |
 | `orgs` | list | yes | List of GitHub organizations to fetch secret alerts for. |
 

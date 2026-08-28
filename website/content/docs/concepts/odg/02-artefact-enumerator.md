@@ -9,7 +9,7 @@ toc: true
 
 The artefact-enumerator extension periodically checks the configured
 [OCM artefacts](#ocm-components) and available
-[runtime artefacts](#runtime-artefacts) and takes care of the lifecycle of
+[runtime artefacts](#runtime-artefact) and takes care of the lifecycle of
 their [compliance snapshots](#compliance-snapshots)
 (create/update/delete). Based on the status information in the compliance
 snapshots, the artefact-enumerator evaluates whether it must create backlog
@@ -24,7 +24,7 @@ periodically being processed by the available extensions (e.g. scanned,
 reported, etc.). Apart from these periodical triggers initiated by the
 artefact-enumerator, certain extensions might be triggered manually by creating
 a respective **backlog item** for the desired extension and `artefact` (see
-[example](#example-backlog-item)), for example via delivery-dashboard or
+[example](#backlog-item)), for example via delivery-dashboard or
 directly via ODG API or cluster API. In general, creating backlog
 items is the same trigger as used by the artefact-enumerator, however, certain
 extensions might require the artefacts to be configured here in order to
@@ -32,7 +32,7 @@ process them (e.g.
 [Lifecycling GitHub Issues](/docs/concepts/odg/03-issue-replicator/)). Artefacts
 may be configured in two different ways, as referenced
 [OCM components](#ocm-components) or as
-[runtime artefacts](#runtime-artefacts).
+[runtime artefacts](#runtime-artefact).
 
 #### OCM Components
 
@@ -49,7 +49,7 @@ To be also able to process artefacts which are not (yet) subject of being
 modelled via OCM, i.e. volatile **runtime artefacts**, those can be added to
 the list of artefacts "of interest" by creating respective `RuntimeArtefact`
 custom resources, either via ODG API or via cluster API (see
-[example](#example-runtime-artefact)). Note that, because these artefacts
+[example](#runtime-artefact)). Note that, because these artefacts
 are not modelled via OCM, the artefact-enumerator is not able to resolve any
 dependencies and thus each artefact must be specified via a dedicated runtime
 artefact. Those runtime artefacts also contain a `ComponentArtefactId` and are

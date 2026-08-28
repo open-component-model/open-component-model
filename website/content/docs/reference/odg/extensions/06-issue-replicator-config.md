@@ -32,7 +32,7 @@ issue_replicator:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `delivery_dashboard_url` | string | — | Publicly accessible URL to the delivery dashboard (included in GitHub issues). |
 | `interval` | int (seconds) | `3600` | Maximum time before GitHub issues are updated. |
 | `mappings` | list | `[]` | Per-prefix component mappings. See mapping fields below. |
@@ -42,7 +42,7 @@ issue_replicator:
 Each entry in the `mappings` list supports the following fields:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `prefix` | string | yes | Component name prefix. Use `''` (empty string) to match all components. |
 | `github_repository` | string | yes | GitHub repository where issues should be created (e.g., `github.com/org/repo`). |
 | `github_issue_labels_to_preserve` | list | `[]` | Regex patterns for labels that should not be removed on issue updates. |
@@ -54,7 +54,7 @@ Each entry in the `mappings` list supports the following fields:
 The `milestones` object configures how ODG sprints are mapped to GitHub milestones:
 
 | Option | Type | Description |
-|--------|------|-------------|
+| --- | --- | --- |
 | `milestones.title.prefix` | string | Prefix for GitHub milestone names (e.g., `"sprint-"`). |
 | `milestones.title.sprint.value_type` | string | How to format the sprint: `name` (use sprint name) or `date` (use sprint date). |
 
@@ -65,6 +65,7 @@ The `milestones` object configures how ODG sprints are mapped to GitHub mileston
 The time (in seconds) between regular GitHub issue updates. Default is 3600 seconds (1 hour).
 
 **Note:** Issues are also updated immediately in response to certain events:
+
 - Initial scan completion
 - Rescoring actions
 - Finding status changes
@@ -79,6 +80,7 @@ and applying different issue management policies.
 #### Prefix Matching
 
 The `prefix` field uses simple string prefix matching (not regex):
+
 - `prefix: 'acme.org'` matches `acme.org/product` and `acme.org/another-product`
 - `prefix: ''` (empty string) matches all components (use as a catch-all)
 
@@ -97,6 +99,7 @@ github_repository: github.com/my-org/security-findings
 
 The `github_issue_labels_to_preserve` field contains regex patterns for labels that
 should not be removed when ODG updates an issue. This is useful for:
+
 - Manual labels added by team members
 - Integration labels from other tools
 - Priority or severity overrides

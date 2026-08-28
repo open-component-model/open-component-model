@@ -18,7 +18,7 @@ osid:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `interval` | int (seconds) | `86400` | Maximum time before a component is re-scanned. |
 | `on_unsupported` | string | `warning` | Behaviour when artefact kind/type/access is unsupported. Options: `fail`, `ignore`, `warning`. |
 
@@ -30,6 +30,7 @@ The maximum time (in seconds) before a component's artefacts are re-analysed for
 operating system version information. Default is 86400 seconds (24 hours).
 
 This interval ensures that:
+
 - New EOL data is regularly checked against existing components
 - Components are re-evaluated as operating systems reach end-of-life
 - Base image changes are detected and analysed

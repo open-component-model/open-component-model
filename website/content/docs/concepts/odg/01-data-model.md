@@ -8,8 +8,8 @@ toc: true
 The data model of the Open Delivery Gear intends to correlate typed metadata
 from multiple sources with [Artefacts](#artefact) said metadata is related
 to. Artefacts can either be OCM Artefacts (i.e.
-[Designtime Artefacts](#designtime-artefacts)), or
-[Runtime Artefacts](#runtime-artefacts). They are referenced using OCM
+[Designtime Artefacts](#artefact)), or
+[Runtime Artefacts](#artefact). They are referenced using OCM
 coordinates with optional extensions.
 
 At its core, the Open Delivery Gear's data model consists of the

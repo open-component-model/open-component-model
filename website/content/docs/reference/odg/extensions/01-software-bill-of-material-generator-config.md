@@ -29,7 +29,7 @@ sbom_generator:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `interval` | int (seconds) | `86400` | Maximum time before an artefact is re-scanned. |
 | `on_unsupported` | string | `warning` | Behaviour when artefact kind/type/access is unsupported. Options: `fail`, `ignore`, `warning`. |
 | `generation_mode` | string | `syft` | SBOM generation tool: `syft`, `bdba`. |
@@ -43,7 +43,7 @@ sbom_generator:
 Each entry in the `mappings` list supports the following fields:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `prefix` | string | yes | Component name prefix. Use `''` to match all components. |
 | `group_id` | int | conditional | BDBA group ID (required when `generation_mode: bdba`). |
 | `aws_secret_name` | string | no | Name of the AWS secret used to access S3 artefacts. |
@@ -75,6 +75,7 @@ When using `bdba` mode, additional fields (`group_id`, `create_new_scan_if_missi
 ### `output_format`
 
 Specifies the SBOM format to generate:
+
 - **`cyclonedx`** (default): Generates CycloneDX format SBOMs
 - **`spdx`**: Generates SPDX format SBOMs
 - **`bdio`**: Generates Black Duck I/O format (BDBA mode only)
@@ -95,12 +96,14 @@ Only applicable when `generation_mode: bdba`. Determines how existing BDBA scans
 ### `mappings`
 
 Allows per-component-prefix configuration. This is particularly useful when:
+
 - Different components require different AWS credentials for S3 access
 - You need to handle components from different sources differently
 
 #### Prefix Matching
 
 The `prefix` field uses simple string prefix matching:
+
 - `prefix: 'acme.org'` matches `acme.org/product` and `acme.org/another-product`
 - `prefix: ''` (empty string) matches all components (use as a catch-all)
 

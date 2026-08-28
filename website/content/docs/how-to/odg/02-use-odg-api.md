@@ -25,7 +25,7 @@ Resolve an OCM component using the ODG API and the ODG Python Package.
 
 The package [is published to pypi.org](https://pypi.org/project/odg-client/), thus can be installed with `pip3`.
 
-```
+```shell
 pip3 install odg-client
 ```
 

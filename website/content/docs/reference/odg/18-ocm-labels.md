@@ -23,7 +23,7 @@ labels:
 ```
 
 | Field | Type | Required | Description |
-|:---|:---|:---|:---|
+| --- | --- | --- | --- |
 | `policy` | string | yes | `scan` runs the scan (default behaviour); `skip` bypasses the vulnerability scan for this resource. |
 | `comment` | string | no | Human-readable explanation for skipping the scan. |
 
@@ -67,7 +67,7 @@ labels:
 ```
 
 | Field | Type | Description |
-|:---|:---|:---|
+| --- | --- | --- |
 | `network_exposure` | string | How reachable the component is from a network perspective. `private`: not reachable from outside a private network. `protected`: reachable from a restricted network or behind authentication. `public`: reachable from the internet. |
 | `authentication_enforced` | boolean | Whether all access to the component requires authentication. |
 | `user_interaction` | string | Who interacts with the component. `operator`: only operators/administrators. `end-user`: arbitrary end users. |
@@ -97,7 +97,7 @@ labels:
 ```
 
 | Type | Required fields | Description |
-|:---|:---|:---|
+| --- | --- | --- |
 | `githubUser` | `username` | A specific GitHub user. |
 | `githubTeam` | `teamname` | A GitHub team in `org/team` format. |
 | `codeowners` | *(none)* | Resolves responsibles from the CODEOWNERS file in the component's source repository. |
@@ -121,5 +121,5 @@ labels:
 Currently the following values are recognised:
 
 | Value | Effect |
-|:---|:---|
+| --- | --- |
 | `sast` | The linting report |

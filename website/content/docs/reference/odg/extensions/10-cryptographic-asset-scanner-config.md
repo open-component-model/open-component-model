@@ -43,7 +43,7 @@ crypto:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `interval` | int (seconds) | `86400` | Maximum time before a component is re-scanned. |
 | `on_unsupported` | string | `warning` | Behaviour when artefact kind/type/access is unsupported. Options: `fail`, `ignore`, `warning`. |
 | `mappings` | list | `[]` | Per-prefix component mappings. See mapping fields below. |
@@ -53,7 +53,7 @@ crypto:
 Each entry in the `mappings` list supports the following fields:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `prefix` | string | yes | Component name prefix. Use `''` (empty string) to match all components. |
 | `standards` | list | yes | Cryptographic standards to validate against. See standard fields below. |
 | `libraries` | list | yes | References to files containing known cryptographic library names. |
@@ -65,7 +65,7 @@ Each entry in the `mappings` list supports the following fields:
 Each entry in the `standards` list defines a cryptographic compliance standard:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `name` | string | yes | Standard name (e.g., `FIPS`). |
 | `version` | string | yes | Standard version (e.g., `140-3`). |
 | `ref.path` | string | yes | Relative path to file containing standard definitions. |
@@ -75,7 +75,7 @@ Each entry in the `standards` list defines a cryptographic compliance standard:
 Each entry in the `libraries` list can be a string (library name) or a reference object:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `ref.path` | string | yes | Relative path to file in odg-core repository, external GitHub repo, or OCM resource. |
 
 ## Configuration Details
@@ -86,6 +86,7 @@ The maximum time (in seconds) before a component's cryptographic assets are
 re-analysed. Default is 86400 seconds (24 hours).
 
 This interval ensures:
+
 - Cryptographic compliance is regularly re-evaluated
 - New standards or library definitions are applied to existing components
 - Changes in artefacts are detected and analysed
@@ -101,6 +102,7 @@ Defines the behaviour when an artefact kind, type, or access method is not suppo
 ### `mappings`
 
 Allows per-component-prefix configuration for cryptographic analysis. This is useful when:
+
 - Different components must comply with different standards
 - Some components require analysis of specific asset types only
 - Components are stored in different AWS S3 accounts
@@ -108,6 +110,7 @@ Allows per-component-prefix configuration for cryptographic analysis. This is us
 #### Prefix Matching
 
 The `prefix` field uses simple string prefix matching:
+
 - `prefix: 'acme.org'` matches `acme.org/product` and `acme.org/another-product`
 - `prefix: ''` (empty string) matches all components (use as a catch-all)
 
@@ -116,6 +119,7 @@ Multiple mappings are evaluated in order, and the first matching prefix is used.
 ### `standards`
 
 Defines cryptographic compliance standards to validate against. Each standard requires:
+
 - A name and version identifier
 - A reference to a YAML file containing the standard's compliance rules
 
@@ -134,6 +138,7 @@ standards:
 ### `libraries`
 
 Lists known cryptographic library names used for validation. Libraries can be:
+
 - Inline strings (direct library names)
 - References to YAML files containing a `libraries` property
 

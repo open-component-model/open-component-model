@@ -28,7 +28,7 @@ client-side.
 ```
 
 | Field | Type | Default | Description |
-|-------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `criteria` | array | `[]` | List of filter criteria (see below) |
 | `limit` | integer | `50` | Page size, capped server-side at `200` |
 | `sort` | array | `[{"field": "meta.creation_date", "order": "desc" }, {"field": "id", "order": "desc" }]` | Sort specification (see [Sorting](#sorting)) |
@@ -56,7 +56,7 @@ Filters by OCM component identity (`name` or `name:version`).
 ```
 
 | Field | Required | Description |
-|-------|----------|-------------|
+| --- | --- | --- |
 | `value` | yes | `name` or `name:version` |
 | `recursive` | no | If `true`, resolves the full component dependency tree and matches all transitive components. Requires a versioned value. |
 | `mode` | no | `"exclude"` negates the predicate |
@@ -95,7 +95,7 @@ Filters on a specific attribute of the artefact metadata row.
 #### Supported `attr` values
 
 | Attribute | Column / source | Notes |
-|-----------|----------------|-------|
+| --- | --- | --- |
 | `type` | `ArtefactMetaData.type` | See [Data types](#data-types) |
 | `referenced_type` | `ArtefactMetaData.referenced_type` | Only populated for `rescorings` rows; holds the finding type the rescoring applies to |
 | `datasource` | `ArtefactMetaData.datasource` | |
@@ -109,7 +109,7 @@ Filters on a specific attribute of the artefact metadata row.
 #### Supported `op` values
 
 | `op` | Required fields | Semantics |
-|------|----------------|-----------|
+| --- | --- | --- |
 | `eq` | `value` | Exact match. If `value` contains `*`, performs a case-insensitive `LIKE` match (`*` → `%`). |
 | `in` | `values` (list) | Any-of match (OR semantics). All values compared as strings. |
 | `range` | `gte` and/or `lte` | Datetime range, both bounds inclusive. Values must be ISO 8601. Either bound may be omitted for an open range. Only applicable to datetime attributes. |
@@ -119,6 +119,7 @@ Filters on a specific attribute of the artefact metadata row.
 
 - Criteria on **different attributes** are **AND**ed.
 - Multiple criteria on the **same attribute** (same `attr`) are **OR**ed (include) or
+
   `NOT(OR(...))` (exclude).
 
 ---
@@ -134,7 +135,7 @@ Searches for a token across a set of default fields using a case-insensitive con
 ```
 
 | Field | Required | Description |
-|-------|----------|-------------|
+| --- | --- | --- |
 | `value` | yes | Token to search for |
 | `fields` | no | List of attributes to search in. Defaults to `data.summary`, `data.cve`, `data.package_name`, `data.package_version`, `artefact.name`, `ocm.name` |
 | `mode` | no | `"exclude"` negates the predicate |
@@ -171,7 +172,7 @@ Example:
 The `type` field on each row identifies what kind of data it holds. Common values:
 
 | Value | Description |
-|-------|-------------|
+| --- | --- |
 | `finding/vulnerability` | CVE vulnerability finding |
 | `finding/license` | License compliance finding |
 | `finding/crypto` | Cryptography finding |
@@ -234,7 +235,7 @@ automatically to guarantee a stable cursor position.
 Supported sort fields:
 
 | Field | Description |
-|-------|-------------|
+| --- | --- |
 | `meta.creation_date` | Creation timestamp (datetime-aware) |
 | `meta.last_update` | Last update timestamp (datetime-aware) |
 | `type` | Data type string |

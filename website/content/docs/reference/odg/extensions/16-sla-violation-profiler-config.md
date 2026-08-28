@@ -24,7 +24,7 @@ sla_violation_profiler:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `components` | list | — | List of OCM root components to evaluate. See component fields below. |
 
 ## Component Fields
@@ -32,7 +32,7 @@ sla_violation_profiler:
 Each entry in the `components` list supports the following fields:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `component_name` | string | yes | OCM component name to evaluate (e.g., `acme.org/my-product`). |
 | `version` | string | no | Specific version to evaluate, or `greatest` to use the most recent version. If omitted, `time_range` must be specified. |
 | `ocm_repo_url` | string | no | Override default OCM repository lookup. |
@@ -44,7 +44,7 @@ Each entry in the `components` list supports the following fields:
 The `time_range` object restricts which component versions are considered during version discovery. Dates are computed relative to the current day at runtime.
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `days_from` | int | `-365` | Start of the time range in days relative to today (negative = past). |
 | `days_to` | int | `0` | End of the time range in days relative to today (`0` = today). |
 

@@ -18,7 +18,7 @@ sast:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `interval` | int (seconds) | `86400` | Maximum time before a component is re-checked. |
 | `on_unsupported` | string | `warning` | Behaviour when artefact kind/type/access is unsupported. Options: `fail`, `ignore`, `warning`. |
 
@@ -30,6 +30,7 @@ The maximum time (in seconds) before a component is re-checked for SAST
 scan execution. Default is 86400 seconds (24 hours).
 
 This interval ensures:
+
 - Components are regularly verified for SAST coverage
 - New components are identified quickly if they lack scans
 - Scan execution tracking remains current

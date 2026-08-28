@@ -29,7 +29,7 @@ codeql:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `interval` | int (seconds) | `86400` | Maximum time before a component is re-checked. |
 | `on_unsupported` | string | `warning` | Behaviour when artefact kind/type/access is unsupported. Options: `fail`, `ignore`, `warning`. |
 | `languages` | list[str] | `[]` | Languages to **exclude** from CodeQL coverage checks, using GitHub repository language names (e.g. `yaml`, `dockerfile`). Empty list (default) means findings are created for every language present in the repository that is not actively scanned by CodeQL. Non-empty list skips the listed languages entirely. |
@@ -49,7 +49,7 @@ such as `yaml`, `dockerfile`, or `shell`. For example, with the configuration
 programming languages like `go` or `python` — not for config/script files.
 
 Language names must match what the GitHub repository languages API returns.
-See: https://docs.github.com/en/rest/repos/repos#list-repository-languages
+See: [GitHub repository languages API](https://docs.github.com/en/rest/repos/repos#list-repository-languages)
 
 The extension automatically handles CodeQL's combined language identifiers:
 `javascript-typescript` covers both `javascript` and `typescript`, and

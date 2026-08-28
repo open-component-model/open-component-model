@@ -40,7 +40,7 @@ cache_manager:
 ## Top-Level Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `schedule` | string | `*/10 * * * *` | Cron schedule for running the cronjob (every 10 minutes by default). |
 | `successful_jobs_history_limit` | int | `1` | Number of successful job executions to retain in history. |
 | `failed_jobs_history_limit` | int | `1` | Number of failed job executions to retain in history. |
@@ -54,7 +54,7 @@ cache_manager:
 Each weight influences the cache eviction algorithm. Higher weights make entries less likely to be deleted:
 
 | Weight | Type | Default | Description |
-|--------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `creation_date_weight` | float | `0` | Weight based on when entry was created. |
 | `last_update_weight` | float | `0` | Weight based on last update time. |
 | `delete_after_weight` | float | `-1.5` | Negative value prioritizes deletion of stale entries. |
@@ -70,14 +70,14 @@ Each weight influences the cache eviction algorithm. Higher weights make entries
 The `prefill_function_caches` object contains:
 
 | Option | Type | Description |
-|--------|------|-------------|
+| --- | --- | --- |
 | `functions` | list | Functions to pre-calculate. Options: `compliance-summary`, `component-versions`. |
 | `components` | list | Components for which to pre-calculate results. |
 
 Each component in the `components` list has:
 
 | Option | Type | Required | Description |
-|--------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `component_name` | string | yes | OCM component name. |
 | `version` | string or object | yes | Version (`greatest` for latest, specific version, or GitHub source). |
 
@@ -115,6 +115,7 @@ prefill_function_caches:
 ```
 
 **Recommendation:** Only prefill components that are:
+
 - Frequently accessed in the dashboard
 - Large enough that calculation is noticeably slow
 - Part of critical workflows (compliance reporting, executive dashboards)

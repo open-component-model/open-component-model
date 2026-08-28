@@ -70,7 +70,7 @@ date.
 For each finding, an initial deadline is computed from its discovery date and
 its `allowed_processing_time`:
 
-```
+```text
 deadline = discovery_date + allowed_processing_time
 ```
 
