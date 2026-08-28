@@ -184,10 +184,6 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		if resource.Type != resourceType {
 			continue
 		}
-
-		// if the type matches we have our resource; we set the name for the identity match.
-		resourceIdentity["name"] = resource.Name
-
 		typedArtifacts = append(typedArtifacts, &desc.Component.Resources[i])
 	}
 	candidates := descriptor.FindArtifactsByIdentity(resourceIdentity, typedArtifacts)
@@ -200,7 +196,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no resource found matching identity %v", resourceIdentity)
 	}
 	if len(toDownload) > 1 {
-		return fmt.Errorf("found multiple resources matching identity", slog.Int("count", len(toDownload)))
+		return fmt.Errorf("found multiple resources matching identity %v: %d candidates", resourceIdentity, len(toDownload))
 	}
 	res := &toDownload[0]
 
