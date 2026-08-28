@@ -29,6 +29,7 @@ const (
 	FlagOutput           = "output"
 	FlagTransformer      = "transformer"
 	FlagExtractionPolicy = "extraction-policy"
+	FlagSBOM             = "sbom"
 )
 
 const (
@@ -55,7 +56,22 @@ If no transformer is specified, the resource is written directly in its original
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
 
-When --output is not provided, the output filename is the resource name.`,
+When --output is not provided, the output filename is the resource name.
+
+With --sbom, the Software Bills of Materials describing the resource are downloaded instead of the
+resource itself. This is EXPERIMENTAL: what is discovered, how it is written out and the flags
+themselves may change in a future release. They are looked for in two ways, in order:
+
+  1. Another resource of the same component version declaring, through the
+     "ocm.software/artifact-references" label, that it describes the selected resource.
+  2. For a resource backed by an OCI artifact, SBOMs attached to that artifact by
+     "docker buildx build --sbom=true". SBOMs attached by other tooling, such as cosign
+     or the OCI referrers API, are not discovered.
+
+Every SBOM found is written to its own file in a directory, byte for byte as published, so digests
+and signatures over them still apply. The directory is --output, or the values of the resource
+identity joined by "-" when that is not given, so --identity name=image,architecture=amd64 writes
+into "image-amd64". The paths written are printed to standard output, one per line.`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
 
@@ -66,18 +82,33 @@ When --output is not provided, the output filename is the resource name.`,
   ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
 
   # Download a resource and apply a transformer
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer`,
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
+
+  # Download every SBOM describing a resource into a directory
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --sbom --output ./sboms
+
+  # Scan every SBOM found for a resource
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --sbom | xargs -n1 grype sbom:`,
 		RunE:              DownloadResource,
 		DisableAutoGenTag: true,
 	}
 
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
-	cmd.Flags().String(FlagOutput, "", "output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name.")
+	cmd.Flags().String(FlagOutput, "", "output path. With --extraction-policy auto, extractable archives are "+
+		"extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are "+
+		"created automatically. If not provided, defaults to the resource name."+
+		"With --sbom this is a single file, and standard output is used when it is not given.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
+	cmd.Flags().Bool(FlagSBOM, false, "experimental: download the SBOMs describing the resource instead of the "+
+		"resource itself, writing every SBOM found to its own file in the output directory. What is discovered, "+
+		"how it is written out and this flag itself may change in a future release")
 	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
 		"policy to apply when extracting a resource. "+
 			"If set to 'disable', the resource will not be extracted, even if they could be. "+
 			"If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.")
+
+	cmd.MarkFlagsMutuallyExclusive(FlagSBOM, FlagTransformer)
+	cmd.MarkFlagsMutuallyExclusive(FlagSBOM, FlagExtractionPolicy)
 
 	return cmd
 }
@@ -106,6 +137,11 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	transformer, err := cmd.Flags().GetString(FlagTransformer)
 	if err != nil {
 		return fmt.Errorf("getting transformer flag failed: %w", err)
+	}
+
+	wantSBOM, err := cmd.Flags().GetBool(FlagSBOM)
+	if err != nil {
+		return fmt.Errorf("getting sbom flag failed: %w", err)
 	}
 
 	requestedIdentity, err := runtime.ParseIdentity(identityStr)
@@ -146,6 +182,20 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("expected exactly one resource candidate to download, got %d", len(toDownload))
 	}
 	res := &toDownload[0]
+
+	if wantSBOM {
+		return downloadSBOMs(cmd, downloadContext{
+			pluginManager:   pluginManager,
+			credentialGraph: credentialGraph,
+			logger:          logger,
+			ref:             ref,
+			repo:            repo,
+			descriptor:      desc,
+			resource:        res,
+			output:          output,
+			identity:        requestedIdentity,
+		})
+	}
 
 	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, ref.Component, ref.Version, repo, res, requestedIdentity)
 	if err != nil {
