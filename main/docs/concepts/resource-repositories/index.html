@@ -84,16 +84,19 @@ integrating with OCM&rsquo;s <a href=/main/docs/concepts/credential-system/>cred
         OCI[&#34;OCI Resource Repository&#34;]
         Helm[&#34;Helm Resource Repository&#34;]
         Wget[&#34;Wget Resource Repository&#34;]
+        S3[&#34;S3 Resource Repository&#34;]
         GitHub[&#34;GitHub Resource Repository&#34;]
     end
 
     CD --&gt;|&#34;OCIImage/v1 access&#34;| OCI
     CD --&gt;|&#34;Helm/v1 access&#34;| Helm
     CD --&gt;|&#34;Wget/v1 access&#34;| Wget
+    CD --&gt;|&#34;S3Bucket/v1 access&#34;| S3
     CD --&gt;|&#34;GitHub/v1 access&#34;| GitHub
     OCI --&gt; Registry[&#34;OCI Registry&#34;]
     Helm --&gt; HelmRepo[&#34;Helm Chart Repository&#34;]
     Wget --&gt; HTTP[&#34;HTTP/HTTPS Server&#34;]
+    S3 --&gt; Bucket[&#34;S3 / S3-compatible Bucket&#34;]
     GitHub --&gt; GitHubAPI[&#34;GitHub REST API&#34;]
 </pre><h2 id=how-it-works>How It Works<a href=#how-it-works class=anchor aria-hidden=true>#</a></h2><p>Every resource in a component descriptor carries an <strong>access specification</strong> with a <code>type</code> field (e.g., <code>OCIImage/v1</code>,
 <code>Helm/v1</code>). When OCM needs to download or upload a resource, it uses the access type to look up the matching resource
