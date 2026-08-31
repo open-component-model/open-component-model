@@ -395,6 +395,13 @@ func main() {
 	}
 
 	if enableFluxExternalArtifactsAPI {
+		// Fail fast with an actionable message if the Flux-owned CRD is missing,
+		// rather than letting the manager crash when it establishes the watch.
+		if err := externalartifact.CheckCRDInstalled(ctx, mgr.GetConfig()); err != nil {
+			setupLog.Error(err, "cannot enable flux external artifacts API")
+			os.Exit(1)
+		}
+
 		advertiseAddr := externalArtifactAdvertiseAddr
 		if advertiseAddr == "" {
 			// Fall back to the bind address host when no explicit in-cluster
