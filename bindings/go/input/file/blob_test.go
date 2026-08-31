@@ -162,6 +162,15 @@ func TestGetV1FileBlob_Success(t *testing.T) {
 			compress:   false,
 			expectGzip: false,
 		},
+		{
+			// https://github.com/open-component-model/ocm-project/issues/1255:
+			// a declared media type already carrying +gzip is not suffixed again.
+			name:       "compressed file with declared gzip media type",
+			fileData:   "Hello, World!",
+			mediaType:  "application/x-tar+gzip",
+			compress:   true,
+			expectGzip: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -221,11 +230,11 @@ func TestGetV1FileBlob_Success(t *testing.T) {
 				r.NoError(err)
 				r.Equal(tt.fileData, string(decompressedData))
 
-				// Test media type for compressed blob
+				// A declared media type is used as-is, even for compressed blobs.
 				if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
 					mediaType, known := mediaTypeAware.MediaType()
 					r.True(known)
-					r.Equal(tt.mediaType+"+gzip", mediaType)
+					r.Equal(tt.mediaType, mediaType)
 				}
 			} else {
 				r.Equal(tt.fileData, string(data))

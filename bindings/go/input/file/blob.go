@@ -80,7 +80,13 @@ func GetV1FileBlob(file v1.File, workingDirectory string) (_ blob.ReadOnlyBlob, 
 	data := blob.ReadOnlyBlob(&InputFileBlob{b, mediaType})
 
 	if file.Compress {
-		data = compression.Compress(data)
+		compressed := compression.Compress(data)
+		if file.MediaType != "" {
+			// A declared media type is used as-is; only a detected one gets the
+			// compression suffix appended.
+			compressed.SetMediaType(file.MediaType)
+		}
+		data = compressed
 	}
 
 	return data, nil
