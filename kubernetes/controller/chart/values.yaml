@@ -126,9 +126,12 @@ fluxExternalArtifacts:
   # (local blobs or OCI artifacts carrying Helm charts / Kustomize overlays)
   # into an in-cluster tar.gz consumable by the Flux kustomize/helm controllers.
   enable: false
-  # -- Install the ExternalArtifact CRD with the chart. Set to false when the
-  # CRD is already provided by the Flux source-controller distribution.
-  installCRD: true
+  # -- Install the ExternalArtifact CRD with the chart. Off by default: the CRD
+  # is owned by Flux and ships with the source-controller distribution that this
+  # feature already depends on (its kustomize/helm controllers are the
+  # consumers). Enable only for standalone/dev/test clusters where Flux is not
+  # installed; installing a second copy risks version skew with Flux's.
+  installCRD: false
   # -- Filesystem path (inside the manager container) where packaged artifacts
   # are stored.
   storagePath: /data

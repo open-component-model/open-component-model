@@ -2,12 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name:
-    {
-      {
-        include "ocm-k8s-toolkit.resourceName" (dict "suffix" "manager-role" "context" $),
-      },
-    }
+  name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "manager-role" "context" $) }}
 rules:
   - apiGroups:
       - ""
