@@ -315,16 +315,15 @@ data:
 		Expect(artifactPath).NotTo(BeAnExistingFile())
 
 		By("triggering a reconcile and verifying the controller repackages the artifact")
-		// Bump the resource generation to trigger a reconcile.
+		// Bump the resource generation via a spec change (source digest unchanged),
+		// so GenerationChangedPredicate fires and the wiped file is repackaged by
+		// the self-heal path rather than by a source change.
 		Eventually(func(ctx context.Context) error {
 			current := &v1alpha1.Resource{}
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(resourceObj), current); err != nil {
 				return err
 			}
-			if current.Annotations == nil {
-				current.Annotations = map[string]string{}
-			}
-			current.Annotations["test.ocm.software/rekick"] = "1"
+			current.Spec.AdditionalStatusFields = &apiextensionsv1.JSON{Raw: []byte(`{"rekick":"1"}`)}
 			return k8sClient.Update(ctx, current)
 		}).WithContext(ctx).Should(Succeed())
 

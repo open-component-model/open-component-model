@@ -118,18 +118,16 @@ spec:
                     - --external-artifact-storage-address={{ .Values.fluxExternalArtifacts.storageAddress }}
                     - --external-artifact-max-size={{ .Values.fluxExternalArtifacts.maxArtifactSize }}
                     - --external-artifact-gc-interval={{ .Values.fluxExternalArtifacts.gcIntervalMinutes }}
-                    {{- $scheme := "http" }}
                     {{- if .Values.fluxExternalArtifacts.tls.enabled }}
-                    {{- $scheme = "https" }}
                     - --external-artifact-tls-cert-file=/etc/ocm/artifact-tls/tls.crt
                     - --external-artifact-tls-key-file=/etc/ocm/artifact-tls/tls.key
                     {{- end }}
-                    {{- $advertise := .Values.fluxExternalArtifacts.advertiseAddress }}
-                    {{- if not $advertise }}
-                    {{- $port := regexFind ":[0-9]+$" .Values.fluxExternalArtifacts.storageAddress | trimPrefix ":" }}
-                    {{- $advertise = printf "%s.%s.svc.cluster.local.:%s" (include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager" "context" $)) .Release.Namespace $port }}
+                    {{- /* The advertise address is discovered at startup from the
+                           Service that fronts this pod on the artifact port. Only
+                           pass it explicitly as an override. */}}
+                    {{- with .Values.fluxExternalArtifacts.advertiseAddress }}
+                    - --external-artifact-storage-advertise-address={{ . }}
                     {{- end }}
-                    - --external-artifact-storage-advertise-address={{ $advertise }}
                     {{- end }}
                     {{- /* Extra args */}}
                     {{- range .Values.manager.extraArgs }}
@@ -139,8 +137,23 @@ spec:
                     - /manager
                   image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
                   imagePullPolicy: {{ .Values.manager.image.pullPolicy }}
-                  {{- with .Values.manager.env }}
-                  env: {{ toYaml . | nindent 20 }}
+                  {{- if or .Values.manager.env .Values.fluxExternalArtifacts.enable }}
+                  env:
+                    {{- if .Values.fluxExternalArtifacts.enable }}
+                    {{- /* Used to discover the Service that fronts this pod when
+                           building ExternalArtifact URLs. */}}
+                    - name: POD_NAME
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: metadata.name
+                    - name: POD_NAMESPACE
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: metadata.namespace
+                    {{- end }}
+                    {{- with .Values.manager.env }}
+                    {{- toYaml . | nindent 20 }}
+                    {{- end }}
                   {{- end }}
                   livenessProbe:
                     httpGet:
