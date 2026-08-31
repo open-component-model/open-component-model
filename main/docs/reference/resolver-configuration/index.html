@@ -96,7 +96,9 @@ contains an invalid glob pattern or an unparseable semver constraint, the config
 describing the offending entry.</p><h2 id=backward-compatibility>Backward Compatibility<a href=#backward-compatibility class=anchor aria-hidden=true>#</a></h2><p>The <code>versionConstraint</code> field is optional. Resolver entries that omit it continue to work exactly as before — they match
 any component version (or no version at all). Existing configurations that do not use <code>versionConstraint</code> require no
 changes.</p><h2 id=resolver-evaluation-order>Resolver Evaluation Order<a href=#resolver-evaluation-order class=anchor aria-hidden=true>#</a></h2><p>Resolvers are evaluated <strong>in the order they are defined</strong>.
-The first matching resolver wins. Place more specific patterns before broader ones.</p><p>This is especially important when mixing constrained and unconstrained resolvers for the same component pattern.
+The first matching resolver wins. Place more specific patterns before broader ones.</p><p>There is no fallback to a later resolver. Once a resolver matches, its repository is the only one used. If the
+component version does not exist in that repository, the lookup fails instead of continuing with the next matching
+resolver. This differs from the deprecated fallback resolvers, which tried every matching entry in turn.</p><p>This is especially important when mixing constrained and unconstrained resolvers for the same component pattern.
 Resolvers with a <code>versionConstraint</code> should be listed <strong>before</strong> unconstrained catch-all entries, otherwise the
 catch-all matches first and the version constraint is never evaluated:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=nt>resolvers</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># constrained entries first</span><span class=w>
