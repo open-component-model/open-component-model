@@ -281,9 +281,54 @@ func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descript
 		return repo.ProcessResourceDigest(ctx, res)
 	case *accessv1.OCIImage:
 		return repo.processOCIImageDigest(ctx, res, typed)
+	case *accessv1.OCIImageLayer:
+		return repo.processOCIImageLayerDigest(ctx, res, typed)
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
+}
+
+// layerDescriptor is the OCI descriptor an OCIImageLayer access addresses.
+func layerDescriptor(access *accessv1.OCIImageLayer) ociImageSpecV1.Descriptor {
+	return ociImageSpecV1.Descriptor{
+		MediaType: access.MediaType,
+		Digest:    access.Digest,
+		Size:      access.Size,
+	}
+}
+
+func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImageLayer) (*descriptor.Resource, error) {
+	if err := typed.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid OCI image layer access: %w", err)
+	}
+
+	src, err := repo.resolver.StoreForReference(ctx, typed.Reference)
+	if err != nil {
+		return nil, err
+	}
+
+	// Exists resolves by digest alone: it confirms the blob is present but checks
+	// neither the declared size nor the media type. Size is checked on download.
+	exists, err := src.Exists(ctx, layerDescriptor(typed))
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify existence of layer %q in %q: %w", typed.Digest, typed.Reference, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("layer %q does not exist in %q", typed.Digest, typed.Reference)
+	}
+
+	if res.Digest == nil {
+		res.Digest = &descriptor.Digest{}
+		if err := internaldigest.Apply(res.Digest, typed.Digest); err != nil {
+			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		}
+	} else if err := internaldigest.Verify(res.Digest, typed.Digest); err != nil {
+		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+	}
+
+	res.Access = typed
+
+	return res, nil
 }
 
 func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImage) (*descriptor.Resource, error) {
@@ -728,9 +773,17 @@ func (repo *Repository) AddOwnership(ctx context.Context, component, version str
 	if err != nil {
 		return err
 	}
+	if store == nil {
+		slogcontext.Log(ctx, slog.LevelDebug, "resource access has no manifest subject; skipping ownership referrer",
+			slog.String("accessType", resource.Access.GetType().String()))
+		return nil
+	}
 	return repo.buildAndPushOwnershipReferrer(ctx, store, subject, resource, component, version)
 }
 
+// resolveOwnershipSubject returns the store and manifest the ownership referrer should
+// point at. It returns a nil store for access types that address a plain blob, which
+// cannot be the subject of a referrer manifest.
 func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, version string, resource *descriptor.Resource) (spec.Store, ociImageSpecV1.Descriptor, error) {
 	typed, err := repo.scheme.NewObject(resource.Access.GetType())
 	if err != nil {
@@ -765,6 +818,8 @@ func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, 
 			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve subject %q for ownership referrer: %w", typed.ImageReference, err)
 		}
 		return store, subject, nil
+	case *accessv1.OCIImageLayer:
+		return nil, ociImageSpecV1.Descriptor{}, nil
 	default:
 		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported resource access type for ownership referrer: %T", typed)
 	}
@@ -1097,6 +1152,20 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			},
 			TempDir: repo.tempDir,
 			Tags:    tags,
+		}, nil
+	case *accessv1.OCIImageLayer:
+		if err := typed.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid OCI image layer access: %w", err)
+		}
+
+		src, err := repo.resolver.StoreForReference(ctx, typed.Reference)
+		if err != nil {
+			return nil, err
+		}
+
+		return &ocistream.OCILayerResourceStream{
+			ReadOnlyGraphStorage: src,
+			Descriptor:           layerDescriptor(typed),
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)

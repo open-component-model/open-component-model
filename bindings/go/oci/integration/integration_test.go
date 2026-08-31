@@ -1805,3 +1805,208 @@ func assertOwnershipReferrerAnnotations(t *testing.T, ctx context.Context, resol
 	assert.Equal(t, subject.Digest, manifest.Subject.Digest,
 		"referrer subject digest must match the resolved subject manifest digest")
 }
+
+func Test_Integration_OCIImageLayer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	password := generateRandomPassword(t, passwordLength)
+	htpasswd := generateHtpasswd(t, testUsername, password)
+
+	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
+	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
+		registry.WithHtpasswd(htpasswd),
+		testcontainers.WithEnv(map[string]string{
+			"REGISTRY_VALIDATION_DISABLED": "true",
+			"REGISTRY_LOG_LEVEL":           "debug",
+		}),
+		testcontainers.WithLogger(log.TestLogger(t)),
+	)
+	r := require.New(t)
+	r.NoError(err)
+	t.Cleanup(func() {
+		r.NoError(testcontainers.TerminateContainer(registryContainer))
+	})
+
+	registryAddress, err := registryContainer.HostAddress(ctx)
+	r.NoError(err)
+
+	client := createAuthClient(registryAddress, testUsername, password)
+	resolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(registryAddress),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+
+	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	// Push a single layer image so the blob genuinely exists, then address it
+	// directly with an OCIImageLayer access, bypassing the manifest.
+	layerData := []byte("layer content addressed directly by an OCIImageLayer access")
+	layerDigest := digest.FromBytes(layerData)
+	imageReference := fmt.Sprintf("%s/layer-test:v1.0.0", registryAddress)
+
+	layoutData, _ := createSingleLayerOCIImage(t, layerData, "ghcr.io/test:v1.0.0")
+	_, err = repo.UploadResource(ctx, &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "carrier", Version: "v1.0.0"},
+		},
+		Type:   "some-arbitrary-type-packed-in-image",
+		Access: &v1.OCIImage{ImageReference: imageReference},
+	}, inmemory.New(bytes.NewReader(layoutData)))
+	r.NoError(err)
+
+	// The plugin path derives the registry from the access, so the reference needs the
+	// scheme to say plain HTTP. The direct repository already has such a resolver.
+	layerReference := fmt.Sprintf("%s/layer-test@%s", registryAddress, layerDigest)
+	schemedLayerReference := fmt.Sprintf("http://%s", layerReference)
+
+	layerAccess := func(reference string) *v1.OCIImageLayer {
+		return &v1.OCIImageLayer{
+			Type:      ocmruntime.NewVersionedType(v1.OCIImageLayerType, v1.Version),
+			Reference: reference,
+			MediaType: ociImageSpecV1.MediaTypeImageLayer,
+			Digest:    layerDigest,
+			Size:      int64(len(layerData)),
+		}
+	}
+	layerResource := func(access ocmruntime.Typed) *descriptor.Resource {
+		return &descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: "test-layer-resource", Version: "v1.0.0"},
+			},
+			Type:         "helmChart",
+			Access:       access,
+			CreationTime: descriptor.CreationTime(time.Now()),
+		}
+	}
+
+	url, err := ocmruntime.ParseURLAndAllowNoScheme(layerReference)
+	r.NoError(err)
+	expectedIdentity := ocmruntime.Identity{
+		"scheme":   "http",
+		"hostname": url.Hostname(),
+		"port":     url.Port(),
+		"type":     "OCIRegistry",
+	}
+	creds := &credconfigv1.DirectCredentials{
+		Type: ocmruntime.NewVersionedType(credconfigv1.DirectCredentialsType, credconfigv1.Version),
+		Properties: map[string]string{
+			"username": testUsername,
+			"password": password,
+		},
+	}
+
+	t.Run("direct repository processes the layer digest", func(t *testing.T) {
+		r := require.New(t)
+
+		res := layerResource(layerAccess(layerReference))
+		newRes, err := repo.ProcessResourceDigest(ctx, res)
+		r.NoError(err)
+
+		r.NotNil(newRes.Digest, "digest must be taken from the layer access")
+		r.Equal(layerDigest.Encoded(), newRes.Digest.Value)
+		r.Equal("SHA-256", newRes.Digest.HashAlgorithm)
+		r.Equal("genericBlobDigest/v1", newRes.Digest.NormalisationAlgorithm)
+	})
+
+	t.Run("direct repository downloads the raw layer", func(t *testing.T) {
+		r := require.New(t)
+
+		downloaded, err := repo.DownloadResource(ctx, layerResource(layerAccess(layerReference)))
+		r.NoError(err)
+
+		reader, err := downloaded.ReadCloser()
+		r.NoError(err)
+		t.Cleanup(func() { r.NoError(reader.Close()) })
+
+		got, err := io.ReadAll(reader)
+		r.NoError(err)
+		// Not an OCI layout tar: a layer has no manifest a layout could point at.
+		r.Equal(layerData, got)
+	})
+
+	t.Run("resource plugin resolves the credential consumer identity", func(t *testing.T) {
+		r := require.New(t)
+		resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
+
+		// This returned an error before the fix, which the constructor swallows and then
+		// proceeds without credentials, so a private registry failed as an opaque auth error.
+		identity, err := resourceRepo.GetResourceDigestProcessorCredentialConsumerIdentity(
+			ctx, layerResource(layerAccess(schemedLayerReference)))
+		r.NoError(err)
+		r.Equal(expectedIdentity, identity)
+
+		identity, err = resourceRepo.GetResourceCredentialConsumerIdentity(
+			ctx, layerResource(layerAccess(schemedLayerReference)))
+		r.NoError(err)
+		r.Equal(expectedIdentity, identity)
+	})
+
+	t.Run("resource plugin processes and downloads with credentials", func(t *testing.T) {
+		r := require.New(t)
+		resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
+
+		// The path `ocm add cv` takes, where issue #2873 surfaced.
+		newRes, err := resourceRepo.ProcessResourceDigest(
+			ctx, layerResource(layerAccess(schemedLayerReference)), creds)
+		r.NoError(err)
+		r.NotNil(newRes.Digest)
+		r.Equal(layerDigest.Encoded(), newRes.Digest.Value)
+
+		downloaded, err := resourceRepo.DownloadResource(
+			ctx, layerResource(layerAccess(schemedLayerReference)), creds)
+		r.NoError(err)
+
+		reader, err := downloaded.ReadCloser()
+		r.NoError(err)
+		t.Cleanup(func() { r.NoError(reader.Close()) })
+
+		got, err := io.ReadAll(reader)
+		r.NoError(err)
+		r.Equal(layerData, got)
+	})
+
+	t.Run("legacy ociBlob access type is routed the same way", func(t *testing.T) {
+		r := require.New(t)
+		resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
+
+		// ociBlob/v1 is the name the old CLI wrote, an alias of OCIImageLayer.
+		// Deserialize through the scheme so the alias is what gets routed.
+		legacy := layerAccess(schemedLayerReference)
+		legacy.Type = ocmruntime.NewVersionedType(v1.LegacyOCIBlobAccessType, v1.LegacyOCIBlobAccessTypeVersion)
+		raw := &ocmruntime.Raw{}
+		r.NoError(ocmoci.Scheme.Convert(legacy, raw))
+		r.Contains(string(raw.Data), `"type":"ociBlob/v1"`)
+
+		newRes, err := resourceRepo.ProcessResourceDigest(ctx, layerResource(raw), creds)
+		r.NoError(err)
+		r.NotNil(newRes.Digest)
+		r.Equal(layerDigest.Encoded(), newRes.Digest.Value)
+	})
+
+	t.Run("layer absent from the registry is reported", func(t *testing.T) {
+		r := require.New(t)
+
+		absent := digest.FromString("never pushed")
+		access := layerAccess(fmt.Sprintf("%s/layer-test@%s", registryAddress, absent))
+		access.Digest = absent
+		access.Size = int64(len("never pushed"))
+
+		_, err := repo.ProcessResourceDigest(ctx, layerResource(access))
+		r.ErrorContains(err, "does not exist")
+	})
+
+	t.Run("layer is rejected as an upload target", func(t *testing.T) {
+		r := require.New(t)
+		resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
+
+		// A layer names one existing blob, so it cannot describe where to push to.
+		_, err := resourceRepo.UploadResource(
+			ctx, layerResource(layerAccess(schemedLayerReference)),
+			inmemory.New(bytes.NewReader(layerData)), creds)
+		r.ErrorContains(err, "as upload target")
+	})
+}
