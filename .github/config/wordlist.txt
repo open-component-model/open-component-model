@@ -957,3 +957,8 @@ WgetCredentials
 GitHubCredentials
 GitHubRepository
 normalisation
+MinIO
+Ceph
+RGW
+Cloudflare
+unversioned

@@ -600,6 +600,25 @@ func TestHTTPConfig(t *testing.T) {
 	})
 }
 
+// withoutAWSEnvironment hides the developer's or CI runner's own AWS setup from a
+// test, so that a region the SDK resolves comes from the test alone. Empty values are
+// treated as unset by the SDK, and the config files point nowhere so that a real
+// ~/.aws/config cannot contribute a region either.
+func withoutAWSEnvironment(t *testing.T) {
+	t.Helper()
+
+	missing := filepath.Join(t.TempDir(), "absent")
+	for k, v := range map[string]string{
+		"AWS_REGION":                  "",
+		"AWS_DEFAULT_REGION":          "",
+		"AWS_PROFILE":                 "",
+		"AWS_CONFIG_FILE":             missing,
+		"AWS_SHARED_CREDENTIALS_FILE": missing,
+	} {
+		t.Setenv(k, v)
+	}
+}
+
 func TestNewClient(t *testing.T) {
 	ctx := t.Context()
 
@@ -607,18 +626,31 @@ func TestNewClient(t *testing.T) {
 		for _, tt := range []struct {
 			name          string
 			req           Request
+			env           map[string]string
 			wantRegion    string
 			wantEndpoint  string
 			wantPathStyle bool
 		}{
 			{
-				name:       "region defaults when unset",
+				name:       "region defaults when neither the request nor the environment names one",
 				req:        Request{BucketName: "b", ObjectKey: "k"},
 				wantRegion: defaultRegion,
 			},
 			{
 				name:       "explicit region is used",
 				req:        Request{Region: "eu-central-1"},
+				wantRegion: "eu-central-1",
+			},
+			{
+				name:       "the environment supplies the region when the request omits it",
+				req:        Request{BucketName: "b", ObjectKey: "k"},
+				env:        map[string]string{"AWS_REGION": "ap-southeast-2"},
+				wantRegion: "ap-southeast-2",
+			},
+			{
+				name:       "the request's region wins over the environment",
+				req:        Request{Region: "eu-central-1"},
+				env:        map[string]string{"AWS_REGION": "ap-southeast-2"},
 				wantRegion: "eu-central-1",
 			},
 			{
@@ -636,6 +668,11 @@ func TestNewClient(t *testing.T) {
 			},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
+				withoutAWSEnvironment(t)
+				for k, v := range tt.env {
+					t.Setenv(k, v)
+				}
+
 				client, err := newClient(ctx, tt.req, &option{})
 				require.NoError(t, err)
 				assert.Equal(t, tt.wantRegion, client.Options().Region)
