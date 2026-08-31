@@ -971,7 +971,7 @@ resources:
 				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			), test.WithErrorOutput(logs))
 
-			r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
+			r.Equal(new(tmp), ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, "expected working directory to be set in ocm context automatically")
 
 			r.NoError(err, "could not construct component version with working directory")
 		})
@@ -1060,7 +1060,7 @@ components:
 			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
 		), test.WithErrorOutput(logs))
 
-		r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
+		r.Equal(new(tmp), ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, "expected working directory to be set in ocm context automatically")
 
 		r.NoError(err, "could not construct component version with working directory")
 
@@ -1176,7 +1176,7 @@ components:
 			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
 		), test.WithErrorOutput(logs))
 
-		r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
+		r.Equal(new(tmp), ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, "expected working directory to be set in ocm context automatically")
 
 		r.NoError(err, "could not construct component version with working directory")
 

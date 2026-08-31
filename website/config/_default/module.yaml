@@ -154,6 +154,12 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/s3/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/s3/v1
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../kubernetes/controller/config/crd/bases
     target: static/main/schemas/kubernetes/controller
     sites:

@@ -23,6 +23,7 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type S3Credentials struct {
 	// +ocm:jsonschema-gen:enum=S3Credentials/v1
 	// +ocm:jsonschema-gen:enum:deprecated=S3Credentials

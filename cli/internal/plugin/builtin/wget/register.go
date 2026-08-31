@@ -23,8 +23,12 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	httpConfig *httpv1alpha1.Config,
 	filesystemConfig *filesystemv1alpha1.Config,
 ) error {
+	var tempFolder string
+	if filesystemConfig.TempFolder != nil {
+		tempFolder = *filesystemConfig.TempFolder
+	}
 	method := &wgetinput.InputMethod{
-		TempFolder: filesystemConfig.TempFolder,
+		TempFolder: tempFolder,
 		HTTPConfig: httpConfig,
 	}
 

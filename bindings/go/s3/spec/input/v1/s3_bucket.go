@@ -12,11 +12,11 @@ const (
 	LowerCamelType = "s3Bucket"
 )
 
-// S3Bucket is the input method specification for sourcing a resource from a single
-// blob (object) stored in an S3 or S3-compatible bucket during component construction.
-// The object is downloaded and stored as a local blob in the component version, so the
-// component version no longer depends on the bucket once it is built. It mirrors the
-// fields of the S3Bucket access type.
+// S3Bucket is the input method specification for a resource that comes from a single
+// blob (object) in an S3 or S3-compatible bucket. OCM downloads the object during the
+// component construction and stores it as a local blob in the component version. The
+// component version therefore does not depend on the bucket after the build. It holds
+// the same fields as the S3Bucket access type.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -27,29 +27,29 @@ type S3Bucket struct {
 	// +ocm:jsonschema-gen:enum:deprecated=S3Bucket,s3Bucket
 	Type runtime.Type `json:"type"`
 
-	// Region is the region of the bucket. Optional; when empty it is resolved from
-	// the environment or defaulted, and is typically ignored for custom endpoints.
+	// Region is the region of the bucket. It is optional. When it is empty, OCM reads
+	// it from the environment or applies a default. Most custom endpoints ignore it.
 	Region string `json:"region,omitempty"`
 
 	// BucketName is the name of the bucket that holds the object.
 	BucketName string `json:"bucketName"`
 
-	// ObjectKey is the key (path) of the object within the bucket.
+	// ObjectKey is the key (path) of the object in the bucket.
 	ObjectKey string `json:"objectKey"`
 
 	// MediaType is the media type of the referenced object.
 	MediaType string `json:"mediaType,omitempty"`
 
-	// Version pins a specific S3 object version (versionId). When empty the latest
-	// version is read.
+	// Version pins one S3 object version (versionId). When it is empty, OCM reads the
+	// latest version.
 	Version string `json:"version,omitempty"`
 
-	// Endpoint is the base endpoint of an S3-compatible store (e.g. MinIO, Ceph,
-	// R2). When empty, AWS S3 is targeted.
+	// Endpoint is the base endpoint of an S3-compatible store, for example MinIO, Ceph
+	// or R2. When it is empty, OCM uses AWS S3.
 	Endpoint string `json:"endpoint,omitempty"`
 
-	// UsePathStyle enables path-style addressing (bucket in the path instead of the
-	// host). Required by most self-hosted S3-compatible stores.
+	// UsePathStyle puts the bucket in the path instead of in the host. Most self-hosted
+	// S3-compatible stores need this.
 	UsePathStyle bool `json:"usePathStyle,omitempty"`
 }
 

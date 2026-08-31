@@ -177,28 +177,26 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		logger.Debug("defaulting arch to runtime ARCH", slog.String("architecture", runtime.GOARCH))
 	}
 
-	var toDownload []descriptor.Resource
-	for _, resource := range desc.Component.Resources {
+	var typedArtifacts []descriptor.Artifact
+	for i, resource := range desc.Component.Resources {
 		// Type is not part of the identity so the below identity matcher will not
 		// catch that, hence, we do this here.
 		if resource.Type != resourceType {
 			continue
 		}
-
-		// if the type matches we have our resource; we set the name for the identity match.
-		resourceIdentity["name"] = resource.Name
-
-		resourceIdent := resource.ToIdentity()
-		if resourceIdentity.Match(resourceIdent, ocmruntime.IdentityMatchingChainFn(ocmruntime.IdentitySubset)) {
-			toDownload = append(toDownload, resource)
-		}
+		typedArtifacts = append(typedArtifacts, &desc.Component.Resources[i])
+	}
+	candidates := descriptor.FindArtifactsByIdentity(resourceIdentity, typedArtifacts)
+	toDownload := make([]descriptor.Resource, 0, len(candidates))
+	for _, c := range candidates {
+		toDownload = append(toDownload, *c.(*descriptor.Resource))
 	}
 
 	if len(toDownload) == 0 {
 		return fmt.Errorf("no resource found matching identity %v", resourceIdentity)
 	}
 	if len(toDownload) > 1 {
-		logger.Warn("multiple resources match identity, using first match", slog.Int("count", len(toDownload)))
+		return fmt.Errorf("found multiple resources matching identity %v: %d candidates", resourceIdentity, len(toDownload))
 	}
 	res := &toDownload[0]
 

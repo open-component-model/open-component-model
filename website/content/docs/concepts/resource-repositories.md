@@ -38,16 +38,19 @@ flowchart TB
         OCI["OCI Resource Repository"]
         Helm["Helm Resource Repository"]
         Wget["Wget Resource Repository"]
+        S3["S3 Resource Repository"]
         GitHub["GitHub Resource Repository"]
     end
 
     CD -->|"OCIImage/v1 access"| OCI
     CD -->|"Helm/v1 access"| Helm
     CD -->|"Wget/v1 access"| Wget
+    CD -->|"S3Bucket/v1 access"| S3
     CD -->|"GitHub/v1 access"| GitHub
     OCI --> Registry["OCI Registry"]
     Helm --> HelmRepo["Helm Chart Repository"]
     Wget --> HTTP["HTTP/HTTPS Server"]
+    S3 --> Bucket["S3 / S3-compatible Bucket"]
     GitHub --> GitHubAPI["GitHub REST API"]
 ```
 
