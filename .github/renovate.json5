@@ -236,6 +236,16 @@
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ],
     },
+    {
+      // Restrict the website update to 28 days as well.
+      matchDatasources: ['npm'],
+      minimumReleaseAge: '28 days',
+      internalChecksFilter: 'strict',
+    },
+    {
+      matchUpdateTypes: ['lockFileMaintenance'],
+      minimumReleaseAge: null,
+    },
   ],
   customDatasources: {
     envtest: {
