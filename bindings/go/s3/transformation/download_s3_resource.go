@@ -112,11 +112,11 @@ func (t *DownloadS3Resource) resolveCredentials(ctx context.Context, targetResou
 		return nil, nil
 	}
 	typed, err := t.CredentialProvider.Resolve(ctx, consumerId)
+	if errors.Is(err, credentials.ErrNotFound) {
+		return nil, nil
+	}
 	if err != nil {
-		if errors.Is(err, credentials.ErrNotFound) {
-			return nil, nil
-		}
-		return nil, err
+		return nil, fmt.Errorf("failed resolving credentials for consumer identity %v: %w", consumerId, err)
 	}
 	return typed, nil
 }
