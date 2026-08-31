@@ -26,7 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/event"
@@ -45,10 +44,6 @@ type Reconciler struct {
 	// Resolver provides repository resolution and caching for resource reconciliation.
 	// It ensures that repository access is efficient and consistent during reconciliation operations.
 	Resolver *resolution.Resolver
-
-	// PluginManager manages plugins for resource operations.
-	// It enables dynamic loading and execution of plugins required for resource access.
-	PluginManager *manager.PluginManager
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -315,11 +310,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
+	pm, err := r.PluginManagerFor(ctx, cfg)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create plugin manager: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:  repoSpec,
-		Configuration:   cfg,
-		SigningRegistry: r.PluginManager.SigningRegistry,
-		Verifications:   verifications,
+		RepositorySpec: repoSpec,
+		Configuration:  cfg,
+		PluginManager:  pm,
+		Verifications:  verifications,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -366,9 +368,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		referencedDescriptor,
 		resource.Spec.Resource.ByReference.ReferencePath,
 		&resolution.RepositoryOptions{
-			RepositorySpec:  repoSpec,
-			Configuration:   cfg,
-			SigningRegistry: r.PluginManager.SigningRegistry,
+			RepositorySpec: repoSpec,
+			Configuration:  cfg,
+			PluginManager:  pm,
 			RequesterFunc: func() workerpool.RequesterInfo {
 				return workerpool.RequesterInfo{
 					NamespacedName: k8stypes.NamespacedName{
@@ -418,7 +420,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if resource.Spec.VerificationPolicy != v1alpha1.VerificationPolicyNever {
 		logger.V(1).Info("verifying resource")
 
-		matchedResource, err = ocm.VerifyResource(ctx, r.PluginManager, matchedResource, cfg)
+		matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
 		if err != nil {
 			if errors.Is(err, ocm.ErrPluginNotFound) {
 				// TODO(@frewilhelm): For now we skip resource types that do not have a digest processor plugin.

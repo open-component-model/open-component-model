@@ -33,6 +33,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
 
 // +kubebuilder:scaffold:imports
@@ -154,15 +155,16 @@ var _ = BeforeSuite(func() {
 	Expect(k8sManager.Add(workerPool)).To(Succeed())
 
 	resolutionLogger := logf.Log.WithName("resolution")
-	resolver := resolution.NewResolver(&resolutionLogger, workerPool, pm)
+	resolver := resolution.NewResolver(&resolutionLogger, workerPool)
 
 	repositoryKey = "metadata.name"
 	// Register reconcilers
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:        k8sManager.GetClient(),
-			Scheme:        testEnv.Scheme,
-			EventRecorder: recorder,
+			Client:           k8sManager.GetClient(),
+			Scheme:           testEnv.Scheme,
+			EventRecorder:    recorder,
+			NewPluginManager: test.StaticPluginManager(pm),
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
