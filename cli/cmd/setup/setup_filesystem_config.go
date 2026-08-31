@@ -15,19 +15,19 @@ import (
 )
 
 func overrideTempFolder(cmd *cobra.Command, fsCfg *filesystemv1alpha1.Config, value string) {
-	if fsCfg.TempFolder != "" {
-		slog.WarnContext(cmd.Context(), "temp folder was defined in ocm config with value, will be overwritten by value", slog.String("original", fsCfg.TempFolder), slog.String("new", value))
+	if fsCfg.TempFolder != nil && *fsCfg.TempFolder != "" {
+		slog.WarnContext(cmd.Context(), "temp folder was defined in ocm config with value, will be overwritten by value", slog.String("original", *fsCfg.TempFolder), slog.String("new", value))
 	}
 
-	fsCfg.TempFolder = value
+	fsCfg.TempFolder = &value
 }
 
 func overrideWorkingDirectory(cmd *cobra.Command, fsCfg *filesystemv1alpha1.Config, value string) {
-	if fsCfg.WorkingDirectory != "" {
-		slog.WarnContext(cmd.Context(), "working-directory was defined in ocm config with value, will be overwritten by value", slog.String("original", fsCfg.WorkingDirectory), slog.String("new", value))
+	if fsCfg.WorkingDirectory != nil && *fsCfg.WorkingDirectory != "" {
+		slog.WarnContext(cmd.Context(), "working-directory was defined in ocm config with value, will be overwritten by value", slog.String("original", *fsCfg.WorkingDirectory), slog.String("new", value))
 	}
 
-	fsCfg.WorkingDirectory = value
+	fsCfg.WorkingDirectory = &value
 }
 
 func ensureFilesystemConfig(cmd *cobra.Command, cfg *genericv1.Config, fsCfg *filesystemv1alpha1.Config) {
