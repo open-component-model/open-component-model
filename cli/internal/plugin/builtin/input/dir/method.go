@@ -16,8 +16,12 @@ func Register(inputRegistry *input.RepositoryRegistry, filesystemConfig *filesys
 }
 
 func RegisterDirInputV1(inputRegistry *input.RepositoryRegistry, filesystemConfig *filesystemv1alpha1.Config) error {
+	var workingDirectory string
+	if filesystemConfig.WorkingDirectory != nil {
+		workingDirectory = *filesystemConfig.WorkingDirectory
+	}
 	method := &dir.InputMethod{
-		WorkingDirectory: filesystemConfig.WorkingDirectory,
+		WorkingDirectory: workingDirectory,
 	}
 	if err := inputRegistry.RegisterInternalResourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register dir resource input method: %w", err)

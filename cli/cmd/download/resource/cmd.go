@@ -169,13 +169,14 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
 
-	var toDownload []descriptor.Resource
-	for _, resource := range desc.Component.Resources {
-		resourceIdentity := resource.ToIdentity()
-		if requestedIdentity.Match(resourceIdentity, runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
-			toDownload = append(toDownload, resource)
-			break
-		}
+	artifacts := make([]descriptor.Artifact, len(desc.Component.Resources))
+	for i := range desc.Component.Resources {
+		artifacts[i] = &desc.Component.Resources[i]
+	}
+	candidates := descriptor.FindArtifactsByIdentity(requestedIdentity, artifacts)
+	toDownload := make([]descriptor.Resource, 0, len(candidates))
+	for _, c := range candidates {
+		toDownload = append(toDownload, *c.(*descriptor.Resource))
 	}
 
 	if len(toDownload) != 1 {
