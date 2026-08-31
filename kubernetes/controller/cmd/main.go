@@ -20,7 +20,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -403,34 +402,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		containerPort, err := externalartifact.PortFromAddress(externalArtifactStorageAddr)
-		if err != nil {
-			setupLog.Error(err, "invalid flag value", "flag", "external-artifact-storage-address", "value", externalArtifactStorageAddr)
-			os.Exit(1)
-		}
-
 		advertiseAddr := externalArtifactAdvertiseAddr
-		switch {
-		case advertiseAddr != "":
-			// Explicit override (local testing / non-standard setups).
-		default:
-			// Discover the address from the Service that fronts this pod on the
-			// artifact port, using a direct client (the manager cache is not synced
-			// before Start).
-			discoveryClient, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
-			if err != nil {
-				setupLog.Error(err, "unable to create client for advertise-address discovery")
-				os.Exit(1)
-			}
-			addr, err := externalartifact.DiscoverAdvertiseAddress(ctx, discoveryClient, externalartifact.AdvertiseDiscovery{
-				ContainerPort: containerPort,
-			})
-			if err != nil {
-				setupLog.Error(err, "unable to discover external artifact advertise address; "+
-					"set --external-artifact-storage-advertise-address explicitly")
-				os.Exit(1)
-			}
-			advertiseAddr = addr
+		if advertiseAddr == "" {
+			// Fall back to the bind address host when no explicit in-cluster
+			// address is provided (useful for local testing).
+			advertiseAddr = externalArtifactStorageAddr
 		}
 
 		maxArtifactQuantity, err := apiresource.ParseQuantity(externalArtifactMaxSize)

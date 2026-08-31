@@ -74,8 +74,6 @@ func (r *Reconciler) SetupWithManager(_ context.Context, mgr ctrl.Manager, concu
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=resources,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=externalartifacts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=externalartifacts/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups="",resources=pods,verbs=get
-// +kubebuilder:rbac:groups="",resources=services,verbs=get;list
 
 //nolint:cyclop,funlen // the reconcile flow is linear and easier to read in one place
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
