@@ -1,0 +1,40 @@
+{{- $ea := .Values.fluxExternalArtifacts }}
+{{- if and $ea.enable $ea.networkPolicy.enable }}
+{{- $port := regexFind ":[0-9]+$" $ea.storageAddress | trimPrefix ":" | int }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "artifacts-allow-flux" "context" $) }}
+    namespace: {{ .Release.Namespace }}
+spec:
+    podSelector:
+        matchLabels:
+            app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            control-plane: controller-manager
+    policyTypes:
+        - Ingress
+    ingress:
+        # Allow only the Flux kustomize-controller and helm-controller to reach
+        # the artifact port. Adjust fluxNamespace/labels if your Flux install
+        # differs.
+        - from:
+            - namespaceSelector:
+                matchLabels:
+                    kubernetes.io/metadata.name: {{ $ea.networkPolicy.fluxNamespace }}
+              podSelector:
+                matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - kustomize-controller
+                        - helm-controller
+          ports:
+            - protocol: TCP
+              port: {{ $port }}
+{{- end }}

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ea-e2e-proof
+  namespace: default
+data:
+  produced-by: ocm-external-artifact-controller
+  hello: world

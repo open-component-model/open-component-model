@@ -1,0 +1,22 @@
+{{- $ea := .Values.fluxExternalArtifacts }}
+{{- if and $ea.enable (eq $ea.storage.type "persistentVolumeClaim") (not $ea.storage.persistentVolumeClaim.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+    labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "artifacts" "context" $) }}
+    namespace: {{ .Release.Namespace }}
+spec:
+    accessModes:
+        {{- toYaml $ea.storage.persistentVolumeClaim.accessModes | nindent 8 }}
+    resources:
+        requests:
+            storage: {{ $ea.storage.persistentVolumeClaim.size }}
+    {{- with $ea.storage.persistentVolumeClaim.storageClassName }}
+    storageClassName: {{ . }}
+    {{- end }}
+{{- end }}

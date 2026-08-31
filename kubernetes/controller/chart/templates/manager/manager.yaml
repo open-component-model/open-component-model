@@ -1,6 +1,17 @@
 {{- if and (gt (int .Values.manager.replicas) 1) (not .Values.manager.leaderElection.enabled) }}
 {{- fail "manager.replicas > 1 requires manager.leaderElection.enabled=true to prevent concurrent reconcilers from racing on the same resources" }}
 {{- end }}
+{{- if and .Values.fluxExternalArtifacts.enable (gt (int .Values.manager.replicas) 1) }}
+{{- $st := .Values.fluxExternalArtifacts.storage }}
+{{- if ne $st.type "persistentVolumeClaim" }}
+{{- fail "fluxExternalArtifacts with manager.replicas > 1 requires fluxExternalArtifacts.storage.type=persistentVolumeClaim with a ReadWriteMany volume, so every replica can serve every artifact. With emptyDir, artifacts written by one replica are invisible to the Service's other replicas." }}
+{{- end }}
+{{- if not (has "ReadWriteMany" $st.persistentVolumeClaim.accessModes) }}
+{{- if not $st.persistentVolumeClaim.existingClaim }}
+{{- fail "fluxExternalArtifacts with manager.replicas > 1 requires storage.persistentVolumeClaim.accessModes to include ReadWriteMany (or supply an RWX existingClaim)." }}
+{{- end }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -100,6 +111,26 @@ spec:
                     - --zap-encoder={{ .encoder }}
                     {{- end }}
                     {{- end }}
+                    {{- /* Flux ExternalArtifact integration */}}
+                    {{- if .Values.fluxExternalArtifacts.enable }}
+                    - --enable-flux-external-artifacts-api
+                    - --external-artifact-storage-path={{ .Values.fluxExternalArtifacts.storagePath }}
+                    - --external-artifact-storage-address={{ .Values.fluxExternalArtifacts.storageAddress }}
+                    - --external-artifact-max-size={{ .Values.fluxExternalArtifacts.maxArtifactSize }}
+                    - --external-artifact-gc-interval={{ .Values.fluxExternalArtifacts.gcIntervalMinutes }}
+                    {{- $scheme := "http" }}
+                    {{- if .Values.fluxExternalArtifacts.tls.enabled }}
+                    {{- $scheme = "https" }}
+                    - --external-artifact-tls-cert-file=/etc/ocm/artifact-tls/tls.crt
+                    - --external-artifact-tls-key-file=/etc/ocm/artifact-tls/tls.key
+                    {{- end }}
+                    {{- $advertise := .Values.fluxExternalArtifacts.advertiseAddress }}
+                    {{- if not $advertise }}
+                    {{- $port := regexFind ":[0-9]+$" .Values.fluxExternalArtifacts.storageAddress | trimPrefix ":" }}
+                    {{- $advertise = printf "%s.%s.svc.cluster.local.:%s" (include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager" "context" $)) .Release.Namespace $port }}
+                    {{- end }}
+                    - --external-artifact-storage-advertise-address={{ $advertise }}
+                    {{- end }}
                     {{- /* Extra args */}}
                     {{- range .Values.manager.extraArgs }}
                     - {{ . }}
@@ -122,6 +153,11 @@ spec:
                     - containerPort: 9090
                       name: http
                       protocol: TCP
+                    {{- if .Values.fluxExternalArtifacts.enable }}
+                    - containerPort: {{ regexFind ":[0-9]+$" .Values.fluxExternalArtifacts.storageAddress | trimPrefix ":" }}
+                      name: artifacts
+                      protocol: TCP
+                    {{- end }}
                     {{- if .Values.webhook.enable }}
                     - containerPort: 9443
                       name: webhook-server
@@ -146,8 +182,13 @@ spec:
                     {}
                     {{- end }}
                   volumeMounts:
-                    - mountPath: /data
+                    - mountPath: {{ .Values.fluxExternalArtifacts.storagePath | default "/data" }}
                       name: data
+                    {{- if and .Values.fluxExternalArtifacts.enable .Values.fluxExternalArtifacts.tls.enabled }}
+                    - mountPath: /etc/ocm/artifact-tls
+                      name: artifact-tls
+                      readOnly: true
+                    {{- end }}
                     {{- if .Values.webhook.enable }}
                     - mountPath: /tmp/k8s-webhook-server/serving-certs
                       name: cert
@@ -162,8 +203,25 @@ spec:
             serviceAccountName: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager" "context" $) }}
             terminationGracePeriodSeconds: 10
             volumes:
+                {{- $ea := .Values.fluxExternalArtifacts }}
+                {{- if and $ea.enable (eq $ea.storage.type "persistentVolumeClaim") }}
+                - name: data
+                  persistentVolumeClaim:
+                    claimName: {{ $ea.storage.persistentVolumeClaim.existingClaim | default (include "ocm-k8s-toolkit.resourceName" (dict "suffix" "artifacts" "context" $)) }}
+                {{- else if and $ea.enable (eq $ea.storage.type "emptyDir") }}
+                - name: data
+                  emptyDir:
+                    sizeLimit: {{ $ea.storage.emptyDirSize }}
+                {{- else }}
                 - emptyDir: {}
                   name: data
+                {{- end }}
+                {{- if and $ea.enable $ea.tls.enabled }}
+                - name: artifact-tls
+                  secret:
+                    defaultMode: 420
+                    secretName: {{ $ea.tls.secretName }}
+                {{- end }}
                 {{- if .Values.webhook.enable }}
                 - name: cert
                   secret:
