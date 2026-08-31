@@ -30,7 +30,7 @@ func TestRegister_InputMethodUsesConfiguredTempFolder(t *testing.T) {
 		digestprocessor.NewDigestProcessorRegistry(ctx),
 		credentialrepository.NewCredentialRepositoryRegistry(ctx),
 		&httpv1alpha1.Config{},
-		&filesystemv1alpha1.Config{TempFolder: tempFolder},
+		&filesystemv1alpha1.Config{TempFolder: &tempFolder},
 	))
 
 	plugin, err := inputRegistry.GetResourceInputPlugin(ctx, &wgetv1.Wget{
