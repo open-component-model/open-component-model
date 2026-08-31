@@ -75,7 +75,7 @@ func Test_Integration_S3Transformation(t *testing.T) {
 
 	transform := &transformation.DownloadS3Resource{
 		Scheme:             scheme,
-		ResourceRepository: repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()}),
+		ResourceRepository: repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: new(t.TempDir())}),
 		CredentialProvider: staticCredentials{container.Username, container.Password},
 	}
 
