@@ -306,6 +306,36 @@ func TestGetBlobFromPath_MediaTypeHandling(t *testing.T) {
 		r.True(known)
 		r.Equal("text/plain", media)
 	})
+
+	// A declared media type is used as-is when compression is enabled; only
+	// the default media type gets a +gzip suffix.
+	t.Run("Directory with custom media type and compression", func(t *testing.T) {
+		createTestFile(t, tmpDir, "file2.txt", "content")
+
+		opt := filesystem.DirOptions{MediaType: "application/custom+tar", Compress: true}
+		b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
+		r.NoError(err)
+
+		mt, ok := b.(blob.MediaTypeAware)
+		r.True(ok)
+		media, known := mt.MediaType()
+		r.True(known)
+		r.Equal("application/custom+tar", media)
+	})
+
+	t.Run("Single file with custom media type and compression", func(t *testing.T) {
+		testFile := createTestFile(t, tmpDir, "single2.txt", "content")
+
+		opt := filesystem.DirOptions{MediaType: "text/plain", Compress: true}
+		b, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
+		r.NoError(err)
+
+		mt, ok := b.(blob.MediaTypeAware)
+		r.True(ok)
+		media, known := mt.MediaType()
+		r.True(known)
+		r.Equal("text/plain", media)
+	})
 }
 
 // REPRODUCIBILITY

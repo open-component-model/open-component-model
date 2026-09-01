@@ -19,5 +19,12 @@ tasks:
       - go test -short -skip "Integration" -count=1 $(go list ./... | grep -v /integration | grep -v /kubernetes/controller/test/e2e) {{.CLI_ARGS}}
 
   test/integration:
+    set: [errexit]
+    vars:
+      SIGSTORE_INTEGRATION_DIR: '{{.TASKFILE_DIR}}/sigstore/integration'
     cmds:
-      - go test -run "Integration" -count=1 $(go list ./... | grep -v /sigstore/integration)
+      - task -d '{{.SIGSTORE_INTEGRATION_DIR}}' setup
+      - |
+        export PATH="{{.SIGSTORE_INTEGRATION_DIR}}/tmp/bin:$PATH"
+        . "{{.SIGSTORE_INTEGRATION_DIR}}/tmp/sigstore-env.sh"
+        go test -run "Integration" -count=1 ./...
