@@ -11,16 +11,16 @@ import (
 
 	"github.com/spf13/cobra"
 
-	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	"ocm.software/open-component-model/bindings/go/credentials"
-	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
-	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
 	ocmcmd "ocm.software/open-component-model/bindings/go/cli/cmd/internal/cmd"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/spec/config/v2alpha1"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
+	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
 func OCMConfig(cmd *cobra.Command) error {

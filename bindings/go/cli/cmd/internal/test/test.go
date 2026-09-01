@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"ocm.software/open-component-model/bindings/go/cli/cmd"
-	context "ocm.software/open-component-model/bindings/go/cli/internal/context"
+	"ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
 )
 

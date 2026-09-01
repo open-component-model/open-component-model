@@ -12,6 +12,11 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
+	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
+	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render"
+	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
@@ -23,11 +28,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/signing/v1alpha1/spec"
-	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
-	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
-	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render"
-	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 )
 
 const (

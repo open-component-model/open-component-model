@@ -6,9 +6,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
 
 func TestBuildImageReference(t *testing.T) {

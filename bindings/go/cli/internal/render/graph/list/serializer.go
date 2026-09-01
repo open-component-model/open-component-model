@@ -8,8 +8,8 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"ocm.software/open-component-model/bindings/go/dag"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
+	"ocm.software/open-component-model/bindings/go/dag"
 )
 
 // Serializer implements the ListSerializer interface for serializing

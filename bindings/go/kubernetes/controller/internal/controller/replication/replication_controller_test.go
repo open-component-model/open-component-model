@@ -21,10 +21,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 var _ = Describe("Replication Controller", func() {

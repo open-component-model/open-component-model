@@ -6,8 +6,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler"
-	oidcidentitytoken "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken"
-	trustedroot "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot"
+	"ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken"
+	"ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot"
 )
 
 // Register registers the Sigstore signing handler with the signing registry and

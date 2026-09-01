@@ -6,12 +6,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	ocmcmd "ocm.software/open-component-model/bindings/go/cli/cmd/internal/cmd"
+	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/configuration"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	ocmcmd "ocm.software/open-component-model/bindings/go/cli/cmd/internal/cmd"
-	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 )
 
 func overrideTempFolder(cmd *cobra.Command, fsCfg *filesystemv1alpha1.Config, value string) {

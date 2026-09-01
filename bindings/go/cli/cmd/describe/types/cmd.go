@@ -7,10 +7,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
 	"ocm.software/open-component-model/bindings/go/cli/internal/subsystem"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // New represents the command to describe OCM types.

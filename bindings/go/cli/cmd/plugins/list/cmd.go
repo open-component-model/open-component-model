@@ -12,16 +12,16 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"ocm.software/open-component-model/bindings/go/dag"
-	"ocm.software/open-component-model/bindings/go/dag/sync"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/oci/compref"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/download/shared"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/list"
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
+	"ocm.software/open-component-model/bindings/go/dag"
+	"ocm.software/open-component-model/bindings/go/dag/sync"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci/compref"
 )
 
 const (

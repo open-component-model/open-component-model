@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
-	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress/bar"
+	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
+	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 )
 
 // mapEvent converts a graph runtime progress event to a typed progress.Event.

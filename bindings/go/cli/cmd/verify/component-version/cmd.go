@@ -10,6 +10,9 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
+	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
+	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
+	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -20,9 +23,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/signing/v1alpha1/spec"
-	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
-	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
-	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 )
 
 const (

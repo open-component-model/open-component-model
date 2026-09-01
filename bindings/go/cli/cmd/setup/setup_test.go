@@ -13,13 +13,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
+	ocmcmd "ocm.software/open-component-model/bindings/go/cli/cmd/internal/cmd"
+	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
-	ocmcmd "ocm.software/open-component-model/bindings/go/cli/cmd/internal/cmd"
-	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 )
 
 func init() {

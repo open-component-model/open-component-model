@@ -19,6 +19,9 @@ import (
 
 	blobfs "ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/cli/cmd"
+	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
+	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
@@ -41,9 +44,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
-	"ocm.software/open-component-model/bindings/go/cli/cmd"
-	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
-	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 )
 
 func Test_Integration_Transfer_OCIArtifact(t *testing.T) {

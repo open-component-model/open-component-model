@@ -21,11 +21,11 @@ import (
 	ocmconfigv1spec "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	resolversv1alpha1spec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	credentialsv1spec "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	ocicredentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferspec "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
 
 // ocmConfigTypes identifies ocm.config.ocm.software entries whose deprecated Aliases field

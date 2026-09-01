@@ -7,11 +7,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"ocm.software/open-component-model/bindings/go/cli/internal/subsystem"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/cli/internal/subsystem"
 )
 
 type ctxKey string

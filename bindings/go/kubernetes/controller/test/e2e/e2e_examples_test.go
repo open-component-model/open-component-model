@@ -9,8 +9,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/test/utils"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 )
 
 const (

@@ -12,6 +12,9 @@ import (
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/cli/cmd"
+	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
+	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -21,9 +24,6 @@ import (
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/cli/cmd"
-	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
-	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 )
 
 // Downloading the repository archive from github.com dominates both commands,

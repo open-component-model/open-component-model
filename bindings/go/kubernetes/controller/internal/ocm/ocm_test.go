@@ -17,11 +17,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 )
 
 var _ = Describe("ocm utility", func() {
@@ -630,9 +630,7 @@ var _ = Describe("ocm utility", func() {
 			Version3      = "3.0.0"
 		)
 
-		var (
-			repo *oci.Repository
-		)
+		var repo *oci.Repository
 
 		BeforeEach(func(ctx SpecContext) {
 			ctfpath := GinkgoT().TempDir()

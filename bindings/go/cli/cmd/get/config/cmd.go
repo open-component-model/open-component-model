@@ -7,6 +7,10 @@ import (
 	"github.com/spf13/cobra"
 	sigsyaml "sigs.k8s.io/yaml"
 
+	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
+	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
+	pluginsv2alpha1 "ocm.software/open-component-model/bindings/go/cli/internal/plugin/spec/config/v2alpha1"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render"
 	extractv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -17,10 +21,6 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
-	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
-	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
-	pluginsv2alpha1 "ocm.software/open-component-model/bindings/go/cli/internal/plugin/spec/config/v2alpha1"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render"
 )
 
 const (

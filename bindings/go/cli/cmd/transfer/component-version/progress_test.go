@@ -8,14 +8,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
-	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
-
-	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress/bar"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
+	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
+	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
 func TestNewProgressTracker(t *testing.T) {

@@ -10,12 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"ocm.software/open-component-model/bindings/go/dag"
-	"ocm.software/open-component-model/bindings/go/dag/sync"
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci/compref"
-	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/download/shared"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/plugins/list"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
@@ -23,6 +17,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
 	daglist "ocm.software/open-component-model/bindings/go/cli/internal/render/graph/list"
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
+	"ocm.software/open-component-model/bindings/go/dag"
+	"ocm.software/open-component-model/bindings/go/dag/sync"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci/compref"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 )
 
 const (

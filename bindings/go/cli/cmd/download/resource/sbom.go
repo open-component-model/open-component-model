@@ -8,14 +8,14 @@ import (
 	"github.com/spf13/cobra"
 
 	ocmblob "ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/cli/cmd/download/shared"
+	"ocm.software/open-component-model/bindings/go/cli/internal/sbom"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/cli/cmd/download/shared"
-	"ocm.software/open-component-model/bindings/go/cli/internal/sbom"
 )
 
 // downloadContext defines all the items needed to fetch the SBOM.

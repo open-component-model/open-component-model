@@ -9,9 +9,9 @@ import (
 	"log/slog"
 	"slices"
 
+	graphutils "ocm.software/open-component-model/bindings/go/cli/internal/render/graph"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	graphutils "ocm.software/open-component-model/bindings/go/cli/internal/render/graph"
 )
 
 // Renderer renders a tree from a DirectedAcyclicGraph as a flat last in a

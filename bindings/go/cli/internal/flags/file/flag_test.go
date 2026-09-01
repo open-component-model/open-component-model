@@ -21,7 +21,7 @@ func TestFlag(t *testing.T) {
 
 	// Create test files
 	regularFile := filepath.Join(tempDir, "regular.txt")
-	err = os.WriteFile(regularFile, []byte("test content"), 0644)
+	err = os.WriteFile(regularFile, []byte("test content"), 0o644)
 	require.NoError(t, err)
 
 	// Test cases

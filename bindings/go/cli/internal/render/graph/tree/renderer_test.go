@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/cli/internal/render"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render"
 )
 
 func withTestAttributes(state syncdag.DiscoveryState, name, version, provider string) map[string]any {

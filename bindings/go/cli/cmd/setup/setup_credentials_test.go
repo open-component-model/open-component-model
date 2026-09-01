@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credconfigruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
@@ -26,7 +27,6 @@ import (
 	trustedrootv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1"
 	sigstoresignerv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
 	sigstoreverifierv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin"
 )
 
 // TestCredentialTypeSchemePopulatedByBuiltinRegister verifies that calling builtin.Register

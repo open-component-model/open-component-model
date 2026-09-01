@@ -18,8 +18,8 @@ import (
 	ocmconfigv1spec "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	resolversv1alpha1spec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestGetConfigFromSecret(t *testing.T) {

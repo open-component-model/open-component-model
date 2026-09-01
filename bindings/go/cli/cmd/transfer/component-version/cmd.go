@@ -13,6 +13,12 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
+	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress/bar"
+	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
@@ -23,12 +29,6 @@ import (
 	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
-	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress/bar"
-	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 )
 
 const (

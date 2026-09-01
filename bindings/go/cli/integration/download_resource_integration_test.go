@@ -24,6 +24,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/cli/cmd"
+	resourceCMD "ocm.software/open-component-model/bindings/go/cli/cmd/download/resource"
+	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
@@ -31,9 +34,6 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/cli/cmd"
-	resourceCMD "ocm.software/open-component-model/bindings/go/cli/cmd/download/resource"
-	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 )
 
 func Test_Integration_OCIRepository(t *testing.T) {

@@ -8,15 +8,15 @@ import (
 	"k8s.io/utils/lru"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
 )
 
 // ErrResolutionInProgress is returned when a component version is being resolved in the background.

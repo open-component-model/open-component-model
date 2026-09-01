@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 )
 
 // OCM Configuration file and directory constants

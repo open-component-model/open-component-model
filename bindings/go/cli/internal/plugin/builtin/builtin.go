@@ -4,11 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
-	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
-	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocicredentialplugin "ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/credentials/oci"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/github"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/gpg"
@@ -20,6 +15,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/oidc"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/rsa"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/wget"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
+	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
 func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, logger *slog.Logger) error {

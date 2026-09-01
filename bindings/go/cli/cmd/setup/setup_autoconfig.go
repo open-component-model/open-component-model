@@ -11,12 +11,12 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
+	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	credv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
-	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 )
 
 const (

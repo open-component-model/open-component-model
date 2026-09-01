@@ -5,7 +5,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/cli/cmd/describe/types"
 	componentversion "ocm.software/open-component-model/bindings/go/cli/cmd/get/component-version"
-	config "ocm.software/open-component-model/bindings/go/cli/cmd/get/config"
+	"ocm.software/open-component-model/bindings/go/cli/cmd/get/config"
 )
 
 // New represents any command that is related to retrieving ( "get"ting ) objects

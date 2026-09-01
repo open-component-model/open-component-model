@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"ocm.software/open-component-model/bindings/go/cli/internal/oidcflow"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/cli/internal/oidcflow"
 )
 
 const (

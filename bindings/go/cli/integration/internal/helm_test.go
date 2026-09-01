@@ -19,7 +19,8 @@ import (
 func createTestOCILayout(t *testing.T, dir string, configMediaType string, layers []struct {
 	mediaType string
 	content   []byte
-}) {
+},
+) {
 	t.Helper()
 
 	// Write oci-layout marker

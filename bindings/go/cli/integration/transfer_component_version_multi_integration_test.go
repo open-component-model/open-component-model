@@ -10,10 +10,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/oci"
-	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/cli/cmd"
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
+	"ocm.software/open-component-model/bindings/go/oci"
+	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 )
 
 // buildMultiVersionSourceCTF creates a source CTF with multiple versions of a component

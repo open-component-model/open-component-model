@@ -12,9 +12,9 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph"
 )
 
 // Renderer prints a tree from a DirectedAcyclicGraph as a table.

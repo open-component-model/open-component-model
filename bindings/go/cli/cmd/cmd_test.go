@@ -21,6 +21,10 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	componentversion "ocm.software/open-component-model/bindings/go/cli/cmd/add/component-version"
+	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
+	"ocm.software/open-component-model/bindings/go/cli/cmd/internal/test"
+	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -29,10 +33,6 @@ import (
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	componentversion "ocm.software/open-component-model/bindings/go/cli/cmd/add/component-version"
-	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
-	"ocm.software/open-component-model/bindings/go/cli/cmd/internal/test"
-	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 )
 
 // setupTestRepositoryWithDescriptorLibrary creates a test repository with the given component versions

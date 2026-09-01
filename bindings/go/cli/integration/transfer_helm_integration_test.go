@@ -12,6 +12,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/cli/cmd"
+	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
+	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -20,9 +23,6 @@ import (
 	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/cli/cmd"
-	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
-	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 )
 
 // newHelmChartRepoServer starts an httptest server that serves files from the given directory.

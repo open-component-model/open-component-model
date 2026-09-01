@@ -14,6 +14,16 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/cli/cmd/setup/hooks"
+	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
+	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
+	"ocm.software/open-component-model/bindings/go/cli/internal/flags/file"
+	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/list"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/tree"
+	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
+	"ocm.software/open-component-model/bindings/go/cli/internal/subsystem"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
@@ -30,16 +40,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/cli/cmd/setup/hooks"
-	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
-	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
-	"ocm.software/open-component-model/bindings/go/cli/internal/flags/file"
-	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/list"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/tree"
-	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
-	"ocm.software/open-component-model/bindings/go/cli/internal/subsystem"
 )
 
 const (

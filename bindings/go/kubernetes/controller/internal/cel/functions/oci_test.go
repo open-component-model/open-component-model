@@ -15,10 +15,10 @@ import (
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmspec "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
-	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/cel/functions"
+	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // componentInfoForRepository creates a ComponentInfo with a repository spec pointing to the given registry and optional subPath.

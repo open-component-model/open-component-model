@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -325,7 +326,6 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 			require.NotNil(t, result)
 
 			require.True(t, isFallbackProvider(result), "expected fallbackProvider, got %T", result)
-
 		})
 
 		t.Run("OptionsShouldBeIgnoredWhenFallbackResolversConfigIsUsed", func(t *testing.T) {

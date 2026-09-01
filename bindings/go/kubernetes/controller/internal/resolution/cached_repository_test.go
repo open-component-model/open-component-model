@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 )
 
 func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {

@@ -3,8 +3,8 @@ package list
 import (
 	"cmp"
 
-	"ocm.software/open-component-model/bindings/go/dag"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
+	"ocm.software/open-component-model/bindings/go/dag"
 )
 
 // SerializerOption is a function that modifies the SerializerOptions.

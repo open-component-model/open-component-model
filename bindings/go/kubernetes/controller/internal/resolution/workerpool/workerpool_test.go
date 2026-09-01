@@ -23,11 +23,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/repository"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/bindings/go/repository"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type FakeLogger struct {
@@ -44,6 +44,7 @@ func (logger *FakeLogger) Info(lvl int, msg string, keysAndValues ...interface{}
 	defer logger.mu.Unlock()
 	logger.infoBuffer.WriteString(msg)
 }
+
 func (logger *FakeLogger) Error(err error, msg string, keysAndValues ...interface{}) {
 	logger.mu.Lock()
 	defer logger.mu.Unlock()

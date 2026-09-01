@@ -11,6 +11,12 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
+	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
+	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/list"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/tree"
+	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/dag"
@@ -23,12 +29,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
-	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/list"
-	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/tree"
-	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 )
 
 const (

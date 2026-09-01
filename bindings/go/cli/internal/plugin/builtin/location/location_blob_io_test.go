@@ -55,7 +55,7 @@ func TestWriteAndRead(t *testing.T) {
 				Value:        filepath.Join(tempDir, "pipe"),
 			},
 			setup: func(t *testing.T) error {
-				return unix.Mkfifo(filepath.Join(tempDir, "pipe"), 0666)
+				return unix.Mkfifo(filepath.Join(tempDir, "pipe"), 0o666)
 			},
 			cleanup: func() error {
 				return os.Remove(filepath.Join(tempDir, "pipe"))

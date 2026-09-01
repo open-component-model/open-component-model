@@ -8,19 +8,18 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
-	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -50,7 +49,6 @@ var _ = Describe("Repository Controller", func() {
 	})
 
 	Describe("Reconciling with different RepositorySpec specifications", func() {
-
 		Context("When correct RepositorySpec is provided", func() {
 			It("Repository can be reconciled with CTF", func(ctx SpecContext) {
 				By("creating a CTF repository")
@@ -78,7 +76,6 @@ var _ = Describe("Repository Controller", func() {
 
 		Context("When incorrect RepositorySpec is provided", func() {
 			It("Validation must fail", func(ctx SpecContext) {
-
 				By("creating a CTF repository with non-existent path")
 				spec := &ctf.Repository{
 					FilePath:   "/nonexistent/path/that/does/not/exist",
@@ -101,7 +98,6 @@ var _ = Describe("Repository Controller", func() {
 
 		Context("When incorrect RepositorySpec is provided", func() {
 			It("Validation must fail", func(ctx SpecContext) {
-
 				By("creating a OCI repository from invalid json")
 				specdata := []byte("not a json")
 				repoName := TestRepositoryObj + "-invalid-json"
@@ -129,10 +125,8 @@ var _ = Describe("Repository Controller", func() {
 	})
 
 	Describe("Reconciling a valid Repository", func() {
-
 		Context("When ConfigRefs properly set", func() {
 			It("Repository can be reconciled", func(ctx SpecContext) {
-
 				By("creating secret and config objects")
 				configs, secrets := createTestConfigsAndSecrets(ctx)
 

@@ -9,10 +9,10 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	ocmcel "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/cel"
 	celconv "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/resource/conversion"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ComputeAdditionalStatusFields compiles and evaluates CEL expressions for additional fields.
