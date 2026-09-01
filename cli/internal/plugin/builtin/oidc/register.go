@@ -20,8 +20,12 @@ func Register(
 	repositoryRegistry.Register(oidcidentitytoken.Scheme)
 	repositoryRegistry.Register(trustedroot.Scheme)
 
+	var tempDir string
+	if filesystemConfig.TempFolder != nil {
+		tempDir = *filesystemConfig.TempFolder
+	}
 	return signingHandlerRegistry.RegisterInternalComponentSignatureHandler(
-		handler.New(handler.WithTempDir(filesystemConfig.TempFolder)),
+		handler.New(handler.WithTempDir(tempDir)),
 	)
 }
 
