@@ -4,14 +4,12 @@ This document contains accumulated knowledge about the OCM repository for any LL
 
 ## Repository Overview
 
-OCM is a multi-module Go monorepo implementing the Open Component Model specification. It consists of four main areas:
+OCM is a multi-module Go monorepo implementing the Open Component Model specification. It consists of two main areas:
 
-- **bindings/go/** — independent Go library modules (the core libraries). See `bindings/go/README.md` for the full module list.
-- **cli/** — The `ocm` CLI tool built with Cobra. See `cli/README.md` for details.
-- **kubernetes/controller/** — A controller-runtime-based Kubernetes operator. See `kubernetes/controller/README.md` for details.
+- **bindings/go/** — a single Go module containing the independent Go library packages (the core libraries), the `ocm` CLI tool built with Cobra, and the controller-runtime-based Kubernetes operator. See `bindings/go/README.md` for the package list.
 - **website/** — The Hugo-based documentation site published at <https://ocm.software>. See `website/README.md` and `website/CONTRIBUTING.md` for details.
 
-Check each module's `go.mod` for the Go version in use. The build system uses **Task** (not Make).
+Check `bindings/go/go.mod` for the Go version in use. The build system uses **Task** (not Make).
 See the Task documentation at <https://taskfile.dev/docs/guide>.
 
 ## Agent Behavior Rules
@@ -107,29 +105,29 @@ For detailed coding patterns, conventions, and idiomatic Go practices used acros
 
 ### bindings/go/
 
-Each module under `bindings/go/` is an independent Go module. Analyze the target module's `doc.go`, `README.md`, and existing code for structure and conventions before making changes.
+`bindings/go/` is a single Go module containing the core library packages, the CLI, and the controller. Analyze the target package's `doc.go`, `README.md`, and existing code for structure and conventions before making changes.
 
 - **Testing**: testify only (`require` and `mock`). No Ginkgo. Table-driven tests with `t.Run()`. Start every test with `r := require.New(t)`.
 - **Test data**: Typically read from `testdata/` directories via `os.ReadFile` or `os.Open`. Some tests use `//go:embed testdata`.
 - **Logging**: `log/slog` via `slogcontext`.
 - For constructor patterns, error handling, concurrency primitives, JSON marshaling tricks, and resource cleanup idioms, see [docs/coding-patterns.md](docs/coding-patterns.md).
 
-### cli/
+### bindings/go/cli/
 
-Analyze `cli/README.md` and `cli/cmd/` for structure and conventions. 
+Analyze `bindings/go/cli/README.md` and `bindings/go/cli/cmd/` for structure and conventions. 
 Run `ocm help` to discover available commands and flags.
 
-- **Testing**: testify/require. The `test.OCM()` helper in `cmd/internal/test/test.go` executes CLI commands programmatically with an options builder pattern.
-- **Integration tests** live in `bindings/go/cli/integration/` (part of the `bindings/go` module, no separate `go.mod`) and use testcontainers.
+- **Testing**: testify/require. The `test.OCM()` helper in `bindings/go/cli/cmd/internal/test/test.go` executes CLI commands programmatically with an options builder pattern.
+- **Integration tests** live in `bindings/go/cli/integration/` (its own Go module with a `replace` directive pointing at `bindings/go`) and use testcontainers.
 - **Logging**: `log/slog` with a JSON/text format flag.
 - For command construction, DI via context, custom flag types, and output renderers, see [docs/coding-patterns.md#cli-idioms](docs/coding-patterns.md#cli-idioms).
 
-### kubernetes/controller/
+### bindings/go/kubernetes/controller/
 
-Analyze `kubernetes/controller/README.md` and `kubernetes/controller/api/` for structure, CRDs, and conventions.
+Analyze `bindings/go/kubernetes/controller/README.md` and `bindings/go/kubernetes/controller/api/` for structure, CRDs, and conventions.
 
 - **Testing**: Ginkgo v2 + Gomega. This is the only area using Ginkgo.
-- **Critical env var**: `export ENVTEST_K8S_VERSION=1.34.1` without this, tests fail with path errors.
+- **envtest binaries**: controller suites self-provision control-plane binaries via `internal/test/envtest.go` (`DownloadBinaryAssets`); no `KUBEBUILDER_ASSETS` setup needed. `ENVTEST_K8S_VERSION` (from `bindings/go/kubernetes/controller/.env`) wins when set, otherwise the renovate-synced `DefaultEnvTestVersion` fallback applies.
 - **Filtering Ginkgo tests**: Use `--ginkgo.focus`, not `-run`.
 - **Test helpers** in `internal/test/` provide mock object builders.
 - **Logging**: `logr` via controller-runtime zap.
@@ -152,7 +150,7 @@ Hugo-based documentation site published at <https://ocm.software>. Read `website
 
 ## Common Pitfalls
 
-1. **Missing ENVTEST_K8S_VERSION** — Controller tests will fail silently with path errors
+1. **Envtest version drift** — Controller suites self-provision binaries via `internal/test/envtest.go`; the version comes from `ENVTEST_K8S_VERSION` (`bindings/go/kubernetes/controller/.env`) with a fallback to `DefaultEnvTestVersion` in that file. Both are bumped together by renovate; keep them in sync when hand-editing
 2. **Cross-module PRs** — CI rejects PRs that mix changes across multiple Go modules
 3. **Forgetting `task generate`** — After adding/changing markers, generated code must be committed
 4. **Using `-run` with Ginkgo** — Use `--ginkgo.focus` instead
