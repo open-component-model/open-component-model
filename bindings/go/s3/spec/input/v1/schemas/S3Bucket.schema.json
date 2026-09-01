@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/s3/spec/input/v1/schemas/S3Bucket.schema.json",
   "title": "S3Bucket",
   "type": "object",
-  "description": "S3Bucket is the input method specification for sourcing a resource from a single\nblob (object) stored in an S3 or S3-compatible bucket during component construction.\nThe object is downloaded and stored as a local blob in the component version, so the\ncomponent version no longer depends on the bucket once it is built. It mirrors the\nfields of the S3Bucket access type.",
+  "description": "S3Bucket is the input method specification for a resource that comes from a single\nblob (object) in an S3 or S3-compatible bucket. OCM downloads the object during the\ncomponent construction and stores it as a local blob in the component version. The\ncomponent version therefore does not depend on the bucket after the build. It holds\nthe same fields as the S3Bucket access type.",
   "properties": {
     "bucketName": {
       "type": "string",
@@ -12,7 +12,7 @@
     },
     "endpoint": {
       "type": "string",
-      "description": "Endpoint is the base endpoint of an S3-compatible store (e.g. MinIO, Ceph,\nR2). When empty, AWS S3 is targeted."
+      "description": "Endpoint is the base endpoint of an S3-compatible store, for example MinIO, Ceph\nor R2. When it is empty, OCM uses AWS S3."
     },
     "mediaType": {
       "type": "string",
@@ -20,11 +20,11 @@
     },
     "objectKey": {
       "type": "string",
-      "description": "ObjectKey is the key (path) of the object within the bucket."
+      "description": "ObjectKey is the key (path) of the object in the bucket."
     },
     "region": {
       "type": "string",
-      "description": "Region is the region of the bucket. Optional; when empty it is resolved from\nthe environment or defaulted, and is typically ignored for custom endpoints."
+      "description": "Region is the region of the bucket. It is optional. When it is empty, OCM reads\nit from the environment or applies a default. Most custom endpoints ignore it."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
@@ -47,11 +47,11 @@
     },
     "usePathStyle": {
       "type": "boolean",
-      "description": "UsePathStyle enables path-style addressing (bucket in the path instead of the\nhost). Required by most self-hosted S3-compatible stores."
+      "description": "UsePathStyle puts the bucket in the path instead of in the host. Most self-hosted\nS3-compatible stores need this."
     },
     "version": {
       "type": "string",
-      "description": "Version pins a specific S3 object version (versionId). When empty the latest\nversion is read."
+      "description": "Version pins one S3 object version (versionId). When it is empty, OCM reads the\nlatest version."
     }
   },
   "required": [

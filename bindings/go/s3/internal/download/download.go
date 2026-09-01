@@ -25,8 +25,9 @@ import (
 )
 
 const (
-	// defaultRegion is used when the request names none. AWS requires a region even
-	// when a custom endpoint is targeted; S3-compatible stores usually ignore it.
+	// defaultRegion applies when neither the request nor the AWS environment names one.
+	// AWS needs a region even for a custom endpoint. Most S3-compatible stores ignore
+	// it.
 	defaultRegion = "us-east-1"
 
 	tempFilePattern = "ocm-s3-download-*"
@@ -49,8 +50,9 @@ type Result struct {
 
 // Request describes a single S3 object download.
 type Request struct {
-	// Region is the bucket region. Optional: an empty one falls back to [defaultRegion],
-	// which is what lets a custom endpoint work without naming a region.
+	// Region is the bucket region. It is optional: if it is empty, the AWS SDK reads
+	// AWS_REGION or the shared config, and falls back to [defaultRegion]. This is why a
+	// custom endpoint works without a region.
 	Region string
 	// BucketName is the bucket holding the object.
 	BucketName string
@@ -255,11 +257,6 @@ func staticCredentials(creds *credv1.S3Credentials) *credentials.StaticCredentia
 // newClient builds an S3 client from the request and the download options. When no
 // credentials are supplied, the AWS default credential chain is used.
 func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) {
-	region := req.Region
-	if region == "" {
-		region = defaultRegion
-	}
-
 	httpClient := o.HTTPClient
 	if httpClient == nil {
 		httpClient = ocmhttp.New(ocmhttp.WithConfig(httpConfig(o.HTTPConfig)))
@@ -268,8 +265,13 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 	// Retrying happens in the SDK alone, driven by the ocm retry configuration; see
 	// [httpConfig]. An unset one leaves the SDK on its own default.
 	loadOpts := []func(*config.LoadOptions) error{
-		config.WithRegion(region),
 		config.WithHTTPClient(httpClient),
+	}
+	// A region in the specification has priority. If it is absent, the SDK resolves one
+	// as every other AWS tool does, from AWS_REGION or the shared config profile.
+	// [defaultRegion] applies only if that finds nothing either.
+	if req.Region != "" {
+		loadOpts = append(loadOpts, config.WithRegion(req.Region))
 	}
 	if attempts := sdkRetryAttempts(o.HTTPConfig, req.Endpoint); attempts > 0 {
 		loadOpts = append(loadOpts, config.WithRetryMaxAttempts(attempts))
@@ -288,6 +290,9 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 	awsCfg, err := config.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("error loading aws config: %w", err)
+	}
+	if awsCfg.Region == "" {
+		awsCfg.Region = defaultRegion
 	}
 
 	return s3.NewFromConfig(awsCfg, func(o *s3.Options) {

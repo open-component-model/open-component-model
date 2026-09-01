@@ -47,7 +47,8 @@ func Test_Integration_S3(t *testing.T) {
 		AccessKeyID:     container.Username,
 		SecretAccessKey: container.Password,
 	}
-	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: t.TempDir()})
+	tempDir := t.TempDir()
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
 
 	access := func(bucket, key, version string) *accessv1.S3Bucket {
 		return &accessv1.S3Bucket{
