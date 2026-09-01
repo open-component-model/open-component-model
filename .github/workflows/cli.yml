@@ -33,7 +33,8 @@ permissions:
   contents: read
 
 env:
-  LOCATION: "cli"                       # Folder containing the CLI source
+  LOCATION: "bindings/go/cli"          # Folder containing the CLI source
+  MODULE_LOCATION: "bindings/go"        # Go module root (cli is a package inside it)
   REGISTRY: ghcr.io                     # Target container registry
   # github.head_ref → branch name from the PR target (works only for pull_request events)
   # github.ref_name → branch or tag name for normal push/tag events
@@ -105,15 +106,15 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
-            ${{ env.LOCATION }}
+            ${{ env.MODULE_LOCATION }}
           persist-credentials: 'false'
           ref: ${{ env.REF }}
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum  # Cache dependencies by go.sum
+          go-version-file: bindings/go/go.mod
+          cache-dependency-path: bindings/go/go.sum  # Cache dependencies by go.sum
 
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0

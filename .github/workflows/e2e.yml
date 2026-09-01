@@ -35,7 +35,8 @@ permissions:
 # Same pattern as conformance.yml and kubernetes-controller.yml.
 
 env:
-  LOCATION: "kubernetes/controller"
+  LOCATION: "bindings/go/kubernetes/controller"
+  MODULE_LOCATION: "bindings/go"
   REGISTRY: ghcr.io
   REF: ${{ inputs.ref || github.head_ref || github.ref_name }}
   CHECKOUT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
@@ -65,7 +66,7 @@ jobs:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.REF }}
           sparse-checkout: |
-            ${{ env.LOCATION }}
+            ${{ env.MODULE_LOCATION }}
             Taskfile.yml
             .env
           persist-credentials: false
@@ -73,8 +74,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version-file: ${{ env.LOCATION }}/go.mod
-          cache-dependency-path: ${{ env.LOCATION }}/go.sum
+          go-version-file: ${{ env.MODULE_LOCATION }}/go.mod
+          cache-dependency-path: ${{ env.MODULE_LOCATION }}/go.sum
 
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
@@ -137,7 +138,7 @@ jobs:
           set -a && source ${{ env.LOCATION }}/.env && set +a
           bash ${{ env.LOCATION }}/test/e2e/hacks/setup.sh
           kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller.tar" --name ocm-e2e
-          task ${{ env.LOCATION }}:test/e2e
+          task kubernetes/controller:test/e2e
 
       - name: Debug cluster state
         if: failure()

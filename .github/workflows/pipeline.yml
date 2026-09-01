@@ -22,8 +22,8 @@ on:
     branches:
       - main
     paths:
-      - 'cli/**'
-      - 'kubernetes/controller/**'
+      - 'bindings/go/cli/**'
+      - 'bindings/go/kubernetes/controller/**'
       - 'conformance/**'
       - '.github/workflows/cli.yml'
       - '.github/workflows/kubernetes-controller.yml'
@@ -245,7 +245,7 @@ jobs:
       attestations: write
       artifact-metadata: write
     env:
-      LOCATION: kubernetes/controller
+      LOCATION: bindings/go/kubernetes/controller
       REF: ${{ needs.decide_publish.outputs.ref }}
     steps:
       - name: Compute image refs (lowercase owner)

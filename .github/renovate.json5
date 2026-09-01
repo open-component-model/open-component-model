@@ -29,7 +29,7 @@
   separateMultipleMajor: true,
   packageRules: [
     {
-      matchFileNames: ['kubernetes/controller/chart/**'],
+      matchFileNames: ['bindings/go/kubernetes/controller/chart/**'],
       groupName: 'Kubernetes Controller chart',
       groupSlug: 'kubernetes-controller-chart',
       enabled: true,
@@ -183,24 +183,6 @@
       enabled: false,
     },
     {
-      matchManagers: [
-        'gomod',
-      ],
-      // With the monolithic bindings/go module, this group now only fires for
-      // cli/ and kubernetes/controller/ consuming the published bindings/go tag.
-      groupName: 'OCM Monorepo Go Module Dependencies',
-      groupSlug: 'ocm-monorepo',
-      matchPackageNames: [
-        'ocm.software/open-component-model/**',
-      ],
-      // Combine minor and patch updates into a single PR.
-      separateMinorPatch: false,
-      'schedule': [
-        '* 22,0-6 * * *' // At every minute past hour 22 and every hour from 0 through 6.
-      ],
-      minimumReleaseAge: null,
-    },
-    {
       // The internal org workflows repo is tracked on @main intentionally
       // (see .github/workflows/stale.yaml). Disable Renovate so it does not
       // re-pin the ref to a SHA and then bump it on every upstream commit.
@@ -214,8 +196,8 @@
       // by this later rule (Renovate merges matching rules in order; last write
       // wins on conflicting fields like groupName).
       matchFileNames: [
-        'kubernetes/controller/**',
-        '!kubernetes/controller/chart/**',
+        'bindings/go/kubernetes/controller/**',
+        '!bindings/go/kubernetes/controller/chart/**',
       ],
       matchUpdateTypes: ['minor', 'patch'],
       groupName: 'Kubernetes Controller dependencies (non-major)',

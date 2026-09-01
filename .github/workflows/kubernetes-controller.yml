@@ -31,7 +31,8 @@ on:
         value: controller-chart-pr
 
 env:
-  LOCATION: "kubernetes/controller"
+  LOCATION: "bindings/go/kubernetes/controller"
+  MODULE_LOCATION: "bindings/go"
   REGISTRY: ghcr.io
   REF: ${{ inputs.ref || github.head_ref || github.ref_name }}
   ARTIFACT_NAME: ${{ inputs.artifact_name || 'controller-artifacts' }}
@@ -101,7 +102,7 @@ jobs:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
             .github/scripts
-            ${{ env.LOCATION }}
+            ${{ env.MODULE_LOCATION }}
             Taskfile.yml
             .env
           persist-credentials: false
