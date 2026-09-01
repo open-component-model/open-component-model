@@ -2,7 +2,7 @@
 
 | Layer | Module | Direct dependencies |
 |-------|--------|---------------------|
-| 0 | `cel`, `dag`, `runtime` | — |
+| 0 | `cel`, `dag`, `descriptor`, `input`, `kubernetes`, `runtime` | — |
 | 1 | `blob`, `configuration`, `descriptor/v2`, `generator` | `runtime` |
 | 2 | `credentials` | `configuration`, `dag`, `runtime` |
 | 2 | `ctf` | `blob` |
@@ -22,3 +22,5 @@
 | 7 | `github` | `blob`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `plugin`, `repository`, `runtime` |
 | 7 | `helm` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `oci`, `plugin`, `repository`, `runtime` |
 | 8 | `transfer` | `blob`, `configuration`, `credentials`, `ctf`, `dag`, `descriptor/runtime`, `descriptor/v2`, `github`, `helm`, `http`, `oci`, `repository`, `runtime`, `s3`, `signing`, `transform`, `wget` |
+| 9 | `cli` | `blob`, `cel`, `configuration`, `constructor`, `credentials`, `ctf`, `dag`, `descriptor`, `github`, `gpg`, `helm`, `http`, `input`, `oci`, `plugin`, `repository`, `rsa`, `runtime`, `s3`, `signing`, `sigstore`, `transfer`, `transform`, `wget` |
+| 9 | `kubernetes/controller` | `blob`, `cel`, `configuration`, `constructor`, `credentials`, `ctf`, `dag`, `descriptor`, `github`, `helm`, `http`, `kubernetes`, `oci`, `plugin`, `repository`, `rsa`, `runtime`, `signing`, `sigstore`, `transfer`, `transform`, `wget` |

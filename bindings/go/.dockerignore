@@ -1,0 +1,6 @@
+# More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
+# The controller Dockerfile uses this module root as its build context.
+# Ignore build and test output so it does not bloat the context.
+**/bin
+**/tmp
+**/dist

@@ -55,16 +55,16 @@ includes:
     dir: ./bindings/go/s3/integration
   cli:
     optional: true
-    taskfile: ./cli/Taskfile.yml
-    dir: ./cli
+    taskfile: ./bindings/go/cli/Taskfile.yml
+    dir: ./bindings/go/cli
   cli/integration:
     optional: true
-    taskfile: ./cli/integration/Taskfile.yml
-    dir: ./cli/integration
+    taskfile: ./bindings/go/cli/integration/Taskfile.yml
+    dir: ./bindings/go/cli/integration
   kubernetes/controller:
     optional: true
-    taskfile: ./kubernetes/controller/Taskfile.yml
-    dir: ./kubernetes/controller
+    taskfile: ./bindings/go/kubernetes/controller/Taskfile.yml
+    dir: ./bindings/go/kubernetes/controller
 
 vars:
   GO_MODULES:
@@ -122,5 +122,5 @@ tasks:
       - task: 'cli:generate/docs'
         vars:
           CLI_DOCUMENTATION_MODE: "hugo"
-          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/cli/docs/reference'
+          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/bindings/go/cli/docs/reference'
       - task: 'tidy'
