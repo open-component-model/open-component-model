@@ -6,6 +6,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS } = require('./register-docs-version');
 
+const MODULE_PREFIX = 'ocm.software/open-component-model';
+
 // Resolved CLI-derived versions for tests that need every binding import emitted.
 // buildModuleBlocks now drops bindings whose version is undefined (filter at the
 // end), so tests asserting "all 14 imports" / "all schema targets" must pass deps.
@@ -767,4 +769,44 @@ test('updateImportTags: monolithic patch roundtrip equals fresh build with patch
     updateImportTags(parsed, '0.15', '0.15.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.1' });
     const { imports: direct } = buildModuleBlocks('0.15', '0.15.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.1' });
     assert.deepEqual(parsed.imports, direct);
+});
+
+// --- cli/controller merged into bindings/go (>= 0.16) ---
+
+test('buildModuleBlocks: pre-merge (<0.16) keeps legacy top-level cli/controller paths', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const cli = imports.find(i => i.path.endsWith('/cli'));
+    const controller = imports.find(i => i.path.endsWith('/kubernetes/controller'));
+    assert.equal(cli.path, `${MODULE_PREFIX}/cli`);
+    assert.equal(controller.path, `${MODULE_PREFIX}/kubernetes/controller`);
+});
+
+test('buildModuleBlocks: post-merge (>=0.16) folds cli/controller into bindings/go', () => {
+    const { imports } = buildModuleBlocks('0.16', '0.16.0', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0' });
+    const cli = imports.find(i => i.path.endsWith('/cli'));
+    const controller = imports.find(i => i.path.endsWith('/kubernetes/controller'));
+    assert.equal(cli.path, `${MODULE_PREFIX}/bindings/go/cli`);
+    assert.equal(controller.path, `${MODULE_PREFIX}/bindings/go/kubernetes/controller`);
+    // Mount targets and the pinned release version are unchanged by the merge.
+    assert.equal(cli.version, 'v0.16.0');
+    assert.equal(cli.mounts[0].target, 'content/docs/reference/ocm-cli');
+    assert.equal(controller.version, 'v0.16.0');
+    assert.equal(controller.mounts[0].target, 'static/0.16/schemas/kubernetes/controller');
+});
+
+test('updateImportTags: bumps merged cli/controller paths on post-merge patch', () => {
+    const { imports } = buildModuleBlocks('0.16', '0.16.0', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0' });
+    const parsed = { imports };
+    const changed = updateImportTags(parsed, '0.16', '0.16.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.1' });
+    assert.equal(changed, true);
+    const byPath = Object.fromEntries(parsed.imports.map(i => [i.path, i.version]));
+    assert.equal(byPath[`${MODULE_PREFIX}/bindings/go/cli`], 'v0.16.1');
+    assert.equal(byPath[`${MODULE_PREFIX}/bindings/go/kubernetes/controller`], 'v0.16.1');
+    assert.equal(byPath[MONOLITHIC_BINDINGS_MODULE], 'v0.16.1');
+});
+
+test('hasAllImportsForVersion: consistent for post-merge layout', () => {
+    const deps = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0' };
+    const { imports } = buildModuleBlocks('0.16', '0.16.0', deps);
+    assert.equal(hasAllImportsForVersion({ imports }, '0.16', deps), true);
 });
