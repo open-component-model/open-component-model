@@ -1,7 +1,7 @@
 # Hugo Parameters
 
 # mainSections
-mainSections: ["docs", "community"]
+mainSections: ["docs", "odg", "community"]
 
 # Doks (@thulite/doks-core)
 doks:
@@ -39,7 +39,7 @@ doks:
   bootstrapJavascript: false # false (default) or true
 
   # Nav
-  sectionNav: ["docs", "community"] # include community so sidebar appears for community section
+  sectionNav: ["docs", "odg", "community"] # include community so sidebar appears for community section
   toTopButton: false # false (default) or true
   breadcrumbTrail: false # false (default) or true
   headlineHash: true # true (default) or false

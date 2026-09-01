@@ -2,6 +2,9 @@ main:
   - name: Docs
     url: docs/
     weight: 10
+  - name: ODG
+    url: odg/
+    weight: 10
   - name: Community
     url: community/
     weight: 20
