@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -34,6 +31,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -85,22 +83,8 @@ var _ = BeforeSuite(func() {
 	err = yaml.Unmarshal(crdBytes, rgdCRD)
 	Expect(err).NotTo(HaveOccurred())
 
-	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "..", "config", "crd", "bases"),
-		},
-		ErrorIfCRDPathMissing: true,
-
-		CRDs: []*apiextensionsv1.CustomResourceDefinition{rgdCRD},
-
-		// The BinaryAssetsDirectory is only required if you want to run the tests directly
-		// without calling `task test`. If not informed it will look for the
-		// default path defined in controller-runtime which is /usr/local/kubebuilder/.
-		// Note that you must have the required binaries setup under the bin directory to perform
-		// the tests directly. When we run `task test` it will be setup and used automatically.
-		BinaryAssetsDirectory: filepath.Join("..", "..", "..", "bin", "k8s",
-			fmt.Sprintf("%s-%s-%s", os.Getenv("ENVTEST_K8S_VERSION"), runtime.GOOS, runtime.GOARCH)),
-	}
+	testEnv = test.NewEnvTest()
+	testEnv.CRDs = []*apiextensionsv1.CustomResourceDefinition{rgdCRD}
 
 	// cfg is defined in this file globally.
 	cfg, err := testEnv.Start()

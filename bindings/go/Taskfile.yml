@@ -16,7 +16,7 @@ tasks:
   test:
     deps: [build/plugins]
     cmds:
-      - go test -short -skip "Integration" -count=1 $(go list ./... | grep -v /integration) {{.CLI_ARGS}}
+      - go test -short -skip "Integration" -count=1 $(go list ./... | grep -v /integration | grep -v /kubernetes/controller/test/e2e) {{.CLI_ARGS}}
 
   test/integration:
     cmds:

@@ -242,6 +242,20 @@
       versioningTemplate: 'semver',
     },
     {
+      // Keeps the envtest fallback version in the Go test helper
+      // (internal/test/envtest.go) in sync with controller .env
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)envtest\\.go$/',
+      ],
+      matchStrings: [
+        '// renovate: datasource=custom\\.envtest depName=envtest\\s+const DefaultEnvTestVersion = "(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
+      ],
+      datasourceTemplate: 'custom.envtest',
+      depNameTemplate: 'envtest',
+      versioningTemplate: 'semver',
+    },
+    {
       customType: 'regex',
       managerFilePatterns: [
         '/(^|/)\\.env(\\.local)?$/',

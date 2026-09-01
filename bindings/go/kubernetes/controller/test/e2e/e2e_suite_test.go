@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -26,34 +27,40 @@ var (
 	timeout string
 	// controllerPodName is required to access the logs after the e2e tests
 	controllerPodName string
-	examplesDir       string
-	examples          []os.DirEntry
+	// examplesDir defaults to the repository-tracked examples directory,
+	// resolved relative to this file so it is found regardless of the test
+	// working directory. EXAMPLES_DIR overrides it, followed by PROJECT_DIR.
+	examplesDir = defaultExamplesDir()
+	// examples are enumerated at spec-tree construction so every example gets
+	// its own spec. A missing directory is a hard failure: the examples are
+	// tracked in the repository, so an unreadable directory indicates a broken
+	// checkout or a bad override.
+	examples = loadExamples(examplesDir)
 )
 
-// To create a test-case for every example in the examples directory, it is required to set the examples before the
-// test suite is started.
-func init() {
-	examplesDir = os.Getenv("EXAMPLES_DIR")
-	if examplesDir == "" {
-		projectDir := os.Getenv("PROJECT_DIR")
-		if projectDir == "" {
-			var err error
-			projectDir, err = os.Getwd()
-			if err != nil {
-				log.Fatal("could not get current working directory", err)
-			}
-		}
-		examplesDir = filepath.Join(projectDir, "examples")
+func defaultExamplesDir() string {
+	if dir := os.Getenv("EXAMPLES_DIR"); dir != "" {
+		return dir
 	}
+	if projectDir := os.Getenv("PROJECT_DIR"); projectDir != "" {
+		return filepath.Join(projectDir, "examples")
+	}
+	_, file, _, _ := runtime.Caller(0)
+	return filepath.Join(filepath.Dir(file), "..", "..", "examples")
+}
 
-	var err error
-	examples, err = os.ReadDir(examplesDir)
+func loadExamples(dir string) []os.DirEntry {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		log.Fatal("could not read directory with examples", err)
+		log.Fatalf("could not read directory with examples %q: %v", dir, err)
 	}
+	return entries
 }
 
 // Run e2e tests using the Ginkgo runner.
+// The suite needs a provisioned kind cluster (task test/e2e/fresh). It is
+// excluded from the module-wide unit sweep in bindings/go/Taskfile.yml, the
+// same way */integration packages are.
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 	fmt.Fprintf(GinkgoWriter, "Starting ocm-k8s-toolkit suite\n")
