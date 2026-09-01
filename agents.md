@@ -120,7 +120,7 @@ Analyze `cli/README.md` and `cli/cmd/` for structure and conventions.
 Run `ocm help` to discover available commands and flags.
 
 - **Testing**: testify/require. The `test.OCM()` helper in `cmd/internal/test/test.go` executes CLI commands programmatically with an options builder pattern.
-- **Integration tests** live in `cli/integration/` with a separate `go.mod` and use testcontainers.
+- **Integration tests** live in `bindings/go/cli/integration/` (part of the `bindings/go` module, no separate `go.mod`) and use testcontainers.
 - **Logging**: `log/slog` with a JSON/text format flag.
 - For command construction, DI via context, custom flag types, and output renderers, see [docs/coding-patterns.md#cli-idioms](docs/coding-patterns.md#cli-idioms).
 

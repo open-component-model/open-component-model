@@ -135,7 +135,7 @@ The build embeds version information via `-ldflags`. The version defaults to a t
 task cli:test
 
 # Integration tests (requires Docker)
-task cli/integration:test/integration
+task cli:test/integration
 ```
 
 Integration tests exercise end-to-end workflows (transfer, signing, plugin registry) against real OCI registries spun

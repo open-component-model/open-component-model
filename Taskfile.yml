@@ -56,10 +56,6 @@ includes:
     optional: true
     taskfile: ./bindings/go/cli/Taskfile.yml
     dir: ./bindings/go/cli
-  bindings/go/cli/integration:
-    optional: true
-    taskfile: ./bindings/go/cli/integration/Taskfile.yml
-    dir: ./bindings/go/cli/integration
   bindings/go/kubernetes/controller:
     optional: true
     taskfile: ./bindings/go/kubernetes/controller/Taskfile.yml
