@@ -151,11 +151,11 @@ func (a *AccessOrInput) ValidateWithSchemes(accessScheme, inputScheme *runtime.S
 	}
 
 	switch {
-	case a.HasAccess() && accessScheme != nil:
+	case a.HasAccess():
 		if err := validateSpecification(a.Access, accessScheme); err != nil {
 			return fmt.Errorf("access specification: %w", err)
 		}
-	case a.HasInput() && inputScheme != nil:
+	case a.HasInput():
 		if err := validateSpecification(a.Input, inputScheme); err != nil {
 			return fmt.Errorf("input specification: %w", err)
 		}
