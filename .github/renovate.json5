@@ -237,10 +237,9 @@
       ],
     },
     {
-      // Restrict the website update to 28 days as well.
+      // Restrict NPM updates to 28 days old packages at least.
       matchDatasources: ['npm'],
       minimumReleaseAge: '28 days',
-      internalChecksFilter: 'strict',
     },
     {
       matchUpdateTypes: ['lockFileMaintenance'],
