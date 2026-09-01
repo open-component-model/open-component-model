@@ -10,6 +10,7 @@ A Helm chart for deploying the OCM Kubernetes Toolkit controller
 
 The OCM Kubernetes Toolkit controller manages OCM (Open Component Model) resources in Kubernetes clusters.
 It provides controllers for:
+
 - **Repository** - OCM repository references
 - **Component** - OCM component version tracking
 - **Resource** - OCM resource extraction
@@ -146,6 +147,7 @@ task helm/validate
 ```
 
 This checks:
+
 - Chart linting passes
 - Templates render successfully
 - CRDs, manager-role, schema, and docs are up to date
