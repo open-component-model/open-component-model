@@ -27,7 +27,8 @@ type Dir struct {
 	MediaType string `json:"mediaType,omitempty"`
 
 	// Compress indicates whether the resulting blob should be compressed with gzip.
-	// If set to true, adds a +gzip suffix to the MediaType.
+	// If set to true, the default media type gets a +gzip suffix. A declared
+	// MediaType is used as-is.
 	Compress bool `json:"compress,omitempty"`
 
 	// PreserveDir defines that the directory specified in the Path field should be included in the resulting blob.

@@ -143,7 +143,11 @@ func createDirBlob(ctx context.Context, path string, opt DirOptions) (blob.ReadO
 
 	// Apply compression if requested
 	if opt.Compress {
-		tarBlob = compression.Compress(tarBlob)
+		compressed := compression.Compress(tarBlob)
+		if opt.MediaType != "" {
+			compressed.SetMediaType(opt.MediaType)
+		}
+		return compressed, nil
 	}
 	return tarBlob, nil
 }
@@ -171,7 +175,13 @@ func createSingleFileBlob(path string, opt DirOptions) (blob.ReadOnlyBlob, error
 	var fileBlob blob.ReadOnlyBlob = direct.New(fr, direct.WithMediaType(mediaType))
 	// Apply compression if requested
 	if opt.Compress {
-		fileBlob = compression.Compress(fileBlob)
+		compressed := compression.Compress(fileBlob)
+		if opt.MediaType != "" {
+			// A declared media type is used as-is; only the default gets the
+			// compression suffix appended.
+			compressed.SetMediaType(opt.MediaType)
+		}
+		return compressed, nil
 	}
 	return fileBlob, nil
 }
