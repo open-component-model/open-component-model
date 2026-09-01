@@ -21,13 +21,13 @@ func validateSpecifications(componentConstructor *constructor.ComponentConstruct
 		component := &componentConstructor.Components[i]
 		for j := range component.Resources {
 			resource := &component.Resources[j]
-			if err := resource.AccessOrInput.ValidateWithSchemes(opts.AccessSpecificationScheme, opts.InputSpecificationScheme); err != nil {
+			if err := resource.ValidateWithSchemes(opts.AccessSpecificationScheme, opts.InputSpecificationScheme); err != nil {
 				errs = append(errs, fmt.Errorf("resource %q of component %q: %w", resource.ToIdentity(), component.ToIdentity(), err))
 			}
 		}
 		for j := range component.Sources {
 			source := &component.Sources[j]
-			if err := source.AccessOrInput.ValidateWithSchemes(opts.AccessSpecificationScheme, opts.InputSpecificationScheme); err != nil {
+			if err := source.ValidateWithSchemes(opts.AccessSpecificationScheme, opts.InputSpecificationScheme); err != nil {
 				errs = append(errs, fmt.Errorf("source %q of component %q: %w", source.ToIdentity(), component.ToIdentity(), err))
 			}
 		}
