@@ -127,7 +127,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           BUILD_VERSION: ${{ needs.version.outputs.build_version }}
         run: |
-          task cli:build/single \
+          task bindings/go/cli:build/single \
             GOOS=${{ matrix.goos }} \
             GOARCH=${{ matrix.goarch }} \
             VERSION="${VERSION}" \
@@ -192,8 +192,8 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          task cli:assemble/ctf VERSION="${VERSION}"
-          task cli:verify/ctf VERSION="${VERSION}"
+          task bindings/go/cli:assemble/ctf VERSION="${VERSION}"
+          task bindings/go/cli:verify/ctf VERSION="${VERSION}"
 
       # Attest built binaries with provenance metadata, but only if we're not on a PR
       - name: Attest binaries

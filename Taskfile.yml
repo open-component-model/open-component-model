@@ -53,15 +53,15 @@ includes:
     optional: true
     taskfile: ./bindings/go/s3/integration/Taskfile.yml
     dir: ./bindings/go/s3/integration
-  cli:
+  bindings/go/cli:
     optional: true
     taskfile: ./bindings/go/cli/Taskfile.yml
     dir: ./bindings/go/cli
-  cli/integration:
+  bindings/go/cli/integration:
     optional: true
     taskfile: ./bindings/go/cli/integration/Taskfile.yml
     dir: ./bindings/go/cli/integration
-  kubernetes/controller:
+  bindings/go/kubernetes/controller:
     optional: true
     taskfile: ./bindings/go/kubernetes/controller/Taskfile.yml
     dir: ./bindings/go/kubernetes/controller
@@ -72,7 +72,7 @@ vars:
 
 tasks:
   default:
-    deps: ["cli:build", "kubernetes/controller:build"]
+    deps: ["bindings/go/cli:build", "bindings/go/kubernetes/controller:build"]
 
   go_modules:
     desc: "List all Go Modules available in this project"
@@ -117,9 +117,9 @@ tasks:
       - task: 'bindings/go/generator:ocmtypegen/generate'
       - task: 'bindings/go/generator:jsonschemagen/generate'
       - task: 'tools:deepcopy-gen/generate-deepcopy'
-      - task: 'kubernetes/controller:manifests'
-      - task: 'kubernetes/controller:generate'
-      - task: 'cli:generate/docs'
+      - task: 'bindings/go/kubernetes/controller:manifests'
+      - task: 'bindings/go/kubernetes/controller:generate'
+      - task: 'bindings/go/cli:generate/docs'
         vars:
           CLI_DOCUMENTATION_MODE: "hugo"
           CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/bindings/go/cli/docs/reference'
