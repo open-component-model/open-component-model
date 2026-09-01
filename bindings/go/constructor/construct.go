@@ -106,7 +106,7 @@ func (c *DefaultConstructor) Construct(ctx context.Context) error {
 	}
 
 	if err := validateSpecifications(c.constructor, c.opts); err != nil {
-		return fmt.Errorf("failed to validate component constructor specifications: %w", err)
+		return fmt.Errorf("component constructor contains invalid access or input specifications: %w", err)
 	}
 
 	err := c.discover(ctx)

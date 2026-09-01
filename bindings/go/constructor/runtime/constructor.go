@@ -131,13 +131,67 @@ func (a *AccessOrInput) HasAccess() bool {
 	return a.Access != nil
 }
 
+// Validate checks that exactly one of access or input is set and that the set specification is valid.
+//
+// If you want to validate the access or input types against a scheme, use ValidateWithSchemes instead.
 func (a *AccessOrInput) Validate() error {
+	return a.ValidateWithSchemes(nil, nil)
+}
+
+// ValidateWithSchemes checks that exactly one of access or input is set and that the set specification is
+// valid.
+//
+// If accessScheme or inputScheme is provided, ValidateWithSchemes will check access or input types against them.
+func (a *AccessOrInput) ValidateWithSchemes(accessScheme, inputScheme *runtime.Scheme) error {
 	if !a.HasInput() && !a.HasAccess() {
 		return fmt.Errorf("either access or input must be set")
 	}
 	if a.HasInput() && a.HasAccess() {
 		return fmt.Errorf("only one of access or input must be set, but both are present")
 	}
+
+	switch {
+	case a.HasAccess() && accessScheme != nil:
+		if err := validateSpecification(a.Access, accessScheme); err != nil {
+			return fmt.Errorf("access specification: %w", err)
+		}
+	case a.HasInput() && inputScheme != nil:
+		if err := validateSpecification(a.Input, inputScheme); err != nil {
+			return fmt.Errorf("input specification: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// validateSpecification decodes spec into the type registered for it and, if that type implements
+// runtime.Validatable, checks it with Validate. A specification of a type that is not registered is
+// not validated.
+func validateSpecification(spec runtime.Typed, scheme *runtime.Scheme) error {
+	if scheme == nil {
+		return nil
+	}
+	typ := spec.GetType()
+	if typ.IsEmpty() || !scheme.IsRegistered(typ) {
+		return nil
+	}
+
+	obj, err := scheme.NewObject(typ)
+	if err != nil {
+		return fmt.Errorf("cannot create an object of type %q: %w", typ, err)
+	}
+	if err := scheme.Convert(spec, obj); err != nil {
+		return fmt.Errorf("type %q cannot be decoded: %w", typ, err)
+	}
+
+	validatable, ok := obj.(runtime.Validatable)
+	if !ok {
+		return nil
+	}
+	if err := validatable.Validate(); err != nil {
+		return fmt.Errorf("type %q is invalid: %w", typ, err)
+	}
+
 	return nil
 }
 

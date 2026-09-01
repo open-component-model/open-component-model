@@ -292,6 +292,6 @@ components:
 
 	err := constr.Construct(context.Background())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to validate component constructor specifications")
+	assert.Contains(t, err.Error(), "component constructor contains invalid access or input specifications")
 	assert.Contains(t, err.Error(), "url is required")
 }
