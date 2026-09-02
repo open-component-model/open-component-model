@@ -1,6 +1,6 @@
 ---
 title: "Working with SBOMs"
-description: "Link an SBOM to a resource and discovery one that docker buildx attached."
+description: "Link an SBOM to a resource and discover one that docker buildx attached."
 icon: "🧾"
 weight: 63
 toc: true
@@ -148,7 +148,7 @@ components:
         version: 1.0.0
         labels:
           - name: ocm.software/artifact-references
-            version: v1
+            singing: true
             value:
               - identity:
                   name: ocm-cli
@@ -194,6 +194,7 @@ ocm get cv ./ctf//ocm.software/examples/sbom-demo:1.0.0 -o yaml | grep -A6 artif
 
 ```yaml
       - name: ocm.software/artifact-references
+        signing: true
         value:
         - identity:
             name: ocm-cli
@@ -261,6 +262,7 @@ Consider the following tiny example of a script that can do it.
 ```bash
 #!/usr/bin/env bash
 # Collect the SBOMs of every resource of a component version into one directory.
+# NOTE: This scripts ignores extra identity for the sake of simplicity.
 set -euo pipefail
 
 REF="${1:?usage: collect-sboms.sh <component-version-ref> [output-dir]}"
@@ -447,3 +449,4 @@ rm -rf /tmp/ocm-sbom-tutorial
 - [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - `File/v1`, `OCIImage/v1`, and what `--copy-resources` turns them into
 - [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) - Signing the component version, which is what makes a linked SBOM trustworthy
 - [Blog: Shipping SBOMs with Your Components]({{< relref "blog/2026-07-28-shipping-sboms-with-your-components.md" >}}) - The proof of concept this feature grew out of
+- [Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}) - Sign and verify component versions with cryptographic keys
