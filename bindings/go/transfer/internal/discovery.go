@@ -234,7 +234,7 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 // valid OCM transformation ID character set (lower camelCase, alphanumeric
 // only) and handles separators ".", "/", "-" as well as SemVer build metadata ("+")
 func isTransformationIDWordBoundary(r rune) bool {
-	return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
+	return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9')
 }
 
 // identityToTransformationID converts a component identity (name + version) to a camelCase
