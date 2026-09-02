@@ -265,3 +265,40 @@ func identityToTransformationID(id runtime.Identity) string {
 	}
 	return result
 }
+
+// resourceIDAllocator hands out unique transformation IDs for the resources of one
+// component. identityToTransformationID is lossy: it drops separators and folds case, so
+// distinct identities (for example versions "0.2.1+meta" and "0.2.1-meta") map to the same
+// base ID. On collision the allocator appends an incrementing suffix ("R1", "R2", ...),
+// mirroring the per-target "T0", "T1" suffix scheme.
+type resourceIDAllocator struct {
+	// used contains every ID handed out so far, including suffixed candidates.
+	used map[string]struct{}
+	// nextSuffix tracks the first untried suffix per colliding base ID.
+	nextSuffix map[string]int
+}
+
+func newResourceIDAllocator() *resourceIDAllocator {
+	return &resourceIDAllocator{
+		used:       make(map[string]struct{}),
+		nextSuffix: make(map[string]int),
+	}
+}
+
+// allocate returns base unchanged while it is unused. On collision, it returns the first
+// unused ID of the form base+"R"+counter, with the counter starting at 1. Callers must
+// allocate in a deterministic order (descriptor order) to keep the resulting IDs stable.
+func (a *resourceIDAllocator) allocate(base string) string {
+	if _, ok := a.used[base]; !ok {
+		a.used[base] = struct{}{}
+		return base
+	}
+	for n := max(a.nextSuffix[base], 1); ; n++ {
+		candidate := fmt.Sprintf("%sR%d", base, n)
+		if _, ok := a.used[candidate]; !ok {
+			a.used[candidate] = struct{}{}
+			a.nextSuffix[base] = n + 1
+			return candidate
+		}
+	}
+}
