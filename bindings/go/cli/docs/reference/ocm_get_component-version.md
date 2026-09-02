@@ -45,6 +45,11 @@ get component-versions ghcr.io/open-component-model//ocm.software/cli
 get cvs ghcr.io/open-component-model//ocm.software/cli --output json
 get cvs ghcr.io/open-component-model//ocm.software/cli -oyaml
 
+Showing the resources of each component version in the tree output:
+
+get cv ./path/to/ctf//ocm.software/cli:0.12.0 -o tree --show-resources
+get cvs ghcr.io/open-component-model//ocm.software/cli -o tree --recursive --show-resources
+
 Specifying types and schemes:
 
 get cv ctf::github.com/locally-checked-out-repo//ocm.software/cli:0.12.0
@@ -64,6 +69,7 @@ get cvs oci::http://localhost:8080//ocm.software/cli
                                    (must be one of [json ndjson table tree yaml]) (default table)
       --recursive int[=-1]         depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))
       --semver-constraint string   semantic version constraint restricting which versions to output (default "> 0.0.0-0")
+      --show-resources             if set, list the resources of each component version below the component (only for --output tree)
 ```
 
 ### Options inherited from parent commands

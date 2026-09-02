@@ -28,6 +28,18 @@ func (f VertexSerializerFunc[T]) Serialize(v *dag.Vertex[T]) (Row, error) {
 	return f(v)
 }
 
+// SubRowProvider returns additional leaf rows rendered as children of a vertex.
+// It must not modify the vertex or its attributes.
+type SubRowProvider[T cmp.Ordered] interface {
+	SubRows(*dag.Vertex[T]) ([]Row, error)
+}
+
+type SubRowProviderFunc[T cmp.Ordered] func(*dag.Vertex[T]) ([]Row, error)
+
+func (f SubRowProviderFunc[T]) SubRows(v *dag.Vertex[T]) ([]Row, error) {
+	return f(v)
+}
+
 func defaultVertexSerializer[T cmp.Ordered](vertex *dag.Vertex[T]) (Row, error) {
 	untypedComponent, ok := vertex.Attributes[syncdag.AttributeValue]
 	if !ok {

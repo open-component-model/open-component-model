@@ -38,6 +38,7 @@ const (
 	FlagConcurrencyLimit = "concurrency-limit"
 	FlagLatest           = "latest"
 	FlagRecursive        = "recursive"
+	FlagShowResources    = "show-resources"
 )
 
 func New() *cobra.Command {
@@ -76,6 +77,11 @@ get component-versions ghcr.io/open-component-model//ocm.software/cli
 get cvs ghcr.io/open-component-model//ocm.software/cli --output json
 get cvs ghcr.io/open-component-model//ocm.software/cli -oyaml
 
+Showing the resources of each component version in the tree output:
+
+get cv ./path/to/ctf//ocm.software/cli:0.12.0 -o tree --show-resources
+get cvs ghcr.io/open-component-model//ocm.software/cli -o tree --recursive --show-resources
+
 Specifying types and schemes:
 
 get cv ctf::github.com/locally-checked-out-repo//ocm.software/cli:0.12.0
@@ -95,6 +101,7 @@ get cvs oci::http://localhost:8080//ocm.software/cli
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
 	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))")
 	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
+	cmd.Flags().Bool(FlagShowResources, false, "if set, list the resources of each component version below the component (only for --output tree)")
 
 	return cmd
 }
@@ -149,15 +156,20 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
+	showResources, err := cmd.Flags().GetBool(FlagShowResources)
+	if err != nil {
+		return fmt.Errorf("getting show-resources flag failed: %w", err)
+	}
 
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
 	params := Params{
-		output:      output,
-		displayMode: displayMode,
-		constraint:  constraint,
-		latestOnly:  latestOnly,
-		recursive:   recursive,
+		output:        output,
+		displayMode:   displayMode,
+		constraint:    constraint,
+		latestOnly:    latestOnly,
+		recursive:     recursive,
+		showResources: showResources,
 	}
 
 	reference := args[0]
@@ -224,14 +236,14 @@ func processComponentReference(cmd *cobra.Command,
 		roots = append(roots, identity)
 	}
 
-	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive, params.showResources); err != nil {
 		return fmt.Errorf("failed to render components: %w", err)
 	}
 
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, format string, mode string, recursive int) error {
+func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, format string, mode string, recursive int, showResources bool) error {
 	resAndDis := resolverAndDiscoverer{
 		repositoryResolver: repoResolver,
 		recursive:          recursive,
@@ -241,7 +253,7 @@ func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersio
 		Resolver:   &resAndDis,
 		Discoverer: &resAndDis,
 	})
-	renderer, err := buildRenderer(cmd.Context(), discoverer.Graph(), roots, format)
+	renderer, err := buildRenderer(cmd.Context(), discoverer.Graph(), roots, format, showResources)
 	if err != nil {
 		return fmt.Errorf("building renderer failed: %w", err)
 	}
@@ -278,7 +290,7 @@ func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersio
 	return nil
 }
 
-func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string) (render.Renderer, error) {
+func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string, showResources bool) (render.Renderer, error) {
 	// Initialize renderer based on the requested output format.
 	switch format {
 	case render.OutputFormatJSON.String():
@@ -291,7 +303,11 @@ func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[
 		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatYAML))
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatTree.String():
-		return tree.New(ctx, dag, tree.WithRoots(roots...)), nil
+		opts := []tree.RendererOption[string]{tree.WithRoots(roots...)}
+		if showResources {
+			opts = append(opts, tree.WithSubRowProviderFunc(serializeResourcesToTreeRows))
+		}
+		return tree.New(ctx, dag, opts...), nil
 	case render.OutputFormatTable.String():
 		serializer := list.ListSerializerFunc[string](serializeVerticesToTable)
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
@@ -314,6 +330,30 @@ func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {
 		return nil, fmt.Errorf("converting descriptor to v2 failed: %w", err)
 	}
 	return descriptorV2, nil
+}
+
+// serializeResourcesToTreeRows returns one tree row per resource of the
+// component version stored in the vertex. The rows are rendered as leaf
+// children below the component node in the tree output.
+func serializeResourcesToTreeRows(vertex *dag.Vertex[string]) ([]tree.Row, error) {
+	untypedDescriptor, ok := vertex.Attributes[syncdag.AttributeValue]
+	if !ok {
+		return nil, fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
+	}
+	desc, ok := untypedDescriptor.(*descruntime.Descriptor)
+	if !ok {
+		return nil, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descruntime.Descriptor{}, untypedDescriptor)
+	}
+	rows := make([]tree.Row, 0, len(desc.Component.Resources))
+	for i := range desc.Component.Resources {
+		res := &desc.Component.Resources[i]
+		rows = append(rows, tree.Row{
+			Component: res.Name,
+			Version:   res.Version,
+			Identity:  fmt.Sprintf("type=%s,relation=%s", res.Type, res.Relation),
+		})
+	}
+	return rows, nil
 }
 
 func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {
@@ -396,11 +436,12 @@ func (r *resolverAndDiscoverer) Discover(ctx context.Context, parent *descruntim
 
 // Params holds the values of the flags for the `get cv` command.
 type Params struct {
-	output      string
-	displayMode string
-	constraint  string
-	latestOnly  bool
-	recursive   int
+	output        string
+	displayMode   string
+	constraint    string
+	latestOnly    bool
+	recursive     int
+	showResources bool
 }
 
 // processRepositoryReference implements the logic for the `get cv <ref>` command, where <ref> is a repository reference.
@@ -446,7 +487,7 @@ func processRepositoryReference(cmd *cobra.Command,
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
 
-	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive, params.showResources); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 
