@@ -264,7 +264,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
 			logger.Info("component is not available", "error", err)
 
-			return ctrl.Result{}, nil
+			// Return the error so controller-runtime requeues this Resource with
+			// the configured exponential backoff. Returning ctrl.Result{}, nil
+			// here would Forget the item and leave recovery solely to a Component
+			// watch event, which can be missed (e.g. a coalesced Ready flip during
+			// the Component's periodic resync) — stranding the Resource NotReady
+			// indefinitely even though its Component has since become ready. The
+			// Resource type has no Interval/RequeueAfter of its own, so the
+			// error-driven backoff is the only self-healing requeue available.
+			return ctrl.Result{}, err
 		}
 
 		return ctrl.Result{}, fmt.Errorf("failed to get ready component: %w", err)

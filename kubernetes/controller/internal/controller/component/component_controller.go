@@ -225,7 +225,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		if errors.As(err, &notReadyErr) || errors.As(err, &deletionErr) {
 			logger.Info("repository is not available", "error", err)
 
-			return ctrl.Result{}, nil
+			// Return the error so controller-runtime requeues with the configured
+			// exponential backoff. Returning ctrl.Result{}, nil would Forget the
+			// item and leave recovery solely to a Repository watch event, which can
+			// be missed (e.g. a coalesced Ready flip) — stranding the Component
+			// NotReady until the next periodic interval resync papers over it.
+			return ctrl.Result{}, err
 		}
 
 		return ctrl.Result{}, fmt.Errorf("failed to get ready repository: %w", err)

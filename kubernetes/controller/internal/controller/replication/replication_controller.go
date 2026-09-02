@@ -203,7 +203,12 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		if errIsUnavailable(err) {
 			logger.Info("source component is not available, waiting for component event", "error", err)
 
-			return ctrl.Result{}, nil
+			// Return the error so controller-runtime requeues with the configured
+			// exponential backoff. Returning ctrl.Result{}, nil would Forget the
+			// item; with no interval on Replication, recovery would depend solely
+			// on a Component watch event, which can be missed (coalesced Ready
+			// flip) — stranding the Replication NotReady indefinitely.
+			return ctrl.Result{}, err
 		}
 
 		return ctrl.Result{}, fmt.Errorf("failed to get ready component: %w", err)
@@ -220,7 +225,12 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		if errIsUnavailable(err) {
 			logger.Info("target repository is not available, waiting for repository event", "error", err)
 
-			return ctrl.Result{}, nil
+			// Return the error so controller-runtime requeues with the configured
+			// exponential backoff. Returning ctrl.Result{}, nil would Forget the
+			// item; with no interval on Replication, recovery would depend solely
+			// on a Repository watch event, which can be missed — stranding the
+			// Replication NotReady indefinitely.
+			return ctrl.Result{}, err
 		}
 
 		return ctrl.Result{}, fmt.Errorf("failed to get ready target repository: %w", err)
