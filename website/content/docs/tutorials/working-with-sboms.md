@@ -1,6 +1,6 @@
 ---
 title: "Working with SBOMs"
-description: "Link an SBOM to a resource and discover one that docker buildx attached."
+description: "Link an SBOM to a resource and discover one was attached in another way."
 icon: "🧾"
 weight: 63
 toc: true
