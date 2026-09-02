@@ -104,6 +104,22 @@ func TestIdentityToTransformationID(t *testing.T) {
 			want: "transformOcmSoftwareMyComponent",
 		},
 		{
+			name: "version with semver build metadata",
+			identity: runtime.Identity{
+				descriptor.IdentityAttributeName:    "operator-image",
+				descriptor.IdentityAttributeVersion: "0.2.1+a0b6f97",
+			},
+			want: "transformOperatorImage021A0b6f97",
+		},
+		{
+			name: "version with semver pre-release",
+			identity: runtime.Identity{
+				descriptor.IdentityAttributeName:    "operator-image",
+				descriptor.IdentityAttributeVersion: "0.2.1-rc.1",
+			},
+			want: "transformOperatorImage021Rc1",
+		},
+		{
 			name:     "empty identity",
 			identity: runtime.Identity{},
 			want:     "transform",

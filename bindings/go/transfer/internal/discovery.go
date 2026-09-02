@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -229,12 +228,19 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 	return children, nil
 }
 
-var toWordRunes = []rune{',', '.', '/', '-'}
+// isTransformationIDWordBoundary reports whether r must be treated as a word
+// boundary when building a transformation ID. Any character that is not an
+// ASCII letter or digit is a boundary. This keeps the derived ID within the
+// valid OCM transformation ID character set (lower camelCase, alphanumeric
+// only) and handles separators ".", "/", "-" as well as SemVer build metadata ("+")
+func isTransformationIDWordBoundary(r rune) bool {
+	return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
+}
 
 // identityToTransformationID converts a component identity (name + version) to a camelCase
 // transformation ID suitable for use as a DAG vertex key. The identity map keys are sorted
-// alphabetically for determinism, and separator characters (dots, slashes, dashes, commas)
-// are treated as word boundaries for camelCase conversion.
+// alphabetically for determinism, and any non-alphanumeric character is treated as a word
+// boundary for camelCase conversion.
 //
 // Example: {"name": "ocm.software/my-app", "version": "1.0.0"} → "transformOcmSoftwareMyApp100"
 func identityToTransformationID(id runtime.Identity) string {
@@ -248,9 +254,7 @@ func identityToTransformationID(id runtime.Identity) string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		words = append(words, strings.FieldsFunc(id[k], func(r rune) bool {
-			return slices.Contains(toWordRunes, r)
-		})...)
+		words = append(words, strings.FieldsFunc(id[k], isTransformationIDWordBoundary)...)
 	}
 	result := strings.ToLower(words[0])
 	for i := 1; i < len(words); i++ {
