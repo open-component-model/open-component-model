@@ -34,6 +34,11 @@ Beyond signatures, OCM uses [**immutable, globally unique component identities**
 These act like tracking IDs, linking all lifecycle phases. They make compliance checks, audits,
 and vulnerability scans easier and more reliable. With OCM, your software is fully traceable from build to deployment.
 
+**Software Bills of Materials with your components.** An SBOM can be added as a resource linked to the artifact
+it describes, so it is signed and transferred along with everything else. Where an SBOM is already attached to an OCI
+image, OCM discovers it instead.
+See [Working with SBOMs]({{< relref "docs/tutorials/working-with-sboms.md" >}}).
+
 ### Deploy Anywhere, Even Air-Gapped
 
 You can **deliver across boundaries** and **deploy anywhere — public cloud, on-premises, or air-gapped environments**.
