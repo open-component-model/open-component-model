@@ -37,8 +37,9 @@ func (a *validatedAccess) Validate() error {
 
 // validatedInput is a registered input type that checks its own required field.
 type validatedInput struct {
-	Type runtime.Type `json:"type"`
-	Path string       `json:"path,omitempty"`
+	Type     runtime.Type `json:"type"`
+	Path     string       `json:"path,omitempty"`
+	Compress bool         `json:"compress,omitempty"`
 }
 
 func (i *validatedInput) GetType() runtime.Type  { return i.Type }
@@ -268,6 +269,93 @@ components:
       type: validatedAccess/v1
 `)
 		require.NoError(t, validateSpecifications(componentConstructor, Options{}))
+	})
+
+	t.Run("a known input type with a misspelled field is rejected", func(t *testing.T) {
+		t.Parallel()
+		componentConstructor := constructorFromYAML(t, `
+components:
+- name: ocm.software/test
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  resources:
+  - name: by-input
+    type: blob
+    version: 1.0.0
+    input:
+      type: validatedInput/v1
+      path: ./some/path
+      compres: true
+`)
+		err := validateSpecifications(componentConstructor, validationOptionsForTest())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "compres")
+	})
+
+	t.Run("a known access type with an unknown field is rejected", func(t *testing.T) {
+		t.Parallel()
+		componentConstructor := constructorFromYAML(t, `
+components:
+- name: ocm.software/test
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  resources:
+  - name: by-reference
+    type: blob
+    version: 1.0.0
+    access:
+      type: validatedAccess/v1
+      url: https://ocm.software
+      retrie: 3
+`)
+		err := validateSpecifications(componentConstructor, validationOptionsForTest())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "retrie")
+	})
+
+	// The unknown field check does not depend on the type implementing runtime.Validatable.
+	t.Run("a known type without Validate is still checked for unknown fields", func(t *testing.T) {
+		t.Parallel()
+		componentConstructor := constructorFromYAML(t, `
+components:
+- name: ocm.software/test
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  resources:
+  - name: by-reference
+    type: blob
+    version: 1.0.0
+    access:
+      type: unvalidatedAccess/v1
+      url: https://ocm.software
+      urll: https://ocm.software
+`)
+		err := validateSpecifications(componentConstructor, validationOptionsForTest())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "urll")
+	})
+
+	// Unknown types stay untouched so that constructors can use types this binary does not know.
+	t.Run("an unregistered type with unknown fields is not rejected", func(t *testing.T) {
+		t.Parallel()
+		componentConstructor := constructorFromYAML(t, `
+components:
+- name: ocm.software/test
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  resources:
+  - name: by-reference
+    type: blob
+    version: 1.0.0
+    access:
+      type: unregisteredAccess/v1
+      whateverField: value
+`)
+		require.NoError(t, validateSpecifications(componentConstructor, validationOptionsForTest()))
 	})
 }
 

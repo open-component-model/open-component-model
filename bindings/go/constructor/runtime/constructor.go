@@ -176,11 +176,8 @@ func validateSpecification(spec runtime.Typed, scheme *runtime.Scheme) error {
 		return nil
 	}
 
-	obj, err := scheme.NewObject(typ)
+	obj, err := decodeSpecification(spec, typ, scheme)
 	if err != nil {
-		return fmt.Errorf("cannot create an object of type %q: %w", typ, err)
-	}
-	if err := scheme.Convert(spec, obj); err != nil {
 		return fmt.Errorf("type %q cannot be decoded: %w", typ, err)
 	}
 
@@ -193,6 +190,32 @@ func validateSpecification(spec runtime.Typed, scheme *runtime.Scheme) error {
 	}
 
 	return nil
+}
+
+// decodeSpecification decodes spec into the type registered for it, rejecting any field that the
+// type does not declare. Decoding with json.Unmarshal drops unknown fields silently, which turns a
+// misspelled option into a silently ignored one: an input written with "compres" instead of
+// "compress" would be accepted and then stored uncompressed.
+//
+// json.Decoder reports the first unknown field it meets, not all of them.
+func decodeSpecification(spec runtime.Typed, typ runtime.Type, scheme *runtime.Scheme) (runtime.Typed, error) {
+	data, err := json.Marshal(spec)
+	if err != nil {
+		return nil, fmt.Errorf("type %q cannot be encoded: %w", typ, err)
+	}
+
+	obj, err := scheme.NewObject(typ)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create an object of type %q: %w", typ, err)
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(obj); err != nil {
+		return nil, fmt.Errorf("type %q cannot be decoded: %w", typ, err)
+	}
+
+	return obj, nil
 }
 
 // Digest defines digest information such as hashing algorithm, normalization and the actual value.
