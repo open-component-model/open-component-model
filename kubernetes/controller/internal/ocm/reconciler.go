@@ -42,7 +42,9 @@ func (r *BaseReconciler) GetEventRecorder() record.EventRecorder {
 	return r.EventRecorder
 }
 
-// PluginManagerFor creates a new plugin manager with wrapping the original context into a with cancelled one.
+// PluginManagerFor creates a new plugin manager by wrapping the original context into a without cancelled one.
+// That's because we don't want the plugin's context to be dependent on the request context but the WorkerPool's
+// context. The resolver will get the right context from the WorkerPool.
 func (r *BaseReconciler) PluginManagerFor(ctx context.Context, cfg *configuration.Configuration) (*manager.PluginManager, error) {
 	if r.NewPluginManager == nil {
 		return nil, errors.New("no plugin manager factory configured on the reconciler")
