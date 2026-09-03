@@ -87,7 +87,20 @@ Specifying types and schemes:
 get cv ctf::github.com/locally-checked-out-repo//ocm.software/cli:0.12.0
 get cvs oci::http://localhost:8080//ocm.software/cli
 `),
-		RunE:              GetComponentVersion,
+		RunE: GetComponentVersion,
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
+			if !cmd.Flags().Changed(FlagShowResources) {
+				return nil
+			}
+			output, err := enum.Get(cmd.Flags(), FlagOutput)
+			if err != nil {
+				return fmt.Errorf("getting %s flag failed: %w", FlagOutput, err)
+			}
+			if output != render.OutputFormatTree.String() {
+				return fmt.Errorf("--%s can only be used with --%s tree", FlagShowResources, FlagOutput)
+			}
+			return nil
+		},
 		DisableAutoGenTag: true,
 	}
 
