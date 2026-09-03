@@ -42,12 +42,19 @@ tooling resolves the module as before. Bindings, CLI, and controller will now
 always be on the same version.
 
 Nothing changes for consumers of the bindings (other than a new minor version).
-For consumers of CLI or controller as libraries, the import paths will have to 
-be adjusted:
+For consumers of CLI or controller as libraries, the module and import paths
+have to be adjusted. The `go.mod` requirement points at the unified module:
 
 ```diff
--import ocm.software/open-component-model/cli v0.15.0
-+import ocm.software/open-component-model/bindings/go/cli v0.16.0
+-require ocm.software/open-component-model/cli v0.15.0
++require ocm.software/open-component-model/bindings/go v0.16.0
+```
+
+The import paths in Go sources move below the unified module:
+
+```diff
+-import "ocm.software/open-component-model/cli/..."
++import "ocm.software/open-component-model/bindings/go/cli/..."
 ```
 
 Since the CLI and controller are now part of the bindings, they share the
