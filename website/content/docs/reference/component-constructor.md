@@ -31,7 +31,7 @@ required field that is not set or a URL with an unsupported scheme. See
 A specification of an unknown type, for example a custom access type, is not validated and is
 written to the component descriptor as given.
 
-All violations are reported together, and no component version is written if there is one.
+All violations are reported together, and no component version is written if there are any.
 
 <a id="component-references"></a>
 
