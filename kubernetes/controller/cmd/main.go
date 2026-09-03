@@ -26,22 +26,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
-	helmcredspec "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
-	ocicache "ocm.software/open-component-model/bindings/go/oci/cache"
-	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
-	ocicredspec "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
-	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
-	rsacredspec "ocm.software/open-component-model/bindings/go/rsa/spec/credentials"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer"
@@ -53,11 +40,10 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 )
 
 const (
-	creator = "Builtin OCI Repository Plugin"
-
 	// defaultMaxResourceSize is a generous upper bound for Kubernetes manifests.
 	// etcd's default --max-request-bytes is 1.5 MiB (https://etcd.io/docs/v3.5/dev-guide/limit/),
 	// so a multi-document manifest written to the cluster will always stay well under 2 MiB.
@@ -214,61 +200,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	pm := manager.NewPluginManager(ctx)
-
 	ocirepository.MustAddLegacyToScheme(ocirepository.Scheme)
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(
-		provider.WithScheme(ocirepository.Scheme),
-		provider.WithBlobCacheOptions(&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}),
-		provider.WithReferenceCacheOptions(&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}),
-	)
-	if err := pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider); err != nil {
-		setupLog.Error(err, "failed to register internal component version repository plugin")
-		os.Exit(1)
+
+	// Plugins use object config so they need to be request based.
+	pluginLogger := slog.New(logr.ToSlogHandler(setupLog))
+	newPluginManager := func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
+		return setup.NewPluginManager(ctx, cfg, pluginLogger)
 	}
 
-	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
-	if err != nil {
-		setupLog.Error(err, "failed to create signing handler")
-		os.Exit(1)
-	}
-
-	if err := pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler); err != nil {
-		setupLog.Error(err, "failed to register internal signing plugin")
-		os.Exit(1)
-	}
-	pm.CredentialRepositoryRegistry.Register(rsacredspec.Scheme)
-
-	if err := pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
-		&ocicredentials.OCICredentialRepository{},
-		[]ocmruntime.Type{v1.Type},
-	); err != nil {
-		setupLog.Error(err, "failed to register internal credential repository plugin")
-		os.Exit(1)
-	}
-	pm.CredentialRepositoryRegistry.Register(ocicredspec.Scheme)
-
-	ociResourceRepoPlugin := ocires.NewResourceRepository(&filesystemv1alpha1.Config{}, ocires.WithUserAgent(creator))
-	if err := pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin); err != nil {
-		setupLog.Error(err, "failed to register internal resource repository plugin")
-		os.Exit(1)
-	}
-
-	if err := pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(ociResourceRepoPlugin); err != nil {
-		setupLog.Error(err, "failed to register internal resource repository plugin")
-		os.Exit(1)
-	}
-
-	if err := pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(helmdigest.NewDigestProcessor("")); err != nil {
-		setupLog.Error(err, "failed to register helm digest processor plugin")
-		os.Exit(1)
-	}
-	pm.CredentialRepositoryRegistry.Register(helmcredspec.Scheme)
-
-	logHandler := logr.ToSlogHandler(setupLog)
-	ociBlobTransformerPlugin := transformer.New(slog.New(logHandler))
-	if err := pm.BlobTransformerRegistry.RegisterInternalBlobTransformerPlugin(ociBlobTransformerPlugin); err != nil {
-		setupLog.Error(err, "failed to register internal blob transformer plugin")
+	if _, err := newPluginManager(ctx, nil); err != nil {
+		setupLog.Error(err, "failed to create plugin manager")
 		os.Exit(1)
 	}
 
@@ -293,12 +234,13 @@ func main() {
 	// TODO: migrate to mgr.GetEventRecorder() once BaseReconciler uses events.EventRecorder
 	eventsRecorder := mgr.GetEventRecorderFor("ocm-k8s-toolkit") //nolint:staticcheck,nolintlint
 
-	resolver := resolution.NewResolver(&setupLog, workerPool, pm)
+	resolver := resolution.NewResolver(&setupLog, workerPool)
 	if err = (&repository.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			EventRecorder: eventsRecorder,
+			Client:           mgr.GetClient(),
+			Scheme:           mgr.GetScheme(),
+			EventRecorder:    eventsRecorder,
+			NewPluginManager: newPluginManager,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr); err != nil {
@@ -307,12 +249,12 @@ func main() {
 	}
 	if err = (&component.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			EventRecorder: eventsRecorder,
+			Client:           mgr.GetClient(),
+			Scheme:           mgr.GetScheme(),
+			EventRecorder:    eventsRecorder,
+			NewPluginManager: newPluginManager,
 		},
-		Resolver:      resolver,
-		PluginManager: pm,
+		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Component")
 		os.Exit(1)
@@ -320,12 +262,12 @@ func main() {
 
 	if err = (&resource.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			EventRecorder: eventsRecorder,
+			Client:           mgr.GetClient(),
+			Scheme:           mgr.GetScheme(),
+			EventRecorder:    eventsRecorder,
+			NewPluginManager: newPluginManager,
 		},
-		Resolver:      resolver,
-		PluginManager: pm,
+		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr, resourceConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Resource")
 		os.Exit(1)
@@ -333,12 +275,12 @@ func main() {
 
 	if err = (&replication.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			EventRecorder: eventsRecorder,
+			Client:           mgr.GetClient(),
+			Scheme:           mgr.GetScheme(),
+			EventRecorder:    eventsRecorder,
+			NewPluginManager: newPluginManager,
 		},
 		Resolver:         resolver,
-		PluginManager:    pm,
 		RepositoryScheme: ocirepository.Scheme,
 	}).SetupWithManager(ctx, mgr, replicationConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Replication")
@@ -347,15 +289,15 @@ func main() {
 
 	if err = (&deployer.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:        mgr.GetClient(),
-			Scheme:        mgr.GetScheme(),
-			EventRecorder: eventsRecorder,
+			Client:           mgr.GetClient(),
+			Scheme:           mgr.GetScheme(),
+			EventRecorder:    eventsRecorder,
+			NewPluginManager: newPluginManager,
 		},
 		DownloadCache: cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_download_cache", deployerDownloadCacheSize, func(k string, v []*unstructured.Unstructured) {
 			setupLog.Info("evicting deployment objects from cache", "key", k, "count", len(v))
 		}),
 		Resolver:             resolver,
-		PluginManager:        pm,
 		MaxResourceSizeBytes: maxResourceSizeBytes,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Deployer")

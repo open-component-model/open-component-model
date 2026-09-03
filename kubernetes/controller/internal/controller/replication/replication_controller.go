@@ -52,9 +52,6 @@ type Reconciler struct {
 	// Resolver provides repository resolution and caching for the transfer source.
 	Resolver *resolution.Resolver
 
-	// PluginManager manages plugins required for transfer operations.
-	PluginManager *manager.PluginManager
-
 	// RepositoryScheme decodes repository specs into their concrete types for
 	// the transfer library. Must be the same scheme the repository provider is
 	// built with, so Replication accepts exactly the spec types Component
@@ -293,10 +290,17 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
+	pm, err := r.PluginManagerFor(ctx, cfg)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create plugin manager: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:  sourceSpec,
-		Configuration:   cfg,
-		SigningRegistry: r.PluginManager.SigningRegistry,
+		RepositorySpec: sourceSpec,
+		Configuration:  cfg,
+		PluginManager:  pm,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -367,7 +371,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		Message: fmt.Sprintf("transferring component version %s", component.Status.Component.Version),
 	})
 
-	if err := r.transfer(ctx, logger, replication, cfg, tgd, component, sourceDigest); err != nil {
+	if err := r.transfer(ctx, logger, replication, cfg, pm, tgd, component, sourceDigest); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -376,14 +380,14 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	return ctrl.Result{}, nil
 }
 
-func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replication *v1alpha1.Replication, cfg *configuration.Configuration, tgd *transformv1alpha1.TransformationGraphDefinition, component *v1alpha1.Component, sourceDigest string) error {
+func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replication *v1alpha1.Replication, cfg *configuration.Configuration, pm *manager.PluginManager, tgd *transformv1alpha1.TransformationGraphDefinition, component *v1alpha1.Component, sourceDigest string) error {
 	var (
 		credGraph credentials.Resolver
 		err       error
 	)
 	if cfg != nil {
 		credGraph, err = setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
-			PluginManager: r.PluginManager,
+			PluginManager: pm,
 			Logger:        &logger,
 		})
 		if err != nil {
@@ -396,8 +400,8 @@ func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replicati
 	events := make(chan graphRuntime.ProgressEvent)
 
 	transferGraph, err := transfer.NewDefaultBuilder(
-		r.PluginManager.ComponentVersionRepositoryRegistry,
-		r.PluginManager.ResourcePluginRegistry,
+		pm.ComponentVersionRepositoryRegistry,
+		pm.ResourcePluginRegistry,
 		credGraph,
 	).WithEvents(events).BuildAndCheck(tgd)
 	if err != nil {

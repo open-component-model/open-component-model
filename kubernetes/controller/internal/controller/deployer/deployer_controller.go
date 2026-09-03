@@ -90,7 +90,6 @@ type Reconciler struct {
 
 	DownloadCache cache.DigestObjectCache[string, []*unstructured.Unstructured]
 	Resolver      *resolution.Resolver
-	PluginManager *manager.PluginManager
 
 	// MaxResourceSizeBytes is the maximum size in bytes a downloaded resource blob may contain.
 	// 0 disables the limit.
@@ -344,12 +343,19 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer *delivery
 		return ctrl.Result{}, err
 	}
 
-	cacheBackedRepo, err := r.createCacheBackedRepository(ctx, deployer, resource, cfg)
+	pm, err := r.PluginManagerFor(ctx, cfg)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create plugin manager: %w", err)
+	}
+
+	cacheBackedRepo, err := r.createCacheBackedRepository(ctx, deployer, resource, cfg, pm)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	componentDescriptor, matchedResource, err := r.resolveComponentAndMatchResource(ctx, deployer, resource, cfg)
+	componentDescriptor, matchedResource, err := r.resolveComponentAndMatchResource(ctx, deployer, resource, cfg, pm)
 	if componentDescriptor == nil {
 		return ctrl.Result{}, err
 	}
@@ -357,7 +363,7 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer *delivery
 	key := buildResourceCacheKey(matchedResource, componentDescriptor, cfg, resource.Spec.Resource.ByReference.Resource.String())
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
-		return r.DownloadResourceWithOCM(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg)
+		return r.DownloadResourceWithOCM(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg, pm)
 	})
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
@@ -458,6 +464,7 @@ func (r *Reconciler) createCacheBackedRepository(
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
 	cfg *configuration.Configuration,
+	pm *manager.PluginManager,
 ) (*resolution.CacheBackedRepository, error) {
 	repoSpec := &ocmruntime.Raw{}
 	if err := repoSpec.UnmarshalJSON(resource.Status.Component.RepositorySpec.Raw); err != nil {
@@ -467,9 +474,9 @@ func (r *Reconciler) createCacheBackedRepository(
 	}
 
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:  repoSpec,
-		Configuration:   cfg,
-		SigningRegistry: r.PluginManager.SigningRegistry,
+		RepositorySpec: repoSpec,
+		Configuration:  cfg,
+		PluginManager:  pm,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: k8stypes.NamespacedName{
@@ -495,8 +502,9 @@ func (r *Reconciler) resolveComponentAndMatchResource(
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
 	cfg *configuration.Configuration,
+	pm *manager.PluginManager,
 ) (*descriptor.Descriptor, *descriptor.Resource, error) {
-	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, cfg)
+	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, cfg, pm)
 	switch {
 	case errors.Is(err, workerpool.ErrResolutionInProgress):
 		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
@@ -602,8 +610,9 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	componentDescriptor *descriptor.Descriptor,
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
+	pm *manager.PluginManager,
 ) (objs []*unstructured.Unstructured, err error) {
-	resourceBlob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, resource, cfg)
+	resourceBlob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, resource, cfg, pm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download resource: %w", err)
 	}
@@ -669,6 +678,7 @@ func (r *Reconciler) downloadResourceBlob(
 	componentDescriptor *descriptor.Descriptor,
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
+	pm *manager.PluginManager,
 ) (blob.ReadOnlyBlob, error) {
 	typed, err := v2.Scheme.NewObject(resource.Access.GetType())
 	if err != nil {
@@ -689,12 +699,12 @@ func (r *Reconciler) downloadResourceBlob(
 	}
 
 	// non-local access types use the plugin manager
-	resourcePlugin, err := r.PluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
+	resourcePlugin, err := pm.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource plugin: %w", err)
 	}
 
-	creds, err := resolveResourceCredentials(ctx, r.PluginManager, resource, cfg)
+	creds, err := resolveResourceCredentials(ctx, pm, resource, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
 	}
@@ -946,6 +956,7 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
 	cfg *configuration.Configuration,
+	pm *manager.PluginManager,
 ) (*descriptor.Descriptor, error) {
 	// We get the (ready) component CR to (1) get any verifications needed to resolve the component version and (2) to
 	// compare the component version used in the component and resource controller.
@@ -980,18 +991,18 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	}
 
 	verifiedOpts := resolution.RepositoryOptions{
-		RepositorySpec:  repoSpecComponent,
-		Configuration:   cfg,
-		SigningRegistry: r.PluginManager.SigningRegistry,
-		Verifications:   verifications,
-		RequesterFunc:   requesterFunc,
+		RepositorySpec: repoSpecComponent,
+		Configuration:  cfg,
+		PluginManager:  pm,
+		Verifications:  verifications,
+		RequesterFunc:  requesterFunc,
 	}
 
 	refPathOpts := resolution.RepositoryOptions{
-		RepositorySpec:  repoSpecComponent,
-		Configuration:   cfg,
-		SigningRegistry: r.PluginManager.SigningRegistry,
-		RequesterFunc:   requesterFunc,
+		RepositorySpec: repoSpecComponent,
+		Configuration:  cfg,
+		PluginManager:  pm,
+		RequesterFunc:  requesterFunc,
 	}
 
 	repoComponent, err := r.Resolver.NewCacheBackedRepository(ctx, &verifiedOpts)

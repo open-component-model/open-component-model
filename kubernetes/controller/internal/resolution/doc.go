@@ -7,17 +7,18 @@
 // added to the controller manager separately so it starts and stops with the manager lifecycle.
 //
 //	wp := workerpool.New(...)
-//	resolver := resolution.NewResolver(logger, wp, pluginManager)
+//	resolver := resolution.NewResolver(logger, wp)
 //	mgr.Add(wp)
 //
 // To fetch a component version, create a [CacheBackedRepository] via [Resolver.NewCacheBackedRepository]
 // with [RepositoryOptions], then call GetComponentVersion on it:
 //
 //	cfg, err := configuration.LoadConfigurations(ctx, client, namespace, ocmConfigs)
+//	pm, err := setup.NewPluginManager(ctx, cfg.Config, logger)
 //	repo, err := resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
 //	    RepositorySpec:    repoSpec,
 //	    Configuration:     cfg,
-//	    SigningRegistry:   signingRegistry,      // required if Verifications is set
+//	    PluginManager:     pm,                   // required; built from cfg
 //	    Verifications:     verifications,        // optional: signature verification
 //	    Digest:            digest,               // optional: integrity check for referenced components
 //	    RequesterFunc:     requesterFunc,        // identifies the requesting controller object
@@ -30,6 +31,13 @@
 // [ErrResolutionInProgress]. Controllers should mark their status accordingly and return. There is
 // no need to requeue the object because the workpool will enqueue reconcile events for the given
 // objects using RequesterFunc function.
+//
+// # Request-Scoped Plugins
+//
+// Plugins are configured from the reconciled object's ocmConfig, so the caller builds a
+// PluginManager per reconcile and passes it in. The resolver caches resolvers under the
+// configuration hash. That works, because the manager is itself derived from the
+// same configuration.
 //
 // # Cache Keys and Verification Separation
 //
