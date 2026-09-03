@@ -35,8 +35,11 @@ permissions:
 # Same pattern as conformance.yml and kubernetes-controller.yml.
 
 env:
-  LOCATION: "bindings/go/kubernetes/controller"
-  MODULE_LOCATION: "bindings/go"
+  # GO_MODULE_ROOT is the Go module root that contains go.mod and go.sum.
+  # CONTROLLER_DIR is the controller subtree inside it, used as task working
+  # directory and for artifact staging.
+  GO_MODULE_ROOT: "bindings/go"
+  CONTROLLER_DIR: "bindings/go/kubernetes/controller"
   REGISTRY: ghcr.io
   REF: ${{ inputs.ref || github.head_ref || github.ref_name }}
   CHECKOUT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
@@ -66,7 +69,7 @@ jobs:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.REF }}
           sparse-checkout: |
-            ${{ env.MODULE_LOCATION }}
+            ${{ env.GO_MODULE_ROOT }}
             Taskfile.yml
             .env
           persist-credentials: false
@@ -74,8 +77,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version-file: ${{ env.MODULE_LOCATION }}/go.mod
-          cache-dependency-path: ${{ env.MODULE_LOCATION }}/go.sum
+          go-version-file: ${{ env.GO_MODULE_ROOT }}/go.mod
+          cache-dependency-path: ${{ env.GO_MODULE_ROOT }}/go.sum
 
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
@@ -90,13 +93,13 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ inputs.cli_artifact }}
-          path: ${{ env.LOCATION }}/tmp/cli
+          path: ${{ env.CONTROLLER_DIR }}/tmp/cli
 
       - name: Setup ocm
         env:
           ARCH: ${{ matrix.arch }}
         run: |
-          install -m 0755 ${{ env.LOCATION }}/tmp/cli/bin/ocm-linux-${ARCH} /usr/local/bin/ocm
+          install -m 0755 ${{ env.CONTROLLER_DIR }}/tmp/cli/bin/ocm-linux-${ARCH} /usr/local/bin/ocm
 
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@16602fa989daa99762f1c6d1186ae2ad1c735815 # v2.9.3
@@ -110,10 +113,10 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ inputs.controller_image_artifact }}
-          path: ${{ env.LOCATION }}/tmp/oci
+          path: ${{ env.CONTROLLER_DIR }}/tmp/oci
 
       - name: Extract OCI layout from tar
-        working-directory: ${{ env.LOCATION }}
+        working-directory: ${{ env.CONTROLLER_DIR }}
         run: task oci/extract TAR_PATH=tmp/oci/controller.tar OUTPUT_DIR=tmp/oci-dir
 
       - name: Ensure skopeo is installed
@@ -123,7 +126,7 @@ jobs:
         # Skopeo can extract by platform (--override-arch) AND convert to docker-archive.
         # Skopeo is pre-installed on ubuntu-latest but may be missing on ARM runners.
         # Set tag to "latest" to match the controller's Helm chart default for E2E testing
-        working-directory: ${{ env.LOCATION }}
+        working-directory: ${{ env.CONTROLLER_DIR }}
         env:
           VERSION: ${{ inputs.controller_version }}
         run: |
@@ -135,10 +138,10 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          set -a && source ${{ env.LOCATION }}/.env && set +a
-          bash ${{ env.LOCATION }}/test/e2e/hacks/setup.sh
-          kind load image-archive "${{ env.LOCATION }}/tmp/docker/controller.tar" --name ocm-e2e
-          task bindings/go/kubernetes/controller:test/e2e
+          set -a && source ${{ env.CONTROLLER_DIR }}/.env && set +a
+          bash ${{ env.CONTROLLER_DIR }}/test/e2e/hacks/setup.sh
+          kind load image-archive "${{ env.CONTROLLER_DIR }}/tmp/docker/controller.tar" --name ocm-e2e
+          task ${{ env.CONTROLLER_DIR }}:test/e2e
 
       - name: Debug cluster state
         if: failure()

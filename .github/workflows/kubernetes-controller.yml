@@ -31,8 +31,11 @@ on:
         value: controller-chart-pr
 
 env:
-  LOCATION: "bindings/go/kubernetes/controller"
-  MODULE_LOCATION: "bindings/go"
+  # GO_MODULE_ROOT is the Go module root that contains go.mod and go.sum.
+  # CONTROLLER_DIR is the controller subtree inside it, used as task working
+  # directory and for artifact staging.
+  GO_MODULE_ROOT: "bindings/go"
+  CONTROLLER_DIR: "bindings/go/kubernetes/controller"
   REGISTRY: ghcr.io
   REF: ${{ inputs.ref || github.head_ref || github.ref_name }}
   ARTIFACT_NAME: ${{ inputs.artifact_name || 'controller-artifacts' }}
@@ -69,7 +72,7 @@ jobs:
           version: v4.2.3
 
       - name: Validate chart (generators + lint + template + drift check)
-        working-directory: ${{ env.LOCATION }}
+        working-directory: ${{ env.CONTROLLER_DIR }}
         run: task helm/validate
 
       - name: Verify no uncommitted changes
@@ -102,7 +105,7 @@ jobs:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
             .github/scripts
-            ${{ env.MODULE_LOCATION }}
+            ${{ env.GO_MODULE_ROOT }}
             Taskfile.yml
             .env
           persist-credentials: false
@@ -139,7 +142,7 @@ jobs:
             await script.default({ core });
 
       - name: Build Multi-Arch Image to OCI Layout
-        working-directory: ${{ env.LOCATION }}
+        working-directory: ${{ env.CONTROLLER_DIR }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
           # PR gates (conformance + e2e) only run on arm64, so build host-arch
@@ -154,7 +157,7 @@ jobs:
 
       # Package Helm chart without digest for use in PR conformance testing
       - name: Package Helm chart (without digest)
-        working-directory: ${{ env.LOCATION }}
+        working-directory: ${{ env.CONTROLLER_DIR }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -168,7 +171,7 @@ jobs:
           retention-days: 1
           name: ${{ env.ARTIFACT_NAME }}
           path: |
-            ${{ env.LOCATION }}/tmp/oci/
+            ${{ env.CONTROLLER_DIR }}/tmp/oci/
 
       # Upload chart artifact separately for easier access in PR conformance testing
       - name: Upload Chart Artifact
@@ -177,4 +180,4 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           name: controller-chart-pr
-          path: ${{ env.LOCATION }}/dist/chart-*.tgz
+          path: ${{ env.CONTROLLER_DIR }}/dist/chart-*.tgz
