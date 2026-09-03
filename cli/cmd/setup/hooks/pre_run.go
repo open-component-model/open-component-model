@@ -31,6 +31,10 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 	slog.SetDefault(logger)
 
 	setup.Syscalls(cmd)
+	// Best-effort first-startup auto configuration. Failures must not block command execution.
+	if err := setup.AutoConfigure(cmd); err != nil {
+		slog.WarnContext(cmd.Context(), "auto configuration failed", slog.String("error", err.Error()))
+	}
 	if err := setup.OCMConfig(cmd); err != nil {
 		return fmt.Errorf("setup ocm config: %w", err)
 	}

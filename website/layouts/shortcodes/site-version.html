@@ -7,6 +7,20 @@ git checkout releases/v{{ $version }}
 {{- else if eq $format "env" -}}
   {{- if ne $version "main" -}}
 OCM_VERSION={{ $version }} {{ end -}}
+{{- else if eq $format "semver" -}}
+  {{/* Full major.minor.0 for OCM component/image references. The version config
+       only carries major.minor names, so .0 is appended (patches are not tracked
+       here). On the "main" docs there is no installable "main" component, so the
+       reference resolves to the latest release: the default content version. */}}
+  {{- $base := $version -}}
+  {{- if eq $version "main" -}}
+    {{- range .Site.Home.Rotate "version" -}}
+      {{- if .Site.Version.IsDefault -}}
+        {{- $base = .Site.Version.Name -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $base -}}.0
 {{- else -}}
   {{- $version -}}
 {{- end -}}

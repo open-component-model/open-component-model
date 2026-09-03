@@ -9,6 +9,8 @@
  * - Accepts SemVer version X.Y.Z, derives minor identifier X.Y
  * - Ensures hugo.yaml has the version entry (idempotent, creates if missing)
  * - Ensures module.yaml has import blocks (creates if missing, updates tags if present)
+ * - Pins bindings schema imports to the monolithic bindings/go module when the
+ *   release consumes it; older releases keep their per-package module imports
  * - Retires oldest minor version when >10 minor versions exist
  */
 
@@ -16,6 +18,9 @@ const fsp = require('node:fs/promises');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const yaml = require('js-yaml');
+
+// Maximum number of minor versions (excluding special versions like main/legacy)
+const MAX_MINOR_VERSIONS = 10;
 
 // Paths
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -42,9 +47,6 @@ function dumpYaml(parsed) {
     return yaml.dump(parsed, { lineWidth: -1, noRefs: true });
 }
 
-// Maximum number of minor versions (excluding special versions like main/legacy)
-const MAX_MINOR_VERSIONS = 10;
-
 // Compare two SemVer strings (X.Y or X.Y.Z). Returns <0 if a<b, >0 if a>b, 0 if equal.
 function compareSemver(a, b) {
     const pa = a.split('.').map(Number);
@@ -53,7 +55,9 @@ function compareSemver(a, b) {
     for (let i = 0; i < len; i++) {
         const av = pa[i] || 0;
         const bv = pb[i] || 0;
-        if (av !== bv) return av - bv;
+        if (av !== bv) {
+            return av - bv;
+        }
     }
     return 0;
 }
@@ -83,24 +87,34 @@ function assignVersionWeights(existingVersions, newVersion) {
     const semverKeys = [];
 
     for (const key of Object.keys(versions)) {
-        if (key === 'main') hasMain = true;
-        else if (key === 'legacy') hasLegacy = true;
-        else semverKeys.push(key);
+        if (key === 'main') {
+            hasMain = true;
+        } else if (key === 'legacy') {
+            hasLegacy = true;
+        } else {
+            semverKeys.push(key);
+        }
     }
 
-    if (!alreadyExists) semverKeys.push(newVersion);
+    if (!alreadyExists) {
+        semverKeys.push(newVersion);
+    }
     semverKeys.sort((a, b) => compareSemver(b, a)); // descending
 
     const result = {};
     let weight = 1;
 
-    if (hasMain) result.main = { weight: weight++ };
+    if (hasMain) {
+        result.main = { weight: weight++ };
+    }
 
     for (const sv of semverKeys) {
         result[sv] = { weight: weight++ };
     }
 
-    if (hasLegacy) result.legacy = { weight: weight };
+    if (hasLegacy) {
+        result.legacy = { weight: weight };
+    }
 
     return result;
 }
@@ -118,7 +132,9 @@ function parseArguments(args) {
 
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--cli-gomod') {
-            if (i + 1 >= args.length) throw new Error('--cli-gomod requires a path argument');
+            if (i + 1 >= args.length) {
+                throw new Error('--cli-gomod requires a path argument');
+            }
             flags.cliGomod = args[++i];
         } else if (args[i].startsWith('--')) {
             throw new Error(`Unknown flag: ${args[i]}`);
@@ -127,8 +143,12 @@ function parseArguments(args) {
         }
     }
 
-    if (positionals.length === 0) throw new Error('Missing version. Usage: register-docs-version.js X.Y.Z --cli-gomod <path>');
-    if (positionals.length > 1) throw new Error(`Expected exactly one version argument, got ${positionals.length}: ${positionals.join(', ')}`);
+    if (positionals.length === 0) {
+        throw new Error('Missing version. Usage: register-docs-version.js X.Y.Z --cli-gomod <path>');
+    }
+    if (positionals.length > 1) {
+        throw new Error(`Expected exactly one version argument, got ${positionals.length}: ${positionals.join(', ')}`);
+    }
 
     const fullVersion = positionals[0];
     const versionPattern = /^\d+\.\d+\.\d+$/;
@@ -167,6 +187,15 @@ function hasAllImportsForVersion(parsed, version, deps) {
     });
 }
 
+// Warn about bindings expected but absent from the go.mod under resolution.
+function warnMissingBindings(goModPath, missing) {
+    console.warn(
+        `[WARN] ${missing.length} binding(s) not in ${path.basename(goModPath)} - ` +
+        `skipping their imports for this version (likely introduced after this release):\n  ` +
+        missing.join('\n  ')
+    );
+}
+
 /**
  * Resolve dependency versions from a go.mod file.
  * Runs `go mod edit -json <goModPath>` and extracts the version for each
@@ -174,16 +203,19 @@ function hasAllImportsForVersion(parsed, version, deps) {
  *
  * Modules in `modulePaths` that don't appear in the file are treated as
  * "binding not part of this release" (e.g. introduced after the snapshot
- * was taken) and are skipped with a warning. Callers (buildModuleBlocks,
+ * was taken) and are skipped with a warning (suppressible via warnMissing). Callers (buildModuleBlocks,
  * updateImportTags) treat a missing entry as "do not emit/touch the import
  * for this binding."
  *
  * @param {string} goModPath - absolute path to go.mod
  * @param {string[]} modulePaths - module paths to look up
+ * @param {Object} [options]
+ * @param {boolean} [options.warnMissing=true] - warn about modulePaths absent
+ *        from go.mod. Configurable to suppress spurious warning for monolithic generation.
  * @returns {Object<string, string>} map of modulePath -> version (e.g. "v0.0.7"),
  *          missing entries omitted
  */
-function resolveGoModVersions(goModPath, modulePaths) {
+function resolveGoModVersions(goModPath, modulePaths, { warnMissing = true } = {}) {
     const absPath = path.resolve(goModPath);
     const output = execFileSync('go', ['mod', 'edit', '-json', absPath], { encoding: 'utf-8' });
     const mod = JSON.parse(output);
@@ -197,16 +229,16 @@ function resolveGoModVersions(goModPath, modulePaths) {
     }
 
     const missing = modulePaths.filter(p => !result[p]);
-    if (missing.length) {
-        console.warn(
-            `[WARN] ${missing.length} binding(s) not in ${path.basename(goModPath)} - ` +
-            `skipping their imports for this version (likely introduced after this release):\n  ` +
-            missing.join('\n  ')
-        );
+    if (warnMissing && missing.length) {
+        warnMissingBindings(goModPath, missing);
     }
 
     return result;
 }
+
+// The following logic is backwards compatible with the non-monolithic bindings.
+// This logic can be simplified/removed once we are >10 versions into the monolithic release
+// and the documentation for non-monolithic releases can be dropped
 
 // Shared prefix for every Go module path in this repo; kept as a single
 // constant so the long FQN doesn't get repeated dozens of times below.
@@ -217,13 +249,79 @@ const CLI_DERIVED_MODULES = [
     `${MODULE_PREFIX}/bindings/go/constructor`,
     `${MODULE_PREFIX}/bindings/go/credentials`,
     `${MODULE_PREFIX}/bindings/go/descriptor/v2`,
+    `${MODULE_PREFIX}/bindings/go/github`,
     `${MODULE_PREFIX}/bindings/go/gpg`,
     `${MODULE_PREFIX}/bindings/go/helm`,
     `${MODULE_PREFIX}/bindings/go/http`,
     `${MODULE_PREFIX}/bindings/go/oci`,
     `${MODULE_PREFIX}/bindings/go/rsa`,
     `${MODULE_PREFIX}/bindings/go/sigstore`,
+    `${MODULE_PREFIX}/bindings/go/wget`,
 ];
+
+// The Go bindings merged into a single Go module. Releases built against the
+// monolith pin this one module instead of the per-package legacy modules above.
+const MONOLITHIC_BINDINGS_MODULE = `${MODULE_PREFIX}/bindings/go`;
+
+// One row per schema directory the website mounts.
+//     * `pkg` is the directory of the package inside bindings/go
+//     * `source` the schema directory relative to the package root (non-monolith)
+//        or path relative to the monolithic module root once prefixed with `pkg`.
+// Order defines the order of the generated import blocks and must match the
+// historical module.yaml entry order.
+// New packages need to be appended to this list.
+const BINDING_SCHEMA_MOUNTS = [
+    { pkg: 'constructor',   source: 'spec/v1/resources',                                 target: 'schemas/bindings/go/constructor' },
+    { pkg: 'descriptor/v2', source: 'resources',                                         target: 'schemas/bindings/go/descriptor/v2' },
+    { pkg: 'github', source: 'spec/credentials/v1/schemas', target: 'schemas/bindings/go/credentials/github/v1' },
+    { pkg: 'http',          source: 'spec/config/v1alpha1/schemas',                      target: 'schemas/bindings/go/http' },
+    { pkg: 'oci',           source: 'spec/credentials/v1/schemas',                       target: 'schemas/bindings/go/credentials/oci/v1' },
+    { pkg: 'helm',          source: 'spec/credentials/v1/schemas',                       target: 'schemas/bindings/go/credentials/helm/v1' },
+    { pkg: 'rsa',           source: 'spec/credentials/v1/schemas',                       target: 'schemas/bindings/go/credentials/rsa/v1' },
+    { pkg: 'gpg',           source: 'spec/credentials/v1alpha1/schemas',                 target: 'schemas/bindings/go/credentials/gpg/v1alpha1' },
+    { pkg: 'sigstore',      source: 'spec/credentials/oidcidentitytoken/v1alpha1/schemas', target: 'schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1' },
+    { pkg: 'sigstore',      source: 'spec/credentials/trustedroot/v1alpha1/schemas',     target: 'schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1' },
+    { pkg: 'credentials',   source: 'spec/config/v1/schemas',                            target: 'schemas/bindings/go/credentials/direct/v1' },
+    { pkg: 'wget',          source: 'spec/credentials/v1/schemas',                       target: 'schemas/bindings/go/credentials/wget/v1' },
+];
+
+// Return the bindings schema imports for a version. The layout is auto-detected
+// from `deps`: a release whose CLI go.mod requires the monolithic module gets a
+// single import pinning all schema directories via in-module mounts; releases
+// that still require the legacy per-package modules (up to 0.14) keep one
+// import per module, with mounts that share a module grouped into it
+// (sigstore ships two). Entries without a resolved version stay `undefined`
+// here and are dropped by the caller's filter.
+function bindingSchemaImports(version, deps) {
+    const monolithVersion = deps?.[MONOLITHIC_BINDINGS_MODULE];
+    if (monolithVersion) {
+        return [{
+            path: MONOLITHIC_BINDINGS_MODULE,
+            version: monolithVersion,
+            mounts: BINDING_SCHEMA_MOUNTS.map(m => ({
+                source: `${m.pkg}/${m.source}`,
+                target: `static/${version}/${m.target}`,
+                sites: { matrix: { versions: [version] } },
+            })),
+        }];
+    }
+    const byPackage = new Map();
+    for (const m of BINDING_SCHEMA_MOUNTS) {
+        if (!byPackage.has(m.pkg)) {
+            byPackage.set(m.pkg, []);
+        }
+        byPackage.get(m.pkg).push(m);
+    }
+    return [...byPackage.entries()].map(([pkg, mounts]) => ({
+        path: `${MODULE_PREFIX}/bindings/go/${pkg}`,
+        version: deps?.[`${MODULE_PREFIX}/bindings/go/${pkg}`],
+        mounts: mounts.map(m => ({
+            source: m.source,
+            target: `static/${version}/${m.target}`,
+            sites: { matrix: { versions: [version] } },
+        })),
+    }));
+}
 
 // Build import blocks for a given version (pure when deps are passed, testable).
 // Bindings whose version is not in `deps` (e.g. introduced after this release)
@@ -231,16 +329,6 @@ const CLI_DERIVED_MODULES = [
 // import block entirely. The always-pinned entries (website/cli/controller) use
 // `v${fullVersion}` so they're never dropped.
 function buildModuleBlocks(version, fullVersion, deps) {
-    const constructorVersion = deps?.[`${MODULE_PREFIX}/bindings/go/constructor`];
-    const credentialsVersion = deps?.[`${MODULE_PREFIX}/bindings/go/credentials`];
-    const descriptorVersion = deps?.[`${MODULE_PREFIX}/bindings/go/descriptor/v2`];
-    const gpgVersion = deps?.[`${MODULE_PREFIX}/bindings/go/gpg`];
-    const helmVersion = deps?.[`${MODULE_PREFIX}/bindings/go/helm`];
-    const httpVersion = deps?.[`${MODULE_PREFIX}/bindings/go/http`];
-    const ociVersion = deps?.[`${MODULE_PREFIX}/bindings/go/oci`];
-    const rsaVersion = deps?.[`${MODULE_PREFIX}/bindings/go/rsa`];
-    const sigstoreVersion = deps?.[`${MODULE_PREFIX}/bindings/go/sigstore`];
-
     // Hugo passes `version:` verbatim to `go mod download <path>@<version>`,
     // which expects a Go module version (e.g. v0.9.0), not the git tag form
     // (<subdir>/v0.9.0). Go's resolver maps tag->version internally based on
@@ -272,94 +360,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
                 sites: { matrix: { versions: [version] } }
             }]
         },
-        {
-            path: `${MODULE_PREFIX}/bindings/go/constructor`,
-            version: constructorVersion,
-            mounts: [{
-                source: 'spec/v1/resources',
-                target: `static/${version}/schemas/bindings/go/constructor`,
-                sites: { matrix: { versions: [version] } }
-            }]
-        },
-        {
-            path: `${MODULE_PREFIX}/bindings/go/descriptor/v2`,
-            version: descriptorVersion,
-            mounts: [{
-                source: 'resources',
-                target: `static/${version}/schemas/bindings/go/descriptor/v2`,
-                sites: { matrix: { versions: [version] } }
-            }]
-        },
-        {
-            path: `${MODULE_PREFIX}/bindings/go/http`,
-            version: httpVersion,
-            mounts: [{
-                source: 'spec/config/v1alpha1/schemas',
-                target: `static/${version}/schemas/bindings/go/http`,
-                sites: { matrix: { versions: [version] } }
-            }]
-        },
-        {
-            path: `${MODULE_PREFIX}/bindings/go/oci`,
-            version: ociVersion,
-            mounts: [{
-                source: 'spec/credentials/v1/schemas',
-                target: `static/${version}/schemas/bindings/go/credentials/oci/v1`,
-                sites: { matrix: { versions: [version] } }
-            }]
-        },
-        {
-            path: `${MODULE_PREFIX}/bindings/go/helm`,
-            version: helmVersion,
-            mounts: [{
-                source: 'spec/credentials/v1/schemas',
-                target: `static/${version}/schemas/bindings/go/credentials/helm/v1`,
-                sites: { matrix: { versions: [version] } }
-            }]
-        },
-        {
-            path: `${MODULE_PREFIX}/bindings/go/rsa`,
-            version: rsaVersion,
-            mounts: [{
-                source: 'spec/credentials/v1/schemas',
-                target: `static/${version}/schemas/bindings/go/credentials/rsa/v1`,
-                sites: { matrix: { versions: [version] } }
-            }]
-        },
-        {
-            path: `${MODULE_PREFIX}/bindings/go/gpg`,
-            version: gpgVersion,
-            mounts: [{
-                source: 'spec/credentials/v1alpha1/schemas',
-                target: `static/${version}/schemas/bindings/go/credentials/gpg/v1alpha1`,
-                sites: { matrix: { versions: [version] } }
-            }]
-        },
-        {
-            path: `${MODULE_PREFIX}/bindings/go/sigstore`,
-            version: sigstoreVersion,
-            mounts: [
-                {
-                    source: 'spec/credentials/oidcidentitytoken/v1alpha1/schemas',
-                    target: `static/${version}/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1`,
-                    sites: { matrix: { versions: [version] } }
-                },
-                {
-                    source: 'spec/credentials/trustedroot/v1alpha1/schemas',
-                    target: `static/${version}/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1`,
-                    sites: { matrix: { versions: [version] } }
-                }
-            ]
-        },
-        {
-            path: `${MODULE_PREFIX}/bindings/go/credentials`,
-            version: credentialsVersion,
-            mounts: [{
-                source: 'spec/config/v1/schemas',
-                target: `static/${version}/schemas/bindings/go/credentials/direct/v1`,
-                sites: { matrix: { versions: [version] } }
-            }]
-        },
+        ...bindingSchemaImports(version, deps),
         {
             path: `${MODULE_PREFIX}/kubernetes/controller`,
             version: `v${fullVersion}`,
@@ -387,7 +388,9 @@ function buildModuleBlocks(version, fullVersion, deps) {
  */
 function retireOldestVersion(versions) {
     const semverKeys = Object.keys(versions).filter(k => !SPECIAL_VERSIONS.has(k));
-    if (semverKeys.length <= MAX_MINOR_VERSIONS) return null;
+    if (semverKeys.length <= MAX_MINOR_VERSIONS) {
+        return null;
+    }
 
     semverKeys.sort((a, b) => compareSemver(a, b)); // ascending
     const oldest = semverKeys[0];
@@ -408,37 +411,33 @@ function retireOldestVersion(versions) {
  * @returns {boolean} true if any tags were updated
  */
 function updateImportTags(parsed, version, fullVersion, deps) {
-    if (!parsed?.imports) return false;
+    if (!parsed?.imports) {
+        return false;
+    }
 
     let changed = false;
 
     for (const imp of parsed.imports) {
         const matchesVersion = imp?.mounts?.some(m => m?.sites?.matrix?.versions?.includes(version));
-        if (!matchesVersion) continue;
+        if (!matchesVersion) {
+            continue;
+        }
 
         let newTag = null;
         if (imp.path.endsWith('/website') ||
             imp.path.endsWith('/cli') ||
             imp.path.endsWith('/kubernetes/controller')) {
             newTag = `v${fullVersion}`;
-        } else if (deps && imp.path.endsWith('/bindings/go/constructor')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/constructor`];
-        } else if (deps && imp.path.endsWith('/bindings/go/descriptor/v2')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/descriptor/v2`];
-        } else if (deps && imp.path.endsWith('/bindings/go/http')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/http`];
-        } else if (deps && imp.path.endsWith('/bindings/go/oci')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/oci`];
-        } else if (deps && imp.path.endsWith('/bindings/go/helm')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/helm`];
-        } else if (deps && imp.path.endsWith('/bindings/go/rsa')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/rsa`];
-        } else if (deps && imp.path.endsWith('/bindings/go/gpg')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/gpg`];
-        } else if (deps && imp.path.endsWith('/bindings/go/sigstore')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/sigstore`];
-        } else if (deps && imp.path.endsWith('/bindings/go/credentials')) {
-            newTag = deps[`${MODULE_PREFIX}/bindings/go/credentials`];
+        } else if (deps && imp.path === MONOLITHIC_BINDINGS_MODULE) {
+            newTag = deps[MONOLITHIC_BINDINGS_MODULE];
+        } else if (deps) {
+            for (const modulePath of CLI_DERIVED_MODULES) {
+                const moduleSubPath = modulePath.slice(MODULE_PREFIX.length + 1)
+                if (imp.path.endsWith(moduleSubPath)) {
+                    newTag = deps[modulePath];
+                    break;
+                }
+            }
         }
 
         if (newTag && imp.version !== newTag) {
@@ -452,7 +451,9 @@ function updateImportTags(parsed, version, fullVersion, deps) {
 
 // Remove all imports for a given version from module.yaml parsed object
 function removeImportsForVersion(parsed, version) {
-    if (!parsed?.imports) return;
+    if (!parsed?.imports) {
+        return;
+    }
     parsed.imports = parsed.imports.filter(
         imp => !imp?.mounts?.some(m => m?.sites?.matrix?.versions?.includes(version))
     );
@@ -499,7 +500,25 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
     const content = await fsp.readFile(MODULE_CONFIG, 'utf-8').catch(e => fail(`Read module.yaml: ${e.message}`));
     const parsed = yaml.load(content) || {};
 
-    const deps = resolveGoModVersions(cliGomod, CLI_DERIVED_MODULES);
+    // Resolve both bindings layouts silently, then let the monolithic module's
+    // presence decide the layout. Legacy "missing binding" warnings only make
+    // sense for legacy releases; in a monolithic release the ten absent legacy
+    // paths are expected and warning for them would be misleading noise.
+    const resolved = resolveGoModVersions(
+        cliGomod,
+        [MONOLITHIC_BINDINGS_MODULE, ...CLI_DERIVED_MODULES],
+        { warnMissing: false }
+    );
+    let deps;
+    if (resolved[MONOLITHIC_BINDINGS_MODULE]) {
+        deps = { [MONOLITHIC_BINDINGS_MODULE]: resolved[MONOLITHIC_BINDINGS_MODULE] };
+    } else {
+        const missing = CLI_DERIVED_MODULES.filter(p => !resolved[p]);
+        if (missing.length) {
+            warnMissingBindings(cliGomod, missing);
+        }
+        deps = resolved;
+    }
 
     const hasAllImports = hasAllImportsForVersion(parsed, version, deps);
     const hasAnyImport = hasAnyImportForVersion(parsed, version);
@@ -559,4 +578,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, resolveGoModVersions, CLI_DERIVED_MODULES };
+module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, resolveGoModVersions, CLI_DERIVED_MODULES, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS };

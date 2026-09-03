@@ -28,6 +28,7 @@ on:
       - '.github/workflows/cli.yml'
       - '.github/workflows/kubernetes-controller.yml'
       - '.github/workflows/conformance.yml'
+      - '.github/workflows/e2e.yml'
       - '.github/workflows/pipeline.yml'
       - '.env'
   workflow_call:
@@ -112,7 +113,7 @@ jobs:
   # controller build; gates publish alongside conformance. ===
   e2e:
     name: E2E
-    needs: [build_controller]
+    needs: [build_cli, build_controller]
     uses: ./.github/workflows/e2e.yml
     permissions:
       contents: read
@@ -121,6 +122,7 @@ jobs:
       ref: ${{ inputs.ref }}
       controller_image_artifact: ${{ needs.build_controller.outputs.artifact_name }}
       controller_version: ${{ needs.build_controller.outputs.version }}
+      cli_artifact: ${{ needs.build_cli.outputs.artifact_name }}
   # === end ===
 
   # === New this part is a copy from cli.yml::build::branch-check + kubernetes-controller.yml::build::branch-check ===
@@ -184,7 +186,7 @@ jobs:
         uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
 
       - name: Log in to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -217,7 +219,7 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest OCI image
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.digest.outputs.digest }}
@@ -257,7 +259,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.ref_name }}
           sparse-checkout: |
@@ -278,10 +280,10 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.2
+          version: v4.2.3
 
       - name: Log in to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -320,7 +322,7 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest image
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.image-digest.outputs.digest }}
@@ -353,7 +355,7 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest chart
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.chart-digest.outputs.digest }}

@@ -75,10 +75,10 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/m
 # Transfer only the latest version
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
 
-# Transfer from one OCI to another using localBlobs
+# Transfer from one OCI to another using localBlobs (default)
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as localBlob
 
-# Transfer from one OCI to another using OCI artifacts (default)
+# Transfer from one OCI to another using OCI artifacts
 transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
 
 # Transfer a component version containing Helm charts (access-type: helm/v1) as an OCI artifact
@@ -120,7 +120,7 @@ transfer component-version --transfer-spec spec.yaml
       --semver-constraint string   semantic version constraint restricting which versions to transfer (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
       --transfer-spec string       path to a transfer specification file (use "-" for stdin)
   -u, --upload-as enum             Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
-                                   (must be one of [default localBlob ociArtifact]) (default default)
+                                   (must be one of [localBlob ociArtifact]) (default localBlob)
 ```
 
 ### Options inherited from parent commands

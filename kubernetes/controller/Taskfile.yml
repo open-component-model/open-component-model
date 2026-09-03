@@ -87,7 +87,7 @@ tasks:
     desc: "Delete the 'ocm-e2e' Kind cluster and its registry. Only affects resources created by test/e2e/setup/local."
     cmds:
       - 'kind delete cluster --name ocm-e2e 2>/dev/null || true'
-      - 'docker rm -f ocm-e2e-registry 2>/dev/null || true'
+      - 'docker rm -f ocm-e2e-image-registry 2>/dev/null || true'
 
   test/e2e:
     desc: "Run end-to-end tests against a running cluster. Pass ginkgo flags via `--`, e.g. `task test/e2e -- -ginkgo.focus=helm-simple`. Omit to run all scenarios."

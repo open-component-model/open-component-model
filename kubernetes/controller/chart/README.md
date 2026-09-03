@@ -99,6 +99,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` | Container-level security context |
 | manager.tolerations | list | `[]` | Pod tolerations |
 | prometheus.enable | bool | `false` | Enable Prometheus ServiceMonitor (requires prometheus-operator) |
+| rbacHelpers.aggregateToDefaultRoles | bool | `true` | Install ClusterRoles that aggregate OCM resource permissions into the built-in `admin`, `edit` and `view` cluster roles |
 | rbacHelpers.enable | bool | `false` | Install convenience admin/editor/viewer roles for CRDs |
 | webhook.certSecret | string | `""` | Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually) |
 | webhook.enable | bool | `false` | Enable conversion webhook for CRD version conversion |

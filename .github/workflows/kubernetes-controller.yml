@@ -52,7 +52,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -65,7 +65,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.2
+          version: v4.2.3
 
       - name: Validate chart (generators + lint + template + drift check)
         working-directory: ${{ env.LOCATION }}
@@ -96,7 +96,7 @@ jobs:
         run: echo "IMAGE_NAME=${REGISTRY}/${OWNER,,}/kubernetes/controller" >> "$GITHUB_ENV"
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
@@ -107,12 +107,6 @@ jobs:
           persist-credentials: false
           ref: ${{ env.REF }}
 
-      - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version-file: ${{ env.LOCATION }}/go.mod
-          cache-dependency-path: ${{ env.LOCATION }}/go.sum
-
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
@@ -120,12 +114,12 @@ jobs:
           version: 3.x
 
       - name: Setup docker/buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.2
+          version: v4.2.3
 
       - name: Compute VERSION
         id: version
@@ -147,10 +141,15 @@ jobs:
         working-directory: ${{ env.LOCATION }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          # PR gates (conformance + e2e) only run on arm64, so build host-arch
+          # only and skip the second cross-compile. Push/release builds stay
+          # multi-arch because the published image must serve amd64 too.
+          PLATFORMS: ${{ github.event_name == 'pull_request' && 'linux/arm64' || 'linux/arm64,linux/amd64' }}
         run: |
           task docker-build/multi-arch \
             CONTROLLER_IMG="${IMAGE_NAME}:${VERSION}" \
-            OCI_OUTPUT=tmp/oci/controller.tar
+            OCI_OUTPUT=tmp/oci/controller.tar \
+            PLATFORMS="${PLATFORMS}"
 
       # Package Helm chart without digest for use in PR conformance testing
       - name: Package Helm chart (without digest)

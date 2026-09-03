@@ -4,12 +4,8 @@
   "$id": "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1/schemas/SigstoreSignerIdentity.schema.json",
   "title": "SigstoreSignerIdentity",
   "type": "object",
-  "description": "SigstoreSignerIdentity is the typed consumer identity for Sigstore signing handlers.\n\nThe credential system matches this identity against configured credentials to resolve\nthe [SigstoreCredentials] used during cosign sign-blob. All fields are optional\nfilters: omitting a field matches any value for that attribute.\n\nEach field corresponds to an identity attribute constant ([IdentityAttributeAlgorithm],\n[IdentityAttributeSignature], [IdentityAttributeIssuer], [IdentityAttributeClientID])\nin the flat runtime.Identity map produced by GetSigningCredentialConsumerIdentity.",
+  "description": "SigstoreSignerIdentity is the typed consumer identity for Sigstore signing handlers.\n\nThe credential system matches this identity against configured credentials to resolve\nthe [SigstoreCredentials] used during cosign sign-blob. All fields are optional\nfilters: omitting a field matches any value for that attribute.\n\nEach field corresponds to an identity attribute constant ([IdentityAttributeSignature],\n[IdentityAttributeIssuer], [IdentityAttributeClientID])\nin the flat runtime.Identity map produced by GetSigningCredentialConsumerIdentity.",
   "properties": {
-    "algorithm": {
-      "type": "string",
-      "description": "Algorithm restricts this identity to a specific signing algorithm.\nPopulated from SignConfig.GetSignatureAlgorithm(); the canonical value is\n\"Sigstore/v1alpha1\" (v1alpha1.AlgorithmSigstoreV1Alpha1). Omit to match all algorithms."
-    },
     "clientID": {
       "type": "string",
       "description": "ClientID restricts this identity to a specific OIDC client ID.\nPopulated from SignConfig.ClientID. Omit to match any client ID."

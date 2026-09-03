@@ -69,7 +69,7 @@ calendar app and every change shows up automatically.
 | Refinement | Weekly (Thursday) | Discuss items in "Needs Refinement" on the [Next Sprint](https://github.com/orgs/open-component-model/projects/10/views/21) view, clarify scope, and story-point |
 | Warroom | Every workday | Synchronous coordination on tasks or open topics |
 | [Community Call]({{< relref "_index.md" >}}) | First Wednesday of the month | Project updates, demos, and open Q&A with the broader community |
-| TSC Meeting | First Monday of the month | Governance decisions, SIG approvals ([meeting notes](https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes)) |
+| TSC Meeting | First Wednesday of the month | Governance decisions, SIG approvals ([meeting notes](https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes)) |
 
 ## Decision-Making
 

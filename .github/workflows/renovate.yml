@@ -9,6 +9,10 @@ on:
         type: choice
         default: enabled
         options: [ enabled, disabled, reset ]
+      ignoreSchedule:
+        description: 'Ignore renovate.json5 schedule'
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -36,7 +40,7 @@ jobs:
       deployment: false
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout:
             ${{ env.RENOVATE_CONFIG_FILE }}
@@ -91,7 +95,7 @@ jobs:
         run: echo "RENOVATE_DRY_RUN=extract" >> $GITHUB_ENV
 
       - name: Run
-        uses: renovatebot/github-action@dd5302ec17783b2fc721b19ae7209b57b1587765 # v46.1.17
+        uses: renovatebot/github-action@316d7cd859606d6039a2182b7d69199e9b036835 # v46.2.1
         with:
           env-regex: |
             ^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$
@@ -105,6 +109,7 @@ jobs:
           RENOVATE_REPOSITORY_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.repoCache || 'enabled' }}
           RENOVATE_ALLOWED_COMMANDS: |
             ^./.github/scripts/renovate-post-upgrade.sh$
+          RENOVATE_FORCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.ignoreSchedule) && '{"schedule":null}' || '' }}
 
       - name: Compress renovate cache
         if: ${{ env.RENOVATE_DRY_RUN == '' && (github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled') }}

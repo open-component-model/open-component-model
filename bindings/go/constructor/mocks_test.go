@@ -259,9 +259,13 @@ func (m *mockDigestProcessor) ProcessResourceDigest(ctx context.Context, resourc
 
 type mockDigestProcessorProvider struct {
 	processor ResourceDigestProcessor
+	err       error
 }
 
 func (m *mockDigestProcessorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (ResourceDigestProcessor, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
 	return m.processor, nil
 }
 

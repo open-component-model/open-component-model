@@ -59,7 +59,7 @@ ocm sign cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
 {{< details "Expected output from signing" >}}
 
 ```text
-time=2026-03-12T21:45:16.517+01:00 level=INFO msg="no signer spec file provided, using default" algorithm=RSASSA-PSS encodingPolicy=Plain
+time=2026-03-12T21:45:16.517+01:00 level=INFO msg="no signer configured, using default" algorithm=RSASSA-PSS encodingPolicy=Plain
 digest:
   hashAlgorithm: SHA-256
   normalisationAlgorithm: jsonNormalisation/v4alpha1
@@ -86,6 +86,9 @@ Without the flag, OCM uses the configuration named `default`. In this example, w
 ```bash
 ocm sign cv --signature prod /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
+
+The name selects both the credentials (the consumer identity with `signature: prod`)
+and the signer (a `signing.config.ocm.software/v1alpha1` entry with `signature: prod`, if you have one).
 
 {{< /step >}}
 
@@ -120,19 +123,18 @@ signatures:
 
 By default, OCM uses **Plain encoding** -- the raw signature bytes are hex-encoded and stored directly. No extra configuration is needed.
 
-To use **PEM encoding** (embeds the signer's X.509 certificate chain in the signature), create a signer spec file and pass it with `--signer-spec`:
+To use **PEM encoding** (embeds the signer's X.509 certificate chain in the signature), append a signer entry to the `configurations` list in your `.ocmconfig`, leaving the credentials entry untouched:
 
 ```yaml
-# pem-signer.yaml
-type: RSASigningConfiguration/v1alpha1
-signatureAlgorithm: RSASSA-PSS
-signatureEncodingPolicy: PEM
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: RSASigningConfiguration/v1alpha1
+    signatureAlgorithm: RSASSA-PSS
+    signatureEncodingPolicy: PEM
 ```
 
 ```bash
-ocm sign cv \
-  --signer-spec pem-signer.yaml \
-  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+ocm sign cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
 PEM encoding requires that `public_key_pem_file` in `.ocmconfig` points to an X.509 certificate chain (leaf + any intermediates), not a bare public key. Verifiers only need the root CA. See [Tutorial: Certificate Chains (PEM)]({{< relref "docs/tutorials/signing/pem.md" >}}) for the full workflow.
@@ -168,7 +170,7 @@ See [How-To: Configure Credentials for Multiple Registries]({{< relref "configur
 
 Sign with an OpenPGP (GPG) key pair. The same key you already use to sign Git tags or release artifacts works for OCM — there's no separate keyring to maintain.
 
-Unlike RSA (which is the default handler when no signer spec is given), GPG requires an explicit signer spec.
+Unlike RSA (the default handler when no signer is configured), GPG has to be selected explicitly in `.ocmconfig`.
 With Sigstore (other tabs) you skip the key-pair setup entirely.
 
 <!-- markdownlint-disable-next-line MD024 -->
@@ -196,24 +198,60 @@ For the end-to-end learning walkthrough including key rotation and best practice
 
 {{< step >}}
 
-### Create the GPG signer spec
+### Configure the GPG signer
 
-Create a `signer-spec.yaml` that selects the GPG signing handler. RSA is the default when no signer spec is given, so this one-line file is what tells `ocm sign` to use GPG:
-
-```yaml
-# signer-spec.yaml
-type: GPGSigningConfiguration/v1alpha1
-```
-
-If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint`:
+Add a signing entry to your `.ocmconfig` that selects the GPG signing handler. RSA is the default when no signer is configured, so this entry is what tells `ocm sign` to use GPG. Append it to the `configurations` list that already holds your GPG credentials:
 
 ```yaml
-# signer-spec.yaml
-type: GPGSigningConfiguration/v1alpha1
-keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
 ```
 
-Keep this file around — the [verify how-to → GPG tab]({{< relref "verify-component-version.md" >}}) reuses it as a verifier spec.
+With the credentials from the prerequisites, the complete `.ocmconfig` is:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: GPG/v1alpha1
+      signature: default
+    credentials:
+    - type: GPGCredentials/v1alpha1
+      privateKeyPGPFile: /path/to/signing-key.asc
+      publicKeyPGPFile: /path/to/verify-key.asc
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
+```
+
+If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the signer by adding one extra line:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
+    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4   # added
+```
+
+To use GPG for one signature only and keep RSA elsewhere, add `signature` to that same entry. GPG then applies to `ocm sign cv --signature gpg-release`, and everything else falls back to the default RSA signer:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signature: gpg-release                                       # added
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
+```
+
+{{< callout context="caution" >}}
+These are in the same file. Just append this signature in that relevant configuration value.
+{{< /callout >}}
+
+{{< callout context="note" >}}
+Verification reads its handler from the same entry, under `verifier` instead of `signer`. Add it now so the [verify how-to → GPG tab]({{< relref "verify-component-version.md" >}}) works against this config.
+{{< /callout >}}
 
 {{< /step >}}
 
@@ -221,22 +259,18 @@ Keep this file around — the [verify how-to → GPG tab]({{< relref "verify-com
 
 ### Sign the component version
 
-Run the sign command with the signer spec.
+Run the sign command. The GPG handler comes from the config entry you just added.
 
 **Local CTF archive:**
 
 ```bash
-ocm sign cv \
-  --signer-spec ./signer-spec.yaml \
-  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+ocm sign cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
 **Remote OCI registry:**
 
 ```bash
-ocm sign cv \
-  --signer-spec ./signer-spec.yaml \
-  ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
+ocm sign cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 
 {{< details "Expected output from signing" >}}
@@ -304,11 +338,11 @@ signatures:
 
 **Fix:** Confirm the consumer block exists and the `signature:` value matches. Without `--signature`, OCM looks for `signature: default`. See [How-To: Configure Signing Credentials → GPG]({{< relref "configure-signing-credentials.md" >}}).
 
-### Symptom: `Error: signing failed: private key not found` (preceded by `no signer spec file provided, using default`)
+### Symptom: `Error: signing failed: private key not found` (preceded by `no signer configured, using default`)
 
-**Cause:** `--signer-spec` was forgotten. OCM defaulted to RSA, then couldn't find an RSA private key.
+**Cause:** No signing entry in `.ocmconfig`. OCM defaulted to RSA, then couldn't find an RSA private key.
 
-**Fix:** Pass `--signer-spec /path/to/signer-spec.yaml` so the GPG handler is selected.
+**Fix:** Add the `signing.config.ocm.software/v1alpha1` entry with the GPG signer, as shown in the first step. If the entry has a `signature` field, it only applies when `--signature` names that same signature.
 
 ### Symptom: `Error: signature "default" already exists`
 
@@ -316,11 +350,11 @@ signatures:
 
 **Fix:** Pass `--force` to overwrite, or pick a different `--signature <name>` to add a second signature alongside the first.
 
-### Symptom: `Error: reading signer spec ...: no such file or directory`
+### Symptom: `Error: --signer-spec is no longer supported ...`
 
-**Cause:** The path passed to `--signer-spec` is wrong.
+**Cause:** The signer used to be passed as a file. It now lives in the OCM configuration.
 
-**Fix:** Double-check the path is reachable from your current working directory. Absolute paths are easiest.
+**Fix:** Move the contents of the old spec file under the `signer` field of a `signing.config.ocm.software/v1alpha1` entry and drop the flag.
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}
@@ -370,7 +404,8 @@ For the end-to-end walkthrough including how Fulcio certificates, Rekor transpar
 
 ### Tell OCM to use Sigstore for signing
 
-Add this entry to your `.ocmconfig`. It says "for the signature named `default`, get an OIDC token instead of using a private key":
+Start your `.ocmconfig` with the credential entry below. It means "for the signature named `default`, get an OIDC token instead of using a private key".
+The next part will append the signer to the same list:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -394,13 +429,31 @@ That's all the credential configuration you need. No keys, no paths.
 
 {{< step >}}
 
-### Create a minimal signer spec
+### Select the Sigstore signer
 
-Until Sigstore is the default signing handler, create `sigstore-sign.yaml` with one line — this picks the Sigstore signing handler and uses public Sigstore defaults:
+Until Sigstore is the default signing handler, pick it in `.ocmconfig`. Append this entry to the `configurations` list you started in the previous step:
 
 ```yaml
-# sigstore-sign.yaml
-type: SigstoreSigningConfiguration/v1alpha1
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
+```
+
+The result is a single `.ocmconfig` file:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: SigstoreSigner/v1alpha1
+      signature: default
+    credentials:
+    - type: OIDCIdentityTokenProvider/v1alpha1
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
 ```
 
 That's it. No URLs, no keys, no certificates. The handler uses public Sigstore (`fulcio.sigstore.dev`, `rekor.sigstore.dev`) automatically.
@@ -411,23 +464,19 @@ That's it. No URLs, no keys, no certificates. The handler uses public Sigstore (
 
 ### Sign the component version
 
-Run the sign command with the signer spec:
+Run the sign command. The Sigstore handler comes from the config entry you just added.
 
 {{< tabs "sign-sigstore-target" >}}
 {{< tab "Local CTF Archive" >}}
 
 ```bash
-ocm sign cv \
-  --signer-spec ./sigstore-sign.yaml \
-  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+ocm sign cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 {{< /tab >}}
 {{< tab "Remote OCI Registry" >}}
 
 ```bash
-ocm sign cv \
-  --signer-spec ./sigstore-sign.yaml \
-  ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
+ocm sign cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 {{< /tab >}}
 {{< /tabs >}}
@@ -531,7 +580,7 @@ This walk-through uses **GitHub Actions** as the CI provider; other providers wo
 
 - The OCM CLI available in your CI image — see [How-To: Install the OCM CLI]({{< relref "ocm-cli-installation.md" >}}) or use the [pre-built OCM CLI container image]({{< relref "container-image-usage.md" >}}) directly as your job's runtime
 - A GitHub Actions workflow with permission to mint OIDC tokens (one line in the workflow file, shown below)
-- A component version reachable from the runner — either built in the same job, restored from a job artefact, or pushed to an OCI registry the runner can read/write
+- A component version reachable from the runner — either built in the same job, restored from a job artifact, or pushed to an OCI registry the runner can read/write
 
 <!-- markdownlint-disable-next-line MD024 -->
 ## Steps
@@ -556,9 +605,9 @@ Without this, the next step fails with `unable to mint OIDC token`.
 
 {{< step >}}
 
-### Use the same `.ocmconfig` and signer spec as the interactive flow
+### Use the same `.ocmconfig` as the interactive flow
 
-Nothing changes here — the credential consumer and signer spec from the interactive tab work as-is in CI:
+Nothing changes here: the credential consumer and the signer from the interactive tab work as-is in CI.
 
 ```yaml
 # .ocmconfig (excerpt)
@@ -571,11 +620,9 @@ configurations:
       signature: default
     credentials:
     - type: OIDCIdentityTokenProvider/v1alpha1
-```
-
-```yaml
-# sigstore-sign.yaml
-type: SigstoreSigningConfiguration/v1alpha1
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
 ```
 
 OCM auto-detects GitHub Actions' `ACTIONS_ID_TOKEN_REQUEST_TOKEN` environment variable and uses it instead of opening a browser. No code change between local interactive runs and CI runs.
@@ -603,7 +650,6 @@ jobs:
       - name: Sign component version
         run: |
           ocm sign cv \
-            --signer-spec ./sigstore-sign.yaml \
             ghcr.io/${{ github.repository_owner }}//github.com/acme.org/helloworld:1.0.0
 ```
 
@@ -629,7 +675,7 @@ jobs:
             -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -e ACTIONS_ID_TOKEN_REQUEST_URL \
             ghcr.io/open-component-model/cli:0.6.0 \
-            sign cv --signer-spec ./sigstore-sign.yaml \
+            sign cv \
               ghcr.io/${{ github.repository_owner }}//github.com/acme.org/helloworld:1.0.0
 ```
 
@@ -675,7 +721,7 @@ The mechanism is the same; only how the runner exposes the OIDC token differs. T
 
    ```bash
    SIGSTORE_ID_TOKEN=$(your-runner-fetches-OIDC-token) \
-     ocm sign cv --signer-spec ./sigstore-sign.yaml ...
+     ocm sign cv ...
    ```
 
 OCM checks `SIGSTORE_ID_TOKEN` first, then `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, then falls back to the credential provider configured in `.ocmconfig`. Whichever route the token takes, the signature, certificate, and Rekor entry are identical.

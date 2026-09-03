@@ -6,9 +6,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"maps"
-	"mime"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -19,7 +17,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
-	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -32,6 +29,7 @@ const (
 	FlagOutput           = "output"
 	FlagTransformer      = "transformer"
 	FlagExtractionPolicy = "extraction-policy"
+	FlagSBOM             = "sbom"
 )
 
 const (
@@ -54,10 +52,26 @@ func New() *cobra.Command {
 This command fetches a specific resource from the given OCM component version reference and stores it at the specified output location. 
 It supports optional transformation of the resource using a registered transformer plugin.
 
-If no transformer is specified, the resource is written directly in its original format. If the media type is known,
-the appropriate file extension will be added to the output file name if no output location is given.
+If no transformer is specified, the resource is written directly in its original format.
 
-Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
+Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
+
+When --output is not provided, the output filename is the resource name.
+
+With --sbom, the Software Bills of Materials describing the resource are downloaded instead of the
+resource itself. This is EXPERIMENTAL: what is discovered, how it is written out and the flags
+themselves may change in a future release. They are looked for in two ways, in order:
+
+  1. Another resource of the same component version declaring, through the
+     "ocm.software/artifact-references" label, that it describes the selected resource.
+  2. For a resource backed by an OCI artifact, SBOMs attached to that artifact by
+     "docker buildx build --sbom=true". SBOMs attached by other tooling, such as cosign
+     or the OCI referrers API, are not discovered.
+
+Every SBOM found is written to its own file in a directory, byte for byte as published, so digests
+and signatures over them still apply. The directory is --output, or the values of the resource
+identity joined by "-" when that is not given, so --identity name=image,architecture=amd64 writes
+into "image-amd64". The paths written are printed to standard output, one per line.`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
   ocm download resource ghcr.io/org/component:v1 --identity name=example
 
@@ -68,30 +82,35 @@ Resources can be accessed either locally or via a plugin that supports remote fe
   ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
 
   # Download a resource and apply a transformer
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer`,
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
+
+  # Download every SBOM describing a resource into a directory
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --sbom --output ./sboms
+
+  # Scan every SBOM found for a resource
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --sbom | xargs -n1 grype sbom:`,
 		RunE:              DownloadResource,
 		DisableAutoGenTag: true,
 	}
 
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
-	cmd.Flags().String(FlagOutput, "", "output location to download to. If no transformer is specified, and no "+
-		"format was discovered that can be written to a directory, the resource will be written to a file.")
+	cmd.Flags().String(FlagOutput, "", "output path. With --extraction-policy auto, extractable archives are "+
+		"extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are "+
+		"created automatically. If not provided, defaults to the resource name."+
+		"With --sbom this is a single file, and standard output is used when it is not given.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
+	cmd.Flags().Bool(FlagSBOM, false, "experimental: download the SBOMs describing the resource instead of the "+
+		"resource itself, writing every SBOM found to its own file in the output directory. What is discovered, "+
+		"how it is written out and this flag itself may change in a future release")
 	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
 		"policy to apply when extracting a resource. "+
 			"If set to 'disable', the resource will not be extracted, even if they could be. "+
 			"If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.")
 
-	return cmd
-}
+	cmd.MarkFlagsMutuallyExclusive(FlagSBOM, FlagTransformer)
+	cmd.MarkFlagsMutuallyExclusive(FlagSBOM, FlagExtractionPolicy)
 
-func init() {
-	if err := errors.Join(
-		mime.AddExtensionType(".tar.gz", layout.MediaTypeOCIImageLayoutTarGzipV1),
-		mime.AddExtensionType(".tar", layout.MediaTypeOCIImageLayoutTarV1),
-	); err != nil {
-		panic(err)
-	}
+	return cmd
 }
 
 func DownloadResource(cmd *cobra.Command, args []string) error {
@@ -120,6 +139,11 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting transformer flag failed: %w", err)
 	}
 
+	wantSBOM, err := cmd.Flags().GetBool(FlagSBOM)
+	if err != nil {
+		return fmt.Errorf("getting sbom flag failed: %w", err)
+	}
+
 	requestedIdentity, err := runtime.ParseIdentity(identityStr)
 	if err != nil {
 		return fmt.Errorf("parsing resource identity %q failed: %w", identityStr, err)
@@ -145,13 +169,14 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
 
-	var toDownload []descriptor.Resource
-	for _, resource := range desc.Component.Resources {
-		resourceIdentity := resource.ToIdentity()
-		if requestedIdentity.Match(resourceIdentity, runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
-			toDownload = append(toDownload, resource)
-			break
-		}
+	artifacts := make([]descriptor.Artifact, len(desc.Component.Resources))
+	for i := range desc.Component.Resources {
+		artifacts[i] = &desc.Component.Resources[i]
+	}
+	candidates := descriptor.FindArtifactsByIdentity(requestedIdentity, artifacts)
+	toDownload := make([]descriptor.Resource, 0, len(candidates))
+	for _, c := range candidates {
+		toDownload = append(toDownload, *c.(*descriptor.Resource))
 	}
 
 	if len(toDownload) != 1 {
@@ -159,12 +184,26 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	}
 	res := &toDownload[0]
 
+	if wantSBOM {
+		return downloadSBOMs(cmd, downloadContext{
+			pluginManager:   pluginManager,
+			credentialGraph: credentialGraph,
+			logger:          logger,
+			ref:             ref,
+			repo:            repo,
+			descriptor:      desc,
+			resource:        res,
+			output:          output,
+			identity:        requestedIdentity,
+		})
+	}
+
 	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, ref.Component, ref.Version, repo, res, requestedIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
 	}
 
-	finalOutputPath, err := processResourceOutput(output, res, data, requestedIdentity.String(), logger)
+	finalOutputPath, err := processResourceOutput(output, res, logger)
 	if err != nil {
 		return err
 	}
@@ -258,34 +297,15 @@ func isTar(mediaType string) bool {
 	}, mediaType) || strings.HasSuffix(mediaType, "+tar")
 }
 
-func processResourceOutput(output string, resource *descriptor.Resource, data blob.ReadOnlyBlob, identity string, logger *slog.Logger) (string, error) {
-	// Check for downloadName label
-	for _, label := range resource.Labels {
-		if label.Name == "downloadName" {
-			var downloadName string
-			if err := label.GetValue(&downloadName); err != nil {
-				return "", fmt.Errorf("interpreting downloadName label value failed: %w", err)
-			}
-			if downloadName = filepath.Clean(downloadName); filepath.IsAbs(downloadName) {
-				return "", fmt.Errorf("downloadName label value %q must not be an absolute path for security reasons", downloadName)
-			}
-			logger.Info("using downloadName label for file download location", slog.String("output", downloadName))
-			return downloadName, nil
-		}
+func processResourceOutput(output string, resource *descriptor.Resource, logger *slog.Logger) (string, error) {
+	if output != "" {
+		logger.Debug("using explicit --output", slog.String("output", output))
+		return output, nil
 	}
 
-	if output == "" {
-		output = identity
-		// if we have media type aware data, we try to append the file extension based on the media type
-		if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
-			if mediaType, known := mediaTypeAware.MediaType(); known {
-				if extensions, err := mime.ExtensionsByType(mediaType); err == nil && len(extensions) > 0 {
-					output += extensions[0]
-				}
-			}
-		}
-		logger.Warn("no output location specified, using resource identity as output file name", slog.String("output", output))
-	}
+	// Fallback: resource name.
+	output = resource.Name
+	logger.Debug("no output location specified, using resource name as output file name", slog.String("output", output))
 
 	return output, nil
 }

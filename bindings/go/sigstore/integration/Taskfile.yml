@@ -9,7 +9,11 @@ vars:
     sh: . ../signing/handler/internal/.env && echo "$COSIGN_VERSION"
   SCAFFOLDING_VERSION:
     sh: . ./.env && echo "$SCAFFOLDING_VERSION"
-  SIGSTORE_ENV_FILE: 'tmp/sigstore-env.sh'
+  # Absolute paths rooted via TASKFILE_DIR to make any call path (taskfiles in root,
+  # bindings/go, or this one) work identically.
+  SIGSTORE_ENV_FILE: '{{.TASKFILE_DIR}}/tmp/sigstore-env.sh'
+  SIGSTORE_ENV_DIR: '{{.TASKFILE_DIR}}/tmp/sigstore'
+  SIGSTORE_BIN_DIR: '{{.TASKFILE_DIR}}/tmp/bin'
   SIGSTORE_BRIDGE_PORT: '8080'
   SCAFFOLDING_URL: 'https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}'
 
@@ -62,6 +66,8 @@ tasks:
     requires:
       vars: [SCAFFOLDING_VERSION]
     preconditions:
+      - sh: sed --version 2>&1 | grep -q 'GNU sed'
+        msg: "GNU sed is required (macOS ships BSD sed). Install it: brew install gnu-sed, then add $(brew --prefix gnu-sed)/libexec/gnubin to PATH"
       - sh: '! docker ps -a --format "{{`{{.Names}}`}}" 2>/dev/null | grep -q "^registry.local$" || kind get clusters 2>/dev/null | grep -q "^kind$"'
         msg: |
           Orphaned 'registry.local' container found without a cluster. Clean up first:
@@ -85,6 +91,22 @@ tasks:
         cd /tmp && ./setup-kind.sh
       - |
         curl -fLo /tmp/setup-scaffolding-from-release.sh "{{.SCAFFOLDING_URL}}/setup-scaffolding-from-release.sh"
+        # Patch setup-scaffolding-from-release.sh for its untested Rekor v2 (tiles) path. Upstream
+        # ships it but pins Rekor v1 in CI, so these bugs never fire there. Same sed-patching
+        # technique as upstream's own actions/setup:
+        # https://github.com/sigstore/scaffolding/blob/main/actions/setup/action.yml#L114-L116
+        # Remove once upstream fixes the script.
+        #
+        # 1. First Rekor apply carries raw <placeholder> Secret values; base64 validation fails
+        #    under set -e. Make it non-fatal (the second apply, with real keys, is the one that counts).
+        # 2. rekor-system has no provisioning Job on tiles; `wait jobs --all` errors "no matching
+        #    resources". Guard with a no-job check (upstream added this guard only for fulcio).
+        # 3. Same guard for ctlog-system.
+        tmp=$(mktemp) && sed \
+          -e 's@kubectl apply -f "${REKOR}"@kubectl apply -f "${REKOR}" || true@' \
+          -e 's@kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@kubectl -n rekor-system get job 2>\&1 | grep '"'"'No resources found'"'"' || kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@' \
+          -e 's@kubectl wait --timeout 5m -n ctlog-system --for=condition=Complete jobs --all@kubectl -n ctlog-system get job 2>\&1 | grep '"'"'No resources found'"'"' || kubectl wait --timeout 5m -n ctlog-system --for=condition=Complete jobs --all@' \
+          /tmp/setup-scaffolding-from-release.sh > "$tmp" && mv "$tmp" /tmp/setup-scaffolding-from-release.sh
         chmod u+x /tmp/setup-scaffolding-from-release.sh
         cd /tmp && ./setup-scaffolding-from-release.sh --release-version {{.SCAFFOLDING_VERSION}}
       - |
@@ -107,13 +129,13 @@ tasks:
         lsof -ti :{{.SIGSTORE_BRIDGE_PORT}} >/dev/null 2>&1 || { echo "port-forward failed to start" >&2; exit 1; }
 
   scaffolding:env:
-    desc: "Extract sigstore env vars from running cluster into tmp/sigstore-env.sh"
+    desc: "Extract sigstore env vars from running cluster into the SIGSTORE_ENV_FILE"
     deps: [scaffolding:setup, scaffolding:bridge, cosign:install]
     cmds:
-      - mkdir -p tmp
-      - cmd: PATH="{{.ROOT_DIR}}/tmp/bin:$PATH" SIGSTORE_BRIDGE_PORT={{.SIGSTORE_BRIDGE_PORT}} bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
+      - mkdir -p "{{.TASKFILE_DIR}}/tmp" "{{.SIGSTORE_ENV_DIR}}"
+      - cmd: PATH="{{.SIGSTORE_BIN_DIR}}:$PATH" SIGSTORE_ENV_DIR="{{.SIGSTORE_ENV_DIR}}" SIGSTORE_BRIDGE_PORT={{.SIGSTORE_BRIDGE_PORT}} bash {{.TASKFILE_DIR}}/hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
         platforms: [darwin]
-      - cmd: PATH="{{.ROOT_DIR}}/tmp/bin:$PATH" bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
+      - cmd: PATH="{{.SIGSTORE_BIN_DIR}}:$PATH" SIGSTORE_ENV_DIR="{{.SIGSTORE_ENV_DIR}}" bash {{.TASKFILE_DIR}}/hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
         platforms: [linux]
 
   scaffolding:refresh:
@@ -148,7 +170,7 @@ tasks:
     requires:
       vars: [COSIGN_VERSION]
     vars:
-      BIN: '{{.ROOT_DIR}}/tmp/bin/cosign'
+      BIN: '{{.SIGSTORE_BIN_DIR}}/cosign'
     status:
       - 'cosign version 2>&1 | grep -qF "{{.COSIGN_VERSION}}"'
     cmds:
@@ -157,17 +179,22 @@ tasks:
         ARCH=$(uname -m)
         case "$ARCH" in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac
         URL="https://github.com/sigstore/cosign/releases/download/{{.COSIGN_VERSION}}/cosign-${OS}-${ARCH}"
-        mkdir -p "{{.ROOT_DIR}}/tmp/bin"
+        mkdir -p "{{.SIGSTORE_BIN_DIR}}"
         curl -fsSL "$URL" -o "{{.BIN}}"
         chmod +x "{{.BIN}}"
 
-  test/integration:
-    desc: "Run sigstore integration tests against scaffolding cluster"
+  setup:
+    desc: "Provision the sigstore scaffolding cluster and write the sourceable env file."
     deps: [scaffolding:env, cosign:install]
+
+  test/integration:
+    desc: "Run only the sigstore integration tests against a scaffolding cluster."
+    # Convenience target for local development
+    deps: [setup]
     set: [errexit]
     cmds:
       - |
-        export PATH="{{.ROOT_DIR}}/tmp/bin:$PATH"
+        export PATH="{{.SIGSTORE_BIN_DIR}}:$PATH"
         . {{.SIGSTORE_ENV_FILE}}
         go test -count=1 -run "{{.INTEGRATION_TEST_IDENTIFIER}}" -timeout 180s ./...
 
@@ -183,4 +210,4 @@ tasks:
         ignore_error: true
       - cmd: docker rm -f registry.local
         ignore_error: true
-      - rm -rf tmp
+      - rm -rf "{{.TASKFILE_DIR}}/tmp"

@@ -14,12 +14,12 @@
 //
 // # Release Filtering
 //
-// The OCM project is a monorepo with releases for multiple components. This package only
-// considers releases tagged with the "cli/v" prefix (e.g. "cli/v0.5.0"). It excludes:
+// The OCM project is a monorepo with unified releases. This package considers releases
+// tagged with the "v" prefix (e.g. "v0.13.0"). It excludes:
 //
 //   - Draft releases
 //   - GitHub pre-releases (prerelease flag set)
-//   - Semantic version pre-releases (e.g. "cli/v1.0.0-rc.1")
+//   - Semantic version pre-releases (e.g. "v1.0.0-rc.1")
 //
 // # Opt-Out
 //

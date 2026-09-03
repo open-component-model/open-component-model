@@ -16,6 +16,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/github/digest"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
+	"ocm.software/open-component-model/bindings/go/github/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -55,6 +56,16 @@ func ocmAccess(ref, commit string) *v1.GitHub {
 		Ref:     ref,
 		Commit:  commit,
 	}
+}
+
+// pinnedAccess decodes the access a processed resource carries. The processor
+// hands it back as the runtime.Raw every other access type uses, so tests
+// decode it instead of type-asserting.
+func pinnedAccess(t *testing.T, res *descriptor.Resource) *v1.GitHub {
+	t.Helper()
+	gitHub := &v1.GitHub{}
+	require.NoError(t, access.Scheme.Convert(res.Access, gitHub))
+	return gitHub
 }
 
 func ocmResource(ref, commit string) *descriptor.Resource {
@@ -124,10 +135,20 @@ func assertOCMArchive(t *testing.T, downloaded blob.ReadOnlyBlob) {
 	assert.True(t, readmeFound, "the archive must contain the repository's README.md under the commit-prefixed root")
 }
 
+func requireCIToken(t *testing.T) {
+	t.Helper()
+	if os.Getenv("CI") != "" && os.Getenv("GITHUB_TOKEN") == "" {
+		t.Fatal("GITHUB_TOKEN must be set in CI: without it these requests go out anonymous " +
+			"and are rate limited at 60 per hour for the runner's shared IP")
+	}
+}
+
 func Test_Integration_GitHub(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
+
+	requireCIToken(t)
 
 	t.Run("resource", func(t *testing.T) {
 		processor := digest.NewDigestProcessor()
@@ -137,8 +158,7 @@ func Test_Integration_GitHub(t *testing.T) {
 				processed, err := processor.ProcessResourceDigest(t.Context(), ocmResource(ocmRef, ocmCommit), testCredentials())
 				require.NoError(t, err)
 
-				pinned, ok := processed.Access.(*v1.GitHub)
-				require.True(t, ok, "processed access must be typed *v1.GitHub")
+				pinned := pinnedAccess(t, processed)
 				assert.Equal(t, ocmCommit, pinned.Commit, "the set commit must not be re-resolved from the ref")
 				assert.Equal(t, ocmRef, pinned.Ref, "the ref stays informational next to the pinned commit")
 				require.NotNil(t, processed.Digest)
@@ -194,8 +214,7 @@ func Test_Integration_GitHub(t *testing.T) {
 				processed, err := processor.ProcessResourceDigest(t.Context(), res, testCredentials())
 				require.NoError(t, err)
 
-				pinned, ok := processed.Access.(*v1.GitHub)
-				require.True(t, ok, "processed access must be typed *v1.GitHub")
+				pinned := pinnedAccess(t, processed)
 				// The ref is a published release tag, so the sha it resolves to
 				// is a stable assertion target.
 				assert.Equal(t, ocmCommit, pinned.Commit, "the ref must be resolved and pinned as a commit")

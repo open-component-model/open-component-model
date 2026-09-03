@@ -37,12 +37,21 @@ flowchart TB
     subgraph resources ["Resource Repositories"]
         OCI["OCI Resource Repository"]
         Helm["Helm Resource Repository"]
+        Wget["Wget Resource Repository"]
+        S3["S3 Resource Repository"]
+        GitHub["GitHub Resource Repository"]
     end
 
     CD -->|"OCIImage/v1 access"| OCI
     CD -->|"Helm/v1 access"| Helm
+    CD -->|"Wget/v1 access"| Wget
+    CD -->|"S3Bucket/v1 access"| S3
+    CD -->|"GitHub/v1 access"| GitHub
     OCI --> Registry["OCI Registry"]
     Helm --> HelmRepo["Helm Chart Repository"]
+    Wget --> HTTP["HTTP/HTTPS Server"]
+    S3 --> Bucket["S3 / S3-compatible Bucket"]
+    GitHub --> GitHubAPI["GitHub REST API"]
 ```
 
 ## How It Works
@@ -57,8 +66,8 @@ Each resource repository implements three operations:
 2. **Download**: fetch the resource content as a blob.
 3. **Upload**: push resource content to the backend (not all backends support this).
 
-OCM ships with built-in resource repositories for OCI artifacts and Helm charts. For the full technical details (
-supported access types, credential resolution rules, and per-repository capabilities), see
+OCM ships with a set of built-in resource repositories, and that set grows as new access types are added. For the
+current list, including the access types each one supports, its credential resolution rules, and its capabilities, see
 the [Resource Repositories Reference]({{< relref "docs/reference/resource-repositories.md" >}}).
 
 ## Extensibility Through Plugins

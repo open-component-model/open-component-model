@@ -190,8 +190,8 @@ ls -la /tmp/ocm-gpg-tutorial/keys/*.asc
 Create a new `.ocmconfig` in the current directory and copy the content below to it, to tell OCM where to find your keys.
 If you already have a `$HOME/.ocmconfig` file you can skip creating a new one and just add the credential configuration to your existing file.
 
-Also create a `signer-spec.yaml` file that tells OCM to use the GPG signing handler.
-Unlike RSA (which is the default when no signer spec is given), GPG requires an explicit signer spec.
+The same file also selects the GPG signing handler.
+Unlike RSA (the default when no signer is configured), GPG has to be selected explicitly.
 
 A detailed How-To guide is available here: [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}).
 
@@ -210,22 +210,23 @@ configurations:
           - type: GPGCredentials/v1alpha1
             privateKeyPGPFile: /tmp/ocm-gpg-tutorial/keys/signing-key.asc
             publicKeyPGPFile: /tmp/ocm-gpg-tutorial/keys/verify-key.asc
-EOF
-
-# Signer spec: selects the GPG signing handler
-cat > /tmp/ocm-gpg-tutorial/signer-spec.yaml << 'EOF'
-type: GPGSigningConfiguration/v1alpha1
+  - type: signing.config.ocm.software/v1alpha1
+    signer:
+      type: GPGSigningConfiguration/v1alpha1
+    verifier:
+      type: GPGSigningConfiguration/v1alpha1
 EOF
 ```
 
 > 👉 The `signature: default` name is used when you don't specify `--signature` on the command line.
 
-To pin a specific key when the keyring contains multiple keys, add `keyFingerprint` to the signer spec:
+To pin a specific key when the keyring contains multiple keys, add one line _keyFingerprint_ in the above config.
 
 ```yaml
-# signer-spec.yaml
-type: GPGSigningConfiguration/v1alpha1
-keyFingerprint: AABBCCDDEEFF00112233445566778899AABBCCDD
+  - type: signing.config.ocm.software/v1alpha1
+    signer:
+      type: GPGSigningConfiguration/v1alpha1
+      keyFingerprint: AABBCCDDEEFF00112233445566778899AABBCCDD   # added
 ```
 
 For more details, see [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}).
@@ -235,12 +236,11 @@ For more details, see [How-to: Configure Signing Credentials]({{< relref "config
 
 ### Sign the component version
 
-Sign your component with the GPG private key, passing the signer spec to select the GPG handler:
+Sign your component with the GPG private key. The GPG handler comes from the signing entry in the config:
 
 ```bash
 ocm sign cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 \
-  --config /tmp/ocm-gpg-tutorial/.ocmconfig \
-  --signer-spec /tmp/ocm-gpg-tutorial/signer-spec.yaml
+  --config /tmp/ocm-gpg-tutorial/.ocmconfig
 ```
 
 <details>
@@ -279,12 +279,11 @@ You should see a `signatures:` section with algorithm `GPG` and a PGP signature 
 
 ### Verify the signature
 
-Verify the signature using the public key, passing the same signer spec as the verifier spec:
+Verify the signature using the public key. The GPG handler comes from the `verifier` field of the same config entry:
 
 ```bash
 ocm verify cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 \
-  --config /tmp/ocm-gpg-tutorial/.ocmconfig \
-  --verifier-spec /tmp/ocm-gpg-tutorial/signer-spec.yaml
+  --config /tmp/ocm-gpg-tutorial/.ocmconfig
 ```
 
 <details>
@@ -311,7 +310,7 @@ Congratulations! You've successfully:
 - ✅ Generated a GPG key pair for signing and verification
 - ✅ Exported the keys to ASCII-armored files
 - ✅ Configured OCM to use your keys via `.ocmconfig`
-- ✅ Created a GPG signer spec to select the GPG handler
+- ✅ Configured the GPG signer and verifier to select the GPG handler
 - ✅ Signed a component version with your GPG private key
 - ✅ Verified the signature using the public key
 
@@ -324,14 +323,14 @@ Now that you understand the workflow, here are key practices for production envi
 - **Rotate keys periodically** — OCM supports multiple signatures per component version to ease key transitions.
 - **Distribute public keys securely** — Publish your public key to a key server (e.g. `keys.openpgp.org`) or share via a trusted channel.
 - **Verify before deployment** — Make signature verification a mandatory step in your deployment pipeline.
-- **Pin key fingerprints** — Use `keyFingerprint` in a signer spec to prevent accidentally signing or verifying with a different key from a shared keyring.
+- **Pin key fingerprints**: use `keyFingerprint` on the signer to constrain signing. Set it on the `verifier` to constrain verification.
 
 ## Check Your Understanding
 
-{{< details "Why do I need a signer spec for GPG but not for RSA?" >}}
-The OCM CLI defaults to the RSA handler when no `--signer-spec` is provided.
+{{< details "Why do I need to configure a signer for GPG but not for RSA?" >}}
+The OCM CLI defaults to the RSA handler when no signer is configured.
 GPG has a different configuration type (`GPGSigningConfiguration/v1alpha1`) that must be specified explicitly.
-A minimal signer spec file with just the type is enough to select the GPG handler.
+A signing entry carrying just that type is enough to select the GPG handler.
 {{< /details >}}
 
 {{< details "How is GPG signing different from RSA signing in OCM?" >}}

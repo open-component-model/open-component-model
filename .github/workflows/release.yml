@@ -57,12 +57,12 @@ jobs:
       controller_module_promotion_tag: ${{ steps.compute.outputs.controller_module_promotion_tag }}
       website_module_promotion_tag: ${{ steps.compute.outputs.website_module_promotion_tag }}
       changelog_artifact: changelog-${{ steps.compute.outputs.new_version }}
-      changelog_range: ${{ steps.compute.outputs.changelog_range }}
+      previous_tag: ${{ steps.compute.outputs.previous_tag }}
       set_latest: ${{ steps.latest.outputs.set_latest }}
       highest_previous_release_version: ${{ steps.latest.outputs.highest_previous_release_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
@@ -93,7 +93,7 @@ jobs:
             --tag "${{ steps.compute.outputs.new_tag }}" \
             -o "$RUNNER_TEMP/CHANGELOG.md" \
             --use-branch-tags \
-            ${{ steps.compute.outputs.changelog_range && format('-- "{0}"', steps.compute.outputs.changelog_range) || '--latest' }}
+            ${{ steps.compute.outputs.previous_tag && format('-- "{0}..HEAD"', steps.compute.outputs.previous_tag) || '--latest' }}
 
       - name: Summarize changelog
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
@@ -164,7 +164,7 @@ jobs:
           permission-contents: write
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
@@ -276,6 +276,7 @@ jobs:
       contents: read
       packages: write
       actions: read
+      id-token: write # forwarded to publish-components.yml for keyless Sigstore signing
     uses: ./.github/workflows/publish-components.yml
     with:
       version: ${{ needs.prepare.outputs.new_version }}
@@ -452,7 +453,7 @@ jobs:
           permission-contents: write
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
@@ -493,7 +494,7 @@ jobs:
         uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
 
       - name: Log in to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -532,7 +533,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.2
+          version: v4.2.3
 
       - name: Re-package final chart
         working-directory: ${{ env.CONTROLLER_PATH }}
@@ -599,21 +600,28 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest final chart
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.chart-digest.outputs.digest }}
           subject-name: ${{ env.CONTROLLER_CHART }}
           push-to-registry: true
 
-      - name: Get RC release notes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
-        run: |
-          set -euo pipefail
-          gh release view "${RC_TAG}" \
-            --repo "$GH_REPO" --json body --jq '.body' > "${{ runner.temp }}/CHANGELOG.md"
+      - name: Generate changelog with git-cliff
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
+        with:
+          version: 'v2.12.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          config: cliff.toml
+          args: |
+            --include-path "cli/**" \
+            --include-path "kubernetes/controller/**" \
+            --tag-pattern "^v\\d+\\.\\d+\\.\\d+(?:[-\\w\\.]+)?$" \
+            --ignore-tags "^v\\d+\\.\\d+\\.\\d+-rc\\.\\d+$" \
+            --tag "${{ needs.prepare.outputs.promotion_tag }}" \
+            -o "$RUNNER_TEMP/CHANGELOG.md" \
+            --use-branch-tags \
+            ${{ needs.prepare.outputs.previous_tag && format('-- "{0}..{1}"', needs.prepare.outputs.previous_tag, needs.prepare.outputs.new_tag) || '--latest' }}
 
       - name: Stage final assets
         env:
@@ -671,6 +679,7 @@ jobs:
       contents: read
       packages: write
       actions: read
+      id-token: write # forwarded to publish-components.yml for keyless Sigstore signing
     uses: ./.github/workflows/publish-components.yml
     with:
       version: ${{ needs.prepare.outputs.base_version }}
@@ -699,14 +708,14 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout main
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Docs PR targets main, so we check out main rather than the release branch.
           ref: main
           persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: cli/go.mod
           cache: false
@@ -720,7 +729,7 @@ jobs:
           git show "cli/v${VERSION}:cli/go.mod" > "${{ runner.temp }}/cli-go.mod"
 
       - name: Setup Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version-file: website/package.json
 

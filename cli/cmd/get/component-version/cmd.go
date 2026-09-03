@@ -66,20 +66,20 @@ If no type is given, the repository path is interpreted based on introspection a
 		Example: strings.TrimSpace(`
 Getting a single component version:
 
-get component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
-get cv ./path/to/ctf//ocm.software/ocmcli:0.23.0
-get cv ./path/to/ctf/component-descriptors/ocm.software/ocmcli:0.23.0
+get component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
+get cv ./path/to/ctf//ocm.software/cli:0.12.0
+get cv ./path/to/ctf/component-descriptors/ocm.software/cli:0.12.0
 
 Listing many component versions:
 
-get component-versions ghcr.io/open-component-model/ocm//ocm.software/ocmcli
-get cvs ghcr.io/open-component-model/ocm//ocm.software/ocmcli --output json
-get cvs ghcr.io/open-component-model/ocm//ocm.software/ocmcli -oyaml
+get component-versions ghcr.io/open-component-model//ocm.software/cli
+get cvs ghcr.io/open-component-model//ocm.software/cli --output json
+get cvs ghcr.io/open-component-model//ocm.software/cli -oyaml
 
 Specifying types and schemes:
 
-get cv ctf::github.com/locally-checked-out-repo//ocm.software/ocmcli:0.23.0
-get cvs oci::http://localhost:8080//ocm.software/ocmcli
+get cv ctf::github.com/locally-checked-out-repo//ocm.software/cli:0.12.0
+get cvs oci::http://localhost:8080//ocm.software/cli
 `),
 		RunE:              GetComponentVersion,
 		DisableAutoGenTag: true,

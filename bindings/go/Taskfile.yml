@@ -1,0 +1,30 @@
+version: '3'
+
+tasks:
+  build/plugins:
+    dir: plugin
+    cmds:
+      - go build -o tmp/testdata/test-plugin-component-version internal/testplugin-component-version/main.go
+      - go build -o tmp/testdata/test-plugin-resource internal/testplugin-resource/main.go
+      - go build -o tmp/testdata/test-plugin-input internal/testplugin-input/main.go
+      - go build -o tmp/testdata/test-plugin-digester internal/testplugin-digester/main.go
+      - go build -o tmp/testdata/test-plugin-blobtransformer internal/testplugin-blobtransformer/main.go
+      - go build -o tmp/testdata/test-plugin-signinghandler internal/testplugin-signinghandler/main.go
+      - go build -o tmp/testdata/test-plugin-component-lister internal/testplugin-component-lister/main.go
+      - go build -o tmp/testdata/test-plugin-credential-repository internal/testplugin-credential-repository/main.go
+
+  test:
+    deps: [build/plugins]
+    cmds:
+      - go test -short -skip "Integration" -count=1 $(go list ./... | grep -v /integration) {{.CLI_ARGS}}
+
+  test/integration:
+    set: [errexit]
+    vars:
+      SIGSTORE_INTEGRATION_DIR: '{{.TASKFILE_DIR}}/sigstore/integration'
+    cmds:
+      - task -d '{{.SIGSTORE_INTEGRATION_DIR}}' setup
+      - |
+        export PATH="{{.SIGSTORE_INTEGRATION_DIR}}/tmp/bin:$PATH"
+        . "{{.SIGSTORE_INTEGRATION_DIR}}/tmp/sigstore-env.sh"
+        go test -run "Integration" -count=1 ./...
