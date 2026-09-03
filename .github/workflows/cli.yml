@@ -33,8 +33,11 @@ permissions:
   contents: read
 
 env:
-  LOCATION: "bindings/go/cli"          # Folder containing the CLI source
-  MODULE_LOCATION: "bindings/go"        # Go module root (cli is a package inside it)
+  # GO_MODULE_ROOT is the Go module root that contains go.mod and go.sum.
+  # CLI_DIR is the CLI subtree inside it, used for sparse checkout and
+  # artifact staging.
+  GO_MODULE_ROOT: "bindings/go"
+  CLI_DIR: "bindings/go/cli"
   REGISTRY: ghcr.io                     # Target container registry
   # github.head_ref → branch name from the PR target (works only for pull_request events)
   # github.ref_name → branch or tag name for normal push/tag events
@@ -106,7 +109,7 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
-            ${{ env.MODULE_LOCATION }}
+            ${{ env.GO_MODULE_ROOT }}
           persist-credentials: 'false'
           ref: ${{ env.REF }}
 
@@ -140,8 +143,8 @@ jobs:
           retention-days: 1
           name: cli-target-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            ${{ env.LOCATION }}/tmp/bin/ocm-${{ matrix.goos }}-${{ matrix.goarch }}
-            ${{ env.LOCATION }}/tmp/resources/ocm-${{ matrix.goos }}-${{ matrix.goarch }}.yaml
+            ${{ env.CLI_DIR }}/tmp/bin/ocm-${{ matrix.goos }}-${{ matrix.goarch }}
+            ${{ env.CLI_DIR }}/tmp/resources/ocm-${{ matrix.goos }}-${{ matrix.goarch }}.yaml
 
   # Join job: gather every prebuilt binary, package the image and CTF without
   # recompiling, then attest and publish the artifacts the pipeline consumes.
@@ -162,7 +165,7 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
-            ${{ env.LOCATION }}
+            ${{ env.CLI_DIR }}
           persist-credentials: 'false'
           ref: ${{ env.REF }}
 
@@ -180,13 +183,13 @@ jobs:
       - name: Download target binaries
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          path: ${{ env.LOCATION }}/tmp
+          path: ${{ env.CLI_DIR }}/tmp
           pattern: cli-target-*
           merge-multiple: true
 
       # Artifact upload/download drops the executable bit; restore it before packaging
       - name: Make binaries executable
-        run: chmod +x ${{ env.LOCATION }}/tmp/bin/ocm-*
+        run: chmod +x ${{ env.CLI_DIR }}/tmp/bin/ocm-*
 
       - name: Assemble & Verify CTF
         env:
@@ -201,7 +204,7 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          subject-path: "${{ env.LOCATION }}/tmp/bin/ocm-*"
+          subject-path: "${{ env.CLI_DIR }}/tmp/bin/ocm-*"
 
       # Upload CLI binaries and OCI layout as build artifacts
       - name: Upload Artifacts
@@ -214,5 +217,5 @@ jobs:
           # Compiled CLI binaries
           # OCI layout files
           path: |
-            ${{ env.LOCATION }}/tmp/bin/ocm-*
-            ${{ env.LOCATION }}/tmp/oci/*
+            ${{ env.CLI_DIR }}/tmp/bin/ocm-*
+            ${{ env.CLI_DIR }}/tmp/oci/*
