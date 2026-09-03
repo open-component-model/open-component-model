@@ -119,6 +119,73 @@ crd:
   enable: true
   # -- Keep CRDs when uninstalling
   keep: true
+## Flux ExternalArtifact integration (RFC-0012)
+fluxExternalArtifacts:
+  # -- Enable the ExternalArtifact controller: produce a Flux ExternalArtifact
+  # (source.toolkit.fluxcd.io/v1) for every OCM Resource, packaging its content
+  # (local blobs or OCI artifacts carrying Helm charts / Kustomize overlays)
+  # into an in-cluster tar.gz consumable by the Flux kustomize/helm controllers.
+  #
+  # The ExternalArtifact CRD is owned by Flux and installed by its
+  # source-controller (whose kustomize/helm controllers are the consumers this
+  # feature depends on); this chart never installs it.
+  enable: false
+  # -- Filesystem path (inside the manager container) where packaged artifacts
+  # are stored.
+  storagePath: /data
+  # -- Address the artifact HTTP storage server binds to.
+  storageAddress: ":9091"
+  # -- In-cluster host[:port] the storage server is reachable at, used to build
+  # artifact URLs. Defaults to the manager Service DNS name when empty.
+  advertiseAddress: ""
+  # -- Maximum uncompressed size of a single artifact (Kubernetes Quantity).
+  # "0" disables the limit. Guards against decompression bombs / oversized
+  # resources.
+  maxArtifactSize: 10Mi
+  # -- Interval in minutes between garbage-collection sweeps that remove on-disk
+  # artifacts whose owning Resource no longer exists (closing the crash-window
+  # gap where a Resource is deleted while the controller is down).
+  gcIntervalMinutes: 60
+  ## Artifact storage volume. In production, use a persistent volume so that
+  ## artifacts survive pod restarts; the controller self-heals a wiped store on
+  ## the next reconcile, but persistence avoids serving 404s in the meantime.
+  storage:
+    # -- Volume type backing the artifact store: "emptyDir" (ephemeral, default),
+    # or "persistentVolumeClaim" (durable; required for HA with replicas > 1).
+    type: emptyDir
+    # -- Size of the emptyDir volume (only used when type=emptyDir).
+    emptyDirSize: 1Gi
+    ## persistentVolumeClaim settings (only used when type=persistentVolumeClaim).
+    persistentVolumeClaim:
+      # -- Use an existing PVC by name instead of creating one. When set, the
+      # chart does not create a PVC and the other pvc fields are ignored.
+      existingClaim: ""
+      # -- Access modes for the created PVC. For HA (replicas > 1) this MUST
+      # include ReadWriteMany so every replica can serve every artifact from the
+      # shared volume; ReadWriteOnce only supports a single replica.
+      accessModes:
+        - ReadWriteOnce
+      # -- Requested storage size for the created PVC.
+      size: 1Gi
+      # -- StorageClass for the created PVC. Empty uses the cluster default; for
+      # ReadWriteMany you typically need an RWX-capable class (e.g. nfs,
+      # cephfs, efs, azurefile).
+      storageClassName: ""
+  ## TLS for the artifact HTTP endpoint. When enabled, the server serves HTTPS
+  ## and the advertised URLs should use https (set advertiseAddress accordingly).
+  tls:
+    # -- Serve artifacts over HTTPS using the referenced secret.
+    enabled: false
+    # -- Name of a kubernetes.io/tls secret containing tls.crt and tls.key.
+    secretName: ""
+  ## NetworkPolicy restricting who may reach the artifact endpoint. Recommended
+  ## when the controller runs outside flux-system.
+  networkPolicy:
+    # -- Create a NetworkPolicy allowing only the Flux kustomize/helm
+    # controllers to reach the artifact port.
+    enable: false
+    # -- Namespace the Flux controllers run in (source of allowed ingress).
+    fluxNamespace: flux-system
 ## Webhook configuration
 webhook:
   # -- Enable conversion webhook for CRD version conversion

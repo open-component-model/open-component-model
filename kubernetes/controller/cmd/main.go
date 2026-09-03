@@ -26,6 +26,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmcredspec "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
@@ -47,6 +48,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/externalartifact"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/replication"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
@@ -73,6 +75,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
+	utilruntime.Must(sourcev1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 
 	dynamic.MustRegisterMetrics(metrics.Registry)
@@ -95,6 +98,15 @@ func main() {
 		resolverWorkerQueueLength int
 		resolverSubscriberBuffer  int
 		resolverCacheTTL          int
+
+		enableFluxExternalArtifactsAPI bool
+		externalArtifactStoragePath    string
+		externalArtifactStorageAddr    string
+		externalArtifactAdvertiseAddr  string
+		externalArtifactMaxSize        string
+		externalArtifactTLSCertFile    string
+		externalArtifactTLSKeyFile     string
+		externalArtifactGCInterval     int
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -124,6 +136,26 @@ func main() {
 			"Tune upward if the resolver_event_channel_drops_total metric is non-zero.")
 	flag.IntVar(&resolverCacheTTL, "resolver-cache-ttl", 30, //nolint:mnd // no magic number
 		"The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.")
+
+	flag.BoolVar(&enableFluxExternalArtifactsAPI, "enable-flux-external-artifacts-api", false,
+		"If set, the controller produces a Flux ExternalArtifact (source.toolkit.fluxcd.io/v1) for every OCM Resource, "+
+			"packaging the referenced content (local blobs or OCI artifacts carrying Helm charts / Kustomize overlays) "+
+			"into a tar.gz served in-cluster. Requires the ExternalArtifact CRD from the Flux source-controller.")
+	flag.StringVar(&externalArtifactStoragePath, "external-artifact-storage-path", "/data",
+		"Filesystem path under which packaged ExternalArtifact tar.gz files are stored. Only used with --enable-flux-external-artifacts-api.")
+	flag.StringVar(&externalArtifactStorageAddr, "external-artifact-storage-address", ":9091",
+		"The address the ExternalArtifact HTTP storage server binds to. Only used with --enable-flux-external-artifacts-api.")
+	flag.StringVar(&externalArtifactAdvertiseAddr, "external-artifact-storage-advertise-address", "",
+		"The in-cluster host[:port] at which the ExternalArtifact storage server is reachable (e.g. \"ocm-k8s-toolkit.ocm-system.svc.cluster.local.\"). "+
+			"This is used to build the artifact URLs reported in the ExternalArtifact status. Only used with --enable-flux-external-artifacts-api.")
+	flag.StringVar(&externalArtifactMaxSize, "external-artifact-max-size", defaultMaxResourceSize,
+		"Maximum uncompressed size of a single ExternalArtifact as a Kubernetes resource.Quantity (e.g. \"2Mi\", \"512Ki\"). \"0\" disables the limit. Guards against decompression bombs and oversized resources.")
+	flag.StringVar(&externalArtifactTLSCertFile, "external-artifact-tls-cert-file", "",
+		"Path to a PEM certificate for serving artifacts over HTTPS. When set together with --external-artifact-tls-key-file, the storage server uses TLS.")
+	flag.StringVar(&externalArtifactTLSKeyFile, "external-artifact-tls-key-file", "",
+		"Path to the PEM private key matching --external-artifact-tls-cert-file.")
+	flag.IntVar(&externalArtifactGCInterval, "external-artifact-gc-interval", 60, //nolint:mnd // default minutes
+		"Interval in minutes between garbage-collection sweeps that remove on-disk artifacts whose owning Resource no longer exists (closing the crash-window gap where a Resource is deleted while the controller is down). Only used with --enable-flux-external-artifacts-api.")
 
 	opts := zap.Options{
 		Development: true,
@@ -361,6 +393,92 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Deployer")
 		os.Exit(1)
 	}
+
+	if enableFluxExternalArtifactsAPI {
+		// Fail fast with an actionable message if the Flux-owned CRD is missing,
+		// rather than letting the manager crash when it establishes the watch.
+		if err := externalartifact.CheckCRDInstalled(ctx, mgr.GetConfig()); err != nil {
+			setupLog.Error(err, "cannot enable flux external artifacts API")
+			os.Exit(1)
+		}
+
+		advertiseAddr := externalArtifactAdvertiseAddr
+		if advertiseAddr == "" {
+			// Fall back to the bind address host when no explicit in-cluster
+			// address is provided (useful for local testing).
+			advertiseAddr = externalArtifactStorageAddr
+		}
+
+		maxArtifactQuantity, err := apiresource.ParseQuantity(externalArtifactMaxSize)
+		if err != nil {
+			setupLog.Error(err, "invalid flag value", "flag", "external-artifact-max-size", "value", externalArtifactMaxSize)
+			os.Exit(1)
+		}
+		maxArtifactSize := maxArtifactQuantity.Value()
+		if maxArtifactSize < 0 {
+			setupLog.Error(nil, "invalid flag value", "flag", "external-artifact-max-size", "value", externalArtifactMaxSize, "reason", "must be >= 0")
+			os.Exit(1)
+		}
+
+		eaMetrics := externalartifact.MustRegisterMetrics(metrics.Registry)
+		storage, err := externalartifact.NewStorage(externalArtifactStoragePath, advertiseAddr,
+			externalartifact.WithMaxArtifactSize(maxArtifactSize),
+			externalartifact.WithMetrics(eaMetrics),
+		)
+		if err != nil {
+			setupLog.Error(err, "unable to create external artifact storage")
+			os.Exit(1)
+		}
+
+		var serverOpts []externalartifact.StorageServerOption
+		if externalArtifactTLSCertFile != "" && externalArtifactTLSKeyFile != "" {
+			serverOpts = append(serverOpts, externalartifact.WithTLS(externalArtifactTLSCertFile, externalArtifactTLSKeyFile))
+		}
+		artifactServer := externalartifact.NewStorageServer(externalArtifactStorageAddr, storage, setupLog, serverOpts...)
+		if err := mgr.Add(artifactServer); err != nil {
+			setupLog.Error(err, "unable to add external artifact storage server")
+			os.Exit(1)
+		}
+		// Mark the pod NotReady if the artifact HTTP server stops accepting
+		// connections, so Flux is not routed to a replica that returns 404s.
+		if err := mgr.AddReadyzCheck("external-artifact-storage", artifactServer.ReadyzCheck()); err != nil {
+			setupLog.Error(err, "unable to add external artifact storage readiness check")
+			os.Exit(1)
+		}
+
+		if err = (&externalartifact.Reconciler{
+			BaseReconciler: &ocm.BaseReconciler{
+				Client:        mgr.GetClient(),
+				Scheme:        mgr.GetScheme(),
+				EventRecorder: eventsRecorder,
+			},
+			Resolver:             resolver,
+			PluginManager:        pm,
+			Storage:              storage,
+			MaxResourceSizeBytes: maxArtifactSize,
+		}).SetupWithManager(ctx, mgr, resourceConcurrency); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ExternalArtifact")
+			os.Exit(1)
+		}
+
+		// Periodically reclaim artifacts orphaned while the controller was down
+		// (a Resource deleted during downtime never runs its finalizer). Leader-
+		// elected so replicas on a shared volume do not race on removals.
+		gcInterval := time.Minute * time.Duration(externalArtifactGCInterval)
+		if err := mgr.Add(externalartifact.NewGarbageCollector(mgr.GetClient(), storage, gcInterval, eaMetrics)); err != nil {
+			setupLog.Error(err, "unable to add external artifact garbage collector")
+			os.Exit(1)
+		}
+
+		setupLog.Info("flux external artifacts API enabled",
+			"storagePath", externalArtifactStoragePath,
+			"storageAddress", externalArtifactStorageAddr,
+			"advertiseAddress", advertiseAddr,
+			"maxArtifactSize", maxArtifactSize,
+			"gcIntervalMinutes", externalArtifactGCInterval,
+			"tls", externalArtifactTLSCertFile != "" && externalArtifactTLSKeyFile != "")
+	}
+
 	if err = (&v1alpha1.Component{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Component")
 		os.Exit(1)

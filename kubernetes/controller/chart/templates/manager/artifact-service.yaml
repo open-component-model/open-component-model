@@ -1,0 +1,26 @@
+{{- if .Values.fluxExternalArtifacts.enable }}
+{{- $port := regexFind ":[0-9]+$" .Values.fluxExternalArtifacts.storageAddress | trimPrefix ":" | int }}
+apiVersion: v1
+kind: Service
+metadata:
+    labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    # Must match the host the manager advertises in ExternalArtifact URLs, i.e.
+    # <controller-manager>.<namespace>.svc.cluster.local. — so the name is the
+    # same "controller-manager" suffix the Deployment uses.
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+    namespace: {{ .Release.Namespace }}
+spec:
+    ports:
+        - name: artifacts
+          port: {{ $port }}
+          protocol: TCP
+          targetPort: artifacts
+    selector:
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        control-plane: controller-manager
+{{- end }}

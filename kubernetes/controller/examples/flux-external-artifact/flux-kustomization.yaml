@@ -1,0 +1,20 @@
+# A Flux Kustomization consuming the ExternalArtifact generated for the OCM
+# Resource "kustomize-simple-resource-rgd". The kustomize-controller fetches the
+# tar.gz from the ExternalArtifact's .status.artifact.url, verifies its digest,
+# and applies the contents.
+#
+# Requires the ExternalArtifact feature gate on kustomize-controller:
+#   --feature-gates=ExternalArtifact=true
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kustomize-simple
+  namespace: default
+spec:
+  interval: 10m
+  sourceRef:
+    # The ExternalArtifact shares the name/namespace of the OCM Resource.
+    kind: ExternalArtifact
+    name: kustomize-simple-resource-rgd
+  path: "./"
+  prune: true

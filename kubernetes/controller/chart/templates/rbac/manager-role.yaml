@@ -64,3 +64,23 @@ rules:
       - get
       - patch
       - update
+  - apiGroups:
+      - source.toolkit.fluxcd.io
+    resources:
+      - externalartifacts
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - source.toolkit.fluxcd.io
+    resources:
+      - externalartifacts/status
+    verbs:
+      - get
+      - patch
+      - update

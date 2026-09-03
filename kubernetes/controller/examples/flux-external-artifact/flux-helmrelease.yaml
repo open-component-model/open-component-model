@@ -1,0 +1,25 @@
+# A Flux HelmRelease consuming the ExternalArtifact generated for an OCM
+# Resource that carries a Helm chart (a local blob or an OCI artifact). The
+# helm-controller fetches the chart tar.gz from the ExternalArtifact's
+# .status.artifact.url via chartRef.
+#
+# Requires the ExternalArtifact feature gate on helm-controller:
+#   --feature-gates=ExternalArtifact=true
+#
+# This assumes an OCM Resource named "helm-simple-resource" exists (created the
+# same way as in bootstrap.yaml, but referencing a helmChart resource) and is
+# Ready, so the controller has produced its ExternalArtifact.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 10m
+  releaseName: podinfo
+  chartRef:
+    # The ExternalArtifact shares the name/namespace of the OCM Resource.
+    kind: ExternalArtifact
+    name: helm-simple-resource
+  values:
+    replicaCount: 2
