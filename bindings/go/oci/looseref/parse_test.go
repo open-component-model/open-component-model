@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 )
 
@@ -200,6 +201,13 @@ func TestParseReferenceUglies(t *testing.T) {
 			require.Errorf(t, err, "ParseReference() expected an error, but got reg=%v,repo=%v,ref=%v", ref.Registry, ref.Repository, ref.Reference)
 		})
 	}
+}
+
+func TestParseReferenceUppercaseRepositoryHint(t *testing.T) {
+	_, err := ParseReference("ghcr.io/UpperCaseUser/example")
+	require.Error(t, err)
+	require.ErrorIs(t, err, errdef.ErrInvalidReference)
+	require.ErrorContains(t, err, "repository names must be lowercase")
 }
 
 func TestLooseReferenceString(t *testing.T) {
