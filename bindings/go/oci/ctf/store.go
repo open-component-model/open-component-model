@@ -25,6 +25,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
+	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
+	"encoding/json"
 )
 
 // wellKnownRegistryCTF is the well-known registry for CTF archives that is set by default when resolving references.
@@ -506,6 +508,173 @@ func (s *repository) untag(ctx context.Context, reference string) error {
 	}
 	if err := s.archive.SetIndex(ctx, idx); err != nil {
 		return fmt.Errorf("unable to persist index after tag removal: %w", err)
+	}
+	return nil
+}
+
+var _ content.Deleter = (*repository)(nil)
+
+// Delete removes an artifact from the CTF archive repository.
+// It removes any tag pointing to the artifact, and cleans up any referrers index pointing to it.
+func (s *repository) Delete(ctx context.Context, target ociImageSpecV1.Descriptor) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx, err := s.archive.GetIndex(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to get index: %w", err)
+	}
+
+	// 1. Remove all tags in our repo for this artifact digest
+	arts := idx.GetArtifacts()
+	for _, art := range arts {
+		if art.Repository == s.repo && art.Digest == target.Digest.String() {
+			if art.Tag != "" {
+				if err := idx.RemoveTag(s.repo, art.Tag); err != nil && !errors.Is(err, v1.ErrArtifactNotFound) {
+					return fmt.Errorf("unable to remove tag %q: %w", art.Tag, err)
+				}
+			}
+		}
+	}
+
+	// 2. Clean up any referrers index pointing to this as a referrer
+	// Fetch the artifact manifest to see if it had a subject
+	b, err := s.archive.GetBlob(ctx, target.Digest.String())
+	if err == nil {
+		rData, openErr := b.ReadCloser()
+		if openErr == nil {
+			manifestJSON, errAll := io.ReadAll(rData)
+			_ = rData.Close()
+			if errAll == nil {
+				referrer, subject, errRef := referrerFromManifest(target, manifestJSON)
+				if errRef == nil && subject != nil {
+					if err := s.removeReferrer(ctx, idx, *subject, referrer); err != nil {
+						return fmt.Errorf("unable to remove referrer: %w", err)
+					}
+				}
+			}
+		}
+	}
+
+	if err := s.archive.SetIndex(ctx, idx); err != nil {
+		return fmt.Errorf("unable to persist index after deletion: %w", err)
+	}
+
+	return nil
+}
+
+func (s *repository) Prune(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx, err := s.archive.GetIndex(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to get index: %w", err)
+	}
+
+	artifacts := idx.GetArtifacts()
+	reachable := make(map[digest.Digest]bool)
+
+	// Mark the component index itself and empty JSON as reachable just in case
+	reachable[indexv1.Descriptor.Digest] = true
+	reachable[ociImageSpecV1.DescriptorEmptyJSON.Digest] = true
+
+	for _, art := range artifacts {
+		desc := ociImageSpecV1.Descriptor{
+			MediaType: art.MediaType,
+			Digest:    digest.Digest(art.Digest),
+		}
+		if err := s.collectReachableDigests(ctx, desc, reachable); err != nil {
+			return fmt.Errorf("failed to collect reachable digests: %w", err)
+		}
+	}
+
+	allBlobs, err := s.archive.ListBlobs(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list blobs: %w", err)
+	}
+
+	for _, bDigest := range allBlobs {
+		dig := digest.Digest(bDigest)
+		if !reachable[dig] {
+			if err := s.archive.DeleteBlob(ctx, bDigest); err != nil {
+				slog.DebugContext(ctx, "failed to delete orphaned blob", "digest", bDigest, "error", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (s *repository) collectReachableDigests(ctx context.Context, start ociImageSpecV1.Descriptor, reachable map[digest.Digest]bool) error {
+	if start.Digest == "" {
+		return nil
+	}
+	if reachable[start.Digest] {
+		return nil
+	}
+	reachable[start.Digest] = true
+
+	switch start.MediaType {
+	case ociImageSpecV1.MediaTypeImageManifest, "application/vnd.docker.distribution.manifest.v2+json":
+		b, err := s.archive.GetBlob(ctx, start.Digest.String())
+		if err != nil {
+			return nil // Best effort
+		}
+		rc, err := b.ReadCloser()
+		if err != nil {
+			return nil
+		}
+		defer rc.Close()
+		var manifest ociImageSpecV1.Manifest
+		if err := json.NewDecoder(rc).Decode(&manifest); err == nil {
+			if manifest.Config.Digest != "" {
+				cfgDesc := manifest.Config
+				if cfgDesc.MediaType == "" {
+					cfgDesc.MediaType = ociImageSpecV1.MediaTypeImageConfig
+				}
+				if err := s.collectReachableDigests(ctx, cfgDesc, reachable); err != nil {
+					return err
+				}
+			}
+			for _, layer := range manifest.Layers {
+				if layer.Digest != "" {
+					if err := s.collectReachableDigests(ctx, layer, reachable); err != nil {
+						return err
+					}
+				}
+			}
+			if manifest.Subject != nil && manifest.Subject.Digest != "" {
+				if err := s.collectReachableDigests(ctx, *manifest.Subject, reachable); err != nil {
+					return err
+				}
+			}
+		}
+	case ociImageSpecV1.MediaTypeImageIndex, "application/vnd.docker.distribution.manifest.list.v2+json":
+		b, err := s.archive.GetBlob(ctx, start.Digest.String())
+		if err != nil {
+			return nil
+		}
+		rc, err := b.ReadCloser()
+		if err != nil {
+			return nil
+		}
+		defer rc.Close()
+		var idx ociImageSpecV1.Index
+		if err := json.NewDecoder(rc).Decode(&idx); err == nil {
+			for _, manifest := range idx.Manifests {
+				if manifest.Digest != "" {
+					if err := s.collectReachableDigests(ctx, manifest, reachable); err != nil {
+						return err
+					}
+				}
+			}
+			if idx.Subject != nil && idx.Subject.Digest != "" {
+				if err := s.collectReachableDigests(ctx, *idx.Subject, reachable); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	return nil
 }
