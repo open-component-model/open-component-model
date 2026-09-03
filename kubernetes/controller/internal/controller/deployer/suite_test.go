@@ -43,6 +43,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
 
 // +kubebuilder:scaffold:imports
@@ -175,7 +176,7 @@ var _ = BeforeSuite(func() {
 	Expect(k8sManager.Add(workerPool)).To(Succeed())
 
 	resolutionLogger := logf.Log.WithName("resolution")
-	resolver := resolution.NewResolver(&resolutionLogger, workerPool, pm)
+	resolver := resolution.NewResolver(&resolutionLogger, workerPool)
 
 	downloadCache = cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_test_object_cache", 1_000, func(k string, v []*unstructured.Unstructured) {
 		GinkgoLogr.Info("DownloadCache eviction", "key", k, "value", fmt.Sprintf("%d objects", len(v)))
@@ -183,13 +184,13 @@ var _ = BeforeSuite(func() {
 
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:        k8sManager.GetClient(),
-			Scheme:        testEnv.Scheme,
-			EventRecorder: recorder,
+			Client:           k8sManager.GetClient(),
+			Scheme:           testEnv.Scheme,
+			EventRecorder:    recorder,
+			NewPluginManager: test.StaticPluginManager(pm),
 		},
 		DownloadCache:        downloadCache,
 		Resolver:             resolver,
-		PluginManager:        pm,
 		MaxResourceSizeBytes: 2 * 1024 * 1024,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 

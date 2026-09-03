@@ -192,9 +192,15 @@ func (r *Reconciler) validate(ctx context.Context, repoSpec runtime.Typed, confi
 		return fmt.Errorf("failed to load configurations: %w", err)
 	}
 
+	pm, err := r.PluginManagerFor(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create plugin manager: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
 		RepositorySpec: repoSpec,
 		Configuration:  cfg,
+		PluginManager:  pm,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create repository: %w", err)
