@@ -1,6 +1,10 @@
 package v1
 
 import (
+	"errors"
+	"fmt"
+	"net/url"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -42,4 +46,19 @@ type Wget struct {
 
 func (t *Wget) String() string {
 	return t.URL
+}
+
+// Validate verifies that the URL of the Wget input is set and uses a supported scheme.
+func (t *Wget) Validate() error {
+	if t.URL == "" {
+		return errors.New("url is required")
+	}
+	parsed, err := url.Parse(t.URL)
+	if err != nil {
+		return fmt.Errorf("invalid url %q: %w", t.URL, err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("url must use the http or https scheme, got %q", parsed.Scheme)
+	}
+	return nil
 }
