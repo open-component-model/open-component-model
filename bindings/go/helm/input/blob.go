@@ -2,7 +2,6 @@ package input
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 
@@ -73,7 +72,7 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 		opt(options)
 	}
 
-	if err := validateInputSpec(helmSpec); err != nil {
+	if err := helmSpec.Validate(); err != nil {
 		return nil, nil, fmt.Errorf("invalid helm input spec: %w", err)
 	}
 
@@ -106,20 +105,6 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 	}
 
 	return result.Blob, chart, nil
-}
-
-func validateInputSpec(helmSpec v1.Helm) error {
-	var err error
-
-	if helmSpec.Path == "" && helmSpec.HelmRepository == "" {
-		err = errors.New("either path or helmRepository must be specified")
-	}
-
-	if helmSpec.Path != "" && helmSpec.HelmRepository != "" {
-		err = errors.New("only one of path or helmRepository can be specified")
-	}
-
-	return err
 }
 
 func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error) {
