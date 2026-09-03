@@ -118,6 +118,11 @@ spec:
       name:            component.name
       version:         component.version
 
+  # Optional. What to do when a reachable reference cannot be resolved from the
+  # root's repository. `Fail` (default) aborts the reconcile. `Ignore` emits the
+  # components that did resolve and records the rest in `status.unresolved`.
+  onResolutionError: Fail
+
 status:
   # ... shared status fields (observedGeneration, effectiveOCMConfig,
   # standard Ready/Reconciling/Stalled conditions) omitted; see other CRDs.
@@ -134,6 +139,13 @@ status:
       resourceVersion: 2.8.1
       name: ghcr.io/example/releasechannel/flux
       version: 2.8.1
+
+  # Controller-owned. Only populated under `onResolutionError: Ignore`.
+  unresolved:
+    - component: ghcr.io/example/releasechannel/notification-controller
+      version: 1.4.0
+      reason: GetComponentVersionFailed
+      message: 'not found in repository ghcr.io/example'
 ```
 
 ### Spec reasoning
@@ -142,6 +154,11 @@ status:
 
 `Component` already resolves `(Repository, semver)` into a `{repositorySpec, component, version, digest}`. `Discovery`
 watches that Component.
+
+The resolved `{component, version}` in that Component's `status.component` is the **root** of the discovery graph, and
+its `repositorySpec` and `effectiveOCMConfig` scope the entire traversal: every transitively reachable component is
+resolved from that one repository with those credentials. The descriptors' `repositoryContexts` are not consulted, so a
+reference that is only resolvable elsewhere does not resolve.
 
 #### Three selectors (reference / component / resource)
 
@@ -265,16 +282,19 @@ only paper over gaps in the event source.
 
 ### Status reasoning
 
-#### `discovery *apiextensionsv1.JSON`: schemaless by construction
+#### `discovery []map[string]apiextensionsv1.JSON`: invariant outer shape, free-form values
 
 ```go
-// +kubebuilder:validation:XPreserveUnknownFields
-// +kubebuilder:validation:Schemaless
 // +optional
-Discovery *apiextensionsv1.JSON `json:"discovery,omitempty"`
+Discovery []map[string]apiextensionsv1.JSON `json:"discovery,omitempty"`
 ```
 
-Payload shape is a function of `spec`. Enumerating the shapes:
+The payload is always a list of objects whose values are arbitrary JSON. Keeping the outer shape fixed lets every
+consumer use one parser regardless of `spec`, and keeps server-side shape validation (`array` of `object`) that a
+fully schemaless field loses. The cost is that `extract.expression` must return a list of objects rather than any
+JSON type.
+
+Value shape is a function of `spec`. Enumerating the shapes:
 
 - No selectors, no extract: JSON *array* of surviving descriptors (always an array, even when there is exactly
   one, consumers can iterate uniformly).
@@ -284,7 +304,36 @@ Payload shape is a function of `spec`. Enumerating the shapes:
 - `resourceSelector`: array of descriptors with `.component.resources` filtered in place.
 - `extract.byResources`: flat array of per-resource records.
 - `extract.byComponents`: flat array of per-component records.
-- `extract.expression`: verbatim return value of the CEL expression (any JSON type).
+- `extract.expression`: the CEL expression's return value, which must be a list of objects. Any other return
+  type is `ExtractFailed`.
+
+#### `unresolved` and `spec.onResolutionError`
+
+A reference can be reachable in the graph and still not resolve: it dangles, the credentials in the root's
+`effectiveOCMConfig` do not cover it, or the target was transferred and is only reachable through a
+`repositoryContexts` entry the controller does not consult (see [`componentRef`](#componentref)). On a large umbrella
+graph this stops being an edge case.
+
+`spec.onResolutionError` decides the contract:
+
+- `Fail` (default): the reconcile aborts, `status.discovery` is left untouched, and `Ready=False` /
+  `ResolutionFailed` carries the first failure. Fail-closed is the default because a silently short list that a
+  downstream controller turns into deployments is worse than a loud error.
+- `Ignore`: the components that did resolve are emitted, and every failure is recorded in `status.unresolved`.
+  `Ready=True` / `PartiallyResolved` with the count in the message.
+
+```go
+type UnresolvedReference struct {
+	Component string `json:"component"`
+	Version   string `json:"version"`
+	Reason    string `json:"reason"`
+	Message   string `json:"message,omitempty"`
+}
+```
+
+`unresolved` is a typed, controller-owned sibling rather than entries inside `discovery`. Mixing the two would
+collide with user-chosen `extract` field names, and a failed node has no descriptor, so its record would carry no
+user fields at all and every consumer iterating `discovery` would have to defend against half-records.
 
 #### etcd size
 
@@ -307,7 +356,12 @@ downstream consumers and generating unnecessary etcd writes.
 Discovery uses the shared condition types and reasons, plus Discovery-specific reasons:
 
 - `SelectorFailed`: a `spec` selector failed to compile or evaluate.
-- `ExtractFailed`: a `spec.extract` expression failed to compile or evaluate.
+- `ExtractFailed`: a `spec.extract` expression failed to compile or evaluate, or returned a type other than a list
+  of objects.
+- `ResolutionFailed`: a reachable reference did not resolve and `spec.onResolutionError` is `Fail`.
+- `PartiallyResolved`: emitted on `Ready=True` when `spec.onResolutionError` is `Ignore` and `status.unresolved` is
+  non-empty.
+- `PayloadTooLarge`: the status write exceeded the etcd limit (see [etcd size](#etcd-size)).
 - `NoReferencesMatched` and `NoComponentsMatched`: emitted on `Ready=True` when a selector filters the
   descriptor set to empty. In that state `status.discovery` is set to an explicit empty JSON array (`[]`) so
   consumers can distinguish "query ran and matched nothing" from "payload never computed". Distinct reasons per
@@ -331,14 +385,14 @@ Pros:
 
 - One CRD, three filter kinds, one expression language.
 - Uses CEL, already in the module.
-- Schemaless status matches the intrinsically-variable output shape.
+- Invariant `[]object` status shape with free-form values: one parser for every `spec`.
 - Selector shape is reusable for `ResourceID.BySelector`.
 - Watch-driven; no additional polling load.
 
 Cons:
 
 - Larger schema and larger conceptual surface than a specialised, single-shape CRD.
-- Schemaless status loses server-side field validation on the payload; consumers must parse defensively.
+- Status values stay unvalidated server-side; consumers must parse them defensively.
 - Two ways to write some queries (e.g. semver via CEL vs. equality via `matchLabels`).
 - Etcd size risk on unprojected large descriptors; mitigation is documentation-plus-`Extract`, not a hard guard.
 
@@ -367,13 +421,14 @@ Cons:
   compose it with multiple Discovery CRs or an umbrella-of-umbrellas Component. We might think of a
   `componentRefs []ComponentRef` in the future.
 - Per-descriptor digest verification: Recompute each transitively-resolved descriptor's digest and compare
-  against the digest asserted by its parent reference; surface a per-entry integrity signal on `status.discovery`.
+  against the digest asserted by its parent reference; a mismatch is a resolution failure and lands in
+  `status.unresolved` with a `DigestMismatch` reason, so no room needs to be reserved in `status.discovery`.
   Not shipped: recomputing digests on every reconcile is expensive on large graphs. Open question whether to enable
   this later as an opt-in flag.
 
 ## Conclusion
 
 Discovery ships as one CRD that projects a filtered slice of a component's transitive reference graph into a
-schemaless `status.discovery` payload. It targets OpenControlPlane's shape, descopes large-descriptor navigation,
+`status.discovery` payload of free-form records. It targets OpenControlPlane's shape, descopes large-descriptor navigation,
 and leaves ODG's synchronous-access needs out of scope. Caching is delegated to the component descriptor cache
 landing upstream in PR #2833.
