@@ -67,7 +67,7 @@ steps in a single kind.
 ## Decision Outcome
 
 Chosen option: **a dedicated `Discovery` CRD** with three selectors that filter the transitively reachable
-descriptors and an optional `Extract` stage of CEL expressions that build the records in `status.discovery` from
+descriptors and an optional `Extract` stage of CEL expressions that build the records in `status.extracted` from
 those descriptors and their resources. Targets OpenControlPlane's shape. Descopes the large-descriptor navigation case
 (see [etcd size](#etcd-size)) and leaves ODG's synchronous-access need out of scope.
 
@@ -127,8 +127,8 @@ status:
   # ... shared status fields (observedGeneration, effectiveOCMConfig,
   # standard Ready/Reconciling/Stalled conditions) omitted; see other CRDs.
 
-  # Schemaless. Shape depends on spec, see Status reasoning below.
-  discovery:
+  # Written only when `spec.extract` is set. Free-form records.
+  extracted:
     - imageRef: ghcr.io/fluxcd/flux:2.8.1
       resourceName: flux
       resourceVersion: 2.8.1
@@ -139,6 +139,18 @@ status:
       resourceVersion: 2.8.1
       name: ghcr.io/example/releasechannel/flux
       version: 2.8.1
+
+  # Written only when `spec.extract` is absent. Raw v2 descriptors.
+  # components:
+  #   - meta: {schemaVersion: v2}
+  #     component:
+  #       name: ghcr.io/example/releasechannel/flux
+  #       version: 2.8.1
+  #       resources:
+  #         - name: flux
+  #           version: 2.8.1
+  #           type: ociArtifact
+  #           access: {type: ociArtifact, imageReference: ghcr.io/fluxcd/flux:2.8.1}
 
   # Controller-owned. Only populated under `onResolutionError: Ignore`.
   unresolved:
@@ -241,7 +253,7 @@ The field was omitted as its semantics are redundant with `expression`. Addition
 #### `Extract` and its three modes
 
 `Extract` is the output-shaping stage: it runs *after* filtering, on the already-narrowed descriptor list, and produces
-the final payload landing in `status.discovery`. Three mutually exclusive modes cover the three join shapes a graph
+the final payload landing in `status.extracted`. Three mutually exclusive modes cover the three join shapes a graph
 query produces, enforced by CRD-level validation:
 
 - `byResources: {field: expr}`: flat map, evaluated once per surviving resource of each surviving component.
@@ -266,7 +278,7 @@ loops in Go and calls CEL once per element, so a runtime error scopes to one ite
 per-element boundary at which to catch and continue. Guard traversals of not-always-present fields with `has(...)`
 or CEL optional access (`foo.?bar.orValue(...)`).
 
-`Extract` is optional. When absent, the raw v2 descriptor list is emitted, subject to the etcd soft limit.
+`Extract` is optional. When absent, the v2 descriptors are emitted, subject to the etcd soft limit.
 
 #### No `Interval`: watch-driven reconciliation
 
@@ -282,30 +294,56 @@ only paper over gaps in the event source.
 
 ### Status reasoning
 
-#### `discovery []map[string]apiextensionsv1.JSON`: invariant outer shape, free-form values
+#### Split status: `components` and `extracted`
 
 ```go
 // +optional
-Discovery []map[string]apiextensionsv1.JSON `json:"discovery,omitempty"`
+Components []apiextensionsv1.JSON `json:"components,omitempty"`
+// +optional
+Extracted []map[string]apiextensionsv1.JSON `json:"extracted,omitempty"`
 ```
 
-The payload is always a list of objects whose values are arbitrary JSON. Keeping the outer shape fixed lets every
-consumer use one parser regardless of `spec`, and keeps server-side shape validation (`array` of `object`) that a
-fully schemaless field loses. The cost is that `extract.expression` must return a list of objects rather than any
-JSON type.
+Exactly one of the two is ever written. `spec.extract` set writes `extracted`. `spec.extract` absent writes
+`components`.
 
-Value shape is a function of `spec`. Enumerating the shapes:
+Consumers only ever read one or the other.
 
-- No selectors, no extract: JSON *array* of surviving descriptors (always an array, even when there is exactly
-  one, consumers can iterate uniformly).
-- `referenceSelector`: array of target descriptors (root excluded; it has no incoming reference).
-- `componentSelector`: array of matched descriptors; runs after `referenceSelector` (if set), so it operates on
-  whatever survived that stage.
-- `resourceSelector`: array of descriptors with `.component.resources` filtered in place.
-- `extract.byResources`: flat array of per-resource records.
-- `extract.byComponents`: flat array of per-component records.
-- `extract.expression`: the CEL expression's return value, which must be a list of objects. Any other return
-  type is `ExtractFailed`.
+A CRD-level validation can enforce them being mutually exclusive:
+
+```yaml
+x-kubernetes-validations:
+  - rule: 'has(self.spec.extract) ? !has(self.status.components) : !has(self.status.extracted)'
+    message: exactly one of status.components / status.extracted, keyed by spec.extract
+```
+
+`components` holds the selector output, one v2 descriptor per element:
+
+- no selectors: every reachable descriptor.
+- `referenceSelector`: target descriptors (root excluded; it has no incoming reference).
+- `componentSelector`: matched descriptors, running on `referenceSelector`'s survivors.
+- `resourceSelector`: descriptors with `resources` filtered.
+
+To get the descriptor:
+
+```go
+var d v2.Descriptor
+json.Unmarshal(item.Raw, &d)
+```
+
+`resourceSelector` filters the resource list, so an entry only matches the stored descriptor when no
+`resourceSelector` is set. Do not verify signatures against this field. Use the repository.
+
+##### No Typed Descriptors
+
+`v2.Descriptor` cannot be a typed CRD field.
+
+- `runtime.Type` has bare `Version` and `Name` fields with no JSON tags.
+- `runtime.Raw.Data` is `json:"-"`
+
+`extracted`: holds the output of the three `extract` modes, one record per emitted element. `extract.expression`
+must return a list of objects. Any other return type is `ExtractFailed`.
+
+A failed extract leaves the last successful payload in place and reports `Ready=False` / `ExtractFailed`.
 
 #### `unresolved` and `spec.onResolutionError`
 
@@ -316,7 +354,7 @@ graph this stops being an edge case.
 
 `spec.onResolutionError` decides the contract:
 
-- `Fail` (default): the reconcile aborts, `status.discovery` is left untouched, and `Ready=False` /
+- `Fail` (default): the reconcile aborts, the status payload is left untouched, and `Ready=False` /
   `ResolutionFailed` carries the first failure. Fail-closed is the default because a silently short list that a
   downstream controller turns into deployments is worse than a loud error.
 - `Ignore`: the components that did resolve are emitted, and every failure is recorded in `status.unresolved`.
@@ -324,10 +362,10 @@ graph this stops being an edge case.
 
 ```go
 type UnresolvedReference struct {
-	Component string `json:"component"`
-	Version   string `json:"version"`
-	Reason    string `json:"reason"`
-	Message   string `json:"message,omitempty"`
+    Component string `json:"component"`
+    Version   string `json:"version"`
+    Reason    string `json:"reason"`
+    Message   string `json:"message,omitempty"`
 }
 ```
 
@@ -339,8 +377,10 @@ user fields at all and every consumer iterating `discovery` would have to defend
 
 Status payloads are subject to the etcd soft limit (~1.5 MiB). Discovery does not store descriptors outside etcd.
 Selectors and `Extract` let users shape the payload down. When the result still exceeds the limit, the API server
-rejects the status write; the controller clears `status.discovery`, repatches a `Ready=False` /
-`PayloadTooLarge` condition carrying the API server's rejection message, and returns without requeueing.
+rejects the status write. The stored object still holds the previous payload, which was small enough, so the
+controller leaves it alone, patches a `Ready=False` / `PayloadTooLarge` condition with the API server's rejection
+message, and returns without requeueing. Same rule as a failed extract: keep the last good payload and report the
+failure in the condition.
 
 The large-descriptor navigation case is descoped. Out-of-status storage (encoded payload,
 sibling ConfigMap, artifact CR) is an additive path if a concrete need appears.
@@ -348,7 +388,7 @@ sibling ConfigMap, artifact CR) is an additive path if a concrete need appears.
 #### Deterministic ordering: `(name, version)` lexicographic
 
 Descriptors are sorted by `(component.name, component.version)` before `Extract` runs. Without this, the map iteration
-order of the underlying graph store would make `status.discovery` flap on every reconcile, causing watcher churn on
+order of the underlying graph store would make the status payload flap on every reconcile, causing watcher churn on
 downstream consumers and generating unnecessary etcd writes.
 
 #### Conditions and reasons
@@ -363,11 +403,11 @@ Discovery uses the shared condition types and reasons, plus Discovery-specific r
   non-empty.
 - `PayloadTooLarge`: the status write exceeded the etcd limit (see [etcd size](#etcd-size)).
 - `NoReferencesMatched` and `NoComponentsMatched`: emitted on `Ready=True` when a selector filters the
-  descriptor set to empty. In that state `status.discovery` is set to an explicit empty JSON array (`[]`) so
+  descriptor set to empty. In that state the field `spec.extract` selects is set to an explicit empty array (`[]`) so
   consumers can distinguish "query ran and matched nothing" from "payload never computed". Distinct reasons per
   stage so consumers can distinguish "no reference matched" from "reference matched but the component didn't".
 
-Consumers of `status.discovery` follow `status.effectiveOCMConfig` when they need credentials (pull-secrets, etc.)
+Consumers of the status payload follow `status.effectiveOCMConfig` when they need credentials (pull-secrets, etc.)
 for the discovered resources.
 
 ## Caching Strategy
@@ -385,14 +425,16 @@ Pros:
 
 - One CRD, three filter kinds, one expression language.
 - Uses CEL, already in the module.
-- Invariant `[]object` status shape with free-form values: one parser for every `spec`.
+- Status shape is keyed by `spec.extract` and enforced by a CRD rule
+- `components` hands back stored descriptors: one `json.Unmarshal` into `v2.Descriptor`, no conversion layer.
 - Selector shape is reusable for `ResourceID.BySelector`.
 - Watch-driven; no additional polling load.
 
 Cons:
 
 - Larger schema and larger conceptual surface than a specialised, single-shape CRD.
-- Status values stay unvalidated server-side; consumers must parse them defensively.
+- No server-side validation.
+- `resourceSelector` filters resources, so `components` cannot be used to verify signatures.
 - Two ways to write some queries (e.g. semver via CEL vs. equality via `matchLabels`).
 - Etcd size risk on unprojected large descriptors; mitigation is documentation-plus-`Extract`, not a hard guard.
 
@@ -422,13 +464,13 @@ Cons:
   `componentRefs []ComponentRef` in the future.
 - Per-descriptor digest verification: Recompute each transitively-resolved descriptor's digest and compare
   against the digest asserted by its parent reference; a mismatch is a resolution failure and lands in
-  `status.unresolved` with a `DigestMismatch` reason, so no room needs to be reserved in `status.discovery`.
+  `status.unresolved` with a `DigestMismatch` reason, so no room needs to be reserved in the status payload.
   Not shipped: recomputing digests on every reconcile is expensive on large graphs. Open question whether to enable
   this later as an opt-in flag.
 
 ## Conclusion
 
 Discovery ships as one CRD that projects a filtered slice of a component's transitive reference graph into a
-`status.discovery` payload of free-form records. It targets OpenControlPlane's shape, descopes large-descriptor navigation,
-and leaves ODG's synchronous-access needs out of scope. Caching is delegated to the component descriptor cache
+status payload: typed v2 descriptors when no `extract` is set, free-form records when one is. It targets
+OpenControlPlane's shape and leaves ODG's synchronous-access needs out of scope. Caching is delegated to the component descriptor cache
 landing upstream in PR #2833.
