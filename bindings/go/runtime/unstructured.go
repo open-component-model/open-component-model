@@ -40,7 +40,11 @@ func NewUnstructured() Unstructured {
 }
 
 func (u *Unstructured) SetType(v Type) {
-	u.Data[IdentityAttributeType] = v
+	if u.Data == nil {
+		u.Data = make(map[string]any)
+	}
+	// Store the string form so Data stays JSON-native (GetType parses it back).
+	u.Data[IdentityAttributeType] = v.String()
 }
 
 func (u *Unstructured) GetType() Type {
