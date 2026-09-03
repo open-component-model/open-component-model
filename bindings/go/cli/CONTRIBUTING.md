@@ -102,7 +102,7 @@ task cli:generate/docs
 
 ## Coding Patterns
 
-The project's [coding patterns guide](../docs/coding-patterns.md) covers conventions used across the codebase. The
+The project's [coding patterns guide](../../../docs/coding-patterns.md) covers conventions used across the codebase. The
 CLI-specific section covers:
 
 - **Command construction** - `New()` pattern, parent/child wiring.
@@ -142,7 +142,7 @@ Integration tests exercise end-to-end workflows (transfer, signing, plugin regis
 up via [testcontainers](https://golang.testcontainers.org/). They live in `cli/integration/`.
 
 For testing conventions (table-driven tests, `require.New(t)`, `t.Context()`, naming), see the testing section in the
-[coding patterns guide](../docs/coding-patterns.md).
+[coding patterns guide](../../../docs/coding-patterns.md).
 
 ## Relationship to Go Bindings
 
@@ -159,4 +159,4 @@ Without `go.work`, each module resolves dependencies from the versions pinned in
 
 If your CLI change depends on a modified binding API, the binding change must be landed and released first. Then create a
 follow-up PR for the CLI that updates `go.mod` to the new binding version. See the
-[Go bindings contributing guide](../bindings/go/CONTRIBUTING.md#breaking-api-changes) for the full workflow.
+[Go bindings contributing guide](../CONTRIBUTING.md#breaking-api-changes) for the full workflow.

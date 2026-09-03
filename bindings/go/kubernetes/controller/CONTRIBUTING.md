@@ -72,7 +72,7 @@ enforces this - if you modify `api/v1alpha1/` types or RBAC markers and forget t
 
 ## Prerequisites
 
-In addition to the [general prerequisites](../../CONTRIBUTING.md#prerequisites), controller development requires:
+In addition to the [general prerequisites](../../../../CONTRIBUTING.md#prerequisites), controller development requires:
 
 - **Docker** - for building container images and running Kind clusters
 - **Helm** - for chart linting, templating, and local installs
@@ -132,7 +132,7 @@ bootstraps the envtest environment - see any of the `internal/controller/*/suite
 Use `-ginkgo.focus` to run specific specs (not `-run`, which only matches the top-level test function).
 
 For controller-specific testing patterns (reconciler structure, condition handling, resource references), see the
-controller idioms section in the [coding patterns guide](../../docs/coding-patterns.md).
+controller idioms section in the [coding patterns guide](../../../../docs/coding-patterns.md).
 
 ## Helm Chart
 

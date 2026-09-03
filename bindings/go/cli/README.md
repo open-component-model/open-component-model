@@ -53,10 +53,10 @@ ocm plugin registry list
 ocm plugin registry get <plugin-name>
 ```
 
-See [ADR-0001: Plugins](../docs/adr/0001_plugins.md) for architecture details.
+See [ADR-0001: Plugins](../../../docs/adr/0001_plugins.md) for architecture details.
 
 ## See Also
 
-- [Go Library](../bindings/go/README.md)
-- [Architecture Decisions](../docs/adr/)
+- [Go Library](../README.md)
+- [Architecture Decisions](../../../docs/adr/)
 - [OCM Specification](https://github.com/open-component-model/ocm-spec)
