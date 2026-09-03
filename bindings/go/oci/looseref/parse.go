@@ -126,6 +126,9 @@ func validateReference(ref LooseReference) error {
 
 	if ref.Repository != "" {
 		if err := ref.ValidateRepository(); err != nil {
+			if ref.Repository != strings.ToLower(ref.Repository) {
+				return fmt.Errorf("%w: repository names must be lowercase", err)
+			}
 			return err
 		}
 	}

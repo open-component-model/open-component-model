@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"errors"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -47,6 +49,17 @@ type Helm struct {
 	// for TLS root certificate to access the source helm repository.
 	// Deprecated: This field is deprecated in favor of using certificates through the credentials.
 	CACertFile string `json:"caCertFile,omitempty"`
+}
+
+// Validate verifies that the Helm input names exactly one chart source.
+func (t *Helm) Validate() error {
+	if t.Path == "" && t.HelmRepository == "" {
+		return errors.New("either path or helmRepository must be specified")
+	}
+	if t.Path != "" && t.HelmRepository != "" {
+		return errors.New("only one of path or helmRepository can be specified")
+	}
+	return nil
 }
 
 func (t *Helm) String() string {

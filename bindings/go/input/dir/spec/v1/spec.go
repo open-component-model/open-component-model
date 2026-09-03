@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"errors"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -53,6 +55,14 @@ type Dir struct {
 
 func (t *Dir) String() string {
 	return t.Path
+}
+
+// Validate verifies that the path of the Dir input is set.
+func (t *Dir) Validate() error {
+	if t.Path == "" {
+		return errors.New("path is required")
+	}
+	return nil
 }
 
 const (
