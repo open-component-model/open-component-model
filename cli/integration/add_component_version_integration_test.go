@@ -1108,3 +1108,135 @@ components:
 			"the ref stays informational next to the pinned commit")
 	})
 }
+
+func Test_Integration_AddComponentVersion_SpecificationValidation(t *testing.T) {
+	t.Parallel()
+
+	componentName := "ocm.software/validation-component"
+	componentVersion := "v1.0.0"
+
+	// Every constructor declares a valid resource before the resource under test, so that a rejected
+	// component version proves that the constructor refused all of it instead of writing the valid part.
+	cases := []struct {
+		name           string
+		resource       string
+		expectedErrors []string
+	}{
+		{
+			name: "access of a known type without a required field",
+			resource: `  - name: myimage
+    version: v1.0.0
+    type: ociImage
+    access:
+      type: ociArtifact/v1
+`,
+			expectedErrors: []string{
+				`resource "name=myimage,version=v1.0.0"`,
+				`access specification: type "ociArtifact/v1" is invalid: imageReference is required`,
+			},
+		},
+		{
+			name: "input of a known type without a required field",
+			resource: `  - name: myfile
+    version: v1.0.0
+    type: blob
+    input:
+      type: file/v1
+`,
+			expectedErrors: []string{
+				`input specification: type "file/v1" is invalid: path is required`,
+			},
+		},
+		{
+			name: "access of a known type with a malformed field",
+			resource: `  - name: myarchive
+    version: v1.0.0
+    type: blob
+    access:
+      type: Wget/v1
+      url: ftp://my.custom.domain.com/archive.tar.gz
+`,
+			expectedErrors: []string{
+				`access specification: type "Wget/v1" is invalid: url must use the http or https scheme`,
+			},
+		},
+		{
+			name: "access of a known type with a field of the wrong type",
+			resource: `  - name: myarchive
+    version: v1.0.0
+    type: blob
+    access:
+      type: Wget/v1
+      url: https://my.custom.domain.com/archive.tar.gz
+      noRedirect: maybe
+`,
+			expectedErrors: []string{
+				`access specification: type "Wget/v1" cannot be decoded`,
+			},
+		},
+		{
+			name: "every violation is reported at once",
+			resource: `  - name: myfirstimage
+    version: v1.0.0
+    type: ociImage
+    access:
+      type: ociArtifact/v1
+  - name: mysecondimage
+    version: v1.0.0
+    type: ociImage
+    access:
+      type: OCIImage/v1
+`,
+			expectedErrors: []string{
+				`resource "name=myfirstimage,version=v1.0.0"`,
+				`resource "name=mysecondimage,version=v1.0.0"`,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+
+			constructorContent := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: myvalidresource
+    version: v1.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: "Hello, World!"
+%s`, componentName, componentVersion, tc.resource)
+
+			tempDir := t.TempDir()
+			constructorPath := filepath.Join(tempDir, "constructor.yaml")
+			r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+			ctfDir := filepath.Join(tempDir, "ctf")
+
+			addCMD := cmd.New()
+			addCMD.SetArgs([]string{
+				"add",
+				"component-version",
+				"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+				"--constructor", constructorPath,
+			})
+
+			err := addCMD.ExecuteContext(ctx)
+			r.Error(err, "add cv with an invalid specification of a known type must fail")
+			for _, expectedError := range tc.expectedErrors {
+				r.ErrorContains(err, expectedError)
+			}
+
+			// The specifications are validated before the target repository is touched, so not even
+			// the archive of the rejected component version is created.
+			_, err = os.Stat(ctfDir)
+			r.ErrorIs(err, os.ErrNotExist, "nothing may be written when a specification is rejected")
+		})
+	}
+}

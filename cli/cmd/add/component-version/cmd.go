@@ -360,6 +360,8 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		SourceInputMethodProvider:           instance,
 		ResourceInputMethodProvider:         instance,
 		ExternalComponentRepositoryProvider: instance,
+		AccessSpecificationScheme:           pluginManager.ResourcePluginRegistry.ResourceScheme(),
+		InputSpecificationScheme:            pluginManager.InputRegistry.InputRepositoryScheme(),
 		Resolver:                            instance.graph,
 		ConcurrencyLimit:                    concurrencyLimit,
 		ComponentVersionConflictPolicy:      ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
