@@ -417,5 +417,5 @@ kubectl get repository replication-target -o wide
   Full API specification
 - [How-To: Configure Credentials for OCM Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}) -
   Set up registry credentials for the controller
-- [Example: `replication-simple`](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller/examples/replication-simple) -
+- [Example: `replication-simple`](https://github.com/open-component-model/open-component-model/tree/main/bindings/go/kubernetes/controller/examples/replication-simple) -
   A complete, runnable manifest set used by the controller end-to-end tests

@@ -119,8 +119,8 @@ Build the OCM CLI from the `open-component-model/open-component-model` monorepo.
 ```shell
 git clone https://github.com/open-component-model/open-component-model.git
 cd open-component-model
-{{< site-version "branch" >}}task cli:build   # builds to cli/tmp/bin/ocm
-task cli:install # installs to /usr/local/bin (requires sudo)
+{{< site-version "branch" >}}task bindings/go/cli:build   # builds to bindings/go/cli/tmp/bin/ocm
+task bindings/go/cli:install # installs to /usr/local/bin (requires sudo)
 ```
 
 {{< /tab >}}
