@@ -123,16 +123,16 @@ var _ = BeforeSuite(func() {
 	Expect(k8sManager.Add(workerPool)).To(Succeed())
 
 	resolutionLogger := logf.Log.WithName("resolution")
-	resolver := resolution.NewResolver(&resolutionLogger, workerPool, pm)
+	resolver := resolution.NewResolver(&resolutionLogger, workerPool)
 
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:        k8sManager.GetClient(),
-			Scheme:        testEnv.Scheme,
-			EventRecorder: recorder,
+			Client:           k8sManager.GetClient(),
+			Scheme:           testEnv.Scheme,
+			EventRecorder:    recorder,
+			NewPluginManager: test.StaticPluginManager(pm),
 		},
 		Resolver:         resolver,
-		PluginManager:    pm,
 		RepositoryScheme: ocmScheme,
 	}).SetupWithManager(ctx, k8sManager, 1)).To(Succeed())
 

@@ -14,7 +14,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -24,12 +23,11 @@ var ErrResolutionInProgress = workerpool.ErrResolutionInProgress
 
 // NewResolver creates a new component version resolver.
 // The returned worker pool must be started separately by adding it to the manager.
-func NewResolver(logger *logr.Logger, workerPool *workerpool.WorkerPool, pluginManager *manager.PluginManager) *Resolver {
+func NewResolver(logger *logr.Logger, workerPool *workerpool.WorkerPool) *Resolver {
 	resolver := &Resolver{
-		logger:        logger,
-		workerPool:    workerPool,
-		pluginManager: pluginManager,
-		repoCache:     lru.New(100),
+		logger:     logger,
+		workerPool: workerPool,
+		repoCache:  lru.New(100),
 	}
 
 	return resolver
@@ -43,10 +41,9 @@ func (r *Resolver) WorkerPool() *workerpool.WorkerPool {
 // Resolver provides implementation for component version resolution using a worker pool. The async resolution
 // is non-blocking so the controller can return once the resolution is done.
 type Resolver struct {
-	logger        *logr.Logger
-	workerPool    *workerpool.WorkerPool
-	pluginManager *manager.PluginManager
-	repoCache     *lru.Cache
+	logger     *logr.Logger
+	workerPool *workerpool.WorkerPool
+	repoCache  *lru.Cache
 }
 
 // RepositoryOptions contains all the options the resolution service requires to perform a resolve operation.
@@ -57,8 +54,8 @@ type RepositoryOptions struct {
 	// Verifications are used to verify against component version signatures and used a cache key.
 	Verifications []verification.Verification
 	// Digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
-	Digest          *v2.Digest
-	SigningRegistry *signinghandler.SigningRegistry
+	Digest        *v2.Digest
+	PluginManager *manager.PluginManager
 }
 
 // NewCacheBackedRepository creates a new cache-backed repository wrapper.
@@ -67,6 +64,9 @@ type RepositoryOptions struct {
 // 2. The provided RepositorySpec as a fallback
 func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *RepositoryOptions) (*CacheBackedRepository, error) {
 	cfg := opts.Configuration
+	if opts.PluginManager == nil {
+		return nil, fmt.Errorf("plugin manager is required")
+	}
 
 	requesterFunc := opts.RequesterFunc
 	if requesterFunc == nil {
@@ -90,7 +90,7 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 	if cached, ok := r.repoCache.Get(cacheKey); ok {
 		provider = cached.(resolvers.ComponentVersionRepositoryResolver)
 	} else {
-		provider, err = r.createResolver(ctx, opts.RepositorySpec, cfg)
+		provider, err = r.createResolver(ctx, opts.RepositorySpec, cfg, opts.PluginManager)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create provider: %w", err)
 		}
@@ -106,24 +106,24 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 		baseRepoSpec:    baseRepoSpec,
 		verifications:   opts.Verifications,
 		digest:          opts.Digest,
-		signingRegistry: opts.SigningRegistry,
+		signingRegistry: opts.PluginManager.SigningRegistry,
 	}, nil
 }
 
 // createResolver creates a resolver based on the configuration.
 // The resolver handles resolving the appropriate repository for each component.
-func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (resolvers.ComponentVersionRepositoryResolver, error) {
+func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration, pm *manager.PluginManager) (resolvers.ComponentVersionRepositoryResolver, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("repository spec is required")
 	}
 
 	opts := resolvers.Options{
-		RepoProvider: r.pluginManager.ComponentVersionRepositoryRegistry,
+		RepoProvider: pm.ComponentVersionRepositoryRegistry,
 	}
 
 	if cfg != nil {
 		credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
-			PluginManager: r.pluginManager,
+			PluginManager: pm,
 			Logger:        r.logger,
 		})
 		if err != nil {

@@ -81,6 +81,7 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 		opts := &resolution.RepositoryOptions{
 			RepositorySpec: repoSpec,
 			Configuration:  cfg,
+			PluginManager:  env.PluginManager,
 		}
 
 		repo, err := env.Resolver.NewCacheBackedRepository(ctx, opts)
@@ -152,6 +153,7 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 		opts := &resolution.RepositoryOptions{
 			RepositorySpec: repoSpec,
 			Configuration:  cfg,
+			PluginManager:  env.PluginManager,
 		}
 
 		repo, err := env.Resolver.NewCacheBackedRepository(ctx, opts)
@@ -246,6 +248,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 		opts1 := &resolution.RepositoryOptions{
 			RepositorySpec: repoSpec,
 			Configuration:  cfg1,
+			PluginManager:  env.PluginManager,
 		}
 
 		repo1, err := env.Resolver.NewCacheBackedRepository(ctx, opts1)
@@ -274,6 +277,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 		opts2 := &resolution.RepositoryOptions{
 			RepositorySpec: repoSpec,
 			Configuration:  cfg2,
+			PluginManager:  env.PluginManager,
 		}
 
 		repo2, err := env.Resolver.NewCacheBackedRepository(ctx, opts2)
@@ -328,6 +332,7 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 	opts := &resolution.RepositoryOptions{
 		RepositorySpec: repoSpec,
 		Configuration:  nil,
+		PluginManager:  env.PluginManager,
 	}
 
 	_, err = env.Resolver.NewCacheBackedRepository(ctx, opts)
@@ -385,6 +390,7 @@ func TestResolveComponentVersionDeduplication(t *testing.T) {
 		opts := &resolution.RepositoryOptions{
 			RepositorySpec: repoSpec,
 			Configuration:  cfg,
+			PluginManager:  env.PluginManager,
 		}
 
 		repo, err := env.Resolver.NewCacheBackedRepository(ctx, opts)
@@ -478,7 +484,7 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger *logr.Lo
 		Client: k8sClient,
 		Cache:  cache,
 	})
-	resolver := resolution.NewResolver(logger, wp, pm)
+	resolver := resolution.NewResolver(logger, wp)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
@@ -492,6 +498,34 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger *logr.Lo
 		Resolver:      resolver,
 		PluginManager: pm,
 	}
+}
+
+// The manager is derived from the configuration and is what the repository cache
+// key implicitly assumes, so callers must always supply one.
+func TestNewCacheBackedRepositoryRequiresPluginManager(t *testing.T) {
+	logger := logr.Discard()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, v1alpha1.AddToScheme(scheme))
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	env := setupTestEnvironment(t, k8sClient, &logger)
+	t.Cleanup(func() {
+		require.NoError(t, env.Close(t.Context()))
+	})
+
+	repoSpec := &ociv1.Repository{
+		Type:    ocmruntime.Type{Name: "oci", Version: "v1"},
+		BaseUrl: "localhost:5000/test",
+	}
+
+	_, err := env.Resolver.NewCacheBackedRepository(t.Context(), &resolution.RepositoryOptions{
+		RepositorySpec: repoSpec,
+		Configuration:  nil,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "plugin manager is required")
 }
 
 // mockPlugin is a minimal OCI repository plugin for testing.

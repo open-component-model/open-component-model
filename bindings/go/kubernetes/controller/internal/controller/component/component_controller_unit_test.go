@@ -26,6 +26,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -40,6 +41,8 @@ func newComponentReconciler(fakeClient client.Client, scheme *runtime.Scheme) *R
 			Client:        fakeClient,
 			Scheme:        scheme,
 			EventRecorder: &record.FakeRecorder{Events: make(chan string, 100)},
+			// These tests never actually call manager, so a static one is good enough.
+			NewPluginManager: test.StaticPluginManager(manager.NewPluginManager(context.Background())),
 		},
 	}
 }
@@ -368,18 +371,18 @@ func TestResolutionInProgress_UnitTest(t *testing.T) {
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(ocmScheme))
 	g.Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
 
-	resolver := resolution.NewResolver(&logger, workerPool, pm)
+	resolver := resolution.NewResolver(&logger, workerPool)
 	eventRecorder := &record.FakeRecorder{
 		Events: make(chan string, 100),
 	}
 	reconciler := &Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:        fakeClient,
-			Scheme:        scheme,
-			EventRecorder: eventRecorder,
+			Client:           fakeClient,
+			Scheme:           scheme,
+			EventRecorder:    eventRecorder,
+			NewPluginManager: test.StaticPluginManager(pm),
 		},
-		Resolver:      resolver,
-		PluginManager: pm,
+		Resolver: resolver,
 	}
 
 	req := ctrl.Request{

@@ -1209,6 +1209,101 @@ components:
 }
 
 // Test_Add_Component_Version_Formats tests the different output formats for the add cv command
+func Test_Add_Component_Version_Specification_Validation(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		constructor   string
+		expectedError string
+	}{
+		{
+			name: "missing required property in a known input type",
+			constructor: `
+resources:
+  - name: my-file
+    type: blob
+    input:
+      type: file/v1
+`,
+			expectedError: `input specification: type "file/v1" is invalid: path is required`,
+		},
+		{
+			name: "missing required property in a known access type",
+			constructor: `
+resources:
+  - name: my-image
+    type: ociImage
+    version: 1.0.0
+    access:
+      type: ociArtifact/v1
+`,
+			expectedError: `access specification: type "ociArtifact/v1" is invalid: imageReference is required`,
+		},
+		{
+			name: "malformed property in a known access type",
+			constructor: `
+resources:
+  - name: my-archive
+    type: blob
+    version: 1.0.0
+    access:
+      type: Wget/v1
+      url: ftp://example.com/archive.tar.gz
+`,
+			expectedError: `access specification: type "Wget/v1" is invalid: url must use the http or https scheme`,
+		},
+		{
+			name: "property of the wrong type in a known access type",
+			constructor: `
+resources:
+  - name: my-archive
+    type: blob
+    version: 1.0.0
+    access:
+      type: Wget/v1
+      url: https://example.com/archive.tar.gz
+      noRedirect: maybe
+`,
+			expectedError: `access specification: type "Wget/v1" cannot be decoded`,
+		},
+		{
+			name: "custom access types are not validated",
+			constructor: `
+resources:
+  - name: my-custom-resource
+    type: blob
+    version: 1.0.0
+    access:
+      type: my.custom.access/v1
+      whatever: true
+`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			tmp := t.TempDir()
+			constructorPath := filepath.Join(tmp, "component-constructor.yaml")
+			constructorYAML := `
+name: ocm.software/examples-01
+version: 1.0.0
+provider:
+  name: ocm.software
+` + tt.constructor
+			r.NoError(os.WriteFile(constructorPath, []byte(constructorYAML), 0o600))
+
+			_, err := test.OCM(t, test.WithArgs("add", "cv",
+				"--constructor", constructorPath,
+				"--repository", filepath.Join(tmp, "transport-archive"),
+			))
+
+			if tt.expectedError == "" {
+				r.NoError(err)
+				return
+			}
+			r.ErrorContains(err, tt.expectedError)
+		})
+	}
+}
+
 func Test_Add_Component_Version_Formats(t *testing.T) {
 	r := require.New(t)
 	tests := []struct {

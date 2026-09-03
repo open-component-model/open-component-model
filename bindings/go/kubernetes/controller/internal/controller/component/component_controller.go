@@ -37,7 +37,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
@@ -50,10 +49,6 @@ type Reconciler struct {
 	// Resolver provides repository resolution and caching for component reconciliation.
 	// It ensures that repository access is efficient and consistent during reconciliation operations.
 	Resolver *resolution.Resolver
-
-	// PluginManager manages signature verification plugins for component version validation.
-	// It enables dynamic loading and execution of signature algorithms required for verifying component authenticity.
-	PluginManager *manager.PluginManager
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -267,11 +262,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
+	pm, err := r.PluginManagerFor(ctx, cfg)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create plugin manager: %w", err)
+	}
+
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-		RepositorySpec:  repoSpec,
-		Configuration:   cfg,
-		SigningRegistry: r.PluginManager.SigningRegistry,
-		Verifications:   verifications,
+		RepositorySpec: repoSpec,
+		Configuration:  cfg,
+		PluginManager:  pm,
+		Verifications:  verifications,
 		RequesterFunc: func() workerpool.RequesterInfo {
 			return workerpool.RequesterInfo{
 				NamespacedName: types.NamespacedName{

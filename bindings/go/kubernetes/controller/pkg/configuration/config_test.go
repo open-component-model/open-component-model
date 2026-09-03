@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr/funcr"
 	"github.com/stretchr/testify/assert"
@@ -18,6 +19,7 @@ import (
 	ocmconfigv1spec "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	resolversv1alpha1spec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -669,6 +671,51 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		assert.Equal(t, "ocm.software/*", resolverCfg.Resolvers[0].ComponentNamePattern)
 	})
 
+	t.Run("http config passes through with values preserved", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"http.config.ocm.software/v1alpha1","timeout":"45s","retry":{"maxRetries":3},"hosts":{"ghcr.io":{"timeout":"10s"}}}`,
+		)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+
+		var httpCfg httpv1alpha1.Config
+		require.NoError(t, httpv1alpha1.Scheme.Convert(result.Configurations[0], &httpCfg))
+		require.NotNil(t, httpCfg.Timeout)
+		assert.Equal(t, 45*time.Second, time.Duration(*httpCfg.Timeout))
+		require.NotNil(t, httpCfg.Retry)
+		require.NotNil(t, httpCfg.Retry.MaxRetries)
+		assert.Equal(t, 3, *httpCfg.Retry.MaxRetries)
+		require.Contains(t, httpCfg.Hosts, "ghcr.io")
+		require.NotNil(t, httpCfg.Hosts["ghcr.io"].Timeout)
+		assert.Equal(t, 10*time.Second, time.Duration(*httpCfg.Hosts["ghcr.io"].Timeout))
+	})
+
+	t.Run("http config passes through unversioned", func(t *testing.T) {
+		cfg := makeGenericConfig(`{"type":"http.config.ocm.software","timeout":"45s"}`)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+		assert.Equal(t,
+			ocmruntime.NewUnversionedType(httpv1alpha1.ConfigType),
+			result.Configurations[0].GetType(),
+		)
+	})
+
+	t.Run("filesystem config is dropped even alongside allowed http config", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"http.config.ocm.software/v1alpha1","timeout":"45s"}`,
+			`{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/etc","workingDirectory":"/etc"}`,
+		)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+		assert.Equal(t,
+			ocmruntime.NewVersionedType(httpv1alpha1.ConfigType, httpv1alpha1.Version),
+			result.Configurations[0].GetType(),
+		)
+	})
+
 	t.Run("allowed entries from multiple configs are all preserved after FlatMap", func(t *testing.T) {
 		cfgA := makeGenericConfig(
 			`{"type":"credentials.config.ocm.software/v1","repositories":[]}`,
@@ -707,4 +754,56 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		assert.Contains(t, logLines[0], "filesystem.config.ocm.software/v1alpha1")
 		assert.Contains(t, logLines[0], "whatever.config.ocm.software/v1alpha1")
 	})
+}
+
+func TestLoadConfigurationsHTTPConfig(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, v1alpha1.AddToScheme(scheme))
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "http-secret", Namespace: "default"},
+		Data: map[string][]byte{
+			v1alpha1.OCMConfigKey: []byte(`{
+				"type": "generic.config.ocm.software/v1",
+				"configurations": [
+					{
+						"type": "http.config.ocm.software/v1alpha1",
+						"timeout": "45s",
+						"retry": {"maxRetries": 3}
+					},
+					{
+						"type": "filesystem.config.ocm.software/v1alpha1",
+						"tempFolder": "/etc"
+					}
+				]
+			}`),
+		},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
+
+	cfg, err := LoadConfigurations(t.Context(), client, "default", []v1alpha1.OCMConfiguration{
+		{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+				Kind:      "Secret",
+				Name:      "http-secret",
+				Namespace: "default",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	// The filesystem entry is dropped by the allowlist, leaving only http.
+	require.Len(t, cfg.Config.Configurations, 1)
+
+	httpCfg, err := httpv1alpha1.LookupConfig(cfg.Config)
+	require.NoError(t, err)
+	require.NotNil(t, httpCfg)
+	require.NotNil(t, httpCfg.Timeout)
+	assert.Equal(t, 45*time.Second, time.Duration(*httpCfg.Timeout))
+	require.NotNil(t, httpCfg.Retry)
+	require.NotNil(t, httpCfg.Retry.MaxRetries)
+	assert.Equal(t, 3, *httpCfg.Retry.MaxRetries)
 }
