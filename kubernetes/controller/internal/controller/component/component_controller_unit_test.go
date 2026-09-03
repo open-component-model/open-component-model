@@ -43,7 +43,7 @@ func newComponentReconciler(fakeClient client.Client, scheme *runtime.Scheme) *R
 	}
 }
 
-func TestReconcile_RepositoryNotReady_ReturnsNoRequeue(t *testing.T) {
+func TestReconcile_RepositoryNotReady_RequeuesWithBackoff(t *testing.T) {
 	g := NewWithT(t)
 	ctx := t.Context()
 
@@ -85,11 +85,13 @@ func TestReconcile_RepositoryNotReady_ReturnsNoRequeue(t *testing.T) {
 		NamespacedName: types.NamespacedName{Name: "test-component", Namespace: "default"},
 	})
 
-	g.Expect(err).ToNot(HaveOccurred())
+	// The repository not being ready is surfaced as an error so controller-runtime
+	// requeues the Component with exponential backoff rather than Forgetting it.
+	g.Expect(err).To(HaveOccurred())
 	g.Expect(result).To(Equal(ctrl.Result{}))
 }
 
-func TestReconcile_RepositoryBeingDeleted_ReturnsNoRequeue(t *testing.T) {
+func TestReconcile_RepositoryBeingDeleted_RequeuesWithBackoff(t *testing.T) {
 	g := NewWithT(t)
 	ctx := t.Context()
 
@@ -140,7 +142,9 @@ func TestReconcile_RepositoryBeingDeleted_ReturnsNoRequeue(t *testing.T) {
 		NamespacedName: types.NamespacedName{Name: "test-component", Namespace: "default"},
 	})
 
-	g.Expect(err).ToNot(HaveOccurred())
+	// The repository being deleted is surfaced as an error so controller-runtime
+	// requeues the Component with exponential backoff rather than Forgetting it.
+	g.Expect(err).To(HaveOccurred())
 	g.Expect(result).To(Equal(ctrl.Result{}))
 }
 
@@ -241,7 +245,9 @@ func TestReconcile_RepositoryNotReady_ComponentMarkedNotReady(t *testing.T) {
 	_, err := newComponentReconciler(fakeClient, scheme).Reconcile(ctx, ctrl.Request{
 		NamespacedName: types.NamespacedName{Name: "test-component", Namespace: "default"},
 	})
-	g.Expect(err).ToNot(HaveOccurred())
+	// The repository not being ready is surfaced as an error so controller-runtime
+	// requeues the Component with exponential backoff rather than Forgetting it.
+	g.Expect(err).To(HaveOccurred())
 
 	updated := &v1alpha1.Component{}
 	g.Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-component", Namespace: "default"}, updated)).To(Succeed())

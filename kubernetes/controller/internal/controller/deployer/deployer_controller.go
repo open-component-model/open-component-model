@@ -407,12 +407,17 @@ func (r *Reconciler) resolveResource(
 		if _, ok := errors.AsType[util.NotReadyError](err); ok {
 			log.FromContext(ctx).Info("resource is not available", "error", err)
 
-			return nil, nil
+			// Return the error so the caller propagates it and controller-runtime
+			// requeues with the configured exponential backoff. Returning nil, nil
+			// would make the caller Forget the item; with no interval on Deployer,
+			// recovery would depend solely on a Resource watch event, which can be
+			// missed (coalesced Ready flip) — stranding the Deployer NotReady.
+			return nil, err
 		}
 		if _, ok := errors.AsType[util.DeletionError](err); ok {
 			log.FromContext(ctx).Info("resource is not available", "error", err)
 
-			return nil, nil
+			return nil, err
 		}
 
 		return nil, fmt.Errorf("failed to get ready resource: %w", err)
