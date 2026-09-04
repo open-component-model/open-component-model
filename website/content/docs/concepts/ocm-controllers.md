@@ -135,6 +135,20 @@ spec:
 
 `Propagate` makes the config available to child objects in the chain. `DoNotPropagate` scopes it to that object only. Supported sources are Kubernetes `Secrets`, `ConfigMaps`, and `OCMConfiguration` objects.
 
+Configuration is request-scoped and loaded and applied per reconciliation, so changing a referenced `Secret` or `ConfigMap` takes effect on the next reconcile without restarting the controller.
+
+The controller accepts a fixed set of OCM configuration types and silently drops the rest:
+
+| Type                              | Purpose                                                                                                                        |
+|-----------------------------------|--------------------------------------------------------------------------------------------------------------------------------|
+| `credentials.config.ocm.software` | registry credentials                                                                                                           |
+| `ocm.config.ocm.software`         | resolvers (the deprecated `aliases` field is ignored)                                                                          |
+| `resolvers.config.ocm.software`   | path-matcher resolvers                                                                                                         |
+| `transfer.config.ocm.software`    | replication settings                                                                                                           |
+| `http.config.ocm.software`        | HTTP client timeouts, retries, per-host overrides, and `insecureSkipVerify` for local registries with self-signed certificates |
+
+`filesystem.config.ocm.software` is deliberately **not** accepted.
+
 ## Additional Status Fields
 
 The `Resource` object supports `additionalStatusFields`, a map of field names to [CEL](https://github.com/google/cel-spec) expressions evaluated against the resource descriptor:

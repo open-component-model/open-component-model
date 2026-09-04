@@ -70,7 +70,8 @@ echo "My first local Resource for an OCM component" > my-local-resource.txt
 
 Create a `component-constructor.yaml` file that describes your component and its resources:
 
-```yaml
+```shell
+cat > component-constructor.yaml << 'EOF'
 # yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 - name: github.com/acme.org/helloworld # Must at least be a DNS domain as per RFC 1123.
@@ -89,6 +90,7 @@ components:
       access: # Reference externally
         type: OCIImage/v1
         imageReference: ghcr.io/stefanprodan/podinfo:6.9.1
+EOF
 ```
 
 ### Referencing Artifacts

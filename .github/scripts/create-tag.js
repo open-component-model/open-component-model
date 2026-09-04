@@ -122,13 +122,12 @@ function tagAtCommit({ core, tag, commit, message, execGit }) {
 
 /**
  * Create RC tags for the unified release: the canonical v0.X.Y-rc.N tag and
- * any number of side tags (cli/v0.X.Y-rc.N, kubernetes/controller/v0.X.Y-rc.N,
- * etc.) all pointing at HEAD.
+ * any number of side tags (e.g. bindings/go/v0.X.Y-rc.N) all pointing at HEAD.
  *
  * Expects env vars:
  *   CANONICAL_TAG Required. The user-facing release tag (e.g. "v0.7.0-rc.1").
  *   ADDITIONAL_TAGS Optional. Comma-separated list of side tags to emit on the
- *                  same commit (e.g. "cli/v0.7.0-rc.1,kubernetes/controller/v0.7.0-rc.1").
+ *                  same commit (e.g. "bindings/go/v0.7.0-rc.1").
  */
 export async function createRcTags({ core, execGit = defaultExecGit }) {
   const { CANONICAL_TAG: canonicalTag, ADDITIONAL_TAGS: moduleTagsRaw } = process.env;

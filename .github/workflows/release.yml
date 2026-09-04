@@ -4,8 +4,9 @@ name: Release
 #
 # Tag scheme on each release:
 #   v0.X.Y                              This is the main release version that will get released.
-#   kubernetes/controller/v0.X.Y        Go-module tag for controller API so we don't break people who import it.
-#   cli/v0.X.Y                          CLI tags for consumption on from the website.
+#   bindings/go/v0.X.Y                  Go-module tag for the merged bindings/go module. This
+#                                       single tag resolves the CLI, the controller API and every
+#                                       binding for Go and Hugo module consumers.
 #   website/v0.X.Y                      Website tag, used by Hugo module imports for versioned docs.
 #                                       Final-only — no RC counterpart, since the docs site has no RC artifacts to validate.
 #
@@ -28,7 +29,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  CONTROLLER_PATH: kubernetes/controller
+  CONTROLLER_PATH: bindings/go/kubernetes/controller
   GH_REPO: ${{ github.repository }}
   # Image refs (CLI_IMAGE, CONTROLLER_IMAGE, CONTROLLER_CHART) are set per-job
   # via a "Compute image refs" step that lowercases github.repository_owner.
@@ -51,18 +52,16 @@ jobs:
       new_version: ${{ steps.compute.outputs.new_version }}
       base_version: ${{ steps.compute.outputs.base_version }}
       promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
-      cli_module_rc_tag: ${{ steps.compute.outputs.cli_module_rc_tag }}
-      cli_module_promotion_tag: ${{ steps.compute.outputs.cli_module_promotion_tag }}
-      controller_module_rc_tag: ${{ steps.compute.outputs.controller_module_rc_tag }}
-      controller_module_promotion_tag: ${{ steps.compute.outputs.controller_module_promotion_tag }}
+      bindings_module_rc_tag: ${{ steps.compute.outputs.bindings_module_rc_tag }}
+      bindings_module_promotion_tag: ${{ steps.compute.outputs.bindings_module_promotion_tag }}
       website_module_promotion_tag: ${{ steps.compute.outputs.website_module_promotion_tag }}
       changelog_artifact: changelog-${{ steps.compute.outputs.new_version }}
-      changelog_range: ${{ steps.compute.outputs.changelog_range }}
+      previous_tag: ${{ steps.compute.outputs.previous_tag }}
       set_latest: ${{ steps.latest.outputs.set_latest }}
       highest_previous_release_version: ${{ steps.latest.outputs.highest_previous_release_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
@@ -86,14 +85,14 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           config: cliff.toml
           args: |
-            --include-path "cli/**" \
-            --include-path "kubernetes/controller/**" \
+            --include-path "bindings/go/cli/**" \
+            --include-path "bindings/go/kubernetes/controller/**" \
             --tag-pattern "^v\\d+\\.\\d+\\.\\d+(?:[-\\w\\.]+)?$" \
             --ignore-tags "^v\\d+\\.\\d+\\.\\d+-rc\\.\\d+$" \
             --tag "${{ steps.compute.outputs.new_tag }}" \
             -o "$RUNNER_TEMP/CHANGELOG.md" \
             --use-branch-tags \
-            ${{ steps.compute.outputs.changelog_range && format('-- "{0}"', steps.compute.outputs.changelog_range) || '--latest' }}
+            ${{ steps.compute.outputs.previous_tag && format('-- "{0}..HEAD"', steps.compute.outputs.previous_tag) || '--latest' }}
 
       - name: Summarize changelog
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
@@ -139,7 +138,7 @@ jobs:
             await script.determineLatestRelease({ core, github, context });
 
   # passes both CANONICAL_TAG and a comma-separated ADDITIONAL_TAGS list
-  # so cli/v* and kubernetes/controller/v* are emitted on the same commit
+  # so bindings/go/v* is emitted on the same commit
   tag_rc:
     name: Create and Push RC Tags
     runs-on: ubuntu-24.04-arm
@@ -160,11 +159,11 @@ jobs:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
           repositories: ${{ github.event.repository.name }}
-          # Push the RC tags (canonical + cli/controller side tags).
+          # Push the RC tags (canonical + bindings/go side tag).
           permission-contents: write
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.ref_name }}
           token: ${{ steps.get_token.outputs.token }}
@@ -188,12 +187,12 @@ jobs:
           git_user_signingkey: true
           git_tag_gpgsign: true
 
-      - name: Create RC tags (canonical + cli + controller side tags)
+      - name: Create RC tags (canonical + bindings/go side tag)
         id: tag
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           CANONICAL_TAG: ${{ needs.prepare.outputs.new_tag }}
-          ADDITIONAL_TAGS: ${{ needs.prepare.outputs.cli_module_rc_tag }},${{ needs.prepare.outputs.controller_module_rc_tag }}
+          ADDITIONAL_TAGS: ${{ needs.prepare.outputs.bindings_module_rc_tag }}
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |
@@ -302,8 +301,7 @@ jobs:
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           RC_VERSION: ${{ needs.prepare.outputs.new_version }}
-          CLI_MODULE_RC_TAG: ${{ needs.prepare.outputs.cli_module_rc_tag }}
-          CONTROLLER_MODULE_RC_TAG: ${{ needs.prepare.outputs.controller_module_rc_tag }}
+          BINDINGS_MODULE_RC_TAG: ${{ needs.prepare.outputs.bindings_module_rc_tag }}
           IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
           CHART_DIGEST: ${{ needs.build_and_test.outputs.controller_chart_digest }}
           CLI_IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
@@ -328,8 +326,7 @@ jobs:
               .addTable([
                 [{ data: 'Field', header: true }, { data: 'Value', header: true }],
                 ['RC Tag', process.env.RC_TAG],
-                ['CLI Module RC Tag', process.env.CLI_MODULE_RC_TAG],
-                ['Controller Module RC Tag', process.env.CONTROLLER_MODULE_RC_TAG],
+                ['Bindings Module RC Tag', process.env.BINDINGS_MODULE_RC_TAG],
                 ['Version', process.env.RC_VERSION],
                 ['CLI Image Digest', (process.env.CLI_IMAGE_DIGEST || 'N/A').substring(0, 19) + '...'],
                 ['Controller Image Digest', (process.env.IMAGE_DIGEST || 'N/A').substring(0, 19) + '...'],
@@ -449,11 +446,11 @@ jobs:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
           repositories: ${{ github.event.repository.name }}
-          # Push the final/promotion tags (canonical + cli/controller/website side tags).
+          # Push the final/promotion tags (canonical + bindings/go + website side tags).
           permission-contents: write
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
@@ -478,12 +475,12 @@ jobs:
           git_user_signingkey: true
           git_tag_gpgsign: true
 
-      - name: Create final tags (canonical + cli + controller side tags)
+      - name: Create final tags (canonical + bindings/go + website side tags)
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RC_TAG: ${{ needs.prepare.outputs.new_tag }}
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
-          ADDITIONAL_TAGS: ${{ needs.prepare.outputs.cli_module_promotion_tag }},${{ needs.prepare.outputs.controller_module_promotion_tag }},${{ needs.prepare.outputs.website_module_promotion_tag }}
+          ADDITIONAL_TAGS: ${{ needs.prepare.outputs.bindings_module_promotion_tag }},${{ needs.prepare.outputs.website_module_promotion_tag }}
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |
@@ -494,7 +491,7 @@ jobs:
         uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
 
       - name: Log in to GHCR
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -607,14 +604,21 @@ jobs:
           subject-name: ${{ env.CONTROLLER_CHART }}
           push-to-registry: true
 
-      - name: Get RC release notes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RC_TAG: ${{ needs.prepare.outputs.new_tag }}
-        run: |
-          set -euo pipefail
-          gh release view "${RC_TAG}" \
-            --repo "$GH_REPO" --json body --jq '.body' > "${{ runner.temp }}/CHANGELOG.md"
+      - name: Generate changelog with git-cliff
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
+        with:
+          version: 'v2.12.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          config: cliff.toml
+          args: |
+            --include-path "bindings/go/cli/**" \
+            --include-path "bindings/go/kubernetes/controller/**" \
+            --tag-pattern "^v\\d+\\.\\d+\\.\\d+(?:[-\\w\\.]+)?$" \
+            --ignore-tags "^v\\d+\\.\\d+\\.\\d+-rc\\.\\d+$" \
+            --tag "${{ needs.prepare.outputs.promotion_tag }}" \
+            -o "$RUNNER_TEMP/CHANGELOG.md" \
+            --use-branch-tags \
+            ${{ needs.prepare.outputs.previous_tag && format('-- "{0}..{1}"', needs.prepare.outputs.previous_tag, needs.prepare.outputs.new_tag) || '--latest' }}
 
       - name: Stage final assets
         env:
@@ -701,7 +705,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout main
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Docs PR targets main, so we check out main rather than the release branch.
           ref: main
@@ -710,16 +714,16 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version-file: cli/go.mod
+          go-version-file: bindings/go/go.mod
           cache: false
 
-      - name: Fetch CLI go.mod at release tag
+      - name: Fetch bindings/go go.mod at release tag
         env:
           VERSION: ${{ needs.prepare.outputs.base_version }}
         run: |
           set -euo pipefail
-          git fetch origin "refs/tags/cli/v${VERSION}:refs/tags/cli/v${VERSION}" --no-tags
-          git show "cli/v${VERSION}:cli/go.mod" > "${{ runner.temp }}/cli-go.mod"
+          git fetch origin "refs/tags/bindings/go/v${VERSION}:refs/tags/bindings/go/v${VERSION}" --no-tags
+          git show "bindings/go/v${VERSION}:bindings/go/go.mod" > "${{ runner.temp }}/cli-go.mod"
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7

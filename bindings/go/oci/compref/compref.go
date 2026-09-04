@@ -354,6 +354,7 @@ func ParseRepository(repoRef string, opts ...Option) (runtime.Typed, error) {
 // It uses a practical set of heuristics:
 //   - If it has a URL scheme ("file://"), assume CTF
 //   - If it's an absolute filesystem path, assume CTF
+//   - If it's a relative filesystem path, assume CTF
 //   - If it contains a colon (e.g., "localhost:5000"), assume OCI
 //   - If it looks like an archive file (tar.gz, tgz or tar), assume CTF
 //   - If it looks like a domain (contains dots like ".com", ".io", etc.), assume OCI
@@ -379,6 +380,20 @@ func guessType(repository string) (string, error) {
 
 	// Absolute filesystem path → assume CTF
 	if filepath.IsAbs(cleaned) {
+		return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
+	}
+
+	// Relative filesystem path -> assume CTF
+	if split := strings.Split(cleaned, string(filepath.Separator)); len(split) > 1 {
+		// only the leading `..` remain after filepath.Clean, all others
+		// are folded away, so only the first element needs to be
+		// checked.
+		if split[0] == ".." {
+			return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
+		}
+	}
+	// Also check "./"
+	if strings.HasPrefix(repository, "."+string(filepath.Separator)) {
 		return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
 	}
 

@@ -461,6 +461,121 @@ func TestRepository_GetLocalResource(t *testing.T) {
 	}
 }
 
+// TestRepository_GetLocalResource_MultipleResourcesSameNameVersion tests that GetLocalResource
+// correctly resolves a resource when multiple resources share the same name+version but differ
+// by extraIdentity. This is the bug described in the OCM spec issue where CTFGetLocalResource
+// lookup was matching all candidates instead of exactly one.
+func TestRepository_GetLocalResource_MultipleResourcesSameNameVersion(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider: descriptor.Provider{Name: "test-provider"},
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "ocm.software/test-component",
+					Version: "1.0.0",
+				},
+			},
+		},
+	}
+
+	content1 := []byte("content for resource 1 - no extraIdentity")
+	content2 := []byte("content for resource 2 - type=helmChart")
+	content3 := []byte("content for resource 3 - type=helmChartImagemap")
+
+	res1 := &descriptor.Resource{
+		Relation: descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "my-resource", Version: "v1.0.0"},
+		},
+		Type: "ociImage",
+		Access: &v2.LocalBlob{
+			LocalReference: digest.FromBytes(content1).String(),
+			MediaType:      "application/octet-stream",
+		},
+	}
+	res2 := &descriptor.Resource{
+		Relation: descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta:    descriptor.ObjectMeta{Name: "my-resource", Version: "v1.0.0"},
+			ExtraIdentity: map[string]string{"type": "helmChart"},
+		},
+		Type: "helmChart",
+		Access: &v2.LocalBlob{
+			LocalReference: digest.FromBytes(content2).String(),
+			MediaType:      "application/octet-stream",
+		},
+	}
+	res3 := &descriptor.Resource{
+		Relation: descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta:    descriptor.ObjectMeta{Name: "my-resource", Version: "v1.0.0"},
+			ExtraIdentity: map[string]string{"type": "helmChartImagemap"},
+		},
+		Type: "helmChart",
+		Access: &v2.LocalBlob{
+			LocalReference: digest.FromBytes(content3).String(),
+			MediaType:      "application/octet-stream",
+		},
+	}
+
+	newRes1, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, res1, inmemory.New(bytes.NewReader(content1)))
+	r.NoError(err)
+	newRes2, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, res2, inmemory.New(bytes.NewReader(content2)))
+	r.NoError(err)
+	newRes3, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, res3, inmemory.New(bytes.NewReader(content3)))
+	r.NoError(err)
+
+	desc.Component.Resources = []descriptor.Resource{*newRes1, *newRes2, *newRes3}
+	r.NoError(repo.AddComponentVersion(ctx, desc))
+
+	tests := []struct {
+		name            string
+		identity        runtime.Identity
+		expectedContent []byte
+	}{
+		{
+			name:            "resource with no extraIdentity",
+			identity:        newRes1.ToIdentity(),
+			expectedContent: content1,
+		},
+		{
+			name:            "resource with type=helmChart extraIdentity",
+			identity:        newRes2.ToIdentity(),
+			expectedContent: content2,
+		},
+		{
+			name:            "resource with type=helmChartImagemap extraIdentity",
+			identity:        newRes3.ToIdentity(),
+			expectedContent: content3,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			b, _, err := repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.identity)
+			r.NoError(err, "GetLocalResource must resolve exactly one resource when extraIdentity distinguishes them")
+			r.NotNil(b)
+
+			reader, err := b.ReadCloser()
+			r.NoError(err)
+			defer reader.Close()
+			got, err := io.ReadAll(reader)
+			r.NoError(err)
+			r.Equal(string(tc.expectedContent), string(got))
+		})
+	}
+}
+
 func TestRepository_DownloadUploadResource(t *testing.T) {
 	artifactMediaType := "application/custom"
 	tests := []struct {

@@ -250,7 +250,7 @@ These are in the same file. Just append this signature in that relevant configur
 {{< /callout >}}
 
 {{< callout context="note" >}}
-Verification still takes the handler from a spec file, not from `.ocmconfig`. Keep a `verifier-spec.yaml` holding the same `type: GPGSigningConfiguration/v1alpha1` for the [verify how-to → GPG tab]({{< relref "verify-component-version.md" >}}).
+Verification reads its handler from the same entry, under `verifier` instead of `signer`. Add it now so the [verify how-to → GPG tab]({{< relref "verify-component-version.md" >}}) works against this config.
 {{< /callout >}}
 
 {{< /step >}}
@@ -580,7 +580,7 @@ This walk-through uses **GitHub Actions** as the CI provider; other providers wo
 
 - The OCM CLI available in your CI image — see [How-To: Install the OCM CLI]({{< relref "ocm-cli-installation.md" >}}) or use the [pre-built OCM CLI container image]({{< relref "container-image-usage.md" >}}) directly as your job's runtime
 - A GitHub Actions workflow with permission to mint OIDC tokens (one line in the workflow file, shown below)
-- A component version reachable from the runner — either built in the same job, restored from a job artefact, or pushed to an OCI registry the runner can read/write
+- A component version reachable from the runner — either built in the same job, restored from a job artifact, or pushed to an OCI registry the runner can read/write
 
 <!-- markdownlint-disable-next-line MD024 -->
 ## Steps

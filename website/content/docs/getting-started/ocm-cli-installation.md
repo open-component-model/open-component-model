@@ -119,8 +119,8 @@ Build the OCM CLI from the `open-component-model/open-component-model` monorepo.
 ```shell
 git clone https://github.com/open-component-model/open-component-model.git
 cd open-component-model
-{{< site-version "branch" >}}task cli:build   # builds to cli/tmp/bin/ocm
-task cli:install # installs to /usr/local/bin (requires sudo)
+{{< site-version "branch" >}}task bindings/go/cli:build   # builds to bindings/go/cli/tmp/bin/ocm
+task bindings/go/cli:install # installs to /usr/local/bin (requires sudo)
 ```
 
 {{< /tab >}}
@@ -128,6 +128,7 @@ task cli:install # installs to /usr/local/bin (requires sudo)
 
 The binary is installed to `~/.local/bin` by default (per the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/latest/)).
 The installer verifies binary integrity via [GitHub attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds) when the [GitHub CLI (`gh`)](https://cli.github.com/) is available.
+Set `OCM_VERSION` to install a specific version, `OCM_BIN_DIR` to control where the binary lands (default: `~/.local/bin`), and `OCM_BIN_NAME` to install the binary under a custom name.
 Run `bash -s -- --help` after the pipe to see all options.
 
 <details>
@@ -150,6 +151,41 @@ If you encounter a Windows-specific issue, please report it at
 [github.com/open-component-model/open-component-model/issues](https://github.com/open-component-model/open-component-model/issues).
 
 </details>
+
+## Install a specific version
+
+By default the script installs the latest stable release. Set `OCM_VERSION` to pin to a specific version. Use `MAJOR.MINOR` for the latest patch on that series, or `MAJOR.MINOR.PATCH` for an exact release:
+
+```shell
+wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.12 bash
+# or with curl:
+curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.12 bash
+```
+
+### Side-by-side versions
+
+Set `OCM_BIN_NAME` to install the binary under a custom name (default: `ocm`), and `OCM_BIN_DIR` to set the install directory. Combine both with a version suffix to keep multiple versions side by side in the same directory:
+
+```shell
+wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.12 OCM_BIN_NAME=ocm-v0.12 OCM_BIN_DIR=~/.local/bin bash
+wget -qO- https://ocm.software/install-cli.sh | OCM_VERSION=0.11 OCM_BIN_NAME=ocm-v0.11 OCM_BIN_DIR=~/.local/bin bash
+```
+
+Each installs the binary under the name you give it. Run by name if `~/.local/bin` is on your `PATH`, or by full path otherwise:
+
+```shell
+# Run a specific version by name (if ~/.local/bin is on PATH)
+ocm-v0.12 version
+
+# Or by full path
+~/.local/bin/ocm-v0.12 version
+
+# Switch which version is active in your shell session
+ln -sf ~/.local/bin/ocm-v0.12 ~/.local/bin/ocm
+ocm version
+```
+
+This is useful for running v1 and v2 side by side during a migration, testing a release candidate, or reproducing version-specific behavior when debugging.
 
 ## Verify Installation
 
@@ -183,23 +219,28 @@ If automatic verification is unavailable, you can verify manually using one of t
 
 {{< tab "GitHub CLI" >}}
 
-The simplest method: requires the [GitHub CLI](https://cli.github.com/) with authentication.
+The simplest method. Requires the [GitHub CLI](https://cli.github.com/) with authentication.
 
 ```shell
 gh auth login --hostname github.com
-gh attestation verify $(which ocm) --repo open-component-model/open-component-model
+# Set this to the binary you installed (adjust the path if you used a custom name or directory).
+binary="${HOME}/.local/bin/ocm"
+gh attestation verify "$binary" --repo open-component-model/open-component-model
 ```
 
 {{< /tab >}}
 {{< tab "Cosign (no GitHub auth)" >}}
 
 Uses [Sigstore cosign](https://docs.sigstore.dev/cosign/signing/overview/) to cryptographically verify the binary's provenance.
-No GitHub authentication required: the attestation API is public.
+No GitHub authentication required. The attestation API is public.
 
 ```shell
+# Set this to the binary you installed (adjust the path if you used a custom name or directory).
+binary="${HOME}/.local/bin/ocm"
+
 # Compute the binary's SHA-256 digest
-DIGEST="sha256:$(sha256sum $(which ocm) | cut -d' ' -f1)"
-# On macOS, use: DIGEST="sha256:$(shasum -a 256 $(which ocm) | cut -d' ' -f1)"
+DIGEST="sha256:$(sha256sum "$binary" | cut -d' ' -f1)"
+# On macOS, use: DIGEST="sha256:$(shasum -a 256 "$binary" | cut -d' ' -f1)"
 
 # Download the Sigstore attestation bundle from the public GitHub API
 curl -sfL \
@@ -214,7 +255,7 @@ cosign verify-blob-attestation \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
     '^https://github\.com/open-component-model/open-component-model/\.github/workflows/cli\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v[0-9]+\.[0-9]+\.[0-9]+)' \
-  $(which ocm)
+  "$binary"
 ```
 
 A successful verification proves the binary was built by the project's GitHub Actions workflow and signed via Sigstore OIDC.
@@ -225,9 +266,12 @@ A successful verification proves the binary was built by the project's GitHub Ac
 Verify integrity by comparing your binary's hash against the digests recorded in the attestation (no extra tools needed beyond `curl` and `jq`).
 
 ```shell
+# Set this to the binary you installed (adjust the path if you used a custom name or directory).
+binary="${HOME}/.local/bin/ocm"
+
 # Compute the binary's SHA-256 digest
-DIGEST="sha256:$(sha256sum $(which ocm) | cut -d' ' -f1)"
-# On macOS, use: DIGEST="sha256:$(shasum -a 256 $(which ocm) | cut -d' ' -f1)"
+DIGEST="sha256:$(sha256sum "$binary" | cut -d' ' -f1)"
+# On macOS, use: DIGEST="sha256:$(shasum -a 256 "$binary" | cut -d' ' -f1)"
 
 # Fetch expected digests from the attestation
 curl -sfL \

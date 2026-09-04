@@ -72,6 +72,7 @@ one test suite.
 graph TD
     Root["open-component-model/"]
     Bindings["bindings/\nLanguage bindings (currently Go)"]
+    Go["go/\nSingle Go module"]
     CLI["cli/\nOCM CLI"]
     K8s["kubernetes/controller/\nOCM Kubernetes Controller Toolkit"]
     Website["website/\nProject website"]
@@ -79,11 +80,12 @@ graph TD
     Docs["docs/\nCommunity docs & governance"]
 
     Root --> Bindings
-    Root --> CLI
-    Root --> K8s
     Root --> Website
     Root --> Conformance
     Root --> Docs
+    Bindings --> Go
+    Go --> CLI
+    Go --> K8s
 ```
 
 {{<callout context="caution" title="Legacy repositories" icon="outline/alert-triangle">}}
@@ -101,8 +103,8 @@ OCM is built as a stack of layers. Each layer builds on the one below it:
 flowchart TD
     Spec["OCM Specification\n(defines the model)"]
     Go["Go Bindings\n(bindings/go/)"]
-    CLI["OCM CLI\n(cli/)"]
-    Controllers["OCM Kubernetes Controller Toolkit\n(kubernetes/controller/)"]
+    CLI["OCM CLI\n(bindings/go/cli/)"]
+    Controllers["OCM Kubernetes Controller Toolkit\n(bindings/go/kubernetes/controller/)"]
     ODG["Open Delivery Gear\n(separate repository, Python)"]
 
     Spec --> Go
@@ -127,39 +129,40 @@ and lives in its [own repository](https://github.com/open-component-model/ocm-sp
 
 The reference implementation of the specification in Go, located in
 [`bindings/go/`](https://github.com/open-component-model/open-component-model/tree/main/bindings/go). The `bindings/`
-directory is structured to welcome implementations in other languages in the future. This library provides the core
+directory is structured to welcome implementations in other languages in the future. The library ships as a single Go
+module (`ocm.software/open-component-model/bindings/go`) split into logical packages and provides the core
 types and operations (creating, signing, resolving, transferring component versions) that the CLI and controllers build
 on.
 
 {{< card-grid >}}
-{{< link-card title="Module Overview" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/README.md" description="Available modules, their purpose, and how to import them." >}}
+{{< link-card title="Package Overview" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/README.md#packages" description="Available packages, their purpose, and how to import them." >}}
 {{< link-card title="Guided Tour (Examples)" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/examples/README.md" description="Progressive learning path with runnable Go tests." >}}
-{{< link-card title="Contributing to Go Bindings" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/CONTRIBUTING.md" description="Workspace setup, testing, module lifecycle, and releases." >}}
+{{< link-card title="Contributing to Go Bindings" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/CONTRIBUTING.md" description="Package structure, testing, code generation, and releasing." >}}
 {{< /card-grid >}}
 
 ### OCM CLI
 
 A command-line tool for the Pack-Sign-Transport workflow, located in
-[`cli/`](https://github.com/open-component-model/open-component-model/tree/main/cli). Built on the Go bindings, it is
+[`bindings/go/cli/`](https://github.com/open-component-model/open-component-model/tree/main/bindings/go/cli). Built on the Go bindings, it is
 designed for interactive use and CI/CD pipelines. Start with
 [Install the OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}).
 
 {{< card-grid >}}
-{{< link-card title="CLI README" href="https://github.com/open-component-model/open-component-model/blob/main/cli/README.md" description="Installation from source, quick start, and plugin system." >}}
+{{< link-card title="CLI README" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/cli/README.md" description="Installation from source, quick start, and plugin system." >}}
 {{< link-card title="Command Reference" href="/docs/reference/ocm-cli/ocm/" description="Full reference for all OCM CLI commands." >}}
-{{< link-card title="Contributing to the CLI" href="https://github.com/open-component-model/open-component-model/blob/main/cli/CONTRIBUTING.md" description="CLI-specific development workflow and conventions." >}}
+{{< link-card title="Contributing to the CLI" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/cli/CONTRIBUTING.md" description="CLI-specific development workflow and conventions." >}}
 {{< /card-grid >}}
 
 ### OCM Kubernetes Controller Toolkit
 
 A set of controllers that handle deployment and verification of OCM component versions in Kubernetes clusters, located
-in [`kubernetes/controller/`](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller).
+in [`bindings/go/kubernetes/controller/`](https://github.com/open-component-model/open-component-model/tree/main/bindings/go/kubernetes/controller).
 They use a dependency chain of custom resources: Repository, Component, Resource, and Deployer.
 
 {{< card-grid >}}
 {{< link-card title="Deploy Helm Charts" href="/docs/getting-started/deploy-helm-charts/" description="Tutorial: deploy a Helm chart from an OCM component version with controllers, kro, and Flux." >}}
-{{< link-card title="Deployment Examples" href="https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller/examples/" description="Deployment examples: Helm, Kustomize, signing, nested deployments." >}}
-{{< link-card title="Contributing to Controllers" href="https://github.com/open-component-model/open-component-model/blob/main/kubernetes/controller/CONTRIBUTING.md" description="Controller development, testing, and CRD conventions." >}}
+{{< link-card title="Deployment Examples" href="https://github.com/open-component-model/open-component-model/tree/main/bindings/go/kubernetes/controller/examples/" description="Deployment examples: Helm, Kustomize, signing, nested deployments." >}}
+{{< link-card title="Contributing to Controllers" href="https://github.com/open-component-model/open-component-model/blob/main/bindings/go/kubernetes/controller/CONTRIBUTING.md" description="Controller development, testing, and CRD conventions." >}}
 {{< /card-grid >}}
 
 ### Open Delivery Gear

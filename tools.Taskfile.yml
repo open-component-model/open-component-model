@@ -110,14 +110,24 @@ tasks:
     vars:
       MARKDOWNLINT_CLI2_CONFIG: '{{ .ROOT_DIR }}/.github/config/.markdownlint-cli2.yaml'
     cmd: |
-      npx markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
+      npx --yes markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
         {{ .CLI_ARGS }} '{{ .ROOT_DIR }}/**/*.md'
 
   dependency-table/generate:
     desc: "Regenerate docs/dependency-table.md from golangci.yml depguard rules"
+    deps: [dependency-table/install]
     cmd: node {{ .ROOT_DIR }}/.github/scripts/dependency-table.js generate > {{ .ROOT_DIR }}/docs/dependency-table.md
 
   dependency-table/verify:
     desc: "Verify docs/dependency-table.md is in sync with golangci.yml depguard rules"
+    deps: [dependency-table/install]
     cmd: |
       node {{ .ROOT_DIR }}/.github/scripts/dependency-table.js generate | diff - {{ .ROOT_DIR }}/docs/dependency-table.md
+
+  dependency-table/install:
+    internal: true
+    dir: '{{ .ROOT_DIR }}/.github/scripts'
+    sources:
+      - package.json
+      - package-lock.json
+    cmd: npm ci --omit=dev

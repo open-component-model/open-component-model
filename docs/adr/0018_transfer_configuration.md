@@ -302,7 +302,7 @@ positions in the component tree (even in different versions). The
 `referencePath` traces the path of component references from the root
 to the owning component, making each entry globally unambiguous. This
 follows the same addressing scheme as the controller's
-[`ResourceReference`](../../kubernetes/controller/api/v1alpha1/common_types.go)
+[`ResourceReference`](../../bindings/go/kubernetes/controller/api/v1alpha1/common_types.go)
 type. For resources in the root component, `referencePath` is omitted.
 Each entry addresses exactly one resource — there is no pattern
 matching or globbing.

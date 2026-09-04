@@ -55,12 +55,14 @@ func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.Rea
 		return nil, fmt.Errorf("path must not be empty")
 	}
 
-	// Ensure the path is within the working directory if specified
+	// Resolve path from within the working directory if specified
 	// Provides full path-traversal protection
 	if opt.WorkingDir != "" {
-		if _, err := ensurePathInWorkingDirectory(path, opt.WorkingDir); err != nil {
+		resolved, err := ensurePathInWorkingDirectory(path, opt.WorkingDir)
+		if err != nil {
 			return nil, fmt.Errorf("error ensuring path %q in working directory %q: %w", path, opt.WorkingDir, err)
 		}
+		path = resolved
 	}
 
 	// Check if path is a valid directory or single file.
@@ -141,7 +143,11 @@ func createDirBlob(ctx context.Context, path string, opt DirOptions) (blob.ReadO
 
 	// Apply compression if requested
 	if opt.Compress {
-		tarBlob = compression.Compress(tarBlob)
+		compressed := compression.Compress(tarBlob)
+		if opt.MediaType != "" {
+			compressed.SetMediaType(opt.MediaType)
+		}
+		return compressed, nil
 	}
 	return tarBlob, nil
 }
@@ -169,7 +175,13 @@ func createSingleFileBlob(path string, opt DirOptions) (blob.ReadOnlyBlob, error
 	var fileBlob blob.ReadOnlyBlob = direct.New(fr, direct.WithMediaType(mediaType))
 	// Apply compression if requested
 	if opt.Compress {
-		fileBlob = compression.Compress(fileBlob)
+		compressed := compression.Compress(fileBlob)
+		if opt.MediaType != "" {
+			// A declared media type is used as-is; only the default gets the
+			// compression suffix appended.
+			compressed.SetMediaType(opt.MediaType)
+		}
+		return compressed, nil
 	}
 	return fileBlob, nil
 }

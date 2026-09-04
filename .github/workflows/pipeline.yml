@@ -22,8 +22,8 @@ on:
     branches:
       - main
     paths:
-      - 'cli/**'
-      - 'kubernetes/controller/**'
+      - 'bindings/go/cli/**'
+      - 'bindings/go/kubernetes/controller/**'
       - 'conformance/**'
       - '.github/workflows/cli.yml'
       - '.github/workflows/kubernetes-controller.yml'
@@ -186,7 +186,7 @@ jobs:
         uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
 
       - name: Log in to GHCR
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -245,7 +245,7 @@ jobs:
       attestations: write
       artifact-metadata: write
     env:
-      LOCATION: kubernetes/controller
+      CONTROLLER_DIR: bindings/go/kubernetes/controller
       REF: ${{ needs.decide_publish.outputs.ref }}
     steps:
       - name: Compute image refs (lowercase owner)
@@ -259,11 +259,11 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.ref_name }}
           sparse-checkout: |
-            ${{ env.LOCATION }}
+            ${{ env.CONTROLLER_DIR }}
             Taskfile.yml
             .env
           persist-credentials: false
@@ -283,7 +283,7 @@ jobs:
           version: v4.2.3
 
       - name: Log in to GHCR
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -293,14 +293,14 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ needs.build_controller.outputs.artifact_name }}
-          path: ${{ env.LOCATION }}/tmp/oci
+          path: ${{ env.CONTROLLER_DIR }}/tmp/oci
 
       - name: Extract OCI layout
-        working-directory: ${{ env.LOCATION }}
+        working-directory: ${{ env.CONTROLLER_DIR }}
         run: task oci/extract TAR_PATH=tmp/oci/controller.tar OUTPUT_DIR=tmp/oci-dir
 
       - name: Push image from OCI layout
-        working-directory: ${{ env.LOCATION }}
+        working-directory: ${{ env.CONTROLLER_DIR }}
         env:
           VERSION: ${{ needs.build_controller.outputs.version }}
         run: oras cp --from-oci-layout tmp/oci-dir:${VERSION} ${IMAGE_NAME}:${VERSION}
@@ -330,7 +330,7 @@ jobs:
           push-to-registry: true
 
       - name: Package and push chart with digest
-        working-directory: ${{ env.LOCATION }}
+        working-directory: ${{ env.CONTROLLER_DIR }}
         env:
           VERSION: ${{ needs.build_controller.outputs.version }}
           IMAGE_DIGEST: ${{ steps.image-digest.outputs.digest }}
@@ -367,6 +367,6 @@ jobs:
         with:
           name: controller-chart-${{ needs.build_controller.outputs.version }}
           retention-days: 1
-          path: ${{ env.LOCATION }}/dist/chart-*.tgz
+          path: ${{ env.CONTROLLER_DIR }}/dist/chart-*.tgz
           if-no-files-found: error
   # === end ===

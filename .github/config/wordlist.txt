@@ -961,3 +961,11 @@ ifying
 Wget's
 presigned
 WgetCredentials
+GitHubCredentials
+GitHubRepository
+normalisation
+MinIO
+Ceph
+RGW
+Cloudflare
+unversioned

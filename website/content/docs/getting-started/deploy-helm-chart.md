@@ -60,7 +60,8 @@ mkdir /tmp/helm-deploy && cd /tmp/helm-deploy
 
 Create a `component-constructor.yaml` file that includes a Helm chart resource:
 
-```yaml
+```shell
+cat > component-constructor.yaml << 'EOF'
 components:
   - name: ocm.software/ocm-k8s-toolkit/simple
     provider:
@@ -73,6 +74,7 @@ components:
         access:
           type: OCIImage/v1
           imageReference: "ghcr.io/stefanprodan/charts/podinfo:6.11.1@sha256:a9b2804ec61795a7457b2303bf9efbc5fba51f856c3945f3bb0af68bf3b35afd"
+EOF
 ```
 
 This component references the `podinfo` Helm chart, a simple web application that displays pod information.
@@ -206,7 +208,8 @@ Create `rgd.yaml` with the following content:
 {{< tab "Flux" >}}
 
 {{< details "ResourceGraphDefinition (rgd.yaml)" >}}
-```yaml
+```shell
+cat > rgd.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
@@ -322,6 +325,7 @@ spec:
             # the instance of the CRD created by the ResourceGraphDefinition (see below).
             ui:
               message: ${schema.spec.message}
+EOF
 ```
 {{< /details >}}
 
@@ -329,7 +333,8 @@ spec:
 {{< tab "Argo CD" >}}
 
 {{< details "ResourceGraphDefinition (rgd.yaml)" >}}
-```yaml
+```shell
+cat > rgd.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
@@ -419,6 +424,7 @@ spec:
               selfHeal: true
             syncOptions:
               - CreateNamespace=true
+EOF
 ```
 {{< /details >}}
 
@@ -472,13 +478,15 @@ A new Custom Resource Definition called `Simple` that you can now instantiate ha
 
 Create the file `instance.yaml` to deploy the application:
 
-```yaml
+```shell
+cat > instance.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
 kind: Simple
 metadata:
   name: simple
 spec:
   message: "Deployed with OCM!"
+EOF
 ```
 {{< /step >}}
 

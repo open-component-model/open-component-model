@@ -25,19 +25,19 @@ permissions:
 
 jobs:
   resolve:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     name: Resolve latest stable release
     outputs:
       version: ${{ steps.find.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Find latest stable CLI release
         id: find
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { extractHighestPreviousReleaseVersion } = await import('${{ github.workspace }}/.github/scripts/release-versioning.js');
@@ -92,7 +92,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -128,12 +128,12 @@ jobs:
   install-without-auth:
     needs: resolve
     name: Install without attestation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     env:
       EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -173,3 +173,46 @@ jobs:
           fi
           echo "Installed version ${actual} matches expected ${EXPECTED_VERSION}"
           ocm --help > /dev/null
+
+  install-custom-name:
+    needs: resolve
+    name: Install with custom binary name
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    env:
+      EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # OCM_BIN_NAME overrides the installed filename; OCM_BIN_DIR sets the install directory.
+      # The binary must land as 'ocm-custom' in the target directory - not under the default 'ocm' name.
+      - name: Run install script with a custom binary name
+        env:
+          OCM_BIN_DIR: ${{ runner.temp }}/ocm-bin
+          OCM_BIN_NAME: ocm-custom
+        run: |
+          bash website/static/install-cli.sh
+          echo "${{ runner.temp }}/ocm-bin" >> "$GITHUB_PATH"
+
+      - name: Verify custom-named binary
+        env:
+          INSTALL_DIR: ${{ runner.temp }}/ocm-bin
+        run: |
+          test -x "${INSTALL_DIR}/ocm-custom"
+          if [[ -e "${INSTALL_DIR}/ocm" ]]; then
+            echo "::error::Unexpected default-named binary at ${INSTALL_DIR}/ocm; OCM_BIN_NAME was not honored"
+            exit 1
+          fi
+          version_json=$("${INSTALL_DIR}/ocm-custom" version 2>/dev/null)
+          actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
+          if [[ "${actual}" != "${EXPECTED_VERSION}" ]]; then
+            echo "::error::Version mismatch: expected ${EXPECTED_VERSION}, got ${actual}"
+            exit 1
+          fi
+          echo "Custom-named binary ocm-custom reports ${actual}"
+          "${INSTALL_DIR}/ocm-custom" --help > /dev/null
