@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	helmcreds "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -41,6 +42,13 @@ func NewDigestProcessor(tempFolder string) *DigestProcessor {
 
 func (p *DigestProcessor) GetResourceRepositoryScheme() *ocmruntime.Scheme {
 	return access.Scheme
+}
+
+// GetCredentialTypeScheme returns the credential payload types this digest processor consumes
+// (currently HelmHTTPCredentials/v1). oci:// helm repositories are authenticated with
+// OCICredentials/v1, which is declared by the OCI binding.
+func (p *DigestProcessor) GetCredentialTypeScheme() *ocmruntime.Scheme {
+	return helmcreds.Scheme
 }
 
 // GetResourceDigestProcessorCredentialConsumerIdentity resolves the credential consumer identity for digest processing.

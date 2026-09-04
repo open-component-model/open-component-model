@@ -19,6 +19,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ocicreds "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -322,4 +323,11 @@ func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource 
 		return nil, fmt.Errorf("error streaming resource upload: %w", err)
 	}
 	return res, nil
+}
+
+// GetCredentialTypeScheme returns the credential payload types this repository consumes
+// (currently OCICredentials/v1). ocicreds.Scheme must NOT be used here: it holds the
+// credential repository configuration types (DockerConfig) instead of payload types.
+func (p *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
+	return ocicreds.CredentialTypeScheme
 }
