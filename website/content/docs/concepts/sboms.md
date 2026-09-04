@@ -20,11 +20,10 @@ version:
 
 - **It is identified.** The SBOM is bound to the resource it describes by an identity, not by a file name or a tag. This
                         creates a hard link from an SBOM to an actual resource that is easy to follow and understand.
-- **It is signed.** This link is a label and if `signing: true` is set on it, it means it will part of the signature.
+- **It is signed.** This link is a label and if `signing: true` is set on it, it means it will be part of the signature.
                     That means, that now it's immutable and any change will require a signature update.
 - **It goes where the resource goes.** Transfer the component version and the SBOM is transferred with it, including
-                                       into an air-gapped environment where the registry the artifact originally came
-                                       from is unreachable. The SBOM remains useful.
+                                       into an air-gapped environment and so the SBOM remains useful.
 
 ## Where SBOMs Actually Reside
 
