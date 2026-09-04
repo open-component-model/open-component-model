@@ -26,7 +26,7 @@ jobs:
       modules_json: ${{ steps.filtered.outputs.modules_json }}
       # lint_modules_json = all modules when lint config changed, else same as modules_json
       lint_modules_json: ${{ steps.filtered.outputs.lint_modules_json }}
-      dependency_table_changed: ${{ steps.lint_config_changes.outputs.dependency_table }}
+      dependency_list_changed: ${{ steps.lint_config_changes.outputs.dependency_list }}
       integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
       unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
     env:
@@ -48,12 +48,14 @@ jobs:
             lint_config:
               - '.env'
               - 'golangci.yml'
-            dependency_table:
+            dependency_list:
               - 'golangci.yml'
-              - '.github/scripts/dependency-table.js'
+              - '.github/scripts/dependency-list.js'
               - '.github/scripts/package.json'
               - '.github/scripts/package-lock.json'
               - 'docs/dependency-table.md'
+              - 'bindings/go/README.md'
+              - 'bindings/go/**/doc.go'
       # Detect CI workflow changes to rebuild/test all modules
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         id: ci_changes
@@ -260,16 +262,20 @@ jobs:
     name: "dependency-table-verify"
     needs: discover_modules
     runs-on: ubuntu-24.04-arm
-    if: ${{ needs.discover_modules.outputs.dependency_table_changed == 'true' }}
+    if: ${{ needs.discover_modules.outputs.dependency_list_changed == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Non-cone mode so that file and glob patterns (e.g. bindings/go/**/doc.go) work.
+          sparse-checkout-cone-mode: 'false'
           sparse-checkout: |
             Taskfile.yml
             tools.Taskfile.yml
             golangci.yml
             docs/dependency-table.md
-            .github/scripts/dependency-table.js
+            bindings/go/README.md
+            bindings/go/**/doc.go
+            .github/scripts/dependency-list.js
             .github/scripts/package.json
             .github/scripts/package-lock.json
           persist-credentials: false
@@ -281,10 +287,10 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify dependency table is in sync
+      - name: Verify generated depguard documents are in sync
         run: |
-          task tools:dependency-table/verify || {
-            echo "::error::docs/dependency-table.md is out of sync. Run 'task tools:dependency-table/generate' and commit the result."
+          task tools:dependency-list/verify || {
+            echo "::error::docs/dependency-table.md or bindings/go/README.md is out of sync. Run 'task tools:dependency-list/generate' and commit the result."
             exit 1
           }
 
