@@ -601,6 +601,17 @@ func buildRenderer(ctx context.Context, graph *syncdag.SyncedDirectedAcyclicGrap
 	}
 }
 
+// renderScheme converts internal descriptors to their v2 representation for
+// output rendering. Unlike descriptorv2.Scheme it allows unknown (typed but
+// unregistered) access and input specs. A freshly constructed component version
+// can still carry typed access specs (for example ociArtifact) that are not
+// registered in the descriptor scheme.
+var renderScheme = func() *runtime.Scheme {
+	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+	descriptorv2.MustAddToScheme(scheme)
+	return scheme
+}()
+
 func serializeVertexToDescriptorTree(vertex *dag.Vertex[string]) (tree.Row, error) {
 	untypedDescriptor, ok := vertex.Attributes[constructor.AttributeDescriptor]
 	if !ok {
@@ -610,7 +621,7 @@ func serializeVertexToDescriptorTree(vertex *dag.Vertex[string]) (tree.Row, erro
 	if !ok {
 		return tree.Row{}, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, constructor.AttributeDescriptor, &descriptor.Descriptor{}, untypedDescriptor)
 	}
-	descriptorV2, err := descriptor.ConvertToV2(descriptorv2.Scheme, desc)
+	descriptorV2, err := descriptor.ConvertToV2(renderScheme, desc)
 	if err != nil {
 		return tree.Row{}, fmt.Errorf("converting descriptor to v2 failed: %w", err)
 	}
@@ -632,7 +643,7 @@ func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {
 	if !ok {
 		return nil, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, constructor.AttributeDescriptor, &descriptor.Descriptor{}, untypedDescriptor)
 	}
-	descriptorV2, err := descriptor.ConvertToV2(descriptorv2.Scheme, desc)
+	descriptorV2, err := descriptor.ConvertToV2(renderScheme, desc)
 	if err != nil {
 		return nil, fmt.Errorf("converting descriptor to v2 failed: %w", err)
 	}
