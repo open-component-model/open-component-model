@@ -46,7 +46,7 @@ OCM has you covered.
 
 ## How It Works
 
-`--sbom` tries two strategies currently, in order, and the first one that finds anything, wins.
+`ocm download resource --sbom` tries two strategies currently, in order, and the first one that finds anything, wins.
 
 ```mermaid
 flowchart TD
@@ -139,7 +139,7 @@ components:
         version: 1.0.0
         input:
           type: File/v1
-          path: ./ocm-cli
+          path: ${OCM_CLI_LOCATION}
           mediaType: application/octet-stream
 
       # Using artifact-references, link back to the binary by label.
@@ -177,7 +177,7 @@ components:
 Build it into a CTF archive:
 
 ```bash
-ocm add cv --constructor component-constructor.yaml --repository ./ctf
+ocm add cv
 ```
 
 ```text
@@ -189,7 +189,7 @@ ocm add cv --constructor component-constructor.yaml --repository ./ctf
 The label is now part of the descriptor, which is what makes it durable:
 
 ```bash
-ocm get cv ./ctf//ocm.software/examples/sbom-demo:1.0.0 -o yaml | grep -A6 artifact-references
+ocm get cv ./transport-archive/ -o yaml | grep -A6 artifact-references
 ```
 
 ```yaml
