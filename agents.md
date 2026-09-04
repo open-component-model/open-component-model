@@ -88,9 +88,9 @@ The foundation of OCM: every typed object has a `runtime.Type` (Name + Version) 
 
 ### CI Pipeline
 
-- Smart module detection: CI discovers Go modules dynamically and filters based on changed files
-- Tests only run for affected modules on PRs; full suite on main
-- Pipeline: PR title validation (conventional commit format) → auto-labeling → module discovery → lint → unit tests → integration tests → CodeQL → generation verification
+- Single Go module (`bindings/go`). CI uses static path filters instead of dynamic module discovery; `conformance/scenarios/sovereign/components/notes` is lint-only
+- On PRs, unit and integration tests run when `bindings/go`, the shared task plumbing (`Taskfile.yml`, `reuse.Taskfile.yml`), or `ci.yml` changes. Lint runs for the changed module only, or for all modules when `golangci.yml` / `.env` / `ci.yml` changes; full suite on main
+- Pipeline: PR title validation (conventional commit format) → auto-labeling → change detection → lint → unit tests → integration tests → CodeQL → generation verification
 - Multi-arch builds for CLI and controller (linux/darwin, amd64/arm64)
 
 ---
