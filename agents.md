@@ -151,13 +151,12 @@ Hugo-based documentation site published at <https://ocm.software>. Read `website
 ## Common Pitfalls
 
 1. **Envtest version drift** — Controller suites self-provision binaries via `internal/test/envtest.go`; the version comes from `ENVTEST_K8S_VERSION` (`bindings/go/kubernetes/controller/.env`) with a fallback to `DefaultEnvTestVersion` in that file. Both are bumped together by renovate; keep them in sync when hand-editing
-2. **Cross-module PRs** — CI rejects PRs that mix changes across multiple Go modules
-3. **Forgetting `task generate`** — After adding/changing markers, generated code must be committed
-4. **Using `-run` with Ginkgo** — Use `--ginkgo.focus` instead
-5. **Interactive git** — Don't use `-i` flags in scripts
-6. **Context** — Always pass `context.Context` through APIs
-7. **APIs are WIP** — Expect changes, especially in bindings
-8. **Hand-editing Hugo version configs** — `config/_default/hugo.yaml` and `module.yaml` version stanzas are managed by `npm run register-docs-version`. Never edit them by hand.
+2. **Forgetting `task generate`** — After adding/changing markers, generated code must be committed
+3. **Using `-run` with Ginkgo** — Use `--ginkgo.focus` instead
+4. **Interactive git** — Don't use `-i` flags in scripts
+5. **Context** — Always pass `context.Context` through APIs
+6. **APIs are WIP** — Expect changes, especially in bindings
+7. **Hand-editing Hugo version configs** — `config/_default/hugo.yaml` and `module.yaml` version stanzas are managed by `npm run register-docs-version`. Never edit them by hand.
 
 ## Dependency Management
 
