@@ -269,15 +269,15 @@ jobs:
           # Non-cone mode so that file and glob patterns (e.g. bindings/go/**/doc.go) work.
           sparse-checkout-cone-mode: 'false'
           sparse-checkout: |
-            Taskfile.yml
-            tools.Taskfile.yml
-            golangci.yml
-            docs/dependency-table.md
-            bindings/go/README.md
-            bindings/go/**/doc.go
-            .github/scripts/dependency-list.js
-            .github/scripts/package.json
-            .github/scripts/package-lock.json
+            /Taskfile.yml
+            /tools.Taskfile.yml
+            /golangci.yml
+            /docs/dependency-table.md
+            /bindings/go/README.md
+            /bindings/go/**/doc.go
+            /.github/scripts/dependency-list.js
+            /.github/scripts/package.json
+            /.github/scripts/package-lock.json
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:

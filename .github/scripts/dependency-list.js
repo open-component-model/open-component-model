@@ -4,7 +4,7 @@
 // depguard rules: the binding dependency layer table (docs/dependency-table.md)
 // and the bindings/go README packages table.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as yaml from "js-yaml";
@@ -266,6 +266,7 @@ function main() {
 }
 
 // Only run the CLI when executed directly, not when imported by tests.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// realpathSync to cover cases with symlinks
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
     main();
 }
