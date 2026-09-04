@@ -7,15 +7,15 @@ toc: true
 ---
 
 A component version tells you *which artifacts* you deliver. It does not tell you *what is inside* them. That answer
-lives in a Software Bill of Materials. Today, they are all over the place, and we need a way to unify them and get all
-of them together.
+lives in a Software Bill of Materials. Today, SBOMs might be located in various places, and we need a way to unify them
+and get all of them together to one location.
 
 In this tutorial you build a component version that ships a binary and a third-party image, and you'll retrieve the SBOM
 for both with the same command, even though the two SBOMs got there in completely different ways.
 
 {{< callout context="caution" title="Experimental" >}}
 `ocm download resource --sbom` is experimental. What is discovered, how it is written out, and the flag itself may
-change in a future release to offer a better UX!
+change in a future release depending on user feedback to offer a better ux.
 {{< /callout >}}
 
 ## What You'll Learn
