@@ -14,13 +14,11 @@ import (
 // processGitHub emits the transformation nodes for a gitHub resource under
 // CopyModeAllResources. The archive at the pinned commit is downloaded (GetGitHubCommit),
 // then embedded as a local blob (AddLocalResource).
-func processGitHub(resource descriptorv2.Resource, access *githubv1.GitHub, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
+func processGitHub(resource descriptorv2.Resource, access *githubv1.GitHub, id string, resourceID string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
 	if access.Commit == "" {
 		return fmt.Errorf("github resource %q has no pinned commit: pin ref %q to a commit before transferring it by value", resource.Name, access.Ref)
 	}
 
-	resourceIdentity := resource.ToIdentity()
-	resourceID := identityToTransformationID(resourceIdentity)
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 

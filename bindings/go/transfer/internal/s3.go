@@ -15,9 +15,7 @@ import (
 // (DownloadS3Resource) and then embedded as a local blob in the target repository
 // (AddLocalResource). Like wget, there is no conversion step and no OCI-artifact representation,
 // so the upload always goes through the local-resource path regardless of the requested upload type.
-func processS3(resource v2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
-	resourceIdentity := resource.ToIdentity()
-	resourceID := identityToTransformationID(resourceIdentity)
+func processS3(resource v2.Resource, id string, resourceID string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 

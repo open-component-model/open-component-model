@@ -104,6 +104,22 @@ func TestIdentityToTransformationID(t *testing.T) {
 			want: "transformOcmSoftwareMyComponent",
 		},
 		{
+			name: "version with semver build metadata",
+			identity: runtime.Identity{
+				descriptor.IdentityAttributeName:    "operator-image",
+				descriptor.IdentityAttributeVersion: "0.2.1+a0b6f97",
+			},
+			want: "transformOperatorImage021A0b6f97",
+		},
+		{
+			name: "version with semver pre-release",
+			identity: runtime.Identity{
+				descriptor.IdentityAttributeName:    "operator-image",
+				descriptor.IdentityAttributeVersion: "0.2.1-rc.1",
+			},
+			want: "transformOperatorImage021Rc1",
+		},
+		{
 			name:     "empty identity",
 			identity: runtime.Identity{},
 			want:     "transform",
@@ -114,6 +130,50 @@ func TestIdentityToTransformationID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := identityToTransformationID(tt.identity)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// --- resourceIDAllocator tests ---
+
+func TestResourceIDAllocator(t *testing.T) {
+	tests := []struct {
+		name  string
+		bases []string
+		want  []string
+	}{
+		{
+			name:  "no collisions",
+			bases: []string{"transformA", "transformB"},
+			want:  []string{"transformA", "transformB"},
+		},
+		{
+			name:  "duplicate bases get incrementing suffix",
+			bases: []string{"transformA", "transformA", "transformA"},
+			want:  []string{"transformA", "transformAR1", "transformAR2"},
+		},
+		{
+			name:  "naturally occurring suffix in input is skipped",
+			bases: []string{"transformA", "transformAR1", "transformA"},
+			want:  []string{"transformA", "transformAR1", "transformAR2"},
+		},
+		{
+			name: "semver build metadata and pre-release collide on base ID",
+			bases: []string{
+				identityToTransformationID(runtime.Identity{"name": "operator-image", "version": "0.2.1+meta"}),
+				identityToTransformationID(runtime.Identity{"name": "operator-image", "version": "0.2.1-meta"}),
+			},
+			want: []string{"transformOperatorImage021Meta", "transformOperatorImage021MetaR1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			a := newResourceIDAllocator()
+			for i, base := range tt.bases {
+				r.Equal(tt.want[i], a.allocate(base))
+			}
 		})
 	}
 }

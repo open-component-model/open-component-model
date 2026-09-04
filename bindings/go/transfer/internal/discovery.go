@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -229,12 +228,19 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 	return children, nil
 }
 
-var toWordRunes = []rune{',', '.', '/', '-'}
+// isTransformationIDWordBoundary reports whether r must be treated as a word
+// boundary when building a transformation ID. Any character that is not an
+// ASCII letter or digit is a boundary. This keeps the derived ID within the
+// valid OCM transformation ID character set (lower camelCase, alphanumeric
+// only) and handles separators ".", "/", "-" as well as SemVer build metadata ("+")
+func isTransformationIDWordBoundary(r rune) bool {
+	return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9')
+}
 
 // identityToTransformationID converts a component identity (name + version) to a camelCase
 // transformation ID suitable for use as a DAG vertex key. The identity map keys are sorted
-// alphabetically for determinism, and separator characters (dots, slashes, dashes, commas)
-// are treated as word boundaries for camelCase conversion.
+// alphabetically for determinism, and any non-alphanumeric character is treated as a word
+// boundary for camelCase conversion.
 //
 // Example: {"name": "ocm.software/my-app", "version": "1.0.0"} → "transformOcmSoftwareMyApp100"
 func identityToTransformationID(id runtime.Identity) string {
@@ -248,9 +254,7 @@ func identityToTransformationID(id runtime.Identity) string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		words = append(words, strings.FieldsFunc(id[k], func(r rune) bool {
-			return slices.Contains(toWordRunes, r)
-		})...)
+		words = append(words, strings.FieldsFunc(id[k], isTransformationIDWordBoundary)...)
 	}
 	result := strings.ToLower(words[0])
 	for i := 1; i < len(words); i++ {
@@ -260,4 +264,41 @@ func identityToTransformationID(id runtime.Identity) string {
 		}
 	}
 	return result
+}
+
+// resourceIDAllocator hands out unique transformation IDs for the resources of one
+// component. identityToTransformationID is lossy: it drops separators and folds case, so
+// distinct identities (for example versions "0.2.1+meta" and "0.2.1-meta") map to the same
+// base ID. On collision the allocator appends an incrementing suffix ("R1", "R2", ...),
+// mirroring the per-target "T0", "T1" suffix scheme.
+type resourceIDAllocator struct {
+	// used contains every ID handed out so far, including suffixed candidates.
+	used map[string]struct{}
+	// nextSuffix tracks the first untried suffix per colliding base ID.
+	nextSuffix map[string]int
+}
+
+func newResourceIDAllocator() *resourceIDAllocator {
+	return &resourceIDAllocator{
+		used:       make(map[string]struct{}),
+		nextSuffix: make(map[string]int),
+	}
+}
+
+// allocate returns base unchanged while it is unused. On collision, it returns the first
+// unused ID of the form base+"R"+counter, with the counter starting at 1. Callers must
+// allocate in a deterministic order (descriptor order) to keep the resulting IDs stable.
+func (a *resourceIDAllocator) allocate(base string) string {
+	if _, ok := a.used[base]; !ok {
+		a.used[base] = struct{}{}
+		return base
+	}
+	for n := max(a.nextSuffix[base], 1); ; n++ {
+		candidate := fmt.Sprintf("%sR%d", base, n)
+		if _, ok := a.used[candidate]; !ok {
+			a.used[candidate] = struct{}{}
+			a.nextSuffix[base] = n + 1
+			return candidate
+		}
+	}
 }
