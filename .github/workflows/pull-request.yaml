@@ -33,9 +33,10 @@ jobs:
               "feat":"kind/feature",
               "fix":"kind/bugfix",
               "chore":"kind/chore",
-              "docs":"area/documentation",
-              "test":"area/testing",
-              "perf":"area/performance"
+              "refactor":"kind/refactor",
+              "docs":["kind/chore","area/documentation"],
+              "test":["kind/chore","area/testing"],
+              "perf":["kind/chore","area/performance"]
             }
           SCOPE_TO_LABEL: |
             {

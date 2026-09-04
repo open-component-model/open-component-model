@@ -9,9 +9,10 @@ const maps = {
     feat: "kind/feature",
     fix: "kind/bugfix",
     chore: "kind/chore",
-    docs: "area/documentation",
-    test: "area/testing",
-    perf: "area/performance",
+    refactor: "kind/refactor",
+    docs: ["kind/chore", "area/documentation"],
+    test: ["kind/chore", "area/testing"],
+    perf: ["kind/chore", "area/performance"],
   },
   scopeToLabel: {
     deps: "kind/dependency",
@@ -56,6 +57,41 @@ test("breaking change adds the breaking label first", () => {
   const { valid, labels } = deriveLabels("feat(deps)!: drop old API", maps);
   assert.strictEqual(valid, true);
   assert.deepStrictEqual(labels, ["!BREAKING-CHANGE!", "kind/feature", "kind/dependency"]);
+});
+
+test("type with a label list applies every label (docs)", () => {
+  const { valid, labels } = deriveLabels("docs: update readme", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/documentation"]);
+});
+
+test("type with a label list applies every label (test)", () => {
+  const { valid, labels } = deriveLabels("test: add unit tests", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/testing"]);
+});
+
+test("type with a label list applies every label (perf)", () => {
+  const { valid, labels } = deriveLabels("perf: reduce allocations", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/performance"]);
+});
+
+test("refactor maps to kind/refactor", () => {
+  const { valid, labels } = deriveLabels("refactor: simplify resolver", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/refactor"]);
+});
+
+test("a label contributed by both type list and scope is de-duplicated", () => {
+  const localMaps = {
+    typeToLabel: { docs: ["kind/chore", "area/documentation"] },
+    scopeToLabel: { deps: "kind/chore" },
+    breakingLabel: "!BREAKING-CHANGE!",
+  };
+  const { valid, labels } = deriveLabels("docs(deps): bump", localMaps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/documentation"]);
 });
 
 test("special 'Initial commit' title is valid but yields no labels", () => {
