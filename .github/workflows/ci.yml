@@ -50,6 +50,7 @@ jobs:
               - 'golangci.yml'
             dependency_list:
               - 'golangci.yml'
+              - 'tools.Taskfile.yml'
               - '.github/scripts/dependency-list.js'
               - '.github/scripts/package.json'
               - '.github/scripts/package-lock.json'
