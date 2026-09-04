@@ -38,7 +38,6 @@ const (
 	FlagConcurrencyLimit = "concurrency-limit"
 	FlagLatest           = "latest"
 	FlagRecursive        = "recursive"
-	FlagShowResources    = "show-resources"
 )
 
 func New() *cobra.Command {
@@ -428,12 +427,11 @@ func (r *resolverAndDiscoverer) Discover(ctx context.Context, parent *descruntim
 
 // Params holds the values of the flags for the `get cv` command.
 type Params struct {
-	output        string
-	displayMode   string
-	constraint    string
-	latestOnly    bool
-	recursive     int
-	showResources bool
+	output      string
+	displayMode string
+	constraint  string
+	latestOnly  bool
+	recursive   int
 }
 
 // processRepositoryReference implements the logic for the `get cv <ref>` command, where <ref> is a repository reference.
