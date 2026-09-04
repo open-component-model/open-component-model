@@ -5,27 +5,26 @@
 package gpg
 
 import (
+	"fmt"
+
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/gpg/signing/handler"
-	gpgcredsv1alpha1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Register(
 	signingHandlerRegistry *signinghandler.SigningRegistry,
-	repositoryRegistry *credentialrepository.RepositoryRegistry,
+	credentialTypeRegistry *credentialtyperepository.CredentialTypeRegistry,
 	_ *filesystemv1alpha1.Config,
 ) error {
-	// has no scheme in released bindings yet
-	gpgCredScheme := runtime.NewScheme()
-	gpgcredsv1alpha1.MustRegisterCredentialType(gpgCredScheme)
-	repositoryRegistry.Register(gpgCredScheme)
-
 	hdlr, err := handler.New(nil)
 	if err != nil {
 		return err
+	}
+
+	if err := credentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(hdlr); err != nil {
+		return fmt.Errorf("could not register GPG credential types: %w", err)
 	}
 
 	return signingHandlerRegistry.RegisterInternalComponentSignatureHandler(hdlr)

@@ -159,3 +159,31 @@ type schemeProviderPlugin struct {
 func (p *schemeProviderPlugin) GetCredentialTypeScheme() *runtime.Scheme {
 	return p.scheme
 }
+
+// TestRegister_DefaultTypeIsNotItsOwnAlias pins the invariant the merge relies on: a scheme never
+// lists a default type among its own aliases, so the candidate list built from type plus aliases
+// holds no duplicate and the type is registered as default, not as an alias of itself.
+func TestRegister_DefaultTypeIsNotItsOwnAlias(t *testing.T) {
+	r := require.New(t)
+	reg := newRegistry(t)
+
+	typ := runtime.NewVersionedType("CredA", "v1")
+	alias := runtime.NewUnversionedType("CredA")
+
+	source := runtime.NewScheme()
+	source.MustRegisterWithAlias(&dummyv1.Repository{}, typ, alias)
+	r.Equal(map[runtime.Type][]runtime.Type{typ: {alias}}, source.GetTypes())
+
+	r.NoError(reg.Register(source))
+
+	scheme := reg.GetCredentialTypeScheme()
+	r.Equal(map[runtime.Type][]runtime.Type{typ: {alias}}, scheme.GetTypes())
+
+	canonical, ok := scheme.ResolveCanonicalType(alias)
+	r.True(ok)
+	r.Equal(typ, canonical)
+
+	canonical, ok = scheme.ResolveCanonicalType(typ)
+	r.True(ok)
+	r.Equal(typ, canonical)
+}

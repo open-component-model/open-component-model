@@ -708,3 +708,64 @@ func TestRegistry_RegisterSchemes(t *testing.T) {
 		r.False(registry.IsRegistered(typ3))
 	})
 }
+
+// TestRegistry_GetTypes_NeverListsDefaultAsItsOwnAlias pins the invariant every scheme merge
+// relies on: whatever order types and aliases arrive in, GetTypes never reports a default type
+// among its own aliases. Callers may therefore build a candidate list as default plus aliases
+// without having to deduplicate it.
+func TestRegistry_GetTypes_NeverListsDefaultAsItsOwnAlias(t *testing.T) {
+	def := NewVersionedType("test", "v1")
+	alias := NewUnversionedType("test")
+
+	for _, tc := range []struct {
+		name     string
+		register func(*Scheme) error
+		expected map[Type][]Type
+	}{
+		{
+			name: "default and alias in one call",
+			register: func(s *Scheme) error {
+				return s.RegisterWithAlias(&TestType{}, def, alias)
+			},
+			expected: map[Type][]Type{def: {alias}},
+		},
+		{
+			name: "alias added in a later call",
+			register: func(s *Scheme) error {
+				s.MustRegisterWithAlias(&TestType{}, def)
+				return s.RegisterWithAlias(&TestType{}, alias)
+			},
+			expected: map[Type][]Type{def: {alias}},
+		},
+		{
+			name: "default registered twice",
+			register: func(s *Scheme) error {
+				s.MustRegisterWithAlias(&TestType{}, def)
+				return s.RegisterWithAlias(&TestType{}, def)
+			},
+			expected: map[Type][]Type{def: nil},
+		},
+		{
+			name: "default repeated within one call",
+			register: func(s *Scheme) error {
+				return s.RegisterWithAlias(&TestType{}, def, def)
+			},
+			expected: map[Type][]Type{def: nil},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			scheme := NewScheme()
+
+			if err := tc.register(scheme); err != nil {
+				r.True(IsTypeAlreadyRegisteredError(err), "re-registering a default must fail loudly, got %v", err)
+			}
+
+			types := scheme.GetTypes()
+			r.Equal(tc.expected, types)
+			for typ, aliases := range types {
+				r.NotContains(aliases, typ)
+			}
+		})
+	}
+}

@@ -101,9 +101,13 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 	}
 
 	// register the cred scheme.
-	pm.CredentialRepositoryRegistry.Register(rsacredspec.Scheme)
-	pm.CredentialRepositoryRegistry.Register(ocicredspec.Scheme)
-	pm.CredentialRepositoryRegistry.Register(helmcredspec.Scheme)
+	if err := errors.Join(
+		pm.CredentialTypeRegistry.Register(rsacredspec.Scheme),
+		pm.CredentialTypeRegistry.Register(ocicredspec.Scheme),
+		pm.CredentialTypeRegistry.Register(helmcredspec.Scheme),
+	); err != nil {
+		return nil, fmt.Errorf("failed to register credential types: %w", err)
+	}
 
 	return pm, nil
 }
