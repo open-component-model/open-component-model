@@ -27,7 +27,7 @@ import (
 )
 
 // creator controller user-agent.
-const creator = "ocm.software/open-component-model/kubernetes/controller"
+const creator = "ocm.software/open-component-model/bindings/go/kubernetes/controller"
 
 // PluginOptions since TempDir is dependent on the Pod and mounted temp folder
 // we set it separately from the ocm config. Also, filesystem config is not allowed.
