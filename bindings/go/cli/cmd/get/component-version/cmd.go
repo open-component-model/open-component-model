@@ -79,32 +79,19 @@ get cvs ghcr.io/open-component-model//ocm.software/cli -oyaml
 
 Showing the resources of each component version in the tree output:
 
-get cv ./path/to/ctf//ocm.software/cli:0.12.0 -o tree --show-resources
-get cvs ghcr.io/open-component-model//ocm.software/cli -o tree --recursive --show-resources
+get cv ./path/to/ctf//ocm.software/cli:0.12.0 -o widetree
+get cvs ghcr.io/open-component-model//ocm.software/cli -o widetree --recursive
 
 Specifying types and schemes:
 
 get cv ctf::github.com/locally-checked-out-repo//ocm.software/cli:0.12.0
 get cvs oci::http://localhost:8080//ocm.software/cli
 `),
-		RunE: GetComponentVersion,
-		PreRunE: func(cmd *cobra.Command, _ []string) error {
-			if !cmd.Flags().Changed(FlagShowResources) {
-				return nil
-			}
-			output, err := enum.Get(cmd.Flags(), FlagOutput)
-			if err != nil {
-				return fmt.Errorf("getting %s flag failed: %w", FlagOutput, err)
-			}
-			if output != render.OutputFormatTree.String() {
-				return fmt.Errorf("--%s can only be used with --%s tree", FlagShowResources, FlagOutput)
-			}
-			return nil
-		},
+		RunE:              GetComponentVersion,
 		DisableAutoGenTag: true,
 	}
 
-	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the component descriptors")
+	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTree.String(), render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatWideTree.String()}, "output format of the component descriptors")
 	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `display mode can be used in combination with --recursive
   static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
@@ -114,7 +101,6 @@ get cvs oci::http://localhost:8080//ocm.software/cli
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
 	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))")
 	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
-	cmd.Flags().Bool(FlagShowResources, false, "if set, list the resources of each component version below the component (only for --output tree)")
 
 	return cmd
 }
@@ -169,20 +155,15 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
-	showResources, err := cmd.Flags().GetBool(FlagShowResources)
-	if err != nil {
-		return fmt.Errorf("getting show-resources flag failed: %w", err)
-	}
 
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
 	params := Params{
-		output:        output,
-		displayMode:   displayMode,
-		constraint:    constraint,
-		latestOnly:    latestOnly,
-		recursive:     recursive,
-		showResources: showResources,
+		output:      output,
+		displayMode: displayMode,
+		constraint:  constraint,
+		latestOnly:  latestOnly,
+		recursive:   recursive,
 	}
 
 	reference := args[0]
@@ -249,14 +230,14 @@ func processComponentReference(cmd *cobra.Command,
 		roots = append(roots, identity)
 	}
 
-	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive, params.showResources); err != nil {
+	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components: %w", err)
 	}
 
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, format string, mode string, recursive int, showResources bool) error {
+func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, format string, mode string, recursive int) error {
 	resAndDis := resolverAndDiscoverer{
 		repositoryResolver: repoResolver,
 		recursive:          recursive,
@@ -266,7 +247,7 @@ func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersio
 		Resolver:   &resAndDis,
 		Discoverer: &resAndDis,
 	})
-	renderer, err := buildRenderer(cmd.Context(), discoverer.Graph(), roots, format, showResources)
+	renderer, err := buildRenderer(cmd.Context(), discoverer.Graph(), roots, format)
 	if err != nil {
 		return fmt.Errorf("building renderer failed: %w", err)
 	}
@@ -303,7 +284,7 @@ func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersio
 	return nil
 }
 
-func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string, showResources bool) (render.Renderer, error) {
+func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string) (render.Renderer, error) {
 	// Initialize renderer based on the requested output format.
 	switch format {
 	case render.OutputFormatJSON.String():
@@ -316,11 +297,9 @@ func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[
 		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatYAML))
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatTree.String():
-		opts := []tree.RendererOption[string]{tree.WithRoots(roots...)}
-		if showResources {
-			opts = append(opts, tree.WithSubRowProviderFunc(serializeResourcesToTreeRows))
-		}
-		return tree.New(ctx, dag, opts...), nil
+		return tree.New(ctx, dag, tree.WithRoots(roots...)), nil
+	case render.OutputFormatWideTree.String():
+		return tree.New(ctx, dag, tree.WithRoots(roots...), tree.WithSubRowProviderFunc(serializeResourcesToTreeRows)), nil
 	case render.OutputFormatTable.String():
 		serializer := list.ListSerializerFunc[string](serializeVerticesToTable)
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
@@ -500,7 +479,7 @@ func processRepositoryReference(cmd *cobra.Command,
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
 
-	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive, params.showResources); err != nil {
+	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 
