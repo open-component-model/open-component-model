@@ -34,8 +34,8 @@ change in a future release depending on user feedback to offer a better UX.
 We'll create a component version consisting of two things: a CLI binary, and the
 [podinfo](https://github.com/stefanprodan/podinfo) image, which you consume as-is from a third party.
 
-Let's try to identify if *CVE-2026-56854* is out, and are you affected? Answering it requires to locate a number of
-SBOMs that are scattered in a number of places.
+Let's try to identify if *CVE-2026-56854* is out, and we are affected by it. SBOMs live in many locations, and OCM helps
+in identifying them and bringing them in to one place.
 
 - Nothing is attached to your binary. You generate its SBOM yourself and have to say, somewhere durable, which resource
   it describes.
