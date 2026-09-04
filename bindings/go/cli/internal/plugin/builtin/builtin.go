@@ -23,7 +23,7 @@ import (
 )
 
 func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, logger *slog.Logger) error {
-	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry, manager.CredentialTypeRegistry); err != nil {
+	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}
 
@@ -33,6 +33,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.DigestProcessorRegistry,
 		manager.BlobTransformerRegistry,
 		manager.ComponentListerRegistry,
+		manager.CredentialTypeRegistry,
 		filesystemConfig,
 		httpConfig,
 		logger,
@@ -92,7 +93,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := oidc.RegisterCredentialPlugin(manager.CredentialPluginRegistry); err != nil {
 		return fmt.Errorf("could not register OIDC credential plugin: %w", err)
 	}
-	if err := gpg.Register(manager.SigningRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
+	if err := gpg.Register(manager.SigningRegistry, manager.CredentialTypeRegistry); err != nil {
 		return fmt.Errorf("could not register GPG signing plugin: %w", err)
 	}
 

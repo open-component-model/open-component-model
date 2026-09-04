@@ -49,6 +49,9 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	if err := digestProcessorRegistry.RegisterInternalDigestProcessorPlugin(wgetResourceRepository); err != nil {
 		return fmt.Errorf("could not register wget digest processor plugin: %w", err)
 	}
+	if err := credentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(wgetResourceRepository); err != nil {
+		return fmt.Errorf("could not register wget credential types: %w", err)
+	}
 
 	return nil
 }

@@ -33,6 +33,9 @@ func Register(resourcePluginRegistry *resource.ResourceRegistry,
 	if err := digestProcessorRegistry.RegisterInternalDigestProcessorPlugin(digestProcessor); err != nil {
 		return fmt.Errorf("could not register github digest processor plugin: %w", err)
 	}
+	if err := credentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(digestProcessor); err != nil {
+		return fmt.Errorf("could not register github credential types: %w", err)
+	}
 
 	return nil
 }

@@ -7,7 +7,6 @@ package gpg
 import (
 	"fmt"
 
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/gpg/signing/handler"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
@@ -16,7 +15,6 @@ import (
 func Register(
 	signingHandlerRegistry *signinghandler.SigningRegistry,
 	credentialTypeRegistry *credentialtyperepository.CredentialTypeRegistry,
-	_ *filesystemv1alpha1.Config,
 ) error {
 	hdlr, err := handler.New(nil)
 	if err != nil {
