@@ -15,7 +15,7 @@ for both with the same command, even though the two SBOMs got there in completel
 
 {{< callout context="caution" title="Experimental" >}}
 `ocm download resource --sbom` is experimental. What is discovered, how it is written out, and the flag itself may
-change in a future release depending on user feedback to offer a better ux.
+change in a future release depending on user feedback to offer a better UX.
 {{< /callout >}}
 
 ## What You'll Learn
@@ -148,7 +148,7 @@ components:
         version: 1.0.0
         labels:
           - name: ocm.software/artifact-references
-            singing: true
+            signing: true
             value:
               - identity:
                   name: ocm-cli
