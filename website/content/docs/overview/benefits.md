@@ -37,7 +37,8 @@ and vulnerability scans easier and more reliable. With OCM, your software is ful
 **Software Bills of Materials with your components.** An SBOM can be added as a resource linked to the artifact
 it describes, so it is signed and transferred along with everything else. Where an SBOM is already attached to an OCI
 image, OCM discovers it instead.
-See [Working with SBOMs]({{< relref "docs/tutorials/working-with-sboms.md" >}}).
+See [Software Bills of Materials]({{< relref "docs/concepts/sboms.md" >}}) for the why, and
+[Working with SBOMs]({{< relref "docs/tutorials/working-with-sboms.md" >}}) for the how.
 
 ### Deploy Anywhere, Even Air-Gapped
 

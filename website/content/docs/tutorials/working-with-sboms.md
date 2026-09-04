@@ -8,7 +8,7 @@ toc: true
 
 A component version tells you *which artifacts* you deliver. It does not tell you *what is inside* them. That answer
 lives in a Software Bill of Materials. Today, SBOMs might be located in various places, and we need a way to unify them
-and get all of them together to one location.
+and get all of them together to one location. For the why, see [Software Bills of Materials]({{< relref "docs/concepts/sboms.md" >}}).
 
 In this tutorial you build a component version that ships a binary and a third-party image, and you'll retrieve the SBOM
 for both with the same command, even though the two SBOMs got there in completely different ways.
@@ -94,18 +94,21 @@ discovered at this time. You can read more about BuildKit attestation at [SBOM a
 mkdir -p /tmp/ocm-sbom-tutorial && cd /tmp/ocm-sbom-tutorial
 ```
 
-We'll be using the ocm cli for this purpose:
+We'll be using the ocm CLI itself as the binary. Point at wherever it is installed, and remember the workspace:
 
 ```bash
-cp "$(command -v ocm)" ./ocm-cli
+export OCM_CLI_LOCATION="$(command -v ocm)"
+export WORKSPACE="$PWD"
 ```
+
+Both are read by the component constructor further down.
 
 ### Generate an SBOM for the binary
 
 Let's create an SBOM for the above binary.
 
 ```bash
-syft scan file:./ocm-cli -o spdx-json > ocm-cli.spdx.json
+syft scan "file:$OCM_CLI_LOCATION" -o spdx-json > ocm-cli.spdx.json
 ```
 
 Check that you got a document with packages in it:
@@ -117,7 +120,7 @@ jq '{spdxVersion, name, packages: (.packages | length)}' ocm-cli.spdx.json
 ```json5
 {
   "spdxVersion": "SPDX-2.3",
-  "name": "ocm-cli",
+  "name": "ocm",
   "packages": 108 // this may vary
 }
 ```
@@ -154,7 +157,7 @@ components:
                   name: ocm-cli
         input:
           type: File/v1
-          path: ./ocm-cli.spdx.json
+          path: ${WORKSPACE}/ocm-cli.spdx.json
           mediaType: application/spdx+json
 
       # This is the reference to podinfo that has been built using buildx.
@@ -177,7 +180,7 @@ components:
 Build it into a CTF archive:
 
 ```bash
-ocm add cv
+ocm add cv --working-directory /
 ```
 
 ```text
@@ -185,6 +188,10 @@ ocm add cv
 ─────────────────────────────────┼─────────┼──────────────
  ocm.software/examples/sbom-demo │ 1.0.0   │ ocm.software
 ```
+
+Without `--repository`, this writes a CTF into `./transport-archive`, which is what the rest of the tutorial reads
+from. `File/v1` only reads files inside the working directory, that defaults to the constructor file's directory. Using
+`--working-directory /` allows reading the ocm binary on your `PATH`.
 
 The label is now part of the descriptor, which is what makes it durable:
 
@@ -205,7 +212,7 @@ ocm get cv ./transport-archive/ -o yaml | grep -A6 artifact-references
 Ask for the SBOM of the *binary*, not of the SBOM resource:
 
 ```bash
-ocm download resource ./ctf//ocm.software/examples/sbom-demo:1.0.0 \
+ocm download resource ./transport-archive//ocm.software/examples/sbom-demo:1.0.0 \
   --identity name=ocm-cli \
   --sbom \
   --output ./sboms/ocm-cli
@@ -222,8 +229,7 @@ deliberate: it lets you pipe the paths straight into a scanner.
 
 {{< callout context="tip" >}}
 Always pass `--output`. Without it the directory is named after the resource identity, so `--identity name=ocm-cli`
-writes into `./ocm-cli` and fails if a file by that name is already sitting there, which is exactly the case in this
-tutorial.
+writes into `./ocm-cli`, which fails if a file by that name already exists in the working directory.
 {{< /callout >}}
 
 ### Retrieve the attached SBOM
@@ -232,7 +238,7 @@ Now the image. Nothing in the component version references it, so OCM falls thro
 the attestation out of the registry:
 
 ```bash
-ocm download resource ./ctf//ocm.software/examples/sbom-demo:1.0.0 \
+ocm download resource ./transport-archive//ocm.software/examples/sbom-demo:1.0.0 \
   --identity name=podinfo \
   --sbom \
   --output ./sboms/podinfo
@@ -291,7 +297,7 @@ expected, so a failure for one of them is reported and the loop continues.
 
 ```bash
 chmod +x collect-sboms.sh
-./collect-sboms.sh ./ctf//ocm.software/examples/sbom-demo:1.0.0
+./collect-sboms.sh ./transport-archive//ocm.software/examples/sbom-demo:1.0.0
 ```
 
 ```text
@@ -340,13 +346,13 @@ is transferred.
 Transfer the component version by value, which is what an air-gapped delivery does:
 
 ```bash
-ocm transfer cv ./ctf//ocm.software/examples/sbom-demo:1.0.0 ./ctf-transferred --copy-resources
+ocm transfer cv ./transport-archive//ocm.software/examples/sbom-demo:1.0.0 ./transport-archive-transferred --copy-resources
 ```
 
 The linked SBOM is still there. It was a resource, so it was copied along with everything else:
 
 ```bash
-ocm download resource ./ctf-transferred//ocm.software/examples/sbom-demo:1.0.0 \
+ocm download resource ./transport-archive-transferred//ocm.software/examples/sbom-demo:1.0.0 \
   --identity name=ocm-cli --sbom --output ./t-sboms/ocm-cli
 ```
 
@@ -358,13 +364,14 @@ t-sboms/ocm-cli/ocm-cli-sbom.spdx.json
 The attached one is gone:
 
 ```bash
-ocm download resource ./ctf-transferred//ocm.software/examples/sbom-demo:1.0.0 \
+ocm download resource ./transport-archive-transferred//ocm.software/examples/sbom-demo:1.0.0 \
   --identity name=podinfo --sbom --output ./t-sboms/podinfo
 ```
 
 ```text
 Error: no sbom found for resource "name=podinfo,version=6.9.2": nothing in the component version
 references it, and its access type "LocalBlob/v1" cannot be inspected for an attached sbom
+(failed to get plugin for typ "LocalBlob/v1")
 ```
 
 `--copy-resources` turns the image's `OCIImage/v1` access into a `LocalBlob/v1`, and the attestation manifests that
@@ -448,5 +455,6 @@ rm -rf /tmp/ocm-sbom-tutorial
 - [How-to: Air-Gap Transfer]({{< relref "docs/how-to/air-gap-transfer.md" >}}) - Moving a component version by value, the case that decides which SBOM strategy works
 - [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - `File/v1`, `OCIImage/v1`, and what `--copy-resources` turns them into
 - [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) - Signing the component version, which is what makes a linked SBOM trustworthy
+- [Concept: Software Bills of Materials]({{< relref "docs/concepts/sboms.md" >}}) - What an SBOM is and why OCM binds it to the component version
 - [Blog: Shipping SBOMs with Your Components]({{< relref "blog/2026-07-28-shipping-sboms-with-your-components.md" >}}) - The proof of concept this feature grew out of
 - [Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}) - Sign and verify component versions with cryptographic keys
