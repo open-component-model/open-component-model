@@ -98,8 +98,13 @@ Generated files follow the naming convention `zz_generated.deepcopy.go`.
 ## Adding a New Package
 
 1. Create a directory under `bindings/go/<package-name>/`.
-2. Add `depguard` rules in `golangci.yml` to enforce which sibling packages may be imported.
-3. Update `bindings/go/README.md` with the new package.
+2. Add a `doc.go` with a package comment. Its first sentence is used as the package purpose in the
+   [package table](README.md#packages).
+3. Add `depguard` rules in `golangci.yml` to enforce which sibling packages may be imported.
+4. Run `task generate` to regenerate the documentation tables derived from the depguard rules:
+   the package table in `bindings/go/README.md` and the dependency layers in
+   [`docs/dependency-table.md`](../../docs/dependency-table.md). CI verifies that both are in sync
+   (`task tools:dependency-list/verify`).
 
 ## Releasing
 
