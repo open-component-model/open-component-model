@@ -170,8 +170,10 @@ components:
           imageReference: ghcr.io/stefanprodan/podinfo:6.9.2
 ```
 
+Explanation on how the `ocm-cli-sbom` is structured:
+
 - **`type: sbom`**: a resource pointing at the binary with any other type is skipped.
-- **`ocm.software/artifact-references`**: the label name is exact. Its value is a *list*, so one SBOM can describe
+- **`ocm.software/artifact-references`**: This label's value is a *list*, so one SBOM can describe
   several resources.
 - **`identity.name`**: `name` is required and must match. `version` is optional: leave it out, as above, and any
   version of `ocm-cli` matches, which means you do not have to touch the label on every release. Any other key you add
