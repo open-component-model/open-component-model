@@ -196,6 +196,7 @@ deployer
 deployers
 deployscript
 deps
+descopes
 descriptor's
 deserializable
 deserialization
@@ -544,7 +545,11 @@ ocmresourcereference
 ocms
 ocmtypegen
 ocmv
+ocp
+ocp's
 odg
+odgs
+odg's
 offboard
 offboarding
 oidc
@@ -556,6 +561,7 @@ oo
 openapi
 openbao
 opencontrolplane
+opencontrolplane's
 openfluxcd
 openid
 openmcp
@@ -599,6 +605,7 @@ pkgs
 pki
 plugability
 pluggable
+poc
 podinfo
 podman
 postgres
