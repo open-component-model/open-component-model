@@ -38,6 +38,9 @@ type Renderer[T cmp.Ordered] struct {
 	// The VertexSerializer serializes a vertex to a Row struct.
 	// It MUST perform READ-ONLY access to the vertex and its attributes.
 	vertexSerializer VertexSerializer[T]
+	// subRowProvider optionally yields additional leaf rows rendered as children
+	// of a vertex (for example the resources of a component version).
+	subRowProvider SubRowProvider[T]
 	// Tree drawing style used for the NESTING column.
 	style TreeStyle
 	// Table style used for the go-pretty table renderer.
@@ -71,6 +74,7 @@ func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcycli
 	return &Renderer[T]{
 		tableWriter:      table.NewWriter(),
 		vertexSerializer: options.VertexSerializer,
+		subRowProvider:   options.SubRowProvider,
 		style:            DefaultTreeStyle,
 		tableStyle:       defaultTableStyle(),
 		roots:            options.Roots,
@@ -154,25 +158,43 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, lockedGraph *dag.Direct
 	if err != nil {
 		return fmt.Errorf("failed to get sorted children of vertex %v: %w", vertex.ID, err)
 	}
-	hasChildren := len(children) > 0
+
+	// Optional leaf rows (for example resources) rendered as children of this
+	// vertex, before the component-reference children.
+	var subRows []Row
+	if t.subRowProvider != nil {
+		subRows, err = t.subRowProvider.SubRows(vertex)
+		if err != nil {
+			return fmt.Errorf("failed to build sub-rows of vertex %v: %w", vertex.ID, err)
+		}
+	}
+
+	totalChildren := len(subRows) + len(children)
+	hasChildren := totalChildren > 0
 	nesting := buildNesting(t.style, ancestorsHasMore, isLast, hasChildren)
 	t.tableWriter.AppendRow(table.Row{nesting, row.Component, row.Version, row.Provider, row.Identity})
 
-	// Recurse into children
-	for i, child := range children {
-		childIsLast := i == len(children)-1
-		// For descendants, include whether the current node has more siblings after it
-		// Create a new slice to track ancestor vertical line states for the child nodes
-		nextAncestors := make([]bool, 0, len(ancestorsHasMore)+1)
-		// Copy all existing ancestor states (whether each ancestor level needs vertical lines)
-		nextAncestors = append(nextAncestors, ancestorsHasMore...)
-		// Determine if current node needs a vertical connector (true if it has siblings below it)
-		connector := !isLast
-		// Add current node's connector state to the ancestor tracking for its children
-		nextAncestors = append(nextAncestors, connector)
+	// The connector state passed down to all children of the current node.
+	nextAncestors := make([]bool, 0, len(ancestorsHasMore)+1)
+	nextAncestors = append(nextAncestors, ancestorsHasMore...)
+	nextAncestors = append(nextAncestors, !isLast)
+
+	childIndex := 0
+	// Render sub-rows first as leaf children.
+	for _, subRow := range subRows {
+		childIsLast := childIndex == totalChildren-1
+		subNesting := buildNesting(t.style, nextAncestors, childIsLast, false)
+		t.tableWriter.AppendRow(table.Row{subNesting, subRow.Component, subRow.Version, subRow.Provider, subRow.Identity})
+		childIndex++
+	}
+
+	// Recurse into component children.
+	for _, child := range children {
+		childIsLast := childIndex == totalChildren-1
 		if err := t.traverseGraph(ctx, lockedGraph, child, level+1, false, childIsLast, nextAncestors); err != nil {
 			return err
 		}
+		childIndex++
 	}
 	return nil
 }
