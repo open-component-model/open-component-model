@@ -152,6 +152,107 @@ rules:
       - watch
 ```
 
+## RBAC for CRDs kro creates at runtime
+
+Everything above grants RBAC to the **OCM controller's** `ServiceAccount`. If your `Deployer` targets a kro
+`ResourceGraphDefinition` (RGD), there is a second, separate RBAC concern: **kro's own** `ServiceAccount`.
+
+An RGD can define a brand-new schema-based kind (for example, a `Podinfo` or `Bootstrap` kind). Registering
+that kind's CRD is covered by kro's own installation role: in [aggregation mode](https://kro.run/docs/advanced/access-control),
+the base role already includes access to `ResourceGraphDefinition`s and `CustomResourceDefinition`s; the
+dev-friendly `unrestricted` mode used in the [setup guide]({{< relref "/docs/getting-started/setup-controller-environment.md" >}})
+grants everything broadly. Neither mode's *base* role covers what happens next: the moment kro (or the RGD)
+creates an *instance* of that new kind, or any other object the RGD manages, kro's `ServiceAccount` needs RBAC
+for that specific kind, no differently than the OCM controller needs RBAC for the resources its `Deployer`
+applies.
+
+This catches people off guard because the dev-friendly kro install (as used in the [setup guide]({{< relref
+"/docs/getting-started/setup-controller-environment.md" >}})) grants broad, cluster-wide permissions, so the
+gap only surfaces once you move to a hardened cluster with least-privilege RBAC. [kro's access control
+guide](https://kro.run/docs/advanced/access-control) covers the least-privilege setup for kro itself.
+
+Grant kro's `ServiceAccount` a `ClusterRole` the same way as above, scoped to the kinds your RGDs create and
+manage. For example, an RGD that defines a `Podinfo` kind and renders a Deployment and Service needs:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro-custom
+rules:
+  - apiGroups:
+      - kro.run
+    resources:
+      - podinfos
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kro.run
+    resources:
+      - podinfos/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - delivery.ocm.software
+    resources:
+      - resources
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kro-custom
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kro-custom
+subjects:
+  - kind: ServiceAccount
+    name: kro # replace with your kro release's service account name if you did not use the default
+    namespace: kro-system
+```
+
+The exact kinds depend on what your own RGDs create. See [Deploy an Application from a Helm Chart with OCM
+and kro]({{< relref "/docs/tutorials/deploy-helm-chart-bootstrap.md" >}}) and [Deploy an Application from
+Plain Manifests with OCM and kro]({{< relref "/docs/tutorials/deploy-plain-manifests.md" >}}) for two worked
+examples of the specific kinds each pattern needs.
+
 ## Related Documentation
 
 - [Concept: OCM controllers]({{< relref "/docs/concepts/ocm-controllers.md" >}}) - Learn how the OCM Controllers work and how they interact with deployers and Kubernetes resources.
+- [kro's access control guide](https://kro.run/docs/advanced/access-control) - Least-privilege RBAC setup for kro itself.

@@ -89,17 +89,36 @@ The Deployer stamps deployed resources with metadata for traceability in the for
 
 ## Common Use Cases
 
-We cover two cases of deployment usage in the following two tutorials:
+Which of the following fits depends on two independent choices: whether your application is packaged as a
+Helm chart or plain manifests, and whether you want kro's RGDs to orchestrate the deployment or apply
+something directly with the Deployer.
 
-### Simple deployment using the Deployer
+### No orchestration: apply manifests directly
 
-The [Deploy a Helm Chart]({{< relref "/docs/getting-started/deploy-helm-chart.md" >}}) tutorial walks through applying a `ResourceGraphDefinition` for the [Podinfo](https://github.com/stefanprodan/podinfo) application using the Deployer.
+If your application is already plain Kubernetes manifests and you don't need an RGD's templating or
+composition, skip kro entirely. The [Deploy Manifests with Deployer]({{< relref "/docs/how-to/deploy-manifests-with-deployer.md" >}})
+how-to applies a Deployment straight from an OCM component using only the OCM Controllers.
 
-### A more complex deployment using Kro and a GitOps deployer
+### Helm chart, RGD applied manually
 
-Another typical pattern is packaging a `ResourceGraphDefinition` ([RGD](https://kro.run/docs/concepts/rgd/overview)) inside an OCM component and using the Deployer to apply it to the cluster. This allows developers to ship deployment instructions alongside the software itself. Once the Deployer applies the RGD, [Kro](https://kro.run/) reconciles it into a CRD that operators can instantiate. The RGD includes the deployer-specific CRDs — `HelmRelease` and `OCIRepository` for Flux, or `Application` for Argo CD.
+The [Deploy a Helm Chart]({{< relref "/docs/getting-started/deploy-helm-chart.md" >}}) getting-started tutorial
+walks through applying a `ResourceGraphDefinition` for the [Podinfo](https://github.com/stefanprodan/podinfo)
+application using the Deployer, with the RGD written and applied by hand. Start here if you're new to RGDs.
 
-For a full walkthrough, see [Deploy Helm Charts with bootstrap]({{< relref "deploy-helm-chart-bootstrap.md" >}}) tutorial.
+### Helm chart, RGD shipped inside the component (bootstrap pattern)
+
+Packaging the `ResourceGraphDefinition` ([RGD](https://kro.run/docs/concepts/rgd/overview)) inside the OCM
+component itself, rather than applying it by hand, lets developers ship deployment instructions alongside
+their software. Once the Deployer applies the RGD, [Kro](https://kro.run/) reconciles it into a CRD that
+operators instantiate. The RGD includes the deployer-specific CRDs — `HelmRelease` and `OCIRepository` for
+Flux, or `Application` for Argo CD. See [Deploy an Application from a Helm Chart with OCM and kro]({{< relref
+"deploy-helm-chart-bootstrap.md" >}}) for a full walkthrough.
+
+### Plain manifests, RGD shipped inside the component, no Helm
+
+The same bootstrap pattern, but for applications that aren't packaged as a Helm chart: the RGD renders plain
+manifests directly, so there's no chart and no GitOps deployer in the path. See [Deploy an Application from
+Plain Manifests with OCM and kro]({{< relref "deploy-plain-manifests.md" >}}) for a full walkthrough.
 
 ## Related Documentation
 
