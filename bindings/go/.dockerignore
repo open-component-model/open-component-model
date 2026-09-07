@@ -1,0 +1,38 @@
+# More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
+# The controller Dockerfile uses this module root as its build context.
+# Ignore build and test output so it does not bloat the context.
+**
+
+!blob
+!cel
+!cli
+!configuration
+!constructor
+!credentials
+!ctf
+!dag
+!descriptor
+!generator
+!github
+!go.mod
+!go.sum
+!gpg
+!helm
+!http
+!input
+!kubernetes
+!oci
+!plugin
+!repository
+!rsa
+!runtime
+!s3
+!signing
+!sigstore
+!transfer
+!transform
+!wget
+
+**/bin
+**/dist
+**/tmp

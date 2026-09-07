@@ -9,8 +9,8 @@ This document presents a structured assurance case for the Open Component Model 
 This assurance case demonstrates that OCM's design and implementation address the security threats relevant to a software supply chain management system. It covers:
 
 - The OCM Go bindings (`bindings/go/`)
-- The OCM CLI (`cli/`)
-- The OCM Kubernetes controller (`kubernetes/controller/`)
+- The OCM CLI (`bindings/go/cli/`)
+- The OCM Kubernetes controller (`bindings/go/kubernetes/controller/`)
 
 It does not cover external plugin implementations, user-managed infrastructure, or the OCM specification itself.
 
@@ -102,7 +102,7 @@ OCM operates in an environment where software artifacts are built, signed, store
 
 | Mitigation | Evidence |
 |------------|----------|
-| HTTP/2 is disabled by default in the Kubernetes controller to mitigate the HTTP/2 Stream Cancellation and Rapid Reset CVEs (GHSA-qppj-fm5r-hxr3, GHSA-4374-p667-p6c8). When disabled, `disableHTTP2` sets `TLSConfig.NextProtos` to `[]string{"http/1.1"}`, ensuring only HTTP/1.1 over TLS is negotiated. | `kubernetes/controller/cmd/main.go` (`disableHTTP2` function) |
+| HTTP/2 is disabled by default in the Kubernetes controller to mitigate the HTTP/2 Stream Cancellation and Rapid Reset CVEs (GHSA-qppj-fm5r-hxr3, GHSA-4374-p667-p6c8). When disabled, `disableHTTP2` sets `TLSConfig.NextProtos` to `[]string{"http/1.1"}`, ensuring only HTTP/1.1 over TLS is negotiated. | `bindings/go/kubernetes/controller/cmd/main.go` (`disableHTTP2` function) |
 | No hardcoded `InsecureSkipVerify: true` exists in the codebase; TLS certificate verification is enabled by default. `InsecureSkipVerify` is available only as an explicit opt-in via `http.config.ocm.software/v1alpha1` (`insecureSkipVerify` field), with runtime warnings emitted at transport build time and per-host on first connection. Evidence: (1) `rg --type=go 'InsecureSkipVerify\s*:\s*true'` returns zero hardcoded matches; (2) `rg 'InsecureSkipVerify' bindings/go/http` shows only the configured opt-in path and the warning transport; (3) unit tests in `bindings/go/http` verify the warning fires and that `DefaultTransport` is not mutated. | `bindings/go/http/transport.go` (`NewTransportWithTLS`), `bindings/go/http/insecure_warn_transport.go` |
 | Go's `crypto/tls` defaults enforce TLS 1.2 as the minimum version when no explicit `MinVersion` is set. | `rg --type=go 'MinVersion\s*[=:]'` returns zero matches; no `tls.Config` construction overrides `MinVersion` anywhere in the codebase |
 | Plain HTTP connections to artifact storage are technically possible for development/test scenarios. Production deployments must use HTTPS; enforcement is an operator responsibility. This is acknowledged as a residual risk (see Residual Risks). | Trust boundary 6; operator deployment configuration |
@@ -113,7 +113,7 @@ OCM operates in an environment where software artifacts are built, signed, store
 
 | Mitigation | Evidence |
 |------------|----------|
-| CLI enum flags use an allowlist pattern that rejects any value not in a predefined set of options. | `cli/internal/flags/enum/flag.go` (`Set` method) |
+| CLI enum flags use an allowlist pattern that rejects any value not in a predefined set of options. | `bindings/go/cli/internal/flags/enum/flag.go` (`Set` method) |
 | Hash algorithm selection for descriptor digests is constrained to an explicit allowlist (SHA-256, SHA-512). RSA signature verification additionally accepts SHA-384 for interoperability with signing certificates that use it. | `bindings/go/signing/digest.go` (`supportedHashes`), `bindings/go/rsa/signing/handler/hash.go` (`hashFromString`) |
 | Signature algorithm selection is constrained to RSASSA-PSS and RSASSA-PKCS1-V1\_5. | `bindings/go/rsa/signing/v1alpha1/algorithm.go` |
 | The signing contract requires implementations to reject signature specifications without a precalculated digest, preventing operations on unvalidated input. | [ADR-0008](../adr/0008_signing_verification.md) (`ComponentSignatureSigner` contract) |
@@ -125,12 +125,12 @@ OCM operates in an environment where software artifacts are built, signed, store
 
 | Mitigation | Evidence |
 |------------|----------|
-| The controller runs on a `gcr.io/distroless/static:nonroot` base image with no shell, package manager, or system utilities. | `kubernetes/controller/Dockerfile` (`FROM gcr.io/distroless/static:nonroot` stage) |
-| The controller runs as non-root user `65532:65532`. | `kubernetes/controller/Dockerfile` (`USER` directive) |
-| The controller binary is statically compiled with `CGO_ENABLED=0`, eliminating C library dependencies. | `kubernetes/controller/Dockerfile` (`RUN CGO_ENABLED=0` build step) |
-| Base images are pinned by SHA-256 digest to prevent tag mutation attacks. | `kubernetes/controller/Dockerfile` (both `FROM` directives use `@sha256:` pinning) |
-| CLI binaries are built with `-ldflags "-s -w"` to strip symbols and debug information. | `cli/Taskfile.yml` (`build:target` task) |
-| The in-memory Component Descriptor Cache (resolved digests and signatures) is process-local and not externally accessible, limiting exposure if the process is compromised. | `kubernetes/controller/` architecture; threat model asset analysis |
+| The controller runs on a `gcr.io/distroless/static:nonroot` base image with no shell, package manager, or system utilities. | `bindings/go/kubernetes/controller/Dockerfile` (`FROM gcr.io/distroless/static:nonroot` stage) |
+| The controller runs as non-root user `65532:65532`. | `bindings/go/kubernetes/controller/Dockerfile` (`USER` directive) |
+| The controller binary is statically compiled with `CGO_ENABLED=0`, eliminating C library dependencies. | `bindings/go/kubernetes/controller/Dockerfile` (`RUN CGO_ENABLED=0` build step) |
+| Base images are pinned by SHA-256 digest to prevent tag mutation attacks. | `bindings/go/kubernetes/controller/Dockerfile` (both `FROM` directives use `@sha256:` pinning) |
+| CLI binaries are built with `-ldflags "-s -w"` to strip symbols and debug information. | `bindings/go/cli/Taskfile.yml` (`build:target` task) |
+| The in-memory Component Descriptor Cache (resolved digests and signatures) is process-local and not externally accessible, limiting exposure if the process is compromised. | `bindings/go/kubernetes/controller/` architecture; threat model asset analysis |
 | IAM and RBAC for the controller service account are delegated to the Kubernetes cluster. The cluster administrator is responsible for granting least-privilege access; the controller does not manage user identity or authorization. | Assumption: IAM delegated to Kubernetes (see Security Assumptions) |
 
 ### T7: Trust Anchor Manipulation

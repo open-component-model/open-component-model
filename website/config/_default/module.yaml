@@ -76,7 +76,7 @@ mounts:
       matrix:
         versions:
           - main
-  - source: ../cli/docs/reference
+  - source: ../bindings/go/cli/docs/reference
     target: content/docs/reference/ocm-cli
     sites:
       matrix:
@@ -160,7 +160,7 @@ mounts:
       matrix:
         versions:
           - main
-  - source: ../kubernetes/controller/config/crd/bases
+  - source: ../bindings/go/kubernetes/controller/config/crd/bases
     target: static/main/schemas/kubernetes/controller
     sites:
       matrix:
