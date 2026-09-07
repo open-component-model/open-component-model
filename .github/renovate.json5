@@ -273,6 +273,7 @@
     fileFilters: [
       '**/go.mod',
       '**/go.sum',
+      '**/*.go',
     ],
     executionMode: 'branch',
   },
