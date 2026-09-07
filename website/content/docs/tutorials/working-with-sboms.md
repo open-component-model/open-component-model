@@ -195,7 +195,7 @@ Without `--repository`, this writes a CTF into `./transport-archive`, which is w
 from. `File/v1` only reads files inside the working directory, that defaults to the constructor file's directory. Using
 `--working-directory /` allows reading the ocm binary on your `PATH`.
 
-The label is now part of the descriptor, which is what makes it durable:
+Let's verify that the label is now part of the component descriptor:
 
 ```bash
 ocm get cv ./transport-archive/ -o yaml | grep -A6 artifact-references
@@ -208,6 +208,8 @@ ocm get cv ./transport-archive/ -o yaml | grep -A6 artifact-references
         - identity:
             name: ocm-cli
 ```
+
+This means, that the label's value is now immutable as it is part of the signature.
 
 ### Retrieve the linked SBOM
 
