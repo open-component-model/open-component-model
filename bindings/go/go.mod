@@ -20,7 +20,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/go-logr/logr v1.4.4
 	github.com/gobwas/glob v0.2.3
-	github.com/google/cel-go v0.30.0
+	github.com/google/cel-go v0.31.0
 	github.com/google/go-github/v89 v89.0.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/invopop/jsonschema v0.14.0
