@@ -38,6 +38,11 @@ func downloadSBOMs(cmd *cobra.Command, dc downloadContext) error {
 
 	dc.logger.Warn("--sbom is experimental: the set of SBOMs discovered, the layout written and the flags themselves may change in a future release")
 
+	var localSBOMDiscoverer repository.LocalSBOMDiscoverer
+	if discoverer, ok := dc.repo.(repository.LocalSBOMDiscoverer); ok {
+		localSBOMDiscoverer = discoverer
+	}
+
 	discovered, err := sbom.Discover(ctx, sbom.Request{
 		Descriptor:    dc.descriptor,
 		Resource:      dc.resource,
@@ -47,7 +52,8 @@ func downloadSBOMs(cmd *cobra.Command, dc downloadContext) error {
 		Download: func(ctx context.Context, res *descriptor.Resource, identity runtime.Identity) (ocmblob.ReadOnlyBlob, error) {
 			return shared.DownloadResourceData(ctx, dc.pluginManager, dc.credentialGraph, dc.ref.Component, dc.ref.Version, dc.repo, res, identity)
 		},
-		Options: []repository.SBOMOption{repository.WithAllSBOMPlatforms()},
+		DiscoverLocal: localSBOMDiscoverer,
+		Options:       []repository.SBOMOption{repository.WithAllSBOMPlatforms()},
 	})
 	if err != nil {
 		return err

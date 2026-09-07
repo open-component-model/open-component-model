@@ -10,8 +10,11 @@ import (
 	"testing"
 
 	"github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -28,9 +31,10 @@ import (
 )
 
 const (
-	componentName    = "ocm.software/test-sbom"
-	componentVersion = "1.0.0"
-	targetName       = "image"
+	attestationMediaType = "application/vnd.in-toto+json"
+	componentName        = "ocm.software/test-sbom"
+	componentVersion     = "1.0.0"
+	targetName           = "image"
 )
 
 type resourceSpec struct {
@@ -100,6 +104,129 @@ func setupComponent(t *testing.T, specs ...resourceSpec) string {
 		Version:    componentVersion,
 	}
 	return ref.String()
+}
+
+func setupComponentWithAttestedImage(t *testing.T, mediaType string) string {
+	t.Helper()
+	r := require.New(t)
+	ctx := t.Context()
+
+	archivePath := t.TempDir()
+	fs, err := filesystem.NewFS(archivePath, os.O_RDWR)
+	r.NoError(err)
+	ctfStore := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo, err := oci.NewRepository(ocictf.WithCTF(ctfStore))
+	r.NoError(err)
+
+	store, err := ctfStore.StoreForReference(ctx, ctfStore.ComponentVersionReference(ctx, componentName, componentVersion))
+	r.NoError(err)
+
+	push := func(mediaType string, value any) ociImageSpecV1.Descriptor {
+		raw, err := json.Marshal(value)
+		r.NoError(err)
+		desc := content.NewDescriptorFromBytes(mediaType, raw)
+		r.NoError(store.Push(ctx, desc, bytes.NewReader(raw)))
+		return desc
+	}
+
+	empty := ociImageSpecV1.DescriptorEmptyJSON
+	r.NoError(store.Push(ctx, empty, bytes.NewReader(empty.Data)))
+
+	platform := ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"}
+	config := push(ociImageSpecV1.MediaTypeImageConfig, map[string]any{
+		"architecture": platform.Architecture,
+		"os":           platform.OS,
+		"rootfs":       map[string]any{"type": "layers"},
+	})
+	image := push(ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Config:    config,
+		Layers:    []ociImageSpecV1.Descriptor{empty},
+	})
+	image.Platform = &platform
+
+	statement := push(attestationMediaType, map[string]any{
+		"_type":         "https://in-toto.io/Statement/v0.1",
+		"predicateType": "https://spdx.dev/Document",
+		"predicate":     json.RawMessage(spdx("attached")),
+	})
+	statement.Annotations = map[string]string{"in-toto.io/predicate-type": "https://spdx.dev/Document"}
+	attested := push(ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Config:    empty,
+		Layers:    []ociImageSpecV1.Descriptor{statement},
+	})
+	attested.Platform = &ociImageSpecV1.Platform{OS: "unknown", Architecture: "unknown"}
+	attested.Annotations = map[string]string{
+		"vnd.docker.reference.type":   "attestation-manifest",
+		"vnd.docker.reference.digest": image.Digest.String(),
+	}
+
+	index := push(ociImageSpecV1.MediaTypeImageIndex, ociImageSpecV1.Index{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ociImageSpecV1.MediaTypeImageIndex,
+		Manifests: []ociImageSpecV1.Descriptor{image, attested},
+	})
+
+	r.NoError(repo.AddComponentVersion(ctx, &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion},
+			},
+			Provider: descriptor.Provider{Name: "ocm.software"},
+			Resources: []descriptor.Resource{{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: targetName, Version: componentVersion},
+				},
+				Type:     "ociImage",
+				Relation: descriptor.ExternalRelation,
+				Access: &v2.LocalBlob{
+					Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					LocalReference: index.Digest.String(),
+					MediaType:      mediaType,
+				},
+			}},
+		},
+	}))
+
+	ref := &compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: archivePath},
+		Component:  componentName,
+		Version:    componentVersion,
+	}
+
+	return ref.String()
+}
+
+func TestDownloadResourceSBOM_LocalBlob(t *testing.T) {
+	t.Run("discovers an attestation inside a transferred local blob", func(t *testing.T) {
+		r := require.New(t)
+		ref := setupComponentWithAttestedImage(t, ociImageSpecV1.MediaTypeImageIndex)
+
+		dir, printed, err := downloadSBOMs(t, ref)
+		r.NoError(err)
+		r.Len(printed, 1)
+
+		raw, err := os.ReadFile(filepath.Join(dir, filepath.Base(printed[0])))
+		r.NoError(err)
+		var document struct {
+			Name string `json:"name"`
+		}
+		r.NoError(json.Unmarshal(raw, &document))
+		assert.Equal(t, "attached", document.Name)
+	})
+
+	t.Run("reports a local blob that cannot carry an attestation", func(t *testing.T) {
+		ref := setupComponentWithAttestedImage(t, "application/octet-stream")
+
+		_, _, err := downloadSBOMs(t, ref)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no sbom found for resource")
+		assert.Contains(t, err.Error(), "is not an image index")
+	})
 }
 
 func target() resourceSpec {
