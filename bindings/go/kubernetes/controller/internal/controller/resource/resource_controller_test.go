@@ -2166,7 +2166,7 @@ consumers:
 })
 
 var _ = Describe("Resource Controller Error Handling", func() {
-	It("should not requeue when the component is not ready", func(ctx SpecContext) {
+	It("should requeue with backoff when the component is not ready", func(ctx SpecContext) {
 		namespace := test.NamespaceForTest(ctx)
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 
@@ -2208,7 +2208,7 @@ var _ = Describe("Resource Controller Error Handling", func() {
 		test.WaitForNotReadyObject(ctx, k8sClient, resource, v1alpha1.ResourceIsNotAvailable)
 	})
 
-	It("should not requeue when the component is being deleted", func(ctx SpecContext) {
+	It("should requeue with backoff when the component is deleted", func(ctx SpecContext) {
 		namespace := test.NamespaceForTest(ctx)
 		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
 
