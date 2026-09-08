@@ -16,6 +16,13 @@
   },
   'updateNotScheduled': true, // Update branches that have already been created
   'minimumReleaseAge': '28 days',
+  // config:best-practices this is usually disabled by default.
+  // https://github.com/google/docsy/blob/9f8acf7a4547cb1c5d1b88b3db588793bfd6eb25/renovate.json5#L7
+  // Also, disabling this means that transitive dependencies that aren't 28 days old at least,
+  // will not get in. Because lock file maintenance doesn't care about that when it's refreshing the lock file.
+  lockFileMaintenance: {
+    enabled: false,
+  },
   'branchPrefix': 'renovate/',
   'gitAuthor': 'ocmbot[bot] <125909804+ocmbot[bot]@users.noreply.github.com>',
   'gitIgnoredAuthors': [
@@ -237,12 +244,20 @@
       ],
     },
     {
-      // Restrict NPM updates to 28 days old packages at least.
       matchDatasources: ['npm'],
       minimumReleaseAge: '28 days',
     },
     {
-      matchUpdateTypes: ['lockFileMaintenance'],
+      // Renovate has no release timestamp for these types and
+      // minimumReleaseAge requires that to work, otherwise, it will just never update them.
+      matchUpdateTypes: [
+        'lockFileMaintenance',
+        'replacement',
+        'pin',
+        'bump',
+        'lockfileUpdate',
+        'rollback',
+      ],
       minimumReleaseAge: null,
     },
   ],
