@@ -26,9 +26,9 @@ done
 # invoked via its absolute path so PATH does not need to be modified.
 GOBIN="$(go env GOPATH)/bin"
 export GOBIN
-if [ ! -x "${GOBIN}/gomajor" ]; then
-  # renovate: datasource=go depName=github.com/icholy/gomajor
-  GOMAJOR_VERSION=v0.15.0
+# renovate: datasource=go depName=github.com/icholy/gomajor
+GOMAJOR_VERSION=v0.15.0
+if ! "${GOBIN}/gomajor" version 2>/dev/null | grep -qx "version: ${GOMAJOR_VERSION}"; then
   go install "github.com/icholy/gomajor@${GOMAJOR_VERSION}"
 fi
 

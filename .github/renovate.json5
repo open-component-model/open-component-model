@@ -270,7 +270,7 @@
       // a renovate comment directly above the version variable.
       customType: 'regex',
       managerFilePatterns: [
-        '/(^|/)renovate-post-upgrade\.sh$/',
+        '/(^|/)renovate-post-upgrade\\.sh$/',
       ],
       matchStrings: [
         '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+[A-Z_]+_VERSION=v?(?<currentValue>\\d+\.\\d+\.\\d+)',
