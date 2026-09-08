@@ -74,6 +74,16 @@ func toJSONs(descriptors ...map[string]any) []apiextensionsv1.JSON {
 	return result
 }
 
+func extractedRecord(values map[string]any) v1alpha1.ExtractedRecord {
+	record := make(v1alpha1.ExtractedRecord, len(values))
+	for name, value := range values {
+		raw, err := json.Marshal(value)
+		Expect(err).NotTo(HaveOccurred())
+		record[name] = apiextensionsv1.JSON{Raw: raw}
+	}
+	return record
+}
+
 // newUnstructured applies the given spec mutation on a minimal valid Discovery
 // expressed as unstructured, bypassing Go client-side serialization
 // (omitempty/omitzero) to test server-side admission of explicit values.
@@ -246,13 +256,41 @@ var _ = Describe("Discovery API", func() {
 			Expect(after.Status.Components[0].Raw).To(MatchJSON(raw))
 		})
 
+		It("preserves extracted records with arbitrary nested JSON", func(ctx SpecContext) {
+			values := map[string]any{
+				"imageRef": "ghcr.io/open-component-model/test:1.0.0",
+				"metadata": map[string]any{
+					"platforms": []any{"linux/amd64", "linux/arm64"},
+					"signed":    true,
+				},
+				"optional": nil,
+			}
+			fetched := &v1alpha1.Discovery{}
+			Expect(k8sClient.Get(ctx, objectKey(discovery), fetched)).To(Succeed())
+			fetched.Status.Extracted = []v1alpha1.ExtractedRecord{
+				extractedRecord(values),
+				{},
+			}
+			Expect(k8sClient.Status().Update(ctx, fetched)).To(Succeed())
+
+			after := &v1alpha1.Discovery{}
+			Expect(k8sClient.Get(ctx, objectKey(discovery), after)).To(Succeed())
+			Expect(after.Status.Extracted).To(HaveLen(2))
+			Expect(after.Status.Extracted[1]).To(BeEmpty())
+			raw, err := json.Marshal(after.Status.Extracted[0])
+			Expect(err).NotTo(HaveOccurred())
+			expected, err := json.Marshal(values)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(raw).To(MatchJSON(expected))
+		})
+
 		It("rejects mutually exclusive payload fields", func(ctx SpecContext) {
 			fetched := &v1alpha1.Discovery{}
 			Expect(k8sClient.Get(ctx, objectKey(discovery), fetched)).To(Succeed())
 			fetched.Status.Components = toJSONs(descriptor)
 			Expect(k8sClient.Status().Update(ctx, fetched)).To(Succeed())
 
-			fetched.Status.Extracted = []apiextensionsv1.JSON{}
+			fetched.Status.Extracted = []v1alpha1.ExtractedRecord{}
 			err := k8sClient.Status().Update(ctx, fetched)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("components and extracted cannot be set at the same time"))

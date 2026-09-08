@@ -20,6 +20,9 @@ func TestDiscoverySchemeRegistration(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "test", Generation: 3},
 		Status: DiscoveryStatus{
 			ObservedGeneration: 3,
+			Extracted: []ExtractedRecord{
+				{"nested": {Raw: []byte(`{"value":"original"}`)}},
+			},
 		},
 	}
 	gvks, unversioned, err := scheme.ObjectKinds(discovery)
@@ -36,6 +39,10 @@ func TestDiscoverySchemeRegistration(t *testing.T) {
 	copied := discovery.DeepCopyObject()
 	r.Equal(discovery, copied)
 	r.NotSame(discovery, copied)
+
+	copyDiscovery := copied.(*Discovery)
+	copyDiscovery.Status.Extracted[0]["nested"].Raw[0] = '['
+	r.NotEqual(discovery.Status.Extracted[0]["nested"].Raw, copyDiscovery.Status.Extracted[0]["nested"].Raw)
 }
 
 // TestDiscoveryStatusPayloadPresence verifies the nil-vs-allocated-empty
@@ -60,12 +67,29 @@ func TestDiscoveryStatusPayloadPresence(t *testing.T) {
 		r.NotContains(string(data), "extracted")
 
 		data, err = json.Marshal(&DiscoveryStatus{
-			Extracted: []apiextensionsv1.JSON{},
+			Extracted: []ExtractedRecord{},
 		})
 		r.NoError(err)
 		r.Contains(string(data), `"extracted":[]`)
 		r.NotContains(string(data), "components")
 	})
+}
+
+func TestExtractedRecordSerialization(t *testing.T) {
+	r := require.New(t)
+
+	record := ExtractedRecord{
+		"nested": {Raw: []byte(`{"items":[1,true],"metadata":{"source":"test"}}`)},
+		"null":   {Raw: []byte(`null`)},
+	}
+	data, err := json.Marshal(record)
+	r.NoError(err)
+	r.JSONEq(`{"nested":{"items":[1,true],"metadata":{"source":"test"}},"null":null}`, string(data))
+
+	var decoded ExtractedRecord
+	r.NoError(json.Unmarshal(data, &decoded))
+	r.JSONEq(`{"items":[1,true],"metadata":{"source":"test"}}`, string(decoded["nested"].Raw))
+	r.Nil(decoded["null"].Raw)
 }
 
 // TestExtractModePresence verifies that the extract CEL exclusivity rule
