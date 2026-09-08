@@ -1,11 +1,9 @@
 package stream
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
@@ -14,12 +12,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 )
 
-// OCILayerResourceStream is a ResourceStream over a single layer blob. No network
-// I/O occurs at construction time.
-//
-// Materialize yields the layer content itself rather than the OCI layout tar
-// OCIResourceStream produces, because a layer is a plain blob with no manifest a
-// layout index could point at.
+// OCILayerResourceStream provides access to a single layer blob without an OCI layout.
+// Construction does not fetch data.
 type OCILayerResourceStream struct {
 	content.ReadOnlyGraphStorage
 	Descriptor ocispec.Descriptor
@@ -31,8 +25,7 @@ func (s *OCILayerResourceStream) Root() ocispec.Descriptor {
 	return s.Descriptor
 }
 
-// Materialize fetches the layer and buffers it into a blob. The returned blob
-// carries the descriptor digest, so reading it verifies the content against it.
+// Materialize fetches and verifies the layer for Repository.DownloadResource.
 func (s *OCILayerResourceStream) Materialize(ctx context.Context) (b blob.ReadOnlyBlob, err error) {
 	reader, err := s.Fetch(ctx, s.Descriptor)
 	if err != nil {
@@ -42,21 +35,19 @@ func (s *OCILayerResourceStream) Materialize(ctx context.Context) (b blob.ReadOn
 		err = errors.Join(err, reader.Close())
 	}()
 
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read layer %q: %w", s.Descriptor.Digest, err)
-	}
-	if int64(len(data)) != s.Descriptor.Size {
-		return nil, fmt.Errorf("layer %q has size %d, but the descriptor declares %d", s.Descriptor.Digest, len(data), s.Descriptor.Size)
-	}
-
 	opts := []inmemory.MemoryBlobOption{
-		inmemory.WithSize(s.Descriptor.Size),
 		inmemory.WithDigest(s.Descriptor.Digest.String()),
 	}
 	// An empty media type would overwrite the default the blob applies on its own.
 	if s.Descriptor.MediaType != "" {
 		opts = append(opts, inmemory.WithMediaType(s.Descriptor.MediaType))
 	}
-	return inmemory.New(bytes.NewReader(data), opts...), nil
+	layer := inmemory.New(reader, opts...)
+	if err := layer.Load(); err != nil {
+		return nil, fmt.Errorf("failed to read layer %q: %w", s.Descriptor.Digest, err)
+	}
+	if layer.Size() != s.Descriptor.Size {
+		return nil, fmt.Errorf("layer %q has size %d, but the descriptor declares %d", s.Descriptor.Digest, layer.Size(), s.Descriptor.Size)
+	}
+	return layer, nil
 }
