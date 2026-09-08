@@ -6,13 +6,16 @@ if ! command -v go >/dev/null 2>&1; then
   exit 0
 fi
 
+failed=0
+
 # Find all go.mod files under */integration/* and run go mod tidy in their directories
-find . -type f -name "go.mod" -path "*/integration/*" -exec dirname {} \; | while IFS= read -r dir; do
+integration_dirs=$(find . -type f -name "go.mod" -path "*/integration/*" -exec dirname {} \;)
+for dir in ${integration_dirs}; do
   echo "Running explicit go mod tidy for integration test in $dir"
-  (
-    cd "$dir"
-    go mod tidy
-  )
+  (cd "$dir" && go mod tidy) || {
+    echo "go mod tidy failed in ${dir}, continuing" >&2
+    failed=1
+  }
 done
 
 # Fix Go major-version bumps that Renovate leaves half-applied.
@@ -41,13 +44,20 @@ fi
 for gomod in $(git diff --name-only "${base_ref}" -- '**/go.mod'); do
   dir=$(dirname "${gomod}")
   echo "Checking ${gomod} for Go major-version bumps"
-  # Emit lines like: +<indent>github.com/foo/bar/v3 v3.0.1 for added requires.
-  git diff "${base_ref}" -- "${gomod}" \
+  # Extract added /vN require lines: +<indent>github.com/foo/bar/v3 v3.0.1
+  pairs=$(git diff "${base_ref}" -- "${gomod}" \
     | grep -E '^\+[[:space:]]+[^[:space:]]+/v[0-9]+ v[0-9]+' \
-    | while read -r plus path version _rest; do
-        (cd "${dir}" && "${GOBIN}/gomajor" get "${path}@${version}") || {
-          echo "gomajor get ${path}@${version} failed in ${dir}, continuing" >&2
-        }
-      done
-  (cd "${dir}" && go mod tidy)
+    | awk '{print $2"@"$3}')
+  for pair in ${pairs}; do
+    (cd "${dir}" && "${GOBIN}/gomajor" get "${pair}") || {
+      echo "gomajor get ${pair} failed in ${dir}, continuing" >&2
+      failed=1
+    }
+  done
+  (cd "${dir}" && go mod tidy) || {
+    echo "go mod tidy failed in ${dir}, continuing" >&2
+    failed=1
+  }
 done
+
+exit "${failed}"
