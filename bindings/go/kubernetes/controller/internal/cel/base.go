@@ -20,8 +20,16 @@ var sharedEnv = sync.OnceValues[*cel.Env, error](func() (*cel.Env, error) {
 		ext.Encoders(),
 		ext.Bindings(),
 		cel.OptionalTypes(),
+		ocmfunctions.SemverCheck(),
 	)
 })
+
+// BaseEnv returns the shared base CEL environment. It contains the base
+// extensions and the semverCheck function, but no resource or discovery
+// specific variables.
+func BaseEnv() (*cel.Env, error) {
+	return sharedEnv()
+}
 
 // ComponentInfoEnv constructs a CEL environment with a v1alpha1.ComponentInfo as a dependency.
 // Extensions like `toOCI` need v1alpha1.ComponentInfo to properly provide an ImageReference from a localBlob.
