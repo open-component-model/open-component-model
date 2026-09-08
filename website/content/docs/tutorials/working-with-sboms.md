@@ -416,7 +416,6 @@ candidates were considered and why they were dropped.
 - ✅ Discovered an SBOM that BuildKit attached to a third-party image, without adding anything to the component version
 - ✅ Retrieved both through one command, `ocm download resource --sbom`
 - ✅ Collected the SBOMs of a whole component version and scanned them with Trivy
-- ✅ Saw why only the linked SBOM survives a by-value transfer
 
 ## Cleanup
 

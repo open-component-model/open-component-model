@@ -229,6 +229,48 @@ func TestDownloadResourceSBOM_LocalBlob(t *testing.T) {
 	})
 }
 
+// TestDownloadResourceSBOM_SurvivesTransfer runs a real by-value transfer and asserts
+// the attestation is still discoverable in the target, which is what the second
+// strategy needs in order to be useful for air-gapped delivery.
+func TestDownloadResourceSBOM_SurvivesTransfer(t *testing.T) {
+	r := require.New(t)
+
+	source := setupComponentWithAttestedImage(t, ociImageSpecV1.MediaTypeImageIndex)
+	targetPath := t.TempDir()
+
+	_, err := test.OCM(t, test.WithArgs(
+		"transfer", "component-version", source, "ctf::"+targetPath, "--copy-resources"))
+	r.NoError(err)
+
+	target := (&compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: targetPath},
+		Component:  componentName,
+		Version:    componentVersion,
+	}).String()
+
+	// The index the local blob points at travels whole: the attestation manifests are
+	// copied with it, so the target can be inspected without reaching the origin.
+	targetFS, err := filesystem.NewFS(targetPath, os.O_RDWR)
+	r.NoError(err)
+	repo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(targetFS))))
+	r.NoError(err)
+	desc, err := repo.GetComponentVersion(t.Context(), componentName, componentVersion)
+	r.NoError(err)
+	r.Equal("LocalBlob/v1", desc.Component.Resources[0].Access.GetType().String())
+
+	dir, printed, err := downloadSBOMs(t, target)
+	r.NoError(err)
+	r.Len(printed, 1)
+
+	raw, err := os.ReadFile(filepath.Join(dir, filepath.Base(printed[0])))
+	r.NoError(err)
+	var document struct {
+		Name string `json:"name"`
+	}
+	r.NoError(json.Unmarshal(raw, &document))
+	assert.Equal(t, "attached", document.Name)
+}
+
 func target() resourceSpec {
 	return resourceSpec{name: targetName, resourceType: "blob", content: "the artifact itself"}
 }
