@@ -57,6 +57,7 @@ rules:
     resources:
       - components/status
       - deployers/status
+      - discoveries/status
       - replications/status
       - repositories/status
       - resources/status
@@ -64,3 +65,11 @@ rules:
       - get
       - patch
       - update
+  - apiGroups:
+      - delivery.ocm.software
+    resources:
+      - discoveries
+    verbs:
+      - get
+      - list
+      - watch

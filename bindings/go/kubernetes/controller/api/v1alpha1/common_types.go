@@ -38,7 +38,7 @@ const (
 // OCMConfiguration defines a configuration applied to the reconciliation of an
 // ocm k8s object as well as the policy for its propagation of this
 // configuration.
-// +kubebuilder:validation:XValidation:rule="((!has(self.apiVersion) || self.apiVersion == \"\" || self.apiVersion == \"v1\") && (self.kind == \"Secret\" || self.kind == \"ConfigMap\")) || (self.apiVersion == \"delivery.ocm.software/v1alpha1\" && (self.kind == \"Repository\" || self.kind == \"Component\" || self.kind == \"Resource\" || self.kind == \"Replication\"))",message="apiVersion must be one of \"v1\" with kind \"Secret\" or \"ConfigMap\" or \"delivery.ocm.software/v1alpha1\" with the kind of an OCM kubernetes object"
+// +kubebuilder:validation:XValidation:rule="((!has(self.apiVersion) || self.apiVersion == \"\" || self.apiVersion == \"v1\") && (self.kind == \"Secret\" || self.kind == \"ConfigMap\")) || (self.apiVersion == \"delivery.ocm.software/v1alpha1\" && (self.kind == \"Repository\" || self.kind == \"Component\" || self.kind == \"Resource\" || self.kind == \"Replication\" || self.kind == \"Discovery\"))",message="apiVersion must be one of \"v1\" with kind \"Secret\" or \"ConfigMap\" or \"delivery.ocm.software/v1alpha1\" with the kind of an OCM kubernetes object"
 type OCMConfiguration struct {
 	// Ref reference config maps or secrets containing arbitrary
 	// ocm config data (in the ocm config file or .dockerconfigjson format), or other configurable

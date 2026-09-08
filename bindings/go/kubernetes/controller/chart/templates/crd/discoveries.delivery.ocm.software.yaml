@@ -10,7 +10,7 @@ metadata:
     {{- if and .Values.webhook.enable .Values.certManager.enable }}
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "serving-cert" "context" $) }}
     {{- end }}
-  name: replications.delivery.ocm.software
+  name: discoveries.delivery.ocm.software
 spec:
   {{- if .Values.webhook.enable }}
   conversion:
@@ -26,26 +26,26 @@ spec:
   {{- end }}
   group: delivery.ocm.software
   names:
-    kind: Replication
-    listKind: ReplicationList
-    plural: replications
-    singular: replication
+    kind: Discovery
+    listKind: DiscoveryList
+    plural: discoveries
+    singular: discovery
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Indicates if the Replication is Ready
+    - description: Indicates if the Discovery is Ready
       jsonPath: .status.conditions[?(@.type=="Ready")].message
       name: Ready
       priority: 1
       type: string
-    - description: Displays the Age of the Replication
+    - description: Displays the Age of the Resource
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Replication is the Schema for the replications API.
+        description: Discovery is the Schema for the discoveries API.
         properties:
           apiVersion:
             description: |-
@@ -65,11 +65,12 @@ spec:
           metadata:
             type: object
           spec:
-            description: ReplicationSpec defines the desired state of Replication.
+            description: DiscoverySpec defines the desired state of Discovery.
             properties:
               componentRef:
-                description: ComponentRef is a reference to a Component whose resolved
-                  version is transferred.
+                description: |-
+                  ComponentRef is a reference to a Component in the same namespace whose
+                  transitive component graph is discovered.
                 properties:
                   name:
                     default: ""
@@ -82,6 +83,70 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+                x-kubernetes-validations:
+                - message: name must not be empty
+                  rule: self.name.size() > 0
+              componentSelector:
+                description: |-
+                  ComponentSelector filters the components of the filtered graph.
+                  If unset, all components are kept.
+                properties:
+                  expression:
+                    description: |-
+                      Expression is a CEL expression evaluated for each element. It must
+                      evaluate to a boolean. An empty expression is a no-op.
+                    type: string
+                  matchIdentity:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      MatchIdentity matches elements whose identity contains all specified
+                      key-value pairs. Keys must be present even when compared against an
+                      empty value.
+                    type: object
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      MatchLabels matches elements carrying labels with the specified string
+                      values. Non-string label values are matched via Expression only.
+                    type: object
+                type: object
+              extract:
+                description: |-
+                  Extract projects the filtered components into free-form records
+                  published in status.extracted. If unset, the filtered raw v2 descriptors
+                  are published in status.components instead.
+                properties:
+                  byComponents:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      ByComponents evaluates each map value as a CEL expression once per
+                      surviving component with the binding component. An explicitly empty map
+                      emits one empty record per component.
+                    type: object
+                  byResources:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      ByResources evaluates each map value as a CEL expression once per
+                      surviving (component, resource) pair with the bindings component and
+                      resource. An explicitly empty map emits one empty record per pair.
+                    type: object
+                  expression:
+                    description: |-
+                      Expression is a single CEL expression evaluated once over the complete
+                      filtered descriptor list with the binding components. It must evaluate
+                      to a list of objects.
+                    minLength: 1
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of byResources, byComponents, or expression
+                    must be specified
+                  rule: '(has(self.byResources) ? 1 : 0) + (has(self.byComponents)
+                    ? 1 : 0) + (has(self.expression) ? 1 : 0) == 1'
               ocmConfig:
                 description: |-
                   OCMConfig defines references to secrets, config maps or ocm api
@@ -131,83 +196,83 @@ spec:
                       == "Repository" || self.kind == "Component" || self.kind ==
                       "Resource" || self.kind == "Replication" || self.kind == "Discovery"))
                 type: array
+              referenceSelector:
+                description: |-
+                  ReferenceSelector filters the references of all resolved descriptors.
+                  Only reference targets with at least one matching incoming reference are
+                  kept. If unset, all references (and the root component) are kept.
+                properties:
+                  expression:
+                    description: |-
+                      Expression is a CEL expression evaluated for each element. It must
+                      evaluate to a boolean. An empty expression is a no-op.
+                    type: string
+                  matchIdentity:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      MatchIdentity matches elements whose identity contains all specified
+                      key-value pairs. Keys must be present even when compared against an
+                      empty value.
+                    type: object
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      MatchLabels matches elements carrying labels with the specified string
+                      values. Non-string label values are matched via Expression only.
+                    type: object
+                type: object
+              resourceSelector:
+                description: |-
+                  ResourceSelector filters the resources of each surviving component.
+                  Components with zero surviving resources are kept. If unset, all
+                  resources are kept.
+                properties:
+                  expression:
+                    description: |-
+                      Expression is a CEL expression evaluated for each element. It must
+                      evaluate to a boolean. An empty expression is a no-op.
+                    type: string
+                  matchIdentity:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      MatchIdentity matches elements whose identity contains all specified
+                      key-value pairs. Keys must be present even when compared against an
+                      empty value.
+                    type: object
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      MatchLabels matches elements carrying labels with the specified string
+                      values. Non-string label values are matched via Expression only.
+                    type: object
+                type: object
               suspend:
                 description: |-
                   Suspend tells the controller to suspend the reconciliation of this
-                  Replication.
+                  Discovery.
                 type: boolean
-              targetRepositoryRef:
-                description: TargetRepositoryRef is a reference to the Repository
-                  the transfer happens to.
-                properties:
-                  name:
-                    default: ""
-                    description: |-
-                      Name of the referent.
-                      This field is effectively required, but due to backwards compatibility is
-                      allowed to be empty. Instances of this type with an empty value here are
-                      almost certainly wrong.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
             required:
             - componentRef
-            - targetRepositoryRef
             type: object
           status:
-            description: ReplicationStatus defines the observed state of Replication.
+            description: DiscoveryStatus defines the observed state of Discovery.
             properties:
-              component:
-                description: Component reflects the currently observed source component
-                  version.
-                properties:
-                  component:
-                    type: string
-                  digest:
-                    description: Digest information of the Component, if available
-                      as per OCM specification.
-                    properties:
-                      hashAlgorithm:
-                        description: |-
-                          HashAlgorithm specifies the hashing algorithm applied after normalization.
-                          The choice of algorithm impacts compatibility across verifiers.
-
-                          See specification reference:
-                            - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/digest-algorithms.md
-                        type: string
-                      normalisationAlgorithm:
-                        description: |-
-                          NormalisationAlgorithm defines how the component descriptor or artifact
-                          is transformed into a stable byte representation before hashing.
-                          Normalization ensures reproducibility by excluding volatile fields
-                          such as transport-related access specifications.
-
-                          See specification references:
-                            - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/component-descriptor-normalization-algorithms.md
-                            - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/artifact-normalization-types.md
-                        type: string
-                      value:
-                        description: |-
-                          Value is the encoded digest result produced from the normalized representation.
-                          Typically hex or base64 encoded, depending on the algorithm specification.
-                        type: string
-                    required:
-                    - hashAlgorithm
-                    - normalisationAlgorithm
-                    - value
-                    type: object
-                  repositorySpec:
-                    x-kubernetes-preserve-unknown-fields: true
-                  version:
-                    type: string
-                required:
-                - component
-                - repositorySpec
-                - version
-                type: object
+              components:
+                description: |-
+                  Components contains the filtered raw v2 descriptors of the discovered
+                  graph, sorted lexicographically by (component.name, component.version).
+                  It is only set when spec.extract is unset. A selected but empty result
+                  is an empty list; an uncomputed result is absent.
+                items:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: array
               conditions:
-                description: Conditions holds the conditions for the Replication.
+                description: Conditions holds the conditions for the Discovery.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -266,7 +331,7 @@ spec:
               effectiveOCMConfig:
                 description: |-
                   EffectiveOCMConfig specifies the entirety of config maps and secrets
-                  whose configuration data was applied to the Replication reconciliation,
+                  whose configuration data was applied to the Discovery reconciliation,
                   in the order the configuration data was applied.
                 items:
                   description: |-
@@ -313,48 +378,25 @@ spec:
                       == "Repository" || self.kind == "Component" || self.kind ==
                       "Resource" || self.kind == "Replication" || self.kind == "Discovery"))
                 type: array
-              lastFailedTransferEvents:
+              extracted:
                 description: |-
-                  LastFailedTransferEvents contains detailed events about the transfer if it failed.
-                  If it's empty, there was no failed last transfer. Is cleaned upon a successful transfer.
+                  Extracted contains the records projected from the filtered components
+                  by spec.extract. It is only set when spec.extract is set. A selected but
+                  empty result is an empty list; an uncomputed result is absent.
                 items:
-                  description: |-
-                    TransferEvent captures a single failed transformation observed during a
-                    replication transfer.
-                  properties:
-                    error:
-                      description: Error is the error message reported by the failed
-                        transformation.
-                      type: string
-                    id:
-                      description: ID is the identifier of the transformation that
-                        failed.
-                      type: string
-                    name:
-                      description: Name is the display name of the transformation
-                        in the form "ID [Type]".
-                      type: string
-                  required:
-                  - error
-                  - id
-                  - name
                   type: object
+                  x-kubernetes-preserve-unknown-fields: true
                 type: array
-              lastTransferredDigest:
-                description: LastTransferredDigest records the component digest of
-                  the last successful transfer.
-                type: string
-              lastTransferredVersion:
-                description: LastTransferredVersion records the component version
-                  of the last successful transfer.
-                type: string
               observedGeneration:
                 description: |-
-                  ObservedGeneration is the last observed generation of the Replication
+                  ObservedGeneration is the last observed generation of the Discovery
                   object.
                 format: int64
                 type: integer
             type: object
+            x-kubernetes-validations:
+            - message: components and extracted cannot be set at the same time
+              rule: '!(has(self.components) && has(self.extracted))'
         required:
         - spec
         type: object

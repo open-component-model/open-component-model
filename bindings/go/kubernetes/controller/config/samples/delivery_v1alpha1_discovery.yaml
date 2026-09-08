@@ -1,0 +1,19 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Discovery
+metadata:
+  name: flux-images
+  namespace: default
+spec:
+  componentRef:
+    name: releasechannel
+  componentSelector:
+    matchLabels:
+      tier: platform
+  resourceSelector:
+    expression: identity.name in ["flux", "image-automation-controller"]
+  extract:
+    byResources:
+      imageRef: resource.access.imageReference
+      resourceName: resource.name
+      componentName: component.name
+      componentVersion: component.version
