@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"encoding/json"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -96,6 +97,26 @@ type DiscoverySpec struct {
 	Suspend bool `json:"suspend,omitempty"`
 }
 
+// ExtractedRecord is one free-form extraction result. It is an opaque CRD
+// object for CEL while exposing each projected field as arbitrary JSON to Go
+// clients.
+// +kubebuilder:validation:Type=object
+// +kubebuilder:pruning:PreserveUnknownFields
+type ExtractedRecord map[string]apiextensionsv1.JSON
+
+func (in ExtractedRecord) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]apiextensionsv1.JSON(in))
+}
+
+func (in *ExtractedRecord) UnmarshalJSON(data []byte) error {
+	var record map[string]apiextensionsv1.JSON
+	if err := json.Unmarshal(data, &record); err != nil {
+		return err
+	}
+	*in = record
+	return nil
+}
+
 // DiscoveryStatus defines the observed state of Discovery.
 // +kubebuilder:validation:XValidation:rule="!(has(self.components) && has(self.extracted))",message="components and extracted cannot be set at the same time"
 type DiscoveryStatus struct {
@@ -121,9 +142,7 @@ type DiscoveryStatus struct {
 	// by spec.extract. It is only set when spec.extract is set. A selected but
 	// empty result is an empty list; an uncomputed result is absent.
 	// +optional
-	// +kubebuilder:validation:items:Type=object
-	// +kubebuilder:validation:items:XPreserveUnknownFields
-	Extracted []apiextensionsv1.JSON `json:"extracted,omitzero"`
+	Extracted []ExtractedRecord `json:"extracted,omitzero"`
 
 	// EffectiveOCMConfig specifies the entirety of config maps and secrets
 	// whose configuration data was applied to the Discovery reconciliation,
