@@ -265,18 +265,6 @@
       ],
       versioningTemplate: 'semver',
     },
-    {
-      // Tracks go install ...@vX.Y.Z pins in shell scripts annotated with
-      // a renovate comment directly above the version variable.
-      customType: 'regex',
-      managerFilePatterns: [
-        '/(^|/)renovate-post-upgrade\\.sh$/',
-      ],
-      matchStrings: [
-        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+[A-Z_]+_VERSION=v?(?<currentValue>\\d+\.\\d+\.\\d+)',
-      ],
-      versioningTemplate: 'semver',
-    },
   ],
   postUpgradeTasks: {
     commands: [
@@ -285,7 +273,6 @@
     fileFilters: [
       '**/go.mod',
       '**/go.sum',
-      '**/*.go',
     ],
     executionMode: 'branch',
   },
