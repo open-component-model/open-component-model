@@ -292,17 +292,17 @@ func TestAccessToBaseURL(t *testing.T) {
 				t.Run(tt.reference, func(t *testing.T) {
 					r := require.New(t)
 					var access runtime.Typed
-					field := "imageReference"
+					wantErr := tt.wantErr
 					if accessType == v1.OCIImageType {
 						access = &v1.OCIImage{ImageReference: tt.reference}
+						wantErr = ""
 					} else {
 						access = &v1.OCIImageLayer{Reference: tt.reference}
-						field = "ref"
 					}
 					baseURL, err := accessToBaseURL(access)
-					if tt.wantErr != "" {
-						r.ErrorContains(err, tt.wantErr)
-						r.ErrorContains(err, `field "`+field+`"`)
+					if wantErr != "" {
+						r.ErrorContains(err, wantErr)
+						r.ErrorContains(err, `field "ref"`)
 						return
 					}
 					r.NoError(err)

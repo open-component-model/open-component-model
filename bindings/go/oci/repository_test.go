@@ -1889,6 +1889,27 @@ func TestRepository_DownloadResourceOCIImageLayer(t *testing.T) {
 	r.True(ok)
 	r.Equal(ociImageSpecV1.MediaTypeImageLayer, mediaType)
 
+	for _, reference := range []string{"test-layer", "test-layer@" + dig.String()} {
+		t.Run("CTF reference without registry "+reference, func(t *testing.T) {
+			r := require.New(t)
+			local := res.DeepCopy()
+			local.Access.(*v1.OCIImageLayer).Reference = reference
+
+			processed, err := repo.ProcessResourceDigest(t.Context(), local)
+			r.NoError(err)
+			r.Equal(dig.Encoded(), processed.Digest.Value)
+
+			downloaded, err := repo.DownloadResource(t.Context(), local)
+			r.NoError(err)
+			reader, err := downloaded.ReadCloser()
+			r.NoError(err)
+			data, err := io.ReadAll(reader)
+			r.NoError(err)
+			r.NoError(reader.Close())
+			r.Equal(testdata, data)
+		})
+	}
+
 	t.Run("without a media type the blob keeps its default", func(t *testing.T) {
 		r := require.New(t)
 		untyped := res.DeepCopy()

@@ -200,28 +200,37 @@ func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *
 	return repo, nil
 }
 
-// accessToBaseURL derives the registry base URL from any access type this repository
-// serves. Each carries an OCI reference, in a differently named field.
 func accessToBaseURL(access runtime.Typed) (string, error) {
-	var reference string
-	var field string
 	switch access := access.(type) {
 	case *v1.OCIImage:
-		reference, field = access.ImageReference, "imageReference"
+		return ociImageAccessToBaseURL(access)
 	case *v1.OCIImageLayer:
-		reference, field = access.Reference, "ref"
+		return ociImageLayerAccessToBaseURL(access)
 	default:
 		return "", fmt.Errorf("unsupported access type %s: expected OCI image or OCI image layer", access.GetType())
 	}
-	if reference == "" {
-		return "", fmt.Errorf("access type %s has an empty reference, set it in field %q", access.GetType(), field)
-	}
-	ref, err := looseref.ParseReference(reference)
+}
+
+func ociImageAccessToBaseURL(access *v1.OCIImage) (string, error) {
+	ref, err := looseref.ParseReference(access.ImageReference)
 	if err != nil {
-		return "", fmt.Errorf("error parsing loose image reference %q: %w", reference, err)
+		return "", fmt.Errorf("error parsing loose image reference %q: %w", access.ImageReference, err)
+	}
+	// host is the registry with sane defaulting
+	baseURL := ref.RegistryWithScheme()
+	return baseURL, nil
+}
+
+func ociImageLayerAccessToBaseURL(access *v1.OCIImageLayer) (string, error) {
+	if access.Reference == "" {
+		return "", fmt.Errorf("access type %s has an empty reference, set it in field %q", access.GetType(), "ref")
+	}
+	ref, err := looseref.ParseReference(access.Reference)
+	if err != nil {
+		return "", fmt.Errorf("error parsing loose image reference %q: %w", access.Reference, err)
 	}
 	if ref.Registry == "" {
-		return "", fmt.Errorf("reference %q in field %q must include a registry", reference, field)
+		return "", fmt.Errorf("reference %q in field %q must include a registry", access.Reference, "ref")
 	}
 	return ref.RegistryWithScheme(), nil
 }
