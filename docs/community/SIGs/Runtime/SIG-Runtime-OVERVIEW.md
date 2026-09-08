@@ -10,8 +10,8 @@
 The SIG Runtime maintains and shapes:
 
 - **OCM Language Bindings** ([bindings](https://github.com/open-component-model/open-component-model/tree/main/bindings))
-- **OCM CLI** ([cli](https://github.com/open-component-model/open-component-model/tree/main/cli))
-- **OCM Kubernetes Controller** ([kubernetes/controller](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller))
+- **OCM CLI** ([bindings/go/cli](https://github.com/open-component-model/open-component-model/tree/main/bindings/go/cli))
+- **OCM Kubernetes Controller** ([bindings/go/kubernetes/controller](https://github.com/open-component-model/open-component-model/tree/main/bindings/go/kubernetes/controller))
 - **Legacy version of OCM Library and CLI (only maintenance)** ([ocm](https://github.com/open-component-model/ocm/tree/main))
 
 The mission of SIG Runtime is to allow OCM components to be:
@@ -81,8 +81,8 @@ The mission of SIG Runtime is to allow OCM components to be:
 
 - **Primary Code Repositories:**
   - **OCM Language Bindings** — [bindings](https://github.com/open-component-model/open-component-model/tree/main/bindings)
-  - **OCM Kubernetes Controller** — [kubernetes/controller](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller)
-  - **OCM CLI** — [cli](https://github.com/open-component-model/open-component-model/tree/main/cli)
+  - **OCM Kubernetes Controller** — [bindings/go/kubernetes/controller](https://github.com/open-component-model/open-component-model/tree/main/bindings/go/kubernetes/controller)
+  - **OCM CLI** — [bindings/go/cli](https://github.com/open-component-model/open-component-model/tree/main/bindings/go/cli)
 
 - **Test Strategy**
   - Component-level unit and integration tests for owned code

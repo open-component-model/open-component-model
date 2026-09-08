@@ -805,8 +805,8 @@ import (
 | Area | Framework | Assertion Style |
 |------|-----------|----------------|
 | `bindings/go/` | testify | `require.New(t)` |
-| `cli/` | testify + `test.OCM()` helper | `require.New(t)` |
-| `kubernetes/controller/` | Ginkgo v2 + Gomega | `Expect().To()` |
+| `bindings/go/cli/` | testify + `test.OCM()` helper | `require.New(t)` |
+| `bindings/go/kubernetes/controller/` | Ginkgo v2 + Gomega | `Expect().To()` |
 
 ### Ginkgo (Controller)
 
@@ -956,8 +956,8 @@ For watching arbitrary GVKs at runtime, a custom informer manager maintains meta
 | Area | Logger |
 |------|--------|
 | `bindings/go/` | `log/slog` via `slogcontext` |
-| `cli/` | `log/slog` with JSON/text format flag |
-| `kubernetes/controller/` | `logr` via controller-runtime zap |
+| `bindings/go/cli/` | `log/slog` with JSON/text format flag |
+| `bindings/go/kubernetes/controller/` | `logr` via controller-runtime zap |
 
 ---
 

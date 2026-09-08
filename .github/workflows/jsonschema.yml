@@ -28,7 +28,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Setup JSON Schema
-      uses: sourcemeta/jsonschema@671ac3baa820e21fc53a3f2c90c72a806e2835be # v16.5.0
+      uses: sourcemeta/jsonschema@1fe3cf08d12f6e8be38f46aac36eaa1dd1d4adf8 # v16.7.0
     - name: Lint JSON Schemas
       run: |
         jsonschema lint $(git ls-files '**/schemas/*.schema.json' | grep -v 'testutils') \

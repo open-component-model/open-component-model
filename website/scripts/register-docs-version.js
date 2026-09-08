@@ -236,6 +236,13 @@ function resolveGoModVersions(goModPath, modulePaths, { warnMissing = true } = {
     return result;
 }
 
+// Read the module path declared by a go.mod file.
+function readGoModModulePath(goModPath) {
+    const absPath = path.resolve(goModPath);
+    const output = execFileSync('go', ['mod', 'edit', '-json', absPath], { encoding: 'utf-8' });
+    return JSON.parse(output)?.Module?.Path;
+}
+
 // The following logic is backwards compatible with the non-monolithic bindings.
 // This logic can be simplified/removed once we are >10 versions into the monolithic release
 // and the documentation for non-monolithic releases can be dropped
@@ -262,6 +269,30 @@ const CLI_DERIVED_MODULES = [
 // The Go bindings merged into a single Go module. Releases built against the
 // monolith pin this one module instead of the per-package legacy modules above.
 const MONOLITHIC_BINDINGS_MODULE = `${MODULE_PREFIX}/bindings/go`;
+
+// Minor version (X.Y) from which cli and kubernetes/controller are folded into
+// the single bindings/go module. From this minor on, their Hugo module import
+// paths are `${MODULE_PREFIX}/bindings/go/cli` and
+// `${MODULE_PREFIX}/bindings/go/kubernetes/controller`, resolved from the single
+// `bindings/go/vX.Y.Z` git tag. Older minors keep the legacy top-level module
+// paths, whose git tags exist only at the old locations.
+const CLI_CONTROLLER_MERGE_MINOR = '0.16';
+
+// Return the cli module import path for a docs version. Post-merge the cli is a
+// package inside the bindings/go module.
+function cliModulePath(version) {
+    return compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) >= 0
+        ? `${MODULE_PREFIX}/bindings/go/cli`
+        : `${MODULE_PREFIX}/cli`;
+}
+
+// Return the controller module import path for a docs version. Post-merge the
+// controller is a package inside the bindings/go module.
+function controllerModulePath(version) {
+    return compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) >= 0
+        ? `${MODULE_PREFIX}/bindings/go/kubernetes/controller`
+        : `${MODULE_PREFIX}/kubernetes/controller`;
+}
 
 // One row per schema directory the website mounts.
 //     * `pkg` is the directory of the package inside bindings/go
@@ -352,7 +383,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             }]
         },
         {
-            path: `${MODULE_PREFIX}/cli`,
+            path: cliModulePath(version),
             version: `v${fullVersion}`,
             mounts: [{
                 source: 'docs/reference',
@@ -362,7 +393,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
         },
         ...bindingSchemaImports(version, deps),
         {
-            path: `${MODULE_PREFIX}/kubernetes/controller`,
+            path: controllerModulePath(version),
             version: `v${fullVersion}`,
             mounts: [{
                 source: 'config/crd/bases',
@@ -509,6 +540,13 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
         [MONOLITHIC_BINDINGS_MODULE, ...CLI_DERIVED_MODULES],
         { warnMissing: false }
     );
+    // Post-merge, cli and controller are packages inside bindings/go, so the
+    // release go.mod IS the bindings/go module rather than a consumer of it.
+    // Its own version is the release version (single bindings/go/vX.Y.Z tag).
+    if (!resolved[MONOLITHIC_BINDINGS_MODULE] &&
+        readGoModModulePath(cliGomod) === MONOLITHIC_BINDINGS_MODULE) {
+        resolved[MONOLITHIC_BINDINGS_MODULE] = `v${fullVersion}`;
+    }
     let deps;
     if (resolved[MONOLITHIC_BINDINGS_MODULE]) {
         deps = { [MONOLITHIC_BINDINGS_MODULE]: resolved[MONOLITHIC_BINDINGS_MODULE] };
