@@ -22,10 +22,8 @@ done
 # Renovate chose so we do not drift to a newer major.
 #
 # gomajor is installed into $HOME/go/bin here rather than /usr/local/bin
-# because the Renovate container runs as an unprivileged user. PATH is set
-# for this shell only, which is fine because the whole rewrite happens in
-# this script (not a follow-up postUpgradeTasks command whose spawn would
-# not inherit it).
+# because the Renovate container runs as an unprivileged user. It is
+# invoked via its absolute path so PATH does not need to be modified.
 GOBIN="$(go env GOPATH)/bin"
 export GOBIN
 if [ ! -x "${GOBIN}/gomajor" ]; then
