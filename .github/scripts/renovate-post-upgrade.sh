@@ -26,11 +26,13 @@ done
 # for this shell only, which is fine because the whole rewrite happens in
 # this script (not a follow-up postUpgradeTasks command whose spawn would
 # not inherit it).
-if ! command -v gomajor >/dev/null 2>&1; then
-  go install github.com/icholy/gomajor@latest
-fi
 GOBIN="$(go env GOPATH)/bin"
-export PATH="${GOBIN}:${PATH}"
+export GOBIN
+if [ ! -x "${GOBIN}/gomajor" ]; then
+  # renovate: datasource=go depName=github.com/icholy/gomajor
+  GOMAJOR_VERSION=v0.15.0
+  go install "github.com/icholy/gomajor@${GOMAJOR_VERSION}"
+fi
 
 base_ref="${RENOVATE_BASE_BRANCH:-origin/main}"
 git rev-parse --verify "${base_ref}" >/dev/null 2>&1 || base_ref="HEAD~1"
@@ -42,7 +44,7 @@ for gomod in $(git diff --name-only "${base_ref}" -- '**/go.mod'); do
   git diff "${base_ref}" -- "${gomod}" \
     | grep -E '^\+[[:space:]]+[^[:space:]]+/v[0-9]+ v[0-9]+' \
     | while read -r plus path version _rest; do
-        (cd "${dir}" && gomajor get "${path}@${version}") || {
+        (cd "${dir}" && "${GOBIN}/gomajor" get "${path}@${version}") || {
           echo "gomajor get ${path}@${version} failed in ${dir}, continuing" >&2
         }
       done
