@@ -35,7 +35,10 @@ if [ ! -x "${GOBIN}/gomajor" ]; then
 fi
 
 base_ref="${RENOVATE_BASE_BRANCH:-origin/main}"
-git rev-parse --verify "${base_ref}" >/dev/null 2>&1 || base_ref="HEAD~1"
+if ! git rev-parse --verify "${base_ref}" >/dev/null 2>&1; then
+  echo "warning: base ref '${base_ref}' does not resolve; falling back to HEAD~1" >&2
+  base_ref="HEAD~1"
+fi
 
 for gomod in $(git diff --name-only "${base_ref}" -- '**/go.mod'); do
   dir=$(dirname "${gomod}")
