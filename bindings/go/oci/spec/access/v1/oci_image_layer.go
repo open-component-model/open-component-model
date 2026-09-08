@@ -44,7 +44,7 @@ type OCIImageLayer struct {
 	Size int64 `json:"size"`
 }
 
-// Validate checks the digest, nonnegative size, and registry-qualified reference.
+// Validate checks the digest, nonnegative size, and reference.
 func (t *OCIImageLayer) Validate() error {
 	if err := t.Digest.Validate(); err != nil {
 		return fmt.Errorf("invalid digest %q: %w", t.Digest, err)
@@ -58,9 +58,6 @@ func (t *OCIImageLayer) Validate() error {
 	ref, err := looseref.ParseReference(t.Reference)
 	if err != nil {
 		return fmt.Errorf("invalid reference %q: %w", t.Reference, err)
-	}
-	if ref.Registry == "" {
-		return fmt.Errorf("reference %q must include a registry", t.Reference)
 	}
 	if dig, err := ref.Digest(); err == nil && dig != t.Digest {
 		return fmt.Errorf("digest field value %q does not match digest contained in reference %q", t.Digest, t.Reference)

@@ -39,14 +39,12 @@ func TestOCIImageLayer_Validate(t *testing.T) {
 			layer: OCIImageLayer{Reference: "example.com/repo", Digest: digest.FromString(""), Size: 0},
 		},
 		{
-			name:    "reference without registry",
-			layer:   OCIImageLayer{Reference: "nginx:latest", Digest: validDigest, Size: 100},
-			wantErr: true,
+			name:  "reference without registry",
+			layer: OCIImageLayer{Reference: "nginx:latest", Digest: validDigest, Size: 100},
 		},
 		{
-			name:    "digest reference without registry",
-			layer:   OCIImageLayer{Reference: "nginx@" + validDigest.String(), Digest: validDigest, Size: 100},
-			wantErr: true,
+			name:  "digest reference without registry",
+			layer: OCIImageLayer{Reference: "nginx@" + validDigest.String(), Digest: validDigest, Size: 100},
 		},
 		{
 			name: "empty reference",
