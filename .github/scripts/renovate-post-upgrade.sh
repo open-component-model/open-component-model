@@ -9,8 +9,7 @@ fi
 failed=0
 
 # Find all go.mod files under */integration/* and run go mod tidy in their directories
-integration_dirs=$(find . -type f -name "go.mod" -path "*/integration/*" -exec dirname {} \;)
-for dir in ${integration_dirs}; do
+for dir in $(find . -type f -name "go.mod" -path "*/integration/*" -exec dirname {} \;); do
   echo "Running explicit go mod tidy for integration test in $dir"
   (cd "$dir" && go mod tidy) || {
     echo "go mod tidy failed in ${dir}, continuing" >&2
@@ -31,9 +30,7 @@ GOBIN="$(go env GOPATH)/bin"
 export GOBIN
 # renovate: datasource=go depName=github.com/icholy/gomajor
 GOMAJOR_VERSION=v0.15.0
-if ! "${GOBIN}/gomajor" version 2>/dev/null | grep -qx "version: ${GOMAJOR_VERSION}"; then
-  go install "github.com/icholy/gomajor@${GOMAJOR_VERSION}"
-fi
+go install "github.com/icholy/gomajor@${GOMAJOR_VERSION}"
 
 base_ref="${RENOVATE_BASE_BRANCH:-origin/main}"
 if ! git rev-parse --verify "${base_ref}" >/dev/null 2>&1; then
