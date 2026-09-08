@@ -182,7 +182,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 	if err != nil {
 		return nil, err
 	}
-	if err := validateUploadTarget(access); err != nil {
+	if err := rejectReadOnlyAccess(access); err != nil {
 		return nil, err
 	}
 	b, err := repo.UploadResource(ctx, resource, content)
@@ -220,12 +220,14 @@ func accessToBaseURL(access runtime.Typed) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error parsing loose image reference %q: %w", reference, err)
 	}
-	// host is the registry with sane defaulting
+	if ref.Registry == "" {
+		return "", fmt.Errorf("reference %q in field %q must include a registry", reference, field)
+	}
 	return ref.RegistryWithScheme(), nil
 }
 
-// validateUploadTarget rejects access types that can be read but not written to.
-func validateUploadTarget(access runtime.Typed) error {
+// rejectReadOnlyAccess rejects access types that can be read but not written to.
+func rejectReadOnlyAccess(access runtime.Typed) error {
 	if _, ok := access.(*v1.OCIImageLayer); ok {
 		return fmt.Errorf("unsupported access type %s as upload target: expected OCI image", access.GetType())
 	}
@@ -321,7 +323,7 @@ func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource 
 	if err != nil {
 		return nil, err
 	}
-	if err := validateUploadTarget(access); err != nil {
+	if err := rejectReadOnlyAccess(access); err != nil {
 		return nil, err
 	}
 	res, err := repo.UploadResourceStream(ctx, resource, stream)

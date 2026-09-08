@@ -1,12 +1,14 @@
 package resource
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -265,6 +267,111 @@ func TestNewResourceRepositoryHTTPConfig_InsecureSkipVerify(t *testing.T) {
 				require.ErrorContains(t, err, tt.expectErrMsgContains)
 			}
 			require.Equal(t, tt.expectHit, serverHit, "expected HTTP request to reach test server")
+		})
+	}
+}
+
+func TestAccessToBaseURL(t *testing.T) {
+	for _, accessType := range []string{v1.OCIImageType, v1.OCIImageLayerType} {
+		t.Run(accessType, func(t *testing.T) {
+			for _, tt := range []struct {
+				reference string
+				wantURL   string
+				wantErr   string
+			}{
+				{reference: "example.com/repo", wantURL: "example.com"},
+				{reference: "example.com/repo:latest", wantURL: "example.com"},
+				{reference: "example.com/repo@" + digest.FromString("layer").String(), wantURL: "example.com"},
+				{reference: "http://localhost:5000/repo", wantURL: "http://localhost:5000"},
+				{reference: "https://example.com/repo", wantURL: "https://example.com"},
+				{reference: "nginx:latest", wantErr: "must include a registry"},
+				{reference: "nginx", wantErr: "must include a registry"},
+				{reference: "nginx@" + digest.FromString("layer").String(), wantErr: "must include a registry"},
+				{reference: "", wantErr: "empty reference"},
+			} {
+				t.Run(tt.reference, func(t *testing.T) {
+					r := require.New(t)
+					var access runtime.Typed
+					field := "imageReference"
+					if accessType == v1.OCIImageType {
+						access = &v1.OCIImage{ImageReference: tt.reference}
+					} else {
+						access = &v1.OCIImageLayer{Reference: tt.reference}
+						field = "ref"
+					}
+					baseURL, err := accessToBaseURL(access)
+					if tt.wantErr != "" {
+						r.ErrorContains(err, tt.wantErr)
+						r.ErrorContains(err, `field "`+field+`"`)
+						return
+					}
+					r.NoError(err)
+					r.Equal(tt.wantURL, baseURL)
+				})
+			}
+		})
+	}
+}
+
+func TestOCIImageLayer_RegistryEndpoint(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		mediaType string
+		endpoint  string
+	}{
+		{name: "layer", mediaType: ocispec.MediaTypeImageLayer, endpoint: "blobs"},
+		{name: "unspecified", endpoint: "blobs"},
+		{name: "manifest", mediaType: ocispec.MediaTypeImageManifest, endpoint: "manifests"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, suffix := range []string{"", ":latest", "@" + digest.FromString("layer").String()} {
+				t.Run(suffix, func(t *testing.T) {
+					r := require.New(t)
+					dig := digest.FromString("layer")
+					requests := make(chan string, 8)
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+						requests <- req.Method + " " + req.URL.Path
+						w.Header().Set("Content-Length", "5")
+						w.Header().Set("Docker-Content-Digest", dig.String())
+						mediaType := tt.mediaType
+						if mediaType == "" {
+							mediaType = "application/octet-stream"
+						}
+						w.Header().Set("Content-Type", mediaType)
+						if req.Method == http.MethodGet {
+							_, _ = io.WriteString(w, "layer")
+						}
+					}))
+					t.Cleanup(server.Close)
+
+					res := layerResource(t, server.URL+"/repo"+suffix)
+					raw := &runtime.Raw{}
+					r.NoError(ociaccess.Scheme.Convert(&v1.OCIImageLayer{
+						Type:      runtime.NewVersionedType(v1.OCIImageLayerType, v1.Version),
+						Reference: server.URL + "/repo" + suffix,
+						Digest:    dig,
+						Size:      5,
+						MediaType: tt.mediaType,
+					}, raw))
+					res.Access = raw
+					repo := NewResourceRepository(nil)
+					processed, err := repo.ProcessResourceDigest(t.Context(), res, nil)
+					r.NoError(err)
+					r.Equal(dig.Encoded(), processed.Digest.Value)
+					path := "/v2/repo/" + tt.endpoint + "/" + dig.String()
+					r.Equal("HEAD "+path, <-requests)
+
+					b, err := repo.DownloadResource(t.Context(), res, nil)
+					r.NoError(err)
+					r.Equal("GET "+path, <-requests)
+					rc, err := b.ReadCloser()
+					r.NoError(err)
+					data, err := io.ReadAll(rc)
+					r.NoError(err)
+					r.NoError(rc.Close())
+					r.Equal("layer", string(data))
+				})
+			}
 		})
 	}
 }

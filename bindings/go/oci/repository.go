@@ -307,8 +307,8 @@ func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *des
 		return nil, err
 	}
 
-	// Exists resolves by digest alone: it confirms the blob is present but checks
-	// neither the declared size nor the media type. Size is checked on download.
+	// The media type selects the blob or manifest endpoint. Exists checks the digest,
+	// not the declared size. DownloadResource checks the size and content.
 	exists, err := src.Exists(ctx, layerDescriptor(typed))
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify existence of layer %q in %q: %w", typed.Digest, typed.Reference, err)
