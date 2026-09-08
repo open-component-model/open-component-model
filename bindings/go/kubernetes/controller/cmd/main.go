@@ -32,6 +32,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer/dynamic"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/discovery"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/replication"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/resource"
@@ -81,6 +82,7 @@ func main() {
 		resolverWorkerQueueLength int
 		resolverSubscriberBuffer  int
 		resolverCacheTTL          int
+		discoverySafetyInterval   time.Duration
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -110,6 +112,10 @@ func main() {
 			"Tune upward if the resolver_event_channel_drops_total metric is non-zero.")
 	flag.IntVar(&resolverCacheTTL, "resolver-cache-ttl", 30, //nolint:mnd // no magic number
 		"The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.")
+	flag.DurationVar(&discoverySafetyInterval, "discovery-controller-safety-interval", discovery.DefaultSafetyInterval,
+		"The discovery-controller-wide safety interval after which successfully reconciled Discoveries are re-queued "+
+			"for a full discovery, jittered by ±10%. It insures against missed watch events. \"0\" disables safety scheduling. "+
+			"Negative durations are invalid.")
 
 	opts := zap.Options{
 		Development: true,
@@ -144,6 +150,12 @@ func main() {
 	if resolverCacheTTL <= 0 {
 		setupLog.Error(nil, "invalid flag value", "flag", "resolver-cache-ttl",
 			"value", resolverCacheTTL, "reason", "must be > 0")
+		os.Exit(1)
+	}
+
+	if err := discovery.ValidateSafetyInterval(discoverySafetyInterval); err != nil {
+		setupLog.Error(err, "invalid flag value", "flag", "discovery-controller-safety-interval",
+			"value", discoverySafetyInterval)
 		os.Exit(1)
 	}
 
@@ -284,6 +296,19 @@ func main() {
 		RepositoryScheme: ocirepository.Scheme,
 	}).SetupWithManager(ctx, mgr, replicationConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Replication")
+		os.Exit(1)
+	}
+
+	if err = (&discovery.Reconciler{
+		BaseReconciler: &ocm.BaseReconciler{
+			Client:           mgr.GetClient(),
+			Scheme:           mgr.GetScheme(),
+			EventRecorder:    eventsRecorder,
+			NewPluginManager: newPluginManager,
+		},
+		SafetyInterval: discoverySafetyInterval,
+	}).SetupWithManager(ctx, mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Discovery")
 		os.Exit(1)
 	}
 

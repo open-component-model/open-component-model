@@ -59,6 +59,8 @@ func GetEffectiveConfig(ctx context.Context, client ctrl.Client, obj v1alpha1.Co
 				resource = &v1alpha1.Component{}
 			case v1alpha1.KindResource:
 				resource = &v1alpha1.Resource{}
+			case v1alpha1.KindReplication:
+				resource = &v1alpha1.Replication{}
 			case v1alpha1.KindDiscovery:
 				resource = &v1alpha1.Discovery{}
 			default:
