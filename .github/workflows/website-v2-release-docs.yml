@@ -41,13 +41,13 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Verify bindings/go tag exists
+      - name: Verify tag exists
         env:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          git ls-remote --exit-code --tags origin "refs/tags/bindings/go/v${VERSION}" \
-            || { echo "::error::tag bindings/go/v${VERSION} not found (release not promoted yet?)"; exit 1; }
+          git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" \
+            || { echo "::error::tag v${VERSION} not found (release not promoted yet?)"; exit 1; }
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -60,8 +60,8 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          git fetch origin "refs/tags/bindings/go/v${VERSION}:refs/tags/bindings/go/v${VERSION}" --no-tags
-          git show "bindings/go/v${VERSION}:bindings/go/go.mod" > "${{ runner.temp }}/cli-go.mod"
+          git fetch origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}" --no-tags
+          git show "v${VERSION}:bindings/go/go.mod" > "${{ runner.temp }}/cli-go.mod"
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
