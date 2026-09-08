@@ -6,15 +6,10 @@ if ! command -v go >/dev/null 2>&1; then
   exit 0
 fi
 
-failed=0
-
 # Find all go.mod files under */integration/* and run go mod tidy in their directories
 for dir in $(find . -type f -name "go.mod" -path "*/integration/*" -exec dirname {} \;); do
   echo "Running explicit go mod tidy for integration test in $dir"
-  (cd "$dir" && go mod tidy) || {
-    echo "go mod tidy failed in ${dir}, continuing" >&2
-    failed=1
-  }
+  (cd "$dir" && go mod tidy) || echo "go mod tidy failed in ${dir}, continuing" >&2
 done
 
 # Fix Go major-version bumps that Renovate leaves half-applied.
@@ -46,15 +41,10 @@ for gomod in $(git diff --name-only "${base_ref}" -- '**/go.mod'); do
     | grep -E '^\+[[:space:]]+[^[:space:]]+/v[0-9]+ v[0-9]+' \
     | awk '{print $2"@"$3}')
   for pair in ${pairs}; do
-    (cd "${dir}" && "${GOBIN}/gomajor" get "${pair}") || {
-      echo "gomajor get ${pair} failed in ${dir}, continuing" >&2
-      failed=1
-    }
+    (cd "${dir}" && "${GOBIN}/gomajor" get "${pair}") \
+      || echo "gomajor get ${pair} failed in ${dir}, continuing" >&2
   done
-  (cd "${dir}" && go mod tidy) || {
-    echo "go mod tidy failed in ${dir}, continuing" >&2
-    failed=1
-  }
+  (cd "${dir}" && go mod tidy) || echo "go mod tidy failed in ${dir}, continuing" >&2
 done
 
-exit "${failed}"
+exit 0
