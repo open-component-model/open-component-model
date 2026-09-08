@@ -923,7 +923,7 @@ imports:
             versions:
               - '0.15'
   - path: ocm.software/open-component-model/bindings/go
-    version: v0.0.13
+    version: v0.0.8
     mounts:
       - source: constructor/spec/v1/resources
         target: static/0.15/schemas/bindings/go/constructor
