@@ -687,107 +687,26 @@ jobs:
       conflict_policy: replace
 
   # === Website version release ===
-  # Replaces the old standalone website-version-release.yml. Runs after the
-  # final promotion succeeded, when the website/v0.X.Y tag exists. Opens a PR
-  # to main pinning Hugo module imports to the just-created website tag, with
-  # binding versions resolved from the released CLI module's go.mod.
+  # Dispatches website-release-pr.yml on main via gh workflow run so the
+  # logic always executes from main's copy of the workflow, regardless of
+  # which release branch triggered this release. A workflow_call would load
+  # the callee from the caller's ref.
   create_website_update_pr:
-    name: Open website update PR
+    name: Trigger website update PR workflow
     needs: [prepare, promote_and_release_final]
     if: ${{ github.event.inputs.dry_run == 'false' }}
     runs-on: ubuntu-24.04-arm
-    environment:
-      name: automation
-      deployment: false
     permissions:
-      contents: read
-      id-token: write
-      pull-requests: write
+      actions: write
     steps:
-      - name: Checkout main
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # Docs PR targets main, so we check out main rather than the release branch.
-          ref: main
-          persist-credentials: false
-
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: bindings/go/go.mod
-          cache: false
-
-      - name: Fetch bindings/go go.mod at release tag
+      - name: Dispatch website-release-pr on main
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.prepare.outputs.base_version }}
         run: |
           set -euo pipefail
-          git fetch origin "refs/tags/bindings/go/v${VERSION}:refs/tags/bindings/go/v${VERSION}" --no-tags
-          git show "bindings/go/v${VERSION}:bindings/go/go.mod" > "${{ runner.temp }}/cli-go.mod"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: website/package.json
-
-      - name: Install dependencies
-        working-directory: website
-        run: npm ci
-
-      - name: Release docs version
-        id: register
-        working-directory: website
-        env:
-          VERSION: ${{ needs.prepare.outputs.base_version }}
-          CLI_GOMOD: ${{ runner.temp }}/cli-go.mod
-          LOG_FILE: ${{ runner.temp }}/register.log
-        run: |
-          set +e
-          node scripts/register-docs-version.js "$VERSION" \
-            --cli-gomod "$CLI_GOMOD" \
-            2>&1 | tee "$LOG_FILE"
-          rc=${PIPESTATUS[0]}
-          # Write the logs to the output so they can be included in the PR body. There might be warnings about missing
-          # modules (diff between CLI_DERIVED_MODULES and CLI_GOMOD) that are not fatal but need to be validated
-          # manually.
-          {
-            echo 'log<<__REGISTER_EOF__'
-            cat "$LOG_FILE"
-            echo '__REGISTER_EOF__'
-          } >> "$GITHUB_OUTPUT"
-          exit "$rc"
-
-      - name: Generate App Token
-        id: get_token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
-          repositories: ${{ github.event.repository.name }}
-          # Push the branch and create the signed commit via GraphQL.
-          permission-contents: write
-          # Open the website docs release PR.
-          permission-pull-requests: write
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
-        with:
-          base: main
-          token: ${{ steps.get_token.outputs.token }}
-          title: "chore(website): release docs version ${{ needs.prepare.outputs.base_version }}"
-          commit-message: "[github-actions] automated change"
-          add-paths: |
-            website/config/
-          branch: website/version-release/${{ needs.prepare.outputs.base_version }}
-          delete-branch: true
-          sign-commits: true
-          body: |
-            Automated docs release for version ${{ needs.prepare.outputs.base_version }}.
-
-            Triggered by tag `website/v${{ needs.prepare.outputs.base_version }}`.
-
-            Output of `register-docs-version.js`:
-
-            ````
-            ${{ steps.register.outputs.log }}
-            ````
+          gh workflow run website-v2-release-docs.yml \
+            --repo "$GH_REPO" \
+            --ref main \
+            -f version="$VERSION"
+          echo "Dispatched website-release-pr for $VERSION on main."
