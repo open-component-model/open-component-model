@@ -79,6 +79,12 @@ spec:
                     - --resolver-cache-ttl={{ .cacheTTL }}
                     {{- end }}
                     {{- end }}
+                    {{- /* Discovery */}}
+                    {{- with .Values.manager.discovery }}
+                    {{- if hasKey . "safetyInterval" }}
+                    - --discovery-controller-safety-interval={{ .safetyInterval }}
+                    {{- end }}
+                    {{- end }}
                     {{- /* Cache */}}
                     {{- with .Values.manager.cache }}
                     {{- if .deployerDownloadSize }}

@@ -66,6 +66,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.cache.deployerDownloadMaxResourceSize | string | `"2Mi"` | Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit. |
 | manager.cache.deployerDownloadSize | int | `1000` | Maximum size of the deployer download object LRU cache |
 | manager.concurrency.resource | int | `4` | Number of active resource controller workers |
+| manager.discovery.safetyInterval | string | `"30m"` | Controller-wide safety interval after which successfully reconciled Discoveries are re-queued for a full discovery, jittered by +/-10%. "0" disables safety scheduling; negative durations are rejected at startup. |
 | manager.env | list | `[]` | Environment variables for the controller |
 | manager.extraArgs | list | `[]` | Extra arguments to pass to the controller |
 | manager.healthProbe.bindAddress | string | `":8081"` | Address the health probe endpoint binds to |

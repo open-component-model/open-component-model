@@ -29,6 +29,7 @@ import (
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/discovery"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
@@ -82,6 +83,9 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 		return []string{resource.Spec.ComponentRef.Name}
 	}); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
+	}
+	if err := discovery.EnsureComponentRefIndex(ctx, mgr); err != nil {
+		return err
 	}
 
 	// event source from resolver's worker pool to get notified when resolutions complete
@@ -150,6 +154,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 					}},
 				}
 			})).
+		Watches(&v1alpha1.Discovery{}, &discoveryReleaseHandler{client: r.Client}).
 		WithOptions(controller.Options{
 			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
 				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
@@ -350,6 +355,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Co
 	// The component should only be deleted if no resource exists that references that component.
 	resourceList := &v1alpha1.ResourceList{}
 	if err := r.List(ctx, resourceList, &client.ListOptions{
+		Namespace: component.GetNamespace(),
 		FieldSelector: fields.OneTermEqualSelector(
 			resourceIndex,
 			client.ObjectKeyFromObject(component).Name,
@@ -368,6 +374,36 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Co
 
 		msg := fmt.Sprintf(
 			"component cannot be removed as resources are still referencing it: %s",
+			strings.Join(names, ","),
+		)
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.DeletionFailedReason, msg)
+
+		return errors.New(msg)
+	}
+
+	// The component should only be deleted if no same-namespace discovery
+	// exists that references that component.
+	discoveryList := &v1alpha1.DiscoveryList{}
+	if err := r.List(ctx, discoveryList, &client.ListOptions{
+		Namespace: component.GetNamespace(),
+		FieldSelector: fields.OneTermEqualSelector(
+			discovery.ComponentRefIndex,
+			client.ObjectKeyFromObject(component).Name,
+		),
+	}); err != nil {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.DeletionFailedReason, err.Error())
+
+		return fmt.Errorf("failed to list discoveries: %w", err)
+	}
+
+	if len(discoveryList.Items) > 0 {
+		var names []string
+		for _, d := range discoveryList.Items {
+			names = append(names, fmt.Sprintf("%s/%s", d.Namespace, d.Name))
+		}
+
+		msg := fmt.Sprintf(
+			"component cannot be removed as discoveries are still referencing it: %s",
 			strings.Join(names, ","),
 		)
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.DeletionFailedReason, msg)
