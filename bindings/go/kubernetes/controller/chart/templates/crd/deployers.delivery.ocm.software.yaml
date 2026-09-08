@@ -114,7 +114,7 @@ spec:
                       == "v1") && (self.kind == "Secret" || self.kind == "ConfigMap"))
                       || (self.apiVersion == "delivery.ocm.software/v1alpha1" && (self.kind
                       == "Repository" || self.kind == "Component" || self.kind ==
-                      "Resource" || self.kind == "Replication"))
+                      "Resource" || self.kind == "Replication" || self.kind == "Discovery"))
                 type: array
               resourceRef:
                 description: ResourceRef is the k8s resource name of an OCM resource
@@ -281,7 +281,7 @@ spec:
                       == "v1") && (self.kind == "Secret" || self.kind == "ConfigMap"))
                       || (self.apiVersion == "delivery.ocm.software/v1alpha1" && (self.kind
                       == "Repository" || self.kind == "Component" || self.kind ==
-                      "Resource" || self.kind == "Replication"))
+                      "Resource" || self.kind == "Replication" || self.kind == "Discovery"))
                 type: array
               observedGeneration:
                 description: |-

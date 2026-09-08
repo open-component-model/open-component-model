@@ -1,4 +1,4 @@
-{{- if .Values.rbacHelpers.aggregateToDefaultRoles }}
+{{- if .Values.rbacHelpers.enable }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -7,23 +7,24 @@ metadata:
         app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
         app.kubernetes.io/instance: {{ .Release.Name }}
-        rbac.authorization.k8s.io/aggregate-to-admin: "true"
-        rbac.authorization.k8s.io/aggregate-to-edit: "true"
-    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "aggregate-to-edit" "context" $) }}
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "discovery-editor-role" "context" $) }}
 rules:
     - apiGroups:
         - delivery.ocm.software
       resources:
-        - components
-        - deployers
         - discoveries
-        - replications
-        - repositories
-        - resources
       verbs:
         - create
         - delete
-        - deletecollection
+        - get
+        - list
         - patch
         - update
+        - watch
+    - apiGroups:
+        - delivery.ocm.software
+      resources:
+        - discoveries/status
+      verbs:
+        - get
 {{- end }}
