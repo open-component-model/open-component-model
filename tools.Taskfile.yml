@@ -113,18 +113,22 @@ tasks:
       npx --yes markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
         {{ .CLI_ARGS }} '{{ .ROOT_DIR }}/**/*.md'
 
-  dependency-table/generate:
-    desc: "Regenerate docs/dependency-table.md from golangci.yml depguard rules"
-    deps: [dependency-table/install]
-    cmd: node {{ .ROOT_DIR }}/.github/scripts/dependency-table.js generate > {{ .ROOT_DIR }}/docs/dependency-table.md
+  dependency-list/generate:
+    desc: "Regenerate the generated documents derived from the golangci.yml depguard rules"
+    deps: [github-scripts/install]
+    cmds:
+      - node {{ .ROOT_DIR }}/.github/scripts/dependency-list.js table > {{ .ROOT_DIR }}/docs/dependency-table.md
+      - node {{ .ROOT_DIR }}/.github/scripts/dependency-list.js readme --write {{ .ROOT_DIR }}/bindings/go/README.md
 
-  dependency-table/verify:
-    desc: "Verify docs/dependency-table.md is in sync with golangci.yml depguard rules"
-    deps: [dependency-table/install]
-    cmd: |
-      node {{ .ROOT_DIR }}/.github/scripts/dependency-table.js generate | diff - {{ .ROOT_DIR }}/docs/dependency-table.md
+  dependency-list/verify:
+    desc: "Verify the generated documents derived from the golangci.yml depguard rules are in sync"
+    deps: [github-scripts/install]
+    cmds:
+      - node {{ .ROOT_DIR }}/.github/scripts/dependency-list.js table | diff - {{ .ROOT_DIR }}/docs/dependency-table.md
+      - node {{ .ROOT_DIR }}/.github/scripts/dependency-list.js readme | diff - {{ .ROOT_DIR }}/bindings/go/README.md
 
-  dependency-table/install:
+  github-scripts/install:
+    desc: "Install dependencies of the Node.js scripts in .github/scripts"
     internal: true
     dir: '{{ .ROOT_DIR }}/.github/scripts'
     sources:

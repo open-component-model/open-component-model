@@ -118,4 +118,6 @@ tasks:
         vars:
           CLI_DOCUMENTATION_MODE: "hugo"
           CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/bindings/go/cli/docs/reference'
+      # Documentation tables derived from golangci.yml depguard rules and doc.go package comments
+      - task: 'tools:dependency-list/generate'
       - task: 'tidy'
