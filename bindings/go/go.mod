@@ -22,6 +22,7 @@ require (
 	github.com/gobwas/glob v0.2.3
 	github.com/google/cel-go v0.31.0
 	github.com/google/go-github/v89 v89.0.0
+	github.com/google/go-github/v90 v90.0.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jedib0t/go-pretty/v6 v6.8.3
