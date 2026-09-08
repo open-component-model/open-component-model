@@ -25,7 +25,6 @@ change in a future release depending on user feedback to offer a better UX.
 - Retrieve both with one command, `ocm download resource --sbom`
 - Collect the SBOMs of an entire component version with a small script
 - Scan the result with Trivy
-- Understand what each of the two approaches guarantees after a by-value transfer, and why that decides which one you should use
 
 **Estimated time:** ~25 minutes
 
@@ -71,8 +70,7 @@ are both part of the signature therefore, are immutable without a signature chan
 **Strategy 2, the buildx attestation.** For a resource backed by an OCI artifact, OCM reads the image index and looks
 for the attestation manifests BuildKit creates next to each platform's image. Nothing has to be added to the component
 version at all. The index is read from wherever the resource currently lives: the origin registry while the access is
-still an `OCIImage/v1`, or the component version's own storage once a by-value transfer has copied it in. The
-attestation is not part of the component descriptor either way, so it is not covered by the component signature.
+still an `OCIImage/v1`, or the component version's own storage once a by-value transfer has copied it in.
 
 {{< callout context="note" >}}
 Only the BuildKit layout is understood right now. SBOMs attached by cosign, or published through the OCI referrers API, are not
@@ -344,10 +342,7 @@ done
 
 Your numbers will differ, because the vulnerability database moves.
 
-## The difference between strategies {#strategy-differences}
-
-The two strategies look identical from the command line, but they behave differently once the component version
-is transferred.
+## Verify that after transfer the SBOMs are still there {#verify-after-transfer}
 
 Transfer the component version by value, which is what an air-gapped delivery does:
 
@@ -367,7 +362,7 @@ level=INFO msg="found an sbom resource referencing the requested resource" sbom=
 t-sboms/ocm-cli/ocm-cli-sbom.spdx.json
 ```
 
-The attached one is still there too:
+The attached SBOM was also transferred together with the resource:
 
 ```bash
 ocm download resource ./transport-archive-transferred//ocm.software/examples/sbom-demo:1.0.0 \
