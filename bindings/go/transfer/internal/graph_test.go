@@ -196,7 +196,7 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	assert.Equal(t, "fileBufferCleanup", tgd.Transformations[3].ID)
 }
 
-func TestBuildGraphDefinition_CollidingResourceVersionsGetUniqueIDs(t *testing.T) {
+func TestBuildGraphDefinition_CollidingResourceVersionsKeepDistinctIDs(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
@@ -215,8 +215,10 @@ func TestBuildGraphDefinition_CollidingResourceVersionsGetUniqueIDs(t *testing.T
 	for _, tr := range tgd.Transformations {
 		ids = append(ids, tr.ID)
 	}
-	r.Contains(ids, "transformOcmSoftwareTest100GettransformOperatorImage021Meta")
-	r.Contains(ids, "transformOcmSoftwareTest100GettransformOperatorImage021MetaR1")
+	// the escaping is injective: build metadata and pre-release versions produce
+	// different IDs without any disambiguation suffix
+	r.Contains(ids, "transform_slash_ocm_dot_software_slash_test_slash_1_dot_0_dot_0Gettransform_slash_operator_dash_image_slash_0_dot_2_dot_1_plus_meta")
+	r.Contains(ids, "transform_slash_ocm_dot_software_slash_test_slash_1_dot_0_dot_0Gettransform_slash_operator_dash_image_slash_0_dot_2_dot_1_dash_meta")
 	unique := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
 		unique[id] = struct{}{}
