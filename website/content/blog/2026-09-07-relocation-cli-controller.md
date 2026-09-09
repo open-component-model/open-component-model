@@ -1,10 +1,10 @@
 ---
 title: "One Module, One Release: CLI and Controller Join the Bindings"
 description: "The OCM CLI and Kubernetes controller move into the monolithic bindings module — one tag, one release, same artifacts."
-date: 2026-09-21T10:00:00+02:00
+date: 2026-09-07T08:00:00+02:00
 contributors: []
 tags: ["ocm", "release", "go", "cli", "kubernetes", "developer-experience"]
-draft: true
+draft: false
 ---
 
 The OCM CLI and the OCM Kubernetes controller have moved into the monolithic Go
