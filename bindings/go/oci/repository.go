@@ -1153,6 +1153,9 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		if err := store.Tag(ctx, rs.Root(), ref.Tag); err != nil {
 			return nil, fmt.Errorf("failed to tag artifact with tag %q: %w", ref.Tag, err)
 		}
+	} else {
+		slogcontext.Warn(ctx, "uploading OCI artifact without a tag, retention depends on the target registry's garbage collection policy",
+			"imageReference", access.ImageReference)
 	}
 
 	res = res.DeepCopy()
