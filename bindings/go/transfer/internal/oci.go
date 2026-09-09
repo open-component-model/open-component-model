@@ -13,11 +13,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-func processOCIArtifact(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+func processOCIArtifact(resource descriptorv2.Resource, id string, resourceID string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
 	if uploadAsOCIArtifact {
 		var ociTarget ocirepo.Repository
 		if err := scheme.Convert(toSpec, &ociTarget); err == nil {
-			return processOCIArtifactStreaming(resource, id, tgd, toSpec, resourceTransformIDs, i)
+			return processOCIArtifactStreaming(resource, id, resourceID, tgd, toSpec, resourceTransformIDs, i)
 		}
 		// toSpec is not an OCI repository — fall through to the legacy Get+Add path.
 	}
@@ -25,8 +25,6 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 
-	resourceIdentity := resource.ToIdentity()
-	resourceID := identityToTransformationID(resourceIdentity)
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
@@ -102,9 +100,7 @@ func imageReferenceFromAccess(id string) referenceNameOption {
 
 // processOCIArtifactStreaming emits a single TransferOCIArtifact node that streams
 // the OCI artifact directly from source to target without tar materialization.
-func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
-	resourceIdentity := resource.ToIdentity()
-	resourceID := identityToTransformationID(resourceIdentity)
+func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, resourceID string, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
 	transferID := fmt.Sprintf("%sTransfer%s", id, resourceID)
 
 	var ociAccess ociv1.OCIImage

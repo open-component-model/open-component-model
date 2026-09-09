@@ -85,7 +85,7 @@ func TestIdentityToTransformationID(t *testing.T) {
 		{
 			name:     "single key",
 			identity: runtime.Identity{"name": "mycomponent"},
-			want:     "transform_slash_mycomponent",
+			want:     "transformMycomponent",
 		},
 		{
 			name: "name and version sorted by key",
@@ -94,14 +94,14 @@ func TestIdentityToTransformationID(t *testing.T) {
 				descriptor.IdentityAttributeVersion: "1.0.0",
 			},
 			// keys sorted: "name" < "version", so name values come first
-			want: "transform_slash_ocm_dot_software_slash_test_slash_1_dot_0_dot_0",
+			want: "transformOcmSoftwareTest100",
 		},
 		{
 			name: "with dots and slashes",
 			identity: runtime.Identity{
 				"name": "ocm.software/my-component",
 			},
-			want: "transform_slash_ocm_dot_software_slash_my_dash_component",
+			want: "transformOcmSoftwareMyComponent",
 		},
 		{
 			name: "version with semver build metadata",
@@ -109,7 +109,7 @@ func TestIdentityToTransformationID(t *testing.T) {
 				descriptor.IdentityAttributeName:    "operator-image",
 				descriptor.IdentityAttributeVersion: "0.2.1+a0b6f97",
 			},
-			want: "transform_slash_operator_dash_image_slash_0_dot_2_dot_1_plus_a0b6f97",
+			want: "transformOperatorImage021A0b6f97",
 		},
 		{
 			name: "version with semver pre-release",
@@ -117,7 +117,16 @@ func TestIdentityToTransformationID(t *testing.T) {
 				descriptor.IdentityAttributeName:    "operator-image",
 				descriptor.IdentityAttributeVersion: "0.2.1-rc.1",
 			},
-			want: "transform_slash_operator_dash_image_slash_0_dot_2_dot_1_dash_rc_dot_1",
+			want: "transformOperatorImage021Rc1",
+		},
+		{
+			name: "identifier with extra identity",
+			identity: runtime.Identity{
+				descriptor.IdentityAttributeName:    "operator-image",
+				descriptor.IdentityAttributeVersion: "0.2.1-rc.1",
+				"platform":                          "linux/amd64",
+			},
+			want: "transformOperatorImageLinuxAmd64021Rc1",
 		},
 		{
 			name:     "empty identity",
@@ -130,6 +139,58 @@ func TestIdentityToTransformationID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := identityToTransformationID(tt.identity)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// --- transformationIDAllocator tests ---
+
+func TestTransformationIDAllocator(t *testing.T) {
+	tests := []struct {
+		name  string
+		bases []string
+		want  []string
+	}{
+		{
+			name:  "no collisions",
+			bases: []string{"transformA", "transformB"},
+			want:  []string{"transformA", "transformB"},
+		},
+		{
+			name:  "duplicate bases get incrementing suffix",
+			bases: []string{"transformA", "transformA", "transformA"},
+			want:  []string{"transformA", "transformAR1", "transformAR2"},
+		},
+		{
+			name:  "naturally occurring suffix in input is skipped",
+			bases: []string{"transformA", "transformAR1", "transformA"},
+			want:  []string{"transformA", "transformAR1", "transformAR2"},
+		},
+		{
+			name: "semver build metadata and pre-release collide on base ID",
+			bases: []string{
+				identityToTransformationID(runtime.Identity{"name": "operator-image", "version": "0.2.1+meta"}),
+				identityToTransformationID(runtime.Identity{"name": "operator-image", "version": "0.2.1-meta"}),
+			},
+			want: []string{"transformOperatorImage021Meta", "transformOperatorImage021MetaR1"},
+		},
+		{
+			name: "collision with extra identity variation is handled",
+			bases: []string{
+				identityToTransformationID(runtime.Identity{"name": "operator-image", "platform": "linux", "version": "1.0.0"}),
+				identityToTransformationID(runtime.Identity{"name": "operator-image", "os": "linux", "version": "1.0.0"}),
+			},
+			want: []string{"transformOperatorImageLinux100", "transformOperatorImageLinux100R1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			a := newTransformationIDAllocator()
+			for i, base := range tt.bases {
+				r.Equal(tt.want[i], a.allocate(base))
+			}
 		})
 	}
 }

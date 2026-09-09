@@ -20,7 +20,8 @@ func ValidateTransformations(transformations map[string]graph.Transformation) er
 }
 
 var (
-	celIdentifierRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	// lowerCamelCaseRegex
+	lowerCamelCaseRegex = regexp.MustCompile(`^[a-z][a-zA-Z0-9]*$`)
 
 	// reservedKeyWords is a list of reserved words in kro.
 	reservedKeyWords = []string{
@@ -57,8 +58,12 @@ var (
 
 // validateResource performs basic validation on a given transfergraphdefinition.
 // It checks that there are no duplicate resource ids and that the
-// resource ids are cel identifier compatible (only letters, numbers, and
-// underscores; no usage of reserved keywords).
+// resource ids are conformant to the OCM naming convention.
+//
+// The OCM naming convention is as follows:
+// - The id should start with a lowercase letter.
+// - The id should only contain alphanumeric characters.
+// - Does not contain any special characters, underscores, or hyphens.
 func validateResourceIDs(transformations map[string]graph.Transformation) error {
 	seen := make(map[string]struct{})
 	for _, transformation := range transformations {
@@ -68,7 +73,7 @@ func validateResourceIDs(transformations map[string]graph.Transformation) error 
 		}
 
 		if !isValidResourceID(meta.ID) {
-			return fmt.Errorf("id %s is not a valid OCM transformations id: must only contain letters, numbers, and underscores, and must not start with a number", meta.ID)
+			return fmt.Errorf("id %s is not a valid OCM transformations id: must be lower camelCase", meta.ID)
 		}
 
 		if _, ok := seen[meta.ID]; ok {
@@ -89,7 +94,7 @@ func isOCMReservedWord(word string) bool {
 	return false
 }
 
-// isValidResourceID checks if the given id is a valid CEL identifier
+// isValidResourceID checks if the given id is a valid OCM resource id (loawercase)
 func isValidResourceID(id string) bool {
-	return celIdentifierRegex.MatchString(id)
+	return lowerCamelCaseRegex.MatchString(id)
 }

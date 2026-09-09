@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -229,12 +228,26 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 	return children, nil
 }
 
-// identityToTransformationID converts a component identity (name + version) to a transformation
-// ID suitable for use as a DAG vertex key. The identity map keys are sorted alphabetically for
-// determinism and non-alphanumeric characters are escaped for CEL compatibility.
+// isTransformationIDWordBoundary reports whether r must be treated as a word
+// boundary when building a transformation ID. Any character that is not an
+// ASCII letter or digit is a boundary. This keeps the derived ID within the
+// valid OCM transformation ID character set (lower camelCase, alphanumeric
+// only) and handles separators ".", "/", "-" as well as SemVer build metadata ("+")
+func isTransformationIDWordBoundary(r rune) bool {
+	return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9')
+}
+
+// identityToTransformationID converts a component identity (name + version) to a camelCase
+// transformation ID suitable for use as a DAG vertex key. The identity map keys are sorted
+// alphabetically for determinism (though determinism is limited to being stable on the same
+// input, if the input is changed names can fluctuate) and any non-alphanumeric character is
+// treated as a word boundary for camelCase conversion.
 //
-// Example: {"name": "ocm.software/my-app", "version": "1.0.0"} → "transform_slash_ocm_dot_software_slash_my_dash_app_slash_1_dot_0_dot_0"
+// Example: {"name": "ocm.software/my-app", "version": "1.0.0"} → "transformOcmSoftwareMyApp100"
 func identityToTransformationID(id runtime.Identity) string {
+	// TODO(jakobmoellerdev): decide if we really wanna keep such strict limits on transformation ids,
+	//   if we really dont need them to be that strict.
+	//   Currently Im forced to convert a map to a camel case string here.
 	words := []string{"transform"}
 	keys := make([]string, 0, len(id))
 	for k := range id {
@@ -242,41 +255,52 @@ func identityToTransformationID(id runtime.Identity) string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		words = append(words, id[k])
+		words = append(words, strings.FieldsFunc(id[k], isTransformationIDWordBoundary)...)
 	}
-	return escapeTransformationID(strings.Join(words, "/"))
+	result := strings.ToLower(words[0])
+	for i := 1; i < len(words); i++ {
+		w := strings.ToLower(words[i])
+		if len(w) > 0 {
+			result += strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	return result
 }
 
-// Functionality is similar to cel.jsonschema.Escape, but there are some key differences:
-//   - `Escape` has a failure path, our id mapping is expected to always succeed
-//   - `Escape` also contains validation logic, our input has already been validated
-//   - `Escape` also guards against reserved keywords being used, we always have a version and
-//     thus a number in the identifier, thereby never matching a keyword exactly
-//   - `Escape` is based on k8s (https://github.com/kubernetes/kubernetes/blob/0c3b1fdd96c940faa3ec43094343d6e44554b74d/staging/src/k8s.io/apiserver/pkg/cel/escaping.go#L90-L136)
-//     but the allowed characters in id & version differ from the supported input format: [a-zA-Z_.-/][a-zA-Z0-9_.-/]*
-//   - Our id mapping needs to support all characters allowed in `componentName`, `identityAttributeKey`, and `relaxedSemver`,
-//     which boils down to: [a-zA-Z0-9.\-_/+] (only the + is different)
-//   - Transformation IDs dictate the names of their corresponding runtime objects, but
-//     these objects are escaped again in `NewDeclType`. So we don't want to use the
-//     double underscore escape sequence, because that would lead to e.g.
-//     `.` -> `__dot__` -> `__underscores__dot__underscores__`
-var expandMatcher = regexp.MustCompile(`(_|[-./+])`)
+// transformationIDAllocator hands out unique transformation IDs at both ID levels: for
+// component base IDs (one instance per vertex loop) and for the resources of one component
+// (one instance per (component, target) pair). identityToTransformationID is lossy: it drops
+// separators and folds case, so distinct identities (for example versions "0.2.1+meta" and
+// "0.2.1-meta") map to the same base ID. On collision the allocator appends an incrementing
+// suffix ("R1", "R2", ...), mirroring the per-target "T0", "T1" suffix scheme.
+type transformationIDAllocator struct {
+	// used contains every ID handed out so far, including suffixed candidates.
+	used map[string]struct{}
+	// nextSuffix tracks the first untried suffix per colliding base ID.
+	nextSuffix map[string]int
+}
 
-func escapeTransformationID(ident string) string {
-	ident = expandMatcher.ReplaceAllStringFunc(ident, func(s string) string {
-		switch s {
-		case "_":
-			return "__"
-		case ".":
-			return "_dot_"
-		case "-":
-			return "_dash_"
-		case "+":
-			return "_plus_"
-		case "/":
-			return "_slash_"
+func newTransformationIDAllocator() *transformationIDAllocator {
+	return &transformationIDAllocator{
+		used:       make(map[string]struct{}),
+		nextSuffix: make(map[string]int),
+	}
+}
+
+// allocate returns base unchanged while it is unused. On collision, it returns the first
+// unused ID of the form base+"R"+counter, with the counter starting at 1. Callers must
+// allocate in a deterministic order (descriptor order) to keep the resulting IDs stable.
+func (a *transformationIDAllocator) allocate(base string) string {
+	if _, ok := a.used[base]; !ok {
+		a.used[base] = struct{}{}
+		return base
+	}
+	for n := max(a.nextSuffix[base], 1); ; n++ {
+		candidate := fmt.Sprintf("%sR%d", base, n)
+		if _, ok := a.used[candidate]; !ok {
+			a.used[candidate] = struct{}{}
+			a.nextSuffix[base] = n + 1
+			return candidate
 		}
-		return s
-	})
-	return ident
+	}
 }

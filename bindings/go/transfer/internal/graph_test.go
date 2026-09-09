@@ -196,7 +196,7 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	assert.Equal(t, "fileBufferCleanup", tgd.Transformations[3].ID)
 }
 
-func TestBuildGraphDefinition_CollidingResourceVersionsKeepDistinctIDs(t *testing.T) {
+func TestBuildGraphDefinition_CollidingResourceVersionsGetUniqueIDs(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
@@ -215,15 +215,130 @@ func TestBuildGraphDefinition_CollidingResourceVersionsKeepDistinctIDs(t *testin
 	for _, tr := range tgd.Transformations {
 		ids = append(ids, tr.ID)
 	}
-	// the escaping is injective: build metadata and pre-release versions produce
-	// different IDs without any disambiguation suffix
-	r.Contains(ids, "transform_slash_ocm_dot_software_slash_test_slash_1_dot_0_dot_0Gettransform_slash_operator_dash_image_slash_0_dot_2_dot_1_plus_meta")
-	r.Contains(ids, "transform_slash_ocm_dot_software_slash_test_slash_1_dot_0_dot_0Gettransform_slash_operator_dash_image_slash_0_dot_2_dot_1_dash_meta")
+	r.Contains(ids, "transformOcmSoftwareTest100GettransformOperatorImage021Meta")
+	r.Contains(ids, "transformOcmSoftwareTest100GettransformOperatorImage021MetaR1")
 	unique := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
 		unique[id] = struct{}{}
 	}
 	r.Len(unique, len(ids), "transformation IDs must be unique, got %v", ids)
+}
+
+// TestBuildGraphDefinition_CollidingComponentVersionsGetUniqueIDs is the component-level
+// counterpart of TestBuildGraphDefinition_CollidingResourceVersionsGetUniqueIDs: versions that
+// differ only in a separator ("1.0.0+meta" vs "1.0.0-meta") fold onto the same base ID. The
+// component-level allocator must hand out distinct base IDs so that neither the upload
+// transformation nor the environment entry of one version clobbers the other.
+func TestBuildGraphDefinition_CollidingComponentVersionsGetUniqueIDs(t *testing.T) {
+	const (
+		buildVersion = "1.0.0+meta"
+		preVersion   = "1.0.0-meta"
+	)
+	baseUpload := "transformOcmSoftwareTest100MetaUpload"
+	suffixedUpload := "transformOcmSoftwareTest100MetaR1Upload"
+
+	// expectedTGD asserts the collision is resolved deterministically: one version keeps the
+	// bare base ID, the other gets the R1 suffix, and neither upload nor environment entry is lost.
+	expectedTGD := func(r *require.Assertions, tgd *transformv1alpha1.TransformationGraphDefinition) {
+		ids := make([]string, 0, len(tgd.Transformations))
+		for _, tr := range tgd.Transformations {
+			ids = append(ids, tr.ID)
+		}
+		r.Contains(ids, baseUpload)
+		r.Contains(ids, suffixedUpload)
+		unique := make(map[string]struct{}, len(ids))
+		for _, id := range ids {
+			unique[id] = struct{}{}
+		}
+		r.Len(unique, len(ids), "transformation IDs must be unique, got %v", ids)
+		r.Len(tgd.Environment.Data, 2, "each component version needs its own environment entry")
+	}
+
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+
+	t.Run("multiple roots", func(t *testing.T) {
+		r := require.New(t)
+		descBuild := testDescriptor("ocm.software/test", buildVersion,
+			[]descriptor.Resource{localBlobResource("blob", "1.0.0")}, nil)
+		descPre := testDescriptor("ocm.software/test", preVersion,
+			[]descriptor.Resource{localBlobResource("blob", "1.0.0")}, nil)
+
+		resolver := testMultiResolver(map[string]struct {
+			spec runtime.Typed
+			desc *descriptor.Descriptor
+		}{
+			"ocm.software/test:" + buildVersion: {spec: sourceRepo, desc: descBuild},
+			"ocm.software/test:" + preVersion:   {spec: sourceRepo, desc: descPre},
+		})
+
+		roots := map[string]TransferRoot{}
+		for _, version := range []string{buildVersion, preVersion} {
+			key := "ocm.software/test:" + version
+			roots[key] = TransferRoot{
+				RootComponentKey: key,
+				Targets:          []runtime.Typed{targetRepo},
+				SourceResolver:   resolver,
+			}
+		}
+
+		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources})
+		r.NoError(err)
+		expectedTGD(r, tgd)
+	})
+
+	t.Run("recursive references", func(t *testing.T) {
+		r := require.New(t)
+		childBuild := testDescriptor("ocm.software/child", buildVersion,
+			[]descriptor.Resource{localBlobResource("blob", "1.0.0")}, nil)
+		childPre := testDescriptor("ocm.software/child", preVersion,
+			[]descriptor.Resource{localBlobResource("blob", "1.0.0")}, nil)
+		rootDesc := testDescriptor("ocm.software/root", "1.0.0", nil, []descriptor.Reference{
+			{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "child-build", Version: buildVersion},
+				},
+				Component: "ocm.software/child",
+			},
+			{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "child-pre", Version: preVersion},
+				},
+				Component: "ocm.software/child",
+			},
+		})
+
+		resolver := testMultiResolver(map[string]struct {
+			spec runtime.Typed
+			desc *descriptor.Descriptor
+		}{
+			"ocm.software/root:1.0.0":            {spec: sourceRepo, desc: rootDesc},
+			"ocm.software/child:" + buildVersion: {spec: sourceRepo, desc: childBuild},
+			"ocm.software/child:" + preVersion:   {spec: sourceRepo, desc: childPre},
+		})
+
+		roots := testTransferRoots("ocm.software/root", "1.0.0", targetRepo, resolver)
+
+		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
+			Recursive: transferv1alpha1.RecursiveInfinite,
+			CopyMode:  transferv1alpha1.CopyModeLocalBlobResources,
+		})
+		r.NoError(err)
+
+		// the root component is unaffected, both children must be present
+		r.Len(tgd.Environment.Data, 3, "root plus both child versions need environment entries")
+		ids := make([]string, 0, len(tgd.Transformations))
+		for _, tr := range tgd.Transformations {
+			ids = append(ids, tr.ID)
+		}
+		r.Contains(ids, "transformOcmSoftwareChild100MetaUpload")
+		r.Contains(ids, "transformOcmSoftwareChild100MetaR1Upload")
+		unique := make(map[string]struct{}, len(ids))
+		for _, id := range ids {
+			unique[id] = struct{}{}
+		}
+		r.Len(unique, len(ids), "transformation IDs must be unique, got %v", ids)
+	})
 }
 
 func TestBuildGraphDefinition_OCIImageSkippedInDefaultMode(t *testing.T) {
