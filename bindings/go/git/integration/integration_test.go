@@ -20,7 +20,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	gitdigest "ocm.software/open-component-model/bindings/go/git/digest"
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -47,7 +46,6 @@ func Test_Integration_Git(t *testing.T) {
 	tempDir := t.TempDir()
 	opts := []repository.Option{repository.WithCABundle(ca), repository.WithTempDir(tempDir)}
 	repo := repository.NewResourceRepository(opts...)
-	processor := gitdigest.NewDigestProcessor(opts...)
 	resourceFor := func(ref, commit string) *descriptor.Resource {
 		raw := &runtime.Raw{}
 		r.NoError(access.Scheme.Convert(&accessv1.Git{
@@ -91,7 +89,7 @@ func Test_Integration_Git(t *testing.T) {
 
 		original := resourceFor("refs/heads/main", "")
 		before := original.DeepCopy()
-		pinned, err := processor.ProcessResourceDigest(t.Context(), original, nil)
+		pinned, err := repo.ProcessResourceDigest(t.Context(), original, nil)
 		r.NoError(err)
 		r.Equal(before, original)
 
@@ -113,7 +111,7 @@ func Test_Integration_Git(t *testing.T) {
 		r.NoError(err)
 		r.Equal(firstBytes, assertArchive(t, again, "first\n"))
 
-		verified, err := processor.ProcessResourceDigest(t.Context(), pinned, nil)
+		verified, err := repo.ProcessResourceDigest(t.Context(), pinned, nil)
 		r.NoError(err)
 		r.Equal(pinned, verified)
 
@@ -122,7 +120,7 @@ func Test_Integration_Git(t *testing.T) {
 		_, err = repo.DownloadResource(t.Context(), mismatched, nil)
 		r.ErrorContains(err, "digest mismatch")
 
-		_, err = processor.ProcessResourceDigest(t.Context(), mismatched, nil)
+		_, err = repo.ProcessResourceDigest(t.Context(), mismatched, nil)
 		r.ErrorContains(err, "digest mismatch")
 	})
 
