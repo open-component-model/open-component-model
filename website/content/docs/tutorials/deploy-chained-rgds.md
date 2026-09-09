@@ -589,7 +589,7 @@ This tutorial uses a dev-friendly kro install with broad permissions (see [Prere
 A hardened cluster locks that down; see [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}})
 for why kro needs its own grant, separate from the `resourcegraphdefinitions.kro.run` grant the
 OCM controller already needs. For this tutorial, grant kro's service account
-`podinfos.kro.run` (the instance), `resources.delivery.ocm.software` (the localized image),
+`podinfoes.kro.run` (the instance), `resources.delivery.ocm.software` (the localized image),
 and `deployments` + `services` (the workload).
 {{< /callout >}}
 

@@ -183,7 +183,7 @@ rules:
   - apiGroups:
       - kro.run
     resources:
-      - podinfos
+      - podinfoes
     verbs:
       - create
       - delete
@@ -195,7 +195,7 @@ rules:
   - apiGroups:
       - kro.run
     resources:
-      - podinfos/status
+      - podinfoes/status
     verbs:
       - get
       - patch
@@ -205,8 +205,12 @@ rules:
     resources:
       - resources
     verbs:
+      - create
+      - delete
       - get
       - list
+      - patch
+      - update
       - watch
   - apiGroups:
       - apps
@@ -247,7 +251,13 @@ subjects:
     namespace: kro-system
 ```
 
-The exact kinds depend on what your own RGDs create. See [Deploy an Application from a Helm Chart with OCM
+The exact kinds depend on what your own RGDs create. Grant the full set of verbs (not just `get`/`list`/`watch`)
+for every kind that appears as a `template:` in an RGD's `resources:` list, even one owned by a different
+controller entirely, like the `delivery.ocm.software` `Resource` above: kro creates and deletes it as part of
+the resource graph the same way it does for a `Deployment` or `Service`, so read-only access isn't enough,
+regardless of which API group the kind belongs to.
+
+See [Deploy an Application from a Helm Chart with OCM
 and kro]({{< relref "/docs/tutorials/deploy-helm-chart-bootstrap.md" >}}) and [Deploy an Application from
 Chained RGDs with OCM and kro]({{< relref "/docs/tutorials/deploy-chained-rgds.md" >}}) for two worked
 examples of the specific kinds each pattern needs.
