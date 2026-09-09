@@ -6,13 +6,6 @@ on:
     branches:
     - main
 
-# Single Go module repo: bindings/go is the only buildable/testable module.
-# conformance/scenarios/sovereign/components/notes is a lint-only fixture module.
-# Scopes are static: push to main runs everything, PRs run unit/integration tests only
-# when bindings/go, the shared task plumbing (Taskfile.yml, reuse.Taskfile.yml), or ci.yml
-# changes. Lint runs for the changed module only, or for all modules when golangci.yml /
-# .env / ci.yml changes.
-
 permissions:
   contents: read
 
@@ -24,7 +17,6 @@ jobs:
       pull-requests: read
     outputs:
       run_go: ${{ steps.compute.outputs.run_go }}
-      lint_matrix: ${{ steps.compute.outputs.lint_matrix }}
       dependency_table_changed: ${{ steps.filter.outputs.dependency_table }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,11 +31,10 @@ jobs:
               # Task plumbing that the Go test/build tasks resolve through
               - 'Taskfile.yml'
               - 'reuse.Taskfile.yml'
-            fixture:
-              - 'conformance/scenarios/sovereign/components/notes/**'
-            lint_config:
+            lint:
               - '.env'
               - 'golangci.yml'
+              - 'conformance/scenarios/sovereign/components/notes/**'
             ci:
               - '.github/workflows/ci.yml'
             dependency_table:
@@ -58,36 +49,24 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           GO_CHANGED: ${{ steps.filter.outputs.go }}
-          FIXTURE_CHANGED: ${{ steps.filter.outputs.fixture }}
-          LINT_CONFIG_CHANGED: ${{ steps.filter.outputs.lint_config }}
+          SHOULD_LINT: ${{ steps.filter.outputs.lint }}
           CI_CHANGED: ${{ steps.filter.outputs.ci }}
         with:
           script: |
-            const GO_MODULE = 'bindings/go';
-            const FIXTURE_MODULE = 'conformance/scenarios/sovereign/components/notes';
-            const ALL_MODULES = [GO_MODULE, FIXTURE_MODULE];
             const isPush = context.eventName === 'push';
             const ciChanged = process.env.CI_CHANGED === 'true';
             const goChanged = process.env.GO_CHANGED === 'true';
-            const fixtureChanged = process.env.FIXTURE_CHANGED === 'true';
-            const lintConfigChanged = process.env.LINT_CONFIG_CHANGED === 'true';
+            const shouldLint = process.env.SHOULD_LINT === 'true';
 
             const runGo = isPush || ciChanged || goChanged;
-
-            const lint = [];
-            if (isPush || ciChanged || lintConfigChanged) {
-              lint.push(...ALL_MODULES);
-            } else {
-              if (goChanged) lint.push(GO_MODULE);
-              if (fixtureChanged) lint.push(FIXTURE_MODULE);
-            }
+            const runLint = runGo || shouldLint;
 
             core.setOutput('run_go', runGo);
-            core.setOutput('lint_matrix', JSON.stringify(lint));
+            core.setOutput('run_lint', runLint);
             await core.summary
               .addRaw('### CI Scope\n\n')
               .addRaw(`**build/test bindings/go:** ${runGo}\n\n`)
-              .addRaw(`**lint:** ${lint.length ? lint.map(m => `- \`${m}\``).join('\n') : '_None_'}\n`)
+              .addRaw(`**lint all Go modules:** ${runLint}\n`)
               .write();
 
   golangci_lint_verify:
@@ -164,10 +143,12 @@ jobs:
       # https://github.blog/changelog/2021-04-20-github-actions-control-permissions-for-github_token/#setting-permissions-in-the-workflow
       # but are kept for runs on main or on pull requests on branches in the repo (renovate).
       checks: write
-    if: ${{ fromJSON(needs.changes.outputs.lint_matrix)[0] != null }}
+    if: ${{ needs.changes.outputs.run_lint == 'true' }}
     strategy:
       matrix:
-        module: ${{ fromJSON(needs.changes.outputs.lint_matrix) }}
+        module:
+          - bindings/go
+          - conformance/scenarios/sovereign/components/notes
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
