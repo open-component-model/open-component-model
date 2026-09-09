@@ -132,6 +132,7 @@ First, create an OCM component version containing three resources:
 ```shell
 mkdir /tmp/bootstrap-deploy && cd /tmp/bootstrap-deploy
 ```
+
 {{< /step >}}
 
 {{< step >}}
@@ -439,7 +440,7 @@ Then update the resources to use credentials:
    secretRef:
      name: ghcr-secret
    ```
-   
+
    For Argo CD, credentials are configured at the repository level, not in the Application spec. *See [Argo CD private registry docs](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#repositories)*
 
 3. **Pod imagePullSecrets**: The deployed pods also need credentials to pull
@@ -473,6 +474,7 @@ Transfer to your registry with `--copy-resources --upload-as ociArtifact` to ena
 ```bash
 ocm transfer cv --copy-resources --upload-as ociArtifact transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
 ```
+
 {{< /step >}}
 
 {{< step >}}
@@ -508,6 +510,7 @@ secret to the repository's `ocmConfig`, as described above!
 {{< /callout >}}
 
 {{< details "Bootstrap Resources (bootstrap.yaml)" >}}
+
 ```shell
 cat > bootstrap.yaml << 'EOF'
 apiVersion: delivery.ocm.software/v1alpha1
@@ -569,6 +572,7 @@ spec:
   # ocmConfig:
 EOF
 ```
+
 {{< /details >}}
 {{< /step >}}
 
@@ -593,6 +597,7 @@ kubectl get rgd -w
 NAME        APIVERSION   KIND        STATE    AGE
 bootstrap   v1alpha1     Bootstrap   Active   2m56s
 ```
+
 </details>
 
 When the state shows `Active`, kro has processed the RGD and created a new CRD called `Bootstrap`.
@@ -612,6 +617,7 @@ metadata:
   name: bootstrap
 EOF
 ```
+
 {{< /step >}}
 
 {{< step >}}
@@ -630,6 +636,7 @@ kubectl apply -f instance.yaml
 ```console
 bootstrap.kro.run/bootstrap created
 ```
+
 </details>
 
 Wait for the deployment to complete:
@@ -645,6 +652,7 @@ kubectl get bootstrap -w
 NAME        STATE    SYNCED   AGE
 bootstrap   ACTIVE   True     3m23s
 ```
+
 </details>
 
 If the instance is in the `ACTIVE` state, the deployment succeeded.
@@ -666,6 +674,7 @@ kubectl get pods -l app.kubernetes.io/name=bootstrap-release-podinfo -o jsonpath
 ```console
 ghcr.io/$GITHUB_USERNAME/component-descriptors/ocm.software/ocm-k8s-toolkit/bootstrap:latest@sha256:262578cde928d5c9eba3bce079976444f624c13ed0afb741d90d5423877496cb
 ```
+
 </details>
 
 The image reference points to your registry with a digest. Localization worked!
@@ -732,7 +741,7 @@ This pattern allows developers to ship deployment instructions alongside their s
 
 ## Next Steps
 
-- [Deploy an Application from Plain Manifests with OCM and kro]({{< relref "deploy-plain-manifests.md" >}}) covers the same delivery without a Helm chart, using plain manifests and kro
+- [Deploy an Application from Chained RGDs with OCM and kro]({{< relref "deploy-chained-rgds.md" >}}) covers the same delivery with two RGDs chained together instead of a Helm chart
 - [How-to: Air-Gap Transfer]({{< relref "air-gap-transfer.md" >}}) — Transfer components to disconnected environments
 - [How-to: Configure Credentials for Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}) — Set up private registry access
 - [Concept: OCM Controllers]({{< relref "ocm-controllers.md" >}}) — Understand the controller architecture

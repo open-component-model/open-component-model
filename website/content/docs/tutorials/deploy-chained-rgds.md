@@ -1,6 +1,6 @@
 ---
-title: Deploy an Application from Plain Manifests with OCM and kro
-description: "Package plain Kubernetes manifests as an OCM component and deploy them with kro ResourceGraphDefinitions — no Helm chart, no GitOps deployer."
+title: Deploy an Application from Chained RGDs with OCM and kro
+description: "Package an OCM component with two chained kro ResourceGraphDefinitions and deploy it as plain manifests, no Helm chart or GitOps deployer needed."
 icon: "⚙️"
 weight: 62
 toc: true
@@ -13,10 +13,12 @@ cluster, the image references must follow automatically. You should never hand-e
 manifest to fix a registry path.
 
 This tutorial builds exactly that. You package an application as an OCM component, describe
-how to run it with two kro `ResourceGraphDefinition`s (RGDs), and let the OCM controllers
-deliver and localize it into your cluster. kro renders plain Kubernetes manifests directly,
-so there is no Helm chart and no Flux or Argo CD in the path. We use
-[Podinfo](https://github.com/stefanprodan/podinfo) as a stand-in for your application.
+how to run it with two kro `ResourceGraphDefinition`s (RGDs) [chained
+together](https://kro.run/docs/building-abstractions/rgd-chaining/), one creating an instance
+of the other's kind, and let the OCM controllers deliver and localize it into your cluster.
+kro renders plain Kubernetes manifests directly, so there is no Helm chart and no Flux or Argo
+CD in the path. We use [Podinfo](https://github.com/stefanprodan/podinfo) as a stand-in for
+your application.
 
 By the end, you will have:
 
@@ -66,7 +68,7 @@ You deliver **two** RGDs inside one OCM component: an app RGD that gives Podinfo
 API, and a system RGD that composes it with the localized image. The OCM controllers deliver
 both the same way described in [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}):
 a `Repository` and `Component` fetch the component, and one `Resource` + `Deployer` pair per
-RGD applies it to the cluster. You then create a single `System` instance, and the chain
+RGD applies it to the cluster. You then create a single `System` instance, and reconciliation
 converges to a running Podinfo.
 
 **Localization** keeps the image correct once it lands in kro's hands. [Transfer preserves
@@ -81,7 +83,7 @@ with them.
 <summary>Architecture diagram</summary>
 
 (Continues from [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}), which
-shows the `Repository` → `Component` → `Resource` → `Deployer` chain that gets the RGD here.)
+shows the `Repository` → `Component` → `Resource` → `Deployer` sequence that gets the RGD here.)
 
 ```mermaid
 flowchart TB
@@ -509,7 +511,7 @@ RGD, it recovers on its own once the `Podinfo` CRD is registered, so the order d
 
 ### Create the System instance
 
-One instance drives the whole chain:
+One instance drives everything downstream:
 
 ```bash
 cat > instance.yaml << 'EOF'

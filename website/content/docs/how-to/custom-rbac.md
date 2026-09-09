@@ -249,7 +249,7 @@ subjects:
 
 The exact kinds depend on what your own RGDs create. See [Deploy an Application from a Helm Chart with OCM
 and kro]({{< relref "/docs/tutorials/deploy-helm-chart-bootstrap.md" >}}) and [Deploy an Application from
-Plain Manifests with OCM and kro]({{< relref "/docs/tutorials/deploy-plain-manifests.md" >}}) for two worked
+Chained RGDs with OCM and kro]({{< relref "/docs/tutorials/deploy-chained-rgds.md" >}}) for two worked
 examples of the specific kinds each pattern needs.
 
 ## Related Documentation

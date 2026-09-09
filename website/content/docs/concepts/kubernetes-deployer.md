@@ -117,8 +117,10 @@ Flux, or `Application` for Argo CD. See [Deploy an Application from a Helm Chart
 ### Plain manifests, RGD shipped inside the component, no Helm
 
 The same bootstrap pattern, but for applications that aren't packaged as a Helm chart: the RGD renders plain
-manifests directly, so there's no chart and no GitOps deployer in the path. See [Deploy an Application from
-Plain Manifests with OCM and kro]({{< relref "deploy-plain-manifests.md" >}}) for a full walkthrough.
+manifests directly, so there's no chart and no GitOps deployer in the path. Two RGDs are [chained
+together](https://kro.run/docs/building-abstractions/rgd-chaining/), one creating an instance of the other's
+kind, which gives the application its own typed Kubernetes API. See [Deploy an Application from Chained RGDs
+with OCM and kro]({{< relref "deploy-chained-rgds.md" >}}) for a full walkthrough.
 
 ## Related Documentation
 
