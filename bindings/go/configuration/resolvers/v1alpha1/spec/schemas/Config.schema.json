@@ -8,7 +8,7 @@
   "properties": {
     "resolvers": {
       "type": "array",
-      "description": "Resolvers define a list of OCM repository specifications to be used to resolve\ndedicated component versions using glob patterns.\nAll matching entries are tried to lookup a component version in the order\nthey are defined in the configuration.\n\nRepositories with a specified componentName pattern are only tried if the pattern\nmatches the component name using glob syntax.\n\nIf resolvers are defined, it is possible to use component version names on the\ncommand line without a repository. The names are resolved with the specified\nresolution rule.\n\nThey are also used as default lookup repositories to lookup component references\nfor recursive operations on component versions («--lookup» option).",
+      "description": "Resolvers define a list of OCM repository specifications to be used to resolve\ndedicated component versions using glob patterns.\n\nThe list is evaluated in the order the entries are defined in the configuration.\nThe first entry whose componentNamePattern (and versionConstraint, if set) matches\nwins, and its repository is used to look up the component version. Later entries\nare not consulted, even if the component version does not exist in the repository\nof the first match. List more specific entries before broader ones.\n\nRepositories with a specified componentName pattern are only tried if the pattern\nmatches the component name using glob syntax.\n\nIf resolvers are defined, it is possible to use component version names on the\ncommand line without a repository. The names are resolved with the specified\nresolution rule.\n\nThey are also used as default lookup repositories to lookup component references\nfor recursive operations on component versions («--lookup» option).",
       "items": {
         "anyOf": [
           {
@@ -47,7 +47,7 @@
       "properties": {
         "componentNamePattern": {
           "type": "string",
-          "description": "ComponentNamePattern specifies a glob pattern for matching component names.\nIt limits the usage of the repository to resolve only components with names\nthat match the given pattern.\nExamples:\n- \"ocm.software/core/*\" (matches any component in the core namespace)\n- \"*.software/*/test\" (matches test components in any software namespace)\n- \"ocm.software/core/[tc]est\" (matches \"test\" or \"cest\" in core namespace)"
+          "description": "ComponentNamePattern specifies a glob pattern for matching component names.\nIt limits the usage of the repository to resolve only components with names\nthat match the given pattern.\nExamples:\n- \"ocm.software/core/*\" (matches any component in the core namespace)\n- \"*.software/*/test\" (matches test components in any software namespace)\n- \"ocm.software/core/[tc]est\" (matches \"test\" or \"cest\" in core namespace)\n\nAn empty pattern matches any component name and is equivalent to \"*\"."
         },
         "repository": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",

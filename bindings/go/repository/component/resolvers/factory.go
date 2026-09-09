@@ -24,8 +24,10 @@ type Options struct {
 	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	FallbackResolvers []*resolverruntime.Resolver
 	// ComponentPatterns specifies high-priority patterns for the base repository.
-	// These patterns are prepended to the resolver list, giving them highest priority.
+	// These patterns are placed at the head of the resolver list, so they win over the
+	// configured path matchers because the first match wins.
 	// Used by CLI to route specific component references to the provided repository.
+	// They have no effect if no base repository is provided.
 	ComponentPatterns []string
 }
 
@@ -92,7 +94,8 @@ func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseR
 			return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
 		}
 
-		// Component patterns get highest priority - prepend them
+		// Component patterns are added first so that they take precedence over the
+		// config resolvers and the catch-all below, because the first match wins.
 		for _, pattern := range opts.ComponentPatterns {
 			finalResolvers = append(finalResolvers, &resolverspec.Resolver{
 				Repository:           &raw,

@@ -30,6 +30,7 @@ OCM ships with the following built-in credential types:
 | [`OCICredentials/v1`](#ocicredentialsv1)                   | `OCIRegistry` consumers                  | OCI registry username/password and token auth                   |
 | [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1)         | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs                  |
 | [`WgetCredentials/v1`](#wgetcredentialsv1)                 | `Wget` consumers                         | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
+| [`S3Credentials/v1`](#s3credentialsv1)                     | `S3Bucket` consumers                     | S3 access keys and temporary STS credentials                    |
 | [`GitHubCredentials/v1`](#githubcredentialsv1)             | `GitHubRepository` consumers             | GitHub and GitHub Enterprise REST API token auth                |
 | [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
 | [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
@@ -214,6 +215,71 @@ is set, and a client certificate has no effect on a plain `http://` URL.
 [`Wget`]({{< relref "credential-consumer-identities.md#wget" >}}) consumer identities, covering both the
 [`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
 [`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}).
+
+---
+
+## S3Credentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/s3/v1/S3Credentials.schema.json" >}}
+
+All fields are optional, because credentials are optional for S3. If an entry leaves all three fields empty, OCM treats
+it as no credentials, and the AWS default credential chain takes over. If an entry sets any of them, OCM passes the
+entry to the AWS SDK unchanged.
+
+### Example
+
+Static access keys for every bucket the account owns:
+
+```yaml
+consumers:
+  - identity:
+      type: S3Bucket
+    credentials:
+      - type: S3Credentials/v1
+        accessKeyId: <access-key-id>
+        secretAccessKey: <secret-access-key>
+```
+
+Temporary STS credentials, scoped to one object:
+
+```yaml
+consumers:
+  - identity:
+      type: S3Bucket
+      path: acme-artifacts/datasets/reference/1.0.0/reference.parquet
+    credentials:
+      - type: S3Credentials/v1
+        accessKeyId: <temporary-access-key-id>
+        secretAccessKey: <temporary-secret-access-key>
+        sessionToken: <session-token>
+```
+
+A self-hosted MinIO, addressed by its endpoint:
+
+```yaml
+consumers:
+  - identity:
+      type: S3Bucket
+      scheme: https
+      hostname: minio.internal
+      port: "9000"
+    credentials:
+      - type: S3Credentials/v1
+        accessKeyId: minio-user
+        secretAccessKey: minio-password
+```
+
+{{< callout context="note" >}}
+OCM still accepts the OCM v1 property names `awsAccessKeyID`, `awsSecretAccessKey` and `token`, but only in an untyped
+[`Credentials/v1`](#directcredentialsv1) entry. There, OCM maps them to `accessKeyId`, `secretAccessKey` and
+`sessionToken`. `S3Credentials/v1` accepts the new names only.
+{{< /callout >}}
+
+### Used With
+
+[`S3Bucket`]({{< relref "credential-consumer-identities.md#s3bucket" >}}) consumer identities. They cover both the
+[`S3Bucket/v1` access type]({{< relref "input-and-access-types.md#s3bucketv1-access" >}}) and the
+[`S3Bucket/v1` input type]({{< relref "input-and-access-types.md#s3bucketv1-input" >}}).
 
 ---
 

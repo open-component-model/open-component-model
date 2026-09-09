@@ -449,6 +449,10 @@ Values are injected via `helm.valuesObject` (a structured YAML object), which av
 
 ### Apply the ResourceGraphDefinition
 
+{{< callout context="caution" title="RBAC required before you apply" icon="outline/alert-triangle" >}}
+Please make sure that you updated your RBAC permissions before applying this command. Follow our [Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md" >}}) guide to know how to do that.
+{{< /callout >}}
+
 ```shell
 envsubst < rgd.yaml | kubectl apply -f -
 ```

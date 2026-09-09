@@ -103,15 +103,22 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 
 	t.Run("basic download of a component version", func(t *testing.T) {
 		r := require.New(t)
+
+		// Listing versions resolves every published tag of the component with
+		// individual registry requests. Bound the subtest so a flaky registry
+		// connection fails within minutes instead of eventually backing of the retry
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+		defer cancel()
+
 		component := "ocm.software/ocmcli"
 
-		vs, err := repo.ListComponentVersions(t.Context(), component)
+		vs, err := repo.ListComponentVersions(ctx, component)
 		r.NoError(err)
 		r.NotEmpty(vs)
 
 		version := vs[0]
 
-		retrievedDesc, err := repo.GetComponentVersion(t.Context(), component, version)
+		retrievedDesc, err := repo.GetComponentVersion(ctx, component, version)
 		r.NoError(err)
 		r.NotEmpty(retrievedDesc)
 
@@ -121,7 +128,7 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 			"architecture": runtime.GOARCH,
 		}
 
-		cliDataBlob, _, err := repo.GetLocalResource(t.Context(), component, version, cliIdentity)
+		cliDataBlob, _, err := repo.GetLocalResource(ctx, component, version, cliIdentity)
 		r.NoError(err)
 		r.NotNil(cliDataBlob)
 

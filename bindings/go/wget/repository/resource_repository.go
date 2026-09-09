@@ -122,6 +122,11 @@ func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
 
+	var tempDir string
+	if r.filesystemConfig.TempFolder != nil {
+		tempDir = *r.filesystemConfig.TempFolder
+	}
+
 	return download.Download(ctx, download.Request{
 		URL:        wget.URL,
 		MediaType:  wget.MediaType,
@@ -133,7 +138,7 @@ func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.
 		download.WithClient(r.client),
 		download.WithMaxDownloadSize(r.maxDownloadSize),
 		download.WithCredentials(credentials),
-		download.WithTempDir(r.filesystemConfig.TempFolder),
+		download.WithTempDir(tempDir),
 	)
 }
 

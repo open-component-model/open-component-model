@@ -8,8 +8,11 @@ import { execFileSync } from "child_process";
 // Computes the next RC version for the unified product release. The release
 // tag scheme is:
 //   v0.X.Y                          canonical release tag (user-facing)
-//   kubernetes/controller/v0.X.Y    Go-module side tag, same commit
-//   cli/v0.X.Y                      CLI tags for consumption on from the website
+//   bindings/go/v0.X.Y              Go-module side tag, same commit. Since cli and
+//                                   kubernetes/controller are folded into the single
+//                                   bindings/go module, this one tag resolves the CLI,
+//                                   the controller API and every binding package for
+//                                   Go and Hugo module consumers.
 //
 // noinspection JSUnusedGlobalSymbols
 /** @param {import('@actions/github-script').AsyncFunctionArguments} args */
@@ -49,10 +52,10 @@ export default async function computeRcVersion({ core }) {
 
     const rcTag = `v${rcVersion}`;
     const promotionTag = `v${baseVersion}`;
-    const cliModuleRcTag = `cli/${rcTag}`;
-    const cliModulePromotionTag = `cli/${promotionTag}`;
-    const controllerModuleRcTag = `kubernetes/controller/${rcTag}`;
-    const controllerModulePromotionTag = `kubernetes/controller/${promotionTag}`;
+    // Single Go-module side tag for the merged bindings/go module (cli and
+    // kubernetes/controller are now packages inside it).
+    const bindingsModuleRcTag = `bindings/go/${rcTag}`;
+    const bindingsModulePromotionTag = `bindings/go/${promotionTag}`;
     // Website has no RC artifacts to validate (docs site, not a binary), so
     // only the promotion tag is emitted — no RC counterpart by design.
     const websiteModulePromotionTag = `website/${promotionTag}`;
@@ -66,21 +69,17 @@ export default async function computeRcVersion({ core }) {
         allTags.split("\n").filter(Boolean),
         rcTag
     );
-    const changelogRange = previousTag ? `${previousTag}..HEAD` : "";
 
     core.setOutput("new_tag", rcTag);
     core.setOutput("new_version", rcVersion);
     core.setOutput("base_version", baseVersion);
     core.setOutput("promotion_tag", promotionTag);
-    core.setOutput("cli_module_rc_tag", cliModuleRcTag);
-    core.setOutput("cli_module_promotion_tag", cliModulePromotionTag);
-    core.setOutput("controller_module_rc_tag", controllerModuleRcTag);
-    core.setOutput("controller_module_promotion_tag", controllerModulePromotionTag);
+    core.setOutput("bindings_module_rc_tag", bindingsModuleRcTag);
+    core.setOutput("bindings_module_promotion_tag", bindingsModulePromotionTag);
     core.setOutput("website_module_promotion_tag", websiteModulePromotionTag);
-    core.setOutput("changelog_range", changelogRange);
+    core.setOutput("previous_tag", previousTag);
 
     core.info(`Previous release tag: ${previousTag || "(none — first release)"}`);
-    core.info(`Changelog range: ${changelogRange || "(full history)"}`);
 
     await core.summary
         .addHeading("Release Version Computation")
@@ -89,13 +88,10 @@ export default async function computeRcVersion({ core }) {
             ["Release Branch", releaseBranch],
             ["Next RC Tag", rcTag],
             ["Next Release Tag", promotionTag],
-            ["CLI Module RC Tag", cliModuleRcTag],
-            ["CLI Module Release Tag", cliModulePromotionTag],
-            ["Controller Module RC Tag", controllerModuleRcTag],
-            ["Controller Module Release Tag", controllerModulePromotionTag],
+            ["Bindings Module RC Tag", bindingsModuleRcTag],
+            ["Bindings Module Release Tag", bindingsModulePromotionTag],
             ["Website Module Release Tag", websiteModulePromotionTag],
             ["Previous Release Tag", previousTag || "(none — first release)"],
-            ["Changelog Range", changelogRange || "(full history)"],
         ])
         .write();
 }

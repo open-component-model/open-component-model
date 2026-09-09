@@ -365,6 +365,23 @@ tar tvf helmchart-tgz/podinfo-6.8.0.tgz
 
 {{< /details >}}
 
+## Controlling the Output Filename
+
+Use `--output` to set the destination path explicitly. This is required whenever the default name is unsuitable — for example, Windows requires `.exe` for PATH-based invocation:
+
+```shell
+ocm download resource ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}} \
+  --identity name=cli,os=windows,architecture=amd64 \
+  --output ./ocm.exe
+```
+
+Without `--output`, the filename is the resource name:
+
+```shell
+# resource name=cli → file: cli
+ocm download resource ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}} --identity name=cli,os=linux,architecture=amd64
+```
+
 ## Specifying Resource Identity
 
 If multiple resources share the same name, use additional identity attributes:

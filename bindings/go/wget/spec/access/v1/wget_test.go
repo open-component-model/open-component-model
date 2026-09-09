@@ -75,3 +75,36 @@ func TestDecodeLegacyOCMAccessSpec(t *testing.T) {
 		})
 	}
 }
+
+func TestWget_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		access  v1.Wget
+		wantErr string
+	}{
+		{
+			name:   "valid",
+			access: v1.Wget{URL: "https://example.com/artifact.tar.gz"},
+		},
+		{
+			name:    "missing url",
+			access:  v1.Wget{},
+			wantErr: "url is required",
+		},
+		{
+			name:    "unsupported scheme",
+			access:  v1.Wget{URL: "ftp://example.com/artifact.tar.gz"},
+			wantErr: "url must use the http or https scheme",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.access.Validate()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}

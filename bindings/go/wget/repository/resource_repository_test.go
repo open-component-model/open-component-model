@@ -121,7 +121,7 @@ func TestDownloadResource(t *testing.T) {
 		defer server.Close()
 
 		tempFolder := t.TempDir()
-		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
+		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder},
 			repository.WithHTTPClient(server.Client()))
 
 		b, err := repo.DownloadResource(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)
@@ -244,7 +244,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		defer server.Close()
 
 		tempFolder := t.TempDir()
-		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: tempFolder},
+		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder},
 			repository.WithHTTPClient(server.Client()))
 
 		_, err := repo.ProcessResourceDigest(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)

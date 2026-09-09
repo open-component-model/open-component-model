@@ -56,7 +56,7 @@ to know where something is located, they need to use OCM as a library or the CLI
 Component Version in the cluster.
 
 This is where a discovery API would be useful. Since you are already in the cluster, why not just create an object
-that uses our [ocm-k8s-toolkit](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller) to figure this out for you?
+that uses our [ocm-k8s-toolkit](https://github.com/open-component-model/open-component-model/tree/main/bindings/go/kubernetes/controller) to figure this out for you?
 
 The new object `Discovery` provides this API. Its design is described in the [Designing a Discovery API](https://ocm.software/blog/designing-a-discovery-api/) blog post.
 

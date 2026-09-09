@@ -199,6 +199,8 @@ OCM's `signature.algorithm` field selects between two signing approaches: classi
 To override the default signing algorithm or encoding policy, add a `signing.config.ocm.software/v1alpha1` entry to your [`.ocmconfig`]({{< relref "configure-multiple-credentials.md" >}}) and put the signer under its `signer` field. See the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
 The signer configures only the algorithm and encoding policy; credentials are always resolved separately from the credentials configuration.
 Give the entry a `signature` field to apply it to that one signature only, matching the `--signature` flag; without it the entry applies to every signature.
+The same entry carries the verification side under its `verifier` field, read by `ocm verify` (see the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_verify_component-version.md" >}})).
+Because the verifier is resolved per signature, a component version carrying several signatures is verified with the handler that each signature name resolves to.
 
 For RSA-based signing, OCM uses PEM-encoded key files configured in the `.ocmconfig`:
 

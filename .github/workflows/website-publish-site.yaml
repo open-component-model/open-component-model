@@ -11,7 +11,7 @@ on:
       - '.github/workflows/website-publish-site.yaml'
       # Paths that are relevant for tracking changes on `main` version.
       # CRDs are generated from api/v1alpha1 at build time via controller-gen.
-      - 'cli/docs/reference/**'
+      - 'bindings/go/cli/docs/reference/**'
       - 'bindings/go/constructor/spec/v1/resources/**'
       - 'bindings/go/credentials/spec/config/v1/schemas/**'
       - 'bindings/go/descriptor/v2/resources/**'
@@ -21,7 +21,7 @@ on:
       - 'bindings/go/oci/spec/credentials/v1/schemas/**'
       - 'bindings/go/rsa/spec/credentials/v1/schemas/**'
       - 'bindings/go/sigstore/spec/credentials/**'
-      - 'kubernetes/controller/api/v1alpha1/**'
+      - 'bindings/go/kubernetes/controller/api/v1alpha1/**'
 
 permissions:
   contents: read

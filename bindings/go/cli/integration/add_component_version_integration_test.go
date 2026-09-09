@@ -1,0 +1,1242 @@
+package integration
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	godigest "github.com/opencontainers/go-digest"
+	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/cli/cmd"
+	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
+	"ocm.software/open-component-model/bindings/go/ctf"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci"
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+)
+
+func Test_Integration_AddComponentVersion_OCIRepository(t *testing.T) {
+	r := require.New(t)
+	t.Parallel()
+
+	t.Logf("Starting OCI repository add component-version integration test")
+
+	cases := []struct {
+		name     string
+		cfg      string
+		external bool
+	}{
+		{
+			name: "targeting defaults",
+			cfg: `
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: %[1]q
+      port: %[2]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+`,
+		},
+		{
+			name: "targeting fallback resolvers",
+			cfg: `
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: %[1]q
+      port: %[2]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+- type: ocm.config.ocm.software
+  resolvers:
+  - repository:
+      type: OCIRepository
+      hostname: %[1]q
+`,
+			external: true,
+		},
+		{
+			name: "targeting resolvers",
+			cfg: `
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: %[1]q
+      port: %[2]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+- type: resolvers.config.ocm.software
+  resolvers:
+  - repository:
+      type: OCIRepository/v1
+      baseUrl: http://%[1]s:%[2]s
+    componentNamePattern: "*"
+`,
+			external: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup credentials and htpasswd
+			registry, err := internal.CreateOCIRegistry(t)
+			r.NoError(err)
+
+			cfg := fmt.Sprintf(tc.cfg, registry.Host, registry.Port, registry.User, registry.Password)
+			cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+			r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
+			t.Logf("Generated config:\n%s", cfg)
+
+			client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
+
+			resolver, err := urlresolver.New(
+				urlresolver.WithBaseURL(registry.RegistryAddress),
+				urlresolver.WithPlainHTTP(true),
+				urlresolver.WithBaseClient(client),
+			)
+			r.NoError(err)
+
+			repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
+			r.NoError(err)
+
+			t.Run("add component-version with plain OCI registry reference", func(t *testing.T) {
+				r := require.New(t)
+
+				componentName := "ocm.software/test-component"
+				componentVersion := "v1.0.0"
+
+				// Create constructor file
+				var constructorContent string
+
+				if tc.external {
+					constructorContent = fmt.Sprintf(`
+components:
+- name: %[1]s
+  version: %[2]s
+  labels:
+    - name: hello
+      value: world
+  provider:
+    name: ocm.software
+  componentReferences:
+    - name: external
+      version: %[2]s
+      componentName: %[1]s-external
+  resources:
+  - name: test-resource
+    version: v1.0.0
+    type: plainText
+    labels:
+      - name: hello
+        value: world
+    input:
+      type: utf8
+      text: "Hello, World from OCI registry!"
+- name: %[1]s-external
+  version: %[2]s
+  provider:
+    name: ocm.software
+  resources:
+  - name: test-resource-2
+    version: v1.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: "Hello, World from external registry!"
+`, componentName, componentVersion)
+				} else {
+					constructorContent = fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  labels:
+    - name: hello
+      value: world
+  provider:
+    name: ocm.software
+  resources:
+  - name: test-resource
+    version: v1.0.0
+    type: plainText
+    labels:
+      - name: hello
+        value: world
+    input:
+      type: utf8
+      text: "Hello, World from OCI registry!"
+`, componentName, componentVersion)
+				}
+
+				constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+				r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+				// Test the add component-version command with plain OCI registry reference
+				addCMD := cmd.New()
+				addCMD.SetArgs([]string{
+					"add",
+					"component-version",
+					"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+					"--constructor", constructorPath,
+					"--config", cfgPath,
+				})
+
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+				defer cancel()
+				r.NoError(addCMD.ExecuteContext(ctx), "add component-version should succeed with OCI registry")
+
+				// Verify the component version was added by attempting to retrieve it
+				desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
+				r.NoError(err, "should be able to retrieve the added component version")
+				r.Equal(componentName, desc.Component.Name)
+				r.Equal(componentVersion, desc.Component.Version)
+				r.Equal("ocm.software", desc.Component.Provider.Name)
+				r.Len(desc.Component.Labels, 1)
+				r.Equal("hello", desc.Component.Labels[0].Name)
+				r.Equal(json.RawMessage("\"world\""), desc.Component.Labels[0].Value)
+				r.Len(desc.Component.Resources, 1)
+				r.Equal("test-resource", desc.Component.Resources[0].Name)
+				r.Equal("v1.0.0", desc.Component.Resources[0].Version)
+				r.Len(desc.Component.Resources[0].Labels, 1)
+				r.Equal("hello", desc.Component.Resources[0].Labels[0].Name)
+				r.Equal(json.RawMessage("\"world\""), desc.Component.Resources[0].Labels[0].Value)
+
+				if tc.external {
+					componentNameExternal := fmt.Sprintf("%s-external", componentName)
+					descExternal, err := repo.GetComponentVersion(ctx, componentNameExternal, componentVersion)
+					r.NoError(err, "should be able to retrieve the added component version")
+					r.Equal(componentNameExternal, descExternal.Component.Name)
+					r.Equal(componentVersion, descExternal.Component.Version)
+					r.Equal("ocm.software", descExternal.Component.Provider.Name)
+					r.Len(descExternal.Component.Resources, 1)
+					r.Equal("test-resource-2", descExternal.Component.Resources[0].Name)
+					r.Equal("v1.0.0", descExternal.Component.Resources[0].Version)
+				}
+			})
+
+			t.Run("add component-version with explicit OCI type prefix", func(t *testing.T) {
+				r := require.New(t)
+
+				componentName := "ocm.software/explicit-oci-component"
+				componentVersion := "v2.0.0"
+
+				// Create constructor file
+				constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: explicit-resource
+    version: v2.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: "Hello from explicit OCI type!"
+`, componentName, componentVersion)
+
+				constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+				r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+				// Test with explicit oci:: prefix
+				addCMD := cmd.New()
+				addCMD.SetArgs([]string{
+					"add",
+					"component-version",
+					"--repository", fmt.Sprintf("oci::http://%s", registry.RegistryAddress),
+					"--constructor", constructorPath,
+					"--config", cfgPath,
+				})
+
+				r.NoError(addCMD.ExecuteContext(t.Context()), "add component-version should succeed with explicit OCI type")
+
+				// Verify the component version was added
+				desc, err := repo.GetComponentVersion(t.Context(), componentName, componentVersion)
+				r.NoError(err, "should be able to retrieve the component version added with explicit OCI type")
+				r.Equal(componentName, desc.Component.Name)
+				r.Equal(componentVersion, desc.Component.Version)
+			})
+
+			t.Run("add component-version with HTTPS URL format", func(t *testing.T) {
+				r := require.New(t)
+
+				componentName := "ocm.software/https-component"
+				componentVersion := "v3.0.0"
+
+				// Create constructor file
+				constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: https-resource
+    version: v3.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: "Hello from HTTPS URL format!"
+`, componentName, componentVersion)
+
+				constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+				r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+				// Test with HTTPS URL format (will be treated as HTTP due to plain HTTP resolver)
+				addCMD := cmd.New()
+				addCMD.SetArgs([]string{
+					"add",
+					"component-version",
+					"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+					"--constructor", constructorPath,
+					"--config", cfgPath,
+				})
+
+				r.NoError(addCMD.ExecuteContext(t.Context()), "add component-version should succeed with HTTPS URL format")
+
+				// Verify the component version was added
+				desc, err := repo.GetComponentVersion(t.Context(), componentName, componentVersion)
+				r.NoError(err, "should be able to retrieve the component version added with HTTPS URL")
+				r.Equal(componentName, desc.Component.Name)
+				r.Equal(componentVersion, desc.Component.Version)
+			})
+
+			t.Run("add and get component-version with wget input", func(t *testing.T) {
+				r := require.New(t)
+
+				content := []byte("hello from wget input")
+				fileSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Content-Type", "application/octet-stream")
+					_, _ = w.Write(content)
+				}))
+				t.Cleanup(fileSrv.Close)
+
+				wgetComponentName := "ocm.software/wget-input-component"
+				wgetComponentVersion := "v1.0.0"
+
+				constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: remote-blob
+    version: v1.0.0
+    type: blob
+    input:
+      type: wget
+      url: %s/artifact.bin
+      mediaType: application/octet-stream
+`, wgetComponentName, wgetComponentVersion, fileSrv.URL)
+
+				constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+				r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+				// add: the wget input downloads the resource and stores it as a local blob.
+				addCMD := cmd.New()
+				addCMD.SetArgs([]string{
+					"add",
+					"component-version",
+					"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+					"--constructor", constructorPath,
+					"--config", cfgPath,
+				})
+				r.NoError(addCMD.ExecuteContext(t.Context()), "add component-version should succeed with wget input")
+
+				// Verify the downloaded bytes were stored locally.
+				desc, err := repo.GetComponentVersion(t.Context(), wgetComponentName, wgetComponentVersion)
+				r.NoError(err)
+				r.Len(desc.Component.Resources, 1)
+				res := desc.Component.Resources[0]
+				r.Equal("remote-blob", res.Name)
+
+				blobData, _, err := repo.GetLocalResource(t.Context(), wgetComponentName, wgetComponentVersion, res.ToIdentity())
+				r.NoError(err)
+				rc, err := blobData.ReadCloser()
+				r.NoError(err)
+				defer func() { r.NoError(rc.Close()) }()
+				got, err := io.ReadAll(rc)
+				r.NoError(err)
+				r.Equal(content, got)
+
+				// get: read the wget-sourced component version back through the CLI.
+				output := new(bytes.Buffer)
+				getCMD := cmd.New()
+				getCMD.SetOut(output)
+				getCMD.SetArgs([]string{
+					"get",
+					"component-version",
+					fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, wgetComponentName, wgetComponentVersion),
+					"--config", cfgPath,
+					"--output", "json",
+				})
+				r.NoError(getCMD.ExecuteContext(t.Context()), "get component-version should succeed for wget-sourced component")
+
+				out := output.String()
+				r.Contains(out, wgetComponentName, "output should contain the component name")
+				r.Contains(out, wgetComponentVersion, "output should contain the component version")
+				r.Contains(out, "remote-blob", "output should contain the wget-sourced resource")
+			})
+		})
+	}
+}
+
+func Test_Integration_AddComponentVersion_CTFRepository(t *testing.T) {
+	t.Parallel()
+
+	t.Run("add component-version with CTF archive path", func(t *testing.T) {
+		r := require.New(t)
+
+		componentName := "ocm.software/ctf-component"
+		componentVersion := "v1.0.0"
+
+		// Create constructor file
+		constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: ctf-resource
+    version: v1.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: "Hello from CTF archive!"
+`, componentName, componentVersion)
+
+		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+		r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+		// Test with CTF archive path
+		ctfArchivePath := filepath.Join(t.TempDir(), "test-archive")
+		addCMD := cmd.New()
+		addCMD.SetArgs([]string{
+			"add",
+			"component-version",
+			"--repository", ctfArchivePath,
+			"--constructor", constructorPath,
+		})
+
+		r.NoError(addCMD.ExecuteContext(t.Context()), "add component-version should succeed with CTF archive")
+
+		// Verify the archive was created
+		_, err := os.Stat(ctfArchivePath)
+		r.NoError(err, "CTF archive should be created")
+	})
+
+	t.Run("add component-version with explicit CTF type prefix", func(t *testing.T) {
+		r := require.New(t)
+
+		componentName := "ocm.software/explicit-ctf-component"
+		componentVersion := "v2.0.0"
+
+		// Create constructor file
+		constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: explicit-ctf-resource
+    version: v2.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: "Hello from explicit CTF type!"
+`, componentName, componentVersion)
+
+		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+		r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+		// Test with explicit ctf:: prefix
+		ctfArchivePath := filepath.Join(t.TempDir(), "explicit-archive")
+		addCMD := cmd.New()
+		addCMD.SetArgs([]string{
+			"add",
+			"component-version",
+			"--repository", fmt.Sprintf("ctf::%s", ctfArchivePath),
+			"--constructor", constructorPath,
+		})
+
+		r.NoError(addCMD.ExecuteContext(t.Context()), "add component-version should succeed with explicit CTF type")
+
+		// Verify the archive was created
+		_, err := os.Stat(ctfArchivePath)
+		r.NoError(err, "CTF archive should be created with explicit type")
+	})
+}
+
+func Test_Integration_AddComponentVersion_UnknownAccessType(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	componentName := "ocm.software/unknown-access-component"
+	componentVersion := "v1.0.0"
+
+	// The access type is not known to the CLI, so no digest processor can be resolved for it.
+	// Adding the component version must still succeed and keep the access as specified.
+	constructorContent := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mycustomresource
+    version: v1.0.0
+    type: blob
+    access:
+      type: MyCustomAccessType/v1
+      url: my.custom.domain.com/access
+`, componentName, componentVersion)
+
+	tempDir := t.TempDir()
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	ctfDir := filepath.Join(tempDir, "ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "add cv with an access type unknown to ocm should succeed")
+
+	fs, err := filesystem.NewFS(ctfDir, os.O_RDONLY)
+	r.NoError(err)
+	archive := ctf.NewFileSystemCTF(fs)
+	repo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err)
+
+	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(desc.Component.Resources, 1)
+
+	resource := desc.Component.Resources[0]
+	r.Equal("mycustomresource", resource.Name)
+	r.Equal(descriptor.ExternalRelation, resource.Relation)
+	r.NotNil(resource.Access)
+	r.Equal("MyCustomAccessType/v1", resource.Access.GetType().String())
+	r.Nil(resource.Digest, "a resource without a digest processor must be stored without a digest")
+}
+
+func Test_Integration_HelmInput_LocalPath(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	root := getRepoRootBasedOnGit(t)
+	chartPath := filepath.Join(root, "bindings/go/helm/testdata/mychart")
+
+	componentName := "ocm.software/helm-input-local"
+	componentVersion := "0.1.0"
+
+	constructor := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mychart
+    version: 0.1.0
+    type: helmChart
+    input:
+      type: helm/v1
+      path: %s
+`, componentName, componentVersion, chartPath)
+
+	tempDir := t.TempDir()
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+	ctfDir := filepath.Join(tempDir, "ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "add cv with local helm input should succeed")
+
+	// Download the resource from the CTF to verify it was stored correctly
+	downloadDir := filepath.Join(tempDir, "downloaded")
+	componentRef := fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, componentVersion)
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"resource",
+		componentRef,
+		"--identity", "name=mychart,version=0.1.0",
+		"--output", downloadDir,
+	})
+	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource from CTF should succeed")
+
+	layout := internal.ParseHelmOCILayout(t, downloadDir)
+	layout.AssertHelmChartLayer(t)
+}
+
+func Test_Integration_HelmAccess_DigestProcessor(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	// Serve the test chart and an index.yaml from a local HTTP server.
+	// The digest is the SHA-256 of mychart-0.1.0.tgz as recorded in the index.
+	root := getRepoRootBasedOnGit(t)
+	chartDir := filepath.Join(root, "bindings/go/helm/testdata")
+	chartDigest := "c68fb36429431f1bf40e539e52d93e49d41b7ab9a6eaceba43e103ca7043bfcb"
+
+	indexYAML := fmt.Sprintf(`apiVersion: v1
+entries:
+  mychart:
+    - urls:
+        - mychart-0.1.0.tgz
+      name: mychart
+      version: 0.1.0
+      digest: "sha256:%s"
+      apiVersion: v2
+generated: "2024-01-01T00:00:00.000000000Z"
+`, chartDigest)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/index.yaml":
+			w.Header().Set("Content-Type", "application/x-yaml")
+			_, _ = w.Write([]byte(indexYAML))
+		default:
+			http.FileServer(http.Dir(chartDir)).ServeHTTP(w, req)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	componentName := "ocm.software/helm-access-digest"
+	componentVersion := "0.1.0"
+
+	constructorContent := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mychart
+    version: 0.1.0
+    type: helmChart
+    access:
+      type: helm/v1
+      helmRepository: %s
+      helmChart: mychart:0.1.0
+`, componentName, componentVersion, srv.URL)
+
+	tempDir := t.TempDir()
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	ctfDir := filepath.Join(tempDir, "ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "add cv with helm access should succeed and trigger digest processor")
+
+	// Open the CTF and verify the resource has a digest set by the Helm digest processor.
+	fs, err := filesystem.NewFS(ctfDir, os.O_RDONLY)
+	r.NoError(err)
+	archive := ctf.NewFileSystemCTF(fs)
+	repo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err)
+
+	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(desc.Component.Resources, 1)
+
+	resource := desc.Component.Resources[0]
+	r.Equal("mychart", resource.Name)
+	r.NotNil(resource.Digest, "helm digest processor should have set a digest on the resource")
+	r.Equal("SHA-256", resource.Digest.HashAlgorithm)
+	r.Equal(chartDigest, resource.Digest.Value)
+}
+
+func Test_Integration_HelmInput_RemoteRepository(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	// Serve the test chart from a local HTTP server
+	root := getRepoRootBasedOnGit(t)
+	chartDir := filepath.Join(root, "bindings/go/helm/testdata/provenance")
+	srv := httptest.NewServer(http.FileServer(http.Dir(chartDir)))
+	t.Cleanup(srv.Close)
+
+	componentName := "ocm.software/helm-input-remote"
+	componentVersion := "0.1.0"
+
+	constructor := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mychart
+    version: 0.1.0
+    type: helmChart
+    input:
+      type: helm/v1
+      helmRepository: %s/mychart-0.1.0.tgz
+`, componentName, componentVersion, srv.URL)
+
+	tempDir := t.TempDir()
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+	ctfDir := filepath.Join(tempDir, "ctf")
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(ctx), "add cv with remote helm input should succeed")
+
+	// Download the resource from the CTF to verify it was stored correctly
+	downloadDir := filepath.Join(tempDir, "downloaded")
+	componentRef := fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, componentVersion)
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"resource",
+		componentRef,
+		"--identity", "name=mychart,version=0.1.0",
+		"--output", downloadDir,
+	})
+	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource from CTF should succeed")
+
+	layout := internal.ParseHelmOCILayout(t, downloadDir)
+	layout.AssertHelmChartLayer(t)
+}
+
+// Test_Integration_AddComponentVersion_HelmAccess verifies that a component version
+// with a helm access resource (remote chart reference) can be added to an OCI registry.
+// This exercises the Helm ResourceRepository plugin for resolving helm access types.
+func Test_Integration_AddComponentVersion_HelmAccess(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	root := getRepoRootBasedOnGit(t)
+	chartDir := filepath.Join(root, "bindings/go/helm/testdata/provenance")
+	_, err := os.Stat(filepath.Join(chartDir, "mychart-0.1.0.tgz"))
+	r.NoError(err, "test helm chart should exist")
+
+	srv := httptest.NewServer(http.FileServer(http.Dir(chartDir)))
+	t.Cleanup(srv.Close)
+
+	registry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: %[1]q
+      port: %[2]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+`, registry.Host, registry.Port, registry.User, registry.Password)
+
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
+	componentName := "ocm.software/helm-access-add-cv"
+	componentVersion := "v1.0.0"
+
+	constructor := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: mychart
+    version: 0.1.0
+    type: helmChart
+    access:
+      type: helm/v1
+      helmRepository: %s
+      helmChart: mychart-0.1.0.tgz
+`, componentName, componentVersion, srv.URL)
+
+	constructorPath := filepath.Join(tempDir, "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+		"--constructor", constructorPath,
+		"--config", cfgPath,
+		"--skip-reference-digest-processing",
+	})
+
+	addCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	r.NoError(addCMD.ExecuteContext(addCtx), "add cv with helm access to OCI registry should succeed")
+
+	// Verify the component version was added by retrieving it
+	client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
+	resolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(registry.RegistryAddress),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+
+	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err, "should be able to retrieve the added component version")
+	r.Equal(componentName, desc.Component.Name)
+	r.Equal(componentVersion, desc.Component.Version)
+	r.Len(desc.Component.Resources, 1)
+	r.Equal("mychart", desc.Component.Resources[0].Name)
+	r.Equal("0.1.0", desc.Component.Resources[0].Version)
+	r.Equal("helmChart", desc.Component.Resources[0].Type)
+	r.Equal("helm/v1", desc.Component.Resources[0].Access.GetType().String())
+}
+
+// Test_Integration_AddComponentVersion_WgetAccess verifies that a resource declaring a wget
+// access directly in the constructor (no input method) can be added to an OCI registry and
+// that the access is then resolved and downloaded via the wget resource repository plugin.
+func Test_Integration_AddComponentVersion_WgetAccess(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	content := []byte("hello from wget access")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(content)
+	}))
+	t.Cleanup(srv.Close)
+
+	registry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: %[1]q
+      port: %[2]q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+`, registry.Host, registry.Port, registry.User, registry.Password)
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
+
+	const componentName = "ocm.software/wget-access-component"
+	const componentVersion = "v1.0.0"
+
+	// The resource declares a wget access directly, not an input method.
+	constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: remote-blob
+    version: v1.0.0
+    type: blob
+    access:
+      type: wget/v1
+      url: %s/artifact.bin
+      mediaType: application/octet-stream
+`, componentName, componentVersion, srv.URL)
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+		"--constructor", constructorPath,
+		"--config", cfgPath,
+	})
+	addCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	r.NoError(addCMD.ExecuteContext(addCtx), "add cv with wget access should succeed")
+
+	// The access is recorded as-is; the resource keeps its wget access spec.
+	repo := registry.Connect(t)
+	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(desc.Component.Resources, 1)
+	res := desc.Component.Resources[0]
+	r.Equal("remote-blob", res.Name)
+	r.NotNil(res.Access, "resource should carry a wget access spec")
+	r.Equal("wget/v1", res.Access.GetType().String())
+
+	// The wget digest processor fetched the content once at add time and set the digest.
+	r.NotNil(res.Digest, "wget digest processor should have set a digest")
+	r.Equal("SHA-256", res.Digest.HashAlgorithm)
+	r.Equal("genericBlobDigest/v1", res.Digest.NormalisationAlgorithm)
+	r.Equal(godigest.FromBytes(content).Encoded(), res.Digest.Value,
+		"digest value must be the SHA-256 of the served content")
+
+	// download resource resolves the wget access via the registered wget resource repository.
+	output := filepath.Join(t.TempDir(), "downloaded")
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"resource",
+		fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, componentName, componentVersion),
+		"--identity", "name=remote-blob,version=v1.0.0",
+		"--output", output,
+		"--config", cfgPath,
+	})
+	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource should resolve the wget access")
+
+	outputBlob, err := filesystem.GetBlobFromOSPath(output)
+	r.NoError(err)
+	dataStream, err := outputBlob.ReadCloser()
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(dataStream.Close()) })
+	data, err := io.ReadAll(dataStream)
+	r.NoError(err)
+	r.Equal(content, data, "downloaded content should match what the wget access points at")
+
+	// get component-version reads the wget-access component back through the CLI.
+	getOutput := new(bytes.Buffer)
+	getCMD := cmd.New()
+	getCMD.SetOut(getOutput)
+	getCMD.SetArgs([]string{
+		"get",
+		"component-version",
+		fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, componentName, componentVersion),
+		"--config", cfgPath,
+		"--output", "json",
+	})
+	r.NoError(getCMD.ExecuteContext(ctx), "get component-version should succeed for the wget-access component")
+
+	out := getOutput.String()
+	r.Contains(out, componentName, "output should contain the component name")
+	r.Contains(out, "remote-blob", "output should contain the resource")
+	r.Contains(out, "wget/v1", "output should contain the wget access type")
+}
+
+// Test_Integration_AddComponentVersion_GitHubAccess verifies that a resource
+// declaring a GitHub access directly in the constructor can be added to an
+// OCI registry, and that the access is then resolved and downloaded via the
+// github resource repository and digest processor the CLI registers.
+//
+// This test talks to live github.com — the same repository the binding-level
+// integration test uses — so it needs network access and is subject to
+// GitHub's rate limits. Set GITHUB_TOKEN to lift the anonymous 60/hour cap.
+func Test_Integration_AddComponentVersion_GitHubAccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	t.Parallel()
+
+	r := require.New(t)
+	ctx := t.Context()
+
+	registry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+	cfgPath := internal.CreateOCMConfigForGitHub(t, registry)
+
+	// addResource adds a component version with one github resource, pinned by
+	// the given access field — "commit" or "ref" — and returns it as stored.
+	addResource := func(t *testing.T, componentName, pinField, pinValue string) descriptor.Resource {
+		t.Helper()
+		r := require.New(t)
+
+		constructor := fmt.Sprintf(`
+components:
+- name: %s
+  version: v1.0.0
+  provider:
+    name: ocm.software
+  resources:
+  - name: repo-archive
+    version: v1.0.0
+    type: blob
+    access:
+      type: GitHub/v1
+      repoUrl: %s
+      %s: %s
+`, componentName, internal.GitHubRepoURL, pinField, pinValue)
+		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+		r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
+
+		// Generous timeout: adding runs the digest processor, which downloads
+		// the full repository archive purely to hash it.
+		addCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+		addCMD := cmd.New()
+		addCMD.SetArgs([]string{
+			"add", "component-version",
+			"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+			"--constructor", constructorPath,
+			"--config", cfgPath,
+		})
+		r.NoError(addCMD.ExecuteContext(addCtx), "add cv with github access should succeed")
+
+		desc, err := registry.Connect(t).GetComponentVersion(ctx, componentName, "v1.0.0")
+		r.NoError(err)
+		r.Len(desc.Component.Resources, 1)
+
+		res := desc.Component.Resources[0]
+		r.NotNil(res.Access, "resource should carry a github access spec")
+		r.Equal("GitHub/v1", res.Access.GetType().String())
+		r.NotNil(res.Digest, "github digest processor should have set a digest")
+		r.Equal("SHA-256", res.Digest.HashAlgorithm)
+		r.Equal("genericBlobDigest/v1", res.Digest.NormalisationAlgorithm)
+		return res
+	}
+
+	t.Run("commit-pinned access", func(t *testing.T) {
+		r := require.New(t)
+
+		const componentName = "ocm.software/github-access-component"
+		res := addResource(t, componentName, "commit", internal.GitHubCommit)
+
+		dlCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+		output := filepath.Join(t.TempDir(), "archive.tgz")
+		downloadCMD := cmd.New()
+		downloadCMD.SetArgs([]string{
+			"download", "resource",
+			fmt.Sprintf("http://%s//%s:v1.0.0", registry.RegistryAddress, componentName),
+			"--identity", "name=repo-archive,version=v1.0.0",
+			"--output", output,
+			"--config", cfgPath,
+		})
+		r.NoError(downloadCMD.ExecuteContext(dlCtx), "download resource should resolve the github access")
+
+		internal.AssertGitHubArchiveAtCommit(t, output)
+
+		// The recorded digest must be the digest of the exact bytes the download
+		// serves. Computed, not hardcoded: GitHub generates the archive.
+		archive, err := os.ReadFile(output)
+		r.NoError(err)
+		r.Equal(godigest.FromBytes(archive).Encoded(), res.Digest.Value,
+			"recorded digest must be the generic blob digest of the downloaded archive")
+	})
+
+	t.Run("ref-only access is pinned to a commit by the digest processor", func(t *testing.T) {
+		r := require.New(t)
+
+		res := addResource(t, "ocm.software/github-ref-component", "ref", internal.GitHubRef)
+
+		// Decode the stored access as plain fields rather than importing the
+		// github binding, keeping this test black-box like its wget sibling.
+		raw, err := json.Marshal(res.Access)
+		r.NoError(err)
+		var stored map[string]string
+		r.NoError(json.Unmarshal(raw, &stored))
+
+		r.Equal(internal.GitHubCommit, stored["commit"],
+			"the digest processor must resolve the ref and pin the commit it points at")
+		r.Equal(internal.GitHubRef, stored["ref"],
+			"the ref stays informational next to the pinned commit")
+	})
+}
+
+func Test_Integration_AddComponentVersion_SpecificationValidation(t *testing.T) {
+	t.Parallel()
+
+	componentName := "ocm.software/validation-component"
+	componentVersion := "v1.0.0"
+
+	// Every constructor declares a valid resource before the resource under test, so that a rejected
+	// component version proves that the constructor refused all of it instead of writing the valid part.
+	cases := []struct {
+		name           string
+		resource       string
+		expectedErrors []string
+	}{
+		{
+			name: "access of a known type without a required field",
+			resource: `  - name: myimage
+    version: v1.0.0
+    type: ociImage
+    access:
+      type: ociArtifact/v1
+`,
+			expectedErrors: []string{
+				`resource "name=myimage,version=v1.0.0"`,
+				`access specification: type "ociArtifact/v1" is invalid: imageReference is required`,
+			},
+		},
+		{
+			name: "input of a known type without a required field",
+			resource: `  - name: myfile
+    version: v1.0.0
+    type: blob
+    input:
+      type: file/v1
+`,
+			expectedErrors: []string{
+				`input specification: type "file/v1" is invalid: path is required`,
+			},
+		},
+		{
+			name: "access of a known type with a malformed field",
+			resource: `  - name: myarchive
+    version: v1.0.0
+    type: blob
+    access:
+      type: Wget/v1
+      url: ftp://my.custom.domain.com/archive.tar.gz
+`,
+			expectedErrors: []string{
+				`access specification: type "Wget/v1" is invalid: url must use the http or https scheme`,
+			},
+		},
+		{
+			name: "access of a known type with a field of the wrong type",
+			resource: `  - name: myarchive
+    version: v1.0.0
+    type: blob
+    access:
+      type: Wget/v1
+      url: https://my.custom.domain.com/archive.tar.gz
+      noRedirect: maybe
+`,
+			expectedErrors: []string{
+				`access specification: type "Wget/v1" cannot be decoded`,
+			},
+		},
+		{
+			name: "every violation is reported at once",
+			resource: `  - name: myfirstimage
+    version: v1.0.0
+    type: ociImage
+    access:
+      type: ociArtifact/v1
+  - name: mysecondimage
+    version: v1.0.0
+    type: ociImage
+    access:
+      type: OCIImage/v1
+`,
+			expectedErrors: []string{
+				`resource "name=myfirstimage,version=v1.0.0"`,
+				`resource "name=mysecondimage,version=v1.0.0"`,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+
+			constructorContent := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: myvalidresource
+    version: v1.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: "Hello, World!"
+%s`, componentName, componentVersion, tc.resource)
+
+			tempDir := t.TempDir()
+			constructorPath := filepath.Join(tempDir, "constructor.yaml")
+			r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+			ctfDir := filepath.Join(tempDir, "ctf")
+
+			addCMD := cmd.New()
+			addCMD.SetArgs([]string{
+				"add",
+				"component-version",
+				"--repository", fmt.Sprintf("ctf::%s", ctfDir),
+				"--constructor", constructorPath,
+			})
+
+			err := addCMD.ExecuteContext(ctx)
+			r.Error(err, "add cv with an invalid specification of a known type must fail")
+			for _, expectedError := range tc.expectedErrors {
+				r.ErrorContains(err, expectedError)
+			}
+
+			// The specifications are validated before the target repository is touched, so not even
+			// the archive of the rejected component version is created.
+			_, err = os.Stat(ctfDir)
+			r.ErrorIs(err, os.ErrNotExist, "nothing may be written when a specification is rejected")
+		})
+	}
+}

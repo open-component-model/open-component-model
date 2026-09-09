@@ -81,7 +81,7 @@ If the component has multiple signatures, specify which one to verify:
 ocm verify cv --signature prod ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 
-> 👉 Without the `--signature` flag, OCM uses the configuration named `default`.
+> 👉 Without the `--signature` flag, **every** signature on the descriptor is verified, not just one named `default`. Each is verified under its own name, so each needs a matching consumer entry.
 
 {{< /step >}}
 
@@ -136,7 +136,7 @@ head -n 1 /tmp/keys/public-key.pem
 {{< /tab >}}
 {{< tab "GPG" >}}
 
-Verify a GPG (OpenPGP) signature using the public key configured in `.ocmconfig`. Verification takes the handler from a spec file passed with `--verifier-spec`, so put the same `type: GPGSigningConfiguration/v1alpha1` you configured for signing into a `verifier-spec.yaml`.
+Verify a GPG (OpenPGP) signature using the public key configured in `.ocmconfig`. Verification takes the handler from the same `.ocmconfig`, so put the `type: GPGSigningConfiguration/v1alpha1` you configured for signing under the `verifier` field as well.
 
 To run this you need the signer's public key on disk and pointed at by `publicKeyPGPFile` in `.ocmconfig`. With Sigstore (other tabs) you don't install a public key at all — you just declare which identity you trust.
 
@@ -167,19 +167,34 @@ If you signed locally, the same `.ocmconfig` you wrote on the sign page already 
 
 If you're verifying a signature **someone else** produced, follow [How-To: Configure Signing Credentials → GPG]({{< relref "configure-signing-credentials.md" >}}) using only the signer's public key (`publicKeyPGPFile`); the `privateKeyPGPFile` entry is not needed for verification.
 
-Create a one-line verifier spec holding the same handler type you configured as the signer in the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}):
+Add a `verifier` to the same `signing.config.ocm.software/v1alpha1` entry you created as the signer in the [sign how-to → GPG tab]({{< relref "sign-component-version.md" >}}). RSA is the default when no verifier is configured, so this is what tells `ocm verify` to use GPG:
 
 ```yaml
-# verifier-spec.yaml
-type: GPGSigningConfiguration/v1alpha1
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1                     # added
+```
+
+If you are only verifying, the `signer` field can be left out entirely:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1
 ```
 
 {{< callout context="note" >}}
-Signing reads its handler from `.ocmconfig`, verification still reads it from this file. The `verifier` field of a `signing.config.ocm.software/v1alpha1` entry is not consulted by `ocm verify` yet.
+Give the entry a `signature` field to scope it to a single signature; without one it applies to every signature. Because the verifier is resolved per signature, a component carrying a GPG signature next to an RSA one can be verified in a single run, each with its own handler.
 {{< /callout >}}
 
 {{< callout context="note" >}}
-`signature: default` matches the default name `ocm verify` looks for. If the signature was created with `--signature <name>`, set the same value in the consumer identity and pass `--signature <name>` on the command line.
+`signature: default` applies to a signature *named* `default`; it is not a catch-all for an omitted `--signature` flag. If the signature was created with `--signature <name>`, set the same value in the consumer identity.
+{{< /callout >}}
+
+{{< callout context="caution" >}}
+Consumer identities are matched **exactly**. Credentials are looked up under the name of the signature being verified, so a `signature: default` entry does not serve a signature named `prod`, and an entry with no `signature` field at all matches nothing. Give every signature its own consumer entry, otherwise a run without `--signature` fails on the signatures that have no matching credential.
 {{< /callout >}}
 
 {{< /step >}}
@@ -188,11 +203,10 @@ Signing reads its handler from `.ocmconfig`, verification still reads it from th
 
 ### Verify the component version
 
-Run the verify command with the verifier spec:
+Run the verify command. The GPG handler comes from the config entry you just added.
 
 ```bash
 ocm verify cv \
-  --verifier-spec ./verifier-spec.yaml \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
@@ -219,12 +233,11 @@ If the component carries multiple signatures (e.g. a GPG signature alongside an 
 
 ```bash
 ocm verify cv \
-  --verifier-spec ./verifier-spec.yaml \
   --signature prod \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
-Without `--signature`, OCM uses the configuration named `default`.
+Without `--signature`, **every** signature on the descriptor is verified. Configuration and credentials are resolved separately for each one, under that signature's own name.
 
 {{< /step >}}
 {{< /steps >}}
@@ -246,9 +259,9 @@ Without `--signature`, OCM uses the configuration named `default`.
 
 ### Symptom: `SIGNATURE VERIFICATION FAILED: no key matching fingerprint "..." found in keyring`
 
-**Cause:** The verifier spec contains a `keyFingerprint` that doesn't match any key resolved from the public-key file.
+**Cause:** The verifier contains a `keyFingerprint` that doesn't match any key resolved from the public-key file.
 
-**Fix:** Either remove `keyFingerprint` from the verifier spec (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
+**Fix:** Either remove `keyFingerprint` from the verifier (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}
@@ -258,8 +271,8 @@ Verify a [Sigstore](https://www.sigstore.dev/) keyless signature made by a perso
 If you've done classical key-based verification, here's what changes:
 
 | Aspect                  | RSA                                                    | Sigstore                                                        |
-| ----------------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
-| Before you start        | Obtain the signer's public key, configure `.ocmconfig` | Nothing — declare expected identity in a verifier spec file     |
+|-------------------------|--------------------------------------------------------|-----------------------------------------------------------------|
+| Before you start        | Obtain the signer's public key, configure `.ocmconfig` | Nothing — declare expected identity in `.ocmconfig`             |
 | What proves trust       | Signature decrypts with the public key you have        | Signature ties back to an OIDC identity you've decided to trust |
 | What the verifier needs | The signer's public key (rotated and re-distributed)   | The expected OIDC identity and issuer — no long-lived key       |
 
@@ -293,20 +306,21 @@ For the end-to-end walkthrough including Fulcio certificate validation, Rekor in
 
 ### Declare which identity you trust
 
-In Sigstore, **the verifier's only job is to decide whose signatures to accept.** You do that with a small spec file.
+In Sigstore, **the verifier's only job is to decide whose signatures to accept.** You do that with a `verifier` entry in your `.ocmconfig`.
 
 Two values matter:
 
 - **`certificateIdentity`** — the email or workload identity of whoever signed (e.g. `jane.doe@example.com`)
 - **`certificateOIDCIssuer`** — *which* OIDC provider they logged in with (e.g. GitHub vs. Google — both could have a `jane.doe@example.com`)
 
-Create `sigstore-verify.yaml`:
+Add the entry to the `configurations` list of your `.ocmconfig`:
 
 ```yaml
-# sigstore-verify.yaml
-type: SigstoreVerificationConfiguration/v1alpha1
-certificateOIDCIssuer: https://github.com/login/oauth
-certificateIdentity: jane.doe@example.com
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuer: https://github.com/login/oauth
+    certificateIdentity: jane.doe@example.com
 ```
 
 That's the entire trust configuration. No public key to fetch, no certificate to install.
@@ -346,7 +360,7 @@ ocm get cv "$REF" -o yaml \
   '
 ```
 
-Output is two lines you can paste straight into your verifier spec. (CI/workload signatures use a `URI:` SAN instead — see the Sigstore (CI) tab.)
+Output is two lines you can paste straight under the `verifier` field. (CI/workload signatures use a `URI:` SAN instead — see the Sigstore (CI) tab.)
 
 {{< /details >}}
 
@@ -356,14 +370,13 @@ Output is two lines you can paste straight into your verifier spec. (CI/workload
 
 ### Verify the component version
 
-Run the verify command with the verifier spec:
+Run the verify command. The Sigstore handler and the identity constraints both come from the config entry you just added.
 
 {{< tabs "verify-sigstore-target" >}}
 {{< tab "Local CTF Archive" >}}
 
 ```bash
 ocm verify cv \
-  --verifier-spec ./sigstore-verify.yaml \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 {{< /tab >}}
@@ -371,7 +384,6 @@ ocm verify cv \
 
 ```bash
 ocm verify cv \
-  --verifier-spec ./sigstore-verify.yaml \
   ghcr.io/<my-namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 {{< /tab >}}
@@ -394,17 +406,18 @@ time=2026-05-19T18:49:13.856+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCES
 
 ### Verify a specific signature
 
-If the component carries multiple signatures (e.g. an RSA signature and a Sigstore signature), select one by **name** with `--signature`. The name is whatever was set at sign time — `default` if no `--signature` flag was passed:
+If the component carries multiple signatures (e.g. an RSA signature and a Sigstore signature), select one by **name** with `--signature`. The name is whatever was set at sign time — `default` if no `--signature` flag was passed *when signing*. Omitting the flag here verifies every signature rather than picking one:
 
 ```bash
 ocm verify cv \
-  --verifier-spec ./sigstore-verify.yaml \
   --signature default \
   ghcr.io/<your namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 
 {{< callout context="note" >}}
-The verifier spec's `type` field decides **which algorithm/handler** verifies the signature. The `--signature` flag picks **which named signature** on the component to verify (matched by name, not by algorithm).
+The verifier's `type` field decides **which algorithm/handler** verifies the signature. The `--signature` flag picks **which named signature** on the component to verify (matched by name, not by algorithm).
+
+You can also scope a config entry itself to one signature by giving it a `signature` field. The verifier is then resolved per signature, so a run without `--signature` verifies every signature, each with the handler its own name resolves to.
 {{< /callout >}}
 
 {{< /step >}}
@@ -433,11 +446,11 @@ stderr: Error: failed to verify certificate identity: no matching CertificateIde
 ```
 
 <!-- TODO(#2588): once the Sigstore tutorial lands on main, restore the relref to docs/tutorials/signing/sigstore.md around "Tutorial: Sigstore (Keyless) — Inspect the signature" -->
-**Fix:** Update `certificateIdentity` / `certificateOIDCIssuer` in your verifier spec to match the identity actually recorded in the signature. Watch for trailing slashes and capitalization. To read the actual identity recorded in the signature, use the decode recipe in Step 1 (or see Tutorial: Sigstore (Keyless) — Inspect the signature).
+**Fix:** Update `certificateIdentity` / `certificateOIDCIssuer` in your verifier config to match the identity actually recorded in the signature. Watch for trailing slashes and capitalization. To read the actual identity recorded in the signature, use the decode recipe in Step 1 (or see Tutorial: Sigstore (Keyless) — Inspect the signature).
 
 ### Symptom: "keyless verification requires both an issuer constraint ... and an identity constraint"
 
-**Cause:** Your verifier spec is missing `certificateIdentity`, `certificateOIDCIssuer`, or both.
+**Cause:** Your verifier config is missing `certificateIdentity`, `certificateOIDCIssuer`, or both.
 
 The full error:
 
@@ -507,7 +520,7 @@ The mechanism is the same; only the issuer URL and identity shape are provider-s
     '
   ```
 
-  Output is two lines you can paste straight into your verifier spec.
+  Output is two lines you can paste straight under the `verifier` field.
 
   Note: `ocm get cv -o yaml` also shows a `signature.issuer` field on the OCM signature object — don't rely on it for verification. The cert is the authoritative source.
 
@@ -517,24 +530,26 @@ The mechanism is the same; only the issuer URL and identity shape are provider-s
 
 {{< step >}}
 
-### Create the verifier spec
+### Configure the verifier
 
-Create `sigstore-verify-ci.yaml`:
+Add the entry to the `configurations` list of your `.ocmconfig`:
 
 ```yaml
-# sigstore-verify-ci.yaml
-type: SigstoreVerificationConfiguration/v1alpha1
-certificateOIDCIssuer: https://token.actions.githubusercontent.com
-certificateIdentity: https://github.com/acme/helloworld/.github/workflows/release.yml@refs/heads/main
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuer: https://token.actions.githubusercontent.com
+    certificateIdentity: https://github.com/acme/helloworld/.github/workflows/release.yml@refs/heads/main
 ```
 
 For GitHub Actions you often want to accept a release workflow on **any** ref (any branch, any tag). Use `certificateIdentityRegexp` instead of `certificateIdentity`:
 
 ```yaml
-# sigstore-verify-ci-regex.yaml
-type: SigstoreVerificationConfiguration/v1alpha1
-certificateOIDCIssuer: https://token.actions.githubusercontent.com
-certificateIdentityRegexp: ^https://github\.com/acme/helloworld/\.github/workflows/release\.yml@refs/.*$
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuer: https://token.actions.githubusercontent.com
+    certificateIdentityRegexp: ^https://github\.com/acme/helloworld/\.github/workflows/release\.yml@refs/.*$
 ```
 
 Exactly one of `certificateIdentity` or `certificateIdentityRegexp` is required (same applies to issuer's `*Regexp` form).
@@ -550,7 +565,6 @@ Exactly one of `certificateIdentity` or `certificateIdentityRegexp` is required 
 
 ```bash
 ocm verify cv \
-  --verifier-spec ./sigstore-verify-ci.yaml \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 {{< /tab >}}
@@ -558,7 +572,6 @@ ocm verify cv \
 
 ```bash
 ocm verify cv \
-  --verifier-spec ./sigstore-verify-ci.yaml \
   ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
 ```
 {{< /tab >}}

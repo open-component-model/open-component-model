@@ -8,10 +8,9 @@ output: prefixed
 includes:
   tools:
     taskfile: ./tools.Taskfile.yml
-  # bindings/go is a single Go module. Unit tests are run via `bindings/go:test`.
-  # Integration tests that only need Docker are run via `bindings/go:test/integration`.
-  # Sigstore integration requires a dedicated scaffolding cluster and runs as a
-  # separate CI job. The other integration includes are for local convenience.
+  # bindings/go is a single Go module. Unit tests are run via `bindings/go:test`,
+  # integration tests via `bindings/go:test/integration`.
+  # The other integration includes are for local convenience.
   # The generator include provides code generation tasks used by `task generate`.
   bindings/go:
     optional: true
@@ -49,18 +48,18 @@ includes:
     optional: true
     taskfile: ./bindings/go/wget/integration/Taskfile.yml
     dir: ./bindings/go/wget/integration
-  cli:
+  bindings/go/s3/integration:
     optional: true
-    taskfile: ./cli/Taskfile.yml
-    dir: ./cli
-  cli/integration:
+    taskfile: ./bindings/go/s3/integration/Taskfile.yml
+    dir: ./bindings/go/s3/integration
+  bindings/go/cli:
     optional: true
-    taskfile: ./cli/integration/Taskfile.yml
-    dir: ./cli/integration
-  kubernetes/controller:
+    taskfile: ./bindings/go/cli/Taskfile.yml
+    dir: ./bindings/go/cli
+  bindings/go/kubernetes/controller:
     optional: true
-    taskfile: ./kubernetes/controller/Taskfile.yml
-    dir: ./kubernetes/controller
+    taskfile: ./bindings/go/kubernetes/controller/Taskfile.yml
+    dir: ./bindings/go/kubernetes/controller
 
 vars:
   GO_MODULES:
@@ -68,7 +67,7 @@ vars:
 
 tasks:
   default:
-    deps: ["cli:build", "kubernetes/controller:build"]
+    deps: ["bindings/go/cli:build", "bindings/go/kubernetes/controller:build"]
 
   go_modules:
     desc: "List all Go Modules available in this project"
@@ -113,10 +112,10 @@ tasks:
       - task: 'bindings/go/generator:ocmtypegen/generate'
       - task: 'bindings/go/generator:jsonschemagen/generate'
       - task: 'tools:deepcopy-gen/generate-deepcopy'
-      - task: 'kubernetes/controller:manifests'
-      - task: 'kubernetes/controller:generate'
-      - task: 'cli:generate/docs'
+      - task: 'bindings/go/kubernetes/controller:manifests'
+      - task: 'bindings/go/kubernetes/controller:generate'
+      - task: 'bindings/go/cli:generate/docs'
         vars:
           CLI_DOCUMENTATION_MODE: "hugo"
-          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/cli/docs/reference'
+          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/bindings/go/cli/docs/reference'
       - task: 'tidy'

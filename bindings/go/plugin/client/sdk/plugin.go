@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"syscall"
@@ -366,20 +367,30 @@ func (p *Plugin) removeFiles(loc string, lockFile string) error {
 }
 
 // createLockFile creates a lock file and puts the current process PID into the file.
+// The PID is written to a temporary file first which is then atomically renamed
+// into place so concurrent observers either see no lock file or a complete one.
 func (p *Plugin) createLockFile(loc string) (err error) {
 	lockFile := loc + ".lock"
-	file, err := os.Create(lockFile)
+	tmp, err := os.CreateTemp(filepath.Dir(lockFile), ".lock-*")
 	if err != nil {
-		return fmt.Errorf("could not create lock file: %w", err)
+		return fmt.Errorf("could not create temporary lock file: %w", err)
 	}
-
 	defer func() {
-		err = errors.Join(err, file.Close())
+		if err != nil {
+			err = errors.Join(err, os.Remove(tmp.Name()))
+		}
 	}()
 
 	pid := strconv.Itoa(os.Getpid())
-	if _, err = file.Write([]byte(pid)); err != nil {
+	if _, err = tmp.WriteString(pid); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("could not write lock file: %w", err)
+	}
+	if err = tmp.Close(); err != nil {
+		return fmt.Errorf("could not close temporary lock file: %w", err)
+	}
+	if err = os.Rename(tmp.Name(), lockFile); err != nil {
+		return fmt.Errorf("could not move lock file into place: %w", err)
 	}
 
 	return nil

@@ -33,7 +33,11 @@ permissions:
   contents: read
 
 env:
-  LOCATION: "cli"                       # Folder containing the CLI source
+  # GO_MODULE_ROOT is the Go module root that contains go.mod and go.sum.
+  # CLI_DIR is the CLI subtree inside it, used for sparse checkout and
+  # artifact staging.
+  GO_MODULE_ROOT: "bindings/go"
+  CLI_DIR: "bindings/go/cli"
   REGISTRY: ghcr.io                     # Target container registry
   # github.head_ref → branch name from the PR target (works only for pull_request events)
   # github.ref_name → branch or tag name for normal push/tag events
@@ -105,15 +109,15 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
-            ${{ env.LOCATION }}
+            ${{ env.GO_MODULE_ROOT }}
           persist-credentials: 'false'
           ref: ${{ env.REF }}
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum  # Cache dependencies by go.sum
+          go-version-file: bindings/go/go.mod
+          cache-dependency-path: bindings/go/go.sum  # Cache dependencies by go.sum
 
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
@@ -126,7 +130,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           BUILD_VERSION: ${{ needs.version.outputs.build_version }}
         run: |
-          task cli:build/single \
+          task bindings/go/cli:build/single \
             GOOS=${{ matrix.goos }} \
             GOARCH=${{ matrix.goarch }} \
             VERSION="${VERSION}" \
@@ -139,8 +143,8 @@ jobs:
           retention-days: 1
           name: cli-target-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            ${{ env.LOCATION }}/tmp/bin/ocm-${{ matrix.goos }}-${{ matrix.goarch }}
-            ${{ env.LOCATION }}/tmp/resources/ocm-${{ matrix.goos }}-${{ matrix.goarch }}.yaml
+            ${{ env.CLI_DIR }}/tmp/bin/ocm-${{ matrix.goos }}-${{ matrix.goarch }}
+            ${{ env.CLI_DIR }}/tmp/resources/ocm-${{ matrix.goos }}-${{ matrix.goarch }}.yaml
 
   # Join job: gather every prebuilt binary, package the image and CTF without
   # recompiling, then attest and publish the artifacts the pipeline consumes.
@@ -161,7 +165,7 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
-            ${{ env.LOCATION }}
+            ${{ env.CLI_DIR }}
           persist-credentials: 'false'
           ref: ${{ env.REF }}
 
@@ -173,26 +177,26 @@ jobs:
 
       # Buildx packages the OCI image from the prebuilt linux binaries (no recompile)
       - name: Setup docker/buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
       # Restore every target's binary and resource manifest under cli/tmp
       - name: Download target binaries
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          path: ${{ env.LOCATION }}/tmp
+          path: ${{ env.CLI_DIR }}/tmp
           pattern: cli-target-*
           merge-multiple: true
 
       # Artifact upload/download drops the executable bit; restore it before packaging
       - name: Make binaries executable
-        run: chmod +x ${{ env.LOCATION }}/tmp/bin/ocm-*
+        run: chmod +x ${{ env.CLI_DIR }}/tmp/bin/ocm-*
 
       - name: Assemble & Verify CTF
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          task cli:assemble/ctf VERSION="${VERSION}"
-          task cli:verify/ctf VERSION="${VERSION}"
+          task bindings/go/cli:assemble/ctf VERSION="${VERSION}"
+          task bindings/go/cli:verify/ctf VERSION="${VERSION}"
 
       # Attest built binaries with provenance metadata, but only if we're not on a PR
       - name: Attest binaries
@@ -200,7 +204,7 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          subject-path: "${{ env.LOCATION }}/tmp/bin/ocm-*"
+          subject-path: "${{ env.CLI_DIR }}/tmp/bin/ocm-*"
 
       # Upload CLI binaries and OCI layout as build artifacts
       - name: Upload Artifacts
@@ -213,5 +217,5 @@ jobs:
           # Compiled CLI binaries
           # OCI layout files
           path: |
-            ${{ env.LOCATION }}/tmp/bin/ocm-*
-            ${{ env.LOCATION }}/tmp/oci/*
+            ${{ env.CLI_DIR }}/tmp/bin/ocm-*
+            ${{ env.CLI_DIR }}/tmp/oci/*
