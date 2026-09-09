@@ -196,6 +196,34 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	assert.Equal(t, "fileBufferCleanup", tgd.Transformations[3].ID)
 }
 
+func TestBuildGraphDefinition_CollidingResourceVersionsGetUniqueIDs(t *testing.T) {
+	r := require.New(t)
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{
+			localBlobResource("operator-image", "0.2.1+meta"),
+			localBlobResource("operator-image", "0.2.1-meta"),
+		}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources})
+	r.NoError(err)
+
+	ids := make([]string, 0, len(tgd.Transformations))
+	for _, tr := range tgd.Transformations {
+		ids = append(ids, tr.ID)
+	}
+	r.Contains(ids, "transformOcmSoftwareTest100GettransformOperatorImage021Meta")
+	r.Contains(ids, "transformOcmSoftwareTest100GettransformOperatorImage021MetaR1")
+	unique := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		unique[id] = struct{}{}
+	}
+	r.Len(unique, len(ids), "transformation IDs must be unique, got %v", ids)
+}
+
 func TestBuildGraphDefinition_OCIImageSkippedInDefaultMode(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")

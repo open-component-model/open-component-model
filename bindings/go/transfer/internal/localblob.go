@@ -13,14 +13,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob, id string, resourceID string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 	sourceRepo := val.SourceRepository
 
 	// Generate transformation IDs
 	resourceIdentity := resource.ToIdentity()
-	resourceID := identityToTransformationID(resourceIdentity)
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
