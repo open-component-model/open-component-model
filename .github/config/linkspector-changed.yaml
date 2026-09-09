@@ -8,3 +8,6 @@ dirs:
 excludedDirs:
   - website
 modifiedFilesOnly: true
+ignorePatterns:
+  # Slack archives require a signed-in session and appears to block crawlers.
+  - pattern: "^https?://kubernetes\\.slack\\.com"

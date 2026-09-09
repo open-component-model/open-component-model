@@ -6,6 +6,7 @@ import (
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Options are the options for construction based on a *constructor.Constructor.
@@ -43,6 +44,26 @@ type Options struct {
 	// Resources whose access type has no digest processor are added without a digest and only cause a warning,
 	// so that component versions can reference access types unknown to the constructor.
 	ResourceDigestProcessorProvider
+
+	// While constructing a component version, the constructor library will use the given access
+	// specification scheme to validate the access specifications of all resources and sources before any
+	// component is constructed. An access specification is decoded into the type registered for it and,
+	// if that type implements ocmruntime.Validatable, it is checked with Validate.
+	// The AccessSpecificationScheme is OPTIONAL, if not provided, the constructor library will not
+	// validate access specifications.
+	// Access specifications whose type is not registered in the scheme are never validated,
+	// so that component versions can reference access types unknown to the constructor.
+	AccessSpecificationScheme *ocmruntime.Scheme
+
+	// While constructing a component version, the constructor library will use the given input
+	// specification scheme to validate the input specifications of all resources and sources before any
+	// component is constructed. An input specification is decoded into the type registered for it and,
+	// if that type implements ocmruntime.Validatable, it is checked with Validate.
+	// The InputSpecificationScheme is OPTIONAL, if not provided, the constructor library will not
+	// validate input specifications.
+	// Input specifications whose type is not registered in the scheme are never validated,
+	// so that component versions can use input types unknown to the constructor.
+	InputSpecificationScheme *ocmruntime.Scheme
 
 	// While constructing a component version, the constructor library will use the given credential provider
 	// to resolve credentials for the input methods.

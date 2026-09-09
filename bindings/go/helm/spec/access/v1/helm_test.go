@@ -177,3 +177,36 @@ func TestHelm_GetVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestHelm_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		access  Helm
+		wantErr string
+	}{
+		{
+			name:   "valid",
+			access: Helm{HelmRepository: "https://charts.example.com", HelmChart: "mychart:1.0.0"},
+		},
+		{
+			name:    "missing helm repository",
+			access:  Helm{HelmChart: "mychart:1.0.0"},
+			wantErr: "helmRepository is required",
+		},
+		{
+			name:    "missing helm chart",
+			access:  Helm{HelmRepository: "https://charts.example.com"},
+			wantErr: "helmChart is required",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.access.Validate()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}

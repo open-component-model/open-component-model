@@ -9,7 +9,11 @@ vars:
     sh: . ../signing/handler/internal/.env && echo "$COSIGN_VERSION"
   SCAFFOLDING_VERSION:
     sh: . ./.env && echo "$SCAFFOLDING_VERSION"
-  SIGSTORE_ENV_FILE: 'tmp/sigstore-env.sh'
+  # Absolute paths rooted via TASKFILE_DIR to make any call path (taskfiles in root,
+  # bindings/go, or this one) work identically.
+  SIGSTORE_ENV_FILE: '{{.TASKFILE_DIR}}/tmp/sigstore-env.sh'
+  SIGSTORE_ENV_DIR: '{{.TASKFILE_DIR}}/tmp/sigstore'
+  SIGSTORE_BIN_DIR: '{{.TASKFILE_DIR}}/tmp/bin'
   SIGSTORE_BRIDGE_PORT: '8080'
   SCAFFOLDING_URL: 'https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}'
 
@@ -125,13 +129,13 @@ tasks:
         lsof -ti :{{.SIGSTORE_BRIDGE_PORT}} >/dev/null 2>&1 || { echo "port-forward failed to start" >&2; exit 1; }
 
   scaffolding:env:
-    desc: "Extract sigstore env vars from running cluster into tmp/sigstore-env.sh"
+    desc: "Extract sigstore env vars from running cluster into the SIGSTORE_ENV_FILE"
     deps: [scaffolding:setup, scaffolding:bridge, cosign:install]
     cmds:
-      - mkdir -p tmp
-      - cmd: PATH="{{.ROOT_DIR}}/tmp/bin:$PATH" SIGSTORE_BRIDGE_PORT={{.SIGSTORE_BRIDGE_PORT}} bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
+      - mkdir -p "{{.TASKFILE_DIR}}/tmp" "{{.SIGSTORE_ENV_DIR}}"
+      - cmd: PATH="{{.SIGSTORE_BIN_DIR}}:$PATH" SIGSTORE_ENV_DIR="{{.SIGSTORE_ENV_DIR}}" SIGSTORE_BRIDGE_PORT={{.SIGSTORE_BRIDGE_PORT}} bash {{.TASKFILE_DIR}}/hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
         platforms: [darwin]
-      - cmd: PATH="{{.ROOT_DIR}}/tmp/bin:$PATH" bash hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
+      - cmd: PATH="{{.SIGSTORE_BIN_DIR}}:$PATH" SIGSTORE_ENV_DIR="{{.SIGSTORE_ENV_DIR}}" bash {{.TASKFILE_DIR}}/hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
         platforms: [linux]
 
   scaffolding:refresh:
@@ -166,7 +170,7 @@ tasks:
     requires:
       vars: [COSIGN_VERSION]
     vars:
-      BIN: '{{.ROOT_DIR}}/tmp/bin/cosign'
+      BIN: '{{.SIGSTORE_BIN_DIR}}/cosign'
     status:
       - 'cosign version 2>&1 | grep -qF "{{.COSIGN_VERSION}}"'
     cmds:
@@ -175,17 +179,22 @@ tasks:
         ARCH=$(uname -m)
         case "$ARCH" in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac
         URL="https://github.com/sigstore/cosign/releases/download/{{.COSIGN_VERSION}}/cosign-${OS}-${ARCH}"
-        mkdir -p "{{.ROOT_DIR}}/tmp/bin"
+        mkdir -p "{{.SIGSTORE_BIN_DIR}}"
         curl -fsSL "$URL" -o "{{.BIN}}"
         chmod +x "{{.BIN}}"
 
-  test/integration:
-    desc: "Run sigstore integration tests against scaffolding cluster"
+  setup:
+    desc: "Provision the sigstore scaffolding cluster and write the sourceable env file."
     deps: [scaffolding:env, cosign:install]
+
+  test/integration:
+    desc: "Run only the sigstore integration tests against a scaffolding cluster."
+    # Convenience target for local development
+    deps: [setup]
     set: [errexit]
     cmds:
       - |
-        export PATH="{{.ROOT_DIR}}/tmp/bin:$PATH"
+        export PATH="{{.SIGSTORE_BIN_DIR}}:$PATH"
         . {{.SIGSTORE_ENV_FILE}}
         go test -count=1 -run "{{.INTEGRATION_TEST_IDENTIFIER}}" -timeout 180s ./...
 
@@ -201,4 +210,4 @@ tasks:
         ignore_error: true
       - cmd: docker rm -f registry.local
         ignore_error: true
-      - rm -rf tmp
+      - rm -rf "{{.TASKFILE_DIR}}/tmp"

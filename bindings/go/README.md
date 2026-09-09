@@ -78,5 +78,5 @@ task -a
 ## See Also
 
 - [OCM Specification](https://github.com/open-component-model/ocm-spec)
-- [CLI Documentation](../../cli/docs/reference/ocm.md)
+- [CLI Documentation](cli/docs/reference/ocm.md)
 - [Architecture Decisions](../../docs/adr/)

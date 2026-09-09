@@ -28,7 +28,7 @@ Embeds a directory as a tar archive.
 | ----- | ---- | -------- | ----------- |
 | `path` | string | yes | Path to the directory (relative to the constructor file). |
 | `mediaType` | string | no | MediaType of the resource (defaults to application/x-tar). The Dir input always creates a tar. However, it does not add a +tar suffix as this might cause conflicts with MediaType's such as application/x-tar. |
-| `compress` | boolean | no | Compress the tar archive (gzip). If set to true, adds a +gzip suffix to the MediaType. |
+| `compress` | boolean | no | Compress the tar archive (gzip). If set to true, the default media type gets a +gzip suffix. A declared `mediaType` is used as-is. |
 | `reproducible` | boolean | no | Normalize file attributes (timestamps, permissions) for reproducible digests. Recommended when signing. |
 | `preserveDir` | boolean | no | Include the directory itself in the archive. |
 | `followSymlinks` | boolean | no | Include the content of symbolic links in the archive. Not yet implemented; accepted for compatibility with previous OCM versions. |
