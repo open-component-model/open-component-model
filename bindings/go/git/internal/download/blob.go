@@ -53,7 +53,7 @@ func newBlob(path, digest string) (*Blob, error) {
 
 	// The cleanup takes the path rather than the blob: an argument that can reach
 	// the object the cleanup is attached to would keep it alive forever.
-	inner.SetMediaType("application/x-tgz")
+	inner.SetMediaType("application/x-tar")
 	b := &Blob{Blob: inner, path: path, digest: digest}
 	runtime.AddCleanup(b, func(path string) {
 		if err := removeTempFile(path); err != nil {

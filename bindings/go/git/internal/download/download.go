@@ -12,6 +12,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -68,12 +69,23 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		}
 
 		if err == nil {
+			// Asking for the pinned commit alone avoids transferring every ref and its
+			// history. Servers without the capability reject it before any transfer.
 			err = repo.FetchContext(ctx, &git.FetchOptions{
 				Auth:     auth,
 				CABundle: opts.CABundle,
-				Tags:     git.AllTags,
-				RefSpecs: []config.RefSpec{"+refs/*:refs/*"},
+				Tags:     git.NoTags,
+				RefSpecs: []config.RefSpec{config.RefSpec("+" + access.Commit + ":refs/ocm/commit")},
 			})
+
+			if errors.Is(err, git.ErrExactSHA1NotSupported) {
+				err = repo.FetchContext(ctx, &git.FetchOptions{
+					Auth:     auth,
+					CABundle: opts.CABundle,
+					Tags:     git.AllTags,
+					RefSpecs: []config.RefSpec{"+refs/*:refs/*"},
+				})
+			}
 
 			if errors.Is(err, git.NoErrAlreadyUpToDate) {
 				err = nil
@@ -95,19 +107,6 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 	if access.Commit != "" {
 		value := plumbing.NewHash(access.Commit)
 		hash = &value
-		if _, objectErr := repo.CommitObject(value); objectErr != nil {
-			// Some servers expose a pinned commit only through an explicit object fetch.
-			err = repo.FetchContext(ctx, &git.FetchOptions{
-				Auth:     auth,
-				CABundle: opts.CABundle,
-				Tags:     git.NoTags,
-				RefSpecs: []config.RefSpec{config.RefSpec("+" + value.String() + ":refs/ocm/commit")},
-			})
-
-			if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-				return nil, "", transportError(ctx, "cannot fetch pinned git commit", err)
-			}
-		}
 	} else {
 		if access.Ref != "HEAD" && (strings.HasPrefix(access.Ref, "refs/heads/") || !strings.HasPrefix(access.Ref, "refs/")) {
 			hash, err = repo.ResolveRevision(plumbing.Revision("refs/remotes/origin/" + strings.TrimPrefix(access.Ref, "refs/heads/")))
@@ -177,8 +176,10 @@ func transportError(ctx context.Context, operation string, err error) error {
 	switch {
 	case errors.Is(err, git.ErrRepositoryNotExists):
 		return fmt.Errorf("%s: repository not found", operation)
-	case strings.Contains(err.Error(), "authentication required"):
+	case errors.Is(err, transport.ErrAuthenticationRequired):
 		return fmt.Errorf("%s: authentication required", operation)
+	case errors.Is(err, transport.ErrAuthorizationFailed):
+		return fmt.Errorf("%s: authorization failed", operation)
 	default:
 		return fmt.Errorf("%s: transport failed; check repository access and server trust", operation)
 	}

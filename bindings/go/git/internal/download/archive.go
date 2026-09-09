@@ -2,7 +2,6 @@ package download
 
 import (
 	"archive/tar"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -16,7 +15,7 @@ import (
 )
 
 func archive(ctx context.Context, root string, opts Options) (_ *Blob, err error) {
-	file, err := os.CreateTemp(opts.TempDir, "ocm-git-archive-*.tar.gz")
+	file, err := os.CreateTemp(opts.TempDir, "ocm-git-archive-*.tar")
 	if err != nil {
 		return nil, err
 	}
@@ -28,10 +27,11 @@ func archive(ctx context.Context, root string, opts Options) (_ *Blob, err error
 
 	digester := digest.SHA256.Digester()
 	writer := &limitedWriter{Writer: io.MultiWriter(file, digester.Hash()), limit: opts.MaxDownloadSize}
-	gz := gzip.NewWriter(writer)
-	tw := tar.NewWriter(gz)
+	// The archive stays uncompressed: its digest is pinned into the descriptor and
+	// verified on other machines, and compress/flate output is not stable across Go releases.
+	tw := tar.NewWriter(writer)
 	err = writeWorktree(ctx, tw, root)
-	err = errors.Join(err, tw.Close(), gz.Close(), file.Close())
+	err = errors.Join(err, tw.Close(), file.Close())
 	if err != nil {
 		return nil, fmt.Errorf("cannot create git archive: %w", err)
 	}
@@ -78,6 +78,9 @@ func writeWorktree(ctx context.Context, tw *tar.Writer, root string) error {
 
 		header.Name = filepath.ToSlash(relative)
 		header.ModTime = time.Time{}
+		// Ownership comes from the checkout user and must not reach the digest.
+		header.Uid, header.Gid = 0, 0
+		header.Uname, header.Gname = "", ""
 		switch {
 		case info.IsDir():
 			return tw.WriteHeader(header)
