@@ -12,6 +12,7 @@
 | 3 | `gpg`, `rsa` | `credentials`, `descriptor/runtime`, `runtime` |
 | 3 | `repository` | `blob`, `configuration`, `credentials`, `descriptor/runtime`, `runtime` |
 | 3 | `transform` | `cel`, `credentials`, `dag`, `runtime` |
+| 4 | `git` | `blob`, `credentials`, `descriptor/runtime`, `repository`, `runtime` |
 | 4 | `oci` | `blob`, `configuration`, `credentials`, `ctf`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime` |
 | 4 | `signing` | `configuration`, `descriptor/normalisation`, `descriptor/runtime`, `runtime` |
 | 5 | `constructor` | `blob`, `credentials`, `ctf`, `dag`, `descriptor/normalisation`, `descriptor/runtime`, `descriptor/v2`, `oci`, `repository`, `runtime` |
