@@ -16,6 +16,8 @@
   },
   'updateNotScheduled': true, // Update branches that have already been created
   'minimumReleaseAge': '28 days',
+  'internalChecksFilter': 'strict',
+  'prCreation': 'not-pending',
   'branchPrefix': 'renovate/',
   'gitAuthor': 'ocmbot[bot] <125909804+ocmbot[bot]@users.noreply.github.com>',
   'gitIgnoredAuthors': [
