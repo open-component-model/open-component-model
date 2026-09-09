@@ -133,6 +133,11 @@ func TestIdentityToTransformationID(t *testing.T) {
 			identity: runtime.Identity{},
 			want:     "transform",
 		},
+		{
+			name:     "non-ascii letters are dropped lossily",
+			identity: runtime.Identity{"name": "ünïcode_res"},
+			want:     "transformNCodeRes",
+		},
 	}
 
 	for _, tt := range tests {
@@ -159,12 +164,12 @@ func TestTransformationIDAllocator(t *testing.T) {
 		{
 			name:  "duplicate bases get incrementing suffix",
 			bases: []string{"transformA", "transformA", "transformA"},
-			want:  []string{"transformA", "transformAR1", "transformAR2"},
+			want:  []string{"transformA", "transformAX1", "transformAX2"},
 		},
 		{
 			name:  "naturally occurring suffix in input is skipped",
-			bases: []string{"transformA", "transformAR1", "transformA"},
-			want:  []string{"transformA", "transformAR1", "transformAR2"},
+			bases: []string{"transformA", "transformAX1", "transformA"},
+			want:  []string{"transformA", "transformAX1", "transformAX2"},
 		},
 		{
 			name: "semver build metadata and pre-release collide on base ID",
@@ -172,7 +177,7 @@ func TestTransformationIDAllocator(t *testing.T) {
 				identityToTransformationID(runtime.Identity{"name": "operator-image", "version": "0.2.1+meta"}),
 				identityToTransformationID(runtime.Identity{"name": "operator-image", "version": "0.2.1-meta"}),
 			},
-			want: []string{"transformOperatorImage021Meta", "transformOperatorImage021MetaR1"},
+			want: []string{"transformOperatorImage021Meta", "transformOperatorImage021MetaX1"},
 		},
 		{
 			name: "collision with extra identity variation is handled",
@@ -180,7 +185,7 @@ func TestTransformationIDAllocator(t *testing.T) {
 				identityToTransformationID(runtime.Identity{"name": "operator-image", "platform": "linux", "version": "1.0.0"}),
 				identityToTransformationID(runtime.Identity{"name": "operator-image", "os": "linux", "version": "1.0.0"}),
 			},
-			want: []string{"transformOperatorImageLinux100", "transformOperatorImageLinux100R1"},
+			want: []string{"transformOperatorImageLinux100", "transformOperatorImageLinux100X1"},
 		},
 	}
 

@@ -244,6 +244,11 @@ func isTransformationIDWordBoundary(r rune) bool {
 // treated as a word boundary for camelCase conversion.
 //
 // Example: {"name": "ocm.software/my-app", "version": "1.0.0"} → "transformOcmSoftwareMyApp100"
+//
+// Note: the mapping is lossy. A character that is neither an ASCII letter nor a digit is
+// dropped entirely (including non-ASCII letters), and separators act only as word
+// boundaries without contributing content. Distinct identities can fold onto the same ID
+// and are disambiguated via transformationIDAllocator.
 func identityToTransformationID(id runtime.Identity) string {
 	// TODO(jakobmoellerdev): decide if we really wanna keep such strict limits on transformation ids,
 	//   if we really dont need them to be that strict.
@@ -267,12 +272,12 @@ func identityToTransformationID(id runtime.Identity) string {
 	return result
 }
 
-// transformationIDAllocator hands out unique transformation IDs at both ID levels: for
+// transformationIDAllocator hands out unique transformation IDs at every ID level: for
 // component base IDs (one instance per vertex loop) and for the resources of one component
-// (one instance per (component, target) pair). identityToTransformationID is lossy: it drops
-// separators and folds case, so distinct identities (for example versions "0.2.1+meta" and
-// "0.2.1-meta") map to the same base ID. On collision the allocator appends an incrementing
-// suffix ("R1", "R2", ...), mirroring the per-target "T0", "T1" suffix scheme.
+// (one instance per (component, target) pair).
+// identityToTransformationID is lossy: it drops separators and folds case, so distinct
+// identities (for example versions "0.2.1+meta" and "0.2.1-meta") map to the same base ID.
+// On collision the allocator appends an incrementing counter ("X1", "X2", ...).
 type transformationIDAllocator struct {
 	// used contains every ID handed out so far, including suffixed candidates.
 	used map[string]struct{}
@@ -288,15 +293,16 @@ func newTransformationIDAllocator() *transformationIDAllocator {
 }
 
 // allocate returns base unchanged while it is unused. On collision, it returns the first
-// unused ID of the form base+"R"+counter, with the counter starting at 1. Callers must
-// allocate in a deterministic order (descriptor order) to keep the resulting IDs stable.
+// unused ID of the form base+"X"+counter, with the counter starting at 1. To keep the
+// resulting IDs stable, allocate in a deterministic order (descriptor order for resources,
+// sorted vertex order for components).
 func (a *transformationIDAllocator) allocate(base string) string {
 	if _, ok := a.used[base]; !ok {
 		a.used[base] = struct{}{}
 		return base
 	}
 	for n := max(a.nextSuffix[base], 1); ; n++ {
-		candidate := fmt.Sprintf("%sR%d", base, n)
+		candidate := fmt.Sprintf("%sX%d", base, n)
 		if _, ok := a.used[candidate]; !ok {
 			a.used[candidate] = struct{}{}
 			a.nextSuffix[base] = n + 1
