@@ -4,17 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	gitinternal "ocm.software/open-component-model/bindings/go/git/internal"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
+	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+const (
+	hashAlgorithmSHA256 = "SHA-256"
+	genericBlobDigestV1 = "genericBlobDigest/v1"
 )
 
 type ResourceRepository struct {
@@ -44,7 +50,7 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 		return nil, fmt.Errorf("resource is required")
 	}
 
-	spec, err := gitinternal.AccessFrom(res.Access)
+	spec, err := accessFrom(res.Access)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +72,7 @@ func (r *ResourceRepository) download(ctx context.Context, res *descriptor.Resou
 		return nil, "", fmt.Errorf("resource is required")
 	}
 
-	spec, err := gitinternal.AccessFrom(res.Access)
+	spec, err := accessFrom(res.Access)
 	if err != nil {
 		return nil, "", err
 	}
@@ -82,7 +88,7 @@ func (r *ResourceRepository) download(ctx context.Context, res *descriptor.Resou
 	}
 
 	raw, _ := b.Digest()
-	if err := gitinternal.VerifyDigest(res.Digest, strings.TrimPrefix(raw, "sha256:")); err != nil {
+	if err := verifyDigest(res.Digest, strings.TrimPrefix(raw, "sha256:")); err != nil {
 		return nil, "", errors.Join(err, b.Close())
 	}
 
@@ -105,7 +111,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 	}
 	defer func() { err = errors.Join(err, b.Close()) }()
 	result := res.DeepCopy()
-	spec, err := gitinternal.AccessFrom(result.Access)
+	spec, err := accessFrom(result.Access)
 	if err != nil {
 		return nil, err
 	}
@@ -119,10 +125,51 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 	result.Access = pinned
 	raw, _ := b.Digest()
 	result.Digest = &descriptor.Digest{
-		HashAlgorithm:          gitinternal.HashAlgorithm,
-		NormalisationAlgorithm: gitinternal.NormalisationAlgorithm,
+		HashAlgorithm:          hashAlgorithmSHA256,
+		NormalisationAlgorithm: genericBlobDigestV1,
 		Value:                  strings.TrimPrefix(raw, "sha256:"),
 	}
 
 	return result, nil
+}
+
+func accessFrom(spec runtime.Typed) (*accessv1.Git, error) {
+	if spec == nil || (reflect.ValueOf(spec).Kind() == reflect.Pointer && reflect.ValueOf(spec).IsNil()) {
+		return nil, fmt.Errorf("git access is required")
+	}
+
+	if _, err := access.Scheme.NewObject(spec.GetType()); err != nil {
+		return nil, fmt.Errorf("unsupported git access type: %w", err)
+	}
+
+	var result accessv1.Git
+	if err := access.Scheme.Convert(spec, &result); err != nil {
+		return nil, fmt.Errorf("cannot decode git access: %w", err)
+	}
+
+	if err := result.Validate(); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+func verifyDigest(expected *descriptor.Digest, value string) error {
+	if expected == nil {
+		return nil
+	}
+
+	if expected.HashAlgorithm != "" && !strings.EqualFold(expected.HashAlgorithm, hashAlgorithmSHA256) {
+		return fmt.Errorf("unsupported git hash algorithm %q", expected.HashAlgorithm)
+	}
+
+	if expected.NormalisationAlgorithm != "" && !strings.EqualFold(expected.NormalisationAlgorithm, genericBlobDigestV1) {
+		return fmt.Errorf("unsupported git normalisation algorithm %q", expected.NormalisationAlgorithm)
+	}
+
+	if !strings.EqualFold(expected.Value, value) {
+		return fmt.Errorf("git archive digest mismatch: expected %s, got %s", expected.Value, value)
+	}
+
+	return nil
 }

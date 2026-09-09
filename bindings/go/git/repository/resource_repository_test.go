@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/git/digest"
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -25,10 +24,9 @@ func TestResourceDigestPinning(t *testing.T) {
 
 	dir := t.TempDir()
 	repo := repository.NewResourceRepository(repository.WithTempDir(dir))
-	processor := digest.NewDigestProcessor(repository.WithTempDir(dir))
 	original := &descriptor.Resource{Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.Path, Ref: "refs/heads/main"}}
 	before := original.DeepCopy()
-	pinned, err := processor.ProcessResourceDigest(t.Context(), original, nil)
+	pinned, err := repo.ProcessResourceDigest(t.Context(), original, nil)
 	r.NoError(err)
 	r.Equal(before, original)
 
@@ -48,7 +46,7 @@ func TestResourceDigestPinning(t *testing.T) {
 	r.NoError(err)
 	r.NoError(b.(io.Closer).Close())
 
-	verified, err := processor.ProcessResourceDigest(t.Context(), pinned, nil)
+	verified, err := repo.ProcessResourceDigest(t.Context(), pinned, nil)
 	r.NoError(err)
 	r.Equal(pinned, verified)
 
