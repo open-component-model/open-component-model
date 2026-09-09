@@ -347,7 +347,7 @@ time the system RGD resolves this to a digest-pinned reference (`...@sha256:...`
 what the running pod uses. You will see that digest form in the verification step below.
 
 A freshly pushed ghcr.io package is private. To make it public, go to the `packages` tab in
-your GitHub repository `https://github.com/$GITHUB_USERNAME?tab=packages`, select the package
+your GitHub repository `https://github.com/<your-github-username>?tab=packages`, select the package
 `component-descriptors/ocm.software/ocm-k8s-toolkit/system`, and under "Package settings"
 change the visibility to `public`. This lets the cluster pull it without credentials.
 
@@ -530,7 +530,7 @@ kubectl apply -f instance.yaml
 Wait for it to converge. This usually takes around 30 seconds, mostly the image pull:
 
 ```bash
-kubectl get system,podinfo
+kubectl get system,podinfo -n default
 ```
 
 ```text
@@ -547,7 +547,7 @@ Check that the pod runs the localized image. The reference points at your regist
 digest:
 
 ```bash
-kubectl get pods -l app=podinfo -o jsonpath='{.items[0].spec.containers[0].image}'
+kubectl get pods -n default -l app=podinfo -o jsonpath='{.items[0].spec.containers[0].image}'
 ```
 
 ```text
@@ -557,7 +557,7 @@ ghcr.io/<your-username>/ocm-tutorial/stefanprodan/podinfo@sha256:8fa56908408de98
 Check that your message reached the container:
 
 ```bash
-kubectl get pods -l app=podinfo \
+kubectl get pods -n default -l app=podinfo \
   -o jsonpath='{.items[0].spec.containers[0].env[?(@.name=="PODINFO_UI_MESSAGE")].value}'
 ```
 
@@ -568,7 +568,7 @@ Hello from OCM and kro
 Call the application and see the message in its response:
 
 ```bash
-kubectl port-forward svc/podinfo 9898:80 &
+kubectl port-forward -n default svc/podinfo 9898:80 &
 sleep 2
 curl -s http://localhost:9898/ | grep message
 kill %1   # stops the port-forward (assumes no other background jobs)
@@ -599,16 +599,15 @@ Delete the instance before the RGDs. Deleting an RGD while its instances still e
 strand them on a finalizer.
 
 ```bash
-kubectl delete system system
+kubectl delete system system -n default
 envsubst < bootstrap.yaml | kubectl delete -f -
 ```
 
-kro keeps the `Podinfo` and `System` CRDs after the RGDs are gone. Remove them if you want a
-clean cluster:
-
-```bash
-kubectl delete crd podinfos.kro.run systems.kro.run
-```
+kro keeps the `Podinfo` and `System` CRDs after the RGDs are gone. That's harmless: they carry
+no instances and cost nothing to leave. Deleting a CRD removes every instance of that kind
+cluster-wide, so unless you know this is the only thing on the cluster using those kinds, leave
+them. They disappear along with everything else if you tear down the whole cluster, for example
+with `kind delete cluster`.
 
 ## Troubleshooting
 

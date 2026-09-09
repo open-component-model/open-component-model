@@ -161,7 +161,7 @@ An RGD can define a brand-new schema-based kind (for example, a `Podinfo` or `Bo
 that kind's CRD is covered by kro's own installation role: in [aggregation mode](https://kro.run/docs/advanced/access-control),
 the base role already includes access to `ResourceGraphDefinition`s and `CustomResourceDefinition`s; the
 dev-friendly `unrestricted` mode used in the [setup guide]({{< relref "/docs/getting-started/setup-controller-environment.md" >}})
-grants everything broadly. Neither mode's *base* role covers what happens next: the moment kro (or the RGD)
+grants everything broadly. Aggregation mode's *base* role does not cover what happens next: the moment kro (or the RGD)
 creates an *instance* of that new kind, or any other object the RGD manages, kro's `ServiceAccount` needs RBAC
 for that specific kind, no differently than the OCM controller needs RBAC for the resources its `Deployer`
 applies.

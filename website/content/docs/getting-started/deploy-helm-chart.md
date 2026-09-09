@@ -1,6 +1,6 @@
 ---
 title: "Deploy Helm Charts"
-description: "Manually deploy a Helm chart from an OCM component version with OCM Controllers, kro, and a GitOps deployer (Flux or Argo CD)."
+description: "Deploy a Helm chart from an OCM component version with OCM Controllers, kro, and a GitOps deployer (Flux or Argo CD)."
 icon: "🚀"
 weight: 26
 toc: true
@@ -52,6 +52,7 @@ export OCM_REPO=ghcr.io/$GITHUB_USERNAME/ocm-tutorial
 ```shell
 mkdir /tmp/helm-deploy && cd /tmp/helm-deploy
 ```
+
 {{< /step >}}
 
 {{< step >}}
@@ -105,6 +106,7 @@ COMPONENT                           │ VERSION │ PROVIDER
 ────────────────────────────────────┼─────────┼──────────────
 ocm.software/ocm-k8s-toolkit/simple │ 1.0.0   │ ocm.software
 ```
+
 </details>
 {{< /step >}}
 
@@ -130,6 +132,7 @@ Transferring component versions...
   ✓ transformOcmSoftwareOcmK8sToolkitSimple100Upload [OCIAddComponentVersion]
   [████████████████████████████████████████] 100% 1/1
 ```
+
 </details>
 
 To make your component public in GitHub Container Registry, go to the `packages` tab in your GitHub repository `https://github.com/$GITHUB_USERNAME?tab=packages`,
@@ -189,6 +192,7 @@ ocm get cv $OCM_REPO//ocm.software/ocm-k8s-toolkit/simple:1.0.0
 ─────────────────────────────────────┼─────────┼──────────────
  ocm.software/ocm-k8s-toolkit/simple │ 1.0.0   │ ocm.software
 ```
+
 </details>
 
 {{< /step >}}
@@ -208,6 +212,7 @@ Create `rgd.yaml` with the following content:
 {{< tab "Flux" >}}
 
 {{< details "ResourceGraphDefinition (rgd.yaml)" >}}
+
 ```shell
 cat > rgd.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
@@ -327,12 +332,14 @@ spec:
               message: ${schema.spec.message}
 EOF
 ```
+
 {{< /details >}}
 
 {{< /tab >}}
 {{< tab "Argo CD" >}}
 
 {{< details "ResourceGraphDefinition (rgd.yaml)" >}}
+
 ```shell
 cat > rgd.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
@@ -426,6 +433,7 @@ spec:
               - CreateNamespace=true
 EOF
 ```
+
 {{< /details >}}
 
 {{< callout context="note" title="Argo CD and OCI Helm" icon="outline/info-circle" >}}
@@ -451,6 +459,7 @@ envsubst < rgd.yaml | kubectl apply -f -
 ```text
 resourcegraphdefinition.kro.run/simple created
 ```
+
 </details>
 
 Verify it's active:
@@ -466,6 +475,7 @@ kubectl get rgd
 NAME     APIVERSION   KIND     STATE    AGE
 simple   v1alpha1     Simple   Active   19s
 ```
+
 </details>
 <br>
 
@@ -488,6 +498,7 @@ spec:
   message: "Deployed with OCM!"
 EOF
 ```
+
 {{< /step >}}
 
 {{< step >}}
@@ -503,6 +514,7 @@ kubectl apply -f instance.yaml
 ```text
 simple.kro.run/simple created
 ```
+
 </details>
 
 Wait for the deployment to complete:
@@ -518,6 +530,7 @@ kubectl get simple -w
 NAME     STATE    SYNCED   AGE
 simple   ACTIVE   True     2m
 ```
+
 </details>
 {{< /step >}}
 
@@ -550,6 +563,7 @@ Output:
 ```text
 Deployed with OCM!
 ```
+
 {{< /step >}}
 {{< /steps >}}
 

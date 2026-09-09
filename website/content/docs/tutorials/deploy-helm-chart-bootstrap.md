@@ -400,7 +400,7 @@ EOF
 {{< /tabs >}}
 {{< /details >}}
 
-To make your component public in GitHub Container Registry, go to the `packages` tab in your GitHub repository `https://github.com/$GITHUB_USERNAME?tab=packages`,
+To make your component public in GitHub Container Registry, go to the `packages` tab in your GitHub repository `https://github.com/<your-github-username>?tab=packages`,
 select the package `component-descriptors/ocm.software/ocm-k8s-toolkit/bootstrap`, and under "Package settings" change the visibility to `public`.
 
 Alternatively, if you want to keep your package private, configure
