@@ -620,10 +620,10 @@ func (repo *Repository) getStore(ctx context.Context, component string, version 
 
 // UploadResource uploads a [*descriptor.Resource] to the repository.
 // The target access image reference may carry a tag, a digest, or neither:
-// a tag is applied on upload, otherwise the access is pinned to the pushed
-// digest. Uploads without a tag are logged as a warning because retention
-// of the artifact then depends on the target registry's garbage collection
-// policy.
+// a tag is applied on upload, a digest-only reference is preserved as-is,
+// and a reference carrying neither is pinned to the pushed digest. Uploads
+// without a tag are logged as a warning because retention of the artifact
+// then depends on the target registry's garbage collection policy.
 func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Resource, b blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "upload resource", log.IdentityLogAttr("resource", res.ToIdentity()))

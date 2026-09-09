@@ -2975,6 +2975,25 @@ func TestRepository_UploadResource_DigestOnlyAccess(t *testing.T) {
 		r.ErrorIs(err, errdef.ErrNotFound, "no tag must be present for a digest-only upload")
 	})
 
+	t.Run("digest-only reference is preserved as-is and not tagged", func(t *testing.T) {
+		r := require.New(t)
+		b, manifest := newLayoutBlob(t)
+
+		ref := "ghcr.io/acme/dst-digest@" + manifest.Digest.String()
+		updated, err := repo.UploadResource(t.Context(), newResource(ref), b)
+		r.NoError(err)
+		r.Equal(ref, updated.Access.(*v1.OCIImage).ImageReference,
+			"a digest-only reference must be preserved, not re-pinned")
+
+		dstStore, err := store.StoreForReference(t.Context(), ref)
+		r.NoError(err)
+		resolved, err := dstStore.Resolve(t.Context(), manifest.Digest.String())
+		r.NoError(err)
+		r.Equal(manifest.Digest, resolved.Digest)
+		_, err = dstStore.Resolve(t.Context(), "latest")
+		r.ErrorIs(err, errdef.ErrNotFound, "no tag must be created for a digest-only upload")
+	})
+
 	t.Run("tagged access is applied as a tag and not re-pinned", func(t *testing.T) {
 		r := require.New(t)
 		b, manifest := newLayoutBlob(t)
