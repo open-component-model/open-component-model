@@ -297,7 +297,7 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 		return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
 	}
 	if resolved.Tag == "" {
-		slogcontext.Warn(ctx, "resource access references an image without a tag; the artifact may be garbage collected if the registry only retains tagged manifests, and copies will be uploaded untagged",
+		slogcontext.Warn(ctx, "resource access references an image without a tag; if it is transferred and uploaded as oci image, it will be untagged, retention depends on the target registry's garbage collection policy",
 			"imageReference", typed.ImageReference,
 			log.IdentityLogAttr("resource", res.ToIdentity()))
 	}
