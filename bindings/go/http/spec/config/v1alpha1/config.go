@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"time"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -344,6 +345,55 @@ func (c *Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+// HostKeys returns the [Config.Hosts] keys to try for host, most specific first.
+//
+// An entry keyed by the bare hostname applies to every port on that host, and one
+// keyed "host:port" applies to that port alone and wins where both are present. So
+// the keys are the host as given, then its hostname on its own — which for a host
+// carrying a port is the entry covering all of its ports, and for a bracketed IPv6
+// address is the same host spelled without the brackets.
+//
+// host is a URL host as in [net/url.URL.Host], so an IPv6 address is expected
+// bracketed; an empty host matches no entry.
+func HostKeys(host string) []string {
+	if host == "" {
+		return nil
+	}
+	if name := (&url.URL{Host: host}).Hostname(); name != host {
+		return []string{host, name}
+	}
+	return []string{host}
+}
+
+// ResolveHost returns the configuration in effect for host, with the per-host
+// overrides of the first matching [HostKeys] entry merged onto the global values.
+//
+// The match is a lookup among the [Config.Hosts] keys and nothing else: no name is
+// resolved and no connection is made. A host with no entry of its own is therefore
+// not an error but the ordinary case, and it yields the global values, as an empty
+// or nil Config does.
+func (c *Config) ResolveHost(host string) HostConfig {
+	if c == nil {
+		return HostConfig{}
+	}
+
+	var timeout *TimeoutConfig
+	var tls *TLSConfig
+	var retry *RetryConfig
+	for _, key := range HostKeys(host) {
+		if hc := c.Hosts[key]; hc != nil {
+			timeout, tls, retry = &hc.TimeoutConfig, &hc.TLSConfig, hc.Retry
+			break
+		}
+	}
+
+	return HostConfig{
+		TimeoutConfig: MergeTimeoutConfig(&c.TimeoutConfig, timeout),
+		TLSConfig:     MergeTLSConfig(&c.TLSConfig, tls),
+		Retry:         MergeRetryConfig(c.Retry, retry),
+	}
 }
 
 // ResolveHTTPConfig resolves the HTTP configuration from a central generic V1

@@ -15,18 +15,15 @@ const TRUNCATION_NOTICE = `\n\n---\n\n*Release notes truncated to fit GitHub's $
 // --------------------------
 
 /**
- * Promote changelog from RC: Read RC changelog and rewrite header for the final release.
+ * Read the release notes rendered for the final release and note which RC they
+ * were promoted from.
  * Falls back to a simple "Promoted from …" message if file is missing.
- *
- * The cliff.toml template renders headers as `version | trim_start_matches(pat="v")`,
- * so we apply the same trim when matching and rewriting headers.
  *
  * @param {string} notesFile - Path to the changelog markdown file.
  * @param {string} rcTag - The RC tag being promoted (e.g. "v0.1.0-rc.1").
- * @param {string} newReleaseTag - The new release tag (e.g. "v0.1.0").
  * @returns {string} The release notes body.
  */
-export function prepareReleaseNotes(notesFile, rcTag, newReleaseTag) {
+export function prepareReleaseNotes(notesFile, rcTag) {
   let notes;
   try {
     notes = fs.readFileSync(notesFile, "utf8").trim();
@@ -39,29 +36,7 @@ export function prepareReleaseNotes(notesFile, rcTag, newReleaseTag) {
   }
 
   const today = new Date().toISOString().split("T")[0];
-
-  // Match the cliff.toml header rendering: `version | trim_start_matches(pat="v")`.
-  const trimLeadingV = (s) => s.startsWith("v") ? s.slice(1) : s;
-  const rcHeaderLabel = trimLeadingV(rcTag);
-  const finalHeaderLabel = trimLeadingV(newReleaseTag);
-
-  // The RC header is a single line of the form `## [<label>] - <date>`.
-  // Find it by line scan rather than regex — clearer and avoids escaping
-  // metacharacters in the label.
-  const rcHeaderLine = `## [${rcHeaderLabel}]`;
-  const finalHeaderLine = `## [${finalHeaderLabel}] - promoted from [${rcHeaderLabel}] on ${today}`;
-
-  const lines = notes.split("\n");
-  const headerIdx = lines.findIndex(line => line.startsWith(rcHeaderLine));
-
-  if (headerIdx !== -1) {
-    lines[headerIdx] = finalHeaderLine;
-    notes = lines.join("\n");
-  } else {
-    // No RC header found — prepend a final header instead of failing.
-    // Handles edge cases like manually edited release notes.
-    notes = `${finalHeaderLine}\n\n${notes}`;
-  }
+  notes = `> Promoted from \`${rcTag}\` on ${today}\n\n${notes}`;
 
   // GitHub rejects release bodies > 125000 chars. Truncate with a notice if
   // the content (typical for first-release-on-fresh-stream changelogs) tips over.
@@ -280,7 +255,7 @@ export default async function publishFinalRelease({ github, context, core }) {
   }
 
   const isLatest = setLatest === "true";
-  const notes = prepareReleaseNotes(notesFile, rcTag, newReleaseTag);
+  const notes = prepareReleaseNotes(notesFile, rcTag);
   const release = await getOrCreateRelease(github, context, {
     newReleaseTag,
     newReleaseVersion,

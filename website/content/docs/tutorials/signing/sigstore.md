@@ -47,7 +47,7 @@ flowchart LR
         F[Signed Component Version] --> TUF[("TUF<br/>discover trust roots")]
         TUF --> CERT[Validate Fulcio cert]
         CERT --> PROOF[Verify Rekor inclusion proof]
-        PROOF --> H{Identity matches<br/>verifier spec?}
+        PROOF --> H{Identity matches<br/>verifier config?}
         H -->|Yes| VALID["✓ Trusted"]
         H -->|No| INVALID["✗ Rejected"]
     end
@@ -58,7 +58,7 @@ flowchart LR
 
 On the sign side: you log in at your OIDC provider, Dex relays the federated token to Fulcio, Fulcio issues a short-lived certificate bound to your identity, OCM signs the descriptor digest with the ephemeral key, and Rekor records the entry in its transparency log. The signature, certificate, and inclusion proof are bundled into the component descriptor.
 
-On the verify side: TUF supplies the current trust roots, OCM validates the Fulcio certificate, checks the Rekor inclusion proof, and matches the certificate's identity against the verifier spec. The consumer doesn't need a public key — they declare which OIDC identity they trust, and OCM checks that the signature was made by that identity.
+On the verify side: TUF supplies the current trust roots, OCM validates the Fulcio certificate, checks the Rekor inclusion proof, and matches the certificate's identity against the configured verifier. The consumer doesn't need a public key — they declare which OIDC identity they trust, and OCM checks that the signature was made by that identity.
 
 ## Prerequisites
 
@@ -248,7 +248,7 @@ The exact bundle layout is defined by the [Sigstore protobuf bundle spec](https:
 
 ### Configure the verifier identity
 
-Verification is "do I trust *this identity*?" — not "do I have *this public key*?" Tell OCM which identity you trust by writing a verifier spec.
+Verification is "do I trust *this identity*?" — not "do I have *this public key*?" Tell OCM which identity you trust by adding a `verifier` to the same `.ocmconfig`.
 
 Two values matter:
 
@@ -257,13 +257,15 @@ Two values matter:
 
 You must set one identity field and one issuer field — exact or regex.
 
-Create `sigstore-verify.yaml`:
+Append it to `.ocmconfig`:
 
 ```bash
-cat > sigstore-verify.yaml << 'EOF'
-type: SigstoreVerificationConfiguration/v1alpha1
-certificateOIDCIssuer: https://accounts.google.com
-certificateIdentity: jane.doe@example.com
+cat >> .ocmconfig << 'EOF'
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuer: https://accounts.google.com
+    certificateIdentity: jane.doe@example.com
 EOF
 ```
 
@@ -284,18 +286,20 @@ Public Sigstore uses Dex (`oauth2.sigstore.dev`) as a federation gateway, but th
 The verifier's `certificateOIDCIssuer` field is **not** the same thing as the OCM signature `issuer` field used by the RSA/PEM signing handlers. They are independent concepts that happen to share a name:
 
 - **OCM signature issuer** — a descriptor-level field on the signature, carrying an [RFC 2253](https://datatracker.ietf.org/doc/html/rfc2253) Distinguished Name (e.g. `CN=Signer,O=Acme,C=US`). It is set on the signing side by the RSA/PEM handlers and inspected by their verifiers. Sigstore signatures don't use it.
-- **Sigstore OIDC issuer** — a URL recorded as an [extension on the Fulcio certificate](https://github.com/sigstore/fulcio/blob/main/docs/oid-info.md) inside the Sigstore bundle, identifying which OIDC provider authenticated the signer. The verifier spec's `certificateOIDCIssuer` is matched against this extension.
+- **Sigstore OIDC issuer** — a URL recorded as an [extension on the Fulcio certificate](https://github.com/sigstore/fulcio/blob/main/docs/oid-info.md) inside the Sigstore bundle, identifying which OIDC provider authenticated the signer. The verifier's `certificateOIDCIssuer` is matched against this extension.
 
-When you write a verifier spec for Sigstore, you are configuring the **Sigstore OIDC issuer** check only.
+When you configure a verifier for Sigstore, you are configuring the **Sigstore OIDC issuer** check only.
 
 #### Trust a pattern of identities, not a single email
 
 `certificateIdentity` and `certificateOIDCIssuer` require an exact match. For team-wide trust — "anyone at my org who logged in via our IdP" — use the regex variants `certificateIdentityRegexp` and `certificateOIDCIssuerRegexp` instead. Realistic example: trust any signer with an `@example.com` email who logged in via Google:
 
 ```yaml
-type: SigstoreVerificationConfiguration/v1alpha1
-certificateOIDCIssuer: https://accounts.google.com
-certificateIdentityRegexp: ^[^@]+@example\.com$
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuer: https://accounts.google.com
+    certificateIdentityRegexp: ^[^@]+@example\.com$
 ```
 
 The exact and regex variants are mutually exclusive per field — set `certificateIdentity` *or* `certificateIdentityRegexp`, not both. The same applies to `certificateOIDCIssuer` / `certificateOIDCIssuerRegexp`. Anchor your patterns (`^...$`) and escape literal dots (`\.`) — an unanchored `.*@example\.com` would also match `attacker@example.com.evil.io`.
@@ -306,11 +310,11 @@ The exact and regex variants are mutually exclusive per field — set `certifica
 
 ### Verify the signature
 
-Run verify with the verifier spec:
+Run verify. The Sigstore handler and the identity constraints both come from `.ocmconfig`:
 
 ```bash
 ocm verify cv \
-  --verifier-spec ./sigstore-verify.yaml \
+  --config ./.ocmconfig \
   ./transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
@@ -328,7 +332,7 @@ time=2026-05-20T15:35:18.951+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCES
 > ✅ **Success!** ✅
 > The component version is verified as authentic and signed by the identity you trusted.
 
-What just ran: OCM extracted the Sigstore bundle from the descriptor, validated the Fulcio certificate against TUF-discovered trust roots, checked the Rekor inclusion proof, and finally compared the certificate's identity against your verifier spec. None of those steps required a public key from the signer — the certificate-bound identity is the trust anchor.
+What just ran: OCM extracted the Sigstore bundle from the descriptor, validated the Fulcio certificate against TUF-discovered trust roots, checked the Rekor inclusion proof, and finally compared the certificate's identity against your configured verifier. None of those steps required a public key from the signer — the certificate-bound identity is the trust anchor.
 
 {{< /step >}}
 

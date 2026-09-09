@@ -8,7 +8,7 @@
   "properties": {
     "componentNamePattern": {
       "type": "string",
-      "description": "ComponentNamePattern specifies a glob pattern for matching component names.\nIt limits the usage of the repository to resolve only components with names\nthat match the given pattern.\nExamples:\n- \"ocm.software/core/*\" (matches any component in the core namespace)\n- \"*.software/*/test\" (matches test components in any software namespace)\n- \"ocm.software/core/[tc]est\" (matches \"test\" or \"cest\" in core namespace)"
+      "description": "ComponentNamePattern specifies a glob pattern for matching component names.\nIt limits the usage of the repository to resolve only components with names\nthat match the given pattern.\nExamples:\n- \"ocm.software/core/*\" (matches any component in the core namespace)\n- \"*.software/*/test\" (matches test components in any software namespace)\n- \"ocm.software/core/[tc]est\" (matches \"test\" or \"cest\" in core namespace)\n\nAn empty pattern matches any component name and is equivalent to \"*\"."
     },
     "repository": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",

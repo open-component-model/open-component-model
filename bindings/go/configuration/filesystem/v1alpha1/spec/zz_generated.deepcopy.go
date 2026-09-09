@@ -13,6 +13,16 @@ import (
 func (in *Config) DeepCopyInto(out *Config) {
 	*out = *in
 	out.Type = in.Type
+	if in.TempFolder != nil {
+		in, out := &in.TempFolder, &out.TempFolder
+		*out = new(string)
+		**out = **in
+	}
+	if in.WorkingDirectory != nil {
+		in, out := &in.WorkingDirectory, &out.WorkingDirectory
+		*out = new(string)
+		**out = **in
+	}
 	return
 }
 

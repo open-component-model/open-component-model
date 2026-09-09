@@ -237,7 +237,7 @@ ocm verify cv ./transport-archive//github.com/acme.org/helloworld:1.0.0
 <summary>Expected output</summary>
 
 ```text
-time=2026-03-12T22:06:37.357+01:00 level=INFO msg="no verifier specification file given, using default RSASSA-PSS"
+time=2026-03-12T22:06:37.357+01:00 level=INFO msg="no verifier configured, using default RSASSA-PSS" signature=default
 time=2026-03-12T22:06:37.357+01:00 level=INFO msg="verifying signature" name=default
 time=2026-03-12T22:06:37.358+01:00 level=INFO msg="signature verification completed" name=default duration=798.25µs
 time=2026-03-12T22:06:37.358+01:00 level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"

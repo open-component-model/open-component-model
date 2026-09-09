@@ -128,7 +128,7 @@ func TestDownloadResource(t *testing.T) {
 	t.Run("downloads chart using configured temp folder", func(t *testing.T) {
 		tempDir := t.TempDir()
 		repoWithConfig := NewResourceRepository(&filesystemv1alpha1.Config{
-			TempFolder: tempDir,
+			TempFolder: &tempDir,
 		})
 
 		res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")

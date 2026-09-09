@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/gobwas/glob"
@@ -36,13 +37,18 @@ type SpecProvider struct {
 
 // NewSpecProvider creates a new SpecProvider with a list of resolvers.
 // The resolvers are used to match component names to repository specifications.
+// A resolver with an empty component name pattern matches any component name.
 // It returns an error if any resolver has an invalid glob pattern or version constraint.
 func NewSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver) (*SpecProvider, error) {
 	compiled := make([]compiledResolver, 0, len(resolvers))
 	for i, r := range resolvers {
-		g, err := glob.Compile(r.ComponentNamePattern)
+		pattern := strings.TrimSpace(r.ComponentNamePattern)
+		if pattern == "" {
+			pattern = "*"
+		}
+		g, err := glob.Compile(pattern)
 		if err != nil {
-			return nil, fmt.Errorf("failed to compile glob pattern %q in resolver index %d: %w", r.ComponentNamePattern, i, err)
+			return nil, fmt.Errorf("failed to compile glob pattern %q in resolver index %d: %w", pattern, i, err)
 		}
 
 		var constraint *semver.Constraints
@@ -66,8 +72,10 @@ func NewSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver) (*Sp
 }
 
 // GetRepositorySpec returns the repository specification for the given component identity.
-// It matches the component name against the configured resolvers and returns
-// the first matching repository specification.
+// It matches the component name against the configured resolvers in list order and
+// returns the repository specification of the first match. Resolvers after the first
+// match are not consulted, so there is no fallback to another repository if the
+// component version does not exist in the matched repository.
 // If no matching resolver is found, an error is returned.
 // componentIdentity must contain the key [descruntime.IdentityAttributeName] with the
 // component name (e.g. "ocm.software/core/test") and may optionally contain

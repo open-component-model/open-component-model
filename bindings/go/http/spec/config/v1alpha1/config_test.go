@@ -873,3 +873,97 @@ func TestMerge_TLS(t *testing.T) {
 		assert.False(t, *merged.InsecureSkipVerify)
 	})
 }
+
+func TestHostKeys(t *testing.T) {
+	tests := []struct {
+		name   string
+		host   string
+		expect []string
+	}{
+		{name: "empty host matches nothing", host: "", expect: nil},
+		{name: "a host without a port has only its own key", host: "example.com", expect: []string{"example.com"}},
+		{name: "a host with a port falls back to the entry covering all its ports", host: "example.com:9000", expect: []string{"example.com:9000", "example.com"}},
+		{name: "a bracketed ipv6 host falls back to its unbracketed spelling", host: "[::1]:9000", expect: []string{"[::1]:9000", "::1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expect, httpspec.HostKeys(tt.host))
+		})
+	}
+}
+
+func TestConfig_ResolveHost(t *testing.T) {
+	five, two, seven := 5, 2, 7
+	tr := true
+	cfg := &httpspec.Config{
+		TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(30 * time.Second)},
+		Retry:         &httpspec.RetryConfig{MaxRetries: &five, MinWait: httpspec.NewTimeout(200 * time.Millisecond)},
+		Hosts: map[string]*httpspec.HostConfig{
+			"example.com": {
+				Retry: &httpspec.RetryConfig{MaxRetries: &two},
+			},
+			"example.com:9000": {
+				TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(time.Minute)},
+				TLSConfig:     httpspec.TLSConfig{InsecureSkipVerify: &tr},
+				Retry:         &httpspec.RetryConfig{MaxRetries: &seven},
+			},
+			"nil-entry.com": nil,
+		},
+	}
+
+	t.Run("nil config yields zero value", func(t *testing.T) {
+		var nilCfg *httpspec.Config
+		assert.Equal(t, httpspec.HostConfig{}, nilCfg.ResolveHost("example.com"))
+	})
+
+	t.Run("a host with no entry of its own yields the global values", func(t *testing.T) {
+		resolved := cfg.ResolveHost("other.com")
+		assert.Equal(t, httpspec.Timeout(30*time.Second), *resolved.Timeout)
+		require.NotNil(t, resolved.Retry)
+		assert.Equal(t, 5, *resolved.Retry.MaxRetries)
+		assert.Nil(t, resolved.InsecureSkipVerify)
+	})
+
+	t.Run("empty host yields global values", func(t *testing.T) {
+		resolved := cfg.ResolveHost("")
+		require.NotNil(t, resolved.Retry)
+		assert.Equal(t, 5, *resolved.Retry.MaxRetries)
+	})
+
+	t.Run("nil host entry yields global values", func(t *testing.T) {
+		resolved := cfg.ResolveHost("nil-entry.com")
+		require.NotNil(t, resolved.Retry)
+		assert.Equal(t, 5, *resolved.Retry.MaxRetries)
+	})
+
+	t.Run("host entry merges onto global values", func(t *testing.T) {
+		resolved := cfg.ResolveHost("example.com")
+		require.NotNil(t, resolved.Retry)
+		assert.Equal(t, 2, *resolved.Retry.MaxRetries, "host overrides global")
+		assert.Equal(t, httpspec.Timeout(200*time.Millisecond), *resolved.Retry.MinWait, "global preserved where host is nil")
+		assert.Equal(t, httpspec.Timeout(30*time.Second), *resolved.Timeout, "global preserved where host is nil")
+	})
+
+	// Which of the two entries wins is [httpspec.HostKeys]'s business and is pinned by
+	// TestHostKeys; what matters here is that every field of the winning one is merged.
+	t.Run("the winning entry's fields merge onto the globals", func(t *testing.T) {
+		resolved := cfg.ResolveHost("example.com:9000")
+		require.NotNil(t, resolved.Retry)
+		assert.Equal(t, 7, *resolved.Retry.MaxRetries)
+		assert.Equal(t, httpspec.Timeout(time.Minute), *resolved.Timeout)
+		require.NotNil(t, resolved.InsecureSkipVerify)
+		assert.True(t, *resolved.InsecureSkipVerify)
+	})
+
+	t.Run("bare hostname entry applies to a port-carrying host", func(t *testing.T) {
+		resolved := cfg.ResolveHost("example.com:1234")
+		require.NotNil(t, resolved.Retry)
+		assert.Equal(t, 2, *resolved.Retry.MaxRetries)
+	})
+
+	t.Run("does not mutate the config", func(t *testing.T) {
+		_ = cfg.ResolveHost("example.com:9000")
+		assert.Equal(t, 5, *cfg.Retry.MaxRetries)
+		assert.Equal(t, httpspec.Timeout(30*time.Second), *cfg.Timeout)
+	})
+}

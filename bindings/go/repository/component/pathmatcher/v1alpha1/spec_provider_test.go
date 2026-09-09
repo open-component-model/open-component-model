@@ -156,6 +156,49 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			want: rawRepo1,
 			err:  assert.NoError,
 		},
+		{
+			name:      "empty pattern matches any component",
+			component: "ocm.software/core/test",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository: rawRepo1,
+				},
+			},
+			want: rawRepo1,
+			err:  assert.NoError,
+		},
+		{
+			name:      "empty pattern acts as catch-all after a specific pattern",
+			component: "ocm.software/core/test",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           rawRepo1,
+					ComponentNamePattern: "ocm.software/other/*",
+				},
+				{
+					Repository: rawRepo2,
+				},
+			},
+			want: rawRepo2,
+			err:  assert.NoError,
+		},
+		{
+			name:      "empty pattern still honors the version constraint",
+			component: "my-org/comp",
+			version:   "1.5.0",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:        rawRepo1,
+					VersionConstraint: ">=2.0.0",
+				},
+				{
+					Repository:        rawRepo2,
+					VersionConstraint: ">=1.0.0, <2.0.0",
+				},
+			},
+			want: rawRepo2,
+			err:  assert.NoError,
+		},
 		// version constraint tests
 		{
 			name:      "no constraint matches any version",

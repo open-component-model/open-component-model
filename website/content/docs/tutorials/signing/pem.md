@@ -263,8 +263,9 @@ ocm verify cv \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
-No `--verifier-spec` is needed -- OCM infers the PEM encoding from the `application/x-pem-file`
-media type stored alongside the signature and selects the correct handler automatically.
+No `verifier` entry is needed in `.ocmconfig` -- OCM infers the PEM encoding from the
+`application/x-pem-file` media type stored alongside the signature and selects the correct
+handler automatically.
 
 <details>
 <summary>Expected output</summary>
@@ -478,8 +479,9 @@ ocm verify cv \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
-No `--verifier-spec` is needed -- OCM infers the PEM encoding from the `application/x-pem-file`
-media type stored alongside the signature and selects the correct handler automatically.
+No `verifier` entry is needed in `.ocmconfig` -- OCM infers the PEM encoding from the
+`application/x-pem-file` media type stored alongside the signature and selects the correct
+handler automatically.
 
 <details>
 <summary>Expected output</summary>
