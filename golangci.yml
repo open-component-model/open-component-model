@@ -476,6 +476,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/blob"
             - "ocm.software/open-component-model/bindings/go/configuration"
             - "ocm.software/open-component-model/bindings/go/credentials"
+            - "ocm.software/open-component-model/bindings/go/cel"
             - "ocm.software/open-component-model/bindings/go/ctf"
             - "ocm.software/open-component-model/bindings/go/dag"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -401,6 +402,11 @@ func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID s
 // each modified resource is referenced via its Add transformation's output, and unmodified
 // resources reference the original environment data.
 func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTransformIDs map[int]string) any {
+	// NewDeclType escapes property names, to keep names matching we need to escape the id
+	// as well. Errors in `Escape` can be ignored because the id has already been validated
+	// to only contain allowed characters at this point
+	id, _ = jsonschema.Escape(id)
+
 	if len(resourceTransformIDs) == 0 {
 		return fmt.Sprintf("${environment.%s}", id)
 	}

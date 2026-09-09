@@ -85,7 +85,7 @@ func TestIdentityToTransformationID(t *testing.T) {
 		{
 			name:     "single key",
 			identity: runtime.Identity{"name": "mycomponent"},
-			want:     "transformMycomponent",
+			want:     "transform_slash_mycomponent",
 		},
 		{
 			name: "name and version sorted by key",
@@ -94,14 +94,14 @@ func TestIdentityToTransformationID(t *testing.T) {
 				descriptor.IdentityAttributeVersion: "1.0.0",
 			},
 			// keys sorted: "name" < "version", so name values come first
-			want: "transformOcmSoftwareTest100",
+			want: "transform_slash_ocm_dot_software_slash_test_slash_1_dot_0_dot_0",
 		},
 		{
 			name: "with dots and slashes",
 			identity: runtime.Identity{
 				"name": "ocm.software/my-component",
 			},
-			want: "transformOcmSoftwareMyComponent",
+			want: "transform_slash_ocm_dot_software_slash_my_dash_component",
 		},
 		{
 			name: "version with semver build metadata",
@@ -109,7 +109,7 @@ func TestIdentityToTransformationID(t *testing.T) {
 				descriptor.IdentityAttributeName:    "operator-image",
 				descriptor.IdentityAttributeVersion: "0.2.1+a0b6f97",
 			},
-			want: "transformOperatorImage021A0b6f97",
+			want: "transform_slash_operator_dash_image_slash_0_dot_2_dot_1_plus_a0b6f97",
 		},
 		{
 			name: "version with semver pre-release",
@@ -117,7 +117,7 @@ func TestIdentityToTransformationID(t *testing.T) {
 				descriptor.IdentityAttributeName:    "operator-image",
 				descriptor.IdentityAttributeVersion: "0.2.1-rc.1",
 			},
-			want: "transformOperatorImage021Rc1",
+			want: "transform_slash_operator_dash_image_slash_0_dot_2_dot_1_dash_rc_dot_1",
 		},
 		{
 			name:     "empty identity",
