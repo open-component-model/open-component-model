@@ -3,7 +3,6 @@ package download
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"io"
 	"os"
 	"path/filepath"
@@ -42,11 +41,7 @@ func TestArchivePreservesSymlinksAndMetadata(t *testing.T) {
 	r.NoError(err)
 
 	defer b.Close()
-	gz, err := gzip.NewReader(bytes.NewReader(readBlob(t, b)))
-	r.NoError(err)
-
-	defer gz.Close()
-	tr := tar.NewReader(gz)
+	tr := tar.NewReader(bytes.NewReader(readBlob(t, b)))
 	names := []string{}
 	for {
 		h, err := tr.Next()
@@ -62,10 +57,10 @@ func TestArchivePreservesSymlinksAndMetadata(t *testing.T) {
 		expected, err := tar.FileInfoHeader(info, "")
 		r.NoError(err)
 		r.Equal(expected.Mode, h.Mode, h.Name)
-		r.Equal(expected.Uid, h.Uid, h.Name)
-		r.Equal(expected.Gid, h.Gid, h.Name)
-		r.Equal(expected.Uname, h.Uname, h.Name)
-		r.Equal(expected.Gname, h.Gname, h.Name)
+		r.Zero(h.Uid, h.Name)
+		r.Zero(h.Gid, h.Name)
+		r.Empty(h.Uname, h.Name)
+		r.Empty(h.Gname, h.Name)
 		r.Equal(time.Unix(0, 0).UTC(), h.ModTime.UTC(), h.Name)
 
 		data, err := io.ReadAll(tr)
