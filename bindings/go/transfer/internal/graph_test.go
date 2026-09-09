@@ -21,6 +21,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/transform/graph"
+	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
@@ -159,6 +161,26 @@ func githubResource(name, version, repoURL, commit string) descriptor.Resource {
 	}
 }
 
+func requireUniqueTransformationIDs(r *require.Assertions, tgd *transformv1alpha1.TransformationGraphDefinition) {
+	ids := make([]string, 0, len(tgd.Transformations))
+	for _, tr := range tgd.Transformations {
+		ids = append(ids, tr.ID)
+	}
+	unique := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		unique[id] = struct{}{}
+	}
+	r.Len(unique, len(ids), "transformation IDs must be unique, got %v", ids)
+}
+
+func requireValidTransformationIDs(r *require.Assertions, tgd *transformv1alpha1.TransformationGraphDefinition) {
+	transformations := make(map[string]graph.Transformation, len(tgd.Transformations))
+	for _, tr := range tgd.Transformations {
+		transformations[tr.ID] = graph.Transformation{GenericTransformation: tr}
+	}
+	r.NoError(builder.ValidateTransformations(transformations))
+}
+
 // --- BuildGraphDefinition tests ---
 
 func TestBuildGraphDefinition_NoResources(t *testing.T) {
@@ -216,12 +238,9 @@ func TestBuildGraphDefinition_CollidingResourceVersionsGetUniqueIDs(t *testing.T
 		ids = append(ids, tr.ID)
 	}
 	r.Contains(ids, "transformOcmSoftwareTest100GettransformOperatorImage021Meta")
-	r.Contains(ids, "transformOcmSoftwareTest100GettransformOperatorImage021MetaR1")
-	unique := make(map[string]struct{}, len(ids))
-	for _, id := range ids {
-		unique[id] = struct{}{}
-	}
-	r.Len(unique, len(ids), "transformation IDs must be unique, got %v", ids)
+	r.Contains(ids, "transformOcmSoftwareTest100GettransformOperatorImage021MetaX1")
+	requireUniqueTransformationIDs(r, tgd)
+	requireValidTransformationIDs(r, tgd)
 }
 
 // TestBuildGraphDefinition_CollidingComponentVersionsGetUniqueIDs is the component-level
@@ -235,10 +254,10 @@ func TestBuildGraphDefinition_CollidingComponentVersionsGetUniqueIDs(t *testing.
 		preVersion   = "1.0.0-meta"
 	)
 	baseUpload := "transformOcmSoftwareTest100MetaUpload"
-	suffixedUpload := "transformOcmSoftwareTest100MetaR1Upload"
+	suffixedUpload := "transformOcmSoftwareTest100MetaX1Upload"
 
 	// expectedTGD asserts the collision is resolved deterministically: one version keeps the
-	// bare base ID, the other gets the R1 suffix, and neither upload nor environment entry is lost.
+	// bare base ID, the other gets the X1 suffix, and neither upload nor environment entry is lost.
 	expectedTGD := func(r *require.Assertions, tgd *transformv1alpha1.TransformationGraphDefinition) {
 		ids := make([]string, 0, len(tgd.Transformations))
 		for _, tr := range tgd.Transformations {
@@ -246,11 +265,8 @@ func TestBuildGraphDefinition_CollidingComponentVersionsGetUniqueIDs(t *testing.
 		}
 		r.Contains(ids, baseUpload)
 		r.Contains(ids, suffixedUpload)
-		unique := make(map[string]struct{}, len(ids))
-		for _, id := range ids {
-			unique[id] = struct{}{}
-		}
-		r.Len(unique, len(ids), "transformation IDs must be unique, got %v", ids)
+		requireUniqueTransformationIDs(r, tgd)
+		requireValidTransformationIDs(r, tgd)
 		r.Len(tgd.Environment.Data, 2, "each component version needs its own environment entry")
 	}
 
@@ -332,13 +348,66 @@ func TestBuildGraphDefinition_CollidingComponentVersionsGetUniqueIDs(t *testing.
 			ids = append(ids, tr.ID)
 		}
 		r.Contains(ids, "transformOcmSoftwareChild100MetaUpload")
-		r.Contains(ids, "transformOcmSoftwareChild100MetaR1Upload")
-		unique := make(map[string]struct{}, len(ids))
-		for _, id := range ids {
-			unique[id] = struct{}{}
-		}
-		r.Len(unique, len(ids), "transformation IDs must be unique, got %v", ids)
+		r.Contains(ids, "transformOcmSoftwareChild100MetaX1Upload")
+		requireUniqueTransformationIDs(r, tgd)
+		requireValidTransformationIDs(r, tgd)
 	})
+}
+
+// TestBuildGraphDefinition_TargetSuffixCollisionGetsUniqueIDs covers the interplay of the
+// per-target T suffix with identity folding: a component with two targets gets the IDs
+// base+"T0" and base+"T1", and a second component whose identity natively folds onto
+// base+"T0" must not reuse that ID. The component-level allocator also hands out the
+// target-suffixed IDs, so the second component receives a X suffix instead.
+func TestBuildGraphDefinition_TargetSuffixCollisionGetsUniqueIDs(t *testing.T) {
+	r := require.New(t)
+
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	target1 := testOCIRepo("ghcr.io/target1")
+	target2 := testOCIRepo("ghcr.io/target2")
+
+	// "1.0.0-t0" folds to the same base ID as "1.0.0" with target suffix T0.
+	descPosix := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{localBlobResource("blob", "1.0.0")}, nil)
+	descPre := testDescriptor("ocm.software/test", "1.0.0-t0",
+		[]descriptor.Resource{localBlobResource("blob", "1.0.0")}, nil)
+
+	resolver := testMultiResolver(map[string]struct {
+		spec runtime.Typed
+		desc *descriptor.Descriptor
+	}{
+		"ocm.software/test:1.0.0":    {spec: sourceRepo, desc: descPosix},
+		"ocm.software/test:1.0.0-t0": {spec: sourceRepo, desc: descPre},
+	})
+
+	roots := map[string]TransferRoot{
+		"ocm.software/test:1.0.0": {
+			RootComponentKey: "ocm.software/test:1.0.0",
+			Targets:          []runtime.Typed{target1, target2},
+			SourceResolver:   resolver,
+		},
+		"ocm.software/test:1.0.0-t0": {
+			RootComponentKey: "ocm.software/test:1.0.0-t0",
+			Targets:          []runtime.Typed{target1},
+			SourceResolver:   resolver,
+		},
+	}
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources})
+	r.NoError(err)
+
+	// vertices sort "1.0.0" before "1.0.0-t0", so the plain version keeps the T
+	// suffixed IDs and the pre-release gets the X marker.
+	ids := make([]string, 0, len(tgd.Transformations))
+	for _, tr := range tgd.Transformations {
+		ids = append(ids, tr.ID)
+	}
+	r.Contains(ids, "transformOcmSoftwareTest100T0Upload")
+	r.Contains(ids, "transformOcmSoftwareTest100T1Upload")
+	r.Contains(ids, "transformOcmSoftwareTest100T0X1Upload")
+	requireUniqueTransformationIDs(r, tgd)
+	requireValidTransformationIDs(r, tgd)
+	r.Len(tgd.Environment.Data, 2, "each component needs its own environment entry")
 }
 
 func TestBuildGraphDefinition_OCIImageSkippedInDefaultMode(t *testing.T) {

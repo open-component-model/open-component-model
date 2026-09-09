@@ -175,6 +175,9 @@ func fillGraphDefinitionWithPrefetchedComponents(
 
 	var allFileRefs []string
 
+	// allocate component base IDs and target-suffixed IDs from one allocator so that a
+	// collision between a target suffix and an identity-folded base ID (for example
+	// "a" with two targets vs. component "a-t0") is disambiguated as well.
 	componentAllocator := newTransformationIDAllocator()
 	vertexKeys := slices.Sorted(maps.Keys(d.Vertices))
 
@@ -207,7 +210,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 		for targetIdx, target := range targets {
 			id := baseID
 			if len(targets) > 1 {
-				id = fmt.Sprintf("%sT%d", baseID, targetIdx)
+				id = componentAllocator.allocate(fmt.Sprintf("%sT%d", baseID, targetIdx))
 			}
 
 			slog.DebugContext(ctx, "generating transformations for target",
