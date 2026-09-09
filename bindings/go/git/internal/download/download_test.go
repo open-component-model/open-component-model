@@ -3,8 +3,9 @@ package download
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -49,7 +51,7 @@ func TestDownloadRevisions(t *testing.T) {
 
 			mt, ok := b.MediaType()
 			r.True(ok)
-			r.Equal("application/x-tgz", mt)
+			r.Equal("application/x-tar", mt)
 
 			data := readBlob(t, b)
 			r.Equal(data, readBlob(t, b))
@@ -61,10 +63,7 @@ func TestDownloadRevisions(t *testing.T) {
 			files, err := os.ReadDir(dir)
 			r.NoError(err)
 			r.Len(files, 1)
-			gz, err := gzip.NewReader(bytes.NewReader(data))
-			r.NoError(err)
-
-			tr := tar.NewReader(gz)
+			tr := tar.NewReader(bytes.NewReader(data))
 			names := []string{}
 			for {
 				h, err := tr.Next()
@@ -82,7 +81,6 @@ func TestDownloadRevisions(t *testing.T) {
 					r.Equal("docs/guide.txt", h.Linkname)
 				}
 			}
-			r.NoError(gz.Close())
 			r.Equal([]string{"README.md", "docs", "docs/guide.txt", "link", "run.sh"}, names)
 			r.NoError(b.Close())
 			r.NoError(b.Close())
@@ -186,11 +184,7 @@ func TestSubmoduleArchive(t *testing.T) {
 	r.NoError(err)
 
 	defer b.Close()
-	gz, err := gzip.NewReader(bytes.NewReader(readBlob(t, b)))
-	r.NoError(err)
-
-	defer gz.Close()
-	tr := tar.NewReader(gz)
+	tr := tar.NewReader(bytes.NewReader(readBlob(t, b)))
 	h, err := tr.Next()
 	r.NoError(err)
 	r.Equal("vendor", h.Name)
@@ -257,4 +251,18 @@ func TestPinnedArchiveContainsSelectedCommit(t *testing.T) {
 
 	defer actual.Close()
 	r.Equal(readBlob(t, expected), readBlob(t, actual))
+}
+
+func TestTransportErrorMessages(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{git.ErrRepositoryNotExists, "fetch: repository not found"},
+		{fmt.Errorf("dial: %w", transport.ErrAuthenticationRequired), "fetch: authentication required"},
+		{transport.ErrAuthorizationFailed, "fetch: authorization failed"},
+		{errors.New("https://user:token@example.invalid rejected"), "fetch: transport failed; check repository access and server trust"},
+	} {
+		require.EqualError(t, transportError(t.Context(), "fetch", tc.err), tc.want)
+	}
 }

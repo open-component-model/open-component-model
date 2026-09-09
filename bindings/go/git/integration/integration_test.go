@@ -3,7 +3,6 @@ package integration_test
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"encoding/pem"
 	"io"
 	"net/http/cgi"
@@ -46,9 +45,11 @@ func Test_Integration_Git(t *testing.T) {
 	tempDir := t.TempDir()
 	opts := []repository.Option{repository.WithCABundle(ca), repository.WithTempDir(tempDir)}
 	repo := repository.NewResourceRepository(opts...)
-	resourceFor := func(ref, commit string) *descriptor.Resource {
+	resourceFor := func(t *testing.T, ref, commit string) *descriptor.Resource {
+		t.Helper()
+
 		raw := &runtime.Raw{}
-		r.NoError(access.Scheme.Convert(&accessv1.Git{
+		require.NoError(t, access.Scheme.Convert(&accessv1.Git{
 			Type:       runtime.NewVersionedType("git", "v1alpha1"),
 			Repository: url,
 			Ref:        ref,
@@ -72,7 +73,7 @@ func Test_Integration_Git(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				r := require.New(t)
 
-				b, err := repo.DownloadResource(t.Context(), resourceFor(tc.ref, tc.commit), nil)
+				b, err := repo.DownloadResource(t.Context(), resourceFor(t, tc.ref, tc.commit), nil)
 				r.NoError(err)
 				assertArchive(t, b, tc.content)
 			})
@@ -87,7 +88,7 @@ func Test_Integration_Git(t *testing.T) {
 			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.Second)))
 		})
 
-		original := resourceFor("refs/heads/main", "")
+		original := resourceFor(t, "refs/heads/main", "")
 		before := original.DeepCopy()
 		pinned, err := repo.ProcessResourceDigest(t.Context(), original, nil)
 		r.NoError(err)
@@ -127,11 +128,11 @@ func Test_Integration_Git(t *testing.T) {
 	t.Run("missing revision and output limit", func(t *testing.T) {
 		r := require.New(t)
 
-		_, err := repo.DownloadResource(t.Context(), resourceFor("missing-ref", ""), nil)
+		_, err := repo.DownloadResource(t.Context(), resourceFor(t, "missing-ref", ""), nil)
 		r.Error(err)
 
 		limited := repository.NewResourceRepository(append(opts, repository.WithMaxDownloadSize(1))...)
-		_, err = limited.DownloadResource(t.Context(), resourceFor("main", ""), nil)
+		_, err = limited.DownloadResource(t.Context(), resourceFor(t, "main", ""), nil)
 		r.ErrorContains(err, "maximum download size")
 	})
 
@@ -155,20 +156,14 @@ func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme strin
 
 	mediaType, ok := content.(blob.MediaTypeAware).MediaType()
 	r.True(ok)
-	r.Equal("application/x-tgz", mediaType)
+	r.Equal("application/x-tar", mediaType)
 	r.Equal(int64(len(data)), content.(blob.SizeAware).Size())
 
 	checksum, ok := content.(blob.DigestAware).Digest()
 	r.True(ok)
 	r.Equal(digest.FromBytes(data).String(), checksum)
 
-	gz, err := gzip.NewReader(bytes.NewReader(data))
-	r.NoError(err)
-
-	defer func(gz *gzip.Reader) {
-		_ = gz.Close()
-	}(gz)
-	tr := tar.NewReader(gz)
+	tr := tar.NewReader(bytes.NewReader(data))
 	var names []string
 	for {
 		header, err := tr.Next()
