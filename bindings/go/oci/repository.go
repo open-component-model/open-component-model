@@ -1078,9 +1078,10 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			return nil, fmt.Errorf("failed to resolve reference %q: %w", typed.ImageReference, err)
 		}
 
-		// Referrers travel with their subject, so the layout can hold several
-		// manifests; the ref name is what marks the requested one.
-		tags := []string{typed.ImageReference}
+		var tags []string
+		if resolved.Tag != "" {
+			tags = []string{typed.ImageReference}
+		}
 		graph, ok := src.(content.ReadOnlyGraphStorage)
 		if !ok {
 			return nil, fmt.Errorf("store %T does not support predecessor walks", src)
