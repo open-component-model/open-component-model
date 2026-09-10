@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -18,6 +20,7 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	accessv2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
@@ -48,7 +51,23 @@ func Test_Integration_S3(t *testing.T) {
 		SecretAccessKey: container.Password,
 	}
 	tempDir := t.TempDir()
-	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
+	fsConfig := &filesystemv1alpha1.Config{TempFolder: &tempDir}
+	// A real http configuration: the retry section drives the SDK's attempt count, and
+	// the per-host entry routes MinIO requests through the host-specific transport.
+	httpConfig := &httpv1alpha1.Config{
+		TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: httpv1alpha1.NewTimeout(30 * time.Second)},
+		Retry: &httpv1alpha1.RetryConfig{
+			MaxRetries: new(2),
+			MinWait:    httpv1alpha1.NewTimeout(50 * time.Millisecond),
+			MaxWait:    httpv1alpha1.NewTimeout(time.Second),
+		},
+		Hosts: map[string]*httpv1alpha1.HostConfig{
+			hostPort: {TimeoutConfig: httpv1alpha1.TimeoutConfig{
+				ResponseHeaderTimeout: httpv1alpha1.NewTimeout(10 * time.Second),
+			}},
+		},
+	}
+	repo := repository.NewResourceRepository(fsConfig, repository.WithHTTPConfig(httpConfig))
 
 	access := func(bucket, key, version string) *accessv2.S3 {
 		return &accessv2.S3{
@@ -119,6 +138,24 @@ func Test_Integration_S3(t *testing.T) {
 
 		_, err := repo.DownloadResource(ctx, resourceFor(access(bucket, "does/not/exist", "")), creds)
 		r.Error(err)
+	})
+
+	t.Run("http config timeout is enforced", func(t *testing.T) {
+		r := require.New(t)
+		const bucket, key = "timeout-bucket", "blob"
+		createBucket(t, ctx, setup, bucket)
+		putObject(t, ctx, setup, bucket, key, []byte("never read"))
+
+		// A timeout no request can meet, with retries off so the single attempt fails fast.
+		strict := repository.NewResourceRepository(fsConfig, repository.WithHTTPConfig(&httpv1alpha1.Config{
+			TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: httpv1alpha1.NewTimeout(time.Nanosecond)},
+			Retry:         &httpv1alpha1.RetryConfig{MaxRetries: new(-1)},
+		}))
+
+		_, err := strict.DownloadResource(ctx, resourceFor(access(bucket, key, "")), creds)
+		var netErr net.Error
+		r.ErrorAs(err, &netErr)
+		r.True(netErr.Timeout(), "download must fail on the configured timeout, got %v", err)
 	})
 }
 
