@@ -5,7 +5,7 @@
 * **Date**: 2026-09-09
 
 **Technical Story**:
-Define how the Open Component Model packages, transports, and delivers Virtual Machine (VM) disk images — `raw`, `qcow2`, `vmdk`, `vhd`, `iso`, and OVA — together with their deployment configuration (cloud-init, ignition, OVF envelopes, sizing/placement metadata) as signed, self-describing, air-gap-capable component versions. This ADR settles the resource-type, media-type, access, and image↔config binding conventions for VM images whose blob fits within registry limits, and frames the large-blob splitting representation for 40 GiB+ images as an open discussion deferred to EPIC [`open-component-model/ocm-project#1290`](https://github.com/open-component-model/ocm-project/issues/1290).
+Define how the Open Component Model packages, transports, and delivers Virtual Machine (VM) disk images — `raw`, `qcow2`, `vmdk`, `vhd`, `iso`, and OVA — together with their deployment configuration (cloud-init, ignition, OVF envelopes, sizing/placement metadata) as signed, self-describing, air-gap-capable component versions. This ADR settles the resource-type, media-type, access, and image↔config binding conventions for VM images whose blob fits within registry limits, and selects the large-blob splitting representation for 40 GiB+ images (an OCI Image Index of chunks), whose implementation and remaining configuration questions are deferred to EPIC [`open-component-model/ocm-project#1290`](https://github.com/open-component-model/ocm-project/issues/1290).
 
 ---
 
@@ -28,7 +28,7 @@ Today there is no documented convention for:
 
 Absent a convention, a VM image would naively be modeled as a resource of `type: blob` with `mediaType: application/octet-stream` — losing both the disk-format information a consumer needs to import it and any structured link to its configuration.
 
-Separately, images that exceed a registry's per-push / per-layer size limit (e.g. Google Artifact Registry's ~10 GiB layer cap) cannot be pushed at all as a single blob. OCM v1 solved this by transparently splitting large blobs into chunk layers and reassembling them on download; OCM v2 does not yet have this capability. EPIC [#1290](https://github.com/open-component-model/ocm-project/issues/1290) and its predecessor [#12](https://github.com/open-component-model/ocm-project/issues/12) track this and explicitly request "an ADR first to settle the representation and open questions." This ADR provides the VM-image packaging baseline now and records the split representation as an open discussion for that EPIC to settle.
+Separately, images that exceed a registry's per-push / per-layer size limit (e.g. Google Artifact Registry's ~10 GiB layer cap) cannot be pushed at all as a single blob. OCM v1 solved this by transparently splitting large blobs into chunk layers and reassembling them on download; OCM v2 does not yet have this capability. EPIC [#1290](https://github.com/open-component-model/ocm-project/issues/1290) and its predecessor [#12](https://github.com/open-component-model/ocm-project/issues/12) track this and explicitly request "an ADR first to settle the representation and open questions." This ADR provides the VM-image packaging baseline now and settles the split representation; the implementation and the remaining open questions land in that EPIC.
 
 ---
 
@@ -55,7 +55,7 @@ Separately, images that exceed a registry's per-push / per-layer size limit (e.g
 
 ## Decision Outcome
 
-Chosen **Option 1**: a resource-typed convention with a media-type registry and label binding. The following is the normative specification (decisions 1–8). Large-blob splitting (decision 9) is explicitly **non-normative and pending EPIC #1290**.
+Chosen **Option 1**: a resource-typed convention with a media-type registry and label binding. The following is the normative specification (decisions 1–9). Decision 9 settles the large-blob splitting **representation** only; its implementation and the remaining configuration questions are tracked in EPIC #1290.
 
 ### 1. VM images are ordinary resources
 
@@ -65,10 +65,10 @@ A VM image is a component-version `resource`, not a new first-class descriptor k
 
 `blob` remains the generic fallback. This ADR defines two domain-specific artifact `type` strings:
 
-| Resource `type`        | Meaning                                                                          |
-|------------------------|----------------------------------------------------------------------------------|
+| Resource `type`        | Meaning                                                                           |
+|------------------------|-----------------------------------------------------------------------------------|
 | `virtualMachineImage`  | A bootable VM disk image.                                                         |
-| `virtualMachineConfig` | Machine-readable VM deployment configuration (cloud-init, ignition, OVF, sizing).|
+| `virtualMachineConfig` | Machine-readable VM deployment configuration (cloud-init, ignition, OVF, sizing). |
 
 Resource `type` values are free-form strings in the component descriptor (like the existing `ociImage`, `helmChart`, `blob`, `git`); they are **not** Go constants, and none is required here — this matches current practice.
 
@@ -254,13 +254,13 @@ graph TD
     DL -->|"config-for label resolves config"| PLAT
 ```
 
-### 9. Large-Blob Splitting (Open Discussion — deferred to EPIC #1290)
+### 9. Large-Blob Splitting (representation chosen — implementation deferred to EPIC #1290)
 
-> **Non-normative.** Decisions 1–8 are the normative baseline. This subsection records the problem and candidate solutions for images that exceed a registry's push/layer size limit; **it makes no choice.** The representation and trigger will be settled by EPIC [#1290](https://github.com/open-component-model/ocm-project/issues/1290).
+> This subsection records the problem and the candidate solutions for images that exceed a registry's push/layer size limit, and **selects the representation**: an OCI Image Index of chunks. The split trigger, the chunk metadata, and the implementation are left to EPIC [#1290](https://github.com/open-component-model/ocm-project/issues/1290).
 
 **Problem.** OCI registries impose per-push / per-layer size limits (e.g. Google's ~10 GiB layer cap). A VM disk larger than that cannot be pushed as a single blob layer. OCM v1 transparently split large blobs into multiple chunk layers on upload and reassembled them on download; OCM v2 lacks this. This blocks the 40 GiB+ artefact use case that motivates [#1290](https://github.com/open-component-model/ocm-project/issues/1290) and the predecessor discussion in [#12](https://github.com/open-component-model/ocm-project/issues/12).
 
-**Candidate representations (no selection made).**
+**Candidate representations.**
 
 1. **Split-manifest indirection.** `localBlob.localReference` points to a small split-descriptor blob with a dedicated media type (proposed `application/vnd.ocm.software.blob.split.v1+json`) that lists the ordered child-layer digests, per-chunk sizes, and the total reassembled digest. Reassembly reads the descriptor, then streams the chunk layers.
    * *Pro:* keeps `LocalReference` single-valued (matches today's `v2.LocalBlob.LocalReference string` in `bindings/go/descriptor/v2/local_access.go`); minimal reader impact; whole-blob digest lives in the descriptor. This is #12's "blob descriptor with a dedicated media type" variant.
@@ -272,10 +272,18 @@ graph TD
    * *Pro:* maximally OCI-native; reuses ADR-0013 machinery.
    * *Con:* overloads "index" for pure byte-chunking; risks confusing OCI-native consumers that interpret an index as a multi-arch image; complicates non-OCI/CTF handling.
 
-**Candidate triggers (no selection made).** From the #1290 discussion:
+**Decision — representation 3, an OCI Image Index of chunks.** The #1290 discussion asked for a *technology-specific* solution rather than a general one, on the grounds that blob storages have no problem with large files and only registries impose the limit. Representation 3 is exactly that: the splitting lives in the OCI layer, reuses the ADR-0013 index machinery, and leaves every non-OCI backend untouched. Representations 1 and 2 invent an OCM-level construct for what is a registry-specific constraint.
+
+Its con is mitigated rather than accepted: the index carries an OCM-specific artifact type / annotation so a consumer can tell a chunk index from a platform index, and the CTF path stores the chunk layers as individual files exactly as it already does for any other blob.
+
+**Open — should splitting be offered at all?** #1290 raises this explicitly. The alternative is to reject over-limit pushes with a clear error and require the publisher to use a backend without the limit. Settled in the EPIC.
+
+**Open — the split trigger.** #1290 requires sharding to be configurable, with `maxLayerSize` as the value. Where that configuration lives is undecided:
 
 * **(a) Explicit per-resource directive** on the `file` input, e.g. `input: { type: File/v1, split: { maxLayerSize: 1Gi } }` — would add a `Split` field to `bindings/go/input/file/spec/v1.File`. Deterministic and self-documenting.
 * **(b) Implicit** via an `.ocmconfig` default max-layer-size and/or auto-detected registry limits (OCM v1 behavior). Transparent but environment-dependent.
+
+**Open — per-chunk metadata.** #1290 suggests each index entry optionally defines `size`, `digest`, and `chunkIndex` beyond what an OCI descriptor already provides. The exact annotation set is settled in the EPIC.
 
 **Invariants any split solution MUST preserve** (from #1290's "Out of Scope" and #12):
 
@@ -283,6 +291,7 @@ graph TD
 * The resource's recorded `digest` remains the digest of the **whole reassembled blob**, so signatures (decision 7) stay valid regardless of chunking.
 * Reassembled bytes are **byte-identical** to the original.
 * **CTF and OCI backends** both supported (CTF stores chunks as individual files via `oras.CopyGraph`, per ADR-0022).
+* Every chunk is **individually digest-verified** on reassembly, so a corrupted chunk is detected before the whole blob is rebuilt.
 * Consumers using `ocm download resource` receive the **reassembled stream transparently** — chunking is invisible above the storage layer.
 
 ---
@@ -339,10 +348,10 @@ Optional follow-ups (not required by this ADR):
 * A VM-format `BlobTransformer` for on-download format conversion (e.g. `qcow2` → `raw`) per [ADR-0007](0007_resource_download.md).
 * A Go constants file for the VM media types if the team later wants compile-time reuse.
 
-**Large-blob splitting is tracked as its own workstream in EPIC [#1290](https://github.com/open-component-model/ocm-project/issues/1290)** — ADR settlement of the representation, then the core split/reassembly implementation, tests, and end-user documentation. This ADR feeds the EPIC's "ADR" deliverable with the open-discussion section above; the split implementation lands under #1290, not here.
+**Large-blob splitting is tracked as its own workstream in EPIC [#1290](https://github.com/open-component-model/ocm-project/issues/1290)** — the representation is settled here; the core split/reassembly implementation, the trigger configuration, chunk metadata, tests, and end-user documentation land under #1290. This ADR feeds the EPIC's "ADR" deliverable with decision 9.
 
 ---
 
 ## Conclusion
 
-OCM ships VM images and their configuration as ordinary signed resources: dedicated `virtualMachineImage` / `virtualMachineConfig` types, a namespaced `application/vnd.ocm.software.vm.*` media-type registry, embedded (`file`) or referenced (`wget` / `ociArtifact`) access, streaming transport for large blobs, and signing-relevant labels binding image to configuration. This delivers verified, self-describing, air-gap-capable VM artifacts with no change to the component-descriptor schema. Transparent splitting of images that exceed registry size limits is deferred to EPIC #1290, which the open-discussion section above informs.
+OCM ships VM images and their configuration as ordinary signed resources: dedicated `virtualMachineImage` / `virtualMachineConfig` types, a namespaced `application/vnd.ocm.software.vm.*` media-type registry, embedded (`file`) or referenced (`wget` / `ociArtifact`) access, streaming transport for large blobs, and signing-relevant labels binding image to configuration. This delivers verified, self-describing, air-gap-capable VM artifacts with no change to the component-descriptor schema. Images that exceed registry size limits are split transparently into an OCI Image Index of chunks; the implementation and its remaining configuration questions are deferred to EPIC #1290.
