@@ -2608,6 +2608,71 @@ func TestRepository_DownloadResourceStream_DigestPinnedWithReferrer(t *testing.T
 	r.Equal(main.Digest, top.Digest, "the requested artifact must be the top level, not its referrer")
 }
 
+// TestRepository_DownloadResourceStream_MultiArchByDigest is the referrer-free
+// twin of the test above. A multi-arch index pinned by digest puts the index
+// and each of its children into the layout's index.json, so the ambiguity is
+// not specific to referrers.
+func TestRepository_DownloadResourceStream_MultiArchByDigest(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	imgStore, err := store.StoreForReference(ctx, "ghcr.io/acme/multi:latest")
+	r.NoError(err)
+
+	var children []ociImageSpecV1.Descriptor
+	for _, arch := range []string{"amd64", "arm64"} {
+		layerData := []byte("layer-" + arch)
+		layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerData)
+		r.NoError(imgStore.Push(ctx, layer, bytes.NewReader(layerData)))
+		m, err := oras.PackManifest(ctx, imgStore, oras.PackManifestVersion1_1, "application/vnd.test.artifact",
+			oras.PackManifestOptions{Layers: []ociImageSpecV1.Descriptor{layer}})
+		r.NoError(err)
+		m.Platform = &ociImageSpecV1.Platform{OS: "linux", Architecture: arch}
+		children = append(children, m)
+	}
+
+	idxBody, err := json.Marshal(ociImageSpecV1.Index{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ociImageSpecV1.MediaTypeImageIndex,
+		Manifests: children,
+	})
+	r.NoError(err)
+	idx := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageIndex,
+		Digest:    digest.FromBytes(idxBody),
+		Size:      int64(len(idxBody)),
+	}
+	r.NoError(imgStore.Push(ctx, idx, bytes.NewReader(idxBody)))
+
+	resource := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "multi", Version: "1.0.0"}},
+		Type:        "ociArtifact",
+		Access: &v1.OCIImage{
+			Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+			ImageReference: "ghcr.io/acme/multi@" + idx.Digest.String(),
+		},
+	}
+
+	stream, err := repo.DownloadResourceStream(ctx, resource)
+	r.NoError(err)
+	layoutBlob, err := stream.Materialize(ctx)
+	r.NoError(err)
+
+	ociStore, err := tar.ReadOCILayout(ctx, layoutBlob)
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(ociStore.Close()) })
+	r.Greater(len(ociStore.Index.Manifests), 1, "index and children must all be listed, otherwise this test proves nothing")
+
+	top, err := tar.CopyOCILayoutWithIndex(ctx, memory.New(), layoutBlob, tar.CopyOCILayoutWithIndexOptions{})
+	r.NoError(err)
+	r.Equal(idx.Digest, top.Digest, "the index must be the top level, not one of its children")
+}
+
 // TestRepository_UploadResource_CopiesOwnershipReferrer is the by-reference twin
 // of TestRepository_AddLocalResource_CopiesOwnershipReferrer: it proves the
 // UploadResource path (-> uploadOCIImage) carries an ADR-0016 ownership referrer
