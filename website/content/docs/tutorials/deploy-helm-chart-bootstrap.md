@@ -605,6 +605,10 @@ EOF
 
 ### Apply the bootstrap resources
 
+{{< callout context="caution" title="RBAC required before you apply" icon="outline/alert-triangle" >}}
+Please make sure that you updated your RBAC permissions before applying this command. Follow our [Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md" >}}) guide to know how to do that.
+{{< /callout >}}
+
 ```bash
 envsubst < bootstrap.yaml | kubectl apply -f -
 ```

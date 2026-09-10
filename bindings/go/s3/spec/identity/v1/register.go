@@ -8,9 +8,9 @@ func init() {
 	MustRegisterIdentityType(scheme)
 }
 
-// MustRegisterIdentityType registers S3Bucket/v1 (with unversioned alias) in the given scheme.
+// MustRegisterIdentityType registers S3/v1 (with unversioned alias) in the given scheme.
 func MustRegisterIdentityType(scheme *runtime.Scheme) {
-	scheme.MustRegisterWithAlias(&S3BucketIdentity{},
+	scheme.MustRegisterWithAlias(&S3Identity{},
 		VersionedType,
 		Type, // backward-compat alias
 	)
