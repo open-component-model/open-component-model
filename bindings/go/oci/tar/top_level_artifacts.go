@@ -55,14 +55,18 @@ func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates 
 	return topLevel
 }
 
-// markedRoot returns the candidate carrying [AnnotationLayoutRoot]
+// markedRoot returns the artifact carrying [AnnotationLayoutRoot]. It counts
+// digests rather than entries, because index.json lists a descriptor once per
+// reference name it was tagged with: a root that is both tagged and addressed
+// by digest appears several times and is still one root.
 func markedRoot(candidates []ociImageSpecV1.Descriptor) (ociImageSpecV1.Descriptor, bool) {
 	var root ociImageSpecV1.Descriptor
-	var found int
+	marked := make(map[digest.Digest]struct{}, 1)
 	for _, candidate := range candidates {
 		if candidate.Annotations[AnnotationLayoutRoot] == "true" {
-			root, found = candidate, found+1
+			root = candidate
+			marked[candidate.Digest] = struct{}{}
 		}
 	}
-	return root, found == 1
+	return root, len(marked) == 1
 }
