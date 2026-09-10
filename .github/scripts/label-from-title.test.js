@@ -68,19 +68,19 @@ test("type with a label list applies every label (docs)", () => {
 test("type with a label list applies every label (test)", () => {
   const { valid, labels } = deriveLabels("test: add unit tests", maps);
   assert.strictEqual(valid, true);
-  assert.deepStrictEqual(labels, ["kind/chore", "area/testing"]);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/quality"]);
 });
 
 test("type with a label list applies every label (perf)", () => {
   const { valid, labels } = deriveLabels("perf: reduce allocations", maps);
   assert.strictEqual(valid, true);
-  assert.deepStrictEqual(labels, ["kind/chore", "area/performance"]);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/quality"]);
 });
 
-test("refactor maps to kind/refactor", () => {
+test("refactor maps to kind/chore", () => {
   const { valid, labels } = deriveLabels("refactor: simplify resolver", maps);
   assert.strictEqual(valid, true);
-  assert.deepStrictEqual(labels, ["kind/refactor"]);
+  assert.deepStrictEqual(labels, ["kind/chore"]);
 });
 
 test("a label contributed by both type list and scope is de-duplicated", () => {
