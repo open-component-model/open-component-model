@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
@@ -70,9 +71,17 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyGraph
 		return
 	}
 
-	// Apply any additional tags.
-	for _, tag := range opts.Tags {
-		if err = errors.Join(err, target.Tag(ctx, base, tag)); err != nil {
+	// base is the only thing that knows which manifest the caller wanted.
+	// Tag is what carries a descriptor's annotations into index.json.
+	root := base
+	root.Annotations = maps.Clone(base.Annotations)
+	if root.Annotations == nil {
+		root.Annotations = make(map[string]string, 1)
+	}
+	root.Annotations[AnnotationLayoutRoot] = "true"
+
+	for _, ref := range append([]string{base.Digest.String()}, opts.Tags...) {
+		if err = errors.Join(err, target.Tag(ctx, root, ref)); err != nil {
 			return
 		}
 	}
@@ -150,14 +159,18 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 	return index, nil
 }
 
-// pickTopLevelDescriptor selects the single top-level manifest from the
-// layout's index.json. With one manifest in the index it returns that
-// manifest; with many it returns the one tagged via
-// `org.opencontainers.image.ref.name`. Returns an error if neither rule
-// uniquely identifies a top-level descriptor.
+// pickTopLevelDescriptor works out which manifest in the layout was the one
+// requested, trying three things in order: if there is only one, it wins; else
+// the entry marked with [AnnotationLayoutRoot]; else the entry named by
+// `org.opencontainers.image.ref.name`, which is only ever set for tag-based
+// references. Returns an error when none of the three settles it, because a
+// wrong guess here silently packs the wrong artifact.
 func pickTopLevelDescriptor(ociStore *CloseableReadOnlyStore) (ociImageSpecV1.Descriptor, error) {
 	if len(ociStore.Index.Manifests) == 1 {
 		return ociStore.Index.Manifests[0], nil
+	}
+	if root, ok := markedRoot(ociStore.Index.Manifests); ok {
+		return root, nil
 	}
 	var named []int
 	for idx, manifest := range ociStore.Index.Manifests {

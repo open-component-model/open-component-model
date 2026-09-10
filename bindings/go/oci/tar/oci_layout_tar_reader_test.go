@@ -207,6 +207,23 @@ func TestCloseableReadOnlyStore_MainArtifacts(t *testing.T) {
 		assert.Equal(t, []string{main.Digest.String()}, digests(store.MainArtifacts(t.Context())))
 	})
 
+	t.Run("a marked referrer is the main artifact", func(t *testing.T) {
+		// The heuristic excludes every referrer, but a resource can point at an
+		// SBOM attestation rather than at the image it describes. When the layout
+		// records which artifact it was built for, that answer wins.
+		var referrer v1.Descriptor
+		store := readLayout(t, func(w *OCILayoutWriter) {
+			main := pack(t, w, "main", "", nil)
+			referrer = pack(t, w, "sbom-referrer", "application/spdx+json", &main)
+			marked := referrer
+			marked.Annotations = map[string]string{AnnotationLayoutRoot: "true"}
+			require.NoError(t, w.Tag(t.Context(), marked, referrer.Digest.String()))
+		})
+
+		assert.Equal(t, []string{referrer.Digest.String()}, digests(store.MainArtifacts(t.Context())),
+			"the marked root wins over subject-based exclusion")
+	})
+
 	t.Run("main selection drops manifests contained by another", func(t *testing.T) {
 		// An image index over two child manifests, plus a referrer on the index.
 		// The children are contained by the index, so only the index is a main
