@@ -69,7 +69,9 @@
       ],
     },
     {
-      // Actual Go toolchain version bumps (go.mod `go 1.X`, setup-go, etc.).
+      // Actual Go toolchain version bumps (go.mod `toolchain go1.X.Y`, setup-go,
+      // golang image tags). The go.mod `go 1.X` directive is deliberately NOT
+      // bumped here. See the depType 'golang' rule at the end of packageRules.
       // Docker image digests for `golang` are handled by 'Digest pins' above.
       matchDatasources: ["golang-version"],
       rangeStrategy: "bump",
@@ -228,6 +230,12 @@
       ],
     },
     {
+      // Go mod updates are disabled as we are using go toolchain directives instead.
+      matchManagers: ['gomod'],
+      matchDepTypes: ['golang'],
+      enabled: false,
+    },
+    {
       matchDatasources: ['npm'],
       minimumReleaseAge: '28 days',
     },
@@ -288,6 +296,17 @@
       ],
       matchStrings: [
         '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
+      ],
+      versioningTemplate: 'semver',
+    },
+    {
+      // Automatic version bump for GO_VERSION, NPM_VERSION and NODE_VERSION in Netlify.
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)netlify\\.toml$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION = "v?(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
       ],
       versioningTemplate: 'semver',
     },
