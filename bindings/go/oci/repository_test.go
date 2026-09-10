@@ -2731,6 +2731,12 @@ func TestRepository_DownloadResourceStream_ReferrerIsTheRequestedArtifact(t *tes
 	layoutBlob, err := stream.Materialize(ctx)
 	r.NoError(err)
 
+	ociStore, err := tar.ReadOCILayout(ctx, layoutBlob)
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(ociStore.Close()) })
+	r.Greater(len(ociStore.Index.Manifests), 1,
+		"the subject must travel with the referrer, otherwise this test proves nothing")
+
 	top, err := tar.CopyOCILayoutWithIndex(ctx, memory.New(), layoutBlob, tar.CopyOCILayoutWithIndexOptions{})
 	r.NoError(err)
 	r.Equal(referrer.Digest, top.Digest,
