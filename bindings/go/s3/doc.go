@@ -1,14 +1,14 @@
 // Package s3 provides access to OCM resources stored as objects in an S3 or
 // S3-compatible bucket.
 //
-// It implements the "S3Bucket" access type: a resource whose bytes are a single
+// It implements the "S3" access type: a resource whose bytes are a single
 // object in a bucket, described by a
-// [ocm.software/open-component-model/bindings/go/s3/spec/access/v1.S3Bucket]
+// [ocm.software/open-component-model/bindings/go/s3/spec/access/v2.S3]
 // access spec. Besides the bucket and object key, the spec carries a region, a media
 // type, a pinned object version (versionId) and — for S3-compatible stores such as
 // MinIO, Ceph or R2 — a custom endpoint and path-style addressing. It addresses one
-// object rather than a component-version storage backend, and is deliberately not the
-// ocmv1 "s3" access type; see "Wire types" below.
+// object rather than a component-version storage backend. On the wire it is the v2
+// format of the ocmv1 "s3" access type; see "Wire types" below.
 //
 // [ocm.software/open-component-model/bindings/go/s3/repository.ResourceRepository]
 // is the entry point. It resolves the access spec of a resource, builds an
@@ -39,15 +39,15 @@
 //
 // The same object can instead be pulled into a component version while it is built.
 // [ocm.software/open-component-model/bindings/go/s3/input.InputMethod] implements the
-// constructor's resource input method for the "S3Bucket" input type, described by a
-// [ocm.software/open-component-model/bindings/go/s3/spec/input/v1.S3Bucket] spec that
+// constructor's resource input method for the "S3" input type, described by a
+// [ocm.software/open-component-model/bindings/go/s3/spec/input/v2.S3] spec that
 // mirrors the fields of the access spec:
 //
 //	resources:
 //	- name: my-object
 //	  type: blob
 //	  input:
-//	    type: S3Bucket/v1
+//	    type: S3/v2
 //	    bucketName: my-bucket
 //	    objectKey: path/to/blob.txt
 //
@@ -111,15 +111,15 @@
 // # Credential consumer identity
 //
 // GetResourceCredentialConsumerIdentity resolves the identity a credential resolver
-// matches against. It always carries the type S3Bucket and the object path, and a
+// matches against. It always carries the type S3 and the object path, and a
 // host only for a custom endpoint:
 //
 //	AWS S3 (no endpoint):
-//		type: S3Bucket
+//		type: S3
 //		path: <bucketName>/<objectKey>
 //
 //	custom endpoint (MinIO, Ceph, R2):
-//		type:     S3Bucket
+//		type:     S3
 //		scheme:   https            // the endpoint scheme (http for a plaintext MinIO)
 //		hostname: minio.internal   // the endpoint host
 //		port:     9000             // when the endpoint sets one
@@ -129,25 +129,31 @@
 // equal hostnames, so a config that set one would not match. The path is matched with
 // path.Match, whose "*" does not cross "/", so a config either omits the path or gives
 // the exact bucketName/objectKey; region, mediaType, version and the path-style switch
-// take no part in matching. The legacy ocmv1 consumer identity (type S3, pathprefix
-// key) is not resolved, tracked by
-// https://github.com/open-component-model/ocm-project/issues/847
+// take no part in matching. The identity type is the one ocmv1 uses, but ocmv1 scoped
+// entries by a pathprefix key, which is not resolved: such an entry never matches.
+// Tracked by https://github.com/open-component-model/ocm-project/issues/847
 //
 // # Wire types
 //
 // The wire types are registered in their package scheme for typed conversion. The
-// access type resolves under four names — versioned and unversioned, each spelled with
-// a leading upper- or lower-case letter:
+// access type is the ocmv1 "s3" access type in its v2 format (bucketName, objectKey),
+// extended by endpoint and usePathStyle, and resolves under the ocmv1 spellings of
+// that format:
 //
-//	S3Bucket/v1
-//	S3Bucket
-//	s3Bucket/v1
-//	s3Bucket
+//	S3/v2
+//	S3
+//	s3/v2
+//	s3
 //
-// Matching is exact, so neither an all-lower-case s3bucket nor the ocmv1 "s3" access
-// type resolves; such descriptors have to have their access type rewritten. Field
-// names within the spec are matched case-insensitively, as JSON decoding is.
+// Matching is exact. The ocmv1 v1 format (bucket, key) is not supported: S3/v1 and
+// s3/v1 do not resolve, and an unversioned S3 or s3 is always read as v2, so a
+// v1-shaped spec fails validation for its missing bucketName. ocmv1 writes an
+// unversioned "s3" in the v1 format by default, so such descriptors need their fields
+// renamed. Field names within the spec are matched case-insensitively, as JSON
+// decoding is. ocmv1 reads S3/v2 as well, but drops endpoint and usePathStyle and so
+// always targets AWS.
 //
 // The input type resolves under the same four names in its own scheme, so a
-// constructor spells an input exactly as a descriptor spells an access.
+// constructor spells an input exactly as a descriptor spells an access. ocmv1 has no
+// S3 input type.
 package s3

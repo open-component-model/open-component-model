@@ -20,7 +20,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
-	accessv1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
+	accessv2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
@@ -50,9 +50,9 @@ func Test_Integration_S3(t *testing.T) {
 	tempDir := t.TempDir()
 	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
 
-	access := func(bucket, key, version string) *accessv1.S3Bucket {
-		return &accessv1.S3Bucket{
-			Type:         accessspec.V1VersionedType,
+	access := func(bucket, key, version string) *accessv2.S3 {
+		return &accessv2.S3{
+			Type:         accessspec.V2VersionedType,
 			Region:       "us-east-1",
 			BucketName:   bucket,
 			ObjectKey:    key,
@@ -61,7 +61,7 @@ func Test_Integration_S3(t *testing.T) {
 			Version:      version,
 		}
 	}
-	resourceFor := func(a *accessv1.S3Bucket) *descriptor.Resource {
+	resourceFor := func(a *accessv2.S3) *descriptor.Resource {
 		res := &descriptor.Resource{}
 		res.Access = a
 		return res
