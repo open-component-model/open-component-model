@@ -12,7 +12,7 @@ import (
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
-	s3accessv1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
+	s3accessv2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	s3v1alpha1 "ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
@@ -21,8 +21,8 @@ import (
 // DownloadS3Resource node followed by an AddLocalResource node (embedding the download as a
 // local blob), and tracks the add node as the resource's transformation.
 func TestProcessS3(t *testing.T) {
-	s3Access := &s3accessv1.S3Bucket{
-		Type:       s3accessspec.V1VersionedType,
+	s3Access := &s3accessv2.S3{
+		Type:       s3accessspec.V2VersionedType,
 		BucketName: "my-bucket",
 		ObjectKey:  "path/to/artifact.txt",
 	}
