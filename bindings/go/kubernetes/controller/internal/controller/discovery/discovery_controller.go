@@ -16,14 +16,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	internaldiscovery "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/discovery"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/repository"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -193,16 +193,40 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		return ctrl.Result{}, fmt.Errorf("failed to create plugin manager: %w", err)
 	}
 
-	repo, err := r.repositoryFor(ctx, pm, cfg, info.RepositorySpec)
+	spec := &runtime.Raw{}
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(info.RepositorySpec.Raw), spec); err != nil {
+		r.markFailure(discovery, v1alpha1.GetRepositoryFailedReason, err)
+
+		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
+	}
+
+	var credentialGraph credentials.Resolver
+	if cfg != nil {
+		credentialGraph, err = setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
+			PluginManager: pm,
+			Logger:        &logger,
+		})
+		if err != nil {
+			r.markFailure(discovery, v1alpha1.GetRepositoryFailedReason, err)
+
+			return ctrl.Result{}, fmt.Errorf("failed to create credential graph: %w", err)
+		}
+	}
+
+	resolver, err := resolvers.NewFromConfig(ctx, genericCfg, ocirepository.Scheme, resolvers.Options{
+		RepoProvider:      pm.ComponentVersionRepositoryRegistry,
+		CredentialGraph:   credentialGraph,
+		ComponentPatterns: []string{info.Component},
+	}, spec)
 	if err != nil {
 		r.markFailure(discovery, v1alpha1.GetRepositoryFailedReason, err)
 
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to create repository resolver: %w", err)
 	}
 
 	graph, err := internaldiscovery.Traverse(ctx,
 		internaldiscovery.ComponentKey{Name: info.Component, Version: info.Version},
-		internaldiscovery.ComponentGetterFunc(repo.GetComponentVersion))
+		resolver)
 	if err != nil {
 		r.markFailure(discovery, v1alpha1.ResolutionFailedReason, err)
 
@@ -243,48 +267,6 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	r.markSuccess(discovery, payloadReason(payload), payloadMessage(payload))
 
 	return ctrl.Result{RequeueAfter: r.safetyRequeueAfter()}, nil
-}
-
-// repositoryFor builds the repository for the complete traversal. The
-// resolver is constructed without configured path matchers or fallback
-// resolvers so that traversal is restricted to the root Component's
-// repository spec; descriptor repository contexts are ignored. The repository
-// is obtained once from the root spec and reused for all transitive fetches.
-func (r *Reconciler) repositoryFor(
-	ctx context.Context,
-	pm *manager.PluginManager,
-	cfg *configuration.Configuration,
-	rootSpec *apiextensionsv1.JSON,
-) (repository.ComponentVersionRepository, error) {
-	spec := &runtime.Raw{}
-	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(rootSpec.Raw), spec); err != nil {
-		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
-	}
-
-	opts := resolvers.Options{RepoProvider: pm.ComponentVersionRepositoryRegistry}
-	if cfg != nil {
-		logger := log.FromContext(ctx)
-		credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
-			PluginManager: pm,
-			Logger:        &logger,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create credential graph: %w", err)
-		}
-		opts.CredentialGraph = credGraph
-	}
-
-	resolver, err := resolvers.New(ctx, opts, spec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create repository resolver: %w", err)
-	}
-
-	repo, err := resolver.GetComponentVersionRepositoryForSpecification(ctx, spec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create repository from root repository spec: %w", err)
-	}
-
-	return repo, nil
 }
 
 // setPayload swaps the status payload in one in-memory update: the selected

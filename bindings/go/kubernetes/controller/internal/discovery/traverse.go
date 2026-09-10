@@ -3,46 +3,68 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ComponentGetter resolves the descriptor of a single component version. It is
-// the only repository dependency of Traverse.
-type ComponentGetter interface {
-	GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error)
+// resolverAndDiscoverer resolves each component version through a configured
+// repository resolver and discovers its transitive references. It implements
+// both syncdag.Resolver and syncdag.Discoverer over string keys of the form
+// produced by runtime.Identity.String (name=...,version=...).
+type resolverAndDiscoverer struct {
+	resolver resolvers.ComponentVersionRepositoryResolver
 }
 
-// ComponentGetterFunc adapts a function to ComponentGetter.
-type ComponentGetterFunc func(ctx context.Context, name, version string) (*descriptor.Descriptor, error)
+// Resolve selects the repository for the given component identity via the
+// configured resolver and fetches its descriptor. Repository-selection and
+// fetch failures are wrapped with the component identity.
+func (rd *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descriptor.Descriptor, error) {
+	id, err := runtime.ParseIdentity(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse component key %q: %w", key, err)
+	}
+	name, version := id[descriptor.IdentityAttributeName], id[descriptor.IdentityAttributeVersion]
 
-// GetComponentVersion calls the underlying function.
-func (f ComponentGetterFunc) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
-	return f(ctx, name, version)
+	repo, err := rd.resolver.GetComponentVersionRepositoryForComponent(ctx, name, version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve repository for component %s: %w", key, err)
+	}
+
+	desc, err := repo.GetComponentVersion(ctx, name, version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve component %s: %w", key, err)
+	}
+	if desc == nil {
+		return nil, fmt.Errorf("failed to resolve component %s: resolved descriptor is nil", key)
+	}
+
+	return desc, nil
 }
 
-// traversalKey encodes a (component name, version) pair as an ordered DAG key.
-// NUL can neither appear in component names nor versions, so the encoding is
-// unambiguous.
-type traversalKey string
-
-func keyFor(key ComponentKey) traversalKey {
-	return traversalKey(key.Name + "\x00" + key.Version)
-}
-
-func (k traversalKey) identity() ComponentKey {
-	name, version, _ := strings.Cut(string(k), "\x00")
-	return ComponentKey{Name: name, Version: version}
+// Discover returns the component identities of every reference of parent.
+// Duplicate reference entries to the same target are naturally deduplicated by
+// the DAG (syncdag resolves each vertex once, dag.AddEdge accepts repeated
+// edges); the descriptor reference entries themselves remain untouched.
+func (rd *resolverAndDiscoverer) Discover(_ context.Context, parent *descriptor.Descriptor) ([]string, error) {
+	neighbors := make([]string, 0, len(parent.Component.References))
+	for i := range parent.Component.References {
+		neighbors = append(neighbors, parent.Component.References[i].ToComponentIdentity().String())
+	}
+	return neighbors, nil
 }
 
 // Traverse resolves the complete transitive component graph reachable from
-// root through component references. Every referenced component version is
-// resolved exactly once via get; duplicate reference entries to the same
-// target are deduplicated while the descriptor reference entries themselves
-// remain untouched.
+// root through component references. The repository for every component
+// identity is chosen by resolver (following CLI resolver precedence:
+// configured path matchers or deprecated fallback resolvers, with an optional
+// high-priority root pattern and root-repository catch-all). Every referenced
+// component version is resolved exactly once; duplicate reference entries to
+// the same target are deduplicated while the descriptor reference entries
+// themselves remain untouched.
 //
 // The traversal is fail-fast: the first resolution failure cancels the
 // remaining traversal and is returned wrapped with the failing component
@@ -51,40 +73,21 @@ func (k traversalKey) identity() ComponentKey {
 //
 // Cycle detection is intentionally not implemented here; it is handled by the
 // shared DAG backlog issue (open-component-model/ocm-project#705).
-func Traverse(ctx context.Context, root ComponentKey, get ComponentGetter) (*Graph, error) {
-	if get == nil {
-		return nil, fmt.Errorf("component getter must not be nil")
+func Traverse(ctx context.Context, root ComponentKey, resolver resolvers.ComponentVersionRepositoryResolver) (*Graph, error) {
+	if resolver == nil {
+		return nil, fmt.Errorf("component version repository resolver must not be nil")
 	}
 
-	discoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[traversalKey, *descriptor.Descriptor]{
-		Roots: []traversalKey{keyFor(root)},
-		Resolver: syncdag.ResolverFunc[traversalKey, *descriptor.Descriptor](
-			func(ctx context.Context, key traversalKey) (*descriptor.Descriptor, error) {
-				id := key.identity()
-				desc, err := get.GetComponentVersion(ctx, id.Name, id.Version)
-				if err != nil {
-					return nil, fmt.Errorf("failed to resolve component %s: %w", id, err)
-				}
-				if desc == nil {
-					return nil, fmt.Errorf("failed to resolve component %s: resolved descriptor is nil", id)
-				}
-				return desc, nil
-			}),
-		Discoverer: syncdag.DiscovererFunc[traversalKey, *descriptor.Descriptor](
-			func(_ context.Context, parent *descriptor.Descriptor) ([]traversalKey, error) {
-				seen := make(map[traversalKey]struct{}, len(parent.Component.References))
-				neighbors := make([]traversalKey, 0, len(parent.Component.References))
-				for i := range parent.Component.References {
-					ref := &parent.Component.References[i]
-					neighbor := keyFor(ComponentKey{Name: ref.Component, Version: ref.Version})
-					if _, ok := seen[neighbor]; ok {
-						continue
-					}
-					seen[neighbor] = struct{}{}
-					neighbors = append(neighbors, neighbor)
-				}
-				return neighbors, nil
-			}),
+	rootKey := runtime.Identity{
+		descriptor.IdentityAttributeName:    root.Name,
+		descriptor.IdentityAttributeVersion: root.Version,
+	}.String()
+
+	rd := &resolverAndDiscoverer{resolver: resolver}
+	discoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *descriptor.Descriptor]{
+		Roots:      []string{rootKey},
+		Resolver:   syncdag.ResolverFunc[string, *descriptor.Descriptor](rd.Resolve),
+		Discoverer: syncdag.DiscovererFunc[string, *descriptor.Descriptor](rd.Discover),
 	})
 
 	if err := discoverer.Discover(ctx); err != nil {
@@ -93,12 +96,12 @@ func Traverse(ctx context.Context, root ComponentKey, get ComponentGetter) (*Gra
 
 	// Consume the discovered vertices only after the entire traversal succeeded.
 	graph := &Graph{Root: root}
-	if err := discoverer.Graph().WithReadLock(func(d *dag.DirectedAcyclicGraph[traversalKey]) error {
+	if err := discoverer.Graph().WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
 		descriptors := make([]*descriptor.Descriptor, 0, len(d.Vertices))
 		for key, vertex := range d.Vertices {
 			desc, ok := vertex.Attributes[syncdag.AttributeValue].(*descriptor.Descriptor)
 			if !ok || desc == nil {
-				return fmt.Errorf("discovered vertex %v has no resolved descriptor", key.identity())
+				return fmt.Errorf("discovered vertex %v has no resolved descriptor", key)
 			}
 			descriptors = append(descriptors, desc)
 		}

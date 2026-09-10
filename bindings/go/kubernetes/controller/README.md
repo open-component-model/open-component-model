@@ -53,6 +53,26 @@ Take a look at our [installation guide](https://ocm.software/docs/getting-starte
 - [Deploying a Helm chart using a `ResourceGraphDefinition` inside the OCM component version (bootstrap) with FluxCD](https://ocm.software/docs/tutorials/deploy-helm-charts-with-bootstrap-setup/)
 - [Configuring credentials for OCM Kubernetes Controller Toolkit resources to access private OCM repositories](https://ocm.software/docs/how-to/configure-credentials-for-ocm-controllers/)
 
+## Discovery resolver precedence
+
+The `Discovery` controller resolves the transitive component graph of the
+referenced `Component`. It selects a repository per component identity, using
+the effective OCM configuration (including inherited config and credentials) and
+following the same resolver precedence as the `ocm` CLI:
+
+| Configuration | Repository selection |
+| --- | --- |
+| None | The root Component's `status.component.repositorySpec` for every component |
+| Path matchers | Root component-name pattern → configured matchers in order → root repository catch-all |
+| Deprecated fallback | Root repository first → configured fallback entries in priority/prefix order |
+| Both resolver types | Rejected as a configuration error |
+
+The explicit root pattern is name-based, so other versions of the root
+component resolve to the root repository as well. Path matching selects exactly
+one repository: a fetch failure does not fall through to the catch-all.
+Deprecated fallback entries advance only on a not-found error. Descriptor
+repository contexts are ignored.
+
 ## Deployers
 
 The OCM Kubernetes Controller Toolkit is deployer-agnostic: the kro.run `ResourceGraphDefinition` (RGD) you write determines
