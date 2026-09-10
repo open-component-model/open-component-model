@@ -9,10 +9,10 @@ const maps = {
     feat: "kind/feature",
     fix: "kind/bugfix",
     chore: "kind/chore",
-    refactor: "kind/refactor",
+    refactor: "kind/chore",
     docs: ["kind/chore", "area/documentation"],
-    test: ["kind/chore", "area/testing"],
-    perf: ["kind/chore", "area/performance"],
+    test: ["kind/chore", "area/quality"],
+    perf: ["kind/chore", "area/quality"],
   },
   scopeToLabel: {
     deps: "kind/dependency",
