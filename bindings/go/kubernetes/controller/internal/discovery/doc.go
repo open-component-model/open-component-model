@@ -1,7 +1,14 @@
 // Package discovery implements the Kubernetes-independent evaluation engine for
-// Discovery resources: it compiles the selector and extraction configuration of a
-// DiscoverySpec once, filters a fully resolved component graph, and projects the
-// filtered descriptors into raw v2 descriptor JSON or free-form extracted records.
+// Discovery resources: it resolves the complete transitive component graph via
+// a configured repository resolver (see Traverse), compiles the selector and
+// extraction configuration of a DiscoverySpec once, filters the resolved graph,
+// and projects the filtered descriptors into raw v2 descriptor JSON or
+// free-form extracted records.
+//
+// Traversal is not restricted to a single repository: each component identity
+// is routed to a repository by the resolver following the configured resolver
+// precedence (path matchers or deprecated fallback resolvers, with an optional
+// high-priority root pattern and root-repository catch-all).
 //
 // The evaluation pipeline per reconcile is:
 //
