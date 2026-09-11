@@ -19,13 +19,11 @@ vars:
 tasks:
   test:
     cmds:
-      - mkdir -p tmp
-      - go test -skip '{{ .INTEGRATION_TEST_IDENTIFIER }}' -coverprofile=tmp/coverage.out ./... {{.CLI_ARGS}}
+      - go test -skip '{{ .INTEGRATION_TEST_IDENTIFIER }}' ./... {{.CLI_ARGS}}
 
   test/integration:
     cmds:
-      - mkdir -p tmp
-      - go test -run '{{ .INTEGRATION_TEST_IDENTIFIER }}' -coverprofile=tmp/coverage.out ./integration/... {{.CLI_ARGS}}
+      - go test -run '{{ .INTEGRATION_TEST_IDENTIFIER }}' ./integration/... {{.CLI_ARGS}}
 
   install:
     desc: "Install the CLI"
