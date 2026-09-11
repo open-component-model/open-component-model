@@ -73,6 +73,16 @@ one repository: a fetch failure does not fall through to the catch-all.
 Deprecated fallback entries advance only on a not-found error. Descriptor
 repository contexts are ignored.
 
+### Discovery evaluation
+
+Selector filtering keeps runtime descriptors and never serializes them. v2
+conversion, marshalling, and generic-map decoding happen only during projection,
+and only for resources that survive selection: a resource removed by the
+resource selector is never serialized, so a bad access on a discarded resource
+cannot fail the discovery. Conversion or serialization failures on retained
+data are retryable and surface under `ExtractFailedReason` (not
+`SelectorFailedReason`), so the controller retries instead of stalling.
+
 ## Deployers
 
 The OCM Kubernetes Controller Toolkit is deployer-agnostic: the kro.run `ResourceGraphDefinition` (RGD) you write determines

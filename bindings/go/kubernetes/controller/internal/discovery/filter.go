@@ -2,14 +2,10 @@ package discovery
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"slices"
 	"strings"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ComponentKey identifies a component by name and version.
@@ -32,33 +28,28 @@ type Graph struct {
 
 // Filtered is the selector-filtered view of a Graph, sorted lexicographically
 // by (component.name, component.version).
+//
+// Filtered is a read-only view, not an isolated snapshot. Filter owns the
+// Descriptors slice and shallow-copies each surviving descriptor with its own
+// resource slice, but untouched nested data (labels, accesses, references,
+// sources, repository contexts, signatures) is shared read-only with the input
+// graph. Callers must not mutate a Filtered result or its descriptors.
 type Filtered struct {
-	// Components contains the surviving components in deterministic order.
-	Components []FilteredComponent
+	// Descriptors contains the surviving runtime descriptors in deterministic
+	// order. It is always non-nil, even when empty.
+	Descriptors []*descriptor.Descriptor
 	// Reason distinguishes an empty selector stage from an ordinary result.
 	Reason EmptyReason
 }
 
-// FilteredComponent is one surviving component with its surviving resources.
-type FilteredComponent struct {
-	// Key identifies the component.
-	Key ComponentKey
-	// Raw is the filtered v2 descriptor serialized as deterministic JSON.
-	Raw json.RawMessage
-	// Descriptor is the full filtered v2 descriptor as a generic map.
-	Descriptor map[string]any
-	// Component is the inner component of Descriptor.
-	Component map[string]any
-	// Resources contains the surviving resources in declaration order.
-	Resources []map[string]any
-}
-
 // Filter applies the reference, component, and resource selector stages of q
-// to graph and returns the surviving components sorted lexicographically by
-// (component.name, component.version). Input descriptors are never mutated.
+// to graph and returns the surviving descriptors sorted lexicographically by
+// (component.name, component.version). Neither the graph nor its descriptors
+// are mutated: Filter performs no v2 conversion or serialization, only label
+// decoding for selector evaluation.
 //
 // An empty reference or component stage is not an error: Filter returns a
-// Filtered with no components and the corresponding EmptyReason. Selector
+// Filtered with no descriptors and the corresponding EmptyReason. Selector
 // compilation or evaluation failures are returned as *SelectorError.
 func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 	if err := checkContext(ctx); err != nil {
@@ -81,7 +72,7 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 		return nil, err
 	}
 	if len(survivors) == 0 && q.references != nil {
-		return &Filtered{Components: []FilteredComponent{}, Reason: EmptyReasonNoReferencesMatched}, nil
+		return &Filtered{Descriptors: []*descriptor.Descriptor{}, Reason: EmptyReasonNoReferencesMatched}, nil
 	}
 
 	survivors, err = q.filterComponents(ctx, survivors)
@@ -89,23 +80,26 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 		return nil, err
 	}
 	if len(survivors) == 0 {
-		return &Filtered{Components: []FilteredComponent{}, Reason: EmptyReasonNoComponentsMatched}, nil
+		return &Filtered{Descriptors: []*descriptor.Descriptor{}, Reason: EmptyReasonNoComponentsMatched}, nil
 	}
 
 	if err := checkContext(ctx); err != nil {
 		return nil, err
 	}
-	filtered := make([]FilteredComponent, 0, len(survivors))
+	filtered := make([]*descriptor.Descriptor, 0, len(survivors))
 	for _, d := range survivors {
-		fc, err := q.filterResources(ctx, d)
+		out, err := q.filterResources(ctx, d)
 		if err != nil {
 			return nil, err
 		}
-		filtered = append(filtered, *fc)
+		filtered = append(filtered, out)
 	}
 
+	if err := checkContext(ctx); err != nil {
+		return nil, err
+	}
 	// Lexicographic order by (component.name, component.version).
-	return &Filtered{Components: sortByComponentKey(filtered), Reason: EmptyReasonNone}, nil
+	return &Filtered{Descriptors: sortByComponentKey(filtered), Reason: EmptyReasonNone}, nil
 }
 
 // filterReferences applies the reference selector stage. Without a selector all
@@ -168,80 +162,52 @@ func (q *Query) filterComponents(ctx context.Context, survivors []*descriptor.De
 	return kept, nil
 }
 
-// filterResources applies the resource selector stage to one component and
-// materializes the result as v2 JSON and generic maps. The v2 conversion
-// already copies, so the runtime input descriptor is never mutated. Components
-// with zero surviving resources are kept.
-func (q *Query) filterResources(ctx context.Context, d *descriptor.Descriptor) (*FilteredComponent, error) {
+// filterResources applies the resource selector stage to one descriptor. It
+// returns a shallow copy with its own resource slice; all other descriptor data
+// is shared read-only with the input, which is never mutated. Components with
+// zero surviving resources are kept.
+//
+// Without an active selector the input resource nilness is retained (a nil
+// slice stays nil). With an active selector an empty result is a non-nil slice,
+// preserving the v2 null-versus-[] distinction downstream.
+func (q *Query) filterResources(ctx context.Context, d *descriptor.Descriptor) (*descriptor.Descriptor, error) {
 	if err := checkContext(ctx); err != nil {
 		return nil, err
 	}
 
-	keep := make([]bool, len(d.Component.Resources))
-	for i := range keep {
-		keep[i] = true
-	}
-	if q.resources != nil {
-		for i := range d.Component.Resources {
-			res := &d.Component.Resources[i]
-			match, err := q.resources.matches(ctx, resourceIdentity(res), labelValues(res.Labels))
-			if err != nil {
-				return nil, err
-			}
-			keep[i] = match
-		}
+	out := *d
+	if q.resources == nil {
+		out.Component.Resources = slices.Clone(d.Component.Resources)
+		return &out, nil
 	}
 
-	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), d)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert descriptor %s to v2: %w", d.Component.String(), err)
-	}
-	if q.resources != nil {
-		filteredResources := make([]v2.Resource, 0, len(v2desc.Component.Resources))
-		for i, res := range v2desc.Component.Resources {
-			if keep[i] {
-				filteredResources = append(filteredResources, res)
-			}
+	kept := make([]descriptor.Resource, 0, len(d.Component.Resources))
+	for i := range d.Component.Resources {
+		if err := checkContext(ctx); err != nil {
+			return nil, err
 		}
-		v2desc.Component.Resources = filteredResources
-	}
-
-	raw, err := json.Marshal(v2desc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal descriptor %s: %w", d.Component.String(), err)
-	}
-	var generic map[string]any
-	if err := json.Unmarshal(raw, &generic); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal descriptor %s into generic map: %w", d.Component.String(), err)
-	}
-
-	fc := &FilteredComponent{
-		Key:        ComponentKey{Name: d.Component.Name, Version: d.Component.Version},
-		Raw:        raw,
-		Descriptor: generic,
-	}
-	if component, ok := generic["component"].(map[string]any); ok {
-		fc.Component = component
-		if resources, ok := component["resources"].([]any); ok {
-			for _, res := range resources {
-				if m, ok := res.(map[string]any); ok {
-					fc.Resources = append(fc.Resources, m)
-				}
-			}
+		res := &d.Component.Resources[i]
+		match, err := q.resources.matches(ctx, resourceIdentity(res), labelValues(res.Labels))
+		if err != nil {
+			return nil, err
+		}
+		if match {
+			kept = append(kept, *res)
 		}
 	}
-	return fc, nil
+	out.Component.Resources = kept
+	return &out, nil
 }
 
-// sortByComponentKey sorts components lexicographically by
+// sortByComponentKey sorts descriptors lexicographically by
 // (component.name, component.version) using plain string comparison; SemVer
 // semantics apply to semverCheck only.
-func sortByComponentKey(components []FilteredComponent) []FilteredComponent {
-	slices.SortStableFunc(components, func(a, b FilteredComponent) int {
-		if c := strings.Compare(a.Key.Name, b.Key.Name); c != 0 {
+func sortByComponentKey(descriptors []*descriptor.Descriptor) []*descriptor.Descriptor {
+	slices.SortStableFunc(descriptors, func(a, b *descriptor.Descriptor) int {
+		if c := strings.Compare(a.Component.Name, b.Component.Name); c != 0 {
 			return c
 		}
-		return strings.Compare(a.Key.Version, b.Key.Version)
+		return strings.Compare(a.Component.Version, b.Component.Version)
 	})
-	return components
+	return descriptors
 }
