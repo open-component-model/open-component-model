@@ -30,17 +30,17 @@ jobs:
         env:
           TYPE_TO_LABEL: |
             {
-              "feat":"kind/feature",
-              "fix":"kind/bugfix",
-              "chore":"kind/chore",
-              "refactor":"kind/chore",
+              "feat":["kind/feature"],
+              "fix":["kind/bugfix"],
+              "chore":["kind/chore"],
+              "refactor":["kind/chore"],
               "docs":["kind/chore","area/documentation"],
               "test":["kind/chore","area/quality"],
               "perf":["kind/chore","area/quality"]
             }
           SCOPE_TO_LABEL: |
             {
-              "deps":"kind/dependency"
+              "deps":["kind/dependency"]
             }
           BREAKING_CHANGE_LABEL: "!BREAKING-CHANGE!"
         with:

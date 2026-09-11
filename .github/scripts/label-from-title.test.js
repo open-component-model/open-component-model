@@ -6,16 +6,16 @@ import { deriveLabels, nullProtoMap } from "./label-from-title.js";
 // Mirrors the maps configured in .github/workflows/pull-request.yaml.
 const maps = {
   typeToLabel: {
-    feat: "kind/feature",
-    fix: "kind/bugfix",
-    chore: "kind/chore",
-    refactor: "kind/chore",
+    feat: ["kind/feature"],
+    fix: ["kind/bugfix"],
+    chore: ["kind/chore"],
+    refactor: ["kind/chore"],
     docs: ["kind/chore", "area/documentation"],
     test: ["kind/chore", "area/quality"],
     perf: ["kind/chore", "area/quality"],
   },
   scopeToLabel: {
-    deps: "kind/dependency",
+    deps: ["kind/dependency"],
   },
   breakingLabel: "!BREAKING-CHANGE!",
 };
@@ -86,7 +86,7 @@ test("refactor maps to kind/chore", () => {
 test("a label contributed by both type list and scope is de-duplicated", () => {
   const localMaps = {
     typeToLabel: { docs: ["kind/chore", "area/documentation"] },
-    scopeToLabel: { deps: "kind/chore" },
+    scopeToLabel: { deps: ["kind/chore"] },
     breakingLabel: "!BREAKING-CHANGE!",
   };
   const { valid, labels } = deriveLabels("docs(deps): bump", localMaps);
@@ -128,8 +128,8 @@ test("type colliding with a prototype name is rejected by the regex", () => {
 });
 
 test("nullProtoMap does not resolve inherited Object.prototype members", () => {
-  const m = nullProtoMap({ deps: "kind/dependency" });
-  assert.strictEqual(m.deps, "kind/dependency");
+  const m = nullProtoMap({ deps: ["kind/dependency"] });
+  assert.deepStrictEqual(m.deps, ["kind/dependency"]);
   assert.strictEqual(m.constructor, undefined);
   assert.strictEqual(m.toString, undefined);
   assert.strictEqual(m.hasOwnProperty, undefined);

@@ -27,8 +27,8 @@ export function buildTitleRegex(allowedTypes) {
  * "constructor" or "toString" returns undefined instead of the corresponding
  * Object.prototype value. This makes every bracket lookup on the map safe.
  *
- * @param {Record<string,string|string[]>} source
- * @returns {Record<string,string|string[]>}
+ * @param {Record<string,string[]>} source
+ * @returns {Record<string,string[]>}
  */
 export function nullProtoMap(source) {
   return Object.assign(Object.create(null), source);
@@ -39,16 +39,17 @@ export function nullProtoMap(source) {
  *
  * @param {string} prTitle - The pull request title.
  * @param {object} maps
- * @param {Record<string,string|string[]>} maps.typeToLabel - type -> label or labels.
- * @param {Record<string,string|string[]>} maps.scopeToLabel - scope -> label or labels.
+ * @param {Record<string,string[]>} maps.typeToLabel - type -> labels.
+ * @param {Record<string,string[]>} maps.scopeToLabel - scope -> labels.
  * @param {string} maps.breakingLabel - label added for breaking changes.
  * @returns {{ valid: boolean, labels: string[] }} valid is false when the title
  *   does not follow the Conventional Commit format; labels is then empty.
  */
 export function deriveLabels(prTitle, { typeToLabel, scopeToLabel, breakingLabel }) {
-  // Use prototype-less maps so a type/scope named like an Object.prototype
-  // member (e.g. "constructor", "toString") cannot resolve to an inherited
-  // value and push an invalid (non-string) label.
+  // Scope is free-form input from the PR title. On a plain object, a scope
+  // equal to an Object.prototype member (e.g. "toString") would resolve to the
+  // inherited function and spreading it below would throw; the prototype-less
+  // maps make such lookups return undefined instead.
   const types = nullProtoMap(typeToLabel);
   const scopes = nullProtoMap(scopeToLabel);
 
@@ -62,33 +63,18 @@ export function deriveLabels(prTitle, { typeToLabel, scopeToLabel, breakingLabel
   const { type, scope, breaking } = match.groups;
   const labels = [];
 
-  // A type or scope may map to a single label or a list of labels. Push each
-  // configured string and ignore anything else (nullProtoMap already prevents
-  // inherited prototype members from resolving here).
-  const add = (value) => {
-    if (typeof value === "string") {
-      labels.push(value);
-    } else if (Array.isArray(value)) {
-      for (const label of value) {
-        if (typeof label === "string") {
-          labels.push(label);
-        }
-      }
-    }
-  };
-
   if (breaking) {
     labels.push(breakingLabel);
   }
   if (type) {
-    add(types[type]);
+    labels.push(...(types[type] ?? []));
   }
   if (scope) {
-    add(scopes[scope]);
+    labels.push(...(scopes[scope] ?? []));
   }
 
-  // De-duplicate while preserving order: a type's label list and a scope can
-  // both contribute the same label (e.g. kind/chore).
+  // De-duplicate while preserving order: a type's labels and a scope's labels
+  // can both contribute the same label (e.g. kind/chore).
   return { valid: true, labels: [...new Set(labels)] };
 }
 
