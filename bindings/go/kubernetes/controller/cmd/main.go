@@ -33,6 +33,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer/dynamic"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/discovery"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/indexes"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/replication"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/resource"
@@ -209,6 +210,11 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	if err := indexes.RegisterDiscoveryComponentRef(ctx, mgr.GetFieldIndexer()); err != nil {
+		setupLog.Error(err, "unable to register shared controller index", "index", indexes.DiscoveryComponentRef)
 		os.Exit(1)
 	}
 

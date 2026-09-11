@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -23,15 +22,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/indexes"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 )
 
 const (
-	// ComponentRefIndex indexes Discoveries by their spec.componentRef.name
-	// for same-namespace lookups. It is shared with the Component controller,
-	// which uses it for its deletion guard.
-	ComponentRefIndex = "spec.componentRef.name"
-
 	// ocmConfigIndex indexes Discoveries by their explicit spec.ocmConfig
 	// entries, normalized as kind/namespace/name. Entries are indexed even
 	// when the referenced source does not exist, so that its creation
@@ -43,42 +38,6 @@ const (
 	// normalized as kind/namespace/name.
 	effectiveOCMConfigIndex = "status.effectiveOCMConfig"
 )
-
-// registeredIndexers guards field-index registration against double
-// registration on the same manager cache, shared between the Discovery and
-// Component controllers as well as standalone envtest suites.
-var registeredIndexers sync.Map
-
-// indexed caches the fact that the index was registered for the given indexer.
-func indexed(indexer client.FieldIndexer) bool {
-	_, ok := registeredIndexers.Load(indexer)
-	return ok
-}
-
-func markIndexed(indexer client.FieldIndexer) {
-	registeredIndexers.Store(indexer, struct{}{})
-}
-
-// EnsureComponentRefIndex registers the Discovery component-reference index on
-// the manager once. It is safe to call from multiple controllers and suites
-// sharing the same manager.
-func EnsureComponentRefIndex(ctx context.Context, mgr ctrl.Manager) error {
-	indexer := mgr.GetFieldIndexer()
-	if indexed(indexer) {
-		return nil
-	}
-	if err := indexer.IndexField(ctx, &v1alpha1.Discovery{}, ComponentRefIndex, func(obj client.Object) []string {
-		d, ok := obj.(*v1alpha1.Discovery)
-		if !ok {
-			return nil
-		}
-		return []string{d.Spec.ComponentRef.Name}
-	}); err != nil {
-		return fmt.Errorf("failed setting discovery component reference index: %w", err)
-	}
-	markIndexed(indexer)
-	return nil
-}
 
 // configKey normalizes a configuration reference as kind/namespace/name.
 func configKey(kind, namespace, name string) string {
@@ -126,15 +85,12 @@ func registerConfigIndexes(ctx context.Context, mgr ctrl.Manager) error {
 	return nil
 }
 
-// SetupWithManager sets up the Discovery controller with the Manager:
-// the Discovery component-reference and configuration indexes, the watches on
-// the root Component, the referenced configuration sources, and the normal
-// backoff rate limiter.
+// SetupWithManager sets up the Discovery controller with the Manager.
+// Manager bootstrap must register indexes.DiscoveryComponentRef before calling
+// this method. This method registers the controller-private configuration
+// indexes and configures all watches and rate limiting.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	if err := ValidateSafetyInterval(r.SafetyInterval); err != nil {
-		return err
-	}
-	if err := EnsureComponentRefIndex(ctx, mgr); err != nil {
 		return err
 	}
 	if err := registerConfigIndexes(ctx, mgr); err != nil {
@@ -193,7 +149,7 @@ func (r *Reconciler) mapComponentToDiscoveries(ctx context.Context, obj client.O
 	referencing := &v1alpha1.DiscoveryList{}
 	if err := r.List(ctx, referencing,
 		client.InNamespace(component.GetNamespace()),
-		client.MatchingFields{ComponentRefIndex: component.GetName()}); err != nil {
+		client.MatchingFields{indexes.DiscoveryComponentRef: component.GetName()}); err != nil {
 		log.FromContext(ctx).Error(err, "failed to list discoveries referencing component as root",
 			"component", client.ObjectKeyFromObject(component))
 	} else {

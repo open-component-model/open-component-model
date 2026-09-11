@@ -29,7 +29,7 @@ import (
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/discovery"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/indexes"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
@@ -56,7 +56,8 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 
 var resourceIndex = ".spec.componentRef.Name"
 
-// SetupWithManager sets up the controller with the Manager.
+// SetupWithManager sets up the controller with the Manager. Manager bootstrap
+// must register indexes.DiscoveryComponentRef before calling this method.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Create index for repository reference name from components to make sure to reconcile, when the base ocm-
 	// repository changes.
@@ -84,10 +85,6 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 	}); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
-	if err := discovery.EnsureComponentRefIndex(ctx, mgr); err != nil {
-		return err
-	}
-
 	// event source from resolver's worker pool to get notified when resolutions complete
 	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
 	return ctrl.NewControllerManagedBy(mgr).
@@ -394,7 +391,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Co
 	if err := r.List(ctx, discoveryList, &client.ListOptions{
 		Namespace: component.GetNamespace(),
 		FieldSelector: fields.OneTermEqualSelector(
-			discovery.ComponentRefIndex,
+			indexes.DiscoveryComponentRef,
 			client.ObjectKeyFromObject(component).Name,
 		),
 	}); err != nil {
