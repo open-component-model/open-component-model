@@ -2531,6 +2531,218 @@ func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 	r.Equal(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
 }
 
+// TestRepository_DownloadResourceStream_DigestPinnedWithReferrer covers a
+// digest-pinned OCI image that carries a referrer (e.g. an SBOM attestation).
+// ExtendedCopyGraph pulls the referrer along, so the materialized layout holds
+// more than one manifest and the index alone no longer says which one was
+// requested. The layout must therefore name the requested artifact, otherwise
+// packing it back in (--copy-resources) fails with "multiple manifests found in
+// oci store, but no manifest could be identified as the top level parent".
+func TestRepository_DownloadResourceStream_DigestPinnedWithReferrer(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	const imageRef = "ghcr.io/acme/backend:latest"
+	imgStore, err := store.StoreForReference(ctx, imageRef)
+	r.NoError(err)
+
+	layerData := []byte("layer")
+	layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerData)
+	r.NoError(imgStore.Push(ctx, layer, bytes.NewReader(layerData)))
+
+	main, err := oras.PackManifest(ctx, imgStore, oras.PackManifestVersion1_1, "application/vnd.test.artifact", oras.PackManifestOptions{
+		Layers: []ociImageSpecV1.Descriptor{layer},
+	})
+	r.NoError(err)
+	r.NoError(imgStore.Tag(ctx, main, "latest"))
+
+	// An SBOM-style referrer: a separate manifest whose subject is the image.
+	// It is not contained by the image, only weakly associated with it.
+	empty := ociImageSpecV1.DescriptorEmptyJSON
+	r.NoError(imgStore.Push(ctx, empty, bytes.NewReader(empty.Data)))
+	refBody, err := json.Marshal(ociImageSpecV1.Manifest{
+		Versioned:    specs.Versioned{SchemaVersion: 2},
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: "application/spdx+json",
+		Config:       empty,
+		Layers:       []ociImageSpecV1.Descriptor{empty},
+		Subject:      &main,
+	})
+	r.NoError(err)
+	referrer := ociImageSpecV1.Descriptor{
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: "application/spdx+json",
+		Digest:       digest.FromBytes(refBody),
+		Size:         int64(len(refBody)),
+	}
+	r.NoError(imgStore.Push(ctx, referrer, bytes.NewReader(refBody)))
+
+	// Digest-pinned access, no tag — this is what puts two unnamed manifests in
+	// the layout.
+	resource := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend-sbom", Version: "1.0.0"}},
+		Type:        "ociArtifact",
+		Access: &v1.OCIImage{
+			Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+			ImageReference: "ghcr.io/acme/backend@" + main.Digest.String(),
+		},
+	}
+
+	stream, err := repo.DownloadResourceStream(ctx, resource)
+	r.NoError(err)
+	layoutBlob, err := stream.Materialize(ctx)
+	r.NoError(err)
+
+	ociStore, err := tar.ReadOCILayout(ctx, layoutBlob)
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(ociStore.Close()) })
+	r.Greater(len(ociStore.Index.Manifests), 1, "referrer must travel with the subject, otherwise this test proves nothing")
+
+	top, err := tar.CopyOCILayoutWithIndex(ctx, memory.New(), layoutBlob, tar.CopyOCILayoutWithIndexOptions{})
+	r.NoError(err)
+	r.Equal(main.Digest, top.Digest, "the requested artifact must be the top level, not its referrer")
+}
+
+// TestRepository_DownloadResourceStream_MultiArchByDigest is the referrer-free
+// twin of the test above. A multi-arch index pinned by digest puts the index
+// and each of its children into the layout's index.json, so the ambiguity is
+// not specific to referrers.
+func TestRepository_DownloadResourceStream_MultiArchByDigest(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	imgStore, err := store.StoreForReference(ctx, "ghcr.io/acme/multi:latest")
+	r.NoError(err)
+
+	var children []ociImageSpecV1.Descriptor
+	for _, arch := range []string{"amd64", "arm64"} {
+		layerData := []byte("layer-" + arch)
+		layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerData)
+		r.NoError(imgStore.Push(ctx, layer, bytes.NewReader(layerData)))
+		m, err := oras.PackManifest(ctx, imgStore, oras.PackManifestVersion1_1, "application/vnd.test.artifact",
+			oras.PackManifestOptions{Layers: []ociImageSpecV1.Descriptor{layer}})
+		r.NoError(err)
+		m.Platform = &ociImageSpecV1.Platform{OS: "linux", Architecture: arch}
+		children = append(children, m)
+	}
+
+	idxBody, err := json.Marshal(ociImageSpecV1.Index{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ociImageSpecV1.MediaTypeImageIndex,
+		Manifests: children,
+	})
+	r.NoError(err)
+	idx := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageIndex,
+		Digest:    digest.FromBytes(idxBody),
+		Size:      int64(len(idxBody)),
+	}
+	r.NoError(imgStore.Push(ctx, idx, bytes.NewReader(idxBody)))
+
+	resource := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "multi", Version: "1.0.0"}},
+		Type:        "ociArtifact",
+		Access: &v1.OCIImage{
+			Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+			ImageReference: "ghcr.io/acme/multi@" + idx.Digest.String(),
+		},
+	}
+
+	stream, err := repo.DownloadResourceStream(ctx, resource)
+	r.NoError(err)
+	layoutBlob, err := stream.Materialize(ctx)
+	r.NoError(err)
+
+	ociStore, err := tar.ReadOCILayout(ctx, layoutBlob)
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(ociStore.Close()) })
+	r.Greater(len(ociStore.Index.Manifests), 1, "index and children must all be listed, otherwise this test proves nothing")
+
+	top, err := tar.CopyOCILayoutWithIndex(ctx, memory.New(), layoutBlob, tar.CopyOCILayoutWithIndexOptions{})
+	r.NoError(err)
+	r.Equal(idx.Digest, top.Digest, "the index must be the top level, not one of its children")
+}
+
+// TestRepository_DownloadResourceStream_ReferrerIsTheRequestedArtifact pins the
+// access at the referrer rather than at its subject, which is what an SBOM
+// resource looks like. The layout holds both, and the subject-based heuristic
+// would answer with the subject here — so this is the case that separates a
+// recorded root from a guessed one.
+func TestRepository_DownloadResourceStream_ReferrerIsTheRequestedArtifact(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	imgStore, err := store.StoreForReference(ctx, "ghcr.io/acme/backend:latest")
+	r.NoError(err)
+
+	layerData := []byte("layer")
+	layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerData)
+	r.NoError(imgStore.Push(ctx, layer, bytes.NewReader(layerData)))
+	subject, err := oras.PackManifest(ctx, imgStore, oras.PackManifestVersion1_1, "application/vnd.test.artifact",
+		oras.PackManifestOptions{Layers: []ociImageSpecV1.Descriptor{layer}})
+	r.NoError(err)
+	r.NoError(imgStore.Tag(ctx, subject, "latest"))
+
+	empty := ociImageSpecV1.DescriptorEmptyJSON
+	r.NoError(imgStore.Push(ctx, empty, bytes.NewReader(empty.Data)))
+	refBody, err := json.Marshal(ociImageSpecV1.Manifest{
+		Versioned:    specs.Versioned{SchemaVersion: 2},
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: "application/spdx+json",
+		Config:       empty,
+		Layers:       []ociImageSpecV1.Descriptor{empty},
+		Subject:      &subject,
+	})
+	r.NoError(err)
+	referrer := ociImageSpecV1.Descriptor{
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: "application/spdx+json",
+		Digest:       digest.FromBytes(refBody),
+		Size:         int64(len(refBody)),
+	}
+	r.NoError(imgStore.Push(ctx, referrer, bytes.NewReader(refBody)))
+
+	resource := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend-sbom", Version: "1.0.0"}},
+		Type:        "ociArtifact",
+		Access: &v1.OCIImage{
+			Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+			ImageReference: "ghcr.io/acme/backend@" + referrer.Digest.String(),
+		},
+	}
+
+	stream, err := repo.DownloadResourceStream(ctx, resource)
+	r.NoError(err)
+	layoutBlob, err := stream.Materialize(ctx)
+	r.NoError(err)
+
+	ociStore, err := tar.ReadOCILayout(ctx, layoutBlob)
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(ociStore.Close()) })
+	r.Greater(len(ociStore.Index.Manifests), 1,
+		"the subject must travel with the referrer, otherwise this test proves nothing")
+
+	top, err := tar.CopyOCILayoutWithIndex(ctx, memory.New(), layoutBlob, tar.CopyOCILayoutWithIndexOptions{})
+	r.NoError(err)
+	r.Equal(referrer.Digest, top.Digest,
+		"the referrer was requested, so it is the top level — not the subject it describes")
+}
+
 // TestRepository_UploadResource_CopiesOwnershipReferrer is the by-reference twin
 // of TestRepository_AddLocalResource_CopiesOwnershipReferrer: it proves the
 // UploadResource path (-> uploadOCIImage) carries an ADR-0016 ownership referrer

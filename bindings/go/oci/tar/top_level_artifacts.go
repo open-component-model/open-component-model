@@ -9,11 +9,17 @@ import (
 	"oras.land/oras-go/v2/content"
 )
 
-// TopLevelArtifacts returns the main top-level artifacts from a list of
-// candidates. A candidate is excluded when it is a referrer (declares a
-// subject) or when another candidate contains it as a successor. The remaining
-// candidates are returned in input order.
+// AnnotationLayoutRoot names the artifact a layout was built for, on that
+// artifact's index.json entry, with the value "true".
+const AnnotationLayoutRoot = "software.ocm.layout.root"
+
+// TopLevelArtifacts picks the artifacts a layout is actually about, out of
+// everything its index lists.
 func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates []ociImageSpecV1.Descriptor) []ociImageSpecV1.Descriptor {
+	if root, ok := markedRoot(candidates); ok {
+		return []ociImageSpecV1.Descriptor{root}
+	}
+
 	var mu sync.Mutex
 	excluded := make(map[digest.Digest]struct{}, len(candidates))
 
@@ -47,4 +53,20 @@ func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates 
 		topLevel = append(topLevel, artifact)
 	}
 	return topLevel
+}
+
+// markedRoot returns the artifact carrying [AnnotationLayoutRoot]. It counts
+// digests rather than entries, because index.json lists a descriptor once per
+// reference name it was tagged with: a root that is both tagged and addressed
+// by digest appears several times and is still one root.
+func markedRoot(candidates []ociImageSpecV1.Descriptor) (ociImageSpecV1.Descriptor, bool) {
+	var root ociImageSpecV1.Descriptor
+	marked := make(map[digest.Digest]struct{}, 1)
+	for _, candidate := range candidates {
+		if candidate.Annotations[AnnotationLayoutRoot] == "true" {
+			root = candidate
+			marked[candidate.Digest] = struct{}{}
+		}
+	}
+	return root, len(marked) == 1
 }
