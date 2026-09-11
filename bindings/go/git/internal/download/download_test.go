@@ -81,7 +81,7 @@ func TestDownloadRevisions(t *testing.T) {
 					r.Equal("docs/guide.txt", h.Linkname)
 				}
 			}
-			r.Equal([]string{"README.md", "docs", "docs/guide.txt", "link", "run.sh"}, names)
+			r.Equal([]string{"./", "README.md", "docs/", "docs/guide.txt", "link", "run.sh"}, names)
 			r.NoError(b.Close())
 			r.NoError(b.Close())
 
@@ -187,7 +187,11 @@ func TestSubmoduleArchive(t *testing.T) {
 	tr := tar.NewReader(bytes.NewReader(readBlob(t, b)))
 	h, err := tr.Next()
 	r.NoError(err)
-	r.Equal("vendor", h.Name)
+	r.Equal("./", h.Name)
+
+	h, err = tr.Next()
+	r.NoError(err)
+	r.Equal("vendor/", h.Name)
 	r.Equal(byte(tar.TypeDir), h.Typeflag)
 
 	_, err = tr.Next()
@@ -234,7 +238,9 @@ func TestPinnedArchiveContainsSelectedCommit(t *testing.T) {
 	r := require.New(t)
 
 	fixture := newRepository(t)
-	root := t.TempDir()
+	// Created like the checkout in Download, since the root directory mode is part of the archive.
+	root, err := os.MkdirTemp(t.TempDir(), "")
+	r.NoError(err)
 	repo, err := git.PlainCloneContext(t.Context(), root, false, &git.CloneOptions{URL: fixture.Path, NoCheckout: true})
 	r.NoError(err)
 
