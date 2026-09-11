@@ -30,7 +30,7 @@ OCM ships with the following built-in credential types:
 | [`OCICredentials/v1`](#ocicredentialsv1)                   | `OCIRegistry` consumers                  | OCI registry username/password and token auth                   |
 | [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1)         | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs                  |
 | [`WgetCredentials/v1`](#wgetcredentialsv1)                 | `Wget` consumers                         | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
-| [`S3Credentials/v1`](#s3credentialsv1)                     | `S3Bucket` consumers                     | S3 access keys and temporary STS credentials                    |
+| [`S3Credentials/v1`](#s3credentialsv1)                     | `S3` consumers                           | S3 access keys and temporary STS credentials                    |
 | [`GitHubCredentials/v1`](#githubcredentialsv1)             | `GitHubRepository` consumers             | GitHub and GitHub Enterprise REST API token auth                |
 | [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
 | [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
@@ -233,7 +233,7 @@ Static access keys for every bucket the account owns:
 ```yaml
 consumers:
   - identity:
-      type: S3Bucket
+      type: S3
     credentials:
       - type: S3Credentials/v1
         accessKeyId: <access-key-id>
@@ -245,7 +245,7 @@ Temporary STS credentials, scoped to one object:
 ```yaml
 consumers:
   - identity:
-      type: S3Bucket
+      type: S3
       path: acme-artifacts/datasets/reference/1.0.0/reference.parquet
     credentials:
       - type: S3Credentials/v1
@@ -259,7 +259,7 @@ A self-hosted MinIO, addressed by its endpoint:
 ```yaml
 consumers:
   - identity:
-      type: S3Bucket
+      type: S3
       scheme: https
       hostname: minio.internal
       port: "9000"
@@ -277,9 +277,9 @@ OCM still accepts the OCM v1 property names `awsAccessKeyID`, `awsSecretAccessKe
 
 ### Used With
 
-[`S3Bucket`]({{< relref "credential-consumer-identities.md#s3bucket" >}}) consumer identities. They cover both the
-[`S3Bucket/v1` access type]({{< relref "input-and-access-types.md#s3bucketv1-access" >}}) and the
-[`S3Bucket/v1` input type]({{< relref "input-and-access-types.md#s3bucketv1-input" >}}).
+[`S3`]({{< relref "credential-consumer-identities.md#s3" >}}) consumer identities. They cover both the
+[`S3/v2` access type]({{< relref "input-and-access-types.md#s3v2-access" >}}) and the
+[`S3/v2` input type]({{< relref "input-and-access-types.md#s3v2-input" >}}).
 
 ---
 

@@ -73,6 +73,25 @@ task init/go.work
 task tidy
 ```
 
+## Go Versions
+
+`bindings/go/go.mod` has two directives:
+
+| Directive   | Value      | Meaning                                                                                                      |
+|-------------|------------|--------------------------------------------------------------------------------------------------------------|
+| `go`        | `1.xx.0`   | The **minimum** Go a consumer needs to build against this module. Usually, a minor with 0 for patch          |
+| `toolchain` | `go1.xx.5` | The Go version **open-component-model** uses for builds, testing and scanning. Usually, specific with patch. |
+
+Renovate bumps `toolchain` on every Go release, along with the `golang` container images, etc. Since `setup-go` already
+references the go.mod files, it should automatically get the right version. It never bumps the `go` directive in the go
+mod files. That is only increased if we require or would like to use some new go version ability.
+
+This directive CANNOT be below the HIGHEST directive compared to all dependencies:
+
+```bash
+cd bindings/go && go list -m -f '{{.GoVersion}} {{.Path}}' all | sort -V | tail -5
+```
+
 ## Linting
 
 A single `golangci.yml` at the repository root configures linting for all Go modules. The `task tools:lint` command

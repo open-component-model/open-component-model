@@ -21,7 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
-	v1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 )
@@ -95,8 +95,8 @@ func fakeCredentials() *credv1.S3Credentials {
 	}
 }
 
-func s3Resource(spec *v1.S3Bucket) *descriptor.Resource {
-	spec.Type = accessspec.V1VersionedType
+func s3Resource(spec *v2.S3) *descriptor.Resource {
+	spec.Type = accessspec.V2VersionedType
 	r := &descriptor.Resource{}
 	r.Access = spec
 	return r
@@ -104,7 +104,7 @@ func s3Resource(spec *v1.S3Bucket) *descriptor.Resource {
 
 // servedBy points spec at srv. The fake serves no bucket subdomains, so the access is
 // addressed path-style.
-func servedBy(srv *fakeS3, spec *v1.S3Bucket) *v1.S3Bucket {
+func servedBy(srv *fakeS3, spec *v2.S3) *v2.S3 {
 	spec.Endpoint = srv.URL
 	spec.UsePathStyle = true
 
@@ -119,12 +119,12 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 
 	t.Run("the access spec is carried into the identity", func(t *testing.T) {
 		id, err := repo.GetResourceCredentialConsumerIdentity(context.Background(),
-			s3Resource(&v1.S3Bucket{BucketName: "b", ObjectKey: "obj", Endpoint: "https://minio.internal:9000"}))
+			s3Resource(&v2.S3{BucketName: "b", ObjectKey: "obj", Endpoint: "https://minio.internal:9000"}))
 		require.NoError(t, err)
 		require.Equal(t, "b/obj", id[runtime.IdentityAttributePath])
 		require.Equal(t, "minio.internal", id[runtime.IdentityAttributeHostname])
 		require.Equal(t, "9000", id[runtime.IdentityAttributePort])
-		require.Equal(t, identityv1.S3BucketIdentityType, id[runtime.IdentityAttributeType])
+		require.Equal(t, identityv1.S3IdentityType, id[runtime.IdentityAttributeType])
 	})
 
 	tests := []struct {
@@ -134,12 +134,12 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	}{
 		{
 			name:     "missing object key",
-			resource: s3Resource(&v1.S3Bucket{BucketName: "my-bucket"}),
+			resource: s3Resource(&v2.S3{BucketName: "my-bucket"}),
 			wantErr:  "objectKey is required",
 		},
 		{
 			name:     "empty access",
-			resource: s3Resource(&v1.S3Bucket{}),
+			resource: s3Resource(&v2.S3{}),
 			wantErr:  "bucketName is required",
 		},
 		{
@@ -164,7 +164,7 @@ func Test_DownloadResource(t *testing.T) {
 	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 
 	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"})),
+		s3Resource(servedBy(srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"})),
 		fakeCredentials())
 	require.NoError(t, err)
 
@@ -196,7 +196,7 @@ func Test_ProcessResourceDigest(t *testing.T) {
 	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 
 	res, err := repo.ProcessResourceDigest(context.Background(),
-		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
+		s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
 	require.NoError(t, err)
 	require.NotNil(t, res.Digest)
 	require.Equal(t, godigest.FromBytes(content).Encoded(), res.Digest.Value)
@@ -254,7 +254,7 @@ func Test_ProcessResourceDigest_VerifiesLeniently(t *testing.T) {
 			tempFolder := t.TempDir()
 			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 
-			resource := s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"}))
+			resource := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
 			resource.Digest = tt.digest
 
 			res, err := repo.ProcessResourceDigest(context.Background(), resource, fakeCredentials())
@@ -346,7 +346,7 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 			tempFolder := t.TempDir()
 			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 
-			resource := s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k", Version: tt.specVersion}))
+			resource := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k", Version: tt.specVersion}))
 			res, err := repo.ProcessResourceDigest(context.Background(), resource, fakeCredentials())
 			if tt.wantErr != "" {
 				require.Error(t, err)
@@ -355,7 +355,7 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 			}
 			require.NoError(t, err)
 
-			original := v1.S3Bucket{}
+			original := v2.S3{}
 			require.NoError(t, accessspec.Scheme.Convert(resource.Access, &original))
 			require.Equal(t, tt.specVersion, original.Version, "the caller's resource must not be pinned in place")
 
@@ -365,7 +365,7 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 				require.IsType(t, &runtime.Raw{}, res.Access)
 			}
 
-			spec := v1.S3Bucket{}
+			spec := v2.S3{}
 			require.NoError(t, accessspec.Scheme.Convert(res.Access, &spec))
 			require.Equal(t, tt.wantVersion, spec.Version)
 
@@ -386,7 +386,7 @@ func Test_NewResourceRepository_NilFilesystemConfig(t *testing.T) {
 	repo := NewResourceRepository(nil)
 
 	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(servedBy(srv, &v1.S3Bucket{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
+		s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
 	require.NoError(t, err)
 
 	rc, err := b.ReadCloser()

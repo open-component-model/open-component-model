@@ -1,4 +1,4 @@
-package v1
+package v2
 
 import (
 	"errors"
@@ -8,23 +8,23 @@ import (
 )
 
 const (
-	Type           = "S3Bucket"
-	LowerCamelType = "s3Bucket"
+	Type           = "S3"
+	LowerCamelType = "s3"
 )
 
-// S3Bucket is the input method specification for a resource that comes from a single
+// S3 is the input method specification for a resource that comes from a single
 // blob (object) in an S3 or S3-compatible bucket. OCM downloads the object during the
 // component construction and stores it as a local blob in the component version. The
 // component version therefore does not depend on the bucket after the build. It holds
-// the same fields as the S3Bucket access type.
+// the same fields as the S3 access type.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
-type S3Bucket struct {
-	// +ocm:jsonschema-gen:enum=S3Bucket/v1,s3Bucket/v1
-	// +ocm:jsonschema-gen:enum:deprecated=S3Bucket,s3Bucket
+type S3 struct {
+	// +ocm:jsonschema-gen:enum=S3/v2,s3/v2
+	// +ocm:jsonschema-gen:enum:deprecated=S3,s3
 	Type runtime.Type `json:"type"`
 
 	// Region is the region of the bucket. It is optional. When it is empty, OCM reads
@@ -53,8 +53,8 @@ type S3Bucket struct {
 	UsePathStyle bool `json:"usePathStyle,omitempty"`
 }
 
-// Validate verifies that the required fields of the S3Bucket input are set.
-func (t *S3Bucket) Validate() error {
+// Validate verifies that the required fields of the S3 input are set.
+func (t *S3) Validate() error {
 	if t.BucketName == "" {
 		return errors.New("bucketName is required")
 	}
@@ -64,7 +64,7 @@ func (t *S3Bucket) Validate() error {
 	return nil
 }
 
-func (t *S3Bucket) String() string {
+func (t *S3) String() string {
 	loc := t.BucketName + "/" + t.ObjectKey
 	if t.Endpoint != "" {
 		return strings.TrimSuffix(t.Endpoint, "/") + "/" + loc
