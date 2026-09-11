@@ -16,9 +16,7 @@ For the general contribution process (fork-and-pull workflow, commit requirement
 
 ```text
 .
-├── bindings/go/          # Go library modules
-├── cli/                  # OCM CLI
-├── kubernetes/controller # Kubernetes controllers and Helm chart
+├── bindings/go/          # Go module: core libraries, ocm CLI, Kubernetes controller
 ├── website/              # Project website (ocm.software)
 ├── conformance/          # End-to-end conformance scenarios
 ├── docs/
@@ -35,8 +33,8 @@ Each area has its own contributing guide with area-specific setup, testing conve
 | Area | Guide | Summary |
 |------|-------|---------|
 | Go library | [`bindings/go/CONTRIBUTING.md`](bindings/go/CONTRIBUTING.md) | Module structure, testify conventions, integration tests |
-| CLI | [`cli/CONTRIBUTING.md`](cli/CONTRIBUTING.md) | Building, testing, documentation generation |
-| Kubernetes controller | [`kubernetes/controller/CONTRIBUTING.md`](kubernetes/controller/CONTRIBUTING.md) | Ginkgo tests, envtest, CRD generation, Helm chart |
+| CLI | [`bindings/go/cli/CONTRIBUTING.md`](bindings/go/cli/CONTRIBUTING.md) | Building, testing, documentation generation |
+| Kubernetes controller | [`bindings/go/kubernetes/controller/CONTRIBUTING.md`](bindings/go/kubernetes/controller/CONTRIBUTING.md) | Ginkgo tests, envtest, CRD generation, Helm chart |
 | Website | [`website/CONTRIBUTING.md`](website/CONTRIBUTING.md) | Local dev setup, Diataxis framework, content templates |
 
 ## Common Tasks
@@ -75,6 +73,25 @@ task init/go.work
 task tidy
 ```
 
+## Go Versions
+
+`bindings/go/go.mod` has two directives:
+
+| Directive   | Value      | Meaning                                                                                                      |
+|-------------|------------|--------------------------------------------------------------------------------------------------------------|
+| `go`        | `1.xx.0`   | The **minimum** Go a consumer needs to build against this module. Usually, a minor with 0 for patch          |
+| `toolchain` | `go1.xx.5` | The Go version **open-component-model** uses for builds, testing and scanning. Usually, specific with patch. |
+
+Renovate bumps `toolchain` on every Go release, along with the `golang` container images, etc. Since `setup-go` already
+references the go.mod files, it should automatically get the right version. It never bumps the `go` directive in the go
+mod files. That is only increased if we require or would like to use some new go version ability.
+
+This directive CANNOT be below the HIGHEST directive compared to all dependencies:
+
+```bash
+cd bindings/go && go list -m -f '{{.GoVersion}} {{.Path}}' all | sort -V | tail -5
+```
+
 ## Linting
 
 A single `golangci.yml` at the repository root configures linting for all Go modules. The `task tools:lint` command
@@ -90,9 +107,9 @@ Several types of code are generated from source:
 | ocmtypegen | `bindings/go/generator:ocmtypegen/generate` | OCM type system code |
 | jsonschemagen | `bindings/go/generator:jsonschemagen/generate` | JSON schema definitions |
 | deepcopy-gen | `tools:deepcopy-gen/generate-deepcopy` | Kubernetes-style DeepCopy methods |
-| controller-gen | `kubernetes/controller:manifests` | CRD, RBAC, and webhook manifests |
-| controller-gen | `kubernetes/controller:generate` | Go deepcopy and runtime.Object implementations |
-| CLI docs | `cli:generate/docs` | CLI reference documentation |
+| controller-gen | `bindings/go/kubernetes/controller:manifests` | CRD, RBAC, and webhook manifests |
+| controller-gen | `bindings/go/kubernetes/controller:generate` | Go deepcopy and runtime.Object implementations |
+| CLI docs | `bindings/go/cli:generate/docs` | CLI reference documentation |
 
 Run `task generate` to execute all generators at once. If you change types, schemas, CRDs, or CLI commands, run this
 before committing.

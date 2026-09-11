@@ -202,7 +202,7 @@ Handles resources stored as a single object in an S3 or S3-compatible bucket (AW
 
 | Access Type                                                                   |
 |-------------------------------------------------------------------------------|
-| [`S3Bucket/v1`]({{< relref "input-and-access-types.md" >}}#s3bucketv1-access) |
+| [`S3/v2`]({{< relref "input-and-access-types.md" >}}#s3v2-access)             |
 
 ### Capabilities
 
@@ -214,30 +214,30 @@ Handles resources stored as a single object in an S3 or S3-compatible bucket (AW
 
 {{< callout context="note" >}}
 The repository supports download only, the same as OCM v1. OCM never writes an object into a bucket, so an upload
-never creates an `S3Bucket/v1` access specification.
+never creates an `S3/v2` access specification.
 {{< /callout >}}
 
 ### Credential Resolution
 
 OCM derives the credential consumer identity from `bucketName`, `objectKey` and the optional `endpoint` of the access
-specification. The identity type is `S3Bucket`.
+specification. The identity type is `S3`.
 
 **Example:** A resource sets `bucketName: acme-artifacts` and
 `objectKey: datasets/reference/1.0.0/reference.parquet`, and sets no `endpoint`:
 
 | Attribute | Value                                                       |
 |-----------|-------------------------------------------------------------|
-| `type`    | `S3Bucket`                                                  |
+| `type`    | `S3`                                                        |
 | `path`    | `acme-artifacts/datasets/reference/1.0.0/reference.parquet` |
 
 An `endpoint` adds its `scheme`, `hostname` and `port`. AWS S3 adds no hostname, because it is the default target. The
-[`S3Bucket/v1` input type]({{< relref "input-and-access-types.md" >}}#s3bucketv1-input) derives the identity the same
+[`S3/v2` input type]({{< relref "input-and-access-types.md" >}}#s3v2-input) derives the identity the same
 way, so one consumer entry covers the construction and the later downloads.
 
 Credentials are optional. If no consumer entry matches, the AWS default credential chain applies: environment
 variables, the shared AWS config, and IAM instance or task roles.
 
-See [Credential Consumer Identities: S3Bucket]({{< relref "credential-consumer-identities.md" >}}#s3bucket) for matching
+See [Credential Consumer Identities: S3]({{< relref "credential-consumer-identities.md" >}}#s3) for matching
 rules.
 
 ### Download Behavior

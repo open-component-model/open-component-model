@@ -110,7 +110,7 @@ tasks:
     vars:
       MARKDOWNLINT_CLI2_CONFIG: '{{ .ROOT_DIR }}/.github/config/.markdownlint-cli2.yaml'
     cmd: |
-      npx markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
+      npx --yes markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
         {{ .CLI_ARGS }} '{{ .ROOT_DIR }}/**/*.md'
 
   dependency-table/generate:
