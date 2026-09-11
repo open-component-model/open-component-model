@@ -104,6 +104,8 @@ func NewFS(base string, flag int) (*RootFileSystem, error) {
 	return &RootFileSystem{root: r, flag: flag}, nil
 }
 
+var _ fs.ReadLinkFS = (*RootFileSystem)(nil)
+
 type RootFileSystem struct {
 	// root may be used to only access files within a single directory tree.
 	root *os.Root
@@ -156,6 +158,14 @@ func (s *RootFileSystem) RemoveAll(path string) error {
 
 func (s *RootFileSystem) Stat(name string) (fs.FileInfo, error) {
 	return s.root.Stat(name)
+}
+
+func (s *RootFileSystem) Lstat(name string) (fs.FileInfo, error) {
+	return s.root.Lstat(name)
+}
+
+func (s *RootFileSystem) ReadLink(name string) (string, error) {
+	return s.root.Readlink(name)
 }
 
 func (s *RootFileSystem) ReadOnly() bool {

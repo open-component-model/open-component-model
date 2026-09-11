@@ -74,7 +74,7 @@ func TestArchivePreservesSymlinksAndMetadata(t *testing.T) {
 			r.Equal("inside content", string(data))
 		}
 	}
-	r.Equal([]string{"absolute", "dangling", "dir", "dir/file", "directory", "external-directory", "parent", "relative", "unchanged-target"}, names)
+	r.Equal([]string{"./", "absolute", "dangling", "dir/", "dir/file", "directory", "external-directory", "parent", "relative", "unchanged-target"}, names)
 }
 
 func TestArchiveIgnoresModificationTime(t *testing.T) {
