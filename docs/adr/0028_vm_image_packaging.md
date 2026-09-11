@@ -78,12 +78,12 @@ The media type identifies the disk format. For an embedded image it is carried i
 
 | Disk format            | mediaType                                          |
 |------------------------|----------------------------------------------------|
-| raw                    | `application/vnd.ocm.software.vm.disk.raw.v1`      |
-| qcow2                  | `application/vnd.ocm.software.vm.disk.qcow2.v1`    |
-| vmdk                   | `application/vnd.ocm.software.vm.disk.vmdk.v1`     |
-| vhd / vhdx             | `application/vnd.ocm.software.vm.disk.vhd.v1`      |
-| ISO (installer / live) | `application/vnd.ocm.software.vm.disk.iso.v1`      |
-| OVA (tar of OVF+disks) | `application/vnd.ocm.software.vm.ova.v1+tar`       |
+| `raw`                    | `application/vnd.ocm.software.vm.disk.raw.v1`      |
+| `qcow2`                  | `application/vnd.ocm.software.vm.disk.qcow2.v1`    |
+| `vmdk`                   | `application/vnd.ocm.software.vm.disk.vmdk.v1`     |
+| `vhd` / `vhdx`           | `application/vnd.ocm.software.vm.disk.vhd.v1`      |
+| `ISO` (installer / live) | `application/vnd.ocm.software.vm.disk.iso.v1`      |
+| `OVA` (tar of OVF+disks) | `application/vnd.ocm.software.vm.ova.v1+tar`       |
 
 The reverse-DNS `application/vnd.ocm.software.vm.*` namespace keeps VM media types self-describing and consistent with the existing OCM layout media type `application/vnd.ocm.software.oci.layout.v1+tar` (`bindings/go/oci/spec/layout/media_type.go`), so `BlobTransformer` and download tooling ([ADR-0007](0007_resource_download.md)) can dispatch on them.
 
