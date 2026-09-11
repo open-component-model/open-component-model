@@ -8,7 +8,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -889,6 +888,14 @@ data:
 			specData, err := json.Marshal(repoSpec)
 			Expect(err).NotTo(HaveOccurred())
 
+			By("creating an ocm config holding the verification configuration")
+			configSecret := test.SetupSignatureVerificationConfig(ctx, k8sClient, namespaceName, "signature-verification",
+				test.SignatureVerification{
+					Signature: signatureName,
+					Algorithm: signingv1alpha1.AlgorithmRSASSAPSS,
+					PublicKey: pubKey,
+				})
+
 			By("mocking a verified component")
 			componentObj := test.MockComponent(
 				ctx,
@@ -902,12 +909,7 @@ data:
 						Version:        componentVersion,
 						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
 					},
-					Verify: []v1alpha1.Verification{
-						{
-							Signature: signatureName,
-							Value:     base64.StdEncoding.EncodeToString([]byte(pubKey)),
-						},
-					},
+					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)},
 				},
 			)
 			DeferCleanup(func(ctx SpecContext) {
@@ -939,6 +941,7 @@ data:
 							Value:                  "verified-cache-test-digest",
 						},
 					},
+					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)},
 				},
 			)
 			DeferCleanup(func(ctx SpecContext) {
@@ -1116,6 +1119,14 @@ data:
 			specData, err := json.Marshal(repoSpec)
 			Expect(err).NotTo(HaveOccurred())
 
+			By("creating an ocm config holding the verification configuration")
+			configSecret := test.SetupSignatureVerificationConfig(ctx, k8sClient, namespaceName, "signature-verification",
+				test.SignatureVerification{
+					Signature: signatureName,
+					Algorithm: signingv1alpha1.AlgorithmRSASSAPSS,
+					PublicKey: pubKey,
+				})
+
 			By("mocking a verified parent component")
 			componentObj := test.MockComponent(
 				ctx,
@@ -1129,12 +1140,7 @@ data:
 						Version:        componentVersion,
 						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
 					},
-					Verify: []v1alpha1.Verification{
-						{
-							Signature: signatureName,
-							Value:     base64.StdEncoding.EncodeToString([]byte(pubKey)),
-						},
-					},
+					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)},
 				},
 			)
 			DeferCleanup(func(ctx SpecContext) {
@@ -1167,6 +1173,7 @@ data:
 			})
 
 			old := resourceObj.DeepCopy()
+			resourceObj.Status.EffectiveOCMConfig = []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)}
 			resourceObj.Status.Component = &v1alpha1.ComponentInfo{
 				Component:      childComponentName,
 				Version:        componentVersion,
@@ -1397,6 +1404,14 @@ data:
 			specData, err := json.Marshal(repoSpec)
 			Expect(err).NotTo(HaveOccurred())
 
+			By("creating an ocm config holding the WRONG public key for verification")
+			configSecret := test.SetupSignatureVerificationConfig(ctx, k8sClient, namespaceName, "signature-verification",
+				test.SignatureVerification{
+					Signature: signatureName,
+					Algorithm: signingv1alpha1.AlgorithmRSASSAPSS,
+					PublicKey: wrongPubKey,
+				})
+
 			By("mocking a component with the WRONG public key for verification")
 			componentObj := test.MockComponent(
 				ctx,
@@ -1410,12 +1425,7 @@ data:
 						Version:        componentVersion,
 						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
 					},
-					Verify: []v1alpha1.Verification{
-						{
-							Signature: signatureName,
-							Value:     base64.StdEncoding.EncodeToString([]byte(wrongPubKey)),
-						},
-					},
+					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)},
 				},
 			)
 			DeferCleanup(func(ctx SpecContext) {
@@ -1448,6 +1458,7 @@ data:
 			})
 
 			old2 := resourceObj.DeepCopy()
+			resourceObj.Status.EffectiveOCMConfig = []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)}
 			resourceObj.Status.Component = &v1alpha1.ComponentInfo{
 				Component:      childComponentName,
 				Version:        componentVersion,

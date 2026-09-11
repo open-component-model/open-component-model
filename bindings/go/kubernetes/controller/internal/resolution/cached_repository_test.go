@@ -9,6 +9,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	rsasigningv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 )
 
 func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
@@ -127,10 +128,10 @@ func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
 		version := "v1.0.0"
 
 		verifications1 := []verification.Verification{
-			{Signature: "sig1"},
+			{Signature: "sig1", Verifier: &rsasigningv1alpha1.Config{}},
 		}
 		verifications2 := []verification.Verification{
-			{Signature: "sig2"},
+			{Signature: "sig2", Verifier: &rsasigningv1alpha1.Config{}},
 		}
 
 		key1, err := buildCacheKey(configHash, spec, component, version, verifications1, nil)
@@ -151,12 +152,12 @@ func TestBuildCacheKeyHashKeyGeneration(t *testing.T) {
 		version := "v1.0.0"
 
 		verifications1 := []verification.Verification{
-			{Signature: "sig1"},
-			{Signature: "sig2"},
+			{Signature: "sig1", Verifier: &rsasigningv1alpha1.Config{}},
+			{Signature: "sig2", Verifier: &rsasigningv1alpha1.Config{}},
 		}
 		verifications2 := []verification.Verification{
-			{Signature: "sig2"},
-			{Signature: "sig1"},
+			{Signature: "sig2", Verifier: &rsasigningv1alpha1.Config{}},
+			{Signature: "sig1", Verifier: &rsasigningv1alpha1.Config{}},
 		}
 
 		key1, err := buildCacheKey(configHash, spec, component, version, verifications1, nil)

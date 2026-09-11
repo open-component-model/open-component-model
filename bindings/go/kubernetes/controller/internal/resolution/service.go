@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/utils/lru"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
@@ -51,7 +52,7 @@ type RepositoryOptions struct {
 	RepositorySpec runtime.Typed
 	Configuration  *configuration.Configuration
 	RequesterFunc  func() workerpool.RequesterInfo
-	// Verifications are used to verify against component version signatures and used a cache key.
+	// Verifications are the component signatures to verify and are used as a cache key.
 	Verifications []verification.Verification
 	// Digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
 	Digest        *v2.Digest
@@ -86,20 +87,21 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 	if err != nil {
 		return nil, fmt.Errorf("failed to build repository cache key: %w", err)
 	}
-	var provider resolvers.ComponentVersionRepositoryResolver
+	var resolved *resolvedProvider
 	if cached, ok := r.repoCache.Get(cacheKey); ok {
-		provider = cached.(resolvers.ComponentVersionRepositoryResolver)
+		resolved = cached.(*resolvedProvider)
 	} else {
-		provider, err = r.createResolver(ctx, opts.RepositorySpec, cfg, opts.PluginManager)
+		resolved, err = r.createResolver(ctx, opts.RepositorySpec, cfg, opts.PluginManager)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create provider: %w", err)
 		}
-		r.repoCache.Add(cacheKey, provider)
+		r.repoCache.Add(cacheKey, resolved)
 	}
 
 	return &CacheBackedRepository{
 		logger:          r.logger,
-		resolver:        provider,
+		resolver:        resolved.resolver,
+		credentialGraph: resolved.credentialGraph,
 		cfg:             cfg,
 		workerPool:      r.workerPool,
 		requesterFunc:   requesterFunc,
@@ -110,9 +112,15 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 	}, nil
 }
 
+// resolvedProvider bundles the repository resolver with the credential graph that it was created with.
+type resolvedProvider struct {
+	resolver        resolvers.ComponentVersionRepositoryResolver
+	credentialGraph credentials.Resolver
+}
+
 // createResolver creates a resolver based on the configuration.
 // The resolver handles resolving the appropriate repository for each component.
-func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration, pm *manager.PluginManager) (resolvers.ComponentVersionRepositoryResolver, error) {
+func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration, pm *manager.PluginManager) (*resolvedProvider, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("repository spec is required")
 	}
@@ -121,8 +129,9 @@ func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *
 		RepoProvider: pm.ComponentVersionRepositoryRegistry,
 	}
 
+	var credGraph credentials.Resolver
 	if cfg != nil {
-		credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
+		graph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
 			PluginManager: pm,
 			Logger:        r.logger,
 		})
@@ -130,7 +139,8 @@ func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *
 			return nil, fmt.Errorf("failed to create credential graph: %w", err)
 		}
 		r.logger.V(1).Info("resolved credential graph")
-		opts.CredentialGraph = credGraph
+		credGraph = graph
+		opts.CredentialGraph = graph
 
 		fallbackResolvers, pathMatchers, err := resolvers.ExtractResolvers(cfg.Config, ocirepository.Scheme)
 		if err != nil {
@@ -140,5 +150,10 @@ func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *
 		opts.PathMatchers = pathMatchers
 	}
 
-	return resolvers.New(ctx, opts, spec)
+	resolver, err := resolvers.New(ctx, opts, spec)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resolvedProvider{resolver: resolver, credentialGraph: credGraph}, nil
 }
