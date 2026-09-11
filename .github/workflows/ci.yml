@@ -9,7 +9,7 @@ on:
 # Single Go module repo: bindings/go is the only buildable/testable module.
 # conformance/scenarios/sovereign/components/notes is a lint-only fixture module.
 # Scopes are static: push to main runs everything, PRs run unit/integration tests only
-# when bindings/go, the shared task plumbing (Taskfile.yml, reuse.Taskfile.yml), or ci.yml
+# when bindings/go, the shared task plumbing (Taskfile.yml), or ci.yml
 # changes. Lint runs for the changed module only, or for all modules when golangci.yml /
 # .env / ci.yml changes.
 
@@ -38,7 +38,6 @@ jobs:
               - 'bindings/go/**'
               # Task plumbing that the Go test/build tasks resolve through
               - 'Taskfile.yml'
-              - 'reuse.Taskfile.yml'
             fixture:
               - 'conformance/scenarios/sovereign/components/notes/**'
             lint_config:
@@ -240,7 +239,6 @@ jobs:
         with:
           sparse-checkout: |
             bindings/go
-            reuse.Taskfile.yml
           persist-credentials: false
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7

@@ -1,4 +1,4 @@
-// Package input implements the constructor input method for the S3Bucket type. It
+// Package input implements the constructor input method for the S3 type. It
 // downloads a single object from an S3 or S3-compatible bucket while a component
 // version is constructed and hands it to the constructor as a local blob, so the
 // finished component version carries the content instead of a reference to the bucket.
@@ -15,7 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/s3/spec/input"
-	"ocm.software/open-component-model/bindings/go/s3/spec/input/v1"
+	"ocm.software/open-component-model/bindings/go/s3/spec/input/v2"
 )
 
 var _ constructor.ResourceInputMethod = (*InputMethod)(nil)
@@ -42,7 +42,7 @@ func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
 }
 
 // GetResourceCredentialConsumerIdentity resolves the credential consumer identity for
-// an S3 input. It derives the same identity as the S3Bucket access type, so a consumer
+// an S3 input. It derives the same identity as the S3 access type, so a consumer
 // entry configured for a bucket resolves for both.
 func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
 	spec, err := i.convertInput(resource)
@@ -53,7 +53,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	return identityv1.IdentityFromObject(spec.BucketName, spec.ObjectKey, spec.Endpoint)
 }
 
-// ProcessResource downloads the object described by the S3Bucket input specification
+// ProcessResource downloads the object described by the S3 input specification
 // and returns it as local blob data to be stored in the component version.
 //
 // The object is streamed into a file under [InputMethod.TempFolder], and the returned
@@ -93,7 +93,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}, nil
 }
 
-func (i *InputMethod) convertInput(resource *constructorruntime.Resource) (*v1.S3Bucket, error) {
+func (i *InputMethod) convertInput(resource *constructorruntime.Resource) (*v2.S3, error) {
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
 	}
@@ -101,7 +101,7 @@ func (i *InputMethod) convertInput(resource *constructorruntime.Resource) (*v1.S
 		return nil, fmt.Errorf("resource input is required")
 	}
 
-	spec := &v1.S3Bucket{}
+	spec := &v2.S3{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, spec); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}

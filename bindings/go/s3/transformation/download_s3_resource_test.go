@@ -19,7 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	s3access "ocm.software/open-component-model/bindings/go/s3/spec/access"
-	s3v1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
+	s3v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/s3/transformation"
 	"ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
@@ -64,8 +64,8 @@ func newFakeS3(t *testing.T, body []byte) *httptest.Server {
 
 func s3Resource(t *testing.T, endpoint string) *v2.Resource {
 	t.Helper()
-	access := &s3v1.S3Bucket{
-		Type:         s3access.V1VersionedType,
+	access := &s3v2.S3{
+		Type:         s3access.V2VersionedType,
 		Region:       "us-east-1",
 		BucketName:   "my-bucket",
 		ObjectKey:    "path/to/myfile",
