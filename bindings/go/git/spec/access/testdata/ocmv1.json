@@ -1,0 +1,6 @@
+{
+  "type": "git",
+  "repository": "file:///fixture/repository",
+  "ref": "refs/heads/main",
+  "commit": "8a06d21da930c1ac2051f2e40a58b9a01673fa04"
+}

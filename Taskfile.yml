@@ -24,6 +24,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/constructor/integration/Taskfile.yml
     dir: ./bindings/go/constructor/integration
+  bindings/go/git/integration:
+    optional: true
+    taskfile: ./bindings/go/git/integration/Taskfile.yml
+    dir: ./bindings/go/git/integration
   bindings/go/github/integration:
     optional: true
     taskfile: ./bindings/go/github/integration/Taskfile.yml
