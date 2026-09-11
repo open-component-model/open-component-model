@@ -31,7 +31,6 @@ jobs:
               - 'bindings/go/**'
               # Task plumbing that the Go test/build tasks resolve through
               - 'Taskfile.yml'
-              - 'reuse.Taskfile.yml'
             lint:
               - '.env'
               - 'golangci.yml'
@@ -222,7 +221,6 @@ jobs:
         with:
           sparse-checkout: |
             bindings/go
-            reuse.Taskfile.yml
           persist-credentials: false
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7

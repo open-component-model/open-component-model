@@ -1,9 +1,5 @@
 version: '3'
 
-includes:
-  reuse: ../../../reuse.Taskfile.yml
-
-
 vars:
   IMAGE_TOOL: docker
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
@@ -23,16 +19,11 @@ vars:
 tasks:
   test:
     cmds:
-      - task: reuse:run-go-test
-        vars:
-          SKIP_PATTERN: '{{ .INTEGRATION_TEST_IDENTIFIER }}'
+      - go test -skip '{{ .INTEGRATION_TEST_IDENTIFIER }}' ./... {{.CLI_ARGS}}
 
   test/integration:
     cmds:
-      - task: reuse:run-go-test
-        vars:
-          GO_TEST_FLAGS: '-run "{{ .INTEGRATION_TEST_IDENTIFIER }}"'
-          PACKAGES: './integration/...'
+      - go test -run '{{ .INTEGRATION_TEST_IDENTIFIER }}' ./integration/... {{.CLI_ARGS}}
 
   install:
     desc: "Install the CLI"
