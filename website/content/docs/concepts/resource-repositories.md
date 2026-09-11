@@ -45,7 +45,7 @@ flowchart TB
     CD -->|"OCIImage/v1 access"| OCI
     CD -->|"Helm/v1 access"| Helm
     CD -->|"Wget/v1 access"| Wget
-    CD -->|"S3Bucket/v1 access"| S3
+    CD -->|"S3/v2 access"| S3
     CD -->|"GitHub/v1 access"| GitHub
     OCI --> Registry["OCI Registry"]
     Helm --> HelmRepo["Helm Chart Repository"]
