@@ -52,6 +52,9 @@ func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginMana
 	if v2.IsLocalBlob(access) {
 		data, _, err = repo.GetLocalResource(ctx, component, version, identity)
 	} else {
+		if access == nil {
+			return nil, fmt.Errorf("access was empty for resource %s", res.Name)
+		}
 		var plugin resource.Repository
 		plugin, err = pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, access)
 		if err != nil {

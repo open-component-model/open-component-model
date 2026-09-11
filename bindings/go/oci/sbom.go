@@ -101,7 +101,7 @@ func (repo *Repository) localResourceFromDescriptor(ctx context.Context, store s
 
 	resource, ok := candidates[0].(*descriptor.Resource)
 	if !ok {
-		return nil, fmt.Errorf("candidate was not of type *descriptor.Request but was %T", candidates[0])
+		return nil, fmt.Errorf("candidate was not of type *descriptor.Resource but was %T", candidates[0])
 	}
 
 	return resource, nil
