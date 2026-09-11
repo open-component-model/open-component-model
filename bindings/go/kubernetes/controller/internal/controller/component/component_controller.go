@@ -121,40 +121,14 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 
 				return requests
 			})).
-		Watches(
-			// Ensure to reconcile the component when an OCM resource changes that references this component.
-			// We want to reconcile because the component-finalizer makes sure that the component is only deleted when
-			// it is not referenced by any resource anymore. So, when the component is already marked for deletion, we
-			// want to get notified about resource changes (e.g. deletion) to remove the component-finalizer
-			// respectively.
-			&v1alpha1.Resource{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				resource, ok := obj.(*v1alpha1.Resource)
-				if !ok {
-					return []reconcile.Request{}
-				}
-
-				component := &v1alpha1.Component{}
-				if err := r.Get(ctx, client.ObjectKey{
-					Namespace: resource.GetNamespace(),
-					Name:      resource.Spec.ComponentRef.Name,
-				}, component); err != nil {
-					return []reconcile.Request{}
-				}
-
-				// Only reconcile if the component is marked for deletion
-				if component.GetDeletionTimestamp().IsZero() {
-					return []reconcile.Request{}
-				}
-
-				return []reconcile.Request{
-					{NamespacedName: types.NamespacedName{
-						Namespace: component.GetNamespace(),
-						Name:      component.GetName(),
-					}},
-				}
-			})).
-		Watches(&v1alpha1.Discovery{}, &discoveryReleaseHandler{client: r.Client}).
+		// Ensure to reconcile the component when an OCM resource or discovery changes that references this
+		// component. We want to reconcile because the component-finalizer makes sure that the component is only
+		// deleted when it is not referenced by any resource or discovery anymore. So, when the component is already
+		// marked for deletion, we want to get notified about reference changes (e.g. deletion or retargeting) to
+		// remove the component-finalizer respectively. Update events map both the old and the new reference, so
+		// retargeting releases the previously referenced Component.
+		Watches(&v1alpha1.Resource{}, handler.EnqueueRequestsFromMapFunc(r.mapToDeletingComponent)).
+		Watches(&v1alpha1.Discovery{}, handler.EnqueueRequestsFromMapFunc(r.mapToDeletingComponent)).
 		WithOptions(controller.Options{
 			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
 				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
@@ -162,6 +136,39 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 			),
 		}).
 		Complete(r)
+}
+
+// mapToDeletingComponent maps a Resource or Discovery event to a reconcile
+// request for the Component it references, but only when that Component exists
+// and is marked for deletion. It is the reverse mapping for the Component
+// deletion guard: deleting or retargeting a reference must release the
+// previously referenced Component. Update events are mapped for both the old
+// and the new reference by controller-runtime, so retargeting releases the old
+// Component as well. Unsupported object types and lookup failures yield no
+// requests.
+func (r *Reconciler) mapToDeletingComponent(ctx context.Context, obj client.Object) []reconcile.Request {
+	var refName string
+	switch o := obj.(type) {
+	case *v1alpha1.Resource:
+		refName = o.Spec.ComponentRef.Name
+	case *v1alpha1.Discovery:
+		refName = o.Spec.ComponentRef.Name
+	default:
+		return nil
+	}
+
+	key := client.ObjectKey{Namespace: obj.GetNamespace(), Name: refName}
+	component := &v1alpha1.Component{}
+	if err := r.Get(ctx, key, component); err != nil {
+		return nil
+	}
+
+	// Only reconcile if the component is marked for deletion.
+	if component.GetDeletionTimestamp().IsZero() {
+		return nil
+	}
+
+	return []reconcile.Request{{NamespacedName: key}}
 }
 
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=components,verbs=get;list;watch;create;update;patch;delete
