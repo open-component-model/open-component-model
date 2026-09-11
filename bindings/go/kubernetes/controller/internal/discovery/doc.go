@@ -16,6 +16,14 @@
 //	Query.Filter(ctx, graph) -> Filtered   (reference -> component -> resource stages)
 //	Query.Project(ctx, filtered) -> Payload (raw | byResources | byComponents | expression)
 //
+// Filtering keeps runtime descriptors: it performs no v2 conversion or
+// serialization, only label decoding for selector evaluation. Filtered is a
+// read-only view over the graph, not an isolated snapshot: Filter owns the
+// result slice and each surviving descriptor's resource slice, but shares all
+// other nested data read-only with the input. Neither the graph nor its
+// descriptors are mutated. v2 JSON and generic CEL maps are materialized only
+// in Project, and only for the selected output.
+//
 // Bindings exposed to CEL expressions depend on the stage:
 //   - selectors: identity (map of string to string), labels (label name to decoded JSON value)
 //   - extract.byResources: component (inner component), resource
@@ -25,7 +33,11 @@
 // Missing field or key access is not an error: it is a selector nonmatch and an
 // omitted extraction field. All other CEL errors (type errors, nonboolean selector
 // results, invalid SemVer inputs, cancellation) are reported as structured
-// SelectorError or ExtractError values.
+// SelectorError or ExtractError values. Descriptor conversion, marshalling, or
+// decoding failures surface from Project as ordinary wrapped errors carrying the
+// component name/version, not as ExtractError, so the controller treats them as
+// retryable rather than terminal. A resource removed by selection is never
+// serialized, so a bad access on a discarded resource cannot fail projection.
 //
 // Empty reference or component selector stages are not failures: Filter reports
 // them with a distinct EmptyReason and Project deterministically emits an empty list.

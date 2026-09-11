@@ -12,9 +12,9 @@ import (
 )
 
 func filteredKeys(f *Filtered) []string {
-	keys := make([]string, 0, len(f.Components))
-	for _, c := range f.Components {
-		keys = append(keys, c.Key.String())
+	keys := make([]string, 0, len(f.Descriptors))
+	for _, d := range f.Descriptors {
+		keys = append(keys, ComponentKey{Name: d.Component.Name, Version: d.Component.Version}.String())
 	}
 	return keys
 }
@@ -124,8 +124,8 @@ func TestFilterNoReferencesMatchedReason(t *testing.T) {
 	r.NoError(err)
 	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "root", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{root, child}})
 	r.NoError(err)
-	r.Empty(f.Components)
-	r.NotNil(f.Components)
+	r.Empty(f.Descriptors)
+	r.NotNil(f.Descriptors)
 	r.Equal(EmptyReasonNoReferencesMatched, f.Reason)
 }
 
@@ -149,7 +149,7 @@ func TestFilterComponentSelectorStructuredLabelsAndReason(t *testing.T) {
 	r.NoError(err)
 	f, err = q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "root", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{root, child}})
 	r.NoError(err)
-	r.Empty(f.Components)
+	r.Empty(f.Descriptors)
 	r.Equal(EmptyReasonNoComponentsMatched, f.Reason)
 }
 
@@ -170,13 +170,13 @@ func TestFilterResourceSelectorKeepsZeroResourceComponents(t *testing.T) {
 	r.Equal(EmptyReasonNone, f.Reason, "resource-empty stages are ordinary success")
 	r.ElementsMatch([]string{"empty:1.0.0", "some:1.0.0"}, filteredKeys(f))
 
-	byKey := map[string]FilteredComponent{}
-	for _, c := range f.Components {
-		byKey[c.Key.String()] = c
+	byKey := map[string]*descriptor.Descriptor{}
+	for _, d := range f.Descriptors {
+		byKey[ComponentKey{Name: d.Component.Name, Version: d.Component.Version}.String()] = d
 	}
-	r.Empty(byKey["empty:1.0.0"].Resources, "component with zero resources must be kept")
-	r.Len(byKey["some:1.0.0"].Resources, 1)
-	r.Equal("keep-me", byKey["some:1.0.0"].Resources[0]["name"])
+	r.Empty(byKey["empty:1.0.0"].Component.Resources, "component with zero resources must be kept")
+	r.Len(byKey["some:1.0.0"].Component.Resources, 1)
+	r.Equal("keep-me", byKey["some:1.0.0"].Component.Resources[0].Name)
 }
 
 func TestFilterResourceDeclarationOrderPreserved(t *testing.T) {
@@ -192,8 +192,8 @@ func TestFilterResourceDeclarationOrderPreserved(t *testing.T) {
 	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
 	r.NoError(err)
 	names := make([]string, 0, 3)
-	for _, res := range f.Components[0].Resources {
-		names = append(names, res["name"].(string))
+	for _, res := range f.Descriptors[0].Component.Resources {
+		names = append(names, res.Name)
 	}
 	r.Equal([]string{"z-first", "a-second", "m-third"}, names)
 }
@@ -213,46 +213,38 @@ func TestFilterSortsLexicographicallyNotBySemver(t *testing.T) {
 
 func TestFilterDoesNotMutateInputs(t *testing.T) {
 	r := require.New(t)
-	d := newDescriptor("d", "1.0.0", withResources(
-		newResource("keep"),
-		newResource("drop"),
-	))
-	snapshot, err := json.Marshal(d.Component)
+	d := newDescriptor("d", "1.0.0",
+		withComponentLabels(structuredLabel("feature", map[string]any{"enabled": true})),
+		withReferences(newReference("to-x", "x", "1.0.0")),
+		withResources(
+			newResource("drop", withResourceLabels(stringLabel("kind", "buildtime"))),
+			newResource("keep"),
+		))
+	snapshot, err := json.Marshal(mustConvertV2(t, d))
 	r.NoError(err)
 
 	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{
 		ResourceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "keep"}},
 	})
 	r.NoError(err)
-	_, err = q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
-	r.NoError(err)
 
-	after, err := json.Marshal(d.Component)
-	r.NoError(err)
-	r.JSONEq(string(snapshot), string(after), "filtering must copy before mutation")
+	// Filter multiple times against the same graph, then project every mode.
+	for range 3 {
+		f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
+		r.NoError(err)
+		_, err = q.Project(t.Context(), f)
+		r.NoError(err)
+	}
+
+	// Typed assertions: original resource order and count are unchanged.
 	r.Len(d.Component.Resources, 2)
-}
+	r.Equal("drop", d.Component.Resources[0].Name)
+	r.Equal("keep", d.Component.Resources[1].Name)
+	r.Len(d.Component.Resources[0].Labels, 1)
 
-func TestFilterKeepsV2JSONShape(t *testing.T) {
-	r := require.New(t)
-	d := newDescriptor("d", "1.0.0",
-		withReferences(newReference("to-x", "x", "1.0.0")),
-		withResources(newResource("image", withResourceExtras(map[string]string{"platform": "linux"}))))
-
-	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{})
+	after, err := json.Marshal(mustConvertV2(t, d))
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
-	r.NoError(err)
-	r.Len(f.Components, 1)
-
-	var decoded map[string]any
-	r.NoError(json.Unmarshal(f.Components[0].Raw, &decoded))
-	component := decoded["component"].(map[string]any)
-	r.Contains(component, "componentReferences", "v2 JSON field names must be preserved")
-
-	res := component["resources"].([]any)[0].(map[string]any)
-	r.Equal("linux", res["extraIdentity"].(map[string]any)["platform"])
-	r.Contains(res, "access")
+	r.JSONEq(string(snapshot), string(after), "filtering and projection must not mutate inputs")
 }
 
 func TestFilterDuplicateDescriptorsResolveOnce(t *testing.T) {
@@ -264,8 +256,40 @@ func TestFilterDuplicateDescriptorsResolveOnce(t *testing.T) {
 	r.NoError(err)
 	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d1, d1dup}})
 	r.NoError(err)
-	r.Len(f.Components, 1)
-	r.Empty(f.Components[0].Resources, "first descriptor wins on duplicate keys")
+	r.Len(f.Descriptors, 1)
+	r.Empty(f.Descriptors[0].Component.Resources, "first descriptor wins on duplicate keys")
+}
+
+func TestFilterIgnoresNilAndEmptyGraph(t *testing.T) {
+	r := require.New(t)
+	d := newDescriptor("d", "1.0.0")
+
+	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{})
+	r.NoError(err)
+
+	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{nil, d, nil}})
+	r.NoError(err)
+	r.Equal([]string{"d:1.0.0"}, filteredKeys(f))
+
+	f, err = q.Filter(t.Context(), Graph{Descriptors: nil})
+	r.NoError(err)
+	r.NotNil(f.Descriptors)
+	r.Empty(f.Descriptors)
+	r.Equal(EmptyReasonNoComponentsMatched, f.Reason)
+}
+
+func TestFilterPreservesGraphOrder(t *testing.T) {
+	r := require.New(t)
+	d1 := newDescriptor("b", "1.0.0")
+	d2 := newDescriptor("a", "1.0.0")
+	graph := Graph{Root: ComponentKey{Name: "b", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d1, d2}}
+
+	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{})
+	r.NoError(err)
+	_, err = q.Filter(t.Context(), graph)
+	r.NoError(err)
+	r.Same(d1, graph.Descriptors[0], "Graph.Descriptors order must not change")
+	r.Same(d2, graph.Descriptors[1])
 }
 
 func TestFilterSelectorErrorSurfacesStage(t *testing.T) {
