@@ -20,10 +20,10 @@ import (
 	"log/slog"
 
 	ocmblob "ocm.software/open-component-model/bindings/go/blob"
-	internalaccess "ocm.software/open-component-model/bindings/go/cli/internal/access"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	artifactref "ocm.software/open-component-model/bindings/go/descriptor/runtime/labels/artifactref/v1alpha1"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -149,7 +149,7 @@ func fromAttestations(ctx context.Context, req Request) ([]repository.SBOM, erro
 			targetIdentity, access.GetType(), reason)
 	}
 
-	if internalaccess.IsLocal(access) {
+	if v2.IsLocalBlob(access) {
 		if req.DiscoverLocal == nil {
 			return nil, notInspectable(errors.New("repository does not support local sbom discovery"))
 		}

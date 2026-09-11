@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	internalaccess "ocm.software/open-component-model/bindings/go/cli/internal/access"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -49,7 +49,7 @@ func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginMana
 	var data blob.ReadOnlyBlob
 	var err error
 
-	if internalaccess.IsLocal(access) {
+	if v2.IsLocalBlob(access) {
 		data, _, err = repo.GetLocalResource(ctx, component, version, identity)
 	} else {
 		var plugin resource.Repository

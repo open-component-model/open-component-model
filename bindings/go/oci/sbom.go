@@ -99,7 +99,12 @@ func (repo *Repository) localResourceFromDescriptor(ctx context.Context, store s
 		return nil, fmt.Errorf("found %d candidates while looking for resource %q, but expected exactly one", len(candidates), identity)
 	}
 
-	return candidates[0].(*descriptor.Resource), nil
+	resource, ok := candidates[0].(*descriptor.Resource)
+	if !ok {
+		return nil, fmt.Errorf("candidate was not of type *descriptor.Request but was %T", candidates[0])
+	}
+
+	return resource, nil
 }
 
 // localBlobAccess converts a resource's access into a local blob, failing when it is
