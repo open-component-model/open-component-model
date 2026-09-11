@@ -296,6 +296,11 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 	if err != nil {
 		return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
 	}
+	if resolved.Tag == "" {
+		slogcontext.Warn(ctx, "resource access references an image without a tag; if it is transferred and uploaded as oci image, it will be untagged, retention depends on the target registry's garbage collection policy",
+			"imageReference", typed.ImageReference,
+			log.IdentityLogAttr("resource", res.ToIdentity()))
+	}
 
 	var pinnedDigest digest.Digest
 	if dig, err := resolved.Digest(); err == nil {
@@ -619,6 +624,11 @@ func (repo *Repository) getStore(ctx context.Context, component string, version 
 }
 
 // UploadResource uploads a [*descriptor.Resource] to the repository.
+// The target access image reference may carry a tag, a digest, or neither:
+// a tag is applied on upload, a digest-only reference is preserved as-is,
+// and a reference carrying neither is pinned to the pushed digest. Uploads
+// without a tag are logged as a warning because retention of the artifact
+// then depends on the target registry's garbage collection policy.
 func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Resource, b blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "upload resource", log.IdentityLogAttr("resource", res.ToIdentity()))
@@ -645,6 +655,8 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 }
 
 // UploadSource uploads a [*descriptor.Source] to the repository.
+// See [Repository.UploadResource] for the tag/digest handling of the target
+// access image reference.
 func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source, b blob.ReadOnlyBlob) (newSrc *descriptor.Source, err error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "upload source", log.IdentityLogAttr("source", src.ToIdentity()))
@@ -692,9 +704,6 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
 	}
-	if err := ref.ValidateReferenceAsTag(); err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("can only copy %q if it is tagged: %w", access.ImageReference, err)
-	}
 
 	extendedOpts := oras.ExtendedCopyGraphOptions{
 		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
@@ -703,8 +712,19 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to upload resource via copy: %w", err)
 	}
 
-	if err := store.Tag(ctx, main, ref.Tag); err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to tag main artifact with tag %q: %w", ref.Tag, err)
+	if ref.Tag != "" {
+		if err := store.Tag(ctx, main, ref.Tag); err != nil {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to tag main artifact with tag %q: %w", ref.Tag, err)
+		}
+	} else {
+		slogcontext.Warn(ctx, "uploading OCI artifact without a tag, retention depends on the target registry's garbage collection policy",
+			"imageReference", access.ImageReference)
+	}
+
+	// if we don't have a pinned access we can pin it now.
+	if ref.Reference.Reference == "" {
+		ref.Reference.Reference = main.Digest.String()
+		access.ImageReference = ref.String()
 	}
 
 	return main, &access, nil
@@ -1138,6 +1158,9 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		if err := store.Tag(ctx, rs.Root(), ref.Tag); err != nil {
 			return nil, fmt.Errorf("failed to tag artifact with tag %q: %w", ref.Tag, err)
 		}
+	} else {
+		slogcontext.Warn(ctx, "uploading OCI artifact without a tag, retention depends on the target registry's garbage collection policy",
+			"imageReference", access.ImageReference)
 	}
 
 	res = res.DeepCopy()

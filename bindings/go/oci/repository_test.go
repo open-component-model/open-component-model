@@ -2913,3 +2913,99 @@ func TestRepository_AddOwnership_RawBlobSubjectSkipped(t *testing.T) {
 	r.NoError(err)
 	r.Nil(body, "a raw-blob subject must yield no ownership referrer")
 }
+
+// TestRepository_UploadResource_DigestOnlyAccess verifies that the
+// materialized upload path accepts digest-only and bare image references
+// (mirroring UploadResourceStream): no tag is applied, a warning is logged,
+// and the resulting access is pinned to the pushed digest when the reference
+// did not already carry one.
+func TestRepository_UploadResource_DigestOnlyAccess(t *testing.T) {
+	r := require.New(t)
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, oci.WithResolver(store))
+
+	newLayoutBlob := func(t *testing.T) (blob.ReadOnlyBlob, ociImageSpecV1.Descriptor) {
+		t.Helper()
+		var buf bytes.Buffer
+		w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+		require.NoError(t, err)
+		layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, []byte("layer"))
+		require.NoError(t, w.Push(t.Context(), layer, bytes.NewReader([]byte("layer"))))
+		manifest, err := oras.PackManifest(t.Context(), w, oras.PackManifestVersion1_1, "application/artifact", oras.PackManifestOptions{
+			Layers: []ociImageSpecV1.Descriptor{layer},
+		})
+		require.NoError(t, err)
+		require.NoError(t, w.Close())
+		return inmemory.New(bytes.NewReader(buf.Bytes())), manifest
+	}
+
+	newResource := func(ref string) *descriptor.Resource {
+		return &descriptor.Resource{
+			Relation:    descriptor.LocalRelation,
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "img", Version: "1.0.0"}},
+			Type:        "ociImage",
+			Access: &v1.OCIImage{
+				Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+				ImageReference: ref,
+			},
+		}
+	}
+
+	t.Run("bare reference uploads untagged and pins the pushed digest", func(t *testing.T) {
+		r := require.New(t)
+		b, manifest := newLayoutBlob(t)
+
+		updated, err := repo.UploadResource(t.Context(), newResource("ghcr.io/acme/dst"), b)
+		r.NoError(err)
+
+		access, ok := updated.Access.(*v1.OCIImage)
+		r.True(ok, "expected an OCIImage access, got %T", updated.Access)
+		r.Equal("ghcr.io/acme/dst@"+manifest.Digest.String(), access.ImageReference,
+			"the access must be pinned to the pushed digest")
+
+		dstStore, err := store.StoreForReference(t.Context(), "ghcr.io/acme/dst")
+		r.NoError(err)
+		exists, err := dstStore.Exists(t.Context(), manifest)
+		r.NoError(err)
+		r.True(exists, "the pushed root must be content-addressable")
+		_, err = dstStore.Resolve(t.Context(), "latest")
+		r.ErrorIs(err, errdef.ErrNotFound, "no tag must be present for a digest-only upload")
+	})
+
+	t.Run("digest-only reference is preserved as-is and not tagged", func(t *testing.T) {
+		r := require.New(t)
+		b, manifest := newLayoutBlob(t)
+
+		ref := "ghcr.io/acme/dst-digest@" + manifest.Digest.String()
+		updated, err := repo.UploadResource(t.Context(), newResource(ref), b)
+		r.NoError(err)
+		r.Equal(ref, updated.Access.(*v1.OCIImage).ImageReference,
+			"a digest-only reference must be preserved, not re-pinned")
+
+		dstStore, err := store.StoreForReference(t.Context(), ref)
+		r.NoError(err)
+		resolved, err := dstStore.Resolve(t.Context(), manifest.Digest.String())
+		r.NoError(err)
+		r.Equal(manifest.Digest, resolved.Digest)
+		_, err = dstStore.Resolve(t.Context(), "latest")
+		r.ErrorIs(err, errdef.ErrNotFound, "no tag must be created for a digest-only upload")
+	})
+
+	t.Run("tagged access is applied as a tag and not re-pinned", func(t *testing.T) {
+		r := require.New(t)
+		b, manifest := newLayoutBlob(t)
+
+		updated, err := repo.UploadResource(t.Context(), newResource("ghcr.io/acme/dst-tagged:v1"), b)
+		r.NoError(err)
+		r.Equal("ghcr.io/acme/dst-tagged:v1", updated.Access.(*v1.OCIImage).ImageReference)
+
+		dstStore, err := store.StoreForReference(t.Context(), "ghcr.io/acme/dst-tagged")
+		r.NoError(err)
+		resolved, err := dstStore.Resolve(t.Context(), "v1")
+		r.NoError(err)
+		r.Equal(manifest.Digest, resolved.Digest, "the tag must point at the pushed root")
+	})
+}
