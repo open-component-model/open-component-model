@@ -10,48 +10,21 @@ includes:
     taskfile: ./tools.Taskfile.yml
   # bindings/go is a single Go module. Unit tests are run via `bindings/go:test`,
   # integration tests via `bindings/go:test/integration`.
-  # The other integration includes are for local convenience.
-  # The generator include provides code generation tasks used by `task generate`.
   bindings/go:
     optional: true
     taskfile: ./bindings/go/Taskfile.yml
     dir: ./bindings/go
-  bindings/go/generator:
-    optional: true
-    taskfile: ./bindings/go/generator/Taskfile.yml
-    dir: ./bindings/go/generator
-  bindings/go/constructor/integration:
-    optional: true
-    taskfile: ./bindings/go/constructor/integration/Taskfile.yml
-    dir: ./bindings/go/constructor/integration
-  bindings/go/github/integration:
-    optional: true
-    taskfile: ./bindings/go/github/integration/Taskfile.yml
-    dir: ./bindings/go/github/integration
-  bindings/go/http/integration:
-    optional: true
-    taskfile: ./bindings/go/http/integration/Taskfile.yml
-    dir: ./bindings/go/http/integration
-  bindings/go/oci/integration:
-    optional: true
-    taskfile: ./bindings/go/oci/integration/Taskfile.yml
-    dir: ./bindings/go/oci/integration
+  # The sigstore include provides the scaffolding cluster lifecycle used by
+  # `bindings/go:test/integration` and for local development convenience.
   bindings/go/sigstore/integration:
     optional: true
     taskfile: ./bindings/go/sigstore/integration/Taskfile.yml
     dir: ./bindings/go/sigstore/integration
-  bindings/go/transfer/integration:
+  # The generator include provides code generation tasks used by `task generate`.
+  bindings/go/generator:
     optional: true
-    taskfile: ./bindings/go/transfer/integration/Taskfile.yml
-    dir: ./bindings/go/transfer/integration
-  bindings/go/wget/integration:
-    optional: true
-    taskfile: ./bindings/go/wget/integration/Taskfile.yml
-    dir: ./bindings/go/wget/integration
-  bindings/go/s3/integration:
-    optional: true
-    taskfile: ./bindings/go/s3/integration/Taskfile.yml
-    dir: ./bindings/go/s3/integration
+    taskfile: ./bindings/go/generator/Taskfile.yml
+    dir: ./bindings/go/generator
   bindings/go/cli:
     optional: true
     taskfile: ./bindings/go/cli/Taskfile.yml
@@ -75,21 +48,14 @@ tasks:
     silent: true
 
   test:
-    desc: "Run all tests in the project"
-    vars:
-      TASKS:
-        sh: "task -aj | jq -r '.tasks[] | select(.name | endswith(\":test\")) | .name | rtrimstr(\":test\")'"
+    desc: "Run all unit tests in the project"
     cmds:
-      - for: { var: TASKS }
-        task: '{{.ITEM}}:test'
+      - task: 'bindings/go:test'
+      - task: 'bindings/go/generator:test'
   test/integration:
     desc: "Run all integration tests in the project, possibly requiring external systems"
-    vars:
-      TASKS:
-        sh: "task -aj | jq -r '.tasks[] | select(.name | endswith(\":test/integration\")) | .name | rtrimstr(\":test/integration\")'"
     cmds:
-      - for: { var: TASKS }
-        task: '{{.ITEM}}:test/integration'
+      - task: 'bindings/go:test/integration'
 
   init/go.work:
     desc: "Initialize the workspace environment"

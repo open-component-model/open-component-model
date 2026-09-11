@@ -1,16 +1,11 @@
 version: '3'
 
-includes:
-  reuse: ../../../reuse.Taskfile.yml
-
-
 tasks:
   test:
     desc: "Run all Generator tests"
     cmds:
       - task: ocmtypegen/test
       - task: jsonschemagen/test
-      - task: reuse:run-go-test
 
   ocmtypegen/install:
     desc: "Install {{.PKG}} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
