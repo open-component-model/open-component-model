@@ -27,8 +27,8 @@ export function buildTitleRegex(allowedTypes) {
  * "constructor" or "toString" returns undefined instead of the corresponding
  * Object.prototype value. This makes every bracket lookup on the map safe.
  *
- * @param {Record<string,string>} source
- * @returns {Record<string,string>}
+ * @param {Record<string,string[]>} source
+ * @returns {Record<string,string[]>}
  */
 export function nullProtoMap(source) {
   return Object.assign(Object.create(null), source);
@@ -39,16 +39,17 @@ export function nullProtoMap(source) {
  *
  * @param {string} prTitle - The pull request title.
  * @param {object} maps
- * @param {Record<string,string>} maps.typeToLabel - type -> label.
- * @param {Record<string,string>} maps.scopeToLabel - scope -> label.
+ * @param {Record<string,string[]>} maps.typeToLabel - type -> labels.
+ * @param {Record<string,string[]>} maps.scopeToLabel - scope -> labels.
  * @param {string} maps.breakingLabel - label added for breaking changes.
  * @returns {{ valid: boolean, labels: string[] }} valid is false when the title
  *   does not follow the Conventional Commit format; labels is then empty.
  */
 export function deriveLabels(prTitle, { typeToLabel, scopeToLabel, breakingLabel }) {
-  // Use prototype-less maps so a type/scope named like an Object.prototype
-  // member (e.g. "constructor", "toString") cannot resolve to an inherited
-  // value and push an invalid (non-string) label.
+  // Scope is free-form input from the PR title. On a plain object, a scope
+  // equal to an Object.prototype member (e.g. "toString") would resolve to the
+  // inherited function and spreading it below would throw; the prototype-less
+  // maps make such lookups return undefined instead.
   const types = nullProtoMap(typeToLabel);
   const scopes = nullProtoMap(scopeToLabel);
 
@@ -65,14 +66,16 @@ export function deriveLabels(prTitle, { typeToLabel, scopeToLabel, breakingLabel
   if (breaking) {
     labels.push(breakingLabel);
   }
-  if (type && types[type]) {
-    labels.push(types[type]);
+  if (type) {
+    labels.push(...(types[type] ?? []));
   }
-  if (scope && scopes[scope]) {
-    labels.push(scopes[scope]);
+  if (scope) {
+    labels.push(...(scopes[scope] ?? []));
   }
 
-  return { valid: true, labels };
+  // De-duplicate while preserving order: a type's labels and a scope's labels
+  // can both contribute the same label (e.g. kind/chore).
+  return { valid: true, labels: [...new Set(labels)] };
 }
 
 /**
