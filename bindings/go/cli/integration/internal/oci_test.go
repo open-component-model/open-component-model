@@ -2,7 +2,7 @@ package internal
 
 import "testing"
 
-func TestSanitizeContainerName(t *testing.T) {
+func Test_Integration_SanitizeContainerName(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
