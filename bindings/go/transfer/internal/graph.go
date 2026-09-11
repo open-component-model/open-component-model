@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -173,15 +175,22 @@ func fillGraphDefinitionWithPrefetchedComponents(
 
 	var allFileRefs []string
 
-	for key, v := range d.Vertices {
+	// allocate component base IDs and target-suffixed IDs from one allocator so that a
+	// collision between a target suffix and an identity-folded base ID (for example
+	// "a" with two targets vs. component "a-t0") is disambiguated as well.
+	componentAllocator := newTransformationIDAllocator()
+	vertexKeys := slices.Sorted(maps.Keys(d.Vertices))
+
+	for _, key := range vertexKeys {
+		v := d.Vertices[key]
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
 		component := val.Descriptor.Component.Name
 		version := val.Descriptor.Component.Version
 
-		baseID := identityToTransformationID(runtime.Identity{
+		baseID := componentAllocator.allocate(identityToTransformationID(runtime.Identity{
 			descruntime.IdentityAttributeName:    component,
 			descruntime.IdentityAttributeVersion: version,
-		})
+		}))
 
 		v2desc, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), val.Descriptor)
 		if err != nil {
@@ -201,7 +210,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 		for targetIdx, target := range targets {
 			id := baseID
 			if len(targets) > 1 {
-				id = fmt.Sprintf("%sT%d", baseID, targetIdx)
+				id = componentAllocator.allocate(fmt.Sprintf("%sT%d", baseID, targetIdx))
 			}
 
 			slog.DebugContext(ctx, "generating transformations for target",
@@ -243,6 +252,7 @@ func processResources(
 	version := val.Descriptor.Component.Version
 	resourceTransformIDs := make(map[int]string)
 	var fileExpressions []string
+	allocator := newTransformationIDAllocator()
 
 	for i, resource := range v2desc.Component.Resources {
 		access, err := scheme.NewObject(resource.Access.Type)
@@ -258,7 +268,8 @@ func processResources(
 			continue
 		}
 
-		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i, uploadType)
+		resourceID := allocator.allocate(identityToTransformationID(resource.ToIdentity()))
+		exprs, err := processResource(resource, access, id, resourceID, val, tgd, toSpec, resourceTransformIDs, i, uploadType)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -288,23 +299,21 @@ func logSkippedResource(ctx context.Context, component, version string, resource
 // target repository. wget and s3 resources are always downloaded and embedded as local blobs.
 // It returns CEL spec-field expressions for the file buffers produced, referencing consumer spec
 // fields (not producer outputs) so the DAG edge points from consumer to the cleanup node.
-func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType transferv1alpha1.UploadType) ([]string, error) {
+func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, resourceID string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType transferv1alpha1.UploadType) ([]string, error) {
 	_, isOCITarget := toSpec.(*oci.Repository)
 	uploadAsArtifact := isOCITarget && uploadType == transferv1alpha1.UploadAsOciArtifact
 
-	resourceIdentity := resource.ToIdentity()
-	resourceID := identityToTransformationID(resourceIdentity)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
 	switch acc := access.(type) {
 	case *descriptorv2.LocalBlob:
 		shouldUpload := uploadAsArtifact && isOCICompliantManifest(acc.MediaType) && acc.ReferenceName != ""
-		if err := processLocalBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i, shouldUpload); err != nil {
+		if err := processLocalBlob(resource, acc, id, resourceID, val, tgd, toSpec, resourceTransformIDs, i, shouldUpload); err != nil {
 			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *ociv1.OCIImage:
-		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
+		if err := processOCIArtifact(resource, id, resourceID, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
 			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
 		}
 		// Streaming path (TransferOCIArtifact) produces no temp file — skip cleanup.
@@ -315,7 +324,7 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *helmv1.Helm:
 		convertResourceID := fmt.Sprintf("%sConvert%s", id, resourceID)
-		if err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
+		if err := processHelm(resource, id, resourceID, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
 			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)
 		}
 		return []string{
@@ -327,19 +336,19 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 	case *wgetv1.Wget:
 		// A wget resource is a plain blob: download it and embed it as a local blob in the
 		// target. There is no OCI-artifact representation, so uploadAsArtifact is not honored here.
-		if err := processWget(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+		if err := processWget(resource, id, resourceID, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process wget resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *s3v2.S3:
 		// An S3 resource is a plain blob: download it and embed it as a local blob in the
 		// target. There is no OCI-artifact representation, so uploadAsArtifact is not honored here.
-		if err := processS3(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+		if err := processS3(resource, id, resourceID, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process s3 resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *githubv1.GitHub:
-		if err := processGitHub(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+		if err := processGitHub(resource, acc, id, resourceID, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process GitHub resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil

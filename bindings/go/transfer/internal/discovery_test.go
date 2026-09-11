@@ -104,9 +104,39 @@ func TestIdentityToTransformationID(t *testing.T) {
 			want: "transformOcmSoftwareMyComponent",
 		},
 		{
+			name: "version with semver build metadata",
+			identity: runtime.Identity{
+				descriptor.IdentityAttributeName:    "operator-image",
+				descriptor.IdentityAttributeVersion: "0.2.1+a0b6f97",
+			},
+			want: "transformOperatorImage021A0b6f97",
+		},
+		{
+			name: "version with semver pre-release",
+			identity: runtime.Identity{
+				descriptor.IdentityAttributeName:    "operator-image",
+				descriptor.IdentityAttributeVersion: "0.2.1-rc.1",
+			},
+			want: "transformOperatorImage021Rc1",
+		},
+		{
+			name: "identifier with extra identity",
+			identity: runtime.Identity{
+				descriptor.IdentityAttributeName:    "operator-image",
+				descriptor.IdentityAttributeVersion: "0.2.1-rc.1",
+				"platform":                          "linux/amd64",
+			},
+			want: "transformOperatorImageLinuxAmd64021Rc1",
+		},
+		{
 			name:     "empty identity",
 			identity: runtime.Identity{},
 			want:     "transform",
+		},
+		{
+			name:     "non-ascii letters are dropped lossily",
+			identity: runtime.Identity{"name": "ünïcode_res"},
+			want:     "transformNCodeRes",
 		},
 	}
 
@@ -114,6 +144,58 @@ func TestIdentityToTransformationID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := identityToTransformationID(tt.identity)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// --- transformationIDAllocator tests ---
+
+func TestTransformationIDAllocator(t *testing.T) {
+	tests := []struct {
+		name  string
+		bases []string
+		want  []string
+	}{
+		{
+			name:  "no collisions",
+			bases: []string{"transformA", "transformB"},
+			want:  []string{"transformA", "transformB"},
+		},
+		{
+			name:  "duplicate bases get incrementing suffix",
+			bases: []string{"transformA", "transformA", "transformA"},
+			want:  []string{"transformA", "transformAX1", "transformAX2"},
+		},
+		{
+			name:  "naturally occurring suffix in input is skipped",
+			bases: []string{"transformA", "transformAX1", "transformA"},
+			want:  []string{"transformA", "transformAX1", "transformAX2"},
+		},
+		{
+			name: "semver build metadata and pre-release collide on base ID",
+			bases: []string{
+				identityToTransformationID(runtime.Identity{"name": "operator-image", "version": "0.2.1+meta"}),
+				identityToTransformationID(runtime.Identity{"name": "operator-image", "version": "0.2.1-meta"}),
+			},
+			want: []string{"transformOperatorImage021Meta", "transformOperatorImage021MetaX1"},
+		},
+		{
+			name: "collision with extra identity variation is handled",
+			bases: []string{
+				identityToTransformationID(runtime.Identity{"name": "operator-image", "platform": "linux", "version": "1.0.0"}),
+				identityToTransformationID(runtime.Identity{"name": "operator-image", "os": "linux", "version": "1.0.0"}),
+			},
+			want: []string{"transformOperatorImageLinux100", "transformOperatorImageLinux100X1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			a := newTransformationIDAllocator()
+			for i, base := range tt.bases {
+				r.Equal(tt.want[i], a.allocate(base))
+			}
 		})
 	}
 }

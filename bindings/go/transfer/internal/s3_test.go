@@ -56,7 +56,7 @@ func TestProcessS3(t *testing.T) {
 	tgd := &transformv1alpha1.TransformationGraphDefinition{}
 	resourceTransformIDs := map[int]string{}
 
-	err := processS3(resource, "comp1", val, tgd, toSpec, resourceTransformIDs, 0)
+	err := processS3(resource, "comp1", identityToTransformationID(resource.ToIdentity()), val, tgd, toSpec, resourceTransformIDs, 0)
 	require.NoError(t, err)
 
 	// Two nodes: download the content, then embed it as a local blob in the target.

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -229,14 +228,27 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 	return children, nil
 }
 
-var toWordRunes = []rune{',', '.', '/', '-'}
+// isTransformationIDWordBoundary reports whether r must be treated as a word
+// boundary when building a transformation ID. Any character that is not an
+// ASCII letter or digit is a boundary. This keeps the derived ID within the
+// valid OCM transformation ID character set (lower camelCase, alphanumeric
+// only) and handles separators ".", "/", "-" as well as SemVer build metadata ("+")
+func isTransformationIDWordBoundary(r rune) bool {
+	return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9')
+}
 
 // identityToTransformationID converts a component identity (name + version) to a camelCase
 // transformation ID suitable for use as a DAG vertex key. The identity map keys are sorted
-// alphabetically for determinism, and separator characters (dots, slashes, dashes, commas)
-// are treated as word boundaries for camelCase conversion.
+// alphabetically for determinism (though determinism is limited to being stable on the same
+// input, if the input is changed names can fluctuate) and any non-alphanumeric character is
+// treated as a word boundary for camelCase conversion.
 //
 // Example: {"name": "ocm.software/my-app", "version": "1.0.0"} → "transformOcmSoftwareMyApp100"
+//
+// Note: the mapping is lossy. A character that is neither an ASCII letter nor a digit is
+// dropped entirely (including non-ASCII letters), and separators act only as word
+// boundaries without contributing content. Distinct identities can fold onto the same ID
+// and are disambiguated via transformationIDAllocator.
 func identityToTransformationID(id runtime.Identity) string {
 	// TODO(jakobmoellerdev): decide if we really wanna keep such strict limits on transformation ids,
 	//   if we really dont need them to be that strict.
@@ -248,9 +260,7 @@ func identityToTransformationID(id runtime.Identity) string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		words = append(words, strings.FieldsFunc(id[k], func(r rune) bool {
-			return slices.Contains(toWordRunes, r)
-		})...)
+		words = append(words, strings.FieldsFunc(id[k], isTransformationIDWordBoundary)...)
 	}
 	result := strings.ToLower(words[0])
 	for i := 1; i < len(words); i++ {
@@ -260,4 +270,43 @@ func identityToTransformationID(id runtime.Identity) string {
 		}
 	}
 	return result
+}
+
+// transformationIDAllocator hands out unique transformation IDs at every ID level: for
+// component base IDs (one instance per vertex loop) and for the resources of one component
+// (one instance per (component, target) pair).
+// identityToTransformationID is lossy: it drops separators and folds case, so distinct
+// identities (for example versions "0.2.1+meta" and "0.2.1-meta") map to the same base ID.
+// On collision the allocator appends an incrementing counter ("X1", "X2", ...).
+type transformationIDAllocator struct {
+	// used contains every ID handed out so far, including suffixed candidates.
+	used map[string]struct{}
+	// nextSuffix tracks the first untried suffix per colliding base ID.
+	nextSuffix map[string]int
+}
+
+func newTransformationIDAllocator() *transformationIDAllocator {
+	return &transformationIDAllocator{
+		used:       make(map[string]struct{}),
+		nextSuffix: make(map[string]int),
+	}
+}
+
+// allocate returns base unchanged while it is unused. On collision, it returns the first
+// unused ID of the form base+"X"+counter, with the counter starting at 1. To keep the
+// resulting IDs stable, allocate in a deterministic order (descriptor order for resources,
+// sorted vertex order for components).
+func (a *transformationIDAllocator) allocate(base string) string {
+	if _, ok := a.used[base]; !ok {
+		a.used[base] = struct{}{}
+		return base
+	}
+	for n := max(a.nextSuffix[base], 1); ; n++ {
+		candidate := fmt.Sprintf("%sX%d", base, n)
+		if _, ok := a.used[candidate]; !ok {
+			a.used[candidate] = struct{}{}
+			a.nextSuffix[base] = n + 1
+			return candidate
+		}
+	}
 }

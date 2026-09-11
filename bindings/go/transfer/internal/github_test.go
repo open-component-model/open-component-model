@@ -43,7 +43,7 @@ func TestProcessGitHub_EmitsGetAndAdd(t *testing.T) {
 	toSpec := testOCIRepo("ghcr.io/target")
 	ids := map[int]string{}
 
-	err := processGitHub(resource, access, "root", githubTestValue(), tgd, toSpec, ids, 0)
+	err := processGitHub(resource, access, "root", identityToTransformationID(resource.ToIdentity()), githubTestValue(), tgd, toSpec, ids, 0)
 	require.NoError(t, err)
 
 	require.Len(t, tgd.Transformations, 2)
@@ -76,7 +76,7 @@ func TestProcessGitHub_RejectsUnpinnedAccess(t *testing.T) {
 	}
 
 	tgd := &transformv1alpha1.TransformationGraphDefinition{}
-	err := processGitHub(resource, access, "root", githubTestValue(), tgd, testOCIRepo("ghcr.io/target"), map[int]string{}, 0)
+	err := processGitHub(resource, access, "root", identityToTransformationID(resource.ToIdentity()), githubTestValue(), tgd, testOCIRepo("ghcr.io/target"), map[int]string{}, 0)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "no pinned commit")
 	assert.Empty(t, tgd.Transformations, "a rejected resource must not add transformation nodes")
