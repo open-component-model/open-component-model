@@ -190,7 +190,7 @@ func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme strin
 			r.Empty(payload)
 		}
 	}
-	r.Equal([]string{"README.md", "docs", "docs/guide.txt", "link", "run.sh"}, names)
+	r.Equal([]string{"./", "README.md", "docs/", "docs/guide.txt", "link", "run.sh"}, names)
 
 	return data
 }

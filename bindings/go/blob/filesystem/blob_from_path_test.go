@@ -2,6 +2,7 @@ package filesystem_test
 
 import (
 	"archive/tar"
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -452,6 +453,30 @@ func TestGetBlobFromPath_SymlinkRejection(t *testing.T) {
 	_, err = readAllFromBlob(b)
 	r.Error(err)
 	r.Contains(err.Error(), "symlinks are not supported")
+}
+
+func TestGetBlobFromPath_PreserveSymlinks(t *testing.T) {
+	r := require.New(t)
+
+	tmpDir := t.TempDir()
+	// The target is outside the directory and does not exist, so any attempt to resolve it fails.
+	if err := os.Symlink("/outside/target.txt", filepath.Join(tmpDir, "symlink.txt")); err != nil {
+		t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
+	}
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{PreserveSymlinks: true})
+	r.NoError(err)
+	data, err := readAllFromBlob(b)
+	r.NoError(err)
+
+	tr := tar.NewReader(bytes.NewReader(data))
+	_, err = tr.Next() // root directory
+	r.NoError(err)
+	h, err := tr.Next()
+	r.NoError(err)
+	r.Equal("symlink.txt", h.Name)
+	r.Equal(byte(tar.TypeSymlink), h.Typeflag)
+	r.Equal("/outside/target.txt", h.Linkname)
 }
 
 func TestGetBlobFromPath_IncludeDirectoryOnly(t *testing.T) {
