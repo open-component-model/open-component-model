@@ -25,7 +25,6 @@ change in a future release depending on user feedback to offer a better UX.
 - Retrieve both with one command, `ocm download resource --sbom`
 - Collect the SBOMs of an entire component version with a small script
 - Scan the result with Trivy
-- Understand which of the two approaches survives a by-value transfer, and why that decides which one you should use
 
 **Estimated time:** ~25 minutes
 
@@ -70,7 +69,8 @@ are both part of the signature therefore, are immutable without a signature chan
 
 **Strategy 2, the buildx attestation.** For a resource backed by an OCI artifact, OCM reads the image index and looks
 for the attestation manifests BuildKit creates next to each platform's image. Nothing has to be added to the component
-version at all, but the SBOM stays in the registry the image came from.
+version at all. The index is read from wherever the resource currently lives: the origin registry while the access is
+still an `OCIImage/v1`, or the component version's own storage once a by-value transfer has copied it in.
 
 {{< callout context="note" >}}
 Only the BuildKit layout is understood right now. SBOMs attached by cosign, or published through the OCI referrers API, are not
@@ -342,10 +342,7 @@ done
 
 Your numbers will differ, because the vulnerability database moves.
 
-## The difference between strategies {#strategy-differences}
-
-The two strategies look identical from the command line, but they behave differently once the component version
-is transferred.
+## Verify that after transfer the SBOMs are still there {#verify-after-transfer}
 
 Transfer the component version by value, which is what an air-gapped delivery does:
 
@@ -365,7 +362,7 @@ level=INFO msg="found an sbom resource referencing the requested resource" sbom=
 t-sboms/ocm-cli/ocm-cli-sbom.spdx.json
 ```
 
-The attached one is gone:
+The attached SBOM was also transferred together with the resource:
 
 ```bash
 ocm download resource ./transport-archive-transferred//ocm.software/examples/sbom-demo:1.0.0 \
@@ -373,39 +370,13 @@ ocm download resource ./transport-archive-transferred//ocm.software/examples/sbo
 ```
 
 ```text
-Error: no sbom found for resource "name=podinfo,version=6.9.2": nothing in the component version
-references it, and its access type "LocalBlob/v1" cannot be inspected for an attached sbom
-(failed to get plugin for typ "LocalBlob/v1")
+level=INFO msg="found sboms attached to the local artifact of the requested resource" resource="name=podinfo,version=6.9.2" discovered=3
+t-sboms/podinfo/sbom_linux_amd64.spdx.json
+t-sboms/podinfo/sbom_linux_arm64.spdx.json
+t-sboms/podinfo/sbom_linux_arm_v7.spdx.json
 ```
 
-`--copy-resources` turns the image's `OCIImage/v1` access into a `LocalBlob/v1`, and the attestation manifests that
-contained the SBOM are **NOT** part of what gets copied. There is no longer an image index to read, so the second strategy
-will no longer work. Transferring *by reference* (without `--copy-resources`) leaves the access untouched and the
-attestation keeps working, but then you are still depending on `ghcr.io` being reachable.
-
-|                                      | Artifact-references label           | buildx attestation   |
-|--------------------------------------|-------------------------------------|----------------------|
-| Who produces the SBOM                | You                                 | The image build      |
-| Where it lives                       | A resource of the component version | The image's registry |
-| Covered by the component signature   | Yes                                 | No                   |
-| Survives `transfer --copy-resources` | Yes                                 | **No**               |
-| Works air-gapped                     | Yes                                 | No                   |
-
-This creates the following practical rule: **the attestation strategy is a convenience for images you consume in place.
-If you plan on shipping your component version, use the label reference strategy instead.** If a third-party image needs
-to stay scannable after an air-gapped transfer, download its SBOM once with `--sbom` and add it back as a linked `type: sbom`
-resource.
-
 ## Troubleshooting {#troubleshooting}
-
-### `no sbom found ... its access type "LocalBlob/v1" cannot be inspected`
-
-**Why:** Nothing in the component version references the resource, and its content is inside the component version, so
-there is no image index to inspect. This is the normal state for any local blob, and for an OCI image after a by-value
-transfer.
-
-**Fix:** Add an SBOM as a resource of `type: sbom` with an `ocm.software/artifact-references` label pointing at it. See
-[The difference between strategies](#strategy-differences).
 
 ### `no buildx SBOM attestation found`
 
@@ -445,7 +416,6 @@ candidates were considered and why they were dropped.
 - ✅ Discovered an SBOM that BuildKit attached to a third-party image, without adding anything to the component version
 - ✅ Retrieved both through one command, `ocm download resource --sbom`
 - ✅ Collected the SBOMs of a whole component version and scanned them with Trivy
-- ✅ Saw why only the linked SBOM survives a by-value transfer
 
 ## Cleanup
 

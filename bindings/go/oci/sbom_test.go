@@ -15,6 +15,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/internal/attestation"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
@@ -112,6 +114,102 @@ func multiPlatformImage(t *testing.T) (*ocictf.Store, string) {
 	require.NoError(t, store.Tag(ctx, index, "latest"))
 
 	return ctfStore, sbomTestRepository + ":latest"
+}
+
+func localBlobComponentVersion(t *testing.T, component, version string, mediaType string) *oci.Repository {
+	t.Helper()
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	require.NoError(t, err)
+	ctfStore := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(ctfStore))
+
+	store, err := ctfStore.StoreForReference(ctx, ctfStore.ComponentVersionReference(ctx, component, version))
+	require.NoError(t, err)
+
+	amd64Image, amd64Attestation := attestedImage(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "amd64"})
+	arm64Image, arm64Attestation := attestedImage(t, store, ociImageSpecV1.Platform{OS: "linux", Architecture: "arm64"})
+
+	raw, err := json.Marshal(ociImageSpecV1.Index{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ociImageSpecV1.MediaTypeImageIndex,
+		Manifests: []ociImageSpecV1.Descriptor{amd64Image, amd64Attestation, arm64Image, arm64Attestation},
+	})
+	require.NoError(t, err)
+
+	index := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, raw)
+	require.NoError(t, store.Push(ctx, index, bytes.NewReader(raw)))
+
+	res := descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "image", Version: version},
+		},
+		Type:     "ociImage",
+		Relation: descriptor.ExternalRelation,
+	}
+	res.Access = &v2.LocalBlob{
+		Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+		LocalReference: index.Digest.String(),
+		MediaType:      mediaType,
+	}
+
+	require.NoError(t, repo.AddComponentVersion(ctx, &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider:      descriptor.Provider{Name: "acme"},
+			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version}},
+			Resources:     []descriptor.Resource{res},
+		},
+	}))
+
+	return repo
+}
+
+func TestRepository_DiscoverLocalSBOM(t *testing.T) {
+	const (
+		component = "ocm.software/acme/app"
+		version   = "1.0.0"
+	)
+
+	t.Run("discovers every platform of a transferred local blob", func(t *testing.T) {
+		repo := localBlobComponentVersion(t, component, version, ociImageSpecV1.MediaTypeImageIndex)
+
+		sboms, err := repo.DiscoverLocalSBOM(t.Context(), component, version,
+			runtime.Identity{"name": "image"}, repository.WithAllSBOMPlatforms())
+		require.NoError(t, err)
+		require.Len(t, sboms, 2)
+
+		names := []string{documentName(t, sboms[0]), documentName(t, sboms[1])}
+		assert.ElementsMatch(t, []string{"linux/amd64", "linux/arm64"}, names)
+	})
+
+	t.Run("narrows to a requested platform", func(t *testing.T) {
+		repo := localBlobComponentVersion(t, component, version, ociImageSpecV1.MediaTypeImageIndex)
+
+		sboms, err := repo.DiscoverLocalSBOM(t.Context(), component, version,
+			runtime.Identity{"name": "image"},
+			repository.WithSBOMPlatform(repository.Platform{OS: "linux", Architecture: "arm64"}))
+		require.NoError(t, err)
+		require.Len(t, sboms, 1)
+		assert.Equal(t, "linux/arm64", documentName(t, sboms[0]))
+	})
+
+	t.Run("rejects a local blob that is not an index", func(t *testing.T) {
+		repo := localBlobComponentVersion(t, component, version, "application/spdx+json")
+
+		_, err := repo.DiscoverLocalSBOM(t.Context(), component, version, runtime.Identity{"name": "image"})
+		require.ErrorIs(t, err, repository.ErrSBOMNotInspectable)
+		assert.Contains(t, err.Error(), "application/spdx+json")
+	})
+
+	t.Run("reports an unknown resource identity", func(t *testing.T) {
+		repo := localBlobComponentVersion(t, component, version, ociImageSpecV1.MediaTypeImageIndex)
+
+		_, err := repo.DiscoverLocalSBOM(t.Context(), component, version, runtime.Identity{"name": "absent"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "found 0 candidates")
+	})
 }
 
 func sbomResource(reference string, extraIdentity runtime.Identity) *descriptor.Resource {

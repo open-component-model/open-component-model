@@ -6,7 +6,9 @@
 //  1. "ocm.software/artifact-references" label resolution to find SBOMs pointing
 //     at the given resource.
 //  2. For OCI Artifacts, we offer discovering and listing SBOMs attached and generated
-//     via "docker buildx build --sbom=true".
+//     via "docker buildx build --sbom=true". This covers artifacts still referenced in
+//     their origin registry as well as ones a by-value transfer has copied into the
+//     component version as a local blob.
 package sbom
 
 import (
@@ -21,6 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	artifactref "ocm.software/open-component-model/bindings/go/descriptor/runtime/labels/artifactref/v1alpha1"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -50,6 +53,7 @@ type Request struct {
 	PluginManager *manager.PluginManager
 	Credentials   credentials.Resolver
 	Download      Downloader
+	DiscoverLocal repository.LocalSBOMDiscoverer
 	Logger        *slog.Logger
 	// Options are passed to sbom discovery, for example WithAllSBOMPlatforms.
 	Options []repository.SBOMOption
@@ -143,6 +147,24 @@ func fromAttestations(ctx context.Context, req Request) ([]repository.SBOM, erro
 	notInspectable := func(reason error) error {
 		return fmt.Errorf("no sbom found for resource %q: nothing in the component version references it, and its access type %q cannot be inspected for an attached sbom (%w)",
 			targetIdentity, access.GetType(), reason)
+	}
+
+	if v2.IsLocalBlob(access) {
+		if req.DiscoverLocal == nil {
+			return nil, notInspectable(errors.New("repository does not support local sbom discovery"))
+		}
+		sboms, err := req.DiscoverLocal.DiscoverLocalSBOM(ctx, req.Descriptor.Component.Name, req.Descriptor.Component.Version, targetIdentity, req.Options...)
+		if errors.Is(err, repository.ErrSBOMNotInspectable) {
+			return nil, notInspectable(err)
+		}
+		if err != nil {
+			return nil, err
+		}
+		req.Logger.Info("found sboms attached to the local artifact of the requested resource",
+			slog.String("resource", targetIdentity.String()),
+			slog.Int("discovered", len(sboms)))
+
+		return sboms, nil
 	}
 
 	plugin, err := req.PluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, access)
