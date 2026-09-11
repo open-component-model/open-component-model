@@ -96,13 +96,10 @@ func Test_Get_Component_Version_Formats(t *testing.T) {
 		expectedError  bool
 	}{
 		{
-			name: "Default Options (Table)",
+			name: "Default Options (Tree)",
 			args: []string{"get", "cv", path},
-			expectedOutput: `
-COMPONENT                   │ VERSION │ PROVIDER     
-─────────────────────────────┼─────────┼──────────────
- ocm.software/test-component │ 0.0.1   │ ocm.software
-`,
+			expectedOutput: `NESTING  COMPONENT                    VERSION  PROVIDER      IDENTITY                                       
+ └─       ocm.software/test-component  0.0.1    ocm.software  name=ocm.software/test-component,version=0.0.1`,
 			expectedError: false,
 		},
 		{
@@ -135,10 +132,13 @@ COMPONENT                   │ VERSION │ PROVIDER
 			expectedError:  false,
 		},
 		{
-			name: "tree output",
-			args: []string{"get", "cv", path, "--output=tree"},
-			expectedOutput: `NESTING  COMPONENT                    VERSION  PROVIDER      IDENTITY                                       
- └─       ocm.software/test-component  0.0.1    ocm.software  name=ocm.software/test-component,version=0.0.1`,
+			name: "table output",
+			args: []string{"get", "cv", path, "--output=table"},
+			expectedOutput: `
+COMPONENT                   │ VERSION │ PROVIDER     
+─────────────────────────────┼─────────┼──────────────
+ ocm.software/test-component │ 0.0.1   │ ocm.software
+`,
 			expectedError: false,
 		},
 		{
@@ -276,15 +276,12 @@ func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
 		expectedError  bool
 	}{
 		{
-			name: "Default Options (Table)",
+			name: "Default Options (Tree)",
 			args: []string{"get", "cv", path, "--recursive=-1"},
-			expectedOutput: `
-COMPONENT           │ VERSION │ PROVIDER     
-─────────────────────┼─────────┼──────────────
- ocm.software/root   │ 0.0.1   │ ocm.software 
- ocm.software/leaf-a │ 0.0.1   │              
- ocm.software/leaf-b │ 0.0.1   │
-`,
+			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
+ └─ ●     ocm.software/root    0.0.1    ocm.software  name=ocm.software/root,version=0.0.1   
+    ├─    ocm.software/leaf-a  0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1 
+    └─    ocm.software/leaf-b  0.0.1    ocm.software  name=ocm.software/leaf-b,version=0.0.1`,
 			expectedError: false,
 		},
 		{
@@ -351,12 +348,15 @@ COMPONENT           │ VERSION │ PROVIDER
 			expectedError:  false,
 		},
 		{
-			name: "tree output",
-			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
-			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
- └─ ●     ocm.software/root    0.0.1    ocm.software  name=ocm.software/root,version=0.0.1   
-    ├─    ocm.software/leaf-a  0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1 
-    └─    ocm.software/leaf-b  0.0.1    ocm.software  name=ocm.software/leaf-b,version=0.0.1`,
+			name: "table output",
+			args: []string{"get", "cv", path, "--output=table", "--recursive=-1"},
+			expectedOutput: `
+COMPONENT           │ VERSION │ PROVIDER     
+─────────────────────┼─────────┼──────────────
+ ocm.software/root   │ 0.0.1   │ ocm.software 
+ ocm.software/leaf-a │ 0.0.1   │              
+ ocm.software/leaf-b │ 0.0.1   │
+`,
 			expectedError: false,
 		},
 	}
@@ -489,8 +489,16 @@ func Test_List_Component_Version_Variations(t *testing.T) {
 		expectedError  bool
 	}{
 		{
-			name: "Default Options (Table) - all versions",
+			name: "Default Options (Tree) - all versions",
 			args: []string{"get", "cv", path},
+			expectedOutput: `NESTING  COMPONENT                    VERSION  PROVIDER      IDENTITY                                       
+ ├─       ocm.software/test-component  0.0.2    ocm.software  name=ocm.software/test-component,version=0.0.2 
+ └─       ocm.software/test-component  0.0.1    ocm.software  name=ocm.software/test-component,version=0.0.1`,
+			expectedError: false,
+		},
+		{
+			name: "table output - all versions",
+			args: []string{"get", "cv", path, "--output=table"},
 			expectedOutput: `
 COMPONENT                   │ VERSION │ PROVIDER     
 ─────────────────────────────┼─────────┼──────────────
@@ -502,11 +510,8 @@ COMPONENT                   │ VERSION │ PROVIDER
 		{
 			name: "Latest version only",
 			args: []string{"get", "cv", path, "--latest"},
-			expectedOutput: `
-COMPONENT                   │ VERSION │ PROVIDER     
-─────────────────────────────┼─────────┼──────────────
- ocm.software/test-component │ 0.0.2   │ ocm.software
-`,
+			expectedOutput: `NESTING  COMPONENT                    VERSION  PROVIDER      IDENTITY                                       
+ └─       ocm.software/test-component  0.0.2    ocm.software  name=ocm.software/test-component,version=0.0.2`,
 			expectedError: false,
 		},
 		{
@@ -517,11 +522,8 @@ COMPONENT                   │ VERSION │ PROVIDER
 		{
 			name: "Semver constraint",
 			args: []string{"get", "cv", path, "--semver-constraint", "< 0.0.2"},
-			expectedOutput: `
-COMPONENT                   │ VERSION │ PROVIDER     
-─────────────────────────────┼─────────┼──────────────
- ocm.software/test-component │ 0.0.1   │ ocm.software
-`,
+			expectedOutput: `NESTING  COMPONENT                    VERSION  PROVIDER      IDENTITY                                       
+ └─       ocm.software/test-component  0.0.1    ocm.software  name=ocm.software/test-component,version=0.0.1`,
 			expectedError: false,
 		},
 		{
@@ -619,8 +621,8 @@ func Test_List_Component_Version_Variations_Recursive(t *testing.T) {
 		expectedError  bool
 	}{
 		{
-			name: "Default Options (Table) - all versions",
-			args: []string{"get", "cv", path, "--recursive=-1"},
+			name: "table output - all versions",
+			args: []string{"get", "cv", path, "--output=table", "--recursive=-1"},
 			expectedOutput: `
 COMPONENT           │ VERSION │ PROVIDER     
 ─────────────────────┼─────────┼──────────────
@@ -633,8 +635,8 @@ COMPONENT           │ VERSION │ PROVIDER
 			expectedError: false,
 		},
 		{
-			name: "tree output - all versions",
-			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
+			name: "Default Options (Tree) - all versions",
+			args: []string{"get", "cv", path, "--recursive=-1"},
 			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
  ├─ ●     ocm.software/root    0.0.2    ocm.software  name=ocm.software/root,version=0.0.2   
  │  └─    ocm.software/leaf-a  0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1 
@@ -646,24 +648,18 @@ COMPONENT           │ VERSION │ PROVIDER
 		{
 			name: "Latest version only",
 			args: []string{"get", "cv", path, "--latest", "--recursive=-1"},
-			expectedOutput: `
-COMPONENT           │ VERSION │ PROVIDER     
-─────────────────────┼─────────┼──────────────
- ocm.software/root   │ 0.0.2   │ ocm.software 
- ocm.software/leaf-a │ 0.0.1   │
-`,
+			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
+ └─ ●     ocm.software/root    0.0.2    ocm.software  name=ocm.software/root,version=0.0.2   
+    └─    ocm.software/leaf-a  0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1`,
 			expectedError: false,
 		},
 		{
 			name: "Semver constraint",
 			args: []string{"get", "cv", path, "--semver-constraint", "< 0.0.2", "--recursive=-1"},
-			expectedOutput: `
-COMPONENT           │ VERSION │ PROVIDER     
-─────────────────────┼─────────┼──────────────
- ocm.software/root   │ 0.0.1   │ ocm.software 
- ocm.software/leaf-a │ 0.0.1   │              
- ocm.software/leaf-b │ 0.0.1   │
-`,
+			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
+ └─ ●     ocm.software/root    0.0.1    ocm.software  name=ocm.software/root,version=0.0.1   
+    ├─    ocm.software/leaf-a  0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1 
+    └─    ocm.software/leaf-b  0.0.1    ocm.software  name=ocm.software/leaf-b,version=0.0.1`,
 			expectedError: false,
 		},
 	}
@@ -710,11 +706,9 @@ func Test_Get_Component_Version_CTF_Dir(t *testing.T) {
 		{
 			name: "get cv from CTF dir - default",
 			args: []string{"get", "cv", archivePath},
-			expectedOutput: `
-COMPONENT           │ VERSION │ PROVIDER     
-─────────────────────┼─────────┼──────────────
- ocm.software/root-b │ 0.0.2   │ ocm.software 
- ocm.software/root-a │ 0.0.1   │`,
+			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
+ ├─       ocm.software/root-b  0.0.2    ocm.software  name=ocm.software/root-b,version=0.0.2 
+ └─       ocm.software/root-a  0.0.1    ocm.software  name=ocm.software/root-a,version=0.0.1`,
 			expectedError: false,
 		},
 		{
@@ -732,11 +726,9 @@ configurations:
       type: CommonTransportFormat/v1
       filePath: /does/not/exist
     componentNamePattern: ocm.software/*`,
-			expectedOutput: `
-COMPONENT           │ VERSION │ PROVIDER     
-─────────────────────┼─────────┼──────────────
- ocm.software/root-b │ 0.0.2   │ ocm.software 
- ocm.software/root-a │ 0.0.1   │`,
+			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
+ ├─       ocm.software/root-b  0.0.2    ocm.software  name=ocm.software/root-b,version=0.0.2 
+ └─       ocm.software/root-a  0.0.1    ocm.software  name=ocm.software/root-a,version=0.0.1`,
 			expectedError: false,
 		},
 	}

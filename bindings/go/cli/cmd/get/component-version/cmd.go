@@ -76,6 +76,11 @@ get component-versions ghcr.io/open-component-model//ocm.software/cli
 get cvs ghcr.io/open-component-model//ocm.software/cli --output json
 get cvs ghcr.io/open-component-model//ocm.software/cli -oyaml
 
+Showing the resources of each component version in the tree output:
+
+get cv ./path/to/ctf//ocm.software/cli:0.12.0 -o widetree
+get cvs ghcr.io/open-component-model//ocm.software/cli -o widetree --recursive
+
 Specifying types and schemes:
 
 get cv ctf::github.com/locally-checked-out-repo//ocm.software/cli:0.12.0
@@ -85,7 +90,7 @@ get cvs oci::http://localhost:8080//ocm.software/cli
 		DisableAutoGenTag: true,
 	}
 
-	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the component descriptors")
+	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTree.String(), render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatWideTree.String()}, "output format of the component descriptors")
 	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `display mode can be used in combination with --recursive
   static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
@@ -292,6 +297,8 @@ func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatTree.String():
 		return tree.New(ctx, dag, tree.WithRoots(roots...)), nil
+	case render.OutputFormatWideTree.String():
+		return tree.New(ctx, dag, tree.WithRoots(roots...), tree.WithSubRowProviderFunc(serializeResourcesToTreeRows)), nil
 	case render.OutputFormatTable.String():
 		serializer := list.ListSerializerFunc[string](serializeVerticesToTable)
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
@@ -314,6 +321,30 @@ func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {
 		return nil, fmt.Errorf("converting descriptor to v2 failed: %w", err)
 	}
 	return descriptorV2, nil
+}
+
+// serializeResourcesToTreeRows returns one tree row per resource of the
+// component version stored in the vertex. The rows are rendered as leaf
+// children below the component node in the tree output.
+func serializeResourcesToTreeRows(vertex *dag.Vertex[string]) ([]tree.Row, error) {
+	untypedDescriptor, ok := vertex.Attributes[syncdag.AttributeValue]
+	if !ok {
+		return nil, fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
+	}
+	desc, ok := untypedDescriptor.(*descruntime.Descriptor)
+	if !ok {
+		return nil, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descruntime.Descriptor{}, untypedDescriptor)
+	}
+	rows := make([]tree.Row, 0, len(desc.Component.Resources))
+	for i := range desc.Component.Resources {
+		res := &desc.Component.Resources[i]
+		rows = append(rows, tree.Row{
+			Component: res.Name,
+			Version:   res.Version,
+			Identity:  fmt.Sprintf("type=%s,relation=%s", res.Type, res.Relation),
+		})
+	}
+	return rows, nil
 }
 
 func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {

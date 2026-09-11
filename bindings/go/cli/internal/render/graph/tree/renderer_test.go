@@ -344,3 +344,68 @@ func (w testLogWriter) Write(p []byte) (int, error) {
 	w.t.Log("\n" + string(p))
 	return len(p), nil
 }
+
+func TestRenderOnceWithSubRows(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	d := dag.NewDirectedAcyclicGraph[string]()
+	graph := syncdag.ToSyncedGraph(d)
+
+	buf := &bytes.Buffer{}
+	writer := io.MultiWriter(buf, testLogWriter{t})
+
+	// subRowProvider returns one leaf row per resource stored on the vertex.
+	subRowProvider := func(vertex *dag.Vertex[string]) ([]Row, error) {
+		untyped, ok := vertex.Attributes[syncdag.AttributeValue]
+		if !ok {
+			return nil, fmt.Errorf("vertex %v has no %s attribute", vertex.ID, syncdag.AttributeValue)
+		}
+		component, ok := untyped.(*descriptor.Descriptor)
+		if !ok {
+			return nil, fmt.Errorf("vertex %v has unexpected type %T", vertex.ID, untyped)
+		}
+		rows := make([]Row, 0, len(component.Component.Resources))
+		for i := range component.Component.Resources {
+			res := &component.Component.Resources[i]
+			rows = append(rows, Row{
+				Component: res.Name,
+				Version:   res.Version,
+				Identity:  fmt.Sprintf("type=%s,relation=%s", res.Type, res.Relation),
+			})
+		}
+		return rows, nil
+	}
+
+	renderer := New(ctx, graph, WithSubRowProviderFunc(subRowProvider))
+
+	attrs := withTestAttributes(syncdag.DiscoveryStateCompleted, "comp-a", "v1.0.0", "acme")
+	desc := attrs[syncdag.AttributeValue].(*descriptor.Descriptor)
+	desc.Component.Resources = []descriptor.Resource{
+		{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "res-a", Version: "v1.0.0"}},
+			Type:        "blueprint",
+			Relation:    descriptor.LocalRelation,
+		},
+		{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "res-b", Version: "v2.0.0"}},
+			Type:        "ociImage",
+			Relation:    descriptor.ExternalRelation,
+		},
+	}
+	r.NoError(d.AddVertex("A", attrs))
+
+	// A component child without resources to verify correct sibling nesting
+	// between resources and referenced components.
+	r.NoError(d.AddVertex("B", withTestAttributes(syncdag.DiscoveryStateCompleted, "comp-b", "v2.0.0", "acme")))
+	r.NoError(d.AddEdge("A", "B"))
+
+	expected := ` NESTING  COMPONENT  VERSION  PROVIDER  IDENTITY                        
+ └─ ●     comp-a     v1.0.0   acme      name=comp-a,version=v1.0.0      
+    ├─    res-a      v1.0.0             type=blueprint,relation=local   
+    ├─    res-b      v2.0.0             type=ociImage,relation=external 
+    └─    comp-b     v2.0.0   acme      name=comp-b,version=v2.0.0      
+`
+	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
+	r.Equal(expected, buf.String())
+}

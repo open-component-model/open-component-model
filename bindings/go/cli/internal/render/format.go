@@ -9,6 +9,7 @@ const (
 	OutputFormatYAML
 	OutputFormatNDJSON
 	OutputFormatTree
+	OutputFormatWideTree
 	OutputFormatTable
 )
 
@@ -22,6 +23,8 @@ func (o OutputFormat) String() string {
 		return "ndjson"
 	case OutputFormatTree:
 		return "tree"
+	case OutputFormatWideTree:
+		return "widetree"
 	case OutputFormatTable:
 		return "table"
 	default:
