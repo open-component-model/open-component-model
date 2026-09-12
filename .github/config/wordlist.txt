@@ -62,6 +62,7 @@ blobhandler
 blobtransformer
 bool
 boolean
+bootable
 braun
 brautigam
 bruns
@@ -107,6 +108,7 @@ codebase
 codeowners
 codeql
 colocated
+colocates
 commontransportarchive
 commontransportformat
 componentaccess
@@ -367,6 +369,7 @@ imagereference
 imagetagtransformer
 implementors
 infomation
+init
 inlined
 inspectable
 installable
@@ -558,6 +561,7 @@ onboarded
 onboarding
 oncefunc
 oo
+oom
 openapi
 openbao
 opencontrolplane
@@ -581,6 +585,7 @@ outputspecification
 overexplain
 overriden
 overwritable
+ovf
 ownershipPolicy
 packageidentifier
 packagename
@@ -868,6 +873,7 @@ verifiers
 versionability
 versionable
 versionedtypedobjects
+vm
 walkthrough
 warroom
 wasm
