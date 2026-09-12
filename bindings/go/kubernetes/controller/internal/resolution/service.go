@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/utils/lru"
 
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
@@ -121,6 +122,7 @@ func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *
 		RepoProvider: pm.ComponentVersionRepositoryRegistry,
 	}
 
+	var genericCfg *genericv1.Config
 	if cfg != nil {
 		credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
 			PluginManager: pm,
@@ -131,14 +133,8 @@ func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *
 		}
 		r.logger.V(1).Info("resolved credential graph")
 		opts.CredentialGraph = credGraph
-
-		fallbackResolvers, pathMatchers, err := resolvers.ExtractResolvers(cfg.Config, ocirepository.Scheme)
-		if err != nil {
-			return nil, err
-		}
-		opts.FallbackResolvers = fallbackResolvers
-		opts.PathMatchers = pathMatchers
+		genericCfg = cfg.Config
 	}
 
-	return resolvers.New(ctx, opts, spec)
+	return resolvers.NewFromConfig(ctx, genericCfg, ocirepository.Scheme, opts, spec)
 }

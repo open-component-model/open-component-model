@@ -83,3 +83,24 @@ const (
 	// TransferCompleteReason is used when no Replication transfer is done.
 	TransferCompleteReason = "TransferComplete"
 )
+
+// Discovery condition reasons.
+const (
+	// SelectorFailedReason is used when a Discovery selector fails to compile or evaluate.
+	SelectorFailedReason = "SelectorFailed"
+
+	// ExtractFailedReason is used when Discovery extraction fails to compile, evaluate, or produce a list of objects.
+	ExtractFailedReason = "ExtractFailed"
+
+	// ResolutionFailedReason is used when the transitive component graph of a Discovery cannot be fully resolved.
+	ResolutionFailedReason = "ResolutionFailed"
+
+	// PayloadTooLargeReason is used when the Discovery status payload exceeds the API server size limit.
+	PayloadTooLargeReason = "PayloadTooLarge"
+
+	// NoReferencesMatchedReason is used when the Discovery reference selector matched no references.
+	NoReferencesMatchedReason = "NoReferencesMatched"
+
+	// NoComponentsMatchedReason is used when the Discovery component selector matched no components.
+	NoComponentsMatchedReason = "NoComponentsMatched"
+)

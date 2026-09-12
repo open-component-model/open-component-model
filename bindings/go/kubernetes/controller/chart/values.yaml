@@ -29,6 +29,10 @@ manager:
     subscriberBufferSize: 100
     # -- The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.
     cacheTTL: 30
+  ## Discovery controller settings
+  discovery:
+    # -- Controller-wide safety interval after which successfully reconciled Discoveries are re-queued for a full discovery, jittered by +/-10%. "0" disables safety scheduling; negative durations are rejected at startup.
+    safetyInterval: "30m"
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache

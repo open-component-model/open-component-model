@@ -540,6 +540,78 @@ var _ = Describe("ocm utility", func() {
 			Expect(config).To(Equal(ocmConfig))
 		})
 
+		It("referenced discovery object does propagation", func(ctx SpecContext) {
+			effectiveConfig := []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+						APIVersion: corev1.SchemeGroupVersion.String(),
+						Kind:       "Secret",
+						Name:       Secret,
+						Namespace:  Namespace,
+					},
+					Policy: v1alpha1.ConfigurationPolicyPropagate,
+				},
+				{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+						APIVersion: corev1.SchemeGroupVersion.String(),
+						Kind:       "ConfigMap",
+						Name:       ConfigMap,
+						Namespace:  Namespace,
+					},
+					Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+				},
+			}
+			discovery := v1alpha1.Discovery{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: v1alpha1.GroupVersion.String(),
+					Kind:       v1alpha1.KindDiscovery,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: Namespace,
+					Name:      "test-discovery",
+				},
+				Status: v1alpha1.DiscoveryStatus{
+					EffectiveOCMConfig: effectiveConfig,
+				},
+			}
+			bldr.WithObjects(&discovery)
+
+			comp := v1alpha1.Component{
+				Spec: v1alpha1.ComponentSpec{
+					OCMConfig: []v1alpha1.OCMConfiguration{
+						{
+							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+								APIVersion: discovery.APIVersion,
+								Kind:       discovery.Kind,
+								Name:       discovery.Name,
+								Namespace:  discovery.Namespace,
+							},
+							Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+						},
+					},
+				},
+			}
+			bldr.WithObjects(&comp)
+
+			clnt = bldr.Build()
+			config, err := GetEffectiveConfig(ctx, clnt, &comp, nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			// only the propagate policy entry is resolved from the discovery, and
+			// the policy is overridden by the one in the referencing component
+			Expect(config).To(Equal([]v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+						APIVersion: corev1.SchemeGroupVersion.String(),
+						Kind:       "Secret",
+						Name:       Secret,
+						Namespace:  Namespace,
+					},
+					Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
+				},
+			}))
+		})
+
 		It("mixes a direct secret with a referenced object", func(ctx SpecContext) {
 			configMap := corev1.ConfigMap{
 				TypeMeta: metav1.TypeMeta{
