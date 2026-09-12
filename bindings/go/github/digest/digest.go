@@ -18,6 +18,7 @@ import (
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
 	"ocm.software/open-component-model/bindings/go/github/spec/access"
+	ghcreds "ocm.software/open-component-model/bindings/go/github/spec/credentials"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -163,4 +164,8 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	res.Digest.Value = resolvedValue
 
 	return res, nil
+}
+
+func (p *DigestProcessor) GetCredentialTypeScheme() *runtime.Scheme {
+	return ghcreds.Scheme
 }

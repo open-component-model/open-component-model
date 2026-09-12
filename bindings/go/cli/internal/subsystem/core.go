@@ -49,7 +49,7 @@ func NewRegistryFromPluginManager(pm *manager.PluginManager) (*Registry, error) 
 		input.Scheme.RegisterScheme(pm.InputRegistry.InputRepositoryScheme()),
 		credentialRepository.Scheme.RegisterScheme(pm.CredentialRepositoryRegistry.RepositoryScheme()),
 		signingHandler.Scheme.RegisterScheme(pm.SigningRegistry.ResourceScheme()),
-		credentials.Scheme.RegisterScheme(pm.CredentialRepositoryRegistry.GetCredentialTypeScheme()),
+		credentials.Scheme.RegisterScheme(pm.CredentialTypeRegistry.GetCredentialTypeScheme()),
 	); err != nil {
 		return nil, err
 	}
