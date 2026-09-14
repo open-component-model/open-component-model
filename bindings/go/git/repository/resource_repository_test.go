@@ -70,6 +70,23 @@ func TestResourceDigestPinning(t *testing.T) {
 	r.Empty(files)
 }
 
+func TestResourceDigestKeepsPinnedCommit(t *testing.T) {
+	r := require.New(t)
+
+	fixture := newRepository(t)
+	tag, err := fixture.Git.Reference("refs/tags/annotated", false)
+	r.NoError(err)
+
+	// The annotated tag object peels to fixture.First, but the pinned value is kept.
+	res := &descriptor.Resource{Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.Path, Commit: tag.Hash().String()}}
+	pinned, err := repository.NewResourceRepository(repository.WithTempDir(t.TempDir())).ProcessResourceDigest(t.Context(), res, nil)
+	r.NoError(err)
+
+	var spec v1.Git
+	r.NoError(access.Scheme.Convert(pinned.Access, &spec))
+	r.Equal(tag.Hash().String(), spec.Commit)
+}
+
 func TestInvalidResource(t *testing.T) {
 	r := require.New(t)
 
