@@ -61,36 +61,11 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 			Tags:       git.AllTags,
 			CABundle:   opts.CABundle,
 		})
+		if err != nil {
+			err = transportError(ctx, "cannot fetch git repository", err)
+		}
 	} else {
-		// A pinned commit must not depend on a valid remote HEAD.
-		repo, err = git.PlainInit(dir, false)
-		if err == nil {
-			_, err = repo.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: []string{access.Repository}})
-		}
-
-		if err == nil {
-			// Asking for the pinned commit alone avoids transferring every ref and its
-			// history. Servers without the capability reject it before any transfer.
-			err = repo.FetchContext(ctx, &git.FetchOptions{
-				Auth:     auth,
-				CABundle: opts.CABundle,
-				Tags:     git.NoTags,
-				RefSpecs: []config.RefSpec{config.RefSpec("+" + access.Commit + ":refs/ocm/commit")},
-			})
-
-			if errors.Is(err, git.ErrExactSHA1NotSupported) {
-				err = repo.FetchContext(ctx, &git.FetchOptions{
-					Auth:     auth,
-					CABundle: opts.CABundle,
-					Tags:     git.AllTags,
-					RefSpecs: []config.RefSpec{"+refs/*:refs/*"},
-				})
-			}
-
-			if errors.Is(err, git.NoErrAlreadyUpToDate) {
-				err = nil
-			}
-		}
+		repo, err = fetchCommit(ctx, dir, access, auth, opts)
 	}
 
 	if repo != nil {
@@ -100,7 +75,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 	}
 
 	if err != nil {
-		return nil, "", transportError(ctx, "cannot fetch git repository", err)
+		return nil, "", err
 	}
 
 	var hash *plumbing.Hash
@@ -145,6 +120,42 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 	}
 
 	return result, selected.Hash.String(), nil
+}
+
+// fetchCommit fetches a pinned commit without depending on a valid remote HEAD.
+// The repository is returned also with a fetch error, so the caller can close its storage.
+func fetchCommit(ctx context.Context, dir string, access *accessv1.Git, auth transport.AuthMethod, opts Options) (*git.Repository, error) {
+	repo, err := git.PlainInit(dir, false)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create git repository: %w", err)
+	}
+
+	if _, err := repo.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: []string{access.Repository}}); err != nil {
+		return repo, fmt.Errorf("cannot configure git remote: %w", err)
+	}
+
+	// Asking for the pinned commit alone avoids transferring every ref and its
+	// history. Servers without the capability reject it before any transfer.
+	err = repo.FetchContext(ctx, &git.FetchOptions{
+		Auth:     auth,
+		CABundle: opts.CABundle,
+		Tags:     git.NoTags,
+		RefSpecs: []config.RefSpec{config.RefSpec("+" + access.Commit + ":refs/ocm/commit")},
+	})
+	if errors.Is(err, git.ErrExactSHA1NotSupported) {
+		err = repo.FetchContext(ctx, &git.FetchOptions{
+			Auth:     auth,
+			CABundle: opts.CABundle,
+			Tags:     git.AllTags,
+			RefSpecs: []config.RefSpec{"+refs/*:refs/*"},
+		})
+	}
+
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return repo, transportError(ctx, "cannot fetch git repository", err)
+	}
+
+	return repo, nil
 }
 
 func peelCommit(repo *git.Repository, hash plumbing.Hash) (*object.Commit, error) {

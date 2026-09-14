@@ -116,13 +116,17 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 		return nil, err
 	}
 
-	spec.Commit = commit
+	// A set commit is authoritative, only a ref-only access gets pinned.
+	if spec.Commit == "" {
+		spec.Commit = commit
+	}
 	pinned := &runtime.Raw{}
 	if err := access.Scheme.Convert(spec, pinned); err != nil {
 		return nil, fmt.Errorf("cannot encode pinned git access: %w", err)
 	}
 
 	result.Access = pinned
+	// r.download already rejected a set digest that does not match this archive.
 	raw, _ := b.Digest()
 	result.Digest = &descriptor.Digest{
 		HashAlgorithm:          hashAlgorithmSHA256,
