@@ -17,7 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 	inputspec "ocm.software/open-component-model/bindings/go/s3/spec/input"
-	v1 "ocm.software/open-component-model/bindings/go/s3/spec/input/v1"
+	"ocm.software/open-component-model/bindings/go/s3/spec/input/v2"
 )
 
 // fakeS3 is an httptest server answering GetObject with a canned object, so that the
@@ -87,8 +87,8 @@ func fakeCredentials() *credv1.S3Credentials {
 	}
 }
 
-func s3InputResource(spec *v1.S3Bucket) *constructorruntime.Resource {
-	spec.Type = inputspec.V1VersionedType
+func s3InputResource(spec *v2.S3) *constructorruntime.Resource {
+	spec.Type = inputspec.V2VersionedType
 	r := &constructorruntime.Resource{}
 	r.Name = "test-resource"
 	r.Version = "1.0.0"
@@ -100,7 +100,7 @@ func s3InputResource(spec *v1.S3Bucket) *constructorruntime.Resource {
 
 // servedBy points spec at srv. The fake serves no bucket subdomains, so the input is
 // addressed path-style.
-func servedBy(srv *fakeS3, spec *v1.S3Bucket) *v1.S3Bucket {
+func servedBy(srv *fakeS3, spec *v2.S3) *v2.S3 {
 	spec.Endpoint = srv.URL
 	spec.UsePathStyle = true
 
@@ -114,7 +114,7 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	method := &InputMethod{}
 
 	t.Run("the input spec is carried into the identity", func(t *testing.T) {
-		id, err := method.GetResourceCredentialConsumerIdentity(t.Context(), s3InputResource(&v1.S3Bucket{
+		id, err := method.GetResourceCredentialConsumerIdentity(t.Context(), s3InputResource(&v2.S3{
 			BucketName: "my-bucket",
 			ObjectKey:  "path/to/blob",
 			Endpoint:   "https://minio.example.com:9000",
@@ -127,11 +127,11 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 
 	t.Run("an input naming no object is rejected", func(t *testing.T) {
 		_, err := method.GetResourceCredentialConsumerIdentity(t.Context(),
-			s3InputResource(&v1.S3Bucket{BucketName: "my-bucket"}))
+			s3InputResource(&v2.S3{BucketName: "my-bucket"}))
 		require.ErrorContains(t, err, "objectKey is required")
 
 		_, err = method.GetResourceCredentialConsumerIdentity(t.Context(),
-			s3InputResource(&v1.S3Bucket{ObjectKey: "path/to/blob"}))
+			s3InputResource(&v2.S3{ObjectKey: "path/to/blob"}))
 		require.ErrorContains(t, err, "bucketName is required")
 	})
 
@@ -150,7 +150,7 @@ func Test_ProcessResource(t *testing.T) {
 		srv := newFakeS3(t, content, "text/plain")
 		method := &InputMethod{TempFolder: t.TempDir()}
 
-		result, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v1.S3Bucket{
+		result, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v2.S3{
 			BucketName: "my-bucket",
 			ObjectKey:  "path/blob.txt",
 		})), fakeCredentials())
@@ -182,7 +182,7 @@ func Test_ProcessResource(t *testing.T) {
 		srv := newFakeS3(t, content, "")
 		method := &InputMethod{TempFolder: t.TempDir()}
 
-		_, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v1.S3Bucket{
+		_, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v2.S3{
 			BucketName: "my-bucket",
 			ObjectKey:  "path/blob.txt",
 			Version:    "v-1",
@@ -198,7 +198,7 @@ func Test_ProcessResource(t *testing.T) {
 		srv := newFakeS3(t, content, "text/plain")
 		method := &InputMethod{TempFolder: t.TempDir()}
 
-		result, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v1.S3Bucket{
+		result, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v2.S3{
 			BucketName: "my-bucket",
 			ObjectKey:  "path/blob.txt",
 			MediaType:  "application/custom",
@@ -217,7 +217,7 @@ func Test_ProcessResource(t *testing.T) {
 		maxDownloadSize := int64(1)
 		method := &InputMethod{TempFolder: t.TempDir(), MaxDownloadSize: &maxDownloadSize}
 
-		_, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v1.S3Bucket{
+		_, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v2.S3{
 			BucketName: "my-bucket",
 			ObjectKey:  "path/blob.txt",
 		})), fakeCredentials())
@@ -229,7 +229,7 @@ func Test_ProcessResource(t *testing.T) {
 		method := &InputMethod{TempFolder: t.TempDir()}
 
 		_, err := method.ProcessResource(t.Context(),
-			s3InputResource(servedBy(srv, &v1.S3Bucket{BucketName: "my-bucket"})), fakeCredentials())
+			s3InputResource(servedBy(srv, &v2.S3{BucketName: "my-bucket"})), fakeCredentials())
 		require.ErrorContains(t, err, "objectKey is required")
 		require.Empty(t, srv.recorded())
 	})
@@ -242,13 +242,13 @@ func Test_InputMethodScheme(t *testing.T) {
 	scheme := method.GetInputMethodScheme()
 
 	for _, typ := range []runtime.Type{
-		runtime.NewVersionedType(v1.Type, v1.Version),
-		runtime.NewUnversionedType(v1.Type),
-		runtime.NewVersionedType(v1.LowerCamelType, v1.Version),
-		runtime.NewUnversionedType(v1.LowerCamelType),
+		runtime.NewVersionedType(v2.Type, v2.Version),
+		runtime.NewUnversionedType(v2.Type),
+		runtime.NewVersionedType(v2.LowerCamelType, v2.Version),
+		runtime.NewUnversionedType(v2.LowerCamelType),
 	} {
 		t.Run(typ.String(), func(t *testing.T) {
-			spec := &v1.S3Bucket{}
+			spec := &v2.S3{}
 			raw := &runtime.Raw{
 				Type: typ,
 				Data: []byte(`{"type":"` + typ.String() + `","bucketName":"my-bucket","objectKey":"path/blob.txt"}`),

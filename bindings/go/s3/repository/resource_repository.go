@@ -19,7 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
-	v1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 )
 
@@ -30,7 +30,7 @@ const (
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
-// ResourceRepository implements the ResourceRepository interface for the S3Bucket
+// ResourceRepository implements the ResourceRepository interface for the S3
 // access type.
 type ResourceRepository struct {
 	maxDownloadSize  *int64
@@ -77,7 +77,7 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 }
 
 // DownloadResource downloads a resource from the bucket/key described by the
-// S3Bucket access spec.
+// S3 access spec.
 //
 // The object is streamed into a file under the configured TempFolder, and the
 // returned blob reads from that file, which outlives this call and is owned by the
@@ -101,7 +101,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return result.Blob, nil
 }
 
-func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S3Bucket, error) {
+func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v2.S3, error) {
 	if resource == nil {
 		return nil, errors.New("resource is required")
 	}
@@ -109,7 +109,7 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S
 		return nil, errors.New("resource access is required")
 	}
 
-	spec := &v1.S3Bucket{}
+	spec := &v2.S3{}
 	if err := accessspec.Scheme.Convert(resource.Access, spec); err != nil {
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
@@ -122,7 +122,7 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.S
 
 // download streams the object described by spec into tempDir and returns it as a
 // file-backed blob. The file outlives this call and is owned by the caller.
-func (r *ResourceRepository) download(ctx context.Context, spec *v1.S3Bucket, credentials runtime.Typed, tempDir string) (*download.Result, error) {
+func (r *ResourceRepository) download(ctx context.Context, spec *v2.S3, credentials runtime.Typed, tempDir string) (*download.Result, error) {
 	opts := []download.Option{
 		download.WithCredentials(credentials),
 		download.WithTempDir(tempDir),
@@ -148,11 +148,11 @@ func (r *ResourceRepository) download(ctx context.Context, spec *v1.S3Bucket, cr
 	}, opts...)
 }
 
-// UploadResource is not supported by the S3Bucket access type, which is
+// UploadResource is not supported by the S3 access type, which is
 // download-only (matching ocmv1). It exists to satisfy the
 // [repository.ResourceRepository] interface and always returns an error.
 func (r *ResourceRepository) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
-	return nil, errors.New("uploading resources is not supported by the S3Bucket access type")
+	return nil, errors.New("uploading resources is not supported by the S3 access type")
 }
 
 // GetResourceDigestProcessorCredentialConsumerIdentity resolves the credential consumer
@@ -245,7 +245,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		spec.Version = served
 
 		// The v2 descriptor encoder passes a [runtime.Raw] straight through but looks a
-		// typed access up in its own scheme, where S3Bucket is not registered.
+		// typed access up in its own scheme, where S3 is not registered.
 		raw := &runtime.Raw{}
 		if err := accessspec.Scheme.Convert(spec, raw); err != nil {
 			return nil, fmt.Errorf("error encoding pinned s3 access: %w", err)

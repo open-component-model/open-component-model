@@ -50,7 +50,7 @@ See the Task documentation at <https://taskfile.dev/docs/guide>.
 task -a
 ```
 
-The root `Taskfile.yml` includes module-specific taskfiles. Each module under `bindings/go/` has its own `Taskfile.yml` that reuses `reuse.Taskfile.yml` for test tasks.
+The root `Taskfile.yml` includes the area taskfiles for the Go module test tasks (`bindings/go/Taskfile.yml`), the sigstore scaffolding lifecycle, the generators, the CLI, and the controller.
 
 ### Import Order (gci enforced)
 
@@ -89,7 +89,7 @@ The foundation of OCM: every typed object has a `runtime.Type` (Name + Version) 
 ### CI Pipeline
 
 - Single Go module (`bindings/go`). CI uses static path filters instead of dynamic module discovery; `conformance/scenarios/sovereign/components/notes` is lint-only
-- On PRs, unit and integration tests run when `bindings/go`, the shared task plumbing (`Taskfile.yml`, `reuse.Taskfile.yml`), or `ci.yml` changes. Lint runs for the changed module only, or for all modules when `golangci.yml` / `.env` / `ci.yml` changes; full suite on main
+- On PRs, unit and integration tests run when `bindings/go`, the shared task plumbing (`Taskfile.yml`), or `ci.yml` changes. Lint runs for the changed module only, or for all modules when `golangci.yml` / `.env` / `ci.yml` changes; full suite on main
 - Pipeline: PR title validation (conventional commit format) → auto-labeling → change detection → lint → unit tests → integration tests → CodeQL → generation verification
 - Multi-arch builds for CLI and controller (linux/darwin, amd64/arm64)
 
