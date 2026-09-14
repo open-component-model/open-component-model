@@ -42,7 +42,7 @@ The following types are defined by the core OCM modules:
 | [`OCIRegistry`](#ociregistry)                 | Authenticating against OCI registries               |
 | [`HelmChartRepository`](#helmchartrepository) | Authenticating against Helm chart repositories      |
 | [`Wget`](#wget)                               | Authenticating against plain HTTP/HTTPS servers     |
-| [`S3Bucket`](#s3bucket)                       | Authenticating against S3 and S3-compatible buckets |
+| [`S3`](#s3)                                   | Authenticating against S3 and S3-compatible buckets |
 | [`GitHubRepository`](#githubrepository)       | Authenticating against the GitHub REST API          |
 | [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys             |
 
@@ -299,11 +299,11 @@ conversion, and the inverted authentication precedence, see
 
 ---
 
-## S3Bucket
+## S3
 
 Used when OCM reads an object from an S3 or S3-compatible bucket. This applies to the
-[`S3Bucket/v1` access type]({{< relref "input-and-access-types.md#s3bucketv1-access" >}}) and to the
-[`S3Bucket/v1` input type]({{< relref "input-and-access-types.md#s3bucketv1-input" >}}). OCM derives the identity from
+[`S3/v2` access type]({{< relref "input-and-access-types.md#s3v2-access" >}}) and to the
+[`S3/v2` input type]({{< relref "input-and-access-types.md#s3v2-input" >}}). OCM derives the identity from
 `bucketName`, `objectKey` and the optional `endpoint`. The access type and the input type derive it the same way, so
 one consumer entry covers both.
 
@@ -320,7 +320,7 @@ Use this path for in-cluster and CI setups. Short-lived role credentials are saf
 
 | Attribute  | Required | Description                                                                                                                                           |
 |------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `S3Bucket`                                                                                                                                    |
+| `type`     | Yes      | Must be `S3`                                                                                                                                          |
 | `path`     | No       | Object location as `<bucketName>/<objectKey>`. Glob patterns are allowed. `*` matches one path segment. If you omit it, the entry matches any object. |
 | `hostname` | No       | Host of the `endpoint`, for example `minio.internal`. OCM derives it only for an S3-compatible store. **Do not set it for AWS S3.**                   |
 | `scheme`   | No       | Scheme of the `endpoint`: `https` or `http`. If you omit it, the entry matches any scheme. If you set it, it must match exactly.                      |
@@ -331,7 +331,7 @@ Use this path for in-cluster and CI setups. Short-lived role credentials are saf
 
 | Attribute | Value                                                       |
 |-----------|-------------------------------------------------------------|
-| `type`    | `S3Bucket`                                                  |
+| `type`    | `S3`                                                        |
 | `path`    | `acme-artifacts/datasets/reference/1.0.0/reference.parquet` |
 
 **Example derivation (S3-compatible store).** Add `endpoint: https://minio.internal:9000`. The endpoint supplies the
@@ -339,7 +339,7 @@ URL attributes. The path still names the object:
 
 | Attribute  | Value                                                       |
 |------------|-------------------------------------------------------------|
-| `type`     | `S3Bucket`                                                  |
+| `type`     | `S3`                                                        |
 | `scheme`   | `https`                                                     |
 | `hostname` | `minio.internal`                                            |
 | `port`     | `9000`                                                      |
@@ -379,10 +379,9 @@ Two results of this are specific to S3:
   bucket, write the full depth (`acme-artifacts/*/*/*`), or omit `path` and scope the entry another way.
 
 {{< callout context="caution" >}}
-Write the identity type as `type: S3Bucket`. OCM matches the type as an exact string, and the type is **unversioned**.
-`S3Bucket/v1` (the name of the
-[access and input type]({{< relref "input-and-access-types.md#s3bucketv1-access" >}})) does not match. The `S3` type of
-OCM v1 does not match either.
+Write the identity type as `type: S3`. OCM matches the type as an exact string, and the type is **unversioned**.
+`S3/v2` (the name of the
+[access and input type]({{< relref "input-and-access-types.md#s3v2-access" >}})) does not match.
 
 A wrong type gives no error message. OCM resolves no credentials, the AWS default credential chain takes over, and the
 request uses what that chain finds, which is often nothing. AWS then reports an access-denied error or a
@@ -395,7 +394,7 @@ missing-credentials error, not a configuration error.
 
 ```yaml
 - identity:
-    type: S3Bucket
+    type: S3
   credentials:
     - type: S3Credentials/v1
       accessKeyId: <access-key-id>
@@ -406,7 +405,7 @@ missing-credentials error, not a configuration error.
 
 ```yaml
 - identity:
-    type: S3Bucket
+    type: S3
     path: acme-artifacts/datasets/reference/1.0.0/reference.parquet
   credentials:
     - type: S3Credentials/v1
@@ -419,7 +418,7 @@ missing-credentials error, not a configuration error.
 
 ```yaml
 - identity:
-    type: S3Bucket
+    type: S3
     scheme: https
     hostname: minio.internal
     port: "9000"
@@ -429,13 +428,12 @@ missing-credentials error, not a configuration error.
       secretAccessKey: minio-password
 ```
 
-### Migrating from OCM v1 {#s3bucket-migration-from-ocm-v1}
+### Migrating from OCM v1 {#s3-identity-migration-from-ocm-v1}
 
-OCM v2 does **not** resolve OCM v1 consumer entries for S3. You must rewrite them. Four things changed:
+The identity type is `S3` in OCM v1 and in OCM v2, but three other things changed:
 
 | Aspect                | OCM v1                                          | OCM v2                                                 |
 |-----------------------|-------------------------------------------------|--------------------------------------------------------|
-| Identity type         | `S3`                                            | `S3Bucket`                                             |
 | Object location       | `pathprefix`, set to `<bucket>/<key>/<version>` | `path`, set to `<bucketName>/<objectKey>` (no version) |
 | Location matching     | Prefix match                                    | Glob match (`*` does not cross `/`)                    |
 | Credential properties | `awsAccessKeyID`, `awsSecretAccessKey`, `token` | `accessKeyId`, `secretAccessKey`, `sessionToken`       |
@@ -455,7 +453,7 @@ OCM v2 does **not** resolve OCM v1 consumer entries for S3. You must rewrite the
 ```yaml
 # OCM v2
 - identity:
-    type: S3Bucket
+    type: S3
     path: acme-artifacts/datasets/*
   credentials:
     - type: S3Credentials/v1
@@ -466,8 +464,10 @@ OCM v2 does **not** resolve OCM v1 consumer entries for S3. You must rewrite the
 The old **property** names are still accepted, but only in an untyped
 [`Credentials/v1`]({{< relref "credential-types.md#directcredentialsv1" >}}) entry. There, OCM reads `awsAccessKeyID`,
 `awsSecretAccessKey` and `token`, and maps them to `accessKeyId`, `secretAccessKey` and `sessionToken`. A typed
-`S3Credentials/v1` entry accepts the new names only. The old **identity** has no alias. `type: S3` with a `pathprefix`
-never matches, whichever credential type it carries.
+`S3Credentials/v1` entry accepts the new names only.
+
+An OCM v1 entry without `pathprefix` still matches every S3 object. An entry with `pathprefix` never matches, because
+the OCM v2 lookup identity has no such attribute. Replace `pathprefix` with `path`.
 
 For the matching access specification changes, see
 [Input and Access Types: Migrating from OCM v1]({{< relref "input-and-access-types.md" >}}#s3-migration-from-ocm-v1).

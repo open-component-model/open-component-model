@@ -18,15 +18,15 @@ func TestMustRegisterIdentityType(t *testing.T) {
 
 	obj, err := scheme.NewObject(Type)
 	require.NoError(t, err)
-	_, ok := obj.(*S3BucketIdentity)
-	assert.True(t, ok, "expected *S3BucketIdentity, got %T", obj)
+	_, ok := obj.(*S3Identity)
+	assert.True(t, ok, "expected *S3Identity, got %T", obj)
 }
 
-func TestS3BucketIdentity_SchemeConvert(t *testing.T) {
+func TestS3Identity_SchemeConvert(t *testing.T) {
 	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
 	MustRegisterIdentityType(scheme)
 
-	original := &S3BucketIdentity{
+	original := &S3Identity{
 		Type:     VersionedType,
 		Hostname: "s3.example.com",
 		Scheme:   "https",
@@ -37,7 +37,7 @@ func TestS3BucketIdentity_SchemeConvert(t *testing.T) {
 	raw := &runtime.Raw{}
 	require.NoError(t, scheme.Convert(original, raw))
 
-	restored := &S3BucketIdentity{}
+	restored := &S3Identity{}
 	require.NoError(t, scheme.Convert(raw, restored))
 
 	assert.Equal(t, original.Type, restored.Type)
@@ -58,12 +58,12 @@ func TestFromIdentity_NilInput(t *testing.T) {
 func TestToIdentity(t *testing.T) {
 	tests := []struct {
 		name  string
-		input *S3BucketIdentity
+		input *S3Identity
 		want  runtime.Identity
 	}{
 		{
 			name: "full identity",
-			input: &S3BucketIdentity{
+			input: &S3Identity{
 				Type:     VersionedType,
 				Hostname: "s3.example.com",
 				Scheme:   "https",
@@ -80,7 +80,7 @@ func TestToIdentity(t *testing.T) {
 		},
 		{
 			name: "only hostname",
-			input: &S3BucketIdentity{
+			input: &S3Identity{
 				Type:     VersionedType,
 				Hostname: "s3.example.com",
 			},
@@ -91,7 +91,7 @@ func TestToIdentity(t *testing.T) {
 		},
 		{
 			name:  "empty identity uses defaulted type",
-			input: &S3BucketIdentity{},
+			input: &S3Identity{},
 			want: runtime.Identity{
 				runtime.IdentityAttributeType: VersionedType.String(),
 			},
@@ -109,7 +109,7 @@ func TestFromIdentity(t *testing.T) {
 	tests := []struct {
 		name  string
 		input runtime.Identity
-		want  *S3BucketIdentity
+		want  *S3Identity
 	}{
 		{
 			name: "full identity",
@@ -120,7 +120,7 @@ func TestFromIdentity(t *testing.T) {
 				runtime.IdentityAttributePort:     "443",
 				runtime.IdentityAttributePath:     "my-bucket/path/to/object.tar.gz",
 			},
-			want: &S3BucketIdentity{
+			want: &S3Identity{
 				Type:     VersionedType,
 				Hostname: "s3.example.com",
 				Scheme:   "https",
@@ -134,7 +134,7 @@ func TestFromIdentity(t *testing.T) {
 				runtime.IdentityAttributeType:     VersionedType.String(),
 				runtime.IdentityAttributeHostname: "s3.example.com",
 			},
-			want: &S3BucketIdentity{
+			want: &S3Identity{
 				Type:     VersionedType,
 				Hostname: "s3.example.com",
 			},
@@ -146,7 +146,7 @@ func TestFromIdentity(t *testing.T) {
 				runtime.IdentityAttributeHostname: "s3.example.com",
 				"unrelated":                       "value",
 			},
-			want: &S3BucketIdentity{
+			want: &S3Identity{
 				Type:     VersionedType,
 				Hostname: "s3.example.com",
 			},
@@ -162,7 +162,7 @@ func TestFromIdentity(t *testing.T) {
 
 func TestIdentity_RoundTrip(t *testing.T) {
 	t.Run("struct -> identity -> struct", func(t *testing.T) {
-		original := &S3BucketIdentity{
+		original := &S3Identity{
 			Type:     VersionedType,
 			Hostname: "s3.example.com",
 			Scheme:   "https",
@@ -360,9 +360,9 @@ func TestIdentityFromObject_MatchesOnlyUnversionedConsumer(t *testing.T) {
 		consumerType string
 		want         bool
 	}{
-		{"S3Bucket", true},
-		{"S3Bucket/v1", false},
-		{"s3bucket", false},
+		{"S3", true},
+		{"S3/v1", false},
+		{"s3", false},
 	} {
 		t.Run(tt.consumerType, func(t *testing.T) {
 			consumer := runtime.Identity{
@@ -372,6 +372,20 @@ func TestIdentityFromObject_MatchesOnlyUnversionedConsumer(t *testing.T) {
 			assert.Equal(t, tt.want, lookup.Clone().Match(consumer.Clone()))
 		})
 	}
+}
+
+// ocmv1 shares the identity type but scoped entries by pathprefix, an attribute the
+// lookup identity never carries, so such an entry must not match — not even as a
+// catch-all.
+func TestIdentityFromObject_DoesNotMatchOCMv1PathPrefixEntry(t *testing.T) {
+	lookup, err := IdentityFromObject("my-bucket", "path/to/object.tar.gz", "")
+	require.NoError(t, err)
+
+	consumer := runtime.Identity{
+		runtime.IdentityAttributeType: "S3",
+		"pathprefix":                  "my-bucket/path",
+	}
+	assert.False(t, lookup.Clone().Match(consumer.Clone()))
 }
 
 // A consumer entry names the object as bucketName/objectKey, whatever base path the

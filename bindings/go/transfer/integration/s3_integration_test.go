@@ -26,7 +26,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3repository "ocm.software/open-component-model/bindings/go/s3/repository"
 	s3access "ocm.software/open-component-model/bindings/go/s3/spec/access"
-	s3accessv1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
+	s3accessv2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	s3identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 	s3v1alpha1 "ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transfer"
@@ -66,8 +66,8 @@ func Test_Integration_TransferS3Resource_CopyModeAllResources(t *testing.T) {
 	// The s3 access lives in a separate binding the CTF/OCI repository scheme does not know,
 	// so store it pre-encoded as raw JSON (how descriptors carry access on disk). The transfer
 	// discovery decodes it via its own scheme, which registers the s3 access type.
-	s3Access := &s3accessv1.S3Bucket{
-		Type:         s3access.V1VersionedType,
+	s3Access := &s3accessv2.S3{
+		Type:         s3access.V2VersionedType,
 		Region:       "us-east-1",
 		BucketName:   bucket,
 		ObjectKey:    objectKey,
