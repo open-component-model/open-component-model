@@ -12,11 +12,11 @@ import (
 
 func authMethod(ep *transport.Endpoint, creds *credsv1.GitCredentials, opts Options) (transport.AuthMethod, error) {
 	if creds == nil {
-		return nil, nil
+		creds = &credsv1.GitCredentials{}
 	}
 
 	switch {
-	case creds.PrivateKey != "":
+	case creds.PrivateKeyPEM != "" || creds.PrivateKey != "":
 		if ep.Protocol != "ssh" {
 			return nil, fmt.Errorf("SSH private keys require an SSH repository")
 		}
@@ -30,7 +30,13 @@ func authMethod(ep *transport.Endpoint, creds *credsv1.GitCredentials, opts Opti
 			username = "git"
 		}
 
-		auth, err := gitssh.NewPublicKeysFromFile(username, creds.PrivateKey, creds.Password)
+		var auth *gitssh.PublicKeys
+		var err error
+		if creds.PrivateKeyPEM != "" {
+			auth, err = gitssh.NewPublicKeys(username, []byte(creds.PrivateKeyPEM), creds.Password)
+		} else {
+			auth, err = gitssh.NewPublicKeysFromFile(username, creds.PrivateKey, creds.Password)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("cannot load SSH private key: %w", err)
 		}
@@ -51,6 +57,15 @@ func authMethod(ep *transport.Endpoint, creds *credsv1.GitCredentials, opts Opti
 		return &githttp.BasicAuth{Username: creds.Username, Password: creds.Password}, nil
 	case creds.Password != "":
 		return nil, fmt.Errorf("password requires a username or SSH private key")
+	case ep.Protocol == "ssh" && opts.HostKeyCallback != nil:
+		// go-git falls back to the SSH agent on its own, but then ignores the host key callback.
+		auth, err := gitssh.NewSSHAgentAuth(ep.User)
+		if err != nil {
+			return nil, fmt.Errorf("cannot use SSH agent: %w", err)
+		}
+
+		auth.HostKeyCallback = opts.HostKeyCallback
+		return auth, nil
 	default:
 		return nil, nil
 	}

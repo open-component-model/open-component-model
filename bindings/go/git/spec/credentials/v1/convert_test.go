@@ -12,23 +12,25 @@ func TestConvertCredentials(t *testing.T) {
 	r := require.New(t)
 
 	want := &v1.GitCredentials{
-		Type:       runtime.NewVersionedType(v1.GitCredentialsType, v1.Version),
-		Username:   "git",
-		Password:   "passphrase",
-		Token:      "token",
-		PrivateKey: "/keys/key",
+		Type:          runtime.NewVersionedType(v1.GitCredentialsType, v1.Version),
+		Username:      "git",
+		Password:      "passphrase",
+		Token:         "token",
+		PrivateKey:    "/keys/key",
+		PrivateKeyPEM: "pem",
 	}
 
 	raw := &runtime.Raw{}
-	r.NoError(raw.UnmarshalJSON([]byte(`{"type":"GitCredentials/v1","username":"git","password":"passphrase","token":"token","privateKey":"/keys/key"}`)))
+	r.NoError(raw.UnmarshalJSON([]byte(`{"type":"GitCredentials/v1","username":"git","password":"passphrase","token":"token","privateKey":"/keys/key","privateKeyPEM":"pem"}`)))
 
 	for _, input := range []runtime.Typed{want, raw, &directv1.DirectCredentials{
 		Type: runtime.NewVersionedType(directv1.CredentialsType, directv1.Version),
 		Properties: map[string]string{
-			"username":   "git",
-			"password":   "passphrase",
-			"token":      "token",
-			"privateKey": "/keys/key",
+			"username":      "git",
+			"password":      "passphrase",
+			"token":         "token",
+			"privateKey":    "/keys/key",
+			"privateKeyPEM": "pem",
 		},
 	}} {
 		got, err := v1.ConvertToGitCredentials(input)

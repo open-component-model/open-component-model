@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	credentialKeyUsername   = "username"
-	credentialKeyPassword   = "password"
-	credentialKeyToken      = "token"
-	credentialKeyPrivateKey = "privateKey"
+	credentialKeyUsername      = "username"
+	credentialKeyPassword      = "password"
+	credentialKeyToken         = "token"
+	credentialKeyPrivateKey    = "privateKey"
+	credentialKeyPrivateKeyPEM = "privateKeyPEM"
 )
 
 var convertScheme = runtime.NewScheme()
@@ -23,11 +24,12 @@ func init() {
 
 func fromDirectCredentials(properties map[string]string) *GitCredentials {
 	return &GitCredentials{
-		Type:       runtime.NewVersionedType(GitCredentialsType, Version),
-		Username:   properties[credentialKeyUsername],
-		Password:   properties[credentialKeyPassword],
-		Token:      properties[credentialKeyToken],
-		PrivateKey: properties[credentialKeyPrivateKey],
+		Type:          runtime.NewVersionedType(GitCredentialsType, Version),
+		Username:      properties[credentialKeyUsername],
+		Password:      properties[credentialKeyPassword],
+		Token:         properties[credentialKeyToken],
+		PrivateKey:    properties[credentialKeyPrivateKey],
+		PrivateKeyPEM: properties[credentialKeyPrivateKeyPEM],
 	}
 }
 
