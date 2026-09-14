@@ -21,6 +21,7 @@ import (
 	internaldiscovery "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/discovery"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
@@ -115,7 +116,7 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		Name:      discovery.Spec.ComponentRef.Name,
 	})
 	if err != nil {
-		r.markFailure(discovery, v1alpha1.ResourceIsNotAvailable, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.ResourceIsNotAvailable, err.Error())
 
 		var notReadyErr util.NotReadyError
 		var deletionErr util.DeletionError
@@ -131,14 +132,14 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	info := component.Status.Component
 	if info.Component == "" || info.Version == "" || info.RepositorySpec == nil {
 		err := fmt.Errorf("component %s has no complete resolved identity and repository spec", component.GetName())
-		r.markFailure(discovery, v1alpha1.ResourceIsNotAvailable, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.ResourceIsNotAvailable, err.Error())
 
 		return ctrl.Result{}, err
 	}
 
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), discovery, component)
 	if err != nil {
-		r.markFailure(discovery, v1alpha1.GetConfigurationFailedReason, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
@@ -156,29 +157,29 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	if err != nil {
 		var selErr *internaldiscovery.SelectorError
 		if errors.As(err, &selErr) {
-			r.markStalled(discovery, v1alpha1.SelectorFailedReason, err)
+			status.MarkAsStalled(r.EventRecorder, discovery, v1alpha1.SelectorFailedReason, err.Error())
 			return ctrl.Result{}, reconcile.TerminalError(err)
 		}
 		var extErr *internaldiscovery.ExtractError
 		if errors.As(err, &extErr) {
-			r.markStalled(discovery, v1alpha1.ExtractFailedReason, err)
+			status.MarkAsStalled(r.EventRecorder, discovery, v1alpha1.ExtractFailedReason, err.Error())
 			return ctrl.Result{}, reconcile.TerminalError(err)
 		}
-		r.markFailure(discovery, v1alpha1.SelectorFailedReason, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.SelectorFailedReason, err.Error())
 
 		return ctrl.Result{}, err
 	}
 
 	cfg, err := configuration.LoadConfigurations(ctx, r.Client, discovery.GetNamespace(), configs)
 	if err != nil {
-		r.markFailure(discovery, v1alpha1.GetConfigurationFailedReason, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
 	if r.NewPluginManager == nil {
 		err := errors.New("no plugin manager factory configured on the reconciler")
-		r.markFailure(discovery, v1alpha1.GetConfigurationFailedReason, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, err
 	}
@@ -188,14 +189,14 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	}
 	pm, err := r.NewPluginManager(ctx, genericCfg)
 	if err != nil {
-		r.markFailure(discovery, v1alpha1.GetConfigurationFailedReason, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create plugin manager: %w", err)
 	}
 
 	spec := &runtime.Raw{}
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(info.RepositorySpec.Raw), spec); err != nil {
-		r.markFailure(discovery, v1alpha1.GetRepositoryFailedReason, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetRepositoryFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
@@ -207,7 +208,7 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 			Logger:        &logger,
 		})
 		if err != nil {
-			r.markFailure(discovery, v1alpha1.GetRepositoryFailedReason, err)
+			status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetRepositoryFailedReason, err.Error())
 
 			return ctrl.Result{}, fmt.Errorf("failed to create credential graph: %w", err)
 		}
@@ -219,7 +220,7 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		ComponentPatterns: []string{info.Component},
 	}, spec)
 	if err != nil {
-		r.markFailure(discovery, v1alpha1.GetRepositoryFailedReason, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetRepositoryFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create repository resolver: %w", err)
 	}
@@ -228,7 +229,7 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		internaldiscovery.ComponentKey{Name: info.Component, Version: info.Version},
 		resolver)
 	if err != nil {
-		r.markFailure(discovery, v1alpha1.ResolutionFailedReason, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.ResolutionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to resolve the transitive component graph: %w", err)
 	}
@@ -238,10 +239,10 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	if err != nil {
 		var selErr *internaldiscovery.SelectorError
 		if errors.As(err, &selErr) {
-			r.markStalled(discovery, v1alpha1.SelectorFailedReason, err)
+			status.MarkAsStalled(r.EventRecorder, discovery, v1alpha1.SelectorFailedReason, err.Error())
 			return ctrl.Result{}, reconcile.TerminalError(err)
 		}
-		r.markFailure(discovery, v1alpha1.SelectorFailedReason, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.SelectorFailedReason, err.Error())
 
 		return ctrl.Result{}, err
 	}
@@ -250,21 +251,24 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	if err != nil {
 		var extErr *internaldiscovery.ExtractError
 		if errors.As(err, &extErr) {
-			r.markStalled(discovery, v1alpha1.ExtractFailedReason, err)
+			status.MarkAsStalled(r.EventRecorder, discovery, v1alpha1.ExtractFailedReason, err.Error())
 			return ctrl.Result{}, reconcile.TerminalError(err)
 		}
-		r.markFailure(discovery, v1alpha1.ExtractFailedReason, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.ExtractFailedReason, err.Error())
 
 		return ctrl.Result{}, err
 	}
 
 	if err := r.setPayload(discovery, payload); err != nil {
-		r.markFailure(discovery, v1alpha1.MarshalFailedReason, err)
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.MarshalFailedReason, err.Error())
 
 		return ctrl.Result{}, err
 	}
 
-	r.markSuccess(discovery, payloadReason(payload), payloadMessage(payload))
+	status.MarkReady(r.EventRecorder, discovery, "%s", payloadMessage(payload))
+	// Discovery advances the observed generation here because it does not use
+	// the shared UpdateBeforePatch defer the other controllers rely on.
+	discovery.SetObservedGeneration(discovery.GetGeneration())
 
 	return ctrl.Result{RequeueAfter: r.safetyRequeueAfter()}, nil
 }
@@ -302,19 +306,8 @@ func (r *Reconciler) setPayload(discovery *v1alpha1.Discovery, payload *internal
 	return nil
 }
 
-// payloadReason returns the Ready condition reason for a successful
-// evaluation: Succeeded, NoReferencesMatched, or NoComponentsMatched.
-func payloadReason(payload *internaldiscovery.Payload) string {
-	switch payload.Reason {
-	case internaldiscovery.EmptyReasonNoReferencesMatched:
-		return v1alpha1.NoReferencesMatchedReason
-	case internaldiscovery.EmptyReasonNoComponentsMatched:
-		return v1alpha1.NoComponentsMatchedReason
-	default:
-		return v1alpha1.SucceededReason
-	}
-}
-
+// payloadMessage returns the Ready condition message for a successful
+// evaluation.
 func payloadMessage(payload *internaldiscovery.Payload) string {
 	switch payload.Reason {
 	case internaldiscovery.EmptyReasonNoReferencesMatched:
