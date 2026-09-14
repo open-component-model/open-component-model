@@ -85,7 +85,7 @@ func createTestOCILayout(t *testing.T, dir string, configMediaType string, layer
 	require(os.WriteFile(filepath.Join(dir, "index.json"), indexData, 0o644), "write index.json")
 }
 
-func TestParseHelmOCILayout(t *testing.T) {
+func Test_Integration_ParseHelmOCILayout(t *testing.T) {
 	dir := t.TempDir()
 	chartContent := []byte("chart-data")
 	createTestOCILayout(t, dir, registry.ConfigMediaType, []struct {
@@ -103,7 +103,7 @@ func TestParseHelmOCILayout(t *testing.T) {
 	assert.Equal(t, dir, layout.Dir)
 }
 
-func TestFindLayerByMediaType(t *testing.T) {
+func Test_Integration_FindLayerByMediaType(t *testing.T) {
 	dir := t.TempDir()
 	createTestOCILayout(t, dir, registry.ConfigMediaType, []struct {
 		mediaType string
@@ -133,7 +133,7 @@ func TestFindLayerByMediaType(t *testing.T) {
 	})
 }
 
-func TestReadLayerBlob(t *testing.T) {
+func Test_Integration_ReadLayerBlob(t *testing.T) {
 	dir := t.TempDir()
 	expected := []byte("chart-blob-content")
 	createTestOCILayout(t, dir, registry.ConfigMediaType, []struct {
@@ -150,7 +150,7 @@ func TestReadLayerBlob(t *testing.T) {
 	assert.Equal(t, expected, actual)
 }
 
-func TestAssertHelmChartLayer(t *testing.T) {
+func Test_Integration_AssertHelmChartLayer(t *testing.T) {
 	dir := t.TempDir()
 	createTestOCILayout(t, dir, registry.ConfigMediaType, []struct {
 		mediaType string
@@ -164,7 +164,7 @@ func TestAssertHelmChartLayer(t *testing.T) {
 	layout.AssertHelmChartLayer(t)
 }
 
-func TestAssertChartContentEquals(t *testing.T) {
+func Test_Integration_AssertChartContentEquals(t *testing.T) {
 	dir := t.TempDir()
 	chartContent := []byte("original-chart-content")
 	createTestOCILayout(t, dir, registry.ConfigMediaType, []struct {
@@ -183,7 +183,7 @@ func TestAssertChartContentEquals(t *testing.T) {
 	layout.AssertChartContentEquals(t, originalPath)
 }
 
-func TestAssertProvContentEquals(t *testing.T) {
+func Test_Integration_AssertProvContentEquals(t *testing.T) {
 	dir := t.TempDir()
 	provContent := []byte("provenance-data")
 	createTestOCILayout(t, dir, registry.ConfigMediaType, []struct {
