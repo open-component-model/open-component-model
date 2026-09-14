@@ -43,7 +43,7 @@ func Test_Integration_TransferS3Resource_CopyModeAllResources(t *testing.T) {
 	ctx := t.Context()
 
 	// 1. Serve the resource content from a MinIO bucket.
-	container, err := minio.Run(ctx, "minio/minio")
+	container, err := minio.Run(ctx, "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
 	r.NoError(err)
 	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
 	hostPort, err := container.ConnectionString(ctx)

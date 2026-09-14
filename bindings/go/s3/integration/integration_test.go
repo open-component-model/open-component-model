@@ -27,7 +27,7 @@ import (
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
-const minioImage = "minio/minio"
+const minioImage = "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z"
 
 // Test_Integration_S3 exercises the S3 ResourceRepository end to end against a MinIO
 // container.
