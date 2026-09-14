@@ -6,15 +6,16 @@ import { deriveLabels, nullProtoMap } from "./label-from-title.js";
 // Mirrors the maps configured in .github/workflows/pull-request.yaml.
 const maps = {
   typeToLabel: {
-    feat: "kind/feature",
-    fix: "kind/bugfix",
-    chore: "kind/chore",
-    docs: "area/documentation",
-    test: "area/testing",
-    perf: "area/performance",
+    feat: ["kind/feature"],
+    fix: ["kind/bugfix"],
+    chore: ["kind/chore"],
+    refactor: ["kind/chore"],
+    docs: ["kind/chore", "area/documentation"],
+    test: ["kind/chore", "area/quality"],
+    perf: ["kind/chore", "area/quality"],
   },
   scopeToLabel: {
-    deps: "kind/dependency",
+    deps: ["kind/dependency"],
   },
   breakingLabel: "!BREAKING-CHANGE!",
 };
@@ -58,6 +59,41 @@ test("breaking change adds the breaking label first", () => {
   assert.deepStrictEqual(labels, ["!BREAKING-CHANGE!", "kind/feature", "kind/dependency"]);
 });
 
+test("type with a label list applies every label (docs)", () => {
+  const { valid, labels } = deriveLabels("docs: update readme", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/documentation"]);
+});
+
+test("type with a label list applies every label (test)", () => {
+  const { valid, labels } = deriveLabels("test: add unit tests", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/quality"]);
+});
+
+test("type with a label list applies every label (perf)", () => {
+  const { valid, labels } = deriveLabels("perf: reduce allocations", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/quality"]);
+});
+
+test("refactor maps to kind/chore", () => {
+  const { valid, labels } = deriveLabels("refactor: simplify resolver", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore"]);
+});
+
+test("a label contributed by both type list and scope is de-duplicated", () => {
+  const localMaps = {
+    typeToLabel: { docs: ["kind/chore", "area/documentation"] },
+    scopeToLabel: { deps: ["kind/chore"] },
+    breakingLabel: "!BREAKING-CHANGE!",
+  };
+  const { valid, labels } = deriveLabels("docs(deps): bump", localMaps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore", "area/documentation"]);
+});
+
 test("special 'Initial commit' title is valid but yields no labels", () => {
   const { valid, labels } = deriveLabels("Initial commit", maps);
   assert.strictEqual(valid, true);
@@ -92,8 +128,8 @@ test("type colliding with a prototype name is rejected by the regex", () => {
 });
 
 test("nullProtoMap does not resolve inherited Object.prototype members", () => {
-  const m = nullProtoMap({ deps: "kind/dependency" });
-  assert.strictEqual(m.deps, "kind/dependency");
+  const m = nullProtoMap({ deps: ["kind/dependency"] });
+  assert.deepStrictEqual(m.deps, ["kind/dependency"]);
   assert.strictEqual(m.constructor, undefined);
   assert.strictEqual(m.toString, undefined);
   assert.strictEqual(m.hasOwnProperty, undefined);
