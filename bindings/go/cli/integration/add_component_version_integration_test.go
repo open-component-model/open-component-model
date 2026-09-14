@@ -1295,7 +1295,7 @@ func startS3WithObject(t *testing.T, registry *internal.OCIRegistry, bucket, key
 	r := require.New(t)
 	ctx := t.Context()
 
-	container, err := minio.Run(ctx, "minio/minio")
+	container, err := minio.Run(ctx, "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
 	r.NoError(err)
 	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
 	hostPort, err := container.ConnectionString(ctx)
