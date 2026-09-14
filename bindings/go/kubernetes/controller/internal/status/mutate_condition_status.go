@@ -10,9 +10,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 )
 
-// MarkNotReady sets the condition status of an Object to `Not Ready`.
+// MarkNotReady sets the condition status of an Object to `Not Ready`. A
+// retryable failure is no longer terminal, so any prior Stalled condition is
+// cleared.
 func MarkNotReady(recorder kuberecorder.EventRecorder, obj IdentifiableClientObject, reason, msg string) {
 	RemoveCondition(obj, v1alpha1.ReconcilingCondition)
+	RemoveCondition(obj, v1alpha1.StalledCondition)
 	SetCondition(obj, metav1.Condition{
 		Type:    v1alpha1.ReadyCondition,
 		Status:  metav1.ConditionFalse,
@@ -40,9 +43,12 @@ func MarkAsStalled(recorder kuberecorder.EventRecorder, obj IdentifiableClientOb
 	event.New(recorder, obj, nil, v1alpha1.EventSeverityError, "%s", msg)
 }
 
-// MarkReady sets the condition status of an Object to `Ready`.
+// MarkReady sets the condition status of an Object to `Ready`. Success clears
+// any prior Stalled condition so a recovered object no longer reports as
+// terminal.
 func MarkReady(recorder kuberecorder.EventRecorder, obj IdentifiableClientObject, msg string, messageArgs ...any) {
 	RemoveCondition(obj, v1alpha1.ReconcilingCondition)
+	RemoveCondition(obj, v1alpha1.StalledCondition)
 	SetCondition(obj, metav1.Condition{
 		Type:    v1alpha1.ReadyCondition,
 		Status:  metav1.ConditionTrue,

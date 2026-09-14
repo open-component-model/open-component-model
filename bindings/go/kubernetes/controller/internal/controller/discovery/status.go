@@ -9,12 +9,10 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 )
 
@@ -88,8 +86,8 @@ func (r *Reconciler) publishPayloadTooLarge(ctx context.Context, discovery *v1al
 	}
 
 	base := fresh.DeepCopy()
-	r.markStalled(fresh, v1alpha1.PayloadTooLargeReason,
-		fmt.Errorf("status payload exceeds the API server size limit; refine the selectors or extraction"))
+	status.MarkAsStalled(r.EventRecorder, fresh, v1alpha1.PayloadTooLargeReason,
+		"status payload exceeds the API server size limit; refine the selectors or extraction")
 
 	if equality.Semantic.DeepEqual(base.Status, fresh.Status) {
 		return nil
@@ -120,46 +118,4 @@ func isPayloadTooLarge(err error) bool {
 		return true
 	}
 	return strings.Contains(msg, "request") && strings.Contains(msg, "too large")
-}
-
-// setCondition sets a condition with the condition-level observed generation
-// of the object it was computed for.
-func (r *Reconciler) setCondition(discovery *v1alpha1.Discovery, condType string, condStatus metav1.ConditionStatus, reason, msg string) {
-	status.SetCondition(discovery, metav1.Condition{
-		Type:               condType,
-		Status:             condStatus,
-		Reason:             reason,
-		Message:            msg,
-		ObservedGeneration: discovery.GetGeneration(),
-	})
-}
-
-// markFailure marks a retryable failure: Ready=False with the given reason.
-// The last successful payload is retained.
-func (r *Reconciler) markFailure(discovery *v1alpha1.Discovery, reason string, err error) {
-	status.RemoveCondition(discovery, v1alpha1.ReconcilingCondition)
-	status.RemoveCondition(discovery, v1alpha1.StalledCondition)
-	r.setCondition(discovery, v1alpha1.ReadyCondition, metav1.ConditionFalse, reason, err.Error())
-	event.New(r.EventRecorder, discovery, discovery.GetVID(), v1alpha1.EventSeverityError, "%s", err.Error())
-}
-
-// markStalled marks a terminal failure requiring a change to recover:
-// Ready=False and Stalled=True with the given reason. The last successful
-// payload is retained. Terminal failures do not schedule periodic work.
-func (r *Reconciler) markStalled(discovery *v1alpha1.Discovery, reason string, err error) {
-	status.RemoveCondition(discovery, v1alpha1.ReconcilingCondition)
-	r.setCondition(discovery, v1alpha1.ReadyCondition, metav1.ConditionFalse, reason, err.Error())
-	r.setCondition(discovery, v1alpha1.StalledCondition, metav1.ConditionTrue, reason, err.Error())
-	event.New(r.EventRecorder, discovery, discovery.GetVID(), v1alpha1.EventSeverityError, "%s", err.Error())
-}
-
-// markSuccess marks a successful evaluation, including empty results:
-// Ready=True with the given reason, Stalled and Reconciling removed, and the
-// top-level observed generation advanced.
-func (r *Reconciler) markSuccess(discovery *v1alpha1.Discovery, reason, msg string) {
-	status.RemoveCondition(discovery, v1alpha1.ReconcilingCondition)
-	status.RemoveCondition(discovery, v1alpha1.StalledCondition)
-	r.setCondition(discovery, v1alpha1.ReadyCondition, metav1.ConditionTrue, reason, msg)
-	discovery.SetObservedGeneration(discovery.GetGeneration())
-	event.New(r.EventRecorder, discovery, discovery.GetVID(), v1alpha1.EventSeverityInfo, "%s", msg)
 }

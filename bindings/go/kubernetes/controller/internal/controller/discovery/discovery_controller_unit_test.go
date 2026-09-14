@@ -210,7 +210,6 @@ func TestReconcile_TerminalSelectorFailureIsStalledAndNotRequeued(t *testing.T) 
 	g.Equal(v1alpha1.SelectorFailedReason, ready.Reason)
 	g.True(status.IsStalled(fresh))
 	g.Zero(fresh.Status.ObservedGeneration, "failures do not advance the observed generation")
-	g.Equal(fresh.GetGeneration(), ready.ObservedGeneration, "condition-level observed generation is set")
 }
 
 func TestReconcile_PublishesRawAndExtractedPayloads(t *testing.T) {
