@@ -9,17 +9,17 @@ import (
 )
 
 const (
-	S3BucketIdentityType = "S3Bucket"
-	Version              = "v1"
+	S3IdentityType = "S3"
+	Version        = "v1"
 )
 
 // Type is the unversioned consumer identity type for S3 objects (backward compat).
-var Type = runtime.NewUnversionedType(S3BucketIdentityType)
+var Type = runtime.NewUnversionedType(S3IdentityType)
 
 // VersionedType is the versioned consumer identity type.
-var VersionedType = runtime.NewVersionedType(S3BucketIdentityType, Version)
+var VersionedType = runtime.NewVersionedType(S3IdentityType, Version)
 
-// S3BucketIdentity is the typed consumer identity for objects read from an S3 bucket.
+// S3Identity is the typed consumer identity for objects read from an S3 bucket.
 // It always carries the object path (bucket and key), and the URL attributes only for
 // an S3-compatible store reached through a custom endpoint — AWS itself is identified
 // by the path alone.
@@ -28,9 +28,9 @@ var VersionedType = runtime.NewVersionedType(S3BucketIdentityType, Version)
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
-type S3BucketIdentity struct {
-	// +ocm:jsonschema-gen:enum=S3Bucket/v1
-	// +ocm:jsonschema-gen:enum:deprecated=S3Bucket
+type S3Identity struct {
+	// +ocm:jsonschema-gen:enum=S3/v1
+	// +ocm:jsonschema-gen:enum:deprecated=S3
 	Type     runtime.Type `json:"type"`
 	Hostname string       `json:"hostname,omitempty"`
 	Scheme   string       `json:"scheme,omitempty"`
@@ -38,10 +38,10 @@ type S3BucketIdentity struct {
 	Path     string       `json:"path,omitempty"`
 }
 
-// ToIdentity converts an [S3BucketIdentity] into a [runtime.Identity].
+// ToIdentity converts an [S3Identity] into a [runtime.Identity].
 // Empty fields are omitted from the resulting map. If the type field is unset,
 // the canonical [VersionedType] is used.
-func ToIdentity(identity *S3BucketIdentity) runtime.Identity {
+func ToIdentity(identity *S3Identity) runtime.Identity {
 	if identity == nil {
 		return nil
 	}
@@ -66,14 +66,14 @@ func ToIdentity(identity *S3BucketIdentity) runtime.Identity {
 	return id
 }
 
-// FromIdentity converts a [runtime.Identity] into an [S3BucketIdentity].
+// FromIdentity converts a [runtime.Identity] into an [S3Identity].
 // Attributes outside the S3 identity schema are ignored. If the type attribute is
 // missing or empty, the canonical [VersionedType] is used.
-func FromIdentity(id runtime.Identity) *S3BucketIdentity {
+func FromIdentity(id runtime.Identity) *S3Identity {
 	if id == nil {
 		return nil
 	}
-	out := &S3BucketIdentity{
+	out := &S3Identity{
 		Hostname: id[runtime.IdentityAttributeHostname],
 		Scheme:   id[runtime.IdentityAttributeScheme],
 		Port:     id[runtime.IdentityAttributePort],
