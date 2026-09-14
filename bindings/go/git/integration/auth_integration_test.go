@@ -16,7 +16,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/repository"
@@ -201,43 +201,80 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 	hostKey, _, _, _, err := ssh.ParseAuthorizedKey(publicKeyData)
 	r.NoError(err)
 
+	assertSSHAccess := func(t *testing.T, gitCreds *credsv1.GitCredentials) {
+		r := require.New(t)
+
+		spec := &descriptor.Resource{
+			Access: &accessv1.Git{
+				Type:       runtime.NewVersionedType("Git", "v1"),
+				Repository: fmt.Sprintf("ssh://git@%s%s", net.JoinHostPort(host, port.Port()), repoPath),
+				Ref:        "main",
+			},
+		}
+		repo := repository.NewResourceRepository(repository.WithHostKeyCallback(ssh.FixedHostKey(hostKey)), repository.WithTempDir(t.TempDir()))
+		b, err := repo.DownloadResource(t.Context(), spec, gitCreds)
+		r.NoError(err)
+		assertArchive(t, b, "second\n")
+
+		_, err = repo.ProcessResourceDigest(t.Context(), spec, gitCreds)
+		r.NoError(err)
+
+		reject := repository.NewResourceRepository(repository.WithHostKeyCallback(ssh.FixedHostKey(clientPublic)), repository.WithTempDir(t.TempDir()))
+		_, err = reject.DownloadResource(t.Context(), spec, gitCreds)
+		r.Error(err)
+	}
+
 	for _, encrypted := range []bool{false, true} {
-		t.Run(strconv.FormatBool(encrypted), func(t *testing.T) {
-			r := require.New(t)
+		passphrase := ""
+		var block *pem.Block
+		if encrypted {
+			passphrase = "fixture-passphrase"
+			block, err = ssh.MarshalPrivateKeyWithPassphrase(private, "fixture", []byte(passphrase))
+		} else {
+			block, err = ssh.MarshalPrivateKey(private, "fixture")
+		}
+		r.NoError(err)
+		keyPEM := pem.EncodeToMemory(block)
 
-			passphrase := ""
-			var block *pem.Block
-			var err error
-			if encrypted {
-				passphrase = "fixture-passphrase"
-				block, err = ssh.MarshalPrivateKeyWithPassphrase(private, "fixture", []byte(passphrase))
-			} else {
-				block, err = ssh.MarshalPrivateKey(private, "fixture")
-			}
-			r.NoError(err)
-
+		t.Run(fmt.Sprintf("file/encrypted=%t", encrypted), func(t *testing.T) {
 			keyPath := filepath.Join(t.TempDir(), "key")
-			r.NoError(os.WriteFile(keyPath, pem.EncodeToMemory(block), 0o600))
+			require.NoError(t, os.WriteFile(keyPath, keyPEM, 0o600))
+			assertSSHAccess(t, &credsv1.GitCredentials{PrivateKey: keyPath, Password: passphrase, Token: "ignored-by-key-precedence"})
+		})
 
-			gitCreds := &credsv1.GitCredentials{PrivateKey: keyPath, Password: passphrase, Token: "ignored-by-key-precedence"}
-			spec := &descriptor.Resource{
-				Access: &accessv1.Git{
-					Type:       runtime.NewVersionedType("Git", "v1"),
-					Repository: fmt.Sprintf("ssh://git@%s%s", net.JoinHostPort(host, port.Port()), repoPath),
-					Ref:        "main",
-				},
-			}
-			repo := repository.NewResourceRepository(repository.WithHostKeyCallback(ssh.FixedHostKey(hostKey)), repository.WithTempDir(t.TempDir()))
-			b, err := repo.DownloadResource(t.Context(), spec, gitCreds)
-			r.NoError(err)
-			assertArchive(t, b, "second\n")
-
-			_, err = repo.ProcessResourceDigest(t.Context(), spec, gitCreds)
-			r.NoError(err)
-
-			reject := repository.NewResourceRepository(repository.WithHostKeyCallback(ssh.FixedHostKey(clientPublic)), repository.WithTempDir(t.TempDir()))
-			_, err = reject.DownloadResource(t.Context(), spec, gitCreds)
-			r.Error(err)
+		t.Run(fmt.Sprintf("inline/encrypted=%t", encrypted), func(t *testing.T) {
+			assertSSHAccess(t, &credsv1.GitCredentials{PrivateKeyPEM: string(keyPEM), PrivateKey: "/ignored/by/inline/precedence", Password: passphrase})
 		})
 	}
+
+	t.Run("agent", func(t *testing.T) {
+		r := require.New(t)
+
+		keyring := agent.NewKeyring()
+		r.NoError(keyring.Add(agent.AddedKey{PrivateKey: private}))
+
+		// Unix socket paths are limited to about 104 bytes, which t.TempDir can exceed on macOS.
+		socketDir, err := os.MkdirTemp("", "ocm-agent-")
+		r.NoError(err)
+		t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
+
+		listener, err := net.Listen("unix", filepath.Join(socketDir, "agent.sock"))
+		r.NoError(err)
+		t.Cleanup(func() { _ = listener.Close() })
+		go func() {
+			for {
+				conn, err := listener.Accept()
+				if err != nil {
+					return
+				}
+				go func() {
+					defer conn.Close()
+					_ = agent.ServeAgent(keyring, conn)
+				}()
+			}
+		}()
+
+		t.Setenv("SSH_AUTH_SOCK", listener.Addr().String())
+		assertSSHAccess(t, nil)
+	})
 }

@@ -3,6 +3,7 @@ package v1
 import "ocm.software/open-component-model/bindings/go/runtime"
 
 // GitCredentials supports HTTP basic authentication, bearer tokens, and SSH keys.
+// An SSH repository without a private key uses the SSH agent.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -16,8 +17,12 @@ type GitCredentials struct {
 	// Password is the HTTP password or the SSH key passphrase.
 	Password string `json:"password,omitempty"`
 	Token    string `json:"token,omitempty"`
-	// PrivateKey is a file path, as in OCM v1.
+	// PrivateKey is a path to an SSH private key file, as in OCM v1.
+	// Ignored when PrivateKeyPEM is also set.
 	PrivateKey string `json:"privateKey,omitempty"`
+	// PrivateKeyPEM is an inline PEM-encoded SSH private key.
+	// Takes precedence over PrivateKey when both are set.
+	PrivateKeyPEM string `json:"privateKeyPEM,omitempty"`
 }
 
 func MustRegisterCredentialType(scheme *runtime.Scheme) {
