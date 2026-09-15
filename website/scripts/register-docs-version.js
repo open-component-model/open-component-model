@@ -39,6 +39,18 @@ const MODULE_HEADER = `# Hugo Module Configuration
 #
 # Static mounts (data, layouts, i18n, archetypes, assets, static) are fixed.
 # Per-version imports are auto-generated at the end.
+#
+# Unversioned top-level content mounts (blog, community, governance) list
+# every registered version explicitly. The register-docs-version script
+# keeps the lists in sync (syncUnversionedMountVersions), adding new
+# versions on release and removing retired ones. Reason for enumerating
+# rather than mounting once: ref/relref links from frozen module-cache
+# snapshots (immutable git tags) must keep resolving inside their own
+# version site, e.g. a v0.14 docs page containing
+# {{< relref "community/_index.md" >}} would fail the build if community
+# were only mounted under the default version. Once every version with
+# such refs in its snapshot has been retired, the enumeration becomes
+# redundant and this can collapse to a single unfiltered mount.
 
 `;
 
@@ -376,7 +388,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
             ignoreImports: true,
             ignoreConfig: true,
             mounts: [{
-                files: ['**', '!blog/**'],
+                files: ['! blog/**', '! community/**', '! governance/**'],
                 source: 'content/',
                 target: 'content',
                 sites: { matrix: { versions: [version] } }
@@ -491,6 +503,8 @@ function removeImportsForVersion(parsed, version) {
 }
 
 // Update hugo.yaml: add version, set default, retire old.
+// Returns { retired, added } - added is the version if newly registered,
+// null if it already existed.
 async function updateHugoConfig(version) {
     const content = await fsp.readFile(HUGO_CONFIG, 'utf-8').catch(e => fail(`Read hugo.yaml: ${e.message}`));
     const parsed = yaml.load(content) || {};
@@ -522,12 +536,44 @@ async function updateHugoConfig(version) {
         console.log(`hugo.yaml: added version ${version} (weights reassigned).`);
     }
 
-    return retired;
+    return { retired, added: alreadyExists ? null : version };
+}
+
+// Keep the unversioned top-level content mounts (blog, community, governance)
+// in sync with the registered version set. These sections have no per-version
+// content of their own - the same source renders under every version's URL
+// prefix so that ref/relref links from frozen module-cache snapshots (v0.9.1
+// ... v0.14.0 today) keep resolving inside their own version site. Without
+// this fan-out, a cached v0.14 docs page containing
+// `{{< relref "community/_index.md" >}}` fails the build because community
+// is not part of the versioned docs tree. Called from updateModuleConfig
+// with the version just added (or null) and the version just retired (or
+// undefined); a no-op re-registration passes both as falsy and the lists
+// are left untouched. Once every snapshot carrying such refs has been
+// retired, this fan-out is no longer required.
+function syncUnversionedMountVersions(parsed, { added, retired } = {}) {
+    const targets = new Set(['content/blog', 'content/community', 'content/governance']);
+    let changed = 0;
+    for (const m of parsed.mounts || []) {
+        if (!targets.has(m.source)) continue;
+        m.sites = m.sites || { matrix: {} };
+        m.sites.matrix = m.sites.matrix || {};
+        const versions = Array.isArray(m.sites.matrix.versions) ? m.sites.matrix.versions : [];
+        const next = versions.filter(v => v !== retired);
+        if (added && !next.includes(added)) next.push(added);
+        if (JSON.stringify(next) !== JSON.stringify(versions)) {
+            m.sites.matrix.versions = next;
+            changed++;
+        }
+    }
+    if (changed) {
+        console.log(`module.yaml: synced ${changed} unversioned content mount(s) with registered versions.`);
+    }
 }
 
 // Update module.yaml: ensure imports exist for a version, update tags,
 // optionally retire old version.
-async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion } = {}) {
+async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion, addedVersion } = {}) {
     const content = await fsp.readFile(MODULE_CONFIG, 'utf-8').catch(e => fail(`Read module.yaml: ${e.message}`));
     const parsed = yaml.load(content) || {};
 
@@ -592,6 +638,8 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
         console.log(`module.yaml: removed imports for retired version '${retiredVersion}'.`);
     }
 
+    syncUnversionedMountVersions(parsed, { added: addedVersion, retired: retiredVersion });
+
     await fsp.writeFile(MODULE_CONFIG, MODULE_HEADER + dumpYaml(parsed), 'utf-8');
 }
 
@@ -603,8 +651,8 @@ async function main() {
         fail('--cli-gomod <path> is required. Provide the path to the CLI go.mod for the release being versioned.');
     }
 
-    const retired = await updateHugoConfig(version);
-    await updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion: retired });
+    const { retired, added } = await updateHugoConfig(version);
+    await updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion: retired, addedVersion: added });
 
     console.log('Docs version registered.');
 }

@@ -143,7 +143,7 @@ test('buildModuleBlocks: website import has correct tag format', () => {
     // project owns the module graph (ignoreImports) and config (ignoreConfig).
     assert.equal(website.ignoreImports, true);
     assert.equal(website.ignoreConfig, true);
-    assert.deepEqual(website.mounts[0].files, ['**', '!blog/**']);
+    assert.deepEqual(website.mounts[0].files, ['! blog/**', '! community/**', '! governance/**']);
     assert.equal(website.mounts[0].source, 'content/');
     assert.equal(website.mounts[0].target, 'content');
     assert.deepEqual(website.mounts[0].sites.matrix.versions, ['0.3']);
