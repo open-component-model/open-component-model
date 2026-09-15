@@ -60,6 +60,7 @@ Read a package's `doc.go` (if present) and `README.md` before changing it.
 
 - **`bindings/go/`**: testify only (`require`, `mock`), no Ginkgo. Table-driven with `t.Run()`; start each test with `r := require.New(t)`. Test data from `testdata/` via `os.ReadFile`/`os.Open` or `//go:embed`.
 - **`bindings/go/cli/`**: testify/require. Helper `test.OCM()` (`bindings/go/cli/cmd/internal/test/test.go`) runs CLI commands programmatically. Integration tests in `bindings/go/cli/integration/` — same `bindings/go` module (no separate go.mod), testcontainers.
+- **Binding integration tests** live in per-area `bindings/go/<area>/integration/` packages (oci, http, wget, github, s3, transfer, constructor, sigstore) with `Test_Integration_*` test funcs. Run one area via `task bindings/go/<area>/integration:test/integration`, all via `task test/integration` (needs Docker / external systems); sigstore additionally spins up its cosign scaffolding.
 - **`bindings/go/kubernetes/controller/`**: Ginkgo v2 + Gomega (only area using Ginkgo). Filter with `-ginkgo.focus`, **not** `-run`. Suites self-provision envtest binaries via `internal/test/envtest.go` — no `KUBEBUILDER_ASSETS` setup.
 - Logging: `log/slog` via `slog-context` in libraries; `logr` via controller-runtime zap in the controller.
 - Idioms: [CLI](docs/coding-patterns.md#cli-idioms), [controller](docs/coding-patterns.md#controller-idioms).
@@ -98,7 +99,7 @@ Read a package's `doc.go` (if present) and `README.md` before changing it.
 
 Coupled files — editing one without the other breaks CI or behavior:
 
-- **Tool/binary versions live in per-area `.env` files (renovate-managed)**: root `.env` (golangci-lint, deepcopy-gen, markdownlint-cli2), `bindings/go/kubernetes/controller/.env` (controller-tools, envtest, kind node), `bindings/go/sigstore/signing/handler/internal/.env` (cosign), `bindings/go/sigstore/integration/.env` (scaffolding). Taskfiles source these — never hardcode a version in a Taskfile or script. Cross-dir coupling: `sigstore/integration/Taskfile.yml` reads `COSIGN_VERSION` from `signing/handler/internal/.env`.
+- **Tool/binary versions live in per-area `.env` files (renovate-managed)**: root `.env` (golangci-lint, deepcopy-gen, markdownlint-cli2), `bindings/go/kubernetes/controller/.env` (controller-tools, envtest, kind node), `bindings/go/sigstore/signing/handler/internal/.env` (cosign), `bindings/go/sigstore/integration/.env` (scaffolding). Taskfiles source these — never hardcode a version in a Taskfile or script. Exception: explicit bash fallbacks for tools without an `.env` pin (controller Taskfile: `HELM_DOCS_VERSION`, `YQ_VERSION`); keep those documented in the Taskfile and don't extend the pattern. Cross-dir coupling: `sigstore/integration/Taskfile.yml` reads `COSIGN_VERSION` from `signing/handler/internal/.env`.
 - `ENVTEST_K8S_VERSION` (`controller/.env`) ↔ `DefaultEnvTestVersion` (`.../internal/test/envtest.go`) — keep equal.
 - Docs version ↔ `hugo.yaml` + `module.yaml` — only via `npm run register-docs-version`.
 - Website Node/npm floors — check the `engines` field in `website/package.json`, don't restate here.

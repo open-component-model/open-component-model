@@ -13,4 +13,4 @@ ignorePatterns:
   - pattern: "^https?://kubernetes\\.slack\\.com"
   # Localhost URLs are documentation examples (e.g. Hugo dev server),
   # not reachable in CI.
-  - pattern: "^https?://localhost"
+  - pattern: "^https?://localhost(:[0-9]+)?([/?#]|$)"
