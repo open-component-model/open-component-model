@@ -326,6 +326,7 @@ const BINDING_SCHEMA_MOUNTS = [
     { pkg: 'sigstore',      source: 'spec/credentials/trustedroot/v1alpha1/schemas',     target: 'schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1' },
     { pkg: 'credentials',   source: 'spec/config/v1/schemas',                            target: 'schemas/bindings/go/credentials/direct/v1' },
     { pkg: 'wget',          source: 'spec/credentials/v1/schemas',                       target: 'schemas/bindings/go/credentials/wget/v1' },
+    { pkg: 'maven',         source: 'spec/credentials/v1/schemas',                       target: 'schemas/bindings/go/credentials/maven/v1' },
 ];
 
 // Return the bindings schema imports for a version. The layout is auto-detected

@@ -40,6 +40,7 @@ flowchart TB
         Wget["Wget Resource Repository"]
         S3["S3 Resource Repository"]
         GitHub["GitHub Resource Repository"]
+        Maven["Maven Resource Repository"]
     end
 
     CD -->|"OCIImage/v1 access"| OCI
@@ -47,11 +48,13 @@ flowchart TB
     CD -->|"Wget/v1 access"| Wget
     CD -->|"S3/v2 access"| S3
     CD -->|"GitHub/v1 access"| GitHub
+    CD -->|"maven/v2alpha1 access"| Maven
     OCI --> Registry["OCI Registry"]
     Helm --> HelmRepo["Helm Chart Repository"]
     Wget --> HTTP["HTTP/HTTPS Server"]
     S3 --> Bucket["S3 / S3-compatible Bucket"]
     GitHub --> GitHubAPI["GitHub REST API"]
+    Maven --> MavenRepo["Maven Repository"]
 ```
 
 ## How It Works

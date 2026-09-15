@@ -335,6 +335,77 @@ and normalisation algorithms are only compared when they are set: an empty field
 
 ---
 
+## Maven Resource Repository
+
+Handles files of a Maven artifact in a Maven repository such as Maven Central, Nexus or Artifactory.
+
+### Supported Access Types
+
+| Access Type                                                                       |
+|-----------------------------------------------------------------------------------|
+| [`maven/v2alpha1`]({{< relref "input-and-access-types.md" >}}#mavenv2alpha1-access) |
+
+### Capabilities
+
+| Operation         | Supported |
+|-------------------|-----------|
+| Download          | Yes       |
+| Upload            | Yes       |
+| Digest Processing | Yes       |
+
+### Credential Resolution
+
+The credential consumer identity is derived from the `repoUrl` field in the access specification. The identity type is
+`MavenRepository`.
+
+**Example:** For a resource with `repoUrl: https://nexus.example.com/repository/maven-releases`:
+
+| Attribute  | Value                       |
+|------------|-----------------------------|
+| `type`     | `MavenRepository`           |
+| `hostname` | `nexus.example.com`         |
+| `scheme`   | `https`                     |
+| `path`     | `repository/maven-releases` |
+
+Credentials are optional: without a matching consumer entry the request is anonymous, which is how public repositories
+such as Maven Central are read. A matching entry that carries only a password is an error rather than a silent
+anonymous request.
+
+See [Credential Consumer Identities: MavenRepository]({{< relref "credential-consumer-identities.md" >}}#mavenrepository)
+for matching rules.
+
+### Download Behavior
+
+Resolves every entry of `artifacts` to exactly one file without listing directories: a release from its coordinates,
+a `-SNAPSHOT` through the version-level `maven-metadata.xml`, and `LATEST` or `RELEASE` through the artifact-level
+one. Every file is fetched together with the sibling files the repository publishes next to it (`.asc`, `.md5`,
+`.sha1`, `.sha256`, `.sha512`); a missing sibling is skipped, any other failure is an error. Nothing is verified.
+
+The result is always one `application/x-tgz` archive with the listed files in spec order, each followed by its
+siblings. The archive is held in memory while it is built.
+
+Request timeouts, retries, and per-host settings come from the
+[HTTP client configuration]({{< relref "http-client-configuration.md" >}}).
+
+### Upload Behavior
+
+Deploys a download archive into the repository named by the access specification. The archive must hold exactly the
+files the specification lists, plus their optional siblings; every entry is written unchanged to the release path and
+no checksums are computed. `-SNAPSHOT`, `LATEST` and `RELEASE` versions are rejected. Entries are written one by one:
+a failing write stops the upload and leaves the entries before it deployed.
+
+### Digest Processing
+
+The Maven digest processor downloads the archive and hashes it with SHA-256, using the `genericBlobDigest/v1`
+normalisation. The archive is built with stored gzip blocks and fixed tar headers, so the digest depends only on the
+files and siblings the repository serves. A repository that starts publishing a checksum file later changes the digest.
+`LATEST`, `RELEASE` and `-SNAPSHOT` versions are rejected because they resolve to different files over time.
+
+When the resource already carries a digest, the computed value is verified against it and a mismatch fails the
+operation. A resource excluded from the signature is left untouched.
+
+---
+
 ## External Resource Repositories (Plugins)
 
 External plugins declare supported access types in their capability specification and implement the same three

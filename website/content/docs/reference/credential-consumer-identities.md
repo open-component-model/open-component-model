@@ -34,7 +34,7 @@ configurations:
 ```
 
 The consumer identity type is extensible — any string in `Name` or `Name/Version` format can be used.
-Plugins and integrations can introduce additional types (e.g. `AWSSecretsManager`, `HashiCorpVault`, `MavenRepository`).
+Plugins and integrations can introduce additional types (e.g. `AWSSecretsManager`, `HashiCorpVault`).
 The following types are defined by the core OCM modules:
 
 | Identity Type                                 | Used For                                            |
@@ -44,6 +44,7 @@ The following types are defined by the core OCM modules:
 | [`Wget`](#wget)                               | Authenticating against plain HTTP/HTTPS servers     |
 | [`S3`](#s3)                                   | Authenticating against S3 and S3-compatible buckets |
 | [`GitHubRepository`](#githubrepository)       | Authenticating against the GitHub REST API          |
+| [`MavenRepository`](#mavenrepository)         | Authenticating against Maven repositories           |
 | [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys             |
 
 ---
@@ -523,6 +524,78 @@ optional; see the note on anonymous access under
 ```
 
 Omitting `path` matches every repository on that host.
+
+---
+
+## MavenRepository
+
+Used when OCM downloads, uploads or computes the digest of a resource with a
+[`maven/v2alpha1` access]({{< relref "input-and-access-types.md#mavenv2alpha1-access" >}}). The identity is derived
+from the access's `repoUrl`. Credentials are optional: without them the request is anonymous, which is how public
+repositories such as Maven Central are read.
+
+### Identity Attributes
+
+| Attribute  | Required | Description                                                                                       |
+|------------|----------|---------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `MavenRepository`                                                                         |
+| `hostname` | Yes      | Repository hostname (e.g. `nexus.example.com`)                                                    |
+| `path`     | No       | Repository path without the leading `/` (e.g. `repository/maven-releases`). If omitted, matches any path. |
+| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme.                                     |
+| `port`     | No       | Port number as string. If omitted, the scheme's default applies (`https` → `443`, `http` → `80`). |
+
+**Example derivation:** for `repoUrl: https://nexus.example.com:8081/repository/maven-releases`, the lookup identity is:
+
+| Attribute  | Value                       |
+|------------|-----------------------------|
+| `type`     | `MavenRepository`           |
+| `hostname` | `nexus.example.com`         |
+| `scheme`   | `https`                     |
+| `port`     | `8081`                      |
+| `path`     | `repository/maven-releases` |
+
+### Credential Properties
+
+| Property        | Description                                                                             |
+|-----------------|-----------------------------------------------------------------------------------------|
+| `username`      | Username for HTTP basic authentication                                                  |
+| `password`      | Password for HTTP basic authentication                                                  |
+| `identityToken` | Bearer token sent as `Authorization: Bearer <token>`. Takes precedence over Basic Auth. |
+
+Use [`MavenCredentials/v1`]({{< relref "credential-types.md#mavencredentialsv1" >}}) for the typed field reference. The
+legacy `Credentials/v1` property bag is accepted too, including the `accessToken` key OCM v1 used for Maven.
+
+{{< callout context="caution" >}}
+The identity type is matched by exact string and is **unversioned**, so it must be written as `type: MavenRepository`.
+A non-matching entry fails silently: no credentials are resolved and the request goes out unauthenticated, so the
+symptom is a `401` from the server rather than a configuration error.
+{{< /callout >}}
+
+### Examples
+
+**Hosted repository with Basic Auth:**
+
+```yaml
+- identity:
+    type: MavenRepository
+    hostname: nexus.example.com
+    path: repository/maven-releases
+  credentials:
+    - type: MavenCredentials/v1
+      username: deployer
+      password: my-password
+```
+
+**Bearer token for every repository on a host:**
+
+```yaml
+- identity:
+    type: MavenRepository
+    hostname: maven.pkg.github.com
+  credentials:
+    - type: MavenCredentials/v1
+      identityToken: ghp_example_token
+```
 
 ---
 

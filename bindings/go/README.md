@@ -28,6 +28,7 @@ Go bindings for the Open Component Model.
 | **generator**                | Code generation tools                                    |
 | **wget**                     | Wget resource handling                                   |
 | **github**                   | GitHub commit archive resource handling                  |
+| **maven**                    | Maven artifact resource handling                         |
 
 ## Usage
 
