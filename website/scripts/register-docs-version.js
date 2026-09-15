@@ -278,22 +278,6 @@ const MONOLITHIC_BINDINGS_MODULE = `${MODULE_PREFIX}/bindings/go`;
 // paths, whose git tags exist only at the old locations.
 const CLI_CONTROLLER_MERGE_MINOR = '0.16';
 
-// Return the cli module import path for a docs version. Post-merge the cli is a
-// package inside the bindings/go module.
-function cliModulePath(version) {
-    return compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) >= 0
-        ? `${MODULE_PREFIX}/bindings/go/cli`
-        : `${MODULE_PREFIX}/cli`;
-}
-
-// Return the controller module import path for a docs version. Post-merge the
-// controller is a package inside the bindings/go module.
-function controllerModulePath(version) {
-    return compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) >= 0
-        ? `${MODULE_PREFIX}/bindings/go/kubernetes/controller`
-        : `${MODULE_PREFIX}/kubernetes/controller`;
-}
-
 // One row per schema directory the website mounts.
 //     * `pkg` is the directory of the package inside bindings/go
 //     * `source` the schema directory relative to the package root (non-monolith)
@@ -408,7 +392,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
     if (compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) < 0) {
         imports.push(
             {
-                path: cliModulePath(version),
+                path: `${MODULE_PREFIX}/cli`,
                 version: `v${fullVersion}`,
                 mounts: [{
                     source: 'docs/reference',
@@ -419,12 +403,12 @@ function buildModuleBlocks(version, fullVersion, deps) {
         );
     }
 
-    imports.push(...bindingSchemaImports(version, deps))
+    imports.push(...bindingSchemaImports(version, deps));
 
     if (compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) < 0) {
         imports.push(
             {
-                path: controllerModulePath(version),
+                path: `${MODULE_PREFIX}/kubernetes/controller`,
                 version: `v${fullVersion}`,
                 mounts: [{
                     source: 'config/crd/bases',
