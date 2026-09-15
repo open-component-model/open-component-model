@@ -39,9 +39,6 @@ func TestConvertCredentials(t *testing.T) {
 		r.NotSame(want, got)
 	}
 
-	got, err := v1.ConvertToGitCredentials(nil)
-	r.NoError(err)
-	r.Nil(got)
-	_, err = v1.ConvertToGitCredentials(&runtime.Raw{Type: runtime.NewUnversionedType("wrong")})
+	_, err := v1.ConvertToGitCredentials(&runtime.Raw{Type: runtime.NewUnversionedType("wrong")})
 	r.Error(err)
 }

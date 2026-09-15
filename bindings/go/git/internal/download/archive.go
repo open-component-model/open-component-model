@@ -1,45 +1,29 @@
 package download
 
 import (
+	"archive/tar"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"time"
 
+	"github.com/go-git/go-git/v5/plumbing/filemode"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/opencontainers/go-digest"
-
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
-func archive(ctx context.Context, root string, opts Options) (_ *Blob, err error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// The archive stays uncompressed: its digest is pinned into the descriptor and
-	// verified on other machines, and compress/flate output is not stable across Go releases.
-	tree, err := filesystem.GetBlobFromPath(ctx, root, filesystem.DirOptions{
-		Reproducible:     true,
-		PreserveSymlinks: true,
-		ExcludePatterns:  []string{".git"},
-	})
+// archive writes the files of the commit tree as tar, so names, modes and symlinks
+// come from git and not from a checkout on the host file system. The archive stays
+// uncompressed: its digest is pinned into the descriptor and verified on other
+// machines, and compress/flate output is not stable across Go releases.
+// Directories are implied by the file paths, submodules are not part of the tree content.
+func archive(ctx context.Context, commit *object.Commit, opts Options) (_ *Blob, err error) {
+	tree, err := commit.Tree()
 	if err != nil {
-		return nil, fmt.Errorf("cannot create git archive: %w", err)
+		return nil, fmt.Errorf("cannot read git tree: %w", err)
 	}
-
-	rc, err := tree.ReadCloser()
-	if err != nil {
-		return nil, fmt.Errorf("cannot create git archive: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			// The tar is written by a goroutine that only checks ctx between entries and
-			// blocks on the pipe until read, so drain it after cancelling to let it exit.
-			cancel()
-			_, _ = io.Copy(io.Discard, rc)
-		}
-		err = errors.Join(err, rc.Close())
-	}()
 
 	file, err := os.CreateTemp(opts.TempDir, "ocm-git-archive-*.tar")
 	if err != nil {
@@ -52,9 +36,15 @@ func archive(ctx context.Context, root string, opts Options) (_ *Blob, err error
 	}()
 
 	digester := digest.SHA256.Digester()
-	writer := &limitedWriter{Writer: io.MultiWriter(file, digester.Hash()), limit: opts.MaxDownloadSize}
-	_, err = io.Copy(writer, &contextReader{ctx: ctx, Reader: rc})
-	err = errors.Join(err, file.Close())
+	tw := tar.NewWriter(&limitedWriter{Writer: io.MultiWriter(file, digester.Hash()), limit: opts.MaxDownloadSize})
+	err = tree.Files().ForEach(func(f *object.File) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		return writeFile(tw, f)
+	})
+	err = errors.Join(err, tw.Close(), file.Close())
 	if err != nil {
 		return nil, fmt.Errorf("cannot create git archive: %w", err)
 	}
@@ -62,17 +52,35 @@ func archive(ctx context.Context, root string, opts Options) (_ *Blob, err error
 	return newBlob(file.Name(), digester.Digest().String())
 }
 
-type contextReader struct {
-	ctx context.Context
-	io.Reader
-}
+func writeFile(tw *tar.Writer, f *object.File) error {
+	header := &tar.Header{Name: f.Name, ModTime: time.Unix(0, 0)}
+	switch f.Mode {
+	case filemode.Symlink:
+		target, err := f.Contents()
+		if err != nil {
+			return err
+		}
 
-func (r *contextReader) Read(p []byte) (int, error) {
-	if err := r.ctx.Err(); err != nil {
-		return 0, err
+		header.Typeflag, header.Mode, header.Linkname = tar.TypeSymlink, 0o777, target
+		return tw.WriteHeader(header)
+	case filemode.Executable:
+		header.Mode = 0o755
+	default:
+		header.Mode = 0o644
 	}
 
-	return r.Reader.Read(p)
+	header.Typeflag, header.Size = tar.TypeReg, f.Size
+	if err := tw.WriteHeader(header); err != nil {
+		return err
+	}
+
+	rc, err := f.Reader()
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(tw, rc)
+	return errors.Join(err, rc.Close())
 }
 
 type limitedWriter struct {

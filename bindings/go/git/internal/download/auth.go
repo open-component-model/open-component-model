@@ -15,6 +15,11 @@ func authMethod(ep *transport.Endpoint, creds *credsv1.GitCredentials, opts Opti
 		creds = &credsv1.GitCredentials{}
 	}
 
+	// go-git turns URL userinfo into basic auth, which plain HTTP would send in clear text.
+	if ep.Protocol == "http" && (ep.User != "" || ep.Password != "") {
+		return nil, fmt.Errorf("credentials require an HTTPS repository")
+	}
+
 	switch {
 	case creds.PrivateKeyPEM != "" || creds.PrivateKey != "":
 		if ep.Protocol != "ssh" {
@@ -44,14 +49,14 @@ func authMethod(ep *transport.Endpoint, creds *credsv1.GitCredentials, opts Opti
 		auth.HostKeyCallback = opts.HostKeyCallback
 		return auth, nil
 	case creds.Token != "":
-		if ep.Protocol != "https" && ep.Protocol != "http" {
-			return nil, fmt.Errorf("tokens require an HTTP or HTTPS repository")
+		if ep.Protocol != "https" {
+			return nil, fmt.Errorf("tokens require an HTTPS repository")
 		}
 
 		return &githttp.TokenAuth{Token: creds.Token}, nil
 	case creds.Username != "":
-		if ep.Protocol != "https" && ep.Protocol != "http" {
-			return nil, fmt.Errorf("username/password authentication requires an HTTP or HTTPS repository")
+		if ep.Protocol != "https" {
+			return nil, fmt.Errorf("username/password authentication requires an HTTPS repository")
 		}
 
 		return &githttp.BasicAuth{Username: creds.Username, Password: creds.Password}, nil

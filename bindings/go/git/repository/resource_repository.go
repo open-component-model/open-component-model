@@ -77,9 +77,11 @@ func (r *ResourceRepository) download(ctx context.Context, res *descriptor.Resou
 		return nil, "", err
 	}
 
-	typed, err := credsv1.ConvertToGitCredentials(creds)
-	if err != nil {
-		return nil, "", err
+	var typed *credsv1.GitCredentials
+	if creds != nil {
+		if typed, err = credsv1.ConvertToGitCredentials(creds); err != nil {
+			return nil, "", err
+		}
 	}
 
 	b, commit, err := download.Download(ctx, spec, typed, r.options)

@@ -39,6 +39,7 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 	executable, err := exec.LookPath("git")
 	r.NoError(err)
 
+	credsType := runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version)
 	authMethods := []struct {
 		name               string
 		authorization      string
@@ -48,14 +49,14 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 		{
 			name:               "token",
 			authorization:      "Bearer fixture-token",
-			credentials:        &credsv1.GitCredentials{Token: "fixture-token"},
-			invalidCredentials: &credsv1.GitCredentials{Token: "wrong-secret"},
+			credentials:        &credsv1.GitCredentials{Type: credsType, Token: "fixture-token"},
+			invalidCredentials: &credsv1.GitCredentials{Type: credsType, Token: "wrong-secret"},
 		},
 		{
 			name:               "basic",
 			authorization:      "Basic " + base64.StdEncoding.EncodeToString([]byte("fixture-user:fixture-password")),
-			credentials:        &credsv1.GitCredentials{Username: "fixture-user", Password: "fixture-password"},
-			invalidCredentials: &credsv1.GitCredentials{Username: "fixture-user", Password: "wrong-secret"},
+			credentials:        &credsv1.GitCredentials{Type: credsType, Username: "fixture-user", Password: "fixture-password"},
+			invalidCredentials: &credsv1.GitCredentials{Type: credsType, Username: "fixture-user", Password: "wrong-secret"},
 		},
 	}
 
@@ -201,7 +202,7 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 	hostKey, _, _, _, err := ssh.ParseAuthorizedKey(publicKeyData)
 	r.NoError(err)
 
-	assertSSHAccess := func(t *testing.T, gitCreds *credsv1.GitCredentials) {
+	assertSSHAccess := func(t *testing.T, gitCreds runtime.Typed) {
 		r := require.New(t)
 
 		spec := &descriptor.Resource{
@@ -239,11 +240,11 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 		t.Run(fmt.Sprintf("file/encrypted=%t", encrypted), func(t *testing.T) {
 			keyPath := filepath.Join(t.TempDir(), "key")
 			require.NoError(t, os.WriteFile(keyPath, keyPEM, 0o600))
-			assertSSHAccess(t, &credsv1.GitCredentials{PrivateKey: keyPath, Password: passphrase, Token: "ignored-by-key-precedence"})
+			assertSSHAccess(t, &credsv1.GitCredentials{Type: runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version), PrivateKey: keyPath, Password: passphrase, Token: "ignored-by-key-precedence"})
 		})
 
 		t.Run(fmt.Sprintf("inline/encrypted=%t", encrypted), func(t *testing.T) {
-			assertSSHAccess(t, &credsv1.GitCredentials{PrivateKeyPEM: string(keyPEM), PrivateKey: "/ignored/by/inline/precedence", Password: passphrase})
+			assertSSHAccess(t, &credsv1.GitCredentials{Type: runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version), PrivateKeyPEM: string(keyPEM), PrivateKey: "/ignored/by/inline/precedence", Password: passphrase})
 		})
 	}
 

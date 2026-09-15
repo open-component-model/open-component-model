@@ -39,6 +39,21 @@ func TestAuthModes(t *testing.T) {
 	_, err = authMethod(httpEndpoint, &credsv1.GitCredentials{PrivateKey: "/keys/key"}, Options{})
 	r.Error(err)
 
+	plainEndpoint, err := endpoint.Parse("http://example.com/repo")
+	r.NoError(err)
+	_, err = authMethod(plainEndpoint, &credsv1.GitCredentials{Token: "token"}, Options{})
+	r.ErrorContains(err, "HTTPS")
+	_, err = authMethod(plainEndpoint, &credsv1.GitCredentials{Username: "user", Password: "password"}, Options{})
+	r.ErrorContains(err, "HTTPS")
+	auth, err = authMethod(plainEndpoint, nil, Options{})
+	r.NoError(err)
+	r.Nil(auth, "anonymous plain HTTP stays allowed")
+
+	userinfoEndpoint, err := endpoint.Parse("http://user:secret@example.com/repo")
+	r.NoError(err)
+	_, err = authMethod(userinfoEndpoint, nil, Options{})
+	r.ErrorContains(err, "HTTPS")
+
 	_, err = authMethod(sshEndpoint, &credsv1.GitCredentials{Token: "token"}, Options{})
 	r.Error(err)
 
