@@ -27,8 +27,7 @@ func uploadLabel(c *descriptor.Component, targetIdx, numTargets int) string {
 }
 
 // resourceLabel renders the label for a resource-level transformation, e.g.
-// "my-app@1.0.0 [Get icons]", where op is the operation verb (Get, Add, Convert,
-// Transfer) and resourceName is the resource name from the descriptor.
+// "my-app@1.0.0 [Get icons]", op is the operation verb (Get, Add, Convert, Transfer)
 func resourceLabel(c *descriptor.Component, op, resourceName string) string {
 	return fmt.Sprintf("%s [%s %s]", componentLabel(c), op, resourceName)
 }
