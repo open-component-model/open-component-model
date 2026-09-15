@@ -24,7 +24,7 @@ By the end, you will have:
 
 - An OCM component that bundles an image and two RGDs
 - A running Podinfo application, deployed and kept in sync by kro
-- A localized image reference that points at your registry, injected automatically
+- A localized image reference that points at your registry, set automatically
 
 ## Prerequisites
 
@@ -64,17 +64,18 @@ export OCM_REPO=ghcr.io/$GITHUB_USERNAME/ocm-tutorial
 
 ## How it works
 
-You deliver **two** RGDs inside one OCM component: an app RGD that gives Podinfo a reusable
-API, and a system RGD that composes it with the localized image. The OCM controllers deliver
-both the same way described in [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}):
+You deliver **two** RGDs inside one OCM component. The first (`podinfo`) defines the `Podinfo`
+kind: the application as its own Kubernetes API. The second (`system`) creates a `Podinfo`
+instance and sets its image to the one OCM localized into your registry. The OCM controllers
+deliver both the same way described in [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}):
 a `Repository` and `Component` fetch the component, and one `Resource` + `Deployer` pair per
 RGD applies it to the cluster. You then create a single `System` instance, and reconciliation
 converges to a running Podinfo.
 
 **Localization** keeps the image correct once it lands in kro's hands. [Transfer preserves
 artifact integrity, and localization adapts the reference at deploy time]({{< relref "docs/concepts/transfer-concept.md#localization" >}}).
-Here, that means the system RGD injects the rewritten image reference into the `Podinfo`
-instance, so the workload always pulls from the registry the component was delivered to.
+Here, that means the system RGD sets the `image` field of the `Podinfo` instance to the
+rewritten reference, so the pod always pulls from the registry the component was delivered to.
 
 The diagram below picks up once both RGDs are already applied, and shows what kro itself does
 with them.
@@ -156,10 +157,10 @@ EOF
 
 ### Write the app RGD
 
-This RGD registers the `Podinfo` API and renders the workload. kro templates values from the
-instance schema and reconciles resources in dependency order, which it infers from the CEL
-references between them. `deployment` and `service` only reference the schema, so they are
-independent and reconcile in parallel.
+This RGD registers the `Podinfo` API and renders the application: a Deployment and a Service.
+kro templates values from the instance schema and reconciles resources in dependency order,
+which it infers from the CEL references between them. `deployment` and `service` only reference
+the schema, so they are independent and reconcile in parallel.
 
 ```bash
 cat > rgd-podinfo.yaml << 'EOF'
@@ -276,12 +277,11 @@ EOF
 
 You just wrote two RGDs instead of one. That split is deliberate:
 
-- **The app RGD (`podinfo`)** is the reusable API. It registers the `Podinfo` custom resource
-  and renders the Deployment and Service you just wrote. Its schema exposes `image`,
-  `message`, and `replicas`. This is the building block a developer owns, and it stays
-  generic, with no OCM coupling.
+- **The app RGD (`podinfo`)** is the Podinfo application packaged as its own API: it registers
+  the `Podinfo` kind and renders the Deployment and Service you just wrote. It contains nothing
+  OCM-specific.
 - **The system RGD (`system`)** is the OCM-specific wiring. It reads the localized image from
-  the OCM component and creates a `Podinfo` instance wired with that image and your message.
+  the OCM component and creates a `Podinfo` instance with that image and your message.
 
 Whether this split is worth it depends on what you're shipping. If your application already
 ships as a Helm chart, or you're doing a one-off install of someone else's chart, a
@@ -291,12 +291,10 @@ first-class Kubernetes API, so operators run `kubectl get podinfo`, set fields w
 validation, and read status like any built-in resource, all without needing to know OCM is
 behind it. Keeping the system RGD separate is what lets that API stay reusable.
 
-Here you built one app, but the shape is bigger. Each app RGD is a reusable building block, a
-**leaf** that knows how to run one thing. The system RGD is the composer that stacks leaves
-into a product: with one app there is one leaf, with a real product there are many, and a
-single instance drives them all. For one app you could fold both RGDs into one; keeping them
-split is what lets the pattern grow. The [Scaling to a whole product](#scaling-to-a-whole-product)
-section at the end shows how.
+For one app you could fold both RGDs into one. Keeping them separate is what makes the
+deployment reusable and composable: the application stays generic, the OCM wiring stays in one
+place, and a real product just adds more app RGDs under one system RGD. The
+[Scaling to a whole product](#scaling-to-a-whole-product) section at the end shows how.
 
 ## Build and transfer
 
@@ -411,10 +409,10 @@ For more details, see [Configure Credentials for Controllers]({{< relref "/docs/
 ### Deliver both RGDs
 
 The bootstrap resources are OCM controller objects: a `Repository` and `Component` fetch the
-component from your registry, then a `Resource` + `Deployer` pair per RGD applies it to the
-cluster. That is six objects for two RGDs, boilerplate that grows with every RGD you deliver.
-All namespaced objects are pinned to the `default` namespace, so their cross-references resolve
-no matter which namespace your kubectl context currently points at.
+component from your registry; then a `Resource` + `Deployer` pair per RGD applies it to the
+cluster. The namespaced objects all live in `default`, so their cross-references and the
+verification commands below work no matter which namespace your kubectl context points at. The
+`Deployer` is cluster-scoped and finds its `Resource` through `resourceRef.namespace`.
 
 ```bash
 cat > bootstrap.yaml << 'EOF'
@@ -511,7 +509,7 @@ RGD, it recovers on its own once the `Podinfo` CRD is registered, so the order d
 
 ### Create the System instance
 
-One instance drives everything downstream:
+Create an instance of the `System` CRD:
 
 ```bash
 cat > instance.yaml << 'EOF'
@@ -527,7 +525,7 @@ EOF
 kubectl apply -f instance.yaml
 ```
 
-Wait for it to converge. This usually takes around 30 seconds, mostly the image pull:
+Wait for it to become `Active`. This usually takes around 30 seconds, mostly the image pull:
 
 ```bash
 kubectl get system,podinfo -n default
@@ -599,11 +597,12 @@ kubectl delete system system -n default
 envsubst < bootstrap.yaml | kubectl delete -f -
 ```
 
-kro keeps the `Podinfo` and `System` CRDs after the RGDs are gone. That's harmless: they carry
-no instances and cost nothing to leave. Deleting a CRD removes every instance of that kind
-cluster-wide, so unless you know this is the only thing on the cluster using those kinds, leave
-them. They disappear along with everything else if you tear down the whole cluster, for example
-with `kind delete cluster`.
+By default kro keeps the `Podinfo` and `System` CRDs after the RGDs are gone. Installing kro
+with `--set config.allowCRDDeletion=true` changes that: deleting the RGD then deletes its CRD
+as well. Leftover CRDs are harmless: they carry no instances and cost nothing to leave.
+Deleting a CRD removes every instance of that kind cluster-wide, so unless you know this is the
+only thing on the cluster using those kinds, leave them. They disappear along with everything
+else if you tear down the whole cluster, for example with `kind delete cluster`.
 
 ## Troubleshooting
 
@@ -625,7 +624,7 @@ kubectl logs -n ocm-k8s-toolkit-system deploy/ocm-k8s-toolkit-controller-manager
 ## What you learned
 
 - Packaged an application as an OCM component with an image and two RGDs
-- Used a system RGD to compose an app RGD and inject a localized image
+- Used a system RGD to instantiate an app RGD with the localized image
 - Delivered both RGDs with the OCM controllers, no Helm or GitOps tooling
 - Confirmed the workload runs the localized image and your message
 
@@ -636,13 +635,14 @@ versioned together. The good news is you already have the building block.
 
 What you wrote is an **app RGD**. It gives one application a typed Kubernetes API, the
 `Podinfo` kind, with a schema and status. It knows how to run one thing and nothing else.
-That self-contained piece is a **leaf**. A real product has many leaves: a database, a
-gateway, a handful of services.
+A real product has many of these: a database, a gateway, a handful of services.
 
-On top sits the **system RGD**. Its job is composition: it creates one instance of each leaf,
-passes values between them, and orders them so nothing starts before what it depends on. You
-already built a tiny version. Our system RGD created a single `Podinfo` instance. Add more
-leaves and reference them, and one `System` instance drives the entire product.
+On top sits the **system RGD**. Its job is composition: it creates one instance of each app
+RGD and passes values between them. Ordering needs no extra configuration: kro infers
+dependencies from references. You saw that in this tutorial: because `app` references
+`resourceImage.status.additional.oci.*`, kro does not create the `Podinfo` instance until
+`resourceImage` satisfies its `readyWhen` condition. Add more app RGDs and reference them the
+same way, and one `System` instance drives the entire product.
 
 One thing is still hand-written: the delivery plumbing in `bootstrap.yaml`. Today you list a
 `Resource` + `Deployer` pair for every RGD yourself. For a dozen apps that is a wall of
@@ -684,10 +684,10 @@ running instance takes over its own delivery. Bump the component version and the
 reconciles. No more editing bootstrap files by hand.
 
 This is not a new tool. It is the same `delivery.ocm.software/Resource` you already used for
-the localized image, now applied to delivery itself. One limit stays honest: an RGD cannot
-deliver the RGD that defines its own kind, because it would have to be running before its own
-instance exists. So app RGDs are still delivered by `bootstrap.yaml`, and the installer
-manages everything downstream.
+the localized image, now applied to delivery itself. There is no layering limit: an RGD can
+create other RGDs, which is exactly what the installer's `Resource` + `Deployer` pairs do for
+the app RGDs. The one thing it cannot do is apply itself: something has to deliver the
+installer RGD once, and that stays in `bootstrap.yaml`.
 
 ## Next steps
 

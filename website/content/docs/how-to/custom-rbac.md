@@ -17,7 +17,7 @@ controller's service account the necessary permissions yourself.
 This guide assumes that you are already familiar with the concepts described in the following documents:
 
 - [Concept: OCM controllers]({{< relref "/docs/concepts/ocm-controllers.md" >}}) - OCM Controllers
-- [Installed Kro](https://kro.run/docs/getting-started/Installation/)
+- [kro installed](https://kro.run/docs/getting-started/Installation/)
 
 ## When is this needed?
 
@@ -157,22 +157,16 @@ rules:
 Everything above grants RBAC to the **OCM controller's** `ServiceAccount`. If your `Deployer` targets a kro
 `ResourceGraphDefinition` (RGD), there is a second, separate RBAC concern: **kro's own** `ServiceAccount`.
 
-An RGD can define a brand-new schema-based kind (for example, a `Podinfo` or `Bootstrap` kind). Registering
-that kind's CRD is covered by kro's own installation role: in [aggregation mode](https://kro.run/docs/advanced/access-control),
-the base role already includes access to `ResourceGraphDefinition`s and `CustomResourceDefinition`s; the
-dev-friendly `unrestricted` mode used in the [setup guide]({{< relref "/docs/getting-started/setup-controller-environment.md" >}})
-grants everything broadly. Aggregation mode's *base* role does not cover what happens next: the moment kro (or the RGD)
-creates an *instance* of that new kind, or any other object the RGD manages, kro's `ServiceAccount` needs RBAC
-for that specific kind, no differently than the OCM controller needs RBAC for the resources its `Deployer`
-applies.
+An RGD can define a brand-new schema-based kind (for example, a `Podinfo` or `Bootstrap` kind). In kro's
+least-privilege [aggregation mode](https://kro.run/docs/advanced/access-control), creating and managing
+instances of that kind, or any other object the RGD templates, requires extra RBAC for kro's own
+`ServiceAccount`. The dev-friendly `unrestricted` mode used in the [setup guide]({{< relref "/docs/getting-started/setup-controller-environment.md" >}})
+grants everything broadly, so this gap only surfaces on a hardened cluster.
 
-This catches people off guard because the dev-friendly kro install (as used in the [setup guide]({{< relref
-"/docs/getting-started/setup-controller-environment.md" >}})) grants broad, cluster-wide permissions, so the
-gap only surfaces once you move to a hardened cluster with least-privilege RBAC. [kro's access control
-guide](https://kro.run/docs/advanced/access-control) covers the least-privilege setup for kro itself.
-
-Grant kro's `ServiceAccount` a `ClusterRole` the same way as above, scoped to the kinds your RGDs create and
-manage. For example, an RGD that defines a `Podinfo` kind and renders a Deployment and Service needs:
+Grant kro's `ServiceAccount` a `ClusterRole` scoped to the kinds your RGDs create and manage. In aggregation
+mode kro also folds in any `ClusterRole` labeled `rbac.kro.run/aggregate-to-controller: "true"`, as described in
+[kro's access control guide](https://kro.run/docs/advanced/access-control). For example, an RGD that defines a
+`Podinfo` kind and renders a Deployment and Service needs:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1

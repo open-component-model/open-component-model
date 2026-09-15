@@ -33,7 +33,7 @@ flowchart LR
 
 To reach the successful deployment status, the following chain of objects has to be reconciled: `Repository` -> `Component` -> `Resource` -> `Deployer`.
 
-The `Repository` validates that the OCM repository is reachable. The `Component` downloads and verifies the component version descriptor from that repository. Once the component is `Ready`, the `Resource` will fetch the resource descriptor and store it in its status. The Deployer watches for this and when the Resource is `Ready`, it downloads the content and applies it to the cluster.
+The `Repository` validates that the OCM repository is reachable. The `Component` downloads and verifies the component version descriptor from that repository. Once the component is `Ready`, the `Resource` will fetch the resource descriptor and store it in its status. The Deployer watches for this and when the `Resource` is `Ready`, it downloads the content and applies it to the cluster.
 
 ## ApplySet Semantics
 
@@ -51,9 +51,9 @@ These informers are created at runtime and only for the specific resource types 
 
 ## Deletion and Finalizers
 
-When a Deployer object is deleted, cleanup happens in two phases. First, the `delivery.ocm.software/applyset-prune` finalizer removes all deployed resources through ApplySet pruning. Once that completes, the `delivery.ocm.software/watch` finalizer unregisters the dynamic informers.
+When a `Deployer` object is deleted, cleanup happens in two phases. First, the `delivery.ocm.software/applyset-prune` finalizer removes all deployed resources through ApplySet pruning. Once that completes, the `delivery.ocm.software/watch` finalizer unregisters the dynamic informers.
 
-The Deployer will not be fully removed until both phases finish, ensuring no orphaned resources are left behind.
+The `Deployer` will not be fully removed until both phases finish, ensuring no orphaned resources are left behind.
 
 ## Caching
 
@@ -89,12 +89,14 @@ The Deployer stamps deployed resources with metadata for traceability in the for
 
 ## Common Use Cases
 
-Which of the two options below applies depends on whether your application is packaged as a Helm chart or plain manifests, and whether you want Kro's RGDs to orchestrate the deployment or apply it directly with the Deployer.
+Which of the sections below applies depends on two independent choices: whether your
+application is packaged as a Helm chart or plain manifests, and whether you want kro's RGDs to
+orchestrate the deployment or apply it directly with the `Deployer`.
 
 ### No orchestration: apply manifests directly
 
 If your application is already plain Kubernetes manifests and you don't need an RGD's templating or
-composition, skip Kro entirely. The [Deploy Manifests with Deployer]({{< relref "/docs/how-to/deploy-manifests-with-deployer.md" >}})
+composition, skip kro entirely. The [Deploy Manifests with Deployer]({{< relref "/docs/how-to/deploy-manifests-with-deployer.md" >}})
 how-to applies a Deployment straight from an OCM component using only the OCM Controllers.
 
 ### Helm chart, RGD applied manually
@@ -107,7 +109,7 @@ application using the `Deployer`, with the RGD written and applied by hand. Star
 
 Packaging the `ResourceGraphDefinition` ([RGD](https://kro.run/docs/concepts/rgd/overview)) inside the OCM
 component itself, rather than applying it by hand, lets developers ship deployment instructions alongside
-their software. Once the Deployer applies the RGD, [Kro](https://kro.run/) reconciles it into a CRD that
+their software. Once the Deployer applies the RGD, [kro](https://kro.run/) reconciles it into a CRD that
 operators instantiate. The RGD includes the deployer-specific CRDs — `HelmRelease` and `OCIRepository` for
 Flux, or `Application` for Argo CD. See [Deploy an Application from a Helm Chart with OCM and kro]({{< relref
 "deploy-helm-chart-bootstrap.md" >}}) for a full walkthrough.
