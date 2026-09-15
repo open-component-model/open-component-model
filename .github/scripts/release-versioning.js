@@ -56,8 +56,9 @@ export default async function computeRcVersion({ core }) {
     // kubernetes/controller are now packages inside it).
     const bindingsModuleRcTag = `bindings/go/${rcTag}`;
     const bindingsModulePromotionTag = `bindings/go/${promotionTag}`;
-    // Website has no RC artifacts to validate (docs site, not a binary), so
-    // only the promotion tag is emitted — no RC counterpart by design.
+    // The website module gets an RC tag (website/vX.Y.Z-rc.N) so the docs
+    // site can pin Hugo module imports of the RC.
+    const websiteModuleRcTag = `website/${rcTag}`;
     const websiteModulePromotionTag = `website/${promotionTag}`;
 
     // Find previous canonical release tag for the changelog range.
@@ -76,6 +77,7 @@ export default async function computeRcVersion({ core }) {
     core.setOutput("promotion_tag", promotionTag);
     core.setOutput("bindings_module_rc_tag", bindingsModuleRcTag);
     core.setOutput("bindings_module_promotion_tag", bindingsModulePromotionTag);
+    core.setOutput("website_module_rc_tag", websiteModuleRcTag);
     core.setOutput("website_module_promotion_tag", websiteModulePromotionTag);
     core.setOutput("previous_tag", previousTag);
 
@@ -90,6 +92,7 @@ export default async function computeRcVersion({ core }) {
             ["Next Release Tag", promotionTag],
             ["Bindings Module RC Tag", bindingsModuleRcTag],
             ["Bindings Module Release Tag", bindingsModulePromotionTag],
+            ["Website Module RC Tag", websiteModuleRcTag],
             ["Website Module Release Tag", websiteModulePromotionTag],
             ["Previous Release Tag", previousTag || "(none — first release)"],
         ])

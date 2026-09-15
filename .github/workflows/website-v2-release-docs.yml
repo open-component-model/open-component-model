@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version, X.Y.Z with no v prefix (e.g. 0.15.0)
+        description: Release version, X.Y.Z with no v prefix (e.g. 0.15.0); RC suffix allowed (e.g. 0.16.0-rc.2)
         required: true
         type: string
 
@@ -32,8 +32,8 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-            || { echo "::error::version must be X.Y.Z, got: $VERSION"; exit 1; }
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] \
+            || { echo "::error::version must be X.Y.Z or X.Y.Z-rc.N, got: $VERSION"; exit 1; }
 
       - name: Checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -49,19 +49,55 @@ jobs:
           git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" \
             || { echo "::error::tag v${VERSION} not found (release not promoted yet?)"; exit 1; }
 
+      # Final releases register exactly one version. RCs instead sync docs for
+      # EVERY RC tag of the minor (append-only tag-sync), so a follow-up rc.N+1
+      # run refreshes the still-open rc.N PR with the complete RC set. The PR
+      # branch/title depend on the path; both are computed here for the
+      # create-pull-request step.
+      - name: Plan docs registration
+        id: plan
+        env:
+          VERSION: ${{ inputs.version }}
+          VERSIONS_FILE: ${{ runner.temp }}/docs-versions.txt
+        run: |
+          set -euo pipefail
+          if [[ "$VERSION" =~ ^([0-9]+\.[0-9]+)\.[0-9]+-rc\.[0-9]+$ ]]; then
+            MINOR="${BASH_REMATCH[1]}"
+            # All RC tags of this minor, ascending. The ^{} filter drops the
+            # peeled-commit lines of annotated tags so each tag appears once.
+            git ls-remote --tags origin "refs/tags/v${MINOR}.*-rc.*" \
+              | awk '{sub("^refs/tags/", "", $2); print $2}' \
+              | grep -v '\^{}$' \
+              | sort -V > "$VERSIONS_FILE"
+            {
+              echo "branch=website/version-release/${MINOR}-rc"
+              echo "title=chore(website): publish RC docs v${VERSION}"
+              echo 'body<<__PR_BODY_EOF__'
+              echo "Automated RC docs release for version ${VERSION}."
+              echo
+              echo "Tag-sync semantics: registers docs for every RC tag of the ${MINOR} minor that carries a \`website/\` tag (append-only). The final release PR removes the RC entries of the minor."
+              echo '__PR_BODY_EOF__'
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "v${VERSION}" > "$VERSIONS_FILE"
+            {
+              echo "branch=website/version-release/${VERSION}"
+              echo "title=chore(website): release docs version ${VERSION}"
+              echo 'body<<__PR_BODY_EOF__'
+              echo "Automated docs release for version ${VERSION}."
+              echo
+              echo "Triggered by tag \`website/v${VERSION}\`."
+              echo '__PR_BODY_EOF__'
+            } >> "$GITHUB_OUTPUT"
+          fi
+          echo "Docs versions to register:"
+          cat "$VERSIONS_FILE"
+
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: bindings/go/go.mod
           cache: false
-
-      - name: Fetch bindings/go go.mod at release tag
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          git fetch origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}" --no-tags
-          git show "v${VERSION}:bindings/go/go.mod" > "${{ runner.temp }}/cli-go.mod"
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -72,25 +108,50 @@ jobs:
         working-directory: website
         run: npm ci
 
-      - name: Register docs version
+      # One loop for both paths: the versions file holds a single tag for
+      # final releases and all RC tags of the minor for RCs. RC tags without
+      # a website/ counterpart (cut before website RC tags existed) are
+      # skipped with a warning; any other registration failure fails the step.
+      - name: Register docs versions
         id: register
         working-directory: website
         env:
-          VERSION: ${{ inputs.version }}
-          CLI_GOMOD: ${{ runner.temp }}/cli-go.mod
+          VERSIONS_FILE: ${{ runner.temp }}/docs-versions.txt
           LOG_FILE: ${{ runner.temp }}/register.log
         run: |
-          set +e
-          node scripts/register-docs-version.js "$VERSION" \
-            --cli-gomod "$CLI_GOMOD" \
-            2>&1 | tee "$LOG_FILE"
-          rc=${PIPESTATUS[0]}
+          set -euo pipefail
+          : > "$LOG_FILE"
+          failed=0
+          while IFS= read -r tag; do
+            version="${tag#v}"
+            echo "=== Registering docs for ${version} ===" | tee -a "$LOG_FILE"
+            git fetch origin "refs/tags/${tag}:refs/tags/${tag}" --no-tags
+            if [[ "$tag" == *-rc.* ]] \
+              && ! git ls-remote --exit-code --tags origin "refs/tags/website/${tag}" > /dev/null; then
+              echo "::warning::skipping ${version}: no website/${tag} tag (RC predates website RC tags)" | tee -a "$LOG_FILE"
+              continue
+            fi
+            gomod="${{ runner.temp }}/cli-go-${version}.mod"
+            git show "${tag}:bindings/go/go.mod" > "$gomod"
+            set +e
+            node scripts/register-docs-version.js "$version" \
+              --cli-gomod "$gomod" \
+              2>&1 | tee -a "$LOG_FILE"
+            rc=${PIPESTATUS[0]}
+            set -e
+            if [[ $rc -ne 0 ]]; then
+              failed=1
+            fi
+          done < "$VERSIONS_FILE"
           {
             echo 'log<<__REGISTER_EOF__'
             cat "$LOG_FILE"
             echo '__REGISTER_EOF__'
           } >> "$GITHUB_OUTPUT"
-          exit "$rc"
+          if [[ $failed -ne 0 ]]; then
+            echo "::error::one or more docs registrations failed (see log)"
+            exit 1
+          fi
 
       - name: Generate App Token
         id: get_token
@@ -102,22 +163,28 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
+      # Branch, title and body intro come from the plan step: finals keep
+      # their per-version branch; RCs share one stable branch per minor
+      # (website/version-release/<MINOR>-rc), which create-pull-request
+      # force-updates with content rebuilt from current main.
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        env:
+          PR_TITLE: ${{ steps.plan.outputs.title }}
+          PR_BRANCH: ${{ steps.plan.outputs.branch }}
+          PR_BODY: ${{ steps.plan.outputs.body }}
         with:
           base: main
           token: ${{ steps.get_token.outputs.token }}
-          title: "chore(website): release docs version ${{ inputs.version }}"
+          title: ${{ env.PR_TITLE }}
           commit-message: "[github-actions] automated change"
           add-paths: |
             website/config/
-          branch: website/version-release/${{ inputs.version }}
+          branch: ${{ env.PR_BRANCH }}
           delete-branch: true
           sign-commits: true
           body: |
-            Automated docs release for version ${{ inputs.version }}.
-
-            Triggered by tag `website/v${{ inputs.version }}`.
+            ${{ env.PR_BODY }}
 
             Output of `register-docs-version.js`:
 
