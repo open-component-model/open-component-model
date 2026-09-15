@@ -335,6 +335,74 @@ and normalisation algorithms are only compared when they are set: an empty field
 
 ---
 
+## PyPI Resource Repository
+
+Handles resources stored as distribution files (wheels, source distributions) of a Python project on a
+PyPI-compatible index (PyPI, Nexus, Artifactory, GitHub Packages).
+
+### Supported Access Types
+
+| Access Type                                                                       |
+|-----------------------------------------------------------------------------------|
+| [`PyPI/v1alpha1`]({{< relref "input-and-access-types.md" >}}#pypiv1alpha1-access) |
+
+### Capabilities
+
+| Operation         | Supported |
+|-------------------|-----------|
+| Download          | Yes       |
+| Upload            | Yes       |
+| Digest Processing | Yes       |
+
+{{< callout context="note" >}}
+Upload deploys the files of a download archive to a writable index with a file-addressed `PUT`
+(`<indexUrl>/<normalized-project>/<filename>`), which a Nexus or Artifactory PyPI-hosted repository accepts. Publishing
+to `upload.pypi.org`, which uses a `twine` multipart upload to a separate endpoint, is not supported.
+{{< /callout >}}
+
+### Credential Resolution
+
+The credential consumer identity is derived from the `indexUrl` field in the access specification. The identity type is
+`PyPIRepository`.
+
+**Example:** For a resource with `indexUrl: https://pypi.org/simple`:
+
+| Attribute  | Value            |
+|------------|------------------|
+| `type`     | `PyPIRepository` |
+| `hostname` | `pypi.org`       |
+| `scheme`   | `https`          |
+| `path`     | `simple`         |
+
+Credentials are optional: a public index is readable anonymously. When credentials resolve, an `identityToken` yields
+`Authorization: Bearer <token>` and `username`/`password` yield HTTP Basic Auth. An API token is configured as the
+`__token__` username with the token as the password.
+
+See [Credential Consumer Identities: PyPIRepository]({{< relref "credential-consumer-identities.md" >}}#pypirepository)
+for matching rules.
+
+### Download Behavior
+
+Resolves the project detail page of the Simple Repository API, preferring the PEP 691 JSON serialization and falling
+back to the PEP 503 HTML serialization via `Accept` content negotiation. It keeps the files whose parsed version matches
+`version` (a yanked file is skipped unless named explicitly), applies the `distributions` selector, and fetches each
+file together with its detached `.asc` signature when the index advertises one. The result is one `application/x-tgz`
+holding the files in a deterministic order, each followed by its signature; nothing is verified, so the index's hashes
+and the signature are the consumer's to check. The archive uses stored gzip blocks and fixed tar headers, so its bytes
+depend only on the files fetched.
+
+Requests go through the shared OCM HTTP client, so timeouts, TLS settings and per-host overrides come from the
+[HTTP client configuration]({{< relref "http-client-configuration.md" >}}).
+
+### Digest Processing
+
+The PyPI digest processor downloads the archive and hashes it with SHA-256, using the `genericBlobDigest/v1`
+normalisation. When the resource already carries a digest, the computed value is verified against it and a mismatch
+fails the operation. A PyPI release version is immutable, so every version is digestable — there is no unpinned version
+to reject.
+
+---
+
 ## External Resource Repositories (Plugins)
 
 External plugins declare supported access types in their capability specification and implement the same three

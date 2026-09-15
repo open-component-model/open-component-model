@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/input/utf8"
 	ociplugin "ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/oci"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/oidc"
+	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/pypi"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/rsa"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/s3"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/wget"
@@ -68,6 +69,12 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.CredentialRepositoryRegistry,
 		httpConfig); err != nil {
 		return fmt.Errorf("could not register github inbuilt plugin: %w", err)
+	}
+	if err := pypi.Register(manager.ResourcePluginRegistry,
+		manager.DigestProcessorRegistry,
+		manager.CredentialRepositoryRegistry,
+		httpConfig); err != nil {
+		return fmt.Errorf("could not register pypi plugins: %w", err)
 	}
 
 	if err := s3.Register(manager.InputRegistry,

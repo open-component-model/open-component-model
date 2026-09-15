@@ -14,6 +14,7 @@ import (
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	pypiv1alpha1 "ocm.software/open-component-model/bindings/go/pypi/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
@@ -343,8 +344,16 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 			return nil, fmt.Errorf("cannot process GitHub resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+	case *pypiv1alpha1.PyPI:
+		// A PyPI resource is one archive of the selected distribution files: download it and
+		// embed it as a local blob in the target. There is no OCI-artifact representation, so
+		// uploadAsArtifact is not honored here.
+		if err := processPyPI(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+			return nil, fmt.Errorf("cannot process PyPI resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	default:
-		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, Helm chart, wget, s3, and GitHub resources are supported for transformation.",
+		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, Helm chart, wget, s3, GitHub, and PyPI resources are supported for transformation.",
 			"component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version,
 			"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 	}

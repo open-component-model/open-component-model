@@ -23,6 +23,7 @@
 !kubernetes
 !oci
 !plugin
+!pypi
 !repository
 !rsa
 !runtime

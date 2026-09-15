@@ -17,6 +17,8 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
+	pypiaccessv1alpha1 "ocm.software/open-component-model/bindings/go/pypi/spec/access/v1alpha1"
+	pypiv1alpha1 "ocm.software/open-component-model/bindings/go/pypi/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -157,6 +159,64 @@ func githubResource(name, version, repoURL, commit string) descriptor.Resource {
 			Commit:  commit,
 		},
 	}
+}
+
+func pypiResource(name, version, indexURL string) descriptor.Resource {
+	return descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: name, Version: version},
+		},
+		Type:     "pythonPackage",
+		Relation: descriptor.ExternalRelation,
+		Access: &pypiaccessv1alpha1.PyPI{
+			Type:     runtime.NewVersionedType(pypiaccessv1alpha1.Type, pypiaccessv1alpha1.Version),
+			IndexURL: indexURL,
+			Project:  name,
+			Version:  version,
+		},
+	}
+}
+
+func TestBuildGraphDefinition_PyPIResource(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{pypiResource("requests", "2.32.3", "https://pypi.org/simple")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
+		CopyMode: transferv1alpha1.CopyModeAllResources,
+	})
+	require.NoError(t, err)
+
+	// get -> add, plus the component Upload node and the FileCleanup node.
+	require.Len(t, tgd.Transformations, 4)
+	assert.Equal(t, pypiv1alpha1.GetPyPIArtifactV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
+	assert.Equal(t, FileCleanupVersionedType, tgd.Transformations[3].Type)
+	assert.Contains(t, tgd.Transformations[3].Spec.Data["files"], "${"+tgd.Transformations[1].ID+".spec.file}",
+		"the cleanup node must remove the archive the Add node consumed")
+}
+
+func TestBuildGraphDefinition_PyPIResource_UploadAsOciArtifact(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{pypiResource("requests", "2.32.3", "https://pypi.org/simple")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
+		CopyMode:   transferv1alpha1.CopyModeAllResources,
+		UploadType: transferv1alpha1.UploadAsOciArtifact,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, tgd.Transformations, 4)
+	assert.Equal(t, pypiv1alpha1.GetPyPIArtifactV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type,
+		"a pypi resource must stay on the local-resource path even when uploadType requests an OCI artifact")
 }
 
 // --- BuildGraphDefinition tests ---
