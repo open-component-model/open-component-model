@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"runtime/debug"
+	"strings"
 	"text/tabwriter"
 	"time"
 )
@@ -35,11 +36,13 @@ func writeHumanReadable(w io.Writer, bi *debug.BuildInfo) error {
 }
 
 // humanBuildDate turns the compact Go pseudo-version build timestamp
-// (YYYYMMDDHHMMSS, UTC) into a human-readable RFC3339 UTC timestamp. Any value
-// that is not in that format (e.g. an empty or custom build date) is returned
-// unchanged.
+// (YYYYMMDDHHMMSS, UTC) into a human-readable RFC3339 UTC timestamp. It also
+// accepts the "0.<timestamp>" pseudo-version form that GetLegacyFormat produces
+// for base versions like vX.Y.Z-0.<timestamp>-<commit>. Any value that is not in
+// one of those formats (e.g. an empty or custom build date) is returned unchanged.
 func humanBuildDate(raw string) string {
-	t, err := time.ParseInLocation("20060102150405", raw, time.UTC)
+	ts := strings.TrimPrefix(raw, "0.")
+	t, err := time.ParseInLocation("20060102150405", ts, time.UTC)
 	if err != nil {
 		return raw
 	}

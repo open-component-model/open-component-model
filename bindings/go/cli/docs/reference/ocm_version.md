@@ -17,7 +17,7 @@ The version command retrieves the build version of the OCM CLI.
 
 The build version can be formatted in different ways depending on the specified output flag.
 The default format is "text", which prints a human-readable summary that clearly identifies
-this binary as the OCM v2 CLI, together with the version, commit, build date and platform.
+this binary as the OCM v2 CLI, together with the version, commit and build date.
 
 When the format is set to "legacyjson", it outputs the version in a format compatible with OCM v1
 specifications, with slight modifications:

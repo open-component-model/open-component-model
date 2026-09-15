@@ -53,6 +53,23 @@ func TestVersion_TextSplitsCommitAndDate(t *testing.T) {
 	r.Contains(out, "2026-01-01T00:00:00Z")
 }
 
+func TestHumanBuildDate(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain timestamp", "20260101153045", "2026-01-01T15:30:45Z"},
+		{"pseudo-version 0. form", "0.20260101153045", "2026-01-01T15:30:45Z"},
+		{"empty", "", ""},
+		{"non-timestamp", "not-a-date", "not-a-date"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, humanBuildDate(tc.in))
+		})
+	}
+}
+
 func TestVersion_LegacyJSONFormatUnchanged(t *testing.T) {
 	r := require.New(t)
 

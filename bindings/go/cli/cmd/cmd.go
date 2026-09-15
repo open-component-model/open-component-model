@@ -54,12 +54,12 @@ func New() *cobra.Command {
 	// the `ocm version` subcommand, so `ocm --version` and `ocm version` match.
 	cmd.Version = "(see template)"
 	cmd.SetVersionTemplate("{{ ocmVersion }}")
-	cobra.AddTemplateFunc("ocmVersion", func() string {
+	cobra.AddTemplateFunc("ocmVersion", func() (string, error) {
 		var buf strings.Builder
 		if err := version.Write(&buf, version.OutputText); err != nil {
-			return err.Error() + "\n"
+			return "", err
 		}
-		return buf.String()
+		return buf.String(), nil
 	})
 
 	configuration.RegisterConfigFlag(cmd)
