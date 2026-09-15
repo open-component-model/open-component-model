@@ -17,7 +17,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 	if uploadAsOCIArtifact {
 		var ociTarget ocirepo.Repository
 		if err := scheme.Convert(toSpec, &ociTarget); err == nil {
-			return processOCIArtifactStreaming(resource, id, tgd, toSpec, resourceTransformIDs, i)
+			return processOCIArtifactStreaming(resource, id, tgd, toSpec, resourceTransformIDs, i, resourceLabel(&val.Descriptor.Component, "Transfer", resource.Name))
 		}
 		// toSpec is not an OCI repository — fall through to the legacy Get+Add path.
 	}
@@ -52,8 +52,9 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 
 	getArtifactTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: ociv1alpha1.GetOCIArtifactV1alpha1,
-			ID:   getResourceID,
+			Type:  ociv1alpha1.GetOCIArtifactV1alpha1,
+			ID:    getResourceID,
+			Label: resourceLabel(&val.Descriptor.Component, "Get", resource.Name),
 		},
 		Spec: unstructured,
 	}
@@ -61,7 +62,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 
 	// Create AddLocalResource transformation
 	var addResourceTransform transformv1alpha1.GenericTransformation
-	if addResourceTransform, err = uploadAsLocalResource(toSpec, component, version, addResourceID, getResourceID, staticReferenceName(referenceName)); err != nil {
+	if addResourceTransform, err = uploadAsLocalResource(toSpec, component, version, addResourceID, getResourceID, staticReferenceName(referenceName), resourceLabel(&val.Descriptor.Component, "Add", resource.Name)); err != nil {
 		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
 	}
 
@@ -102,7 +103,7 @@ func imageReferenceFromAccess(id string) referenceNameOption {
 
 // processOCIArtifactStreaming emits a single TransferOCIArtifact node that streams
 // the OCI artifact directly from source to target without tar materialization.
-func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
+func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, label string) error {
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
 	transferID := fmt.Sprintf("%sTransfer%s", id, resourceID)
@@ -160,8 +161,9 @@ func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, tgd 
 
 	transferTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: ociv1alpha1.TransferOCIArtifactV1alpha1,
-			ID:   transferID,
+			Type:  ociv1alpha1.TransferOCIArtifactV1alpha1,
+			ID:    transferID,
+			Label: label,
 		},
 		Spec: unstructured,
 	}
@@ -172,7 +174,7 @@ func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, tgd 
 	return nil
 }
 
-func ociUploadAsArtifact(toSpec runtime.Typed, addResourceID string, getResourceID string, referenceName referenceNameOption) (transformv1alpha1.GenericTransformation, error) {
+func ociUploadAsArtifact(toSpec runtime.Typed, addResourceID string, getResourceID string, referenceName referenceNameOption, label string) (transformv1alpha1.GenericTransformation, error) {
 	var ociSpec ocirepo.Repository
 	if err := scheme.Convert(toSpec, &ociSpec); err != nil {
 		return transformv1alpha1.GenericTransformation{}, err
@@ -184,8 +186,9 @@ func ociUploadAsArtifact(toSpec runtime.Typed, addResourceID string, getResource
 
 	addResourceTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version),
-			ID:   addResourceID,
+			Type:  runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version),
+			ID:    addResourceID,
+			Label: label,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
 			"resource": map[string]any{

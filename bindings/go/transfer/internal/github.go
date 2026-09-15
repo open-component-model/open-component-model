@@ -33,14 +33,15 @@ func processGitHub(resource descriptorv2.Resource, access *githubv1.GitHub, id s
 
 	getTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: githubv1alpha1.GetGitHubCommitV1alpha1,
-			ID:   getResourceID,
+			Type:  githubv1alpha1.GetGitHubCommitV1alpha1,
+			ID:    getResourceID,
+			Label: resourceLabel(&val.Descriptor.Component, "Get", resource.Name),
 		},
 		Spec: unstructured,
 	}
 	tgd.Transformations = append(tgd.Transformations, getTransform)
 
-	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, staticReferenceName(resource.Name))
+	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, staticReferenceName(resource.Name), resourceLabel(&val.Descriptor.Component, "Add", resource.Name))
 	if err != nil {
 		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
 	}

@@ -43,8 +43,9 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 	// Create GetLocalResource transformation
 	getResourceTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: getLocalResourceType,
-			ID:   getResourceID,
+			Type:  getLocalResourceType,
+			ID:    getResourceID,
+			Label: resourceLabel(&val.Descriptor.Component, "Get", resource.Name),
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
 			"repository":       sourceRepoUnstructured.Data,
@@ -70,8 +71,9 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 		// Create AddLocalResource transformation
 		addResourceTransform = transformv1alpha1.GenericTransformation{
 			TransformationMeta: meta.TransformationMeta{
-				Type: addLocalResourceType,
-				ID:   addResourceID,
+				Type:  addLocalResourceType,
+				ID:    addResourceID,
+				Label: resourceLabel(&val.Descriptor.Component, "Add", resource.Name),
 			},
 			Spec: &runtime.Unstructured{Data: map[string]any{
 				"repository": toRepo.Data,
@@ -92,8 +94,9 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 		}
 		addResourceTransform = transformv1alpha1.GenericTransformation{
 			TransformationMeta: meta.TransformationMeta{
-				Type: runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version),
-				ID:   addResourceID,
+				Type:  runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version),
+				ID:    addResourceID,
+				Label: resourceLabel(&val.Descriptor.Component, "Add", resource.Name),
 			},
 			Spec: &runtime.Unstructured{Data: map[string]any{
 				"resource": map[string]any{
@@ -127,7 +130,7 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 // (OCI registry or CTF) via chooseAddLocalResourceType.
 // It uses the output of the preceding Get transformation to populate the fields of the
 // AddLocalResource transformation, ensuring that the same resource is referenced and uploaded.
-func uploadAsLocalResource(toSpec runtime.Typed, component, version, addResourceID, getResourceID string, referenceName referenceNameOption) (transformv1alpha1.GenericTransformation, error) {
+func uploadAsLocalResource(toSpec runtime.Typed, component, version, addResourceID, getResourceID string, referenceName referenceNameOption, label string) (transformv1alpha1.GenericTransformation, error) {
 	addLocalResourceType, err := chooseAddLocalResourceType(toSpec)
 	if err != nil {
 		return transformv1alpha1.GenericTransformation{}, fmt.Errorf("choosing add local resource type for target repository: %w", err)
@@ -140,8 +143,9 @@ func uploadAsLocalResource(toSpec runtime.Typed, component, version, addResource
 
 	addResourceTransform := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: addLocalResourceType,
-			ID:   addResourceID,
+			Type:  addLocalResourceType,
+			ID:    addResourceID,
+			Label: label,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
 			"repository": toRepo.Data,

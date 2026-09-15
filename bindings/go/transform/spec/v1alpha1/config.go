@@ -34,8 +34,10 @@ type GenericTransformation struct {
 }
 
 func (t *GenericTransformation) AsRaw() *runtime.Raw {
+	stripped := *t
+	stripped.Label = "" // Label is display-only metadata, exclude as in `AsUnstructured`
 	var r runtime.Raw
-	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(t, &r); err != nil {
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(&stripped, &r); err != nil {
 		panic(err)
 	}
 	return &r

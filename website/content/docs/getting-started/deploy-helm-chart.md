@@ -127,7 +127,7 @@ ocm transfer cv transport-archive//ocm.software/ocm-k8s-toolkit/simple:1.0.0 $OC
 
 ```text
 Transferring component versions...
-  ✓ transformOcmSoftwareOcmK8sToolkitSimple100Upload [OCIAddComponentVersion]
+  ✓ simple@1.0.0 [Upload]
   [████████████████████████████████████████] 100% 1/1
 ```
 </details>
