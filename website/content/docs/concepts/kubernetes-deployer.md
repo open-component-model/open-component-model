@@ -101,7 +101,7 @@ how-to applies a Deployment straight from an OCM component using only the OCM Co
 
 The [Deploy a Helm Chart]({{< relref "/docs/getting-started/deploy-helm-chart.md" >}}) getting-started tutorial
 walks through applying a `ResourceGraphDefinition` for the [Podinfo](https://github.com/stefanprodan/podinfo)
-application using the Deployer, with the RGD written and applied by hand. Start here if you're new to RGDs.
+application using the `Deployer`, with the RGD written and applied by hand. Start here if you're new to RGDs.
 
 ### Helm chart, RGD shipped inside the component (bootstrap pattern)
 
