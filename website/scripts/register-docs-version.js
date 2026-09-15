@@ -6,7 +6,8 @@
  *   node scripts/register-docs-version.js X.Y.Z --cli-gomod <path>
  *
  * Behavior:
- * - Accepts SemVer version X.Y.Z, derives minor identifier X.Y
+ * - Accepts SemVer version X.Y.Z (derives minor identifier X.Y) or release
+ *   candidate X.Y.Z-rc.N (full version becomes the matrix key, never default)
  * - Ensures hugo.yaml has the version entry (idempotent, creates if missing)
  * - Ensures module.yaml has import blocks (creates if missing, updates tags if present)
  * - Pins bindings schema imports to the monolithic bindings/go module when the
@@ -47,19 +48,52 @@ function dumpYaml(parsed) {
     return yaml.dump(parsed, { lineWidth: -1, noRefs: true });
 }
 
-// Compare two SemVer strings (X.Y or X.Y.Z). Returns <0 if a<b, >0 if a>b, 0 if equal.
-function compareSemver(a, b) {
-    const pa = a.split('.').map(Number);
-    const pb = b.split('.').map(Number);
-    const len = Math.max(pa.length, pb.length);
-    for (let i = 0; i < len; i++) {
-        const av = pa[i] || 0;
-        const bv = pb[i] || 0;
-        if (av !== bv) {
-            return av - bv;
-        }
+// Version keys this script compares: finals as minor keys (X.Y) or full
+// versions (X.Y.Z), release candidates as full X.Y.Z-rc.N keys.
+const VERSION_KEY_PATTERN = /^(\d+)\.(\d+)(?:\.(\d+))?(?:-rc\.(\d+))?$/;
+
+// True for full-version RC keys like 0.16.0-rc.2.
+const RC_KEY_PATTERN = /-rc\.\d+$/;
+
+function parseVersionKey(input) {
+    const m = typeof input === 'string' ? VERSION_KEY_PATTERN.exec(input) : null;
+    if (!m) {
+        throw new Error(`Cannot compare version '${input}': expected X.Y, X.Y.Z or X.Y.Z-rc.N`);
     }
-    return 0;
+    return {
+        major: Number(m[1]),
+        minor: Number(m[2]),
+        patch: m[3] === undefined ? 0 : Number(m[3]),
+        rc: m[4] === undefined ? null : Number(m[4]),
+    };
+}
+
+// Compare two version keys (X.Y, X.Y.Z or X.Y.Z-rc.N). Returns <0 if a<b,
+// >0 if a>b, 0 if equal. SemVer rule on equal numeric bases: a version with a
+// prerelease sorts BELOW its release (0.16.0-rc.2 < 0.16); two prereleases
+// compare by rc number (0.16.0-rc.2 > 0.16.0-rc.1).
+function compareSemver(a, b) {
+    const pa = parseVersionKey(a);
+    const pb = parseVersionKey(b);
+    if (pa.major !== pb.major) {
+        return pa.major - pb.major;
+    }
+    if (pa.minor !== pb.minor) {
+        return pa.minor - pb.minor;
+    }
+    if (pa.patch !== pb.patch) {
+        return pa.patch - pb.patch;
+    }
+    if (pa.rc === null && pb.rc === null) {
+        return 0;
+    }
+    if (pa.rc === null) {
+        return 1; // release > prerelease
+    }
+    if (pb.rc === null) {
+        return -1;
+    }
+    return pa.rc - pb.rc;
 }
 
 // Special version keys that are not SemVer
@@ -151,16 +185,19 @@ function parseArguments(args) {
     }
 
     const fullVersion = positionals[0];
-    const versionPattern = /^\d+\.\d+\.\d+$/;
-    if (!versionPattern.test(fullVersion)) {
-        throw new Error(`Invalid version '${fullVersion}'. Expected X.Y.Z, without "v" or suffixes, e.g. 1.2.3`);
+    if (/^\d+\.\d+\.\d+-rc\.\d+$/.test(fullVersion)) {
+        // Release candidate: the full X.Y.Z-rc.N is the matrix key.
+        return { version: fullVersion, fullVersion, cliGomod: flags.cliGomod, isRc: true };
+    }
+    const finalMatch = /^(\d+)\.(\d+)\.\d+$/.exec(fullVersion);
+    if (!finalMatch) {
+        throw new Error(`Invalid version '${fullVersion}'. Expected X.Y.Z or X.Y.Z-rc.N, without "v" or other suffixes, e.g. 1.2.3 or 1.2.3-rc.1`);
     }
 
     // Derive X.Y from X.Y.Z
-    const parts = fullVersion.split('.');
-    const version = `${parts[0]}.${parts[1]}`;
+    const version = `${finalMatch[1]}.${finalMatch[2]}`;
 
-    return { version, fullVersion, cliGomod: flags.cliGomod };
+    return { version, fullVersion, cliGomod: flags.cliGomod, isRc: false };
 }
 
 // True if at least one import references this version in its site matrix.
@@ -175,7 +212,10 @@ function hasAnyImportForVersion(parsed, version) {
 // lack newer bindings). A mismatch (hasAny=true, hasAll=false) indicates a
 // corrupted partial state.
 function hasAllImportsForVersion(parsed, version, deps) {
-    const { imports: expected } = buildModuleBlocks(version, `${version}.0`, deps);
+    // RC keys already are full versions (0.16.0-rc.2); final minor keys
+    // (0.16) probe the minor's .0 patch of the always-pinned imports.
+    const fullVersion = RC_KEY_PATTERN.test(version) ? version : `${version}.0`;
+    const { imports: expected } = buildModuleBlocks(version, fullVersion, deps);
     const existingByPath = new Map(
         (parsed?.imports || [])
             .filter(i => i?.mounts?.some(m => m?.sites?.matrix?.versions?.includes(version)))
@@ -278,10 +318,19 @@ const MONOLITHIC_BINDINGS_MODULE = `${MODULE_PREFIX}/bindings/go`;
 // paths, whose git tags exist only at the old locations.
 const CLI_CONTROLLER_MERGE_MINOR = '0.16';
 
+// The major.minor base of a version key. An RC key (0.16.0-rc.2) belongs to
+// the vintage of its minor (0.16), so layout decisions that key off the merge
+// minor must use this base, not the prerelease-aware compareSemver ordering
+// (in which 0.16.0-rc.2 < 0.16).
+function versionMinor(version) {
+    const m = /^(\d+)\.(\d+)/.exec(version);
+    return m ? `${m[1]}.${m[2]}` : version;
+}
+
 // Return the cli module import path for a docs version. Post-merge the cli is a
 // package inside the bindings/go module.
 function cliModulePath(version) {
-    return compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) >= 0
+    return compareSemver(versionMinor(version), CLI_CONTROLLER_MERGE_MINOR) >= 0
         ? `${MODULE_PREFIX}/bindings/go/cli`
         : `${MODULE_PREFIX}/cli`;
 }
@@ -289,7 +338,7 @@ function cliModulePath(version) {
 // Return the controller module import path for a docs version. Post-merge the
 // controller is a package inside the bindings/go module.
 function controllerModulePath(version) {
-    return compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) >= 0
+    return compareSemver(versionMinor(version), CLI_CONTROLLER_MERGE_MINOR) >= 0
         ? `${MODULE_PREFIX}/bindings/go/kubernetes/controller`
         : `${MODULE_PREFIX}/kubernetes/controller`;
 }
@@ -418,7 +467,9 @@ function buildModuleBlocks(version, fullVersion, deps) {
  * @returns {string|null} removed version key, or null if no retirement needed
  */
 function retireOldestVersion(versions) {
-    const semverKeys = Object.keys(versions).filter(k => !SPECIAL_VERSIONS.has(k));
+    // RC keys neither count against the limit nor are retired here; they are
+    // purged when the final of their minor is registered.
+    const semverKeys = Object.keys(versions).filter(k => !SPECIAL_VERSIONS.has(k) && !RC_KEY_PATTERN.test(k));
     if (semverKeys.length <= MAX_MINOR_VERSIONS) {
         return null;
     }
@@ -427,6 +478,31 @@ function retireOldestVersion(versions) {
     const oldest = semverKeys[0];
     delete versions[oldest];
     return oldest;
+}
+
+/**
+ * Remove all RC version keys (X.Y.Z-rc.N) belonging to a minor from the
+ * hugo.yaml versions object. Called when the final of that minor is
+ * registered. No-op when no RC keys exist.
+ *
+ * @param {Object} hugoVersions - versions object from hugo.yaml
+ * @param {string} minor - minor version (X.Y)
+ * @returns {string[]} the removed RC keys
+ */
+function removeRcVersionsForMinor(hugoVersions, minor) {
+    if (!hugoVersions) {
+        return [];
+    }
+    const escapedMinor = minor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rcKeyForMinor = new RegExp(`^${escapedMinor}\\.\\d+-rc\\.\\d+$`);
+    const removed = [];
+    for (const key of Object.keys(hugoVersions)) {
+        if (rcKeyForMinor.test(key)) {
+            delete hugoVersions[key];
+            removed.push(key);
+        }
+    }
+    return removed;
 }
 
 /**
@@ -491,16 +567,31 @@ function removeImportsForVersion(parsed, version) {
 }
 
 // Update hugo.yaml: add version, set default, retire old.
-async function updateHugoConfig(version) {
-    const content = await fsp.readFile(HUGO_CONFIG, 'utf-8').catch(e => fail(`Read hugo.yaml: ${e.message}`));
+// RC versions (full-version keys like 0.16.0-rc.2) are never promoted to
+// defaultContentVersion. Registering the final X.Y of a minor purges all of
+// that minor's RC keys, with weights reassigned in the same write.
+async function updateHugoConfig(version, { hugoConfigPath = HUGO_CONFIG } = {}) {
+    const content = await fsp.readFile(hugoConfigPath, 'utf-8').catch(e => fail(`Read hugo.yaml: ${e.message}`));
     const parsed = yaml.load(content) || {};
 
+    const isRc = RC_KEY_PATTERN.test(version);
     const alreadyExists = !!(parsed.versions && parsed.versions[version]);
+
+    // Final registration purges the minor's RC keys.
+    let removedRcKeys = [];
+    if (!isRc && parsed.versions) {
+        removedRcKeys = removeRcVersionsForMinor(parsed.versions, version);
+        for (const rcKey of removedRcKeys) {
+            console.log(`hugo.yaml: removed RC version '${rcKey}' (final ${version} registered).`);
+        }
+    }
 
     parsed.versions = assignVersionWeights(parsed.versions || {}, version);
 
     if (alreadyExists) {
         console.log(`hugo.yaml: version ${version} already exists, skipping.`);
+    } else if (isRc) {
+        console.log(`hugo.yaml: added RC version ${version}; defaultContentVersion remains '${parsed.defaultContentVersion}' (RCs are never the default).`);
     } else {
         const oldDefault = parsed.defaultContentVersion;
         if (!oldDefault || compareSemver(version, oldDefault) > 0) {
@@ -517,17 +608,17 @@ async function updateHugoConfig(version) {
         console.log(`hugo.yaml: retired oldest version '${retired}' (exceeded ${MAX_MINOR_VERSIONS} minor versions).`);
     }
 
-    await fsp.writeFile(HUGO_CONFIG, HUGO_HEADER + dumpYaml(parsed), 'utf-8');
+    await fsp.writeFile(hugoConfigPath, HUGO_HEADER + dumpYaml(parsed), 'utf-8');
     if (!alreadyExists) {
         console.log(`hugo.yaml: added version ${version} (weights reassigned).`);
     }
 
-    return retired;
+    return { retired, removedRcKeys };
 }
 
 // Update module.yaml: ensure imports exist for a version, update tags,
 // optionally retire old version.
-async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion } = {}) {
+async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion, removedRcKeys = [] } = {}) {
     const content = await fsp.readFile(MODULE_CONFIG, 'utf-8').catch(e => fail(`Read module.yaml: ${e.message}`));
     const parsed = yaml.load(content) || {};
 
@@ -592,6 +683,12 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
         console.log(`module.yaml: removed imports for retired version '${retiredVersion}'.`);
     }
 
+    // Purge the import blocks of RC keys whose final was just registered.
+    for (const rcKey of removedRcKeys) {
+        removeImportsForVersion(parsed, rcKey);
+        console.log(`module.yaml: removed imports for RC version '${rcKey}' (final ${version} registered).`);
+    }
+
     await fsp.writeFile(MODULE_CONFIG, MODULE_HEADER + dumpYaml(parsed), 'utf-8');
 }
 
@@ -603,8 +700,8 @@ async function main() {
         fail('--cli-gomod <path> is required. Provide the path to the CLI go.mod for the release being versioned.');
     }
 
-    const retired = await updateHugoConfig(version);
-    await updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion: retired });
+    const { retired, removedRcKeys } = await updateHugoConfig(version);
+    await updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion: retired, removedRcKeys });
 
     console.log('Docs version registered.');
 }
@@ -616,4 +713,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, resolveGoModVersions, CLI_DERIVED_MODULES, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS };
+module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, removeRcVersionsForMinor, removeImportsForVersion, updateHugoConfig, updateImportTags, resolveGoModVersions, CLI_DERIVED_MODULES, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS };

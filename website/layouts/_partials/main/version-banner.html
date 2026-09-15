@@ -25,6 +25,11 @@
       You are viewing documentation for the <strong>legacy</strong> OCM version.
       For up-to-date documentation, see the
       <a class="version-warning-link" href="{{ $defaultLink }}">latest version{{ with $defaultName }} ({{ . }}){{ end }}</a>.
+    {{- else if strings.Contains $currentVer "-rc." -}}
+      You are viewing pre-release documentation for <strong>v{{ $currentVer }}</strong>.
+      It reflects a release candidate and may change or be removed before the final release.
+      For the current release, see the
+      <a class="version-warning-link" href="{{ $defaultLink }}">latest version{{ with $defaultName }} ({{ . }}){{ end }}</a>.
     {{- else -}}
       You are not viewing the current OCM documentation (<strong>{{ $currentVer }}</strong>).
       For up-to-date documentation, see the

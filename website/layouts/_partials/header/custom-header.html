@@ -119,7 +119,7 @@
                             <button class="btn btn-link nav-link p-0 dropdown-toggle btn-dropdown" id="doks-versions"
                                 data-bs-toggle="dropdown" aria-expanded="false" data-bs-display="static"
                                 aria-label="Toggle version menu">
-                                {{ $.Site.Version.Name }}{{ if $.Site.Version.IsDefault }} (latest){{ end }}
+                                {{ $.Site.Version.Name }}{{ if $.Site.Version.IsDefault }} (latest){{ end }}{{ if strings.Contains $.Site.Version.Name "-rc." }} (RC){{ end }}
                                 <span class="dropdown-caret">
                                     <svg xmlns="http://www.w3.org/2000/svg"
                                         class="icon icon-tabler icon-tabler-chevron-down" width="20" height="20"
@@ -141,7 +141,7 @@
                                     <li>
                                       <a class="dropdown-item{{ if $isCurrent }} current{{ end }}" {{ if $isCurrent }}aria-current="true" {{ end }}
                                          href="{{ .RelPermalink }}">
-                                        {{ $name }}{{ if $isDefault }} <span class="version-flag">(latest)</span>{{ end }}
+                                        {{ $name }}{{ if $isDefault }} <span class="version-flag">(latest)</span>{{ end }}{{ if strings.Contains $name "-rc." }} <span class="version-flag">(RC)</span>{{ end }}
                                       </a>
                                     </li>
                                   {{ end }}
