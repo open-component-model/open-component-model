@@ -555,12 +555,16 @@ function syncUnversionedMountVersions(parsed, { added, retired } = {}) {
     const targets = new Set(['content/blog', 'content/community', 'content/governance']);
     let changed = 0;
     for (const m of parsed.mounts || []) {
-        if (!targets.has(m.source)) continue;
+        if (!targets.has(m.source)) {
+            continue;
+        }
         m.sites = m.sites || { matrix: {} };
         m.sites.matrix = m.sites.matrix || {};
         const versions = Array.isArray(m.sites.matrix.versions) ? m.sites.matrix.versions : [];
         const next = versions.filter(v => v !== retired);
-        if (added && !next.includes(added)) next.push(added);
+        if (added && !next.includes(added)) {
+            next.push(added);
+        }
         if (JSON.stringify(next) !== JSON.stringify(versions)) {
             m.sites.matrix.versions = next;
             changed++;
