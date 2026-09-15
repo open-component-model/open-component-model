@@ -317,7 +317,7 @@ On success it prints a summary table:
 
 Transfer it to your registry. `--copy-resources` copies the image into your registry instead
 of leaving the component pointing back at `ghcr.io/stefanprodan`, and `--upload-as ociArtifact`
-is what makes it land as a pullable artifact instead of an internal blob; see [Resource
+is what creates a standalone oci image that can be pulled individually; see [Resource
 Handling: References vs. Copies]({{< relref "docs/concepts/transfer-concept.md#resource-handling-references-vs-copies" >}})
 for why that distinction exists.
 
