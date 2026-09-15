@@ -126,10 +126,24 @@ jobs:
             version="${tag#v}"
             echo "=== Registering docs for ${version} ===" | tee -a "$LOG_FILE"
             git fetch origin "refs/tags/${tag}:refs/tags/${tag}" --no-tags
-            if [[ "$tag" == *-rc.* ]] \
-              && ! git ls-remote --exit-code --tags origin "refs/tags/website/${tag}" > /dev/null; then
-              echo "::warning::skipping ${version}: no website/${tag} tag (RC predates website RC tags)" | tee -a "$LOG_FILE"
-              continue
+            if [[ "$tag" == *-rc.* ]]; then
+              # Skip only when the website/ tag genuinely does not exist
+              # (ls-remote exit 2 = no matching ref, i.e. the RC predates
+              # website RC tags). Any other failure is transient
+              # infrastructure trouble and must fail loudly, not silently
+              # drop the RC from the PR.
+              set +e
+              git ls-remote --exit-code --tags origin "refs/tags/website/${tag}" > /dev/null
+              ls_rc=$?
+              set -e
+              if [[ $ls_rc -eq 2 ]]; then
+                echo "::warning::skipping ${version}: no website/${tag} tag (RC predates website RC tags)" | tee -a "$LOG_FILE"
+                continue
+              fi
+              if [[ $ls_rc -ne 0 ]]; then
+                echo "::error::cannot verify refs/tags/website/${tag} (git ls-remote exit ${ls_rc})" | tee -a "$LOG_FILE"
+                exit 1
+              fi
             fi
             gomod="${{ runner.temp }}/cli-go-${version}.mod"
             git show "${tag}:bindings/go/go.mod" > "$gomod"

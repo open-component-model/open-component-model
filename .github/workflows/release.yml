@@ -189,7 +189,7 @@ jobs:
           git_user_signingkey: true
           git_tag_gpgsign: true
 
-      - name: Create RC tags (canonical + bindings/go side tag)
+      - name: Create RC tags (canonical + bindings/go + website side tags)
         id: tag
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
@@ -718,7 +718,7 @@ jobs:
 
   # === Website version release (final) ===
   # Final counterpart of create_website_rc_update_pr above. Dispatches
-  # website-release-pr.yml on main via gh workflow run so the
+  # website-v2-release-docs.yml on main via gh workflow run so the
   # logic always executes from main's copy of the workflow, regardless of
   # which release branch triggered this release. A workflow_call would load
   # the callee from the caller's ref.
