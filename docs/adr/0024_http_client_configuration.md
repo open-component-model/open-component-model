@@ -51,7 +51,7 @@ Six pointer-typed duration fields. Pointers preserve the *unset / zero / positiv
 
 | Field                   | Default | Meaning                                                                     |
 |-------------------------|---------|-----------------------------------------------------------------------------|
-| `timeout`               | `30s`   | Total request budget (connect + headers + body read). Zero = no timeout.    |
+| `timeout`               | `0s`    | Total request budget (connect + headers + body read). Zero = no timeout.    |
 | `tcpDialTimeout`        | `30s`   | Max time for TCP connect.                                                   |
 | `tcpKeepAlive`          | `30s`   | Keep-alive probe interval. Negative disables probes.                        |
 | `tlsHandshakeTimeout`   | `10s`   | Max time for TLS handshake. Zero = no timeout.                              |
@@ -59,7 +59,9 @@ Six pointer-typed duration fields. Pointers preserve the *unset / zero / positiv
 | `idleConnTimeout`       | `90s`   | Max idle keep-alive connection lifetime. Zero = no limit.                   |
 
 Negative values are rejected by `Validate` except `tcpKeepAlive` (negative disables probes, consistent with `net.Dialer.KeepAlive`).
-The `30s` default for `timeout` is injected by `ResolveHTTPConfig`, not `Scheme.Convert`, so tests can inspect the literal YAML value.
+The `0s` default for `timeout` is injected by `ResolveHTTPConfig`, not
+`Scheme.Convert`, so resolved clients have no overall request deadline while
+the literal YAML value remains inspectable in conversion tests.
 
 ### Per-host overrides
 
@@ -99,7 +101,7 @@ When no per-host routing is needed the chain collapses and `http.Client.Timeout`
 package v1alpha1
 
 const ConfigType = "http.config.ocm.software"
-const DefaultTimeout = Timeout(30 * time.Second)
+const DefaultTimeout = Timeout(0)
 
 type Timeout time.Duration // marshals as "30s", "5m", ...
 

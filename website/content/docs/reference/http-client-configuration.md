@@ -46,7 +46,7 @@ All fields are optional. When omitted, OCM applies these defaults:
 
 | Field                    | Default                              |
 |--------------------------|--------------------------------------|
-| `timeout`                | `30s`                                |
+| `timeout`                | `0s` (no overall deadline)           |
 | `retry.maxRetries`       | `5`                                  |
 | `retry.minWait`          | `200ms`                              |
 | `retry.maxWait`          | `3s`                                 |
@@ -63,8 +63,10 @@ all other fields reject negative values.
 
 ### `timeout` and Retries
 
-`timeout` covers the **entire** HTTP request including all retry attempts and
-their backoff waits — it is not reset between retries. Pick `timeout` large
+`timeout` covers the **entire** HTTP request, including retry attempts, their
+backoff waits, and the response body. It defaults to `0s`, allowing large
+response bodies to stream to completion regardless of duration. When configured
+with a positive value, it is not reset between retries. Pick a value large
 enough to cover the worst-case retry chain:
 `timeout ≥ slowestAttempt × (maxRetries + 1) + maxWait × maxRetries`.
 
