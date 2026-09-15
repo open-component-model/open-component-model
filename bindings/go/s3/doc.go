@@ -105,8 +105,9 @@
 // On AWS the request host is derived by the SDK's endpoint resolver and is not known
 // when the client is built, so a per-host entry does not reach it and the global
 // setting stands. A download's wall-clock ceiling is roughly the attempt count times
-// the ocm timeout (30s by default), and SDK retry ends once the response headers are
-// deserialised, so it does not cover a body that fails mid-stream.
+// the configured OCM timeout; by default there is no wall-clock limit. SDK
+// retry ends once the response headers are deserialised, so it does not cover a
+// body that fails mid-stream.
 //
 // # Credential consumer identity
 //
