@@ -32,13 +32,13 @@ func processS3(resource v2.Resource, id string, val *discoveryValue, tgd *transf
 		TransformationMeta: meta.TransformationMeta{
 			Type:  s3v1alpha1.DownloadS3ResourceV1alpha1,
 			ID:    getResourceID,
-			Label: resourceLabel(&val.Descriptor.Component, "Get", resource.Name),
+			Label: getLabel(&val.Descriptor.Component, resource.Name),
 		},
 		Spec: unstructured,
 	}
 	tgd.Transformations = append(tgd.Transformations, getTransform)
 
-	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, staticReferenceName(resource.Name), resourceLabel(&val.Descriptor.Component, "Add", resource.Name))
+	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, staticReferenceName(resource.Name), addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec))
 	if err != nil {
 		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
 	}

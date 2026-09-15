@@ -45,7 +45,7 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 		TransformationMeta: meta.TransformationMeta{
 			Type:  getLocalResourceType,
 			ID:    getResourceID,
-			Label: resourceLabel(&val.Descriptor.Component, "Get", resource.Name),
+			Label: getLabel(&val.Descriptor.Component, resource.Name),
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
 			"repository":       sourceRepoUnstructured.Data,
@@ -73,7 +73,7 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 			TransformationMeta: meta.TransformationMeta{
 				Type:  addLocalResourceType,
 				ID:    addResourceID,
-				Label: resourceLabel(&val.Descriptor.Component, "Add", resource.Name),
+				Label: addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec),
 			},
 			Spec: &runtime.Unstructured{Data: map[string]any{
 				"repository": toRepo.Data,
@@ -96,7 +96,7 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 			TransformationMeta: meta.TransformationMeta{
 				Type:  runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version),
 				ID:    addResourceID,
-				Label: resourceLabel(&val.Descriptor.Component, "Add", resource.Name),
+				Label: addLabel(&val.Descriptor.Component, resource.Name, "OCIArtifact", toSpec),
 			},
 			Spec: &runtime.Unstructured{Data: map[string]any{
 				"resource": map[string]any{

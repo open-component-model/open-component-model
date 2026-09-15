@@ -17,7 +17,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 	if uploadAsOCIArtifact {
 		var ociTarget ocirepo.Repository
 		if err := scheme.Convert(toSpec, &ociTarget); err == nil {
-			return processOCIArtifactStreaming(resource, id, tgd, toSpec, resourceTransformIDs, i, resourceLabel(&val.Descriptor.Component, "Transfer", resource.Name))
+			return processOCIArtifactStreaming(resource, id, tgd, toSpec, resourceTransformIDs, i, transferLabel(&val.Descriptor.Component, resource.Name, toSpec))
 		}
 		// toSpec is not an OCI repository — fall through to the legacy Get+Add path.
 	}
@@ -54,7 +54,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 		TransformationMeta: meta.TransformationMeta{
 			Type:  ociv1alpha1.GetOCIArtifactV1alpha1,
 			ID:    getResourceID,
-			Label: resourceLabel(&val.Descriptor.Component, "Get", resource.Name),
+			Label: getLabel(&val.Descriptor.Component, resource.Name),
 		},
 		Spec: unstructured,
 	}
@@ -62,7 +62,7 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 
 	// Create AddLocalResource transformation
 	var addResourceTransform transformv1alpha1.GenericTransformation
-	if addResourceTransform, err = uploadAsLocalResource(toSpec, component, version, addResourceID, getResourceID, staticReferenceName(referenceName), resourceLabel(&val.Descriptor.Component, "Add", resource.Name)); err != nil {
+	if addResourceTransform, err = uploadAsLocalResource(toSpec, component, version, addResourceID, getResourceID, staticReferenceName(referenceName), addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec)); err != nil {
 		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
 	}
 

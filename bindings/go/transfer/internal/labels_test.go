@@ -1,12 +1,14 @@
 package internal
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -29,16 +31,34 @@ func TestComponentLabel(t *testing.T) {
 
 func TestUploadLabel(t *testing.T) {
 	r := require.New(t)
-	r.Equal("my-app@1.0.0 [Upload]", uploadLabel(testComponent("ocm.software/my-app", "1.0.0"), 0, 1))
-	r.Equal("my-app@1.0.0 [Upload → target 1]", uploadLabel(testComponent("ocm.software/my-app", "1.0.0"), 0, 2))
-	r.Equal("my-app@1.0.0 [Upload → target 2]", uploadLabel(testComponent("ocm.software/my-app", "1.0.0"), 1, 2))
+	r.Equal("my-app@1.0.0 [Upload to OCI]", uploadLabel(testComponent("ocm.software/my-app", "1.0.0"), testOCIRepo("ghcr.io/t"), 0, 1))
+	r.Equal("my-app@1.0.0 [Upload to OCI → target 1]", uploadLabel(testComponent("ocm.software/my-app", "1.0.0"), testOCIRepo("ghcr.io/t"), 0, 2))
+	r.Equal("my-app@1.0.0 [Upload to OCI → target 2]", uploadLabel(testComponent("ocm.software/my-app", "1.0.0"), testOCIRepo("ghcr.io/t"), 1, 2))
 }
 
-func TestResourceLabel(t *testing.T) {
+func TestTargetKind(t *testing.T) {
 	r := require.New(t)
-	r.Equal("test@0.1.0 [Get myapp]", resourceLabel(testComponent("ocm.software/test", "0.1.0"), "Get", "myapp"))
-	r.Equal("test@0.1.0 [Add icons]", resourceLabel(testComponent("ocm.software/test", "0.1.0"), "Add", "icons"))
-	r.Equal("test@0.1.0 [Convert chart]", resourceLabel(testComponent("ocm.software/test", "0.1.0"), "Convert", "chart"))
+	r.Equal("OCI", targetKind(testOCIRepo("ghcr.io/t")))
+	r.Equal("CTF", targetKind(testCTFRepo("./out")))
+
+	// Raw specs must resolve to the concrete type before the short name is decided.
+	data, err := json.Marshal(testOCIRepo("ghcr.io/t"))
+	r.NoError(err)
+	raw := &runtime.Raw{Type: runtime.Type{Name: oci.Type, Version: oci.Version}, Data: data}
+	r.Equal("OCI", targetKind(raw))
+}
+
+func TestResourceLabels(t *testing.T) {
+	r := require.New(t)
+	c := testComponent("ocm.software/test", "0.1.0")
+	ociTgt := testOCIRepo("ghcr.io/t")
+	ctfTgt := testCTFRepo("./out")
+
+	r.Equal("test@0.1.0 [Get myapp]", getLabel(c, "myapp"))
+	r.Equal("test@0.1.0 [Add icons as LocalBlob to CTF]", addLabel(c, "icons", "LocalBlob", ctfTgt))
+	r.Equal("test@0.1.0 [Add icons as OCIArtifact to OCI]", addLabel(c, "icons", "OCIArtifact", ociTgt))
+	r.Equal("test@0.1.0 [Convert chart to OCIArtifact]", convertLabel(c, "chart"))
+	r.Equal("test@0.1.0 [Transfer icons to OCI]", transferLabel(c, "icons", ociTgt))
 }
 
 // assertLabel checks the label of the transformation with the given ID.
@@ -78,9 +98,9 @@ func TestBuildGraphDefinition_Labels(t *testing.T) {
 	iconsResource := localBlobResource("icons", "1.0.0")
 	resourceID := identityToTransformationID(iconsResource.ToIdentity())
 
-	assertLabel(t, r, tgd, componentID+"Upload", "my-app@1.0.0 [Upload]")
+	assertLabel(t, r, tgd, componentID+"Upload", "my-app@1.0.0 [Upload to OCI]")
 	assertLabel(t, r, tgd, componentID+"Get"+resourceID, "my-app@1.0.0 [Get icons]")
-	assertLabel(t, r, tgd, componentID+"Add"+resourceID, "my-app@1.0.0 [Add icons]")
+	assertLabel(t, r, tgd, componentID+"Add"+resourceID, "my-app@1.0.0 [Add icons as LocalBlob to OCI]")
 	// the cleanup transformation buffers the Add outputs, so it must exist and carry
 	// the shared cleanup label
 	assertLabel(t, r, tgd, "fileBufferCleanup", cleanupLabel)

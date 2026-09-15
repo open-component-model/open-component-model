@@ -216,7 +216,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 			allFileRefs = append(allFileRefs, fileRefs...)
 
 			if err := addUploadTransformation(v2desc, id, baseID, target, tgd, resourceTransformIDs,
-				uploadLabel(&val.Descriptor.Component, targetIdx, len(targets))); err != nil {
+				uploadLabel(&val.Descriptor.Component, target, targetIdx, len(targets))); err != nil {
 				return err
 			}
 		}
