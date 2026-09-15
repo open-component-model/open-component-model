@@ -35,12 +35,10 @@ type Renderer[T cmp.Ordered] struct {
 	// The tableWriter outputs a table and holds the visual NESTING column.
 	// It manages the formatting/style and the output destination.
 	tableWriter table.Writer
-	// The VertexSerializer serializes a vertex to a Row struct.
+	// The VertexSerializer serializes a vertex to a Row struct. The Row may
+	// carry nested Children rows, which are rendered below the vertex row.
 	// It MUST perform READ-ONLY access to the vertex and its attributes.
 	vertexSerializer VertexSerializer[T]
-	// subRowProvider optionally yields additional leaf rows rendered as children
-	// of a vertex (for example the resources of a component version).
-	subRowProvider SubRowProvider[T]
 	// Tree drawing style used for the NESTING column.
 	style TreeStyle
 	// Table style used for the go-pretty table renderer.
@@ -74,7 +72,6 @@ func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcycli
 	return &Renderer[T]{
 		tableWriter:      table.NewWriter(),
 		vertexSerializer: options.VertexSerializer,
-		subRowProvider:   options.SubRowProvider,
 		style:            DefaultTreeStyle,
 		tableStyle:       defaultTableStyle(),
 		roots:            options.Roots,
@@ -159,15 +156,10 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, lockedGraph *dag.Direct
 		return fmt.Errorf("failed to get sorted children of vertex %v: %w", vertex.ID, err)
 	}
 
-	// Optional leaf rows (for example resources) rendered as children of this
-	// vertex, before the component-reference children.
-	var subRows []Row
-	if t.subRowProvider != nil {
-		subRows, err = t.subRowProvider.SubRows(vertex)
-		if err != nil {
-			return fmt.Errorf("failed to build sub-rows of vertex %v: %w", vertex.ID, err)
-		}
-	}
+	// Optional rows for the elements contained in the vertex (for example the
+	// resources of a component version). They are rendered before the rows of
+	// the graph children.
+	subRows := row.Children
 
 	totalChildren := len(subRows) + len(children)
 	hasChildren := totalChildren > 0
@@ -180,11 +172,10 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, lockedGraph *dag.Direct
 	nextAncestors = append(nextAncestors, !isLast)
 
 	childIndex := 0
-	// Render sub-rows first as leaf children.
+	// Render the rows of the vertex elements first.
 	for _, subRow := range subRows {
 		childIsLast := childIndex == totalChildren-1
-		subNesting := buildNesting(t.style, nextAncestors, childIsLast, false)
-		t.tableWriter.AppendRow(table.Row{subNesting, subRow.Component, subRow.Version, subRow.Provider, subRow.Identity})
+		t.appendRowTree(subRow, nextAncestors, childIsLast)
 		childIndex++
 	}
 
@@ -197,6 +188,26 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, lockedGraph *dag.Direct
 		childIndex++
 	}
 	return nil
+}
+
+// appendRowTree appends a row and, recursively, its nested Children rows.
+// Nested rows do not correspond to vertices of the graph, so no graph traversal
+// takes place here.
+func (t *Renderer[T]) appendRowTree(row Row, ancestorsHasMore []bool, isLast bool) {
+	nesting := buildNesting(t.style, ancestorsHasMore, isLast, len(row.Children) > 0)
+	t.tableWriter.AppendRow(table.Row{nesting, row.Component, row.Version, row.Provider, row.Identity})
+
+	if len(row.Children) == 0 {
+		return
+	}
+
+	nextAncestors := make([]bool, 0, len(ancestorsHasMore)+1)
+	nextAncestors = append(nextAncestors, ancestorsHasMore...)
+	nextAncestors = append(nextAncestors, !isLast)
+
+	for i, child := range row.Children {
+		t.appendRowTree(child, nextAncestors, i == len(row.Children)-1)
+	}
 }
 
 // buildNesting constructs the visual tree structure prefix for each row in the NESTING column.

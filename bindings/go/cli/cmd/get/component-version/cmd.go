@@ -298,7 +298,7 @@ func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[
 	case render.OutputFormatTree.String():
 		return tree.New(ctx, dag, tree.WithRoots(roots...)), nil
 	case render.OutputFormatWideTree.String():
-		return tree.New(ctx, dag, tree.WithRoots(roots...), tree.WithSubRowProviderFunc(serializeResourcesToTreeRows)), nil
+		return tree.New(ctx, dag, tree.WithRoots(roots...), tree.WithVertexSerializerFunc(serializeVertexToDescriptorTreeWithResources)), nil
 	case render.OutputFormatTable.String():
 		serializer := list.ListSerializerFunc[string](serializeVerticesToTable)
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
@@ -323,28 +323,34 @@ func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {
 	return descriptorV2, nil
 }
 
-// serializeResourcesToTreeRows returns one tree row per resource of the
-// component version stored in the vertex. The rows are rendered as leaf
-// children below the component node in the tree output.
-func serializeResourcesToTreeRows(vertex *dag.Vertex[string]) ([]tree.Row, error) {
+// serializeVertexToDescriptorTreeWithResources serializes the component version
+// held by the vertex into a tree row, with one nested row per resource of the
+// component version. The nested rows are rendered below the component row.
+func serializeVertexToDescriptorTreeWithResources(vertex *dag.Vertex[string]) (tree.Row, error) {
 	untypedDescriptor, ok := vertex.Attributes[syncdag.AttributeValue]
 	if !ok {
-		return nil, fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
+		return tree.Row{}, fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
 	}
 	desc, ok := untypedDescriptor.(*descruntime.Descriptor)
 	if !ok {
-		return nil, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descruntime.Descriptor{}, untypedDescriptor)
+		return tree.Row{}, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descruntime.Descriptor{}, untypedDescriptor)
 	}
-	rows := make([]tree.Row, 0, len(desc.Component.Resources))
+	resources := make([]tree.Row, 0, len(desc.Component.Resources))
 	for i := range desc.Component.Resources {
 		res := &desc.Component.Resources[i]
-		rows = append(rows, tree.Row{
+		resources = append(resources, tree.Row{
 			Component: res.Name,
 			Version:   res.Version,
 			Identity:  fmt.Sprintf("type=%s,relation=%s", res.Type, res.Relation),
 		})
 	}
-	return rows, nil
+	return tree.Row{
+		Component: desc.Component.Name,
+		Version:   desc.Component.Version,
+		Provider:  desc.Component.Provider.Name,
+		Identity:  desc.Component.ToIdentity().String(),
+		Children:  resources,
+	}, nil
 }
 
 func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {

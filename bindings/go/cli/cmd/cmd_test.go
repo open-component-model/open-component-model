@@ -31,6 +31,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -201,6 +202,103 @@ COMPONENT                   │ VERSION │ PROVIDER
 			logEntries, err := logs.List()
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
+
+			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
+		})
+	}
+}
+
+// Test_Get_Component_Version_WideTree tests the `-o widetree` output format,
+func Test_Get_Component_Version_WideTree(t *testing.T) {
+	leaf := createTestDescriptor("ocm.software/leaf", "0.0.1")
+	leaf.Component.Resources = []descriptor.Resource{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: "leaf-image", Version: "2.0.0"},
+			},
+			Type:     "ociImage",
+			Relation: descriptor.ExternalRelation,
+			Access:   &accessv1.OCIImage{ImageReference: "ghcr.io/example/leaf-image:2.0.0"},
+		},
+	}
+
+	root := createTestDescriptor("ocm.software/root", "0.0.1")
+	root.Component.Resources = []descriptor.Resource{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: "blueprint", Version: "0.0.1"},
+			},
+			Type:     "blueprint",
+			Relation: descriptor.LocalRelation,
+			Access:   &accessv1.OCIImage{ImageReference: "ghcr.io/example/blueprint:0.0.1"},
+		},
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: "chart", Version: "1.2.3"},
+			},
+			Type:     "helmChart",
+			Relation: descriptor.ExternalRelation,
+			Access:   &accessv1.OCIImage{ImageReference: "ghcr.io/example/chart:1.2.3"},
+		},
+	}
+	root.Component.References = []descriptor.Reference{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: "leaf", Version: leaf.Component.Version},
+			},
+			Component: leaf.Component.Name,
+		},
+	}
+
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, root, leaf)
+	require.NoError(t, err)
+
+	ref := compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: archivePath},
+		Component:  root.Component.Name,
+		Version:    root.Component.Version,
+	}
+	path := ref.String()
+
+	tests := []struct {
+		name           string
+		args           []string
+		expectedOutput string
+	}{
+		{
+			name: "widetree output",
+			args: []string{"get", "cv", path, "--output=widetree"},
+			expectedOutput: `NESTING  COMPONENT          VERSION  PROVIDER      IDENTITY                             
+ └─ ●     ocm.software/root  0.0.1    ocm.software  name=ocm.software/root,version=0.0.1 
+    ├─    blueprint          0.0.1                  type=blueprint,relation=local        
+    └─    chart              1.2.3                  type=helmChart,relation=external`,
+		},
+		{
+			name: "widetree output recursive",
+			args: []string{"get", "cv", path, "--output=widetree", "--recursive=-1"},
+			expectedOutput: `NESTING   COMPONENT          VERSION  PROVIDER      IDENTITY                             
+ └─ ●      ocm.software/root  0.0.1    ocm.software  name=ocm.software/root,version=0.0.1 
+    ├─     blueprint          0.0.1                  type=blueprint,relation=local        
+    ├─     chart              1.2.3                  type=helmChart,relation=external     
+    └─ ●   ocm.software/leaf  0.0.1    ocm.software  name=ocm.software/leaf,version=0.0.1 
+       └─  leaf-image         2.0.0                  type=ociImage,relation=external`,
+		},
+		{
+			name: "tree output does not render resources",
+			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
+			expectedOutput: `NESTING  COMPONENT          VERSION  PROVIDER      IDENTITY                             
+ └─ ●     ocm.software/root  0.0.1    ocm.software  name=ocm.software/root,version=0.0.1 
+    └─    ocm.software/leaf  0.0.1    ocm.software  name=ocm.software/leaf,version=0.0.1`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err := test.OCM(t, test.WithArgs(tt.args...), test.WithOutput(result), test.WithErrorOutput(logs))
+			r.NoError(err, "failed to run command")
 
 			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
 		})

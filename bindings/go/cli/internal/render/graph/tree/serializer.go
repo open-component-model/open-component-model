@@ -9,15 +9,22 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
-// Row represents a single rendered row
+// Row represents a single rendered row.
+// A Row may contain Children. Children are rendered as rows nested below the
+// Row, before the rows of the graph children of the same vertex. This lets a
+// VertexSerializer expose the elements contained in a vertex (for example the
+// resources of a component version, or the labels of a resource) at any
+// nesting depth.
 type Row struct {
 	Component string
 	Version   string
 	Provider  string
 	Identity  string
+	Children  []Row
 }
 
 // VertexSerializer is an interface that defines a method to serialize a vertex.
+// The returned Row may contain nested Children rows.
 type VertexSerializer[T cmp.Ordered] interface {
 	Serialize(*dag.Vertex[T]) (Row, error)
 }
@@ -25,18 +32,6 @@ type VertexSerializer[T cmp.Ordered] interface {
 type VertexSerializerFunc[T cmp.Ordered] func(*dag.Vertex[T]) (Row, error)
 
 func (f VertexSerializerFunc[T]) Serialize(v *dag.Vertex[T]) (Row, error) {
-	return f(v)
-}
-
-// SubRowProvider returns additional leaf rows rendered as children of a vertex.
-// It must not modify the vertex or its attributes.
-type SubRowProvider[T cmp.Ordered] interface {
-	SubRows(*dag.Vertex[T]) ([]Row, error)
-}
-
-type SubRowProviderFunc[T cmp.Ordered] func(*dag.Vertex[T]) ([]Row, error)
-
-func (f SubRowProviderFunc[T]) SubRows(v *dag.Vertex[T]) ([]Row, error) {
 	return f(v)
 }
 
