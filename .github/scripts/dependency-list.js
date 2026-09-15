@@ -6,12 +6,9 @@
 
 import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import * as yaml from "js-yaml";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_CONFIG = resolve(__dirname, "../../golangci.yml");
-const DEFAULT_README = resolve(__dirname, "../../bindings/go/README.md");
 const BINDING_PREFIX = "ocm.software/open-component-model/bindings/go/";
 export const GENERATED_TABLE_START = "<!-- GENERATED PACKAGES TABLE:START (run 'task tools:dependency-list/generate' to update) -->";
 export const GENERATED_TABLE_END = "<!-- GENERATED PACKAGES TABLE:END -->";
@@ -235,33 +232,65 @@ export function generateTable(deps, layers) {
     return lines.join("\n");
 }
 
-function main() {
-    const args = process.argv.slice(2);
-    const command = args[0];
+/**
+ * Render every generated document.
+ *
+ * @param {string} configPath path to golangci.yml
+ * @param {string} tablePath path to docs/dependency-table.md
+ * @param {string} readmePath path to bindings/go/README.md
+ * @returns {{path: string, content: string}[]}
+ */
+export function renderDocuments(configPath, tablePath, readmePath) {
+    const deps = parseDepguardRules(configPath);
+    const layers = computeLayers(deps);
+    return [
+        { path: tablePath, content: generateTable(deps, layers) },
+        { path: readmePath, content: generatePackagesReadme(configPath, readmePath) },
+    ];
+}
 
-    if (command === "table") {
-        const configPath = args[1] ?? DEFAULT_CONFIG;
-        const deps = parseDepguardRules(configPath);
-        const layers = computeLayers(deps);
-        const table = generateTable(deps, layers);
-        process.stdout.write(table);
-    } else if (command === "readme") {
-        const write = args.includes("--write");
-        const positional = args.slice(1).filter((arg) => arg !== "--write");
-        const readmePath = positional[0] ?? DEFAULT_README;
-        const configPath = positional[1] ?? DEFAULT_CONFIG;
-        const content = generatePackagesReadme(configPath, readmePath);
-        if (write) {
-            writeFileSync(readmePath, content);
-        } else {
-            process.stdout.write(content);
+/**
+ * Report the first line that differs between the expected and the actual content.
+ *
+ * @param {string} expected
+ * @param {string} actual
+ * @returns {string} a human readable hint about the first difference
+ */
+function firstDifference(expected, actual) {
+    const expectedLines = expected.split("\n");
+    const actualLines = actual.split("\n");
+    for (let i = 0; i < Math.max(expectedLines.length, actualLines.length); i++) {
+        if (expectedLines[i] !== actualLines[i]) {
+            return `line ${i + 1}:\n  expected: ${expectedLines[i] ?? "<end of file>"}\n  actual:   ${actualLines[i] ?? "<end of file>"}`;
+        }
+    }
+    return "no line difference";
+}
+
+function main() {
+    const [command, configPath, tablePath, readmePath] = process.argv.slice(2);
+
+    if ((command !== "generate" && command !== "verify") || !configPath || !tablePath || !readmePath) {
+        process.stderr.write("Usage: dependency-list.js <generate|verify> <golangci.yml> <dependency-table.md> <README.md>\n");
+        process.stderr.write("  generate  Write the generated documents\n");
+        process.stderr.write("  verify    Fail if a generated document is out of sync\n");
+        process.exit(1);
+    }
+
+    const documents = renderDocuments(configPath, tablePath, readmePath);
+
+    if (command === "generate") {
+        for (const { path, content } of documents) {
+            writeFileSync(path, content);
         }
     } else {
-        process.stderr.write("Usage: dependency-list.js <table|readme> [...args]\n");
-        process.stderr.write("  table [config-path]                Generate dependency layer table to stdout\n");
-        process.stderr.write("  readme [--write] [readme] [config] Generate README with updated packages table\n");
-        process.stderr.write("                                     (to stdout, or in place with --write)\n");
-        process.exit(1);
+        const stale = documents.filter(({ path, content }) => readFileSync(path, "utf-8") !== content);
+        for (const { path, content } of stale) {
+            process.stderr.write(`${path} is out of sync: ${firstDifference(content, readFileSync(path, "utf-8"))}\n`);
+        }
+        if (stale.length > 0) {
+            process.exit(1);
+        }
     }
 }
 
