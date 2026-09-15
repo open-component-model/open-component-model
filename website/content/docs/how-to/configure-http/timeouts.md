@@ -47,6 +47,14 @@ By default, OCM does not impose an end-to-end deadline, allowing large response
 bodies to stream to completion. Set `timeout` to the longest transfer you expect
 on the slowest link you support. A zero value disables the limit explicitly.
 
+{{< callout context="caution" title="No overall timeout by default" >}}
+With `timeout` omitted or set to `0s`, OCM does not limit response-body
+duration. A peer that stops sending data without closing the connection may
+therefore leave an operation waiting indefinitely. Configure a positive
+`timeout` when bounded completion is required. Connection-phase timeouts do not
+limit an active response-body read.
+{{< /callout >}}
+
 {{< callout context="caution" >}}
 `timeout` spans the entire request **including all retry attempts and their
 backoff waits** — it is not reset between retries. Raising `maxRetries`

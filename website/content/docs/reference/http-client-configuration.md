@@ -53,6 +53,13 @@ All fields are optional. When omitted, OCM applies these defaults:
 | All other timeout fields | No limit (OS default for TCP fields) |
 | `insecureSkipVerify`     | `false`                              |
 
+{{< callout context="caution" title="No overall timeout by default" >}}
+The default does not bound response-body duration. A stalled peer can therefore
+leave an operation waiting indefinitely. Set a positive `timeout` when bounded
+completion is more important than allowing arbitrarily long transfers.
+Connection-phase timeouts do not limit an active response-body read.
+{{< /callout >}}
+
 ### Duration Format
 
 All duration fields accept Go's
