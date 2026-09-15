@@ -259,8 +259,8 @@ jobs:
         run:
           task tools:golangci-lint/verify
 
-  dependency_table_verify:
-    name: "dependency-table-verify"
+  dependency_list_verify:
+    name: "dependency-list-verify"
     needs: discover_modules
     runs-on: ubuntu-24.04-arm
     if: ${{ needs.discover_modules.outputs.dependency_list_changed == 'true' }}
@@ -449,7 +449,7 @@ jobs:
       - run_unit_tests
       - run_integration_tests
       - golangci_lint
-      - dependency_table_verify
+      - dependency_list_verify
     if: ${{ failure() }}
     steps:
       - name: Some CI step failed or was cancelled!
