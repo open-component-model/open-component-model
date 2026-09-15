@@ -69,7 +69,7 @@ the literal YAML value remains inspectable in conversion tests.
 
 Routing is handled by an internal `hostRouter` `RoundTripper` that is only installed when `Hosts` has at least one non-nil entry. When all entries are nil or `Hosts` is empty, `hostRouter` is skipped entirely.
 
-**Why a context deadline instead of `http.Client.Timeout`**: setting `http.Client.Timeout` globally would cap every request before the router runs, preventing a per-host timeout from exceeding the global. Instead, `http.Client.Timeout` is left zero when `hostRouter` is active and the deadline is applied per-request inside `hostRouter.RoundTrip` via `context.WithTimeout`. Note: this deadline covers the round-trip call (until response headers are received); it does not extend over the response body read.
+**Why a context deadline instead of `http.Client.Timeout`**: setting `http.Client.Timeout` globally would cap every request before the router runs, preventing a per-host timeout from exceeding the global. Instead, `http.Client.Timeout` is left zero when `hostRouter` is active and the deadline is applied per-request inside `hostRouter.RoundTrip` via `context.WithTimeout`. The response body is wrapped by `cancelOnCloseBody`, which defers cancellation until the body is closed so the deadline remains active throughout response-body reads.
 
 Transport chain when per-host routing is active:
 
