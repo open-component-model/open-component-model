@@ -86,6 +86,7 @@ metadata:
   name: platform-components
   namespace: default
 spec:
+  interval: 10m
   componentRef:
     name: releasechannel
   componentSelector:
@@ -136,6 +137,7 @@ metadata:
   name: flux-images
   namespace: default
 spec:
+  interval: 10m
   componentRef:
     name: releasechannel
   componentSelector:
@@ -225,6 +227,58 @@ Notes:
   record, and the per-iteration record is kept even if all its fields disappear.
 - All modes return a list of objects. Anything else fails with `ExtractFailed`.
 
+### Absent, null, and missing: three different outcomes
+
+A missing access (a map key that is not there, an attribute that isn't there,
+an out-of-range list index) is never an error. In `byResources` and
+`byComponents` the field is omitted. Within a selector, it simply doesn't match.
+
+**A field that is present but `null`.** `descriptor/v2` has no `omitempty` on
+`resources`, `sources` or `references`, so a component with none of them
+serializes the field as `null` rather than omitting it.
+
+For example:
+
+```yaml
+# `Stalls` the Discovery.
+byComponents:
+  refs: size(component.componentReferences)
+```
+
+`size(null)` is not a missing key, it is `no such overload`, which is an
+`ExtractFailed`. 
+
+Do this instead:
+
+```yaml
+byComponents:
+  # single quotes are required
+  refs: 'component.componentReferences == null ? 0 : size(component.componentReferences)'
+```
+
+**A missing access inside `expression` mode.** Unlike the map modes, whole-list
+extraction is strict. The same typo that omits a field under
+`byComponents` _fails_ the whole Discovery here.
+
+Each optional read MUST be checked first:
+
+```yaml
+extract:
+  expression: |
+    components.map(c, {
+      "name": c.component.name,
+      "refs": has(c.component.componentReferences) && c.component.componentReferences != null
+        ? size(c.component.componentReferences) : 0,
+    })
+```
+
+`has()` -> "is the key there at all", then `!= null` -> "is it there but empty". A key that is
+present with a `null` value passes `has()`.
+
+**An expression returning `null` or `optional.none()`.** This is not a `missing
+access` at all: the key is written into the record with an explicit `null` value
+rather than being omitted.
+
 ## Configuration and repository scope
 
 Discovery uses the shared OCM configuration propagation of the controller chain:
@@ -278,20 +332,22 @@ suspended object never advances its observed generation solely because it
 retains an old `Ready` condition.
 {{< /callout >}}
 
-## Scheduling and safety interval
+## Scheduling
 
 Discovery is watch-driven: it reacts to `Discovery` generation changes,
 `Component` resolved-info/config/readiness/termination changes, and to the
 referenced configuration sources (explicit OCM config providers and the
 effective `Secret`s/`ConfigMap`s).
 
-As insurance against missed watch events, the **controller-wide** safety interval
-re-queues successfully reconciled Discoveries for a full re-discovery. It is not a
-per-object `spec.interval` and not a freshness SLA.
+`spec.interval` is optional. If unset or 0 it will not reconcile and instead
+will completely rely on watch events. Set an interval only as insurance against
+possible missed events.
 
-- Flag: `--discovery-controller-safety-interval` (default `30m`, ±10% jitter).
-- Helm: `manager.discovery.safetyInterval` (default `"30m"`).
-- `"0"` disables safety scheduling; negative durations are rejected at startup.
+`status.observedComponentDigest` is used to check if another walk is necessary.
+If the digest is the same for the root component as observed last time, we don't
+need to re-walk the entire graph. This field is only set if ALL references have
+a digest field for the root component since a missing digest breaks the chain
+of trust.
 
 Suspended, deleting, and terminally failed (`Stalled=True`) objects do not
 schedule periodic work.
@@ -321,7 +377,7 @@ Not supported:
 - Artifact/resource downloads.
 - Signature-verification guarantees for the filtered descriptors. Filtered
   descriptors are **not** signature-verification inputs.
-- Multi-root discovery or a per-object reconciliation interval.
+- Multi-root discovery.
 
 ## Next Steps
 

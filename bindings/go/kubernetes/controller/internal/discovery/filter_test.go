@@ -28,7 +28,6 @@ func TestFilterEmptySelectorsKeepEverything(t *testing.T) {
 	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{ReferenceSelector: &v1alpha1.Selector{}})
 	r.NoError(err)
 	f, err := q.Filter(t.Context(), Graph{
-		Root:        ComponentKey{Name: "root", Version: "1.0.0"},
 		Descriptors: []*descriptor.Descriptor{root, child},
 	})
 	r.NoError(err)
@@ -48,7 +47,7 @@ func TestFilterReferenceSelectorExcludesRoot(t *testing.T) {
 		ReferenceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"componentName": "child"}},
 	})
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "root", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{root, child, other}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{root, child, other}})
 	r.NoError(err)
 	r.Equal([]string{"child:2.0.0"}, filteredKeys(f))
 }
@@ -68,7 +67,7 @@ func TestFilterNestedDiamondGraph(t *testing.T) {
 		ReferenceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"componentName": "d"}},
 	})
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "a", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{a, b, c, d}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{a, b, c, d}})
 	r.NoError(err)
 	r.Equal([]string{"d:1.0.0"}, filteredKeys(f), "D matches behind unmatched ancestors and must appear once")
 }
@@ -87,7 +86,7 @@ func TestFilterMultipleIncomingReferences(t *testing.T) {
 		ReferenceSelector: &v1alpha1.Selector{MatchLabels: map[string]string{"kind": "buildtime"}},
 	})
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "root", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{root, target}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{root, target}})
 	r.NoError(err)
 	r.Equal([]string{"target:1.0.0"}, filteredKeys(f))
 }
@@ -108,7 +107,7 @@ func TestFilterReferenceIdentityAndExtras(t *testing.T) {
 			semverCheck(identity.version, ">=9.0.0")`},
 	})
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "root", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{root, target}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{root, target}})
 	r.NoError(err)
 	r.Equal([]string{"target:9.9.9"}, filteredKeys(f))
 }
@@ -122,7 +121,7 @@ func TestFilterNoReferencesMatchedReason(t *testing.T) {
 		ReferenceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"componentName": "absent"}},
 	})
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "root", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{root, child}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{root, child}})
 	r.NoError(err)
 	r.Empty(f.Descriptors)
 	r.NotNil(f.Descriptors)
@@ -139,7 +138,7 @@ func TestFilterComponentSelectorStructuredLabelsAndReason(t *testing.T) {
 		ComponentSelector: &v1alpha1.Selector{Expression: `labels.feature.enabled == true`},
 	})
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "root", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{root, child}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{root, child}})
 	r.NoError(err)
 	r.Equal([]string{"root:1.0.0"}, filteredKeys(f))
 
@@ -147,7 +146,7 @@ func TestFilterComponentSelectorStructuredLabelsAndReason(t *testing.T) {
 		ComponentSelector: &v1alpha1.Selector{Expression: `has(labels.absent)`},
 	})
 	r.NoError(err)
-	f, err = q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "root", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{root, child}})
+	f, err = q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{root, child}})
 	r.NoError(err)
 	r.Empty(f.Descriptors)
 	r.Equal(EmptyReasonNoComponentsMatched, f.Reason)
@@ -165,7 +164,7 @@ func TestFilterResourceSelectorKeepsZeroResourceComponents(t *testing.T) {
 		ResourceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "keep-me"}},
 	})
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "empty", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{empty, some}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{empty, some}})
 	r.NoError(err)
 	r.Equal(EmptyReasonNone, f.Reason, "resource-empty stages are ordinary success")
 	r.ElementsMatch([]string{"empty:1.0.0", "some:1.0.0"}, filteredKeys(f))
@@ -189,7 +188,7 @@ func TestFilterResourceDeclarationOrderPreserved(t *testing.T) {
 
 	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{})
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
 	r.NoError(err)
 	names := make([]string, 0, 3)
 	for _, res := range f.Descriptors[0].Component.Resources {
@@ -206,7 +205,7 @@ func TestFilterSortsLexicographicallyNotBySemver(t *testing.T) {
 
 	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{})
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "b", Version: "1.2.0"}, Descriptors: []*descriptor.Descriptor{d1, d2, d3}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d1, d2, d3}})
 	r.NoError(err)
 	r.Equal([]string{"a:1.10.0", "a:1.2.0", "b:1.2.0"}, filteredKeys(f), "plain lexicographic order: 1.10.0 sorts before 1.2.0")
 }
@@ -230,7 +229,7 @@ func TestFilterDoesNotMutateInputs(t *testing.T) {
 
 	// Filter multiple times against the same graph, then project every mode.
 	for range 3 {
-		f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
+		f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
 		r.NoError(err)
 		_, err = q.Project(t.Context(), f)
 		r.NoError(err)
@@ -254,7 +253,7 @@ func TestFilterDuplicateDescriptorsResolveOnce(t *testing.T) {
 
 	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{})
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d1, d1dup}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d1, d1dup}})
 	r.NoError(err)
 	r.Len(f.Descriptors, 1)
 	r.Empty(f.Descriptors[0].Component.Resources, "first descriptor wins on duplicate keys")
@@ -267,7 +266,7 @@ func TestFilterIgnoresNilAndEmptyGraph(t *testing.T) {
 	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{})
 	r.NoError(err)
 
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{nil, d, nil}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{nil, d, nil}})
 	r.NoError(err)
 	r.Equal([]string{"d:1.0.0"}, filteredKeys(f))
 
@@ -282,7 +281,7 @@ func TestFilterPreservesGraphOrder(t *testing.T) {
 	r := require.New(t)
 	d1 := newDescriptor("b", "1.0.0")
 	d2 := newDescriptor("a", "1.0.0")
-	graph := Graph{Root: ComponentKey{Name: "b", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d1, d2}}
+	graph := Graph{Descriptors: []*descriptor.Descriptor{d1, d2}}
 
 	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{})
 	r.NoError(err)
@@ -300,10 +299,36 @@ func TestFilterSelectorErrorSurfacesStage(t *testing.T) {
 		ResourceSelector: &v1alpha1.Selector{Expression: `semverCheck(identity.version, ">=")`},
 	})
 	r.NoError(err)
-	_, err = q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
+	_, err = q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
 	r.Error(err)
 	var selErr *SelectorError
 	r.ErrorAs(err, &selErr)
 	r.Equal(StageResource, selErr.Stage)
 	r.Contains(err.Error(), "invalid constraint")
+}
+
+// TestFilterResourcesWithoutSelectorSharesDescriptor pins that the no-selector
+// path copies nothing: there is no write, so Filtered shares the input pointer
+// like it shares every other nested field.
+func TestFilterResourcesWithoutSelectorSharesDescriptor(t *testing.T) {
+	r := require.New(t)
+	d := newDescriptor("c", "1.0.0", withResources(newResource("keep")))
+
+	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{})
+	r.NoError(err)
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
+	r.NoError(err)
+	r.Len(f.Descriptors, 1)
+	r.Same(d, f.Descriptors[0], "no selector means no write, so no copy")
+
+	// With a selector the copy is required and the input must stay untouched.
+	q, err = Compile(t.Context(), &v1alpha1.DiscoverySpec{
+		ResourceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "absent"}},
+	})
+	r.NoError(err)
+	f, err = q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
+	r.NoError(err)
+	r.NotSame(d, f.Descriptors[0])
+	r.Empty(f.Descriptors[0].Component.Resources)
+	r.Len(d.Component.Resources, 1, "input must not be mutated")
 }

@@ -90,9 +90,6 @@ func registerConfigIndexes(ctx context.Context, mgr ctrl.Manager) error {
 // this method. This method registers the controller-private configuration
 // indexes and configures all watches and rate limiting.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
-	if err := ValidateSafetyInterval(r.SafetyInterval); err != nil {
-		return err
-	}
 	if err := registerConfigIndexes(ctx, mgr); err != nil {
 		return err
 	}

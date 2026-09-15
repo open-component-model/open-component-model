@@ -140,6 +140,7 @@ func (d *GraphDiscoverer[K, V]) CurrentState(key K) DiscoveryState {
 // - Each vertex is resolved at most once.
 // - If any error occurs, discovery halts and propagates the error.
 // - States are updated consistently on success or failure.
+// - A cycle is reported as a *dag.CycleError (or dag.ErrSelfReference), not a hang.
 func (d *GraphDiscoverer[K, V]) Discover(ctx context.Context) (retErr error) {
 	// Ensure panic safety even with concurrency in place.
 	defer func() {
@@ -193,9 +194,16 @@ func (d *GraphDiscoverer[K, V]) discover(
 		}
 	}
 
-	// Add vertex in "discovering" state.
-	if err := d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
-		return d.AddVertex(id, map[string]any{
+	// Add vertex in "discovering" state. A parent registers its neighbors before
+	// descending into them, so the vertex may already exist.
+	if err := d.graph.WithWriteLock(func(g *dag.DirectedAcyclicGraph[K]) error {
+		if vertex, ok := g.Vertices[id]; ok {
+			vertex.Attributes[AttributeDiscoveryState] = DiscoveryStateDiscovering
+
+			return nil
+		}
+
+		return g.AddVertex(id, map[string]any{
 			AttributeDiscoveryState: DiscoveryStateDiscovering,
 		})
 	}); err != nil {
@@ -236,16 +244,30 @@ func (d *GraphDiscoverer[K, V]) discover(
 	// Explore neighbors concurrently.
 	errGroup, egctx := errgroup.WithContext(ctx)
 	for index, neighbor := range neighbors {
+		// Add the edge before descending. Adding it afterwards means AddEdge only
+		// ever runs once the target has completed, so its cycle check can never
+		// observe a back-edge to an in-flight ancestor: the recursion blocks on
+		// that ancestor's done channel forever instead.
+		if err := d.graph.WithWriteLock(func(g *dag.DirectedAcyclicGraph[K]) error {
+			if _, ok := g.Vertices[neighbor]; !ok {
+				if err := g.AddVertex(neighbor, map[string]any{
+					AttributeDiscoveryState: DiscoveryStateUnknown,
+				}); err != nil {
+					return err
+				}
+			}
+
+			return g.AddEdge(id, neighbor, map[string]any{AttributeOrderIndex: index})
+		}); err != nil {
+			return fmt.Errorf("failed to add reference %v: %w", neighbor, err)
+		}
+
 		errGroup.Go(func() error {
 			if err := d.discover(egctx, neighbor); err != nil {
 				return fmt.Errorf("failed to discover reference %v: %w", neighbor, err)
 			}
-			// Add edge from current vertex to neighbor.
-			return d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
-				return d.AddEdge(id, neighbor, map[string]any{
-					AttributeOrderIndex: index,
-				})
-			})
+
+			return nil
 		})
 	}
 	err = errGroup.Wait()

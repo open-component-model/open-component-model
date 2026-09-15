@@ -57,6 +57,27 @@ func (rd *resolverAndDiscoverer) Discover(_ context.Context, parent *descriptor.
 	return neighbors, nil
 }
 
+// DigestsComplete reports whether every reference in the graph has a
+// digest. A component descriptor digest is computed over the normalised
+// descriptor including its references' digests, so the root digest covers the
+// whole transitive graph only if everything has a digest. A single reference
+// without a digest signals that we can't trust the whole chain, so we have to
+// always fully fetch everything.
+func (g Graph) DigestsComplete() bool {
+	for _, d := range g.Descriptors {
+		if d == nil {
+			return false
+		}
+		for i := range d.Component.References {
+			if d.Component.References[i].Digest.Value == "" {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 // Traverse resolves the complete transitive component graph reachable from
 // root through component references. The repository for every component
 // identity is chosen by resolver (following CLI resolver precedence:
@@ -71,8 +92,8 @@ func (rd *resolverAndDiscoverer) Discover(_ context.Context, parent *descriptor.
 // identity. The graph is only consumed after the entire traversal succeeded;
 // on error no partial graph is returned.
 //
-// Cycle detection is intentionally not implemented here; it is handled by the
-// shared DAG backlog issue (open-component-model/ocm-project#705).
+// A reference cycle is reported by the DAG as a *dag.CycleError and fails the
+// traversal; it is not detected here.
 func Traverse(ctx context.Context, root ComponentKey, resolver resolvers.ComponentVersionRepositoryResolver) (*Graph, error) {
 	if resolver == nil {
 		return nil, fmt.Errorf("component version repository resolver must not be nil")
@@ -95,7 +116,7 @@ func Traverse(ctx context.Context, root ComponentKey, resolver resolvers.Compone
 	}
 
 	// Consume the discovered vertices only after the entire traversal succeeded.
-	graph := &Graph{Root: root}
+	graph := &Graph{}
 	if err := discoverer.Graph().WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
 		descriptors := make([]*descriptor.Descriptor, 0, len(d.Vertices))
 		for key, vertex := range d.Vertices {

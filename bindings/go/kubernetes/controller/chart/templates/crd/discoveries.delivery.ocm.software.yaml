@@ -147,6 +147,13 @@ spec:
                     must be specified
                   rule: '(has(self.byResources) ? 1 : 0) + (has(self.byComponents)
                     ? 1 : 0) + (has(self.expression) ? 1 : 0) == 1'
+              interval:
+                description: |-
+                  Interval at which the component graph is re-discovered. Watches on the
+                  referenced Component usually trigger reconcile events. The interval can
+                  be set to avoid missed events. Unset or zero disables periodic
+                  re-discovery.
+                type: string
               ocmConfig:
                 description: |-
                   OCMConfig defines references to secrets, config maps or ocm api
@@ -387,6 +394,17 @@ spec:
                   type: object
                   x-kubernetes-preserve-unknown-fields: true
                 type: array
+              observedComponentDigest:
+                description: |-
+                  ObservedComponentDigest is the digest of the root Component
+                  It is recorded only when every reference in the discovered graph has a
+                  digest. An empty value forces a full re-discovery.
+
+                  This value is used to determine if a full re-discovery is required or not.
+                  If the root component version's digest didn't change, there is no need
+                  to re-walk the entire component version. Everything should be still the same.
+                  Force-pushing over a version is not supported.
+                type: string
               observedGeneration:
                 description: |-
                   ObservedGeneration is the last observed generation of the Discovery

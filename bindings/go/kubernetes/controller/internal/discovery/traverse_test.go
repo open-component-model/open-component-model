@@ -133,7 +133,6 @@ func TestTraverse_ResolvesCompleteGraph(t *testing.T) {
 
 	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
 	r.NoError(err)
-	r.Equal(ComponentKey{Name: "root", Version: "1.0.0"}, graph.Root)
 	r.Equal([]ComponentKey{
 		{Name: "a", Version: "1.0.0"},
 		{Name: "b", Version: "1.0.0"},
@@ -279,4 +278,49 @@ func TestTraverse_NilDescriptorIsAFailure(t *testing.T) {
 	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
 	r.Nil(graph)
 	r.ErrorContains(err, "resolved descriptor is nil")
+}
+
+func TestGraphDigestsComplete(t *testing.T) {
+	withDigest := func(name, component, version string) descriptor.Reference {
+		ref := descriptor.Reference{Component: component}
+		ref.Name = name
+		ref.Version = version
+		ref.Digest = descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "jsonNormalisation/v4alpha1", Value: "v"}
+		return ref
+	}
+	withoutDigest := func(name, component, version string) descriptor.Reference {
+		ref := descriptor.Reference{Component: component}
+		ref.Name = name
+		ref.Version = version
+		return ref
+	}
+	descriptorWith := func(name string, refs ...descriptor.Reference) *descriptor.Descriptor {
+		d := &descriptor.Descriptor{}
+		d.Component.Name = name
+		d.Component.Version = "1.0.0"
+		d.Component.References = refs
+		return d
+	}
+
+	for _, tc := range []struct {
+		name  string
+		graph Graph
+		want  bool
+	}{
+		{"no references", Graph{Descriptors: []*descriptor.Descriptor{descriptorWith("a")}}, true},
+		{"all digested", Graph{Descriptors: []*descriptor.Descriptor{
+			descriptorWith("a", withDigest("to-b", "b", "1.0.0")),
+			descriptorWith("b"),
+		}}, true},
+		{"one missing deep in the graph", Graph{Descriptors: []*descriptor.Descriptor{
+			descriptorWith("a", withDigest("to-b", "b", "1.0.0")),
+			descriptorWith("b", withoutDigest("to-c", "c", "1.0.0")),
+		}}, false},
+		{"nil descriptor", Graph{Descriptors: []*descriptor.Descriptor{nil}}, false},
+		{"empty graph", Graph{}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, tc.graph.DigestsComplete())
+		})
+	}
 }

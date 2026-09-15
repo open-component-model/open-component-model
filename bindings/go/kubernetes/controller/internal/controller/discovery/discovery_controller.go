@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -17,6 +16,7 @@ import (
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	internaldiscovery "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/discovery"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
@@ -41,16 +41,6 @@ import (
 // rooted at the referenced Component's repository spec.
 type Reconciler struct {
 	*ocm.BaseReconciler
-
-	// SafetyInterval is the controller-wide interval after which a
-	// successfully reconciled Discovery is re-queued for a full discovery,
-	// jittered by ±10%. It insures against missed watch events. A zero
-	// interval disables safety scheduling.
-	SafetyInterval time.Duration
-
-	// randFloat yields values in [0.0, 1.0) for the safety-interval jitter.
-	// It is injectable for tests; nil defaults to math/rand.Float64.
-	randFloat func() float64
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -151,6 +141,13 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	if !equality.Semantic.DeepEqual(discovery.Status.EffectiveOCMConfig, configs) {
 		discovery.Status.EffectiveOCMConfig = configs
 		return ctrl.Result{}, errors.New("effective ocm config changed")
+	}
+
+	if upToDate(discovery, info) {
+		logger.V(1).Info("root component digest unchanged, skipping re-discovery",
+			"digest", discovery.Status.ObservedComponentDigest)
+
+		return status.RequeueResult(discovery, discovery.GetRequeueAfter()), nil
 	}
 
 	query, err := internaldiscovery.Compile(ctx, &discovery.Spec)
@@ -265,12 +262,17 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		return ctrl.Result{}, err
 	}
 
+	discovery.Status.ObservedComponentDigest = ""
+	if graph.DigestsComplete() {
+		discovery.Status.ObservedComponentDigest = digestKey(info.Digest)
+	}
+
 	status.MarkReady(r.EventRecorder, discovery, "%s", payloadMessage(payload))
 	// Discovery advances the observed generation here because it does not use
 	// the shared UpdateBeforePatch defer the other controllers rely on.
 	discovery.SetObservedGeneration(discovery.GetGeneration())
 
-	return ctrl.Result{RequeueAfter: r.safetyRequeueAfter()}, nil
+	return status.RequeueResult(discovery, discovery.GetRequeueAfter()), nil
 }
 
 // setPayload swaps the status payload in one in-memory update: the selected
@@ -304,6 +306,39 @@ func (r *Reconciler) setPayload(discovery *v1alpha1.Discovery, payload *internal
 	discovery.Status.Extracted = nil
 
 	return nil
+}
+
+// upToDate checks whether the digest of the root component is the same
+// as last time we encountered it. If yes, the traverse can be skipped.
+//
+// A component descriptor digest covers its references' digests, which cover
+// theirs, so an unchanged root digest means an unchanged transitive graph. The
+// recorded digest is only written when that chain was complete (see
+// Graph.DigestsComplete), so an empty value here always forces a full
+// re-discovery.
+func upToDate(discovery *v1alpha1.Discovery, info v1alpha1.ComponentInfo) bool {
+	if discovery.Status.ObservedComponentDigest == "" {
+		return false
+	}
+	if discovery.Status.ObservedGeneration != discovery.GetGeneration() {
+		return false
+	}
+	if discovery.Status.Components == nil && discovery.Status.Extracted == nil {
+		return false
+	}
+
+	return discovery.Status.ObservedComponentDigest == digestKey(info.Digest)
+}
+
+// digestKey renders a digest as a comparable key. The algorithms are part of it
+// because the same component yields a different value under a different
+// normalisation.
+func digestKey(digest *v2.Digest) string {
+	if digest == nil || digest.Value == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("%s:%s:%s", digest.NormalisationAlgorithm, digest.HashAlgorithm, digest.Value)
 }
 
 // payloadMessage returns the Ready condition message for a successful

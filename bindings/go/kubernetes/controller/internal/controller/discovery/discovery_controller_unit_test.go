@@ -24,6 +24,7 @@ import (
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	desc "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
@@ -83,45 +84,19 @@ func readyComponent(name, namespace string) *v1alpha1.Component {
 	}
 }
 
-func TestValidateSafetyInterval(t *testing.T) {
+// TestRequeueAfterUsesSpecInterval pins that the requeue comes from the object,
+// not from a controller-wide default.
+func TestRequeueAfterUsesSpecInterval(t *testing.T) {
 	r := require.New(t)
 
-	r.NoError(ValidateSafetyInterval(DefaultSafetyInterval), "default 30m interval is valid")
-	r.NoError(ValidateSafetyInterval(90*time.Minute), "overridden interval is valid")
-	r.NoError(ValidateSafetyInterval(time.Second), "short injected interval is valid")
-	r.NoError(ValidateSafetyInterval(0), "zero disables safety scheduling")
-	r.ErrorContains(ValidateSafetyInterval(-time.Second), "must not be negative")
-	r.ErrorContains(ValidateSafetyInterval(-time.Hour), "must not be negative")
-}
+	discovery := &v1alpha1.Discovery{}
+	r.Zero(discovery.GetRequeueAfter(), "an unset interval schedules no requeue")
 
-func TestJitterDurationBounds(t *testing.T) {
-	r := require.New(t)
-	d := 30 * time.Minute
+	discovery.Spec.Interval = metav1.Duration{Duration: 10 * time.Minute}
+	r.Equal(10*time.Minute, discovery.GetRequeueAfter())
 
-	// f in [0, 1): jitter is within ±10%.
-	r.Equal(d-time.Duration(0.1*float64(d)), jitterDuration(d, 0))
-	r.Equal(d, jitterDuration(d, 0.5))
-	within := jitterDuration(d, 0.9999)
-	r.Greater(within, d)
-	r.LessOrEqual(within, d+time.Duration(0.1*float64(d)))
-}
-
-func TestSafetyRequeueAfter(t *testing.T) {
-	r := require.New(t)
-
-	rec, _ := newReconciler(t)
-	rec.SafetyInterval = 0
-	r.Zero(rec.safetyRequeueAfter(), "disabled interval schedules no safety requeue")
-
-	rec.SafetyInterval = DefaultSafetyInterval
-	randFloat := 0.5
-	rec.randFloat = func() float64 { return randFloat }
-	r.Equal(DefaultSafetyInterval, rec.safetyRequeueAfter())
-
-	randFloat = 0
-	r.Equal(DefaultSafetyInterval-time.Duration(0.1*float64(DefaultSafetyInterval)), rec.safetyRequeueAfter())
-	randFloat = 0.9999
-	r.Greater(rec.safetyRequeueAfter(), DefaultSafetyInterval)
+	var nilDiscovery *v1alpha1.Discovery
+	r.Zero(nilDiscovery.GetRequeueAfter())
 }
 
 func TestReconcile_NotFound(t *testing.T) {
@@ -304,4 +279,52 @@ func TestReconcile_UnreadyComponentIsRetryable(t *testing.T) {
 	g.Equal(metav1.ConditionFalse, ready.Status)
 	g.Equal(v1alpha1.ResourceIsNotAvailable, ready.Reason)
 	g.False(status.IsStalled(fresh))
+}
+
+func TestUpToDate(t *testing.T) {
+	const key = "jsonNormalisation/v4alpha1:SHA-256:abc"
+	info := func(value string) v1alpha1.ComponentInfo {
+		if value == "" {
+			return v1alpha1.ComponentInfo{}
+		}
+		return v1alpha1.ComponentInfo{Digest: &v2.Digest{
+			HashAlgorithm: "SHA-256", NormalisationAlgorithm: "jsonNormalisation/v4alpha1", Value: value,
+		}}
+	}
+	discovery := func(mutate func(*v1alpha1.Discovery)) *v1alpha1.Discovery {
+		d := &v1alpha1.Discovery{ObjectMeta: metav1.ObjectMeta{Generation: 3}}
+		d.Status.ObservedGeneration = 3
+		d.Status.ObservedComponentDigest = key
+		d.Status.Components = []apiextensionsv1.JSON{}
+		if mutate != nil {
+			mutate(d)
+		}
+		return d
+	}
+
+	for _, tc := range []struct {
+		name     string
+		discover *v1alpha1.Discovery
+		info     v1alpha1.ComponentInfo
+		want     bool
+	}{
+		{"unchanged", discovery(nil), info("abc"), true},
+		{"unchanged with extracted payload", discovery(func(d *v1alpha1.Discovery) {
+			d.Status.Components = nil
+			d.Status.Extracted = []v1alpha1.ExtractedRecord{}
+		}), info("abc"), true},
+		{"no recorded digest", discovery(func(d *v1alpha1.Discovery) {
+			d.Status.ObservedComponentDigest = ""
+		}), info("abc"), false},
+		{"spec changed", discovery(func(d *v1alpha1.Discovery) { d.Generation = 4 }), info("abc"), false},
+		{"no payload published", discovery(func(d *v1alpha1.Discovery) {
+			d.Status.Components = nil
+		}), info("abc"), false},
+		{"digest changed", discovery(nil), info("def"), false},
+		{"component has no digest", discovery(nil), info(""), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, upToDate(tc.discover, tc.info))
+		})
+	}
 }

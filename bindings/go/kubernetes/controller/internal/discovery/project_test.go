@@ -21,8 +21,7 @@ func filterForResources(t *testing.T, spec *v1alpha1.DiscoverySpec, descriptors 
 	r := require.New(t)
 	q, err := Compile(t.Context(), spec)
 	r.NoError(err)
-	root := ComponentKey{Name: descriptors[0].Component.Name, Version: descriptors[0].Component.Version}
-	f, err := q.Filter(t.Context(), Graph{Root: root, Descriptors: descriptors})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: descriptors})
 	r.NoError(err)
 	return f
 }
@@ -32,8 +31,7 @@ func projectForSpec(t *testing.T, spec *v1alpha1.DiscoverySpec, descriptors ...*
 	r := require.New(t)
 	q, err := Compile(t.Context(), spec)
 	r.NoError(err)
-	root := ComponentKey{Name: descriptors[0].Component.Name, Version: descriptors[0].Component.Version}
-	f, err := q.Filter(t.Context(), Graph{Root: root, Descriptors: descriptors})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: descriptors})
 	r.NoError(err)
 	p, err := q.Project(t.Context(), f)
 	r.NoError(err)
@@ -186,7 +184,7 @@ func TestProjectEmptyStageDoesNotFabricate(t *testing.T) {
 	d := newDescriptor("d", "1.0.0")
 	q, err := Compile(t.Context(), spec)
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
 	r.NoError(err)
 	p, err := q.Project(t.Context(), f)
 	r.NoError(err)
@@ -245,7 +243,7 @@ func TestProjectEmptySelectorStagesKeepEmptyReasonsDistinct(t *testing.T) {
 	root := newDescriptor("root", "1.0.0", withReferences(newReference("to-child", "child", "1.0.0")))
 	child := newDescriptor("child", "1.0.0")
 	graph := func() Graph {
-		return Graph{Root: ComponentKey{Name: "root", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{root, child}}
+		return Graph{Descriptors: []*descriptor.Descriptor{root, child}}
 	}
 
 	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{
@@ -306,7 +304,7 @@ func TestProjectSerializationFailureNotClassified(t *testing.T) {
 			r := require.New(t)
 			q, err := Compile(t.Context(), tc.spec)
 			r.NoError(err)
-			f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "bad", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{bad}})
+			f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{bad}})
 			r.NoError(err, "conversion is not performed during filtering")
 
 			_, err = q.Project(t.Context(), f)
@@ -336,7 +334,7 @@ func TestProjectSelectingBadResourceAwayPermitsProjection(t *testing.T) {
 		ResourceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "keep"}},
 	})
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
 	r.NoError(err)
 	p, err := q.Project(t.Context(), f)
 	r.NoError(err)
@@ -345,7 +343,7 @@ func TestProjectSelectingBadResourceAwayPermitsProjection(t *testing.T) {
 	// Retaining the malformed resource fails projection with component context.
 	q, err = Compile(t.Context(), &v1alpha1.DiscoverySpec{})
 	r.NoError(err)
-	f, err = q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
+	f, err = q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
 	r.NoError(err)
 	_, err = q.Project(t.Context(), f)
 	r.Error(err)
@@ -443,7 +441,7 @@ func TestProjectConsistencyAcrossModes(t *testing.T) {
 
 	q, err := Compile(t.Context(), specs["raw"])
 	r.NoError(err)
-	f, err := q.Filter(t.Context(), Graph{Root: ComponentKey{Name: "comp", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
 	r.NoError(err)
 	r.Len(f.Descriptors[0].Component.Resources, 1)
 	r.Equal("keep", f.Descriptors[0].Component.Resources[0].Name)
@@ -451,7 +449,7 @@ func TestProjectConsistencyAcrossModes(t *testing.T) {
 	for name, spec := range specs {
 		qq, err := Compile(t.Context(), spec)
 		r.NoError(err)
-		ff, err := qq.Filter(t.Context(), Graph{Root: ComponentKey{Name: "comp", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
+		ff, err := qq.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
 		r.NoError(err)
 		p, err := qq.Project(t.Context(), ff)
 		r.NoError(err, name)
@@ -506,7 +504,41 @@ func TestFilterCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err = q.Filter(ctx, Graph{Root: ComponentKey{Name: "d", Version: "1.0.0"}, Descriptors: []*descriptor.Descriptor{d}})
+	_, err = q.Filter(ctx, Graph{Descriptors: []*descriptor.Descriptor{d}})
 	r.Error(err)
 	r.ErrorIs(err, context.Canceled)
+}
+
+// TestProjectRejectsNilFiltered pins that a nil view is an error, not a
+// computed-empty result: status distinguishes an absent payload from an empty
+// one, so publishing "found nothing" for a caller bug would be the wrong signal.
+func TestProjectRejectsNilFiltered(t *testing.T) {
+	r := require.New(t)
+	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{})
+	r.NoError(err)
+
+	p, err := q.Project(t.Context(), nil)
+	r.Error(err)
+	r.Nil(p)
+	r.ErrorContains(err, "must not be nil")
+}
+
+// TestProjectUnknownExtractMode pins the switch default, so a mode added
+// without a projector fails loudly instead of publishing an empty list.
+func TestProjectUnknownExtractMode(t *testing.T) {
+	r := require.New(t)
+	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{
+		Extract: &v1alpha1.Extract{ByComponents: map[string]string{"n": `component.name`}},
+	})
+	r.NoError(err)
+	q.extract.mode = extractMode(99)
+
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{newDescriptor("c", "1.0.0")}})
+	r.NoError(err)
+
+	p, err := q.Project(t.Context(), f)
+	r.Nil(p)
+	var extErr *ExtractError
+	r.ErrorAs(err, &extErr)
+	r.ErrorContains(err, "unknown extraction mode")
 }
