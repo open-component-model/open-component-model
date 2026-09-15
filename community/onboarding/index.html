@@ -52,7 +52,7 @@
                             </svg>
 </button>
 <a href=https://github.com/open-component-model target=_blank class="header-github-pill d-none d-lg-inline-flex" aria-label=GitHub><span class=icon><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-brand-github" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"></path><path d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5"></path></svg></span>
-</a><a href=https://kubernetes.slack.com/archives/C05UWBE8R1D target=_blank class="header-github-pill d-none d-lg-inline-flex" aria-label=Slack><span class=icon><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-brand-slack"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12v-6a2 2 0 0 1 4 0v6m0 -2a2 2 0 1 1 2 2h-6" /><path d="M12 12h6a2 2 0 0 1 0 4h-6m2 0a2 2 0 1 1 -2 2v-6" /><path d="M12 12v6a2 2 0 0 1 -4 0v-6m0 2a2 2 0 1 1 -2 -2h6" /><path d="M12 12h-6a2 2 0 0 1 0 -4h6m-2 0a2 2 0 1 1 2 -2v6" /></svg></span></a><div class="dropdown me-3 d-none d-lg-flex"><button class="btn btn-link nav-link p-0 dropdown-toggle btn-dropdown" id=doks-versions data-bs-toggle=dropdown aria-expanded=false data-bs-display=static aria-label="Toggle version menu">
+</a><a href=https://kubernetes.slack.com/archives/C05UWBE8R1D target=_blank class="header-github-pill d-none d-lg-inline-flex" aria-label=Slack><span class=icon><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-brand-slack"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12v-6a2 2 0 0 1 4 0v6m0 -2a2 2 0 1 1 2 2h-6" /><path d="M12 12h6a2 2 0 0 1 0 4h-6m2 0a2 2 0 1 1 -2 2v-6" /><path d="M12 12v6a2 2 0 0 1 -4 0v-6m0 2a2 2 0 1 1 -2 -2h6" /><path d="M12 12h-6a2 2 0 0 1 0 -4h6m-2 0a2 2 0 1 1 2 -2v6" /></svg></span></a><div class="dropdown me-3 d-none d-lg-flex" style=visibility:hidden aria-hidden=true><button class="btn btn-link nav-link p-0 dropdown-toggle btn-dropdown" id=doks-versions data-bs-toggle=dropdown aria-expanded=false data-bs-display=static aria-label="Toggle version menu">
 0.15 (latest)
 <span class=dropdown-caret><svg xmlns="http://www.w3.org/2000/svg"
                                         class="icon icon-tabler icon-tabler-chevron-down" width="20" height="20"
@@ -118,6 +118,7 @@ one test suite.</p><pre class=mermaid>
   graph TD
     Root[&#34;open-component-model/&#34;]
     Bindings[&#34;bindings/\nLanguage bindings (currently Go)&#34;]
+    Go[&#34;go/\nSingle Go module&#34;]
     CLI[&#34;cli/\nOCM CLI&#34;]
     K8s[&#34;kubernetes/controller/\nOCM Kubernetes Controller Toolkit&#34;]
     Website[&#34;website/\nProject website&#34;]
@@ -125,11 +126,12 @@ one test suite.</p><pre class=mermaid>
     Docs[&#34;docs/\nCommunity docs &amp; governance&#34;]
 
     Root --&gt; Bindings
-    Root --&gt; CLI
-    Root --&gt; K8s
     Root --&gt; Website
     Root --&gt; Conformance
     Root --&gt; Docs
+    Bindings --&gt; Go
+    Go --&gt; CLI
+    Go --&gt; K8s
 </pre><div class="callout callout-caution d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/alert-triangle svg-inline callout-icon me-2 mb-3" id="svg-alert-triangle" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M12 9v4" />   <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" />   <path d="M12 16h.01" /> </svg><div class=callout-content><div class=callout-title>Legacy repositories</div><div class=callout-body><p>The <a href=https://github.com/open-component-model/ocm target=_blank rel=noopener>ocm</a> and
 <a href=https://github.com/open-component-model/ocm-controller target=_blank rel=noopener>ocm-controller</a> repositories are the previous generation of
 OCM tooling. They are maintained but no longer receive new features. All new development targets the mono-repo above.
@@ -137,8 +139,8 @@ Read the <a href=/blog/ocmv2/>OCM v2 announcement</a> for background on the rewr
   flowchart TD
     Spec[&#34;OCM Specification\n(defines the model)&#34;]
     Go[&#34;Go Bindings\n(bindings/go/)&#34;]
-    CLI[&#34;OCM CLI\n(cli/)&#34;]
-    Controllers[&#34;OCM Kubernetes Controller Toolkit\n(kubernetes/controller/)&#34;]
+    CLI[&#34;OCM CLI\n(bindings/go/cli/)&#34;]
+    Controllers[&#34;OCM Kubernetes Controller Toolkit\n(bindings/go/kubernetes/controller/)&#34;]
     ODG[&#34;Open Delivery Gear\n(separate repository, Python)&#34;]
 
     Spec --&gt; Go
@@ -177,9 +179,9 @@ on.</p><div class="card-nav d-flex flex-column flex-sm-row"><div class="card tex
           <path d="M13 18l6 -6"></path>
           <path d="M13 6l6 6"></path>
         </svg></div></div></div></div><h3 id=ocm-cli>OCM CLI<a href=#ocm-cli class=anchor aria-hidden=true>#</a></h3><p>A command-line tool for the Pack-Sign-Transport workflow, located in
-<a href=https://github.com/open-component-model/open-component-model/tree/main/cli target=_blank rel=noopener><code>cli/</code></a>. Built on the Go bindings, it is
+<a href=https://github.com/open-component-model/open-component-model/tree/main/bindings/go/cli target=_blank rel=noopener><code>bindings/go/cli/</code></a>. Built on the Go bindings, it is
 designed for interactive use and CI/CD pipelines. Start with
-<a href=/docs/getting-started/install-the-ocm-cli/>Install the OCM CLI</a>.</p><div class="card-nav d-flex flex-column flex-sm-row"><div class="card text-end w-100"><div class="card-body d-flex"><div class="d-flex flex-column me-auto text-start"><h5 class="card-title my-0"><a href=https://github.com/open-component-model/open-component-model/blob/main/cli/README.md class="stretched-link text-reset text-decoration-none">CLI README</a></h5><p class="card-text mt-1">Installation from source, quick start, and plugin system.</p></div><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-right" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+<a href=/docs/getting-started/install-the-ocm-cli/>Install the OCM CLI</a>.</p><div class="card-nav d-flex flex-column flex-sm-row"><div class="card text-end w-100"><div class="card-body d-flex"><div class="d-flex flex-column me-auto text-start"><h5 class="card-title my-0"><a href=https://github.com/open-component-model/open-component-model/blob/main/bindings/go/cli/README.md class="stretched-link text-reset text-decoration-none">CLI README</a></h5><p class="card-text mt-1">Installation from source, quick start, and plugin system.</p></div><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-right" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
           <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
           <path d="M5 12l14 0"></path>
           <path d="M13 18l6 -6"></path>
@@ -189,24 +191,24 @@ designed for interactive use and CI/CD pipelines. Start with
           <path d="M5 12l14 0"></path>
           <path d="M13 18l6 -6"></path>
           <path d="M13 6l6 6"></path>
-        </svg></div></div></div><div class="card text-end w-100"><div class="card-body d-flex"><div class="d-flex flex-column me-auto text-start"><h5 class="card-title my-0"><a href=https://github.com/open-component-model/open-component-model/blob/main/cli/CONTRIBUTING.md class="stretched-link text-reset text-decoration-none">Contributing to the CLI</a></h5><p class="card-text mt-1">CLI-specific development workflow and conventions.</p></div><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-right" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        </svg></div></div></div><div class="card text-end w-100"><div class="card-body d-flex"><div class="d-flex flex-column me-auto text-start"><h5 class="card-title my-0"><a href=https://github.com/open-component-model/open-component-model/blob/main/bindings/go/cli/CONTRIBUTING.md class="stretched-link text-reset text-decoration-none">Contributing to the CLI</a></h5><p class="card-text mt-1">CLI-specific development workflow and conventions.</p></div><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-right" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
           <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
           <path d="M5 12l14 0"></path>
           <path d="M13 18l6 -6"></path>
           <path d="M13 6l6 6"></path>
         </svg></div></div></div></div><h3 id=ocm-kubernetes-controller-toolkit>OCM Kubernetes Controller Toolkit<a href=#ocm-kubernetes-controller-toolkit class=anchor aria-hidden=true>#</a></h3><p>A set of controllers that handle deployment and verification of OCM component versions in Kubernetes clusters, located
-in <a href=https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller target=_blank rel=noopener><code>kubernetes/controller/</code></a>.
+in <a href=https://github.com/open-component-model/open-component-model/tree/main/bindings/go/kubernetes/controller target=_blank rel=noopener><code>bindings/go/kubernetes/controller/</code></a>.
 They use a dependency chain of custom resources: Repository, Component, Resource, and Deployer.</p><div class="card-nav d-flex flex-column flex-sm-row"><div class="card text-end w-100"><div class="card-body d-flex"><div class="d-flex flex-column me-auto text-start"><h5 class="card-title my-0"><a href=/docs/getting-started/deploy-helm-charts/ class="stretched-link text-reset text-decoration-none">Deploy Helm Charts</a></h5><p class="card-text mt-1">Tutorial: deploy a Helm chart from an OCM component version with controllers, kro, and Flux.</p></div><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-right" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
           <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
           <path d="M5 12l14 0"></path>
           <path d="M13 18l6 -6"></path>
           <path d="M13 6l6 6"></path>
-        </svg></div></div></div><div class="card text-end w-100"><div class="card-body d-flex"><div class="d-flex flex-column me-auto text-start"><h5 class="card-title my-0"><a href=https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller/examples/ class="stretched-link text-reset text-decoration-none">Deployment Examples</a></h5><p class="card-text mt-1">Deployment examples: Helm, Kustomize, signing, nested deployments.</p></div><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-right" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        </svg></div></div></div><div class="card text-end w-100"><div class="card-body d-flex"><div class="d-flex flex-column me-auto text-start"><h5 class="card-title my-0"><a href=https://github.com/open-component-model/open-component-model/tree/main/bindings/go/kubernetes/controller/examples/ class="stretched-link text-reset text-decoration-none">Deployment Examples</a></h5><p class="card-text mt-1">Deployment examples: Helm, Kustomize, signing, nested deployments.</p></div><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-right" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
           <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
           <path d="M5 12l14 0"></path>
           <path d="M13 18l6 -6"></path>
           <path d="M13 6l6 6"></path>
-        </svg></div></div></div><div class="card text-end w-100"><div class="card-body d-flex"><div class="d-flex flex-column me-auto text-start"><h5 class="card-title my-0"><a href=https://github.com/open-component-model/open-component-model/blob/main/kubernetes/controller/CONTRIBUTING.md class="stretched-link text-reset text-decoration-none">Contributing to Controllers</a></h5><p class="card-text mt-1">Controller development, testing, and CRD conventions.</p></div><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-right" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        </svg></div></div></div><div class="card text-end w-100"><div class="card-body d-flex"><div class="d-flex flex-column me-auto text-start"><h5 class="card-title my-0"><a href=https://github.com/open-component-model/open-component-model/blob/main/bindings/go/kubernetes/controller/CONTRIBUTING.md class="stretched-link text-reset text-decoration-none">Contributing to Controllers</a></h5><p class="card-text mt-1">Controller development, testing, and CRD conventions.</p></div><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-right" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
           <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
           <path d="M5 12l14 0"></path>
           <path d="M13 18l6 -6"></path>
@@ -256,8 +258,7 @@ label across our repositories.</p><div class="card-nav d-flex flex-column flex-s
           <path d="M13 18l6 -6"></path>
           <path d="M13 6l6 6"></path>
         </svg></div></div></div></div><div class="callout callout-tip d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/heart-handshake svg-inline callout-icon me-2 mb-3" id="svg-heart-handshake" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" />   <path d="M12 6l-3.293 3.293a1 1 0 0 0 0 1.414l.543 .543c.69 .69 1.81 .69 2.5 0l1 -1a3.182 3.182 0 0 1 4.5 0l2.25 2.25" />   <path d="M12.5 15.5l2 2" />   <path d="M15 13l2 2" /> </svg><div class=callout-content><div class=callout-title>Say Hello</div><div class=callout-body><p>The easiest way to get started is to say hello. Join our monthly
-<a href=/community/#community-call>community call</a> or ask for an invite to the
-<a href=/community/how-we-work/#meetings>daily standup</a> - it is a casual sync, not mandatory, and not necessarily work-related.
+<a href=/community/#community-call>community call</a> - open to everyone, no invite needed.
 You can reach us on <a href=/community/#slack>Slack</a> or <a href=/community/#zulip>Zulip</a> anytime.</p></div></div></div><div class="page-footer-meta d-flex flex-column flex-md-row justify-content-between"></div><div class="page-nav d-flex flex-column flex-sm-row"><div class="card text-end w-100"><div class="card-body d-flex justify-content-end"><div class="d-flex flex-column"><div class=text-body-secondary>Next</div><a href=/community/contributing/ class="stretched-link text-reset text-decoration-none">Contributing to OCM</a></div><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-right" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
 						<path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
 						<path d="M5 12l14 0"></path>
