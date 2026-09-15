@@ -64,7 +64,7 @@ containing `Integration` in their name are skipped during unit test runs and onl
 
 ```bash
 # Run integration tests for a specific package
-task bindings/go/oci/integration:test/integration
+cd bindings/go && go test -run Integration ./oci/...
 
 # Run all integration tests
 task test/integration

@@ -269,6 +269,10 @@ For details on how the Deployer uses ApplySets, see [OCM Controllers]({{< relref
 
 Replace the `$OCM_REPO` placeholder with your actual repository URL and apply:
 
+{{< callout context="caution" title="RBAC required before you apply" icon="outline/alert-triangle" >}}
+Please make sure that you updated your RBAC permissions before applying this command. Follow our [Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md" >}}) guide to know how to do that.
+{{< /callout >}}
+
 ```shell
 envsubst < bootstrap.yaml > deployment-subst.yaml
 kubectl apply -f deployment-subst.yaml
