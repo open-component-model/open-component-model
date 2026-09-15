@@ -30,14 +30,26 @@
 //   - extract.byComponents: component (inner component)
 //   - extract.expression: components (list of full v2 descriptors)
 //
-// Missing field or key access is not an error: it is a selector nonmatch and an
-// omitted extraction field. All other CEL errors (type errors, nonboolean selector
-// results, invalid SemVer inputs, cancellation) are reported as structured
-// SelectorError or ExtractError values. Descriptor conversion, marshalling, or
-// decoding failures surface from Project as ordinary wrapped errors carrying the
-// component name/version, not as ExtractError, so the controller treats them as
-// retryable rather than terminal. A resource removed by selection is never
-// serialized, so a bad access on a discarded resource cannot fail projection.
+// A missing access (missing map key, missing attribute, out-of-range index) is
+// not an error: it is a selector nonmatch and an omitted extraction field. All
+// three shapes come from one unexported cel-go error type. See `missingAccessPrefixes`.
+//
+// Three near-misses are terminal instead:
+//
+//   - A present-but-null field. descriptor/v2 has no omitempty, so
+//     size(component.resources) on a component without resources is
+//     "no such overload". Guard with 'x == null ? 0 : size(x)'.
+//   - A missing access in extract.expression, strict by design, unlike the
+//     byResources and byComponents field maps.
+//   - An expression returning null or optional.none(), which stores an explicit
+//     null rather than omitting the field.
+//
+// All other CEL errors are SelectorError or ExtractError, which the controller
+// treats as terminal. Cancellation is excluded: evalResult re-checks the context
+// so it stays a plain retryable error. Descriptor conversion, marshalling, or
+// decoding failures surface from `Project` as ordinary wrapped errors with the
+// component name/version, so they are retryable too. A resource removed by
+// selection is not serialized, so a `bad access` on a discarded resource will never fail.
 //
 // Empty reference or component selector stages are not failures: Filter reports
 // them with a distinct EmptyReason and Project deterministically emits an empty list.

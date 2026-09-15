@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -91,6 +92,13 @@ type DiscoverySpec struct {
 	// +optional
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
 
+	// Interval at which the component graph is re-discovered. Watches on the
+	// referenced Component usually trigger reconcile events. The interval can
+	// be set to avoid missed events. Unset or zero disables periodic
+	// re-discovery.
+	// +optional
+	Interval metav1.Duration `json:"interval,omitempty"`
+
 	// Suspend tells the controller to suspend the reconciliation of this
 	// Discovery.
 	// +optional
@@ -153,15 +161,23 @@ type DiscoveryStatus struct {
 	// +optional
 	Extracted []ExtractedRecord `json:"extracted,omitzero"`
 
+	// ObservedComponentDigest is the digest of the root Component
+	// It is recorded only when every reference in the discovered graph has a
+	// digest. An empty value forces a full re-discovery.
+	//
+	// This value is used to determine if a full re-discovery is required or not.
+	// If the root component version's digest didn't change, there is no need
+	// to re-walk the entire component version. Everything should be still the same.
+	// Force-pushing over a version is not supported.
+	// +optional
+	ObservedComponentDigest string `json:"observedComponentDigest,omitempty"`
+
 	// EffectiveOCMConfig specifies the entirety of config maps and secrets
 	// whose configuration data was applied to the Discovery reconciliation,
 	// in the order the configuration data was applied.
 	// +optional
 	EffectiveOCMConfig []OCMConfiguration `json:"effectiveOCMConfig,omitempty"`
 }
-
-// +kubebuilder:rbac:groups=delivery.ocm.software,resources=discoveries,verbs=get;list;watch
-// +kubebuilder:rbac:groups=delivery.ocm.software,resources=discoveries/status,verbs=get;update;patch
 
 // Discovery is the Schema for the discoveries API.
 // +kubebuilder:object:root=true
@@ -193,6 +209,16 @@ func (in *Discovery) GetVID() map[string]string {
 	metadata[GroupVersion.Group+"/discovery_version"] = vid
 
 	return metadata
+}
+
+// GetRequeueAfter returns the duration after which the Discovery must be
+// reconciled again.
+func (in *Discovery) GetRequeueAfter() time.Duration {
+	if in == nil {
+		return 0
+	}
+
+	return in.Spec.Interval.Duration
 }
 
 func (in *Discovery) SetObservedGeneration(v int64) {

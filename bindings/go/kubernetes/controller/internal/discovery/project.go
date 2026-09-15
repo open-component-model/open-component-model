@@ -47,17 +47,15 @@ type Payload struct {
 // descriptor list and must produce a list of objects with string keys; record
 // order produced by the expression is retained.
 func (q *Query) Project(ctx context.Context, filtered *Filtered) (*Payload, error) {
-	if err := checkContext(ctx); err != nil {
-		return nil, err
-	}
 	if filtered == nil {
-		filtered = &Filtered{}
+		// Never a computed-empty result: status distinguishes an absent payload
+		// from an empty one, so a nil view must not publish "found nothing".
+		return nil, fmt.Errorf("filtered view must not be nil")
 	}
 
-	empty := len(filtered.Descriptors) == 0
 	if q.extract == nil {
 		payload := &Payload{Components: make([]json.RawMessage, 0, len(filtered.Descriptors)), Reason: filtered.Reason}
-		if empty {
+		if len(filtered.Descriptors) == 0 {
 			return payload, nil
 		}
 		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
@@ -75,7 +73,7 @@ func (q *Query) Project(ctx context.Context, filtered *Filtered) (*Payload, erro
 	}
 
 	payload := &Payload{Extracted: make([]map[string]any, 0), Reason: filtered.Reason}
-	if empty {
+	if len(filtered.Descriptors) == 0 {
 		return payload, nil
 	}
 
@@ -84,6 +82,9 @@ func (q *Query) Project(ctx context.Context, filtered *Filtered) (*Payload, erro
 		return nil, err
 	}
 
+	// Every projector returns an allocated slice, so the selected output stays
+	// non-nil even when empty. The default keeps a future mode from shipping as
+	// a silent empty result.
 	switch q.extract.mode {
 	case extractByResources:
 		payload.Extracted, err = q.projectPerResource(ctx, descriptors)
@@ -91,14 +92,13 @@ func (q *Query) Project(ctx context.Context, filtered *Filtered) (*Payload, erro
 		payload.Extracted, err = q.projectPerComponent(ctx, descriptors)
 	case extractExpression:
 		payload.Extracted, err = q.projectExpression(ctx, descriptors)
+	default:
+		return nil, extractErrorf("", "unknown extraction mode %d", q.extract.mode)
 	}
 	if err != nil {
 		return nil, err
 	}
-	// A selected but empty extraction result is an empty list, never nil.
-	if payload.Extracted == nil {
-		payload.Extracted = []map[string]any{}
-	}
+
 	return payload, nil
 }
 
@@ -140,11 +140,14 @@ func descriptorMaps(ctx context.Context, descriptors []*descriptor.Descriptor) (
 }
 
 // component returns the inner component map of a full v2 descriptor map.
-func component(desc map[string]any) map[string]any {
-	if c, ok := desc["component"].(map[string]any); ok {
-		return c
+// Do not ignore the missing component field.
+func component(desc map[string]any) (map[string]any, error) {
+	c, ok := desc["component"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("descriptor has no component object")
 	}
-	return nil
+
+	return c, nil
 }
 
 // resources returns the resource maps of an inner component map. It handles
@@ -165,11 +168,14 @@ func resources(component map[string]any) []map[string]any {
 
 func (q *Query) projectPerResource(ctx context.Context, descriptors []map[string]any) ([]map[string]any, error) {
 	records := make([]map[string]any, 0, len(descriptors))
-	for _, desc := range descriptors {
+	for i, desc := range descriptors {
 		if err := checkContext(ctx); err != nil {
 			return nil, err
 		}
-		comp := component(desc)
+		comp, err := component(desc)
+		if err != nil {
+			return nil, fmt.Errorf("failed to project resources of descriptor %d: %w", i, err)
+		}
 		for _, resource := range resources(comp) {
 			record, err := q.evalFields(ctx, map[string]any{
 				"component": comp,
@@ -186,11 +192,15 @@ func (q *Query) projectPerResource(ctx context.Context, descriptors []map[string
 
 func (q *Query) projectPerComponent(ctx context.Context, descriptors []map[string]any) ([]map[string]any, error) {
 	records := make([]map[string]any, 0, len(descriptors))
-	for _, desc := range descriptors {
+	for i, desc := range descriptors {
 		if err := checkContext(ctx); err != nil {
 			return nil, err
 		}
-		record, err := q.evalFields(ctx, map[string]any{"component": component(desc)})
+		comp, err := component(desc)
+		if err != nil {
+			return nil, fmt.Errorf("failed to project descriptor %d: %w", i, err)
+		}
+		record, err := q.evalFields(ctx, map[string]any{"component": comp})
 		if err != nil {
 			return nil, err
 		}
@@ -204,16 +214,12 @@ func (q *Query) projectExpression(ctx context.Context, descriptors []map[string]
 	for _, desc := range descriptors {
 		components = append(components, desc)
 	}
-	if err := checkContext(ctx); err != nil {
-		return nil, err
-	}
 	val, _, err := q.extract.expression.ContextEval(ctx, map[string]any{"components": components})
-	// Missing access is a strict error for whole-expression extraction,
-	// unlike map-field extraction where it only omits the field.
-	if missing, cause := evalResult(val, err); missing {
-		return nil, extractErrorf("", "failed to evaluate expression: %s", cause)
-	} else if cause != nil {
-		return nil, extractErrorf("", "failed to evaluate expression: %s", cause)
+	// Missing access is a strict error for whole-expression extraction, unlike
+	// map-field extraction where it only omits the field, so both outcomes of
+	// evalResult are handled the same way here.
+	if _, cause := evalResult(ctx, val, err); cause != nil {
+		return nil, extractEvalError("", cause)
 	}
 	native, err := conversion.GoNativeType(val)
 	if err != nil {
@@ -242,16 +248,13 @@ func (q *Query) projectExpression(ctx context.Context, descriptors []map[string]
 func (q *Query) evalFields(ctx context.Context, activation map[string]any) (map[string]any, error) {
 	record := make(map[string]any, len(q.extract.fields))
 	for _, field := range q.extract.fields {
-		if err := checkContext(ctx); err != nil {
-			return nil, err
-		}
 		val, _, err := field.prog.ContextEval(ctx, activation)
-		missing, cause := evalResult(val, err)
+		missing, cause := evalResult(ctx, val, err)
 		if missing {
 			continue
 		}
 		if cause != nil {
-			return nil, extractErrorf(field.name, "failed to evaluate expression: %s", cause)
+			return nil, extractEvalError(field.name, cause)
 		}
 		native, err := conversion.GoNativeType(val)
 		if err != nil {

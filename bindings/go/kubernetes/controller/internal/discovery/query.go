@@ -75,6 +75,10 @@ func Compile(ctx context.Context, spec *v1alpha1.DiscoverySpec) (*Query, error) 
 		return nil, fmt.Errorf("failed to extend base CEL environment: %w", err)
 	}
 
+	if err := checkContext(ctx); err != nil {
+		return nil, err
+	}
+
 	q := &Query{}
 	if q.references, err = compileSelector(ctx, selectorEnv, StageReference, spec.ReferenceSelector); err != nil {
 		return nil, err
@@ -93,10 +97,7 @@ func Compile(ctx context.Context, spec *v1alpha1.DiscoverySpec) (*Query, error) 
 
 // compileSelector compiles a single selector. A nil or empty selector compiles
 // to nil and matches everything, including the graph root.
-func compileSelector(ctx context.Context, env *cel.Env, stage string, sel *v1alpha1.Selector) (*compiledSelector, error) {
-	if err := checkContext(ctx); err != nil {
-		return nil, err
-	}
+func compileSelector(_ context.Context, env *cel.Env, stage string, sel *v1alpha1.Selector) (*compiledSelector, error) {
 	if sel == nil || (len(sel.MatchIdentity) == 0 && len(sel.MatchLabels) == 0 && sel.Expression == "") {
 		return nil, nil
 	}
@@ -116,9 +117,6 @@ func compileSelector(ctx context.Context, env *cel.Env, stage string, sel *v1alp
 }
 
 func compileExtract(ctx context.Context, base *cel.Env, extract *v1alpha1.Extract) (*compiledExtract, error) {
-	if err := checkContext(ctx); err != nil {
-		return nil, err
-	}
 	if extract == nil {
 		return nil, nil
 	}
@@ -168,12 +166,9 @@ func compileExtract(ctx context.Context, base *cel.Env, extract *v1alpha1.Extrac
 
 // compileFields compiles one CEL expression per map value. Field names are
 // processed in lexicographic order so compilation errors are deterministic.
-func compileFields(ctx context.Context, env *cel.Env, exprs map[string]string) ([]extractedField, error) {
+func compileFields(_ context.Context, env *cel.Env, exprs map[string]string) ([]extractedField, error) {
 	fields := make([]extractedField, 0, len(exprs))
 	for _, name := range slices.Sorted(maps.Keys(exprs)) {
-		if err := checkContext(ctx); err != nil {
-			return nil, err
-		}
 		prog, err := compileProgram(env, exprs[name])
 		if err != nil {
 			return nil, extractErrorf(name, "failed to compile expression: %s", err)
@@ -196,9 +191,10 @@ func compileProgram(env *cel.Env, expr string) (cel.Program, error) {
 }
 
 // matches reports whether the element with the given identity and labels
-// survives the selector. All clauses are ANDed. A missing field or key access
-// in the selector expression is a nonmatch; a nonboolean result or any other
-// evaluation error is a *SelectorError.
+// survives the selector. All clauses are ANDed. A missing field, key or index
+// access in the selector expression is a nonmatch; a nonboolean result or any
+// other evaluation error is a *SelectorError. A cancelled evaluation is a
+// plain error, never a *SelectorError, so it stays retryable.
 func (s *compiledSelector) matches(ctx context.Context, identity runtime.Identity, labels map[string]any) (bool, error) {
 	if s == nil {
 		return true, nil
@@ -212,23 +208,16 @@ func (s *compiledSelector) matches(ctx context.Context, identity runtime.Identit
 	if s.prog == nil {
 		return true, nil
 	}
-	if err := checkContext(ctx); err != nil {
-		return false, err
-	}
-	if labels == nil {
-		labels = map[string]any{}
-	}
 	val, _, err := s.prog.ContextEval(ctx, map[string]any{
 		"identity": map[string]string(identity),
 		"labels":   labels,
 	})
-	if err := checkContext(ctx); err != nil {
-		return false, err
-	}
-	if missing, failure := evalResult(val, err); missing {
+	missing, failure := evalResult(ctx, val, err)
+	if missing {
 		return false, nil
-	} else if failure != nil {
-		return false, selectorErrorf(s.stage, "failed to evaluate expression: %s", failure)
+	}
+	if failure != nil {
+		return false, selectorEvalError(s.stage, failure)
 	}
 	native, err := conversion.GoNativeType(val)
 	if err != nil {

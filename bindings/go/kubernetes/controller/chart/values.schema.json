@@ -46,14 +46,6 @@
                         }
                     }
                 },
-                "discovery": {
-                    "type": "object",
-                    "properties": {
-                        "safetyInterval": {
-                            "type": "string"
-                        }
-                    }
-                },
                 "env": {
                     "type": "array"
                 },

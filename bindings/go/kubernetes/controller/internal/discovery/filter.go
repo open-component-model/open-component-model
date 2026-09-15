@@ -20,8 +20,6 @@ func (k ComponentKey) String() string {
 
 // Graph is a fully resolved transitive component graph.
 type Graph struct {
-	// Root identifies the traversal root within Descriptors.
-	Root ComponentKey
 	// Descriptors contains the resolved descriptors, including the root.
 	Descriptors []*descriptor.Descriptor
 }
@@ -30,8 +28,9 @@ type Graph struct {
 // by (component.name, component.version).
 //
 // Filtered is a read-only view, not an isolated snapshot. Filter owns the
-// Descriptors slice and shallow-copies each surviving descriptor with its own
-// resource slice, but untouched nested data (labels, accesses, references,
+// Descriptors slice. A descriptor whose resources were filtered is a shallow
+// copy owning its own resource slice; every other descriptor is the input
+// pointer itself. All remaining nested data (labels, accesses, references,
 // sources, repository contexts, signatures) is shared read-only with the input
 // graph. Callers must not mutate a Filtered result or its descriptors.
 type Filtered struct {
@@ -83,9 +82,6 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 		return &Filtered{Descriptors: []*descriptor.Descriptor{}, Reason: EmptyReasonNoComponentsMatched}, nil
 	}
 
-	if err := checkContext(ctx); err != nil {
-		return nil, err
-	}
 	filtered := make([]*descriptor.Descriptor, 0, len(survivors))
 	for _, d := range survivors {
 		out, err := q.filterResources(ctx, d)
@@ -95,9 +91,6 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 		filtered = append(filtered, out)
 	}
 
-	if err := checkContext(ctx); err != nil {
-		return nil, err
-	}
 	// Lexicographic order by (component.name, component.version).
 	return &Filtered{Descriptors: sortByComponentKey(filtered), Reason: EmptyReasonNone}, nil
 }
@@ -162,25 +155,21 @@ func (q *Query) filterComponents(ctx context.Context, survivors []*descriptor.De
 	return kept, nil
 }
 
-// filterResources applies the resource selector stage to one descriptor. It
-// returns a shallow copy with its own resource slice; all other descriptor data
-// is shared read-only with the input, which is never mutated. Components with
-// zero surviving resources are kept.
+// filterResources applies the resource selector stage to one descriptor. With
+// an active selector it returns a shallow copy owning its own resource slice,
+// so the input is never mutated; an empty result is then a non-nil slice,
+// preserving the v2 null-versus-[] distinction downstream. Components with zero
+// surviving resources are kept.
 //
-// Without an active selector the input resource nilness is retained (a nil
-// slice stays nil). With an active selector an empty result is a non-nil slice,
-// preserving the v2 null-versus-[] distinction downstream.
+// Without a selector nothing is written, so the input descriptor is returned
+// as is. Filtered is documented as a read-only view sharing its nested data
+// with the graph, so this shares one level more and copies nothing.
 func (q *Query) filterResources(ctx context.Context, d *descriptor.Descriptor) (*descriptor.Descriptor, error) {
-	if err := checkContext(ctx); err != nil {
-		return nil, err
+	if q.resources == nil {
+		return d, nil
 	}
 
 	out := *d
-	if q.resources == nil {
-		out.Component.Resources = slices.Clone(d.Component.Resources)
-		return &out, nil
-	}
-
 	kept := make([]descriptor.Resource, 0, len(d.Component.Resources))
 	for i := range d.Component.Resources {
 		if err := checkContext(ctx); err != nil {

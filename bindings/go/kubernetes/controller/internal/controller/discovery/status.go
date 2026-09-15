@@ -3,9 +3,7 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"strings"
-	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,43 +13,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 )
-
-const (
-	// DefaultSafetyInterval is the default controller-wide safety interval
-	// for periodic full re-discovery.
-	DefaultSafetyInterval = 30 * time.Minute
-	// safetyJitter is the relative jitter applied to the safety interval.
-	safetyJitter = 0.1
-)
-
-// ValidateSafetyInterval validates the controller-wide safety interval. Zero
-// disables safety scheduling; negative durations are invalid.
-func ValidateSafetyInterval(d time.Duration) error {
-	if d < 0 {
-		return fmt.Errorf("discovery controller safety interval must not be negative: %s", d)
-	}
-	return nil
-}
-
-// safetyRequeueAfter returns the jittered safety interval for a successful
-// reconcile, or 0 when safety scheduling is disabled.
-func (r *Reconciler) safetyRequeueAfter() time.Duration {
-	if r.SafetyInterval <= 0 {
-		return 0
-	}
-	f := rand.Float64
-	if r.randFloat != nil {
-		f = r.randFloat
-	}
-	return jitterDuration(r.SafetyInterval, f())
-}
-
-// jitterDuration applies a relative jitter of ±10% to d based on f in
-// [0.0, 1.0).
-func jitterDuration(d time.Duration, f float64) time.Duration {
-	delta := (f*2 - 1) * safetyJitter
-	return d + time.Duration(delta*float64(d))
-}
 
 // publish writes the mutated status to the API server with an
 // optimistic-lock merge patch. Only semantic status changes are published; an
