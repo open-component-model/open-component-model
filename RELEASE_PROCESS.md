@@ -9,7 +9,7 @@ For OCM release managers. CLI and Kubernetes Controller ship together in lockste
 * One workflow run produces three tags on the same commit:
   * `v0.X.Y` (canonical, the GitHub release)
   * `bindings/go/v0.X.Y` (Go-module side tag for the merged `bindings/go` module; cli and kubernetes/controller are packages inside it, so this one tag resolves the CLI docs, the controller CRDs and every binding for Go and Hugo module consumers)
-  * `website/v0.X.Y` (Hugo module imports for versioned docs; final-only, no RC)
+  * `website/v0.X.Y-rc.N` at RC time, `website/v0.X.Y` at final — website tags pinning Hugo module imports for versioned docs
 * Cadence: one release per sprint (two weeks). RC at sprint start, promote previous RC at the next sprint start.
 
 ## Release Workflow Diagram
@@ -46,11 +46,11 @@ canonical final tag (`v0.7.0`) lands on the same commit as the most recent
 RC tag (`v0.7.0-rc.2`). The workflow just stamps additional tags on the RC 
 commit. Second, **each tagged release commit carries multiple tags, not one.**
 The same commit also receives `bindings/go/v0.7.0-rc.2` + `bindings/go/v0.7.0` 
-and `website/v0.7.0`. 
+and `website/v0.7.0-rc.2` + `website/v0.7.0`. 
 The side tags exist so the website install script, Go module consumers, and 
 Hugo docs imports can address each component directly.
 
-The `website/v0.X.Y` tag is asymmetric: only the final form is created, no `website/v0.X.Y-rc.N` counterpart. The website ships docs, not artifacts that need RC validation, so an RC tag would have no consumer. If you go looking and don't find a `website/v0.7.0-rc.2`, that's by design — it isn't missing.
+Website tags come in both forms. Each RC-phase tag push includes `website/v0.X.Y-rc.N` alongside the canonical and `bindings/go` RC tags, and a workflow dispatched right after the RC pre-release publishes docs for every RC of the minor as full-version entries (e.g. `0.7.0-rc.2`). The final registration PR removes those RC entries again, so only finals stay pinned long-term.
 
 ### What the Release workflow does
 
@@ -58,7 +58,7 @@ The `website/v0.X.Y` tag is asymmetric: only the final form is created, no `webs
 flowchart TD
     Start([workflow_dispatch<br/>release.yml on releases/vX.Y])
     Start --> Prepare[prepare<br/>compute RC version<br/>generate changelog<br/>decide set_latest]
-    Prepare --> TagRC[tag_rc<br/>GPG-signed tags pushed:<br/>v0.X.Y-rc.N<br/>bindings/go/v0.X.Y-rc.N]
+    Prepare --> TagRC[tag_rc<br/>GPG-signed tags pushed:<br/>v0.X.Y-rc.N<br/>bindings/go/v0.X.Y-rc.N<br/>website/v0.X.Y-rc.N]
     TagRC --> Pipeline
 
     subgraph Pipeline["build_and_test - calls monorepo shared build & publish"]
@@ -77,6 +77,7 @@ flowchart TD
 
     Pipeline --> ReleaseRC[release_rc<br/>GitHub pre-release<br/>binaries + OCI tarballs + chart + changelog]
     ReleaseRC --> PubCompRC[publish_components_rc<br/>ocm.software/cli, /controller, /ocm<br/>conflict: replace]
+    ReleaseRC --> WebsiteDocsRC[create_website_rc_update_pr<br/>open/update docs PR for RC entries]
     ReleaseRC --> Gate{{release environment<br/>manual approval}}
     Gate --> Verify[verify_attestations<br/>CLI binaries, CLI OCI,<br/>controller image, chart]
     Verify --> Promote[promote_and_release_final<br/>tag v0.X.Y + bindings/go/v0.X.Y + website/v0.X.Y<br/>oras retag images, set :latest if applicable<br/>repackage chart, diff vs RC, push + attest<br/>publish final GitHub release]
@@ -89,7 +90,7 @@ flowchart TD
     classDef final fill:#dcfce7,stroke:#16a34a,color:#14532d
     classDef gate fill:#fef3c7,stroke:#d97706,color:#78350f
 
-    class Prepare,TagRC,Pipeline,ReleaseRC,PubCompRC,BuildCLI,BuildCtl,Conf,PubCLI,PubCtl rc
+    class Prepare,TagRC,Pipeline,ReleaseRC,PubCompRC,WebsiteDocsRC,BuildCLI,BuildCtl,Conf,PubCLI,PubCtl rc
     class Verify,Promote,PubCompFinal,WebsiteDocs final
     class Gate gate
 ```
@@ -98,8 +99,9 @@ Phase 1 (RC, blue) runs end-to-end without human intervention once you trigger t
 
 ### Website
 
-The website integrates into the same workflow run, after `promote_and_release_final` succeeds:
+The website integrates into the same workflow run, at RC time and again after `promote_and_release_final` succeeds:
 
+* At RC time the `tag_rc` step pushes `website/v0.X.Y-rc.N`, and a separate `create_website_rc_update_pr` job dispatches the docs PR workflow with the RC version. That workflow registers docs for **every** RC tag of the minor that carries a `website/` tag (append-only tag-sync; one stable PR per minor, so `rc.3` updates the still-open `rc.2` PR). RC docs become full-version entries like `0.16.0-rc.2` — never the default version, and excluded from the 10-minor retirement. When the final release PR later registers `0.X.Y`, it removes all RC entries of the minor atomically in the same PR.
 * The `website/v0.X.Y` tag is created at the same commit as the canonical tag — same `ADDITIONAL_TAGS` step that emits the `bindings/go/` tag.
 * A separate `create_website_update_pr` job then opens a PR to `main` updating `website/config/_default/{hugo.yaml,module.yaml}` to pin the new minor's Hugo module imports to the just-created `website/v0.X.Y` tag. The PR uses the OCMBot app token, signed commits, and `add-paths: website/config/`.
 
@@ -108,8 +110,6 @@ The website integrates into the same workflow run, after `promote_and_release_fi
 * On a **minor release** (`Z=0`) the script adds a new version entry under `versions` in `hugo.yaml` and a new set of import blocks in `module.yaml`.
 * On a **patch release** (`Z>0`) the script updates the existing minor's import tags in `module.yaml` in place; `hugo.yaml` is unchanged.
 * When more than 10 minors would be live, the oldest is retired (entry removed from `hugo.yaml`, imports removed from `module.yaml`). Retirement logic lives in `website/scripts/register-docs-version.js`.
-
-There is no `website/v0.X.Y-rc.N` tag. The website has no RC artifacts to validate (it's a docs site, not a binary or image), so the RC variant would have no consumer.
 
 ## OCM components produced
 
