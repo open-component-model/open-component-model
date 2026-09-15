@@ -54,12 +54,11 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 
 	var repo *git.Repository
 	if access.Commit == "" {
-		repo, err = git.PlainCloneContext(ctx, dir, false, &git.CloneOptions{
-			URL:        access.Repository,
-			Auth:       auth,
-			NoCheckout: true,
-			Tags:       git.AllTags,
-			CABundle:   opts.CABundle,
+		repo, err = git.PlainCloneContext(ctx, dir, true, &git.CloneOptions{
+			URL:      access.Repository,
+			Auth:     auth,
+			Tags:     git.AllTags,
+			CABundle: opts.CABundle,
 		})
 		if err != nil {
 			err = transportError(ctx, "cannot fetch git repository", err)
@@ -105,16 +104,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		return nil, "", err
 	}
 
-	worktree, err := repo.Worktree()
-	if err != nil {
-		return nil, "", fmt.Errorf("cannot open git worktree: %w", err)
-	}
-
-	if err := worktree.Checkout(&git.CheckoutOptions{Hash: selected.Hash}); err != nil {
-		return nil, "", fmt.Errorf("cannot check out git commit: %w", err)
-	}
-
-	result, err = archive(ctx, dir, opts)
+	result, err = archive(ctx, selected, opts)
 	if err != nil {
 		return nil, "", err
 	}
@@ -125,7 +115,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 // fetchCommit fetches a pinned commit without depending on a valid remote HEAD.
 // The repository is returned also with a fetch error, so the caller can close its storage.
 func fetchCommit(ctx context.Context, dir string, access *accessv1.Git, auth transport.AuthMethod, opts Options) (*git.Repository, error) {
-	repo, err := git.PlainInit(dir, false)
+	repo, err := git.PlainInit(dir, true)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create git repository: %w", err)
 	}

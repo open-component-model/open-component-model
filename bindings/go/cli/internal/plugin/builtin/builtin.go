@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	ocicredentialplugin "ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/credentials/oci"
+	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/git"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/github"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/gpg"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/input/dir"
@@ -80,6 +81,13 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		httpConfig,
 		filesystemConfig); err != nil {
 		return fmt.Errorf("could not register s3 inbuilt plugin: %w", err)
+	}
+
+	if err := git.Register(manager.ResourcePluginRegistry,
+		manager.DigestProcessorRegistry,
+		manager.CredentialRepositoryRegistry,
+		filesystemConfig); err != nil {
+		return fmt.Errorf("could not register git inbuilt plugin: %w", err)
 	}
 
 	var tempFolder string

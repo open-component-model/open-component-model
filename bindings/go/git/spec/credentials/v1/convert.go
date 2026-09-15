@@ -34,18 +34,6 @@ func fromDirectCredentials(properties map[string]string) *GitCredentials {
 }
 
 func ConvertToGitCredentials(creds runtime.Typed) (*GitCredentials, error) {
-	if creds == nil {
-		return nil, nil
-	}
-
-	if typed, ok := creds.(*GitCredentials); ok {
-		if typed == nil {
-			return nil, nil
-		}
-
-		return typed.DeepCopy(), nil
-	}
-
 	typed, err := convertScheme.NewObject(creds.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("unsupported git credential type: %w", err)

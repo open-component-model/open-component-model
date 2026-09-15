@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,7 +11,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1285,6 +1288,160 @@ components:
 	blobData, _, err := repo.GetLocalResource(ctx, componentName, componentVersion, res.ToIdentity())
 	r.NoError(err)
 	r.Equal(content, readAllFromBlob(t, blobData), "local blob should hold the object from the bucket")
+}
+
+// Test_Integration_AddComponentVersion_GitAccess verifies that a resource declaring a Git
+// access with a ref directly in the constructor is pinned to a commit and hashed by the git
+// digest processor, and that the access is then resolved and downloaded via the git resource
+// repository as an uncompressed tar of that commit.
+func Test_Integration_AddComponentVersion_GitAccess(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	registry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{{
+		Host: registry.Host, Port: registry.Port, User: registry.User, Password: registry.Password,
+	}})
+	r.NoError(err)
+
+	// A local repository keeps the test offline; file:// runs the same fetch and archive path as a remote.
+	repoDir, commit := createGitRepository(t)
+
+	const componentName = "ocm.software/git-access-component"
+	const componentVersion = "v1.0.0"
+
+	constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: repo-archive
+    version: v1.0.0
+    type: blob
+    relation: external
+    access:
+      type: Git/v1
+      repository: file://%s
+      ref: main
+`, componentName, componentVersion, repoDir)
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+		"--constructor", constructorPath,
+		"--config", cfgPath,
+	})
+	addCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	r.NoError(addCMD.ExecuteContext(addCtx), "add cv with git access should succeed")
+
+	repo := registry.Connect(t)
+	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(desc.Component.Resources, 1)
+	res := desc.Component.Resources[0]
+	r.Equal("repo-archive", res.Name)
+	r.NotNil(res.Access, "resource should carry a git access spec")
+	r.Equal("Git/v1", res.Access.GetType().String())
+	r.NotNil(res.Digest, "git digest processor should have set a digest")
+	r.Equal("SHA-256", res.Digest.HashAlgorithm)
+	r.Equal("genericBlobDigest/v1", res.Digest.NormalisationAlgorithm)
+
+	// Decode the stored access as plain fields rather than importing the git binding,
+	// keeping this test black-box like its github sibling.
+	raw, err := json.Marshal(res.Access)
+	r.NoError(err)
+	var stored map[string]string
+	r.NoError(json.Unmarshal(raw, &stored))
+	r.Equal(commit, stored["commit"], "the digest processor must resolve the ref and pin the commit it points at")
+	r.Equal("main", stored["ref"], "the ref stays informational next to the pinned commit")
+
+	// download resource resolves the git access via the registered git resource repository.
+	output := filepath.Join(t.TempDir(), "archive.tar")
+	downloadCMD := cmd.New()
+	downloadCMD.SetArgs([]string{
+		"download",
+		"resource",
+		fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, componentName, componentVersion),
+		"--identity", "name=repo-archive,version=v1.0.0",
+		"--output", output,
+		"--extraction-policy", "disable",
+		"--config", cfgPath,
+	})
+	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource should resolve the git access")
+
+	archive, err := os.ReadFile(output)
+	r.NoError(err)
+	r.Equal(godigest.FromBytes(archive).Encoded(), res.Digest.Value,
+		"recorded digest must be the generic blob digest of the downloaded archive")
+
+	files := map[string]*tar.Header{}
+	contents := map[string]string{}
+	tr := tar.NewReader(bytes.NewReader(archive))
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+		data, err := io.ReadAll(tr)
+		r.NoError(err)
+		files[h.Name], contents[h.Name] = h, string(data)
+	}
+	r.Len(files, 2, "archive should hold exactly the committed files")
+	r.Equal("hello from git access\n", contents["README.md"])
+	r.Equal(int64(0o755), files["run.sh"].Mode, "executable bit should come from the git tree")
+
+	// get component-version reads the git-access component back through the CLI.
+	getOutput := new(bytes.Buffer)
+	getCMD := cmd.New()
+	getCMD.SetOut(getOutput)
+	getCMD.SetArgs([]string{
+		"get",
+		"component-version",
+		fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, componentName, componentVersion),
+		"--config", cfgPath,
+		"--output", "json",
+	})
+	r.NoError(getCMD.ExecuteContext(ctx), "get component-version should succeed for the git-access component")
+
+	out := getOutput.String()
+	r.Contains(out, componentName, "output should contain the component name")
+	r.Contains(out, "repo-archive", "output should contain the resource")
+	r.Contains(out, "Git/v1", "output should contain the git access type")
+}
+
+// createGitRepository creates a local repository with a regular and an executable file on
+// main and returns its path and the commit main points to.
+func createGitRepository(t *testing.T) (dir, commit string) {
+	t.Helper()
+	r := require.New(t)
+	git, err := exec.LookPath("git")
+	r.NoError(err, "git binary should be available in PATH to create the git access repository")
+
+	dir = t.TempDir()
+	run := func(args ...string) string {
+		args = append([]string{"-C", dir, "-c", "user.name=ocm", "-c", "user.email=ocm@example.invalid", "-c", "commit.gpgsign=false"}, args...)
+		out, err := exec.CommandContext(t.Context(), git, args...).CombinedOutput()
+		r.NoError(err, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	run("init", "-q", "-b", "main")
+	r.NoError(os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello from git access\n"), 0o644))
+	r.NoError(os.WriteFile(filepath.Join(dir, "run.sh"), []byte("#!/bin/sh\necho ocm\n"), 0o755))
+	run("add", "-A")
+	run("commit", "-q", "-m", "initial")
+
+	return dir, run("rev-parse", "HEAD")
 }
 
 // startS3WithObject starts RustFS holding content at bucket/key and writes an ocmconfig
