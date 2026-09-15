@@ -218,24 +218,24 @@ test('buildModuleBlocks: version matrix uses X.Y not X.Y.Z', () => {
 });
 
 test('buildModuleBlocks: schema imports have correct targets with version prefix', () => {
-    const { imports } = buildModuleBlocks('2.0', '2.0.0', ALL_DEPS);
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', ALL_DEPS);
     const targets = imports.flatMap(i => i.mounts.map(m => m.target)).sort();
     assert.deepEqual(targets, [
         'content',
         'content/docs/reference/ocm-cli',
-        'static/2.0/schemas/bindings/go/constructor',
-        'static/2.0/schemas/bindings/go/credentials/direct/v1',
-        'static/2.0/schemas/bindings/go/credentials/github/v1',
-        'static/2.0/schemas/bindings/go/credentials/gpg/v1alpha1',
-        'static/2.0/schemas/bindings/go/credentials/helm/v1',
-        'static/2.0/schemas/bindings/go/credentials/oci/v1',
-        'static/2.0/schemas/bindings/go/credentials/rsa/v1',
-        'static/2.0/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1',
-        'static/2.0/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1',
-        'static/2.0/schemas/bindings/go/credentials/wget/v1',
-        'static/2.0/schemas/bindings/go/descriptor/v2',
-        'static/2.0/schemas/bindings/go/http',
-        'static/2.0/schemas/kubernetes/controller',
+        'static/0.15/schemas/bindings/go/constructor',
+        'static/0.15/schemas/bindings/go/credentials/direct/v1',
+        'static/0.15/schemas/bindings/go/credentials/github/v1',
+        'static/0.15/schemas/bindings/go/credentials/gpg/v1alpha1',
+        'static/0.15/schemas/bindings/go/credentials/helm/v1',
+        'static/0.15/schemas/bindings/go/credentials/oci/v1',
+        'static/0.15/schemas/bindings/go/credentials/rsa/v1',
+        'static/0.15/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1',
+        'static/0.15/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1',
+        'static/0.15/schemas/bindings/go/credentials/wget/v1',
+        'static/0.15/schemas/bindings/go/descriptor/v2',
+        'static/0.15/schemas/bindings/go/http',
+        'static/0.15/schemas/kubernetes/controller',
     ]);
 });
 
@@ -783,15 +783,16 @@ test('buildModuleBlocks: pre-merge (<0.16) keeps legacy top-level cli/controller
 
 test('buildModuleBlocks: post-merge (>=0.16) folds cli/controller into bindings/go', () => {
     const { imports } = buildModuleBlocks('0.16', '0.16.0', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0' });
-    const cli = imports.find(i => i.path.endsWith('/cli'));
-    const controller = imports.find(i => i.path.endsWith('/kubernetes/controller'));
-    assert.equal(cli.path, `${MODULE_PREFIX}/bindings/go/cli`);
-    assert.equal(controller.path, `${MODULE_PREFIX}/bindings/go/kubernetes/controller`);
+    const bindings = imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE)
+    const cli = bindings.mounts.find(i => i.target.endsWith('cli'));
+    const controller = bindings.mounts.find(i => i.target.endsWith('controller'));
     // Mount targets and the pinned release version are unchanged by the merge.
-    assert.equal(cli.version, 'v0.16.0');
-    assert.equal(cli.mounts[0].target, 'content/docs/reference/ocm-cli');
-    assert.equal(controller.version, 'v0.16.0');
-    assert.equal(controller.mounts[0].target, 'static/0.16/schemas/kubernetes/controller');
+    assert.equal(cli.sites.matrix.versions[0], '0.16');
+    assert.equal(cli.target, 'content/docs/reference/ocm-cli');
+    assert.equal(cli.source, 'cli/docs/reference');
+    assert.equal(controller.sites.matrix.versions[0], '0.16');
+    assert.equal(controller.target, 'static/0.16/schemas/kubernetes/controller');
+    assert.equal(controller.source, 'kubernetes/controller/config/crd/bases');
 });
 
 test('updateImportTags: bumps merged cli/controller paths on post-merge patch', () => {
@@ -799,10 +800,11 @@ test('updateImportTags: bumps merged cli/controller paths on post-merge patch', 
     const parsed = { imports };
     const changed = updateImportTags(parsed, '0.16', '0.16.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.1' });
     assert.equal(changed, true);
-    const byPath = Object.fromEntries(parsed.imports.map(i => [i.path, i.version]));
-    assert.equal(byPath[`${MODULE_PREFIX}/bindings/go/cli`], 'v0.16.1');
-    assert.equal(byPath[`${MODULE_PREFIX}/bindings/go/kubernetes/controller`], 'v0.16.1');
-    assert.equal(byPath[MONOLITHIC_BINDINGS_MODULE], 'v0.16.1');
+    const bindings = imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE)
+    const cli = bindings.mounts.find(i => i.target.endsWith('cli'));
+    const controller = bindings.mounts.find(i => i.target.endsWith('controller'));
+    assert.equal(cli.sites.matrix.versions[0], '0.16');
+    assert.equal(controller.sites.matrix.versions[0], '0.16');
 });
 
 test('hasAllImportsForVersion: consistent for post-merge layout', () => {
