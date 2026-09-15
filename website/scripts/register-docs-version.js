@@ -561,10 +561,16 @@ function syncUnversionedMountVersions(parsed, { added, retired } = {}) {
         m.sites = m.sites || { matrix: {} };
         m.sites.matrix = m.sites.matrix || {};
         const versions = Array.isArray(m.sites.matrix.versions) ? m.sites.matrix.versions : [];
-        const next = versions.filter(v => v !== retired);
-        if (added && !next.includes(added)) {
-            next.push(added);
+        const semvers = versions.filter(v => v !== 'main' && v !== 'legacy' && v !== retired);
+        if (added && !semvers.includes(added)) {
+            semvers.push(added);
         }
+        semvers.sort((a, b) => compareSemver(b, a));
+        const next = [
+            ...(versions.includes('main') ? ['main'] : []),
+            ...semvers,
+            ...(versions.includes('legacy') ? ['legacy'] : []),
+        ];
         if (JSON.stringify(next) !== JSON.stringify(versions)) {
             m.sites.matrix.versions = next;
             changed++;
