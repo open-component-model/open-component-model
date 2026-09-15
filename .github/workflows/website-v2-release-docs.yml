@@ -1,0 +1,126 @@
+name: Website Release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, X.Y.Z with no v prefix (e.g. 0.15.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-release-pr-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  open_pr:
+    name: Open website update PR for ${{ inputs.version }}
+    runs-on: ubuntu-24.04-arm
+    environment:
+      name: automation
+      deployment: false
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Validate version format
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::version must be X.Y.Z, got: $VERSION"; exit 1; }
+
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Verify tag exists
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" \
+            || { echo "::error::tag v${VERSION} not found (release not promoted yet?)"; exit 1; }
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache: false
+
+      - name: Fetch bindings/go go.mod at release tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}" --no-tags
+          git show "v${VERSION}:bindings/go/go.mod" > "${{ runner.temp }}/cli-go.mod"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: website/package.json
+
+      - name: Install dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Register docs version
+        id: register
+        working-directory: website
+        env:
+          VERSION: ${{ inputs.version }}
+          CLI_GOMOD: ${{ runner.temp }}/cli-go.mod
+          LOG_FILE: ${{ runner.temp }}/register.log
+        run: |
+          set +e
+          node scripts/register-docs-version.js "$VERSION" \
+            --cli-gomod "$CLI_GOMOD" \
+            2>&1 | tee "$LOG_FILE"
+          rc=${PIPESTATUS[0]}
+          {
+            echo 'log<<__REGISTER_EOF__'
+            cat "$LOG_FILE"
+            echo '__REGISTER_EOF__'
+          } >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Generate App Token
+        id: get_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          base: main
+          token: ${{ steps.get_token.outputs.token }}
+          title: "chore(website): release docs version ${{ inputs.version }}"
+          commit-message: "[github-actions] automated change"
+          add-paths: |
+            website/config/
+          branch: website/version-release/${{ inputs.version }}
+          delete-branch: true
+          sign-commits: true
+          body: |
+            Automated docs release for version ${{ inputs.version }}.
+
+            Triggered by tag `website/v${{ inputs.version }}`.
+
+            Output of `register-docs-version.js`:
+
+            ````
+            ${{ steps.register.outputs.log }}
+            ````

@@ -96,7 +96,7 @@ into "image-amd64". The paths written are printed to standard output, one per li
 	cmd.Flags().String(FlagResourceIdentity, "", "resource identity to download")
 	cmd.Flags().String(FlagOutput, "", "output path. With --extraction-policy auto, extractable archives are "+
 		"extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are "+
-		"created automatically. If not provided, defaults to the resource name."+
+		"created automatically. If not provided, defaults to the resource name. "+
 		"With --sbom this is a single file, and standard output is used when it is not given.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
 	cmd.Flags().Bool(FlagSBOM, false, "experimental: download the SBOMs describing the resource instead of the "+

@@ -2,10 +2,10 @@ package access
 
 import (
 	"ocm.software/open-component-model/bindings/go/runtime"
-	v1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 )
 
-var V1VersionedType = runtime.NewVersionedType(v1.Type, v1.Version)
+var V2VersionedType = runtime.NewVersionedType(v2.Type, v2.Version)
 
 var Scheme = runtime.NewScheme()
 
@@ -14,12 +14,12 @@ func init() {
 }
 
 func MustAddToScheme(scheme *runtime.Scheme) {
-	spec := &v1.S3Bucket{}
+	spec := &v2.S3{}
 
 	scheme.MustRegisterWithAlias(spec,
-		V1VersionedType,
-		runtime.NewUnversionedType(v1.Type),
-		runtime.NewVersionedType(v1.LowerCamelType, v1.Version),
-		runtime.NewUnversionedType(v1.LowerCamelType),
+		V2VersionedType,
+		runtime.NewUnversionedType(v2.Type),
+		runtime.NewVersionedType(v2.LowerCamelType, v2.Version),
+		runtime.NewUnversionedType(v2.LowerCamelType),
 	)
 }
