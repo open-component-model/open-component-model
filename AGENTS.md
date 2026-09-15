@@ -4,7 +4,7 @@ Facts for AI agents working in this repo. If a fact here no longer matches the c
 
 ## Repository Overview
 
-OCM is a multi-module Go monorepo implementing the Open Component Model specification. Two areas matter:
+OCM is a single-module Go monorepo implementing the Open Component Model specification. Two areas matter:
 
 - **`bindings/go/`** — a single Go module: core library packages, the `ocm` CLI (Cobra), and the controller-runtime Kubernetes operator. Package list: `bindings/go/README.md`.
 - **`website/`** — Hugo documentation site at <https://ocm.software>. See `website/README.md` and `website/CONTRIBUTING.md`.
