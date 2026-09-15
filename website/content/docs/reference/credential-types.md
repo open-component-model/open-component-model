@@ -32,6 +32,7 @@ OCM ships with the following built-in credential types:
 | [`WgetCredentials/v1`](#wgetcredentialsv1)                 | `Wget` consumers                         | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
 | [`S3Credentials/v1`](#s3credentialsv1)                     | `S3` consumers                           | S3 access keys and temporary STS credentials                    |
 | [`GitHubCredentials/v1`](#githubcredentialsv1)             | `GitHubRepository` consumers             | GitHub and GitHub Enterprise REST API token auth                |
+| [`MavenCredentials/v1`](#mavencredentialsv1)               | `MavenRepository` consumers              | Maven repository Basic Auth and bearer token                    |
 | [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
 | [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
 | [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers      | OIDC token for Sigstore keyless signing via Fulcio              |
@@ -317,6 +318,56 @@ Configuring no consumer at all is valid: the GitHub REST API is then called anon
 ### Used With
 
 [`GitHubRepository`]({{< relref "credential-consumer-identities.md#githubrepository" >}}) consumer identities.
+
+---
+
+## MavenCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/maven/v1/MavenCredentials.schema.json" >}}
+
+### Example
+
+HTTP Basic Auth:
+
+```yaml
+consumers:
+  - identity:
+      type: MavenRepository
+      hostname: nexus.example.com
+      path: repository/maven-releases
+    credentials:
+      - type: MavenCredentials/v1
+        username: deployer
+        password: my-password
+```
+
+Bearer token:
+
+```yaml
+consumers:
+  - identity:
+      type: MavenRepository
+      hostname: maven.pkg.github.com
+    credentials:
+      - type: MavenCredentials/v1
+        identityToken: ghp_example_token
+```
+
+The legacy [`Credentials/v1`](#directcredentialsv1) fallback works as well, with `username`/`password` or
+`identityToken` in its `properties` map. The `accessToken` key OCM v1 used for Maven repositories is still read when
+`identityToken` is absent.
+
+{{< callout context="note" >}}
+`username`/`password` and `identityToken` both set the `Authorization` header. When both are present, the bearer token
+wins. An entry that carries a password but neither a username nor a token is rejected rather than downgraded to an
+anonymous request. Configuring no consumer at all is valid: the repository is then read anonymously, which is how
+Maven Central works.
+{{< /callout >}}
+
+### Used With
+
+[`MavenRepository`]({{< relref "credential-consumer-identities.md#mavenrepository" >}}) consumer identities, covering the
+[`maven/v2alpha1` access type]({{< relref "input-and-access-types.md#mavenv2alpha1-access" >}}).
 
 ---
 

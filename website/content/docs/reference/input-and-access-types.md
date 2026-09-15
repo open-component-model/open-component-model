@@ -613,3 +613,56 @@ the content, in OCM v1 and in OCM v2. It does not come from the S3 `ETag`.
 **Credentials.** The consumer identity type is `S3` in both versions, but the attribute that holds the object location
 and the credential property names changed. See
 [Credential Consumer Identities: Migrating from OCM v1]({{< relref "credential-consumer-identities.md" >}}#s3-identity-migration-from-ocm-v1).
+
+### `maven/v2alpha1` {#mavenv2alpha1-access}
+
+References one or more files of a Maven artifact in a Maven repository such as Maven Central, Nexus or Artifactory.
+The files stay in the repository and are fetched when the resource is downloaded, when its digest is computed, and
+when the component version is transferred by value.
+
+`maven/v2alpha1` is the canonical type name; `Maven/v2alpha1` is accepted as an alias. There is no `v1` and no
+unversioned form, so the `maven/v1` access of OCM v1 does not resolve.
+
+{{< callout context="caution" >}}
+This access type is **alpha** (`v2alpha1`). Its schema may change in future releases.
+{{< /callout >}}
+
+| Field                    | Type   | Required | Description                                                                                                                                                  |
+|--------------------------|--------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `repoUrl`                | string | yes      | Base URL of the Maven repository, for example `https://repo1.maven.org/maven2`. Must be absolute.                                                            |
+| `groupId`                | string | yes      | Maven group id, for example `org.springframework.kafka`.                                                                                                     |
+| `artifactId`             | string | yes      | Maven artifact id.                                                                                                                                           |
+| `version`                | string | yes      | Artifact version. `LATEST`, `RELEASE` and `-SNAPSHOT` versions can be downloaded, but cannot be pinned by a digest, transferred by value, or uploaded.        |
+| `artifacts`              | list   | yes      | The files to access, at least one entry. Each entry names exactly one file, `<artifactId>-<version>[-<classifier>].<extension>`. Entries must be unique.     |
+| `artifacts[].extension`  | string | yes      | File extension, for example `jar`, `pom` or `zip`.                                                                                                           |
+| `artifacts[].classifier` | string | no       | Maven classifier, for example `sources` or `javadoc`. Empty selects the main file.                                                                           |
+
+Maven has no listing for release versions, so the files must be named explicitly. The sibling files a repository
+publishes next to each file, the `.asc` signature and the `.md5`, `.sha1`, `.sha256` and `.sha512` checksum files, are
+never listed: they are fetched automatically when present and stored exactly as served, without verification.
+
+```yaml
+resources:
+  - name: spring-kafka
+    type: blob
+    version: 4.0.1
+    relation: external
+    access:
+      type: maven/v2alpha1
+      repoUrl: https://repo1.maven.org/maven2
+      groupId: org.springframework.kafka
+      artifactId: spring-kafka
+      version: "4.0.1"
+      artifacts:
+        - extension: pom
+        - extension: jar
+        - extension: jar
+          classifier: sources
+```
+
+Every download is one `application/x-tgz` archive, even for a single file: the listed files in spec order, each
+followed by its sibling files. See
+[Resource Repositories: Maven]({{< relref "resource-repositories.md" >}}#maven-resource-repository) for download,
+upload and digest details, and
+[Credential Consumer Identities: MavenRepository]({{< relref "credential-consumer-identities.md" >}}#mavenrepository)
+for authentication.

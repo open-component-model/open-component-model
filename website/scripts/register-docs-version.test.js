@@ -18,6 +18,7 @@ const ALL_DEPS = {
     'ocm.software/open-component-model/bindings/go/github': 'v0.0.1',
     'ocm.software/open-component-model/bindings/go/gpg': 'v0.0.1',
     'ocm.software/open-component-model/bindings/go/helm': 'v0.0.1',
+    'ocm.software/open-component-model/bindings/go/maven': 'v0.0.1',
     'ocm.software/open-component-model/bindings/go/http': 'v0.0.5',
     'ocm.software/open-component-model/bindings/go/oci': 'v0.0.46',
     'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.1',
@@ -124,9 +125,9 @@ test('hasAllImportsForVersion: returns true when the full import set (built with
 
 // --- buildModuleBlocks ---
 
-test('buildModuleBlocks: returns 14 imports (website + CLI + 11 bindings + controller)', () => {
+test('buildModuleBlocks: returns 15 imports (website + CLI + 12 bindings + controller)', () => {
     const { imports } = buildModuleBlocks('0.3', '0.3.0', ALL_DEPS);
-    assert.equal(imports.length, 14);
+    assert.equal(imports.length, 15);
 });
 
 test('buildModuleBlocks: does not return a mount field', () => {
@@ -228,6 +229,7 @@ test('buildModuleBlocks: schema imports have correct targets with version prefix
         'static/2.0/schemas/bindings/go/credentials/github/v1',
         'static/2.0/schemas/bindings/go/credentials/gpg/v1alpha1',
         'static/2.0/schemas/bindings/go/credentials/helm/v1',
+        'static/2.0/schemas/bindings/go/credentials/maven/v1',
         'static/2.0/schemas/bindings/go/credentials/oci/v1',
         'static/2.0/schemas/bindings/go/credentials/rsa/v1',
         'static/2.0/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1',
@@ -250,6 +252,7 @@ test('buildModuleBlocks: schema imports have correct sources', () => {
         'spec/config/v1alpha1/schemas',
         'spec/credentials/oidcidentitytoken/v1alpha1/schemas',
         'spec/credentials/trustedroot/v1alpha1/schemas',
+        'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',

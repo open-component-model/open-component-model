@@ -11,6 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/input/file"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/input/helm"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/input/utf8"
+	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/maven"
 	ociplugin "ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/oci"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/oidc"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/rsa"
@@ -92,6 +93,13 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		helmresource.NewResourceRepository(filesystemConfig, helmresource.WithHTTPConfig(httpConfig)),
 	); err != nil {
 		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
+	}
+	if err := maven.Register(manager.ResourcePluginRegistry,
+		manager.DigestProcessorRegistry,
+		manager.CredentialRepositoryRegistry,
+		httpConfig,
+	); err != nil {
+		return fmt.Errorf("could not register maven plugins: %w", err)
 	}
 	if err := rsa.Register(manager.SigningRegistry, manager.CredentialRepositoryRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register RSA signing plugin: %w", err)
