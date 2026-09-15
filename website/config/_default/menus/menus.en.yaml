@@ -3,16 +3,16 @@ main:
     url: docs/
     weight: 10
   - name: Community
-    url: community/
+    url: /community/
     weight: 20
   - name: Governance
-    url: governance/
+    url: /governance/
     weight: 25
   - name: Roadmap
     url: https://github.com/orgs/open-component-model/projects/10/views/5
     weight: 30
   - name: Blog
-    url: blog/
+    url: /blog/
     weight: 40
 
 social:
