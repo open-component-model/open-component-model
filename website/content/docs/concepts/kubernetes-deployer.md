@@ -94,7 +94,7 @@ Which of the two options below applies depends on whether your application is pa
 ### No orchestration: apply manifests directly
 
 If your application is already plain Kubernetes manifests and you don't need an RGD's templating or
-composition, skip kro entirely. The [Deploy Manifests with Deployer]({{< relref "/docs/how-to/deploy-manifests-with-deployer.md" >}})
+composition, skip Kro entirely. The [Deploy Manifests with Deployer]({{< relref "/docs/how-to/deploy-manifests-with-deployer.md" >}})
 how-to applies a Deployment straight from an OCM component using only the OCM Controllers.
 
 ### Helm chart, RGD applied manually
