@@ -89,9 +89,7 @@ The Deployer stamps deployed resources with metadata for traceability in the for
 
 ## Common Use Cases
 
-Which of the following fits depends on two independent choices: whether your application is packaged as a
-Helm chart or plain manifests, and whether you want kro's RGDs to orchestrate the deployment or apply
-something directly with the Deployer.
+Which of the two options below applies depends on whether your application is packaged as a Helm chart or plain manifests, and whether you want Kro's RGDs to orchestrate the deployment or apply it directly with the Deployer.
 
 ### No orchestration: apply manifests directly
 
