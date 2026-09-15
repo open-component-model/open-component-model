@@ -13,6 +13,8 @@ import (
 	githubv1alpha1 "ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	mavenv2alpha1 "ocm.software/open-component-model/bindings/go/maven/spec/access/v2alpha1"
+	mavenv1alpha1 "ocm.software/open-component-model/bindings/go/maven/transformation/spec/v1alpha1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -159,6 +161,24 @@ func githubResource(name, version, repoURL, commit string) descriptor.Resource {
 	}
 }
 
+func mavenResource(name, version, repoURL string) descriptor.Resource {
+	return descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: name, Version: version},
+		},
+		Type:     "mavenArtifact",
+		Relation: descriptor.ExternalRelation,
+		Access: &mavenv2alpha1.Maven{
+			Type:       runtime.NewVersionedType(mavenv2alpha1.Type, mavenv2alpha1.Version),
+			RepoURL:    repoURL,
+			GroupID:    "org.springframework.kafka",
+			ArtifactID: name,
+			Version:    version,
+			Artifacts:  []mavenv2alpha1.Artifact{{Extension: "jar"}, {Extension: "pom"}},
+		},
+	}
+}
+
 // --- BuildGraphDefinition tests ---
 
 func TestBuildGraphDefinition_NoResources(t *testing.T) {
@@ -301,6 +321,62 @@ func TestBuildGraphDefinition_GitHubResource_UploadAsOciArtifact(t *testing.T) {
 	assert.Equal(t, githubv1alpha1.GetGitHubCommitV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type,
 		"a github resource must stay on the local-resource path even when uploadType requests an OCI artifact")
+}
+
+func TestBuildGraphDefinition_MavenResource(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{mavenResource("spring-kafka", "4.0.1", "https://repo1.maven.org/maven2")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
+		CopyMode: transferv1alpha1.CopyModeAllResources,
+	})
+	require.NoError(t, err)
+
+	// get -> add, plus the component Upload node and the FileCleanup node.
+	require.Len(t, tgd.Transformations, 4)
+	assert.Equal(t, mavenv1alpha1.GetMavenArtifactV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
+	assert.Equal(t, FileCleanupVersionedType, tgd.Transformations[3].Type)
+	assert.Contains(t, tgd.Transformations[3].Spec.Data["files"], "${"+tgd.Transformations[1].ID+".spec.file}",
+		"the cleanup node must remove the archive the Add node consumed")
+}
+
+func TestBuildGraphDefinition_MavenResource_UploadAsOciArtifact(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{mavenResource("spring-kafka", "4.0.1", "https://repo1.maven.org/maven2")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
+		CopyMode:   transferv1alpha1.CopyModeAllResources,
+		UploadType: transferv1alpha1.UploadAsOciArtifact,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, tgd.Transformations, 4)
+	assert.Equal(t, mavenv1alpha1.GetMavenArtifactV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type,
+		"a maven resource must stay on the local-resource path even when uploadType requests an OCI artifact")
+}
+
+func TestBuildGraphDefinition_MavenResource_UnpinnedVersion(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{mavenResource("spring-kafka", "LATEST", "https://repo1.maven.org/maven2")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
+		CopyMode: transferv1alpha1.CopyModeAllResources,
+	})
+	require.ErrorContains(t, err, "LATEST")
 }
 
 func TestBuildGraphDefinition_CTFTarget(t *testing.T) {
