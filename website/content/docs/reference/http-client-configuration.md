@@ -46,7 +46,7 @@ All fields are optional. When omitted, OCM applies these defaults:
 
 | Field                    | Default                              |
 |--------------------------|--------------------------------------|
-| `timeout`                | `0s` (no overall deadline)           |
+| `timeout`                | `0s` (no limit)                      |
 | `retry.maxRetries`       | `5`                                  |
 | `retry.minWait`          | `200ms`                              |
 | `retry.maxWait`          | `3s`                                 |
@@ -54,10 +54,7 @@ All fields are optional. When omitted, OCM applies these defaults:
 | `insecureSkipVerify`     | `false`                              |
 
 {{< callout context="caution" title="No overall timeout by default" >}}
-The default does not bound response-body duration. A stalled peer can therefore
-leave an operation waiting indefinitely. Set a positive `timeout` when bounded
-completion is more important than allowing arbitrarily long transfers.
-Connection-phase timeouts do not limit an active response-body read.
+With `timeout` omitted or set to `0s` (the default), OCM does not bound response-body duration. A stalled peer can therefore leave an operation waiting indefinitely. Set a positive `timeout` when bounded completion is more important than allowing arbitrarily long transfers.
 {{< /callout >}}
 
 ### Duration Format

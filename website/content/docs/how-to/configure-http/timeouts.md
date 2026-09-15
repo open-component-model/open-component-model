@@ -31,7 +31,7 @@ Open `$HOME/.ocmconfig` and add (or extend) an
 type: generic.config.ocm.software/v1
 configurations:
   - type: http.config.ocm.software/v1alpha1
-    timeout: 15s               # Optional end-to-end deadline (default: no limit)
+    timeout: 15s               # An end-to-end deadline (default: no limit)
     tlsHandshakeTimeout: 10s   # Maximum time for the TLS handshake
     responseHeaderTimeout: 30s # Time to wait for the first response header byte
     idleConnTimeout: 90s       # How long a keep-alive connection stays pooled
@@ -48,11 +48,7 @@ bodies to stream to completion. Set `timeout` to the longest transfer you expect
 on the slowest link you support. A zero value disables the limit explicitly.
 
 {{< callout context="caution" title="No overall timeout by default" >}}
-With `timeout` omitted or set to `0s`, OCM does not limit response-body
-duration. A peer that stops sending data without closing the connection may
-therefore leave an operation waiting indefinitely. Configure a positive
-`timeout` when bounded completion is required. Connection-phase timeouts do not
-limit an active response-body read.
+With `timeout` omitted or set to `0s` (the default), OCM does not bound response-body duration. A stalled peer can therefore leave an operation waiting indefinitely. Set a positive `timeout` when bounded completion is more important than allowing arbitrarily long transfers.
 {{< /callout >}}
 
 {{< callout context="caution" >}}
