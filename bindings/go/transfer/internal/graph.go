@@ -16,7 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	s3v1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
+	s3v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
@@ -331,7 +331,7 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 			return nil, fmt.Errorf("cannot process wget resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
-	case *s3v1.S3Bucket:
+	case *s3v2.S3:
 		// An S3 resource is a plain blob: download it and embed it as a local blob in the
 		// target. There is no OCI-artifact representation, so uploadAsArtifact is not honored here.
 		if err := processS3(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
