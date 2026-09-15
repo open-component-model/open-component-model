@@ -8,7 +8,7 @@ const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const yaml = require('js-yaml');
-const { parseArguments, isRcVersionKey, staleRcImportKeys, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, removeRcVersionsForMinor, removeImportsForVersion, updateHugoConfig, updateImportTags, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS } = require('./register-docs-version');
+const { parseArguments, isRcVersionKey, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, removeRcVersionsForMinor, removeImportsForVersion, updateHugoConfig, updateImportTags, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS } = require('./register-docs-version');
 
 const MODULE_PREFIX = 'ocm.software/open-component-model';
 
@@ -919,24 +919,6 @@ test('isRcVersionKey: recognizes only valid RC version keys', () => {
     assert.ok(!isRcVersionKey(42));
 });
 
-// --- staleRcImportKeys: convergent module.yaml purge ---
-
-test('staleRcImportKeys: collects RC imports whose key hugo.yaml no longer lists', () => {
-    const monolithDeps = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0-rc.1' };
-    const { imports: rcImports } = buildModuleBlocks('0.16.0-rc.1', '0.16.0-rc.1', monolithDeps);
-    const { imports: otherRcImports } = buildModuleBlocks('0.17.0-rc.1', '0.17.0-rc.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.17.0-rc.1' });
-    const { imports: finalImports } = buildModuleBlocks('0.15', '0.15.0', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.0' });
-    const parsed = { imports: [...finalImports, ...rcImports, ...otherRcImports] };
-    const hugoVersions = { main: {}, '0.15': {}, '0.17.0-rc.1': {}, legacy: {} };
-    assert.deepEqual(staleRcImportKeys(parsed, hugoVersions), ['0.16.0-rc.1']);
-});
-
-test('staleRcImportKeys: empty when hugoVersions omitted and when nothing is stale', () => {
-    const { imports } = buildModuleBlocks('0.16.0-rc.1', '0.16.0-rc.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0-rc.1' });
-    assert.deepEqual(staleRcImportKeys({ imports }, undefined), []);
-    assert.deepEqual(staleRcImportKeys({ imports }, { '0.16.0-rc.1': {} }), []);
-});
-
 // --- buildModuleBlocks: release candidates ---
 
 test('buildModuleBlocks: RC key pins the RC tags and uses the full key everywhere', () => {
@@ -992,6 +974,13 @@ test('removeRcVersionsForMinor: no-op without RC keys or versions map', () => {
     assert.deepEqual(removeRcVersionsForMinor(undefined, '0.15'), []);
 });
 
+test('removeRcVersionsForMinor: exceptKey keeps the newest RC of the minor', () => {
+    const versions = { '0.16.0-rc.1': {}, '0.16.0-rc.2': {} };
+    const removed = removeRcVersionsForMinor(versions, '0.16', '0.16.0-rc.2');
+    assert.deepEqual(removed, ['0.16.0-rc.1']);
+    assert.deepEqual(Object.keys(versions), ['0.16.0-rc.2']);
+});
+
 test('removeImportsForVersion: removes all imports of an RC key', () => {
     const deps = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0-rc.1' };
     const { imports: rcImports } = buildModuleBlocks('0.16.0-rc.1', '0.16.0-rc.1', deps);
@@ -1028,6 +1017,24 @@ test('updateHugoConfig: registering an RC never bumps defaultContentVersion', as
     assert.equal(parsed.versions['0.16.0-rc.2'].weight, 2, 'RC sorts right after main');
     assert.equal(result.retired, null);
     assert.deepEqual(result.removedRcKeys, []);
+});
+
+test('updateHugoConfig: a newer RC supersedes the previous RC of the minor', async () => {
+    const initial = {
+        defaultContentVersion: '0.15',
+        versions: {
+            main: { weight: 1 },
+            '0.16.0-rc.1': { weight: 2 },
+            '0.15': { weight: 3 },
+            legacy: { weight: 4 },
+        },
+    };
+    const { result, parsed } = await withTempHugoConfig(undefined, initial, file =>
+        updateHugoConfig('0.16.0-rc.2', { hugoConfigPath: file }));
+    assert.equal(parsed.versions['0.16.0-rc.1'], undefined, 'previous RC removed');
+    assert.ok(parsed.versions['0.16.0-rc.2'], 'newer RC present');
+    assert.equal(parsed.defaultContentVersion, '0.15', 'RC must not become the default');
+    assert.deepEqual(result.removedRcKeys, ['0.16.0-rc.1']);
 });
 
 test('updateHugoConfig: registering the final purges the minor RC keys and bumps default', async () => {

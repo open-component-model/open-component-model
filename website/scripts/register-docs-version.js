@@ -13,6 +13,9 @@
  * - Pins bindings schema imports to the monolithic bindings/go module when the
  *   release consumes it; older releases keep their per-package module imports
  * - Retires oldest minor version when >10 minor versions exist
+ * - Registering an RC supersedes the previous RC of the same minor: the
+ *   older RC's version entry (hugo.yaml) and import blocks (module.yaml) are
+ *   removed so only the latest RC of a minor stays live
  * - Registering the final X.Y of a minor removes that minor's RC version
  *   entries (hugo.yaml) and their import blocks (module.yaml)
  */
@@ -489,22 +492,25 @@ function retireOldestVersion(versions) {
 }
 
 /**
- * Remove all RC version keys (X.Y.Z-rc.N) belonging to a minor from the
- * hugo.yaml versions object. Called when the final of that minor is
- * registered. No-op when no RC keys exist.
+ * Remove RC version keys (X.Y.Z-rc.N) belonging to a minor from the hugo.yaml
+ * versions object. Called both when a newer RC supersedes older RCs of the
+ * same minor and when the final of the minor is registered. No-op when no RC
+ * keys match.
  *
  * @param {Object} hugoVersions - versions object from hugo.yaml
  * @param {string} minor - minor version (X.Y)
+ * @param {string} [exceptKey] - RC key to keep (the RC being registered);
+ *        omitted when the final is registered, so all the minor's RCs go
  * @returns {string[]} the removed RC keys
  */
 
-function removeRcVersionsForMinor(hugoVersions, minor) {
+function removeRcVersionsForMinor(hugoVersions, minor, exceptKey) {
     if (!hugoVersions) {
         return [];
     }
     const removed = [];
     for (const key of Object.keys(hugoVersions)) {
-        if (key.startsWith(`${minor}.`) && isRcVersionKey(key)) {
+        if (key !== exceptKey && key.startsWith(`${minor}.`) && isRcVersionKey(key)) {
             delete hugoVersions[key];
             removed.push(key);
         }
@@ -575,8 +581,9 @@ function removeImportsForVersion(parsed, version) {
 
 // Update hugo.yaml: add version, set default, retire old.
 // RC versions (full-version keys like 0.16.0-rc.2) are never promoted to
-// defaultContentVersion. Registering the final X.Y of a minor purges all of
-// that minor's RC keys, with weights reassigned in the same write.
+// defaultContentVersion. Registering an RC purges the minor's OTHER RC keys
+// (the new RC supersedes them); registering the final X.Y purges ALL of the
+// minor's RC keys. Weights are reassigned in the same write.
 async function updateHugoConfig(version, { hugoConfigPath = HUGO_CONFIG } = {}) {
     const content = await fsp.readFile(hugoConfigPath, 'utf-8').catch(e => fail(`Read hugo.yaml: ${e.message}`));
     const parsed = yaml.load(content) || {};
@@ -584,12 +591,16 @@ async function updateHugoConfig(version, { hugoConfigPath = HUGO_CONFIG } = {}) 
     const isRc = isRcVersionKey(version);
     const alreadyExists = !!(parsed.versions && parsed.versions[version]);
 
-    // Final registration purges the minor's RC keys.
+    // Purge the minor's RC keys. On the RC path keep the RC being registered
+    // (exceptKey) and drop its older siblings; on the final path `version` is
+    // a minor key (e.g. "0.16") that never equals an RC key, so all go.
     let removedRcKeys = [];
-    if (!isRc && parsed.versions) {
-        removedRcKeys = removeRcVersionsForMinor(parsed.versions, version);
+    if (parsed.versions) {
+        const minor = isRc ? versionMinor(version) : version;
+        removedRcKeys = removeRcVersionsForMinor(parsed.versions, minor, version);
         for (const rcKey of removedRcKeys) {
-            console.log(`hugo.yaml: removed RC version '${rcKey}' (final ${version} registered).`);
+            const reason = isRc ? `superseded by ${version}` : `final ${version} registered`;
+            console.log(`hugo.yaml: removed RC version '${rcKey}' (${reason}).`);
         }
     }
 
@@ -620,40 +631,13 @@ async function updateHugoConfig(version, { hugoConfigPath = HUGO_CONFIG } = {}) 
         console.log(`hugo.yaml: added version ${version} (weights reassigned).`);
     }
 
-    return { retired, removedRcKeys, versions: parsed.versions };
-}
-
-/**
- * Collect RC keys referenced by module.yaml imports that no longer exist in
- * the hugo.yaml versions map. hugo.yaml is the source of truth for which
- * versions exist; a stale RC import appears when a run dies between the
- * hugo.yaml write and the module.yaml write, and removing it here makes a
- * rerun converge instead of leaving orphan imports forever.
- *
- * @param {Object} parsed - parsed module.yaml
- * @param {Object} [hugoVersions] - versions object from hugo.yaml (post-update)
- * @returns {string[]} stale RC keys (empty when hugoVersions is omitted)
- */
-function staleRcImportKeys(parsed, hugoVersions) {
-    if (!hugoVersions) {
-        return [];
-    }
-    const hugoKeys = new Set(Object.keys(hugoVersions));
-    const stale = new Set();
-    for (const imp of parsed?.imports || []) {
-        for (const v of imp?.mounts?.flatMap(m => m?.sites?.matrix?.versions || []) || []) {
-            if (isRcVersionKey(v) && !hugoKeys.has(v)) {
-                stale.add(v);
-            }
-        }
-    }
-    return [...stale];
+    return { retired, removedRcKeys };
 }
 
 // Update module.yaml: ensure imports exist for a version, update tags,
-// optionally retire old version and drop RC imports that hugo.yaml no
-// longer knows (see staleRcImportKeys).
-async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion, hugoVersions, moduleConfigPath = MODULE_CONFIG } = {}) {
+// optionally retire old version and drop the import blocks of RC versions
+// that hugo.yaml removed in the same run (removedRcKeys).
+async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion, removedRcKeys = [], moduleConfigPath = MODULE_CONFIG } = {}) {
     const content = await fsp.readFile(moduleConfigPath, 'utf-8').catch(e => fail(`Read module.yaml: ${e.message}`));
     const parsed = yaml.load(content) || {};
 
@@ -718,11 +702,12 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
         console.log(`module.yaml: removed imports for retired version '${retiredVersion}'.`);
     }
 
-    // Purge RC import blocks that hugo.yaml no longer lists (final purge of
-    // this minor's RCs, plus leftovers from an interrupted earlier run).
-    for (const rcKey of staleRcImportKeys(parsed, hugoVersions)) {
+    // Drop the import blocks of RC versions hugo.yaml removed in this run
+    // (an RC superseded by a newer RC, or all of the minor's RCs when the
+    // final was registered).
+    for (const rcKey of removedRcKeys) {
         removeImportsForVersion(parsed, rcKey);
-        console.log(`module.yaml: removed imports for RC version '${rcKey}' (not present in hugo.yaml).`);
+        console.log(`module.yaml: removed imports for RC version '${rcKey}'.`);
     }
 
     await fsp.writeFile(moduleConfigPath, MODULE_HEADER + dumpYaml(parsed), 'utf-8');
@@ -736,8 +721,8 @@ async function main() {
         fail('--cli-gomod <path> is required. Provide the path to the CLI go.mod for the release being versioned.');
     }
 
-    const { retired, versions } = await updateHugoConfig(version);
-    await updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion: retired, hugoVersions: versions });
+    const { retired, removedRcKeys } = await updateHugoConfig(version);
+    await updateModuleConfig(version, fullVersion, cliGomod, { retiredVersion: retired, removedRcKeys });
 
     console.log('Docs version registered.');
 }
@@ -749,4 +734,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArguments, isRcVersionKey, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, removeRcVersionsForMinor, removeImportsForVersion, staleRcImportKeys, updateHugoConfig, updateModuleConfig, updateImportTags, resolveGoModVersions, CLI_DERIVED_MODULES, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS };
+module.exports = { parseArguments, isRcVersionKey, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, removeRcVersionsForMinor, removeImportsForVersion, updateHugoConfig, updateModuleConfig, updateImportTags, resolveGoModVersions, CLI_DERIVED_MODULES, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS };

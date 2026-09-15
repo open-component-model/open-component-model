@@ -49,37 +49,30 @@ jobs:
           git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" \
             || { echo "::error::tag v${VERSION} not found (release not promoted yet?)"; exit 1; }
 
-      # Final releases register exactly one version. RCs instead sync docs for
-      # EVERY RC tag of the minor (append-only tag-sync), so a follow-up rc.N+1
-      # run refreshes the still-open rc.N PR with the complete RC set. The PR
-      # branch/title depend on the path; both are computed here for the
-      # create-pull-request step.
+      # Finals register a minor-keyed entry on a per-version branch. RCs
+      # register a full-version entry and share one stable branch per minor
+      # (website/version-release/<MINOR>-rc): a follow-up rc.N+1 run refreshes
+      # the still-open PR, and register-docs-version.js drops the superseded
+      # rc.N entry so only the latest RC of the minor stays live. The final
+      # release PR removes the minor's remaining RC entry.
       - name: Plan docs registration
         id: plan
         env:
           VERSION: ${{ inputs.version }}
-          VERSIONS_FILE: ${{ runner.temp }}/docs-versions.txt
         run: |
           set -euo pipefail
           if [[ "$VERSION" =~ ^([0-9]+\.[0-9]+)\.[0-9]+-rc\.[0-9]+$ ]]; then
             MINOR="${BASH_REMATCH[1]}"
-            # All RC tags of this minor, ascending. The ^{} filter drops the
-            # peeled-commit lines of annotated tags so each tag appears once.
-            git ls-remote --tags origin "refs/tags/v${MINOR}.*-rc.*" \
-              | awk '{sub("^refs/tags/", "", $2); print $2}' \
-              | grep -v '\^{}$' \
-              | sort -V > "$VERSIONS_FILE"
             {
               echo "branch=website/version-release/${MINOR}-rc"
               echo "title=chore(website): publish RC docs v${VERSION}"
               echo 'body<<__PR_BODY_EOF__'
               echo "Automated RC docs release for version ${VERSION}."
               echo
-              echo "Tag-sync semantics: registers docs for every RC tag of the ${MINOR} minor that carries a \`website/\` tag (append-only). The final release PR removes the RC entries of the minor."
+              echo "Registers ${VERSION} as a release-candidate docs version of the ${MINOR} minor, superseding any earlier RC of that minor. The final release PR removes the RC entry."
               echo '__PR_BODY_EOF__'
             } >> "$GITHUB_OUTPUT"
           else
-            echo "v${VERSION}" > "$VERSIONS_FILE"
             {
               echo "branch=website/version-release/${VERSION}"
               echo "title=chore(website): release docs version ${VERSION}"
@@ -90,8 +83,6 @@ jobs:
               echo '__PR_BODY_EOF__'
             } >> "$GITHUB_OUTPUT"
           fi
-          echo "Docs versions to register:"
-          cat "$VERSIONS_FILE"
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -108,64 +99,28 @@ jobs:
         working-directory: website
         run: npm ci
 
-      # One loop for both paths: the versions file holds a single tag for
-      # final releases and all RC tags of the minor for RCs. RC tags without
-      # a website/ counterpart (cut before website RC tags existed) are
-      # skipped with a warning; any other registration failure fails the step.
-      - name: Register docs versions
+      - name: Register docs version
         id: register
         working-directory: website
         env:
-          VERSIONS_FILE: ${{ runner.temp }}/docs-versions.txt
+          VERSION: ${{ inputs.version }}
+          CLI_GOMOD: ${{ runner.temp }}/cli-go.mod
           LOG_FILE: ${{ runner.temp }}/register.log
         run: |
           set -euo pipefail
-          : > "$LOG_FILE"
-          failed=0
-          while IFS= read -r tag; do
-            version="${tag#v}"
-            echo "=== Registering docs for ${version} ===" | tee -a "$LOG_FILE"
-            git fetch origin "refs/tags/${tag}:refs/tags/${tag}" --no-tags
-            if [[ "$tag" == *-rc.* ]]; then
-              # Skip only when the website/ tag genuinely does not exist
-              # (ls-remote exit 2 = no matching ref, i.e. the RC predates
-              # website RC tags). Any other failure is transient
-              # infrastructure trouble and must fail loudly, not silently
-              # drop the RC from the PR.
-              set +e
-              git ls-remote --exit-code --tags origin "refs/tags/website/${tag}" > /dev/null
-              ls_rc=$?
-              set -e
-              if [[ $ls_rc -eq 2 ]]; then
-                echo "::warning::skipping ${version}: no website/${tag} tag (RC predates website RC tags)" | tee -a "$LOG_FILE"
-                continue
-              fi
-              if [[ $ls_rc -ne 0 ]]; then
-                echo "::error::cannot verify refs/tags/website/${tag} (git ls-remote exit ${ls_rc})" | tee -a "$LOG_FILE"
-                exit 1
-              fi
-            fi
-            gomod="${{ runner.temp }}/cli-go-${version}.mod"
-            git show "${tag}:bindings/go/go.mod" > "$gomod"
-            set +e
-            node scripts/register-docs-version.js "$version" \
-              --cli-gomod "$gomod" \
-              2>&1 | tee -a "$LOG_FILE"
-            rc=${PIPESTATUS[0]}
-            set -e
-            if [[ $rc -ne 0 ]]; then
-              failed=1
-            fi
-          done < "$VERSIONS_FILE"
+          git fetch origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}" --no-tags
+          git show "v${VERSION}:bindings/go/go.mod" > "$CLI_GOMOD"
+          set +e
+          node scripts/register-docs-version.js "$VERSION" \
+            --cli-gomod "$CLI_GOMOD" \
+            2>&1 | tee "$LOG_FILE"
+          rc=${PIPESTATUS[0]}
           {
             echo 'log<<__REGISTER_EOF__'
             cat "$LOG_FILE"
             echo '__REGISTER_EOF__'
           } >> "$GITHUB_OUTPUT"
-          if [[ $failed -ne 0 ]]; then
-            echo "::error::one or more docs registrations failed (see log)"
-            exit 1
-          fi
+          exit "$rc"
 
       - name: Generate App Token
         id: get_token

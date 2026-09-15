@@ -50,7 +50,7 @@ and `website/v0.7.0-rc.2` + `website/v0.7.0`.
 The side tags exist so the website install script, Go module consumers, and 
 Hugo docs imports can address each component directly.
 
-Website tags come in both forms. Each RC-phase tag push includes `website/v0.X.Y-rc.N` alongside the canonical and `bindings/go` RC tags, and a workflow dispatched right after the RC pre-release publishes docs for every RC of the minor as full-version entries (e.g. `0.7.0-rc.2`). The final registration PR removes those RC entries again, so only finals stay pinned long-term.
+Website tags come in both forms. Each RC-phase tag push includes `website/v0.X.Y-rc.N` alongside the canonical and `bindings/go` RC tags, and a workflow dispatched right after the RC pre-release publishes docs for the dispatched RC as a full-version entry (e.g. `0.7.0-rc.2`), superseding any earlier RC of the minor. The final registration PR removes the RC entry again, so only finals stay pinned long-term.
 
 ### What the Release workflow does
 
@@ -101,7 +101,7 @@ Phase 1 (RC, blue) runs end-to-end without human intervention once you trigger t
 
 The website integrates into the same workflow run, at RC time and again after `promote_and_release_final` succeeds:
 
-* At RC time the `tag_rc` step pushes `website/v0.X.Y-rc.N`, and a separate `create_website_rc_update_pr` job dispatches the docs PR workflow with the RC version. That workflow registers docs for **every** RC tag of the minor that carries a `website/` tag (append-only tag-sync; one stable PR per minor, so `rc.3` updates the still-open `rc.2` PR). RC docs become full-version entries like `0.16.0-rc.2` — never the default version, and excluded from the 10-minor retirement. When the final release PR later registers `0.X.Y`, it removes all RC entries of the minor atomically in the same PR.
+* At RC time the `tag_rc` step pushes `website/v0.X.Y-rc.N`, and a separate `create_website_rc_update_pr` job dispatches the docs PR workflow with the RC version. That workflow registers the dispatched RC as a full-version entry like `0.16.0-rc.2`, and each new RC supersedes the previous RC of the same minor — `register-docs-version.js` drops the older RC's `hugo.yaml` entry and `module.yaml` imports so only the latest RC stays live. There is one stable PR per minor, so `rc.3` updates the still-open `rc.2` PR, replacing the entry. RC docs are never the default version and are excluded from the 10-minor retirement. When the final release PR later registers `0.X.Y`, it removes the minor's remaining RC entry in the same PR.
 * The `website/v0.X.Y` tag is created at the same commit as the canonical tag — same `ADDITIONAL_TAGS` step that emits the `bindings/go/` tag.
 * A separate `create_website_update_pr` job then opens a PR to `main` updating `website/config/_default/{hugo.yaml,module.yaml}` to pin the new minor's Hugo module imports to the just-created `website/v0.X.Y` tag. The PR uses the OCMBot app token, signed commits, and `add-paths: website/config/`.
 
