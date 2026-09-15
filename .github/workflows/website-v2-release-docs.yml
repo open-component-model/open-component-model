@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version, X.Y.Z with no v prefix (e.g. 0.15.0)
+        description: Release version, X.Y.Z with no v prefix (e.g. 0.15.0); RC suffix allowed (e.g. 0.16.0-rc.2)
         required: true
         type: string
 
@@ -32,8 +32,8 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-            || { echo "::error::version must be X.Y.Z, got: $VERSION"; exit 1; }
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] \
+            || { echo "::error::version must be X.Y.Z or X.Y.Z-rc.N, got: $VERSION"; exit 1; }
 
       - name: Checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -49,19 +49,46 @@ jobs:
           git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" \
             || { echo "::error::tag v${VERSION} not found (release not promoted yet?)"; exit 1; }
 
+      # Finals register a minor-keyed entry on a per-version branch. RCs
+      # register a full-version entry and share one stable branch per minor
+      # (website/version-release/<MINOR>-rc): a follow-up rc.N+1 run refreshes
+      # the still-open PR, and register-docs-version.js drops the superseded
+      # rc.N entry so only the latest RC of the minor stays live. The final
+      # release PR removes the minor's remaining RC entry.
+      - name: Plan docs registration
+        id: plan
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$VERSION" =~ ^([0-9]+\.[0-9]+)\.[0-9]+-rc\.[0-9]+$ ]]; then
+            MINOR="${BASH_REMATCH[1]}"
+            {
+              echo "branch=website/version-release/${MINOR}-rc"
+              echo "title=chore(website): publish RC docs v${VERSION}"
+              echo 'body<<__PR_BODY_EOF__'
+              echo "Automated RC docs release for version ${VERSION}."
+              echo
+              echo "Registers ${VERSION} as a release-candidate docs version of the ${MINOR} minor, superseding any earlier RC of that minor. The final release PR removes the RC entry."
+              echo '__PR_BODY_EOF__'
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "branch=website/version-release/${VERSION}"
+              echo "title=chore(website): release docs version ${VERSION}"
+              echo 'body<<__PR_BODY_EOF__'
+              echo "Automated docs release for version ${VERSION}."
+              echo
+              echo "Triggered by tag \`website/v${VERSION}\`."
+              echo '__PR_BODY_EOF__'
+            } >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: bindings/go/go.mod
           cache: false
-
-      - name: Fetch bindings/go go.mod at release tag
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          git fetch origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}" --no-tags
-          git show "v${VERSION}:bindings/go/go.mod" > "${{ runner.temp }}/cli-go.mod"
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -80,6 +107,9 @@ jobs:
           CLI_GOMOD: ${{ runner.temp }}/cli-go.mod
           LOG_FILE: ${{ runner.temp }}/register.log
         run: |
+          set -euo pipefail
+          git fetch origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}" --no-tags
+          git show "v${VERSION}:bindings/go/go.mod" > "$CLI_GOMOD"
           set +e
           node scripts/register-docs-version.js "$VERSION" \
             --cli-gomod "$CLI_GOMOD" \
@@ -102,22 +132,28 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
+      # Branch, title and body intro come from the plan step: finals keep
+      # their per-version branch; RCs share one stable branch per minor
+      # (website/version-release/<MINOR>-rc), which create-pull-request
+      # force-updates with content rebuilt from current main.
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        env:
+          PR_TITLE: ${{ steps.plan.outputs.title }}
+          PR_BRANCH: ${{ steps.plan.outputs.branch }}
+          PR_BODY: ${{ steps.plan.outputs.body }}
         with:
           base: main
           token: ${{ steps.get_token.outputs.token }}
-          title: "chore(website): release docs version ${{ inputs.version }}"
+          title: ${{ env.PR_TITLE }}
           commit-message: "[github-actions] automated change"
           add-paths: |
             website/config/
-          branch: website/version-release/${{ inputs.version }}
+          branch: ${{ env.PR_BRANCH }}
           delete-branch: true
           sign-commits: true
           body: |
-            Automated docs release for version ${{ inputs.version }}.
-
-            Triggered by tag `website/v${{ inputs.version }}`.
+            ${{ env.PR_BODY }}
 
             Output of `register-docs-version.js`:
 

@@ -4,7 +4,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS } = require('./register-docs-version');
+const fsp = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+const yaml = require('js-yaml');
+const { parseArguments, isRcVersionKey, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, removeRcVersionsForMinor, removeImportsForVersion, updateHugoConfig, updateImportTags, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS } = require('./register-docs-version');
 
 const MODULE_PREFIX = 'ocm.software/open-component-model';
 
@@ -68,6 +72,29 @@ test('parseArguments: --keepDefault is rejected as unknown', () => {
 
 test('parseArguments: --patch is rejected as unknown', () => {
     assert.throws(() => parseArguments(['1.2.3', '--patch']), /Unknown flag/);
+});
+
+// --- parseArguments: release candidates ---
+
+test('parseArguments: accepts release candidate X.Y.Z-rc.N with the full version as key', () => {
+    const result = parseArguments(['0.16.0-rc.2', '--cli-gomod', '/tmp/go.mod']);
+    assert.equal(result.version, '0.16.0-rc.2');
+    assert.equal(result.fullVersion, '0.16.0-rc.2');
+    assert.equal(result.isRc, true);
+    assert.equal(result.cliGomod, '/tmp/go.mod');
+});
+
+test('parseArguments: final versions keep deriving X.Y and are not RCs', () => {
+    const result = parseArguments(['0.16.0']);
+    assert.equal(result.version, '0.16');
+    assert.equal(result.fullVersion, '0.16.0');
+    assert.equal(result.isRc, false);
+});
+
+test('parseArguments: rejects non-rc prerelease forms, v prefix, and minor-only', () => {
+    assert.throws(() => parseArguments(['0.16.0-beta.1']), /Invalid version/);
+    assert.throws(() => parseArguments(['v0.16.0-rc.2']), /Invalid version/);
+    assert.throws(() => parseArguments(['0.16']), /Invalid version/);
 });
 
 // --- hasAnyImportForVersion ---
@@ -293,6 +320,28 @@ test('compareSemver: mixed lengths (X.Y vs X.Y.Z) treated as missing=0', () => {
     assert.ok(compareSemver('1.2.1', '1.2') > 0);
 });
 
+test('compareSemver: rc numbers compare numerically on equal bases', () => {
+    assert.ok(compareSemver('0.16.0-rc.2', '0.16.0-rc.1') > 0);
+    assert.ok(compareSemver('0.16.0-rc.1', '0.16.0-rc.2') < 0);
+    assert.equal(compareSemver('0.16.0-rc.2', '0.16.0-rc.2'), 0);
+});
+
+test('compareSemver: prerelease sorts below its final release', () => {
+    assert.ok(compareSemver('0.16.0-rc.2', '0.16') < 0);
+    assert.ok(compareSemver('0.17.0-rc.1', '0.17') < 0);
+    assert.ok(compareSemver('0.16', '0.16.0-rc.2') > 0);
+});
+
+test('compareSemver: rc on a higher patch sorts above a lower-patch final', () => {
+    assert.ok(compareSemver('0.15.1-rc.1', '0.15') > 0);
+});
+
+test('compareSemver: unparseable input throws', () => {
+    assert.throws(() => compareSemver('latest', '0.15'), /Cannot compare version/);
+    assert.throws(() => compareSemver('0.16.0-beta.1', '0.15'), /Cannot compare version/);
+    assert.throws(() => compareSemver('v0.16.0', '0.15'), /Cannot compare version/);
+});
+
 // --- assignVersionWeights ---
 
 test('assignVersionWeights: first registration (main + legacy -> add version)', () => {
@@ -409,6 +458,25 @@ test('assignVersionWeights: null existing versions', () => {
     });
 });
 
+test('assignVersionWeights: RC keys sort by full version between the minors', () => {
+    const existing = {
+        main: { weight: 1 },
+        '0.16.0-rc.1': { weight: 2 },
+        '0.15': { weight: 3 },
+        '0.14': { weight: 4 },
+        legacy: { weight: 5 }
+    };
+    const result = assignVersionWeights(existing, '0.16.0-rc.2');
+    assert.deepEqual(result, {
+        main: { weight: 1 },
+        '0.16.0-rc.2': { weight: 2 },
+        '0.16.0-rc.1': { weight: 3 },
+        '0.15': { weight: 4 },
+        '0.14': { weight: 5 },
+        legacy: { weight: 6 }
+    });
+});
+
 test('assignVersionWeights: no "latest" handling (latest is not special)', () => {
     // 'latest' is no longer a special version, it would be treated as semver-like
     // but since it's not in SPECIAL_VERSIONS, passing it as a key should just be treated as a semver key
@@ -483,6 +551,32 @@ test('retireOldestVersion: correctly identifies oldest by semver', () => {
     }
     const retired = retireOldestVersion(versions);
     assert.equal(retired, '1.1');
+});
+
+test('retireOldestVersion: RC keys never count and are never retired', () => {
+    const versions = { main: { weight: 1 } };
+    for (let i = 1; i <= 11; i++) {
+        versions[`0.${i}`] = { weight: i + 1 };
+    }
+    versions['0.12.0-rc.1'] = { weight: 13 };
+    versions.legacy = { weight: 14 };
+    const retired = retireOldestVersion(versions);
+    assert.equal(retired, '0.1'); // oldest FINAL, not the RC key
+    assert.ok(versions['0.12.0-rc.1']); // RC key survives
+    assert.ok(versions['0.11']); // still there
+});
+
+test('retireOldestVersion: 10 finals plus an RC key stays under the limit', () => {
+    const versions = { main: { weight: 1 } };
+    for (let i = 1; i <= 10; i++) {
+        versions[`0.${i}`] = { weight: i + 1 };
+    }
+    versions['0.11.0-rc.1'] = { weight: 12 };
+    versions.legacy = { weight: 13 };
+    const retired = retireOldestVersion(versions);
+    assert.equal(retired, null);
+    assert.ok(versions['0.11.0-rc.1']);
+    assert.ok(versions['0.1']);
 });
 
 // --- updateImportTags ---
@@ -809,4 +903,159 @@ test('hasAllImportsForVersion: consistent for post-merge layout', () => {
     const deps = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0' };
     const { imports } = buildModuleBlocks('0.16', '0.16.0', deps);
     assert.equal(hasAllImportsForVersion({ imports }, '0.16', deps), true);
+});
+
+// --- isRcVersionKey: the single RC-kind predicate ---
+
+test('isRcVersionKey: recognizes only valid RC version keys', () => {
+    assert.ok(isRcVersionKey('0.16.0-rc.2'));
+    assert.ok(isRcVersionKey('0.16-rc.1')); // patch-less RC parses; never created in practice
+    assert.ok(!isRcVersionKey('0.16'));
+    assert.ok(!isRcVersionKey('0.16.0'));
+    assert.ok(!isRcVersionKey('main'));
+    assert.ok(!isRcVersionKey('legacy'));
+    assert.ok(!isRcVersionKey('0.16.0-beta.1'), 'non-rc prerelease forms are not RC keys');
+    assert.ok(!isRcVersionKey('latest-rc.1'), 'adversarial suffix-only lookalike rejected');
+    assert.ok(!isRcVersionKey(42));
+});
+
+// --- buildModuleBlocks: release candidates ---
+
+test('buildModuleBlocks: RC key pins the RC tags and uses the full key everywhere', () => {
+    const deps = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0-rc.2' };
+    const { imports } = buildModuleBlocks('0.16.0-rc.2', '0.16.0-rc.2', deps);
+
+    for (const imp of imports) {
+        assert.equal(imp.version, 'v0.16.0-rc.2', `import ${imp.path} must pin the RC tag`);
+    }
+    // Matrix versions carry the full RC key.
+    const website = imports.find(i => i.path.endsWith('/website'));
+    assert.deepEqual(website.mounts[0].sites.matrix.versions, ['0.16.0-rc.2']);
+    // Static schema targets live under the RC key, never colliding with finals.
+    const monolith = imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE);
+    for (const m of monolith.mounts) {
+        assert.ok(m.target.startsWith('static/0.16.0-rc.2/'), `target ${m.target} must be RC-scoped`);
+    }
+    const controller = imports.find(i => i.path.endsWith('/kubernetes/controller'));
+    assert.equal(controller.mounts[0].target, 'static/0.16.0-rc.2/schemas/kubernetes/controller');
+});
+
+test('buildModuleBlocks: RC key uses post-merge cli/controller paths', () => {
+    const deps = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0-rc.1' };
+    const { imports } = buildModuleBlocks('0.16.0-rc.1', '0.16.0-rc.1', deps);
+    assert.ok(imports.find(i => i.path === `${MODULE_PREFIX}/bindings/go/cli`));
+    assert.ok(imports.find(i => i.path === `${MODULE_PREFIX}/bindings/go/kubernetes/controller`));
+});
+
+test('hasAllImportsForVersion: RC key does not fabricate a .0 suffix version', () => {
+    const deps = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0-rc.2' };
+    const { imports } = buildModuleBlocks('0.16.0-rc.2', '0.16.0-rc.2', deps);
+    assert.equal(hasAllImportsForVersion({ imports }, '0.16.0-rc.2', deps), true);
+});
+
+// --- removeRcVersionsForMinor / final purge ---
+
+test('removeRcVersionsForMinor: removes only RC keys of the given minor', () => {
+    const versions = {
+        main: { weight: 1 },
+        '0.16.0-rc.2': { weight: 2 },
+        '0.16.0-rc.1': { weight: 3 },
+        '0.15.1-rc.1': { weight: 4 },
+        '0.15': { weight: 5 },
+        legacy: { weight: 6 },
+    };
+    const removed = removeRcVersionsForMinor(versions, '0.16');
+    assert.deepEqual(removed.sort(), ['0.16.0-rc.1', '0.16.0-rc.2']);
+    assert.deepEqual(Object.keys(versions), ['main', '0.15.1-rc.1', '0.15', 'legacy']);
+});
+
+test('removeRcVersionsForMinor: no-op without RC keys or versions map', () => {
+    assert.deepEqual(removeRcVersionsForMinor({ main: { weight: 1 }, '0.15': { weight: 2 } }, '0.15'), []);
+    assert.deepEqual(removeRcVersionsForMinor(undefined, '0.15'), []);
+});
+
+test('removeRcVersionsForMinor: exceptKey keeps the newest RC of the minor', () => {
+    const versions = { '0.16.0-rc.1': {}, '0.16.0-rc.2': {} };
+    const removed = removeRcVersionsForMinor(versions, '0.16', '0.16.0-rc.2');
+    assert.deepEqual(removed, ['0.16.0-rc.1']);
+    assert.deepEqual(Object.keys(versions), ['0.16.0-rc.2']);
+});
+
+test('removeImportsForVersion: removes all imports of an RC key', () => {
+    const deps = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0-rc.1' };
+    const { imports: rcImports } = buildModuleBlocks('0.16.0-rc.1', '0.16.0-rc.1', deps);
+    const { imports: finalImports } = buildModuleBlocks('0.15', '0.15.0', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.0' });
+    const parsed = { imports: [...finalImports, ...rcImports] };
+    removeImportsForVersion(parsed, '0.16.0-rc.1');
+    assert.equal(parsed.imports.length, finalImports.length);
+    assert.ok(parsed.imports.every(i => i.mounts.every(m => (m.sites?.matrix?.versions || [])[0] === '0.15')));
+});
+
+// --- updateHugoConfig: RC never becomes default, final purges RC keys ---
+
+async function withTempHugoConfig(t, versionsYaml, fn) {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'rdv-test-'));
+    const file = path.join(dir, 'hugo.yaml');
+    await fsp.writeFile(file, yaml.dump(versionsYaml), 'utf-8');
+    try {
+        const result = await fn(file);
+        return { result, parsed: yaml.load(await fsp.readFile(file, 'utf-8')) };
+    } finally {
+        await fsp.rm(dir, { recursive: true, force: true });
+    }
+}
+
+test('updateHugoConfig: registering an RC never bumps defaultContentVersion', async () => {
+    const initial = {
+        defaultContentVersion: '0.15',
+        versions: { main: { weight: 1 }, '0.15': { weight: 2 }, legacy: { weight: 3 } },
+    };
+    const { result, parsed } = await withTempHugoConfig(undefined, initial, file =>
+        updateHugoConfig('0.16.0-rc.2', { hugoConfigPath: file }));
+    assert.equal(parsed.defaultContentVersion, '0.15', 'RC must not become the default');
+    assert.ok(parsed.versions['0.16.0-rc.2'], 'RC key added');
+    assert.equal(parsed.versions['0.16.0-rc.2'].weight, 2, 'RC sorts right after main');
+    assert.equal(result.retired, null);
+    assert.deepEqual(result.removedRcKeys, []);
+});
+
+test('updateHugoConfig: a newer RC supersedes the previous RC of the minor', async () => {
+    const initial = {
+        defaultContentVersion: '0.15',
+        versions: {
+            main: { weight: 1 },
+            '0.16.0-rc.1': { weight: 2 },
+            '0.15': { weight: 3 },
+            legacy: { weight: 4 },
+        },
+    };
+    const { result, parsed } = await withTempHugoConfig(undefined, initial, file =>
+        updateHugoConfig('0.16.0-rc.2', { hugoConfigPath: file }));
+    assert.equal(parsed.versions['0.16.0-rc.1'], undefined, 'previous RC removed');
+    assert.ok(parsed.versions['0.16.0-rc.2'], 'newer RC present');
+    assert.equal(parsed.defaultContentVersion, '0.15', 'RC must not become the default');
+    assert.deepEqual(result.removedRcKeys, ['0.16.0-rc.1']);
+});
+
+test('updateHugoConfig: registering the final purges the minor RC keys and bumps default', async () => {
+    const initial = {
+        defaultContentVersion: '0.15',
+        versions: {
+            main: { weight: 1 },
+            '0.16.0-rc.2': { weight: 2 },
+            '0.16.0-rc.1': { weight: 3 },
+            '0.15': { weight: 4 },
+            legacy: { weight: 5 },
+        },
+    };
+    const { result, parsed } = await withTempHugoConfig(undefined, initial, file =>
+        updateHugoConfig('0.16', { hugoConfigPath: file }));
+    assert.deepEqual(result.removedRcKeys.sort(), ['0.16.0-rc.1', '0.16.0-rc.2']);
+    assert.equal(parsed.versions['0.16.0-rc.1'], undefined);
+    assert.equal(parsed.versions['0.16.0-rc.2'], undefined);
+    assert.ok(parsed.versions['0.16'], 'final minor key added');
+    assert.equal(parsed.defaultContentVersion, '0.16', 'final bumps the default');
+    // weights stay dense and main stays first
+    assert.equal(parsed.versions.main.weight, 1);
+    assert.equal(parsed.versions['0.16'].weight, 2);
 });

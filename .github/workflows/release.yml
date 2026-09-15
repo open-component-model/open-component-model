@@ -8,7 +8,8 @@ name: Release
 #                                       single tag resolves the CLI, the controller API and every
 #                                       binding for Go and Hugo module consumers.
 #   website/v0.X.Y                      Website tag, used by Hugo module imports for versioned docs.
-#                                       Final-only — no RC counterpart, since the docs site has no RC artifacts to validate.
+#                                       Has an RC counterpart (website/v0.X.Y-rc.N), used for
+#                                       publishing release-candidate docs.
 #
 # Flow: Release manager selects a release branch, hits release, then gates will take
 # care of the rest.
@@ -54,6 +55,7 @@ jobs:
       promotion_tag: ${{ steps.compute.outputs.promotion_tag }}
       bindings_module_rc_tag: ${{ steps.compute.outputs.bindings_module_rc_tag }}
       bindings_module_promotion_tag: ${{ steps.compute.outputs.bindings_module_promotion_tag }}
+      website_module_rc_tag: ${{ steps.compute.outputs.website_module_rc_tag }}
       website_module_promotion_tag: ${{ steps.compute.outputs.website_module_promotion_tag }}
       changelog_artifact: changelog-${{ steps.compute.outputs.new_version }}
       previous_tag: ${{ steps.compute.outputs.previous_tag }}
@@ -187,12 +189,12 @@ jobs:
           git_user_signingkey: true
           git_tag_gpgsign: true
 
-      - name: Create RC tags (canonical + bindings/go side tag)
+      - name: Create RC tags (canonical + bindings/go + website side tags)
         id: tag
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           CANONICAL_TAG: ${{ needs.prepare.outputs.new_tag }}
-          ADDITIONAL_TAGS: ${{ needs.prepare.outputs.bindings_module_rc_tag }}
+          ADDITIONAL_TAGS: ${{ needs.prepare.outputs.bindings_module_rc_tag }},${{ needs.prepare.outputs.website_module_rc_tag }}
         with:
           github-token: ${{ steps.get_token.outputs.token }}
           script: |
@@ -686,8 +688,37 @@ jobs:
       controller_chart_digest: ${{ needs.promote_and_release_final.outputs.final_chart_digest }}
       conflict_policy: replace
 
-  # === Website version release ===
-  # Dispatches website-release-pr.yml on main via gh workflow run so the
+  # === Website RC docs release ===
+  # RC counterpart of create_website_update_pr below. Needs release_rc only,
+  # not the release gate or the promote jobs: RC docs publish during the RC
+  # phase. One stable PR per minor; a follow-up rc.N+1 dispatch updates the
+  # still-open rc.N PR.
+  create_website_rc_update_pr:
+    name: Trigger website RC update PR workflow
+    needs: [prepare, release_rc]
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      actions: write
+    steps:
+      # Dispatch happens from main's copy for the same reason as the final
+      # job: the workflow logic always executes from main, regardless of
+      # which release branch triggered this release.
+      - name: Dispatch website-release-pr on main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.new_version }}
+        run: |
+          set -euo pipefail
+          gh workflow run website-v2-release-docs.yml \
+            --repo "$GH_REPO" \
+            --ref main \
+            -f version="$VERSION"
+          echo "Dispatched website-release-pr for $VERSION on main."
+
+  # === Website version release (final) ===
+  # Final counterpart of create_website_rc_update_pr above. Dispatches
+  # website-v2-release-docs.yml on main via gh workflow run so the
   # logic always executes from main's copy of the workflow, regardless of
   # which release branch triggered this release. A workflow_call would load
   # the callee from the caller's ref.
