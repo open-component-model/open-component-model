@@ -63,11 +63,10 @@ calendar app and every change shows up automatically.
 
 | Meeting | Cadence | Purpose |
 | --- | --- | --- |
-| Daily Standup | Every workday | Casual sync - not mandatory, not necessarily work-related |
+| Daily Standup | Every workday | Team sync on in-flight work, blockers, and coordination |
 | Planning | Biweekly (Monday) | Review the [Next Sprint](https://github.com/orgs/open-component-model/projects/10/views/21) view, agree on sprint goals |
 | Retrospective | Biweekly (Monday) | Reflect on what went well and what to improve (invited members only to maintain a safe space for feedback) |
 | Refinement | Weekly (Thursday) | Discuss items in "Needs Refinement" on the [Next Sprint](https://github.com/orgs/open-component-model/projects/10/views/21) view, clarify scope, and story-point |
-| Warroom | Every workday | Synchronous coordination on tasks or open topics |
 | [Community Call]({{< relref "_index.md" >}}) | First Wednesday of the month | Project updates, demos, and open Q&A with the broader community |
 | TSC Meeting | First Wednesday of the month | Governance decisions, SIG approvals ([meeting notes](https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes)) |
 
