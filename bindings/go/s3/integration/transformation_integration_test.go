@@ -16,7 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
-	accessv1 "ocm.software/open-component-model/bindings/go/s3/spec/access/v1"
+	accessv2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/s3/transformation"
 	"ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
@@ -64,8 +64,8 @@ func Test_Integration_S3Transformation(t *testing.T) {
 	scheme.MustRegisterWithAlias(&v1alpha1.DownloadS3Resource{}, v1alpha1.DownloadS3ResourceV1alpha1)
 
 	rawAccess := &runtime.Raw{}
-	r.NoError(accessspec.Scheme.Convert(&accessv1.S3Bucket{
-		Type:         accessspec.V1VersionedType,
+	r.NoError(accessspec.Scheme.Convert(&accessv2.S3{
+		Type:         accessspec.V2VersionedType,
 		Region:       "us-east-1",
 		BucketName:   bucket,
 		ObjectKey:    key,
