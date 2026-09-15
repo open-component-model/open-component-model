@@ -298,7 +298,11 @@ func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[
 	case render.OutputFormatTree.String():
 		return tree.New(ctx, dag, tree.WithRoots(roots...)), nil
 	case render.OutputFormatWideTree.String():
-		return tree.New(ctx, dag, tree.WithRoots(roots...), tree.WithVertexSerializerFunc(serializeVertexToDescriptorTreeWithResources)), nil
+		return tree.New(ctx, dag,
+			tree.WithRoots(roots...),
+			tree.WithHeader[string](wideTreeHeader...),
+			tree.WithVertexSerializerFunc(serializeVertexToWideTreeRow),
+		), nil
 	case render.OutputFormatTable.String():
 		serializer := list.ListSerializerFunc[string](serializeVerticesToTable)
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
@@ -323,10 +327,28 @@ func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {
 	return descriptorV2, nil
 }
 
-// serializeVertexToDescriptorTreeWithResources serializes the component version
-// held by the vertex into a tree row, with one nested row per resource of the
-// component version. The nested rows are rendered below the component row.
-func serializeVertexToDescriptorTreeWithResources(vertex *dag.Vertex[string]) (tree.Row, error) {
+// wideTreeHeader describes the columns of the widetree output. It renders both
+// component versions and the resources they contain, so it carries the columns
+// of both element kinds. COMPONENT and PROVIDER are filled for component rows,
+// NAME, TYPE and RELATION for resource rows.
+var wideTreeHeader = []string{"COMPONENT", "NAME", "VERSION", "PROVIDER", "TYPE", "RELATION", "IDENTITY"}
+
+// extraIdentity returns the identity without the name attribute, because the
+// name already has its own column. What remains is the extra identity, which is
+// what distinguishes elements that share a name. An element without extra
+// identity yields an empty string.
+func extraIdentity(identity runtime.Identity) string {
+	delete(identity, descruntime.IdentityAttributeName)
+	if len(identity) == 0 {
+		return ""
+	}
+	return identity.String()
+}
+
+// serializeVertexToWideTreeRow serializes the component version held by the
+// vertex into a row matching wideTreeHeader, with one nested row per resource of
+// the component version. The nested rows are rendered below the component row.
+func serializeVertexToWideTreeRow(vertex *dag.Vertex[string]) (tree.Row, error) {
 	untypedDescriptor, ok := vertex.Attributes[syncdag.AttributeValue]
 	if !ok {
 		return tree.Row{}, fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
@@ -338,18 +360,27 @@ func serializeVertexToDescriptorTreeWithResources(vertex *dag.Vertex[string]) (t
 	resources := make([]tree.Row, 0, len(desc.Component.Resources))
 	for i := range desc.Component.Resources {
 		res := &desc.Component.Resources[i]
-		resources = append(resources, tree.Row{
-			Component: res.Name,
-			Version:   res.Version,
-			Identity:  fmt.Sprintf("type=%s,relation=%s", res.Type, res.Relation),
-		})
+		resources = append(resources, tree.Row{Cells: []string{
+			"", // COMPONENT: a resource belongs to the component row above it.
+			res.Name,
+			res.Version,
+			"", // PROVIDER: resources inherit the provider of their component.
+			res.Type,
+			string(res.Relation),
+			extraIdentity(res.ToIdentity()),
+		}})
 	}
 	return tree.Row{
-		Component: desc.Component.Name,
-		Version:   desc.Component.Version,
-		Provider:  desc.Component.Provider.Name,
-		Identity:  desc.Component.ToIdentity().String(),
-		Children:  resources,
+		Cells: []string{
+			desc.Component.Name,
+			"", // NAME: only resources carry an element name.
+			desc.Component.Version,
+			desc.Component.Provider.Name,
+			"", // TYPE: only resources carry a type.
+			"", // RELATION: only resources carry a relation.
+			extraIdentity(desc.Component.ToIdentity()),
+		},
+		Children: resources,
 	}, nil
 }
 

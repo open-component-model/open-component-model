@@ -58,12 +58,12 @@ func TestRunRenderLoop(t *testing.T) {
 			if !ok {
 				return Row{}, fmt.Errorf("vertex %v has a value attribute of unexpected type %T, expected type %T", vertex.ID, untypedComponent, &descriptor.Descriptor{})
 			}
-			return Row{
-				Component: fmt.Sprintf("%s (%s)", component.Component.Name, state),
-				Version:   component.Component.Version,
-				Provider:  component.Component.Provider.Name,
-				Identity:  component.Component.ToIdentity().String(),
-			}, nil
+			return Row{Cells: []string{
+				fmt.Sprintf("%s (%s)", component.Component.Name, state),
+				component.Component.Version,
+				component.Component.Provider.Name,
+				component.Component.ToIdentity().String(),
+			}}, nil
 		}
 
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -372,28 +372,29 @@ func TestRenderOnceWithNestedRows(t *testing.T) {
 			res := &component.Component.Resources[i]
 			labels := make([]Row, 0, len(res.Labels))
 			for _, label := range res.Labels {
-				labels = append(labels, Row{
-					Component: label.Name,
-					Identity:  string(label.Value),
-				})
+				labels = append(labels, Row{Cells: []string{"", label.Name, "", "", string(label.Value)}})
 			}
 			resources = append(resources, Row{
-				Component: res.Name,
-				Version:   res.Version,
-				Identity:  fmt.Sprintf("type=%s,relation=%s", res.Type, res.Relation),
-				Children:  labels,
+				Cells:    []string{"", res.Name, res.Version, res.Type, res.ToIdentity().String()},
+				Children: labels,
 			})
 		}
 		return Row{
-			Component: component.Component.Name,
-			Version:   component.Component.Version,
-			Provider:  component.Component.Provider.Name,
-			Identity:  component.Component.ToIdentity().String(),
-			Children:  resources,
+			Cells: []string{
+				component.Component.Name,
+				"",
+				component.Component.Version,
+				"",
+				component.Component.ToIdentity().String(),
+			},
+			Children: resources,
 		}, nil
 	}
 
-	renderer := New(ctx, graph, WithVertexSerializerFunc(vertexSerializer))
+	renderer := New(ctx, graph,
+		WithHeader[string]("COMPONENT", "NAME", "VERSION", "TYPE", "IDENTITY"),
+		WithVertexSerializerFunc(vertexSerializer),
+	)
 
 	attrs := withTestAttributes(syncdag.DiscoveryStateCompleted, "comp-a", "v1.0.0", "acme")
 	desc := attrs[syncdag.AttributeValue].(*descriptor.Descriptor)
@@ -422,12 +423,12 @@ func TestRenderOnceWithNestedRows(t *testing.T) {
 	r.NoError(d.AddVertex("B", withTestAttributes(syncdag.DiscoveryStateCompleted, "comp-b", "v2.0.0", "acme")))
 	r.NoError(d.AddEdge("A", "B"))
 
-	expected := ` NESTING   COMPONENT  VERSION  PROVIDER  IDENTITY                        
- └─ ●      comp-a     v1.0.0   acme      name=comp-a,version=v1.0.0      
-    ├─     res-a      v1.0.0             type=blueprint,relation=local   
-    ├─ ●   res-b      v2.0.0             type=ociImage,relation=external 
-    │  └─  label-a                       "value-a"                       
-    └─     comp-b     v2.0.0   acme      name=comp-b,version=v2.0.0      
+	expected := ` NESTING   COMPONENT  NAME     VERSION  TYPE       IDENTITY                   
+ └─ ●      comp-a              v1.0.0              name=comp-a,version=v1.0.0 
+    ├─                res-a    v1.0.0   blueprint  name=res-a,version=v1.0.0  
+    ├─ ●              res-b    v2.0.0   ociImage   name=res-b,version=v2.0.0  
+    │  └─             label-a                      "value-a"                  
+    └─     comp-b              v2.0.0              name=comp-b,version=v2.0.0 
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	r.Equal(expected, buf.String())

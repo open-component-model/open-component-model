@@ -74,6 +74,22 @@ func createTestDescriptor(name, version string) *descriptor.Descriptor {
 	}
 }
 
+// trimTreeOutput normalizes a rendered tree for comparison in order to make
+// expected values in tests easier to read as the column alignment fits
+func trimTreeOutput(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t\r")
+	}
+	for len(lines) > 0 && lines[0] == "" {
+		lines = lines[1:]
+	}
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Test_Get_Component_Version_Formats tests the different output formats for the get cv command
 func Test_Get_Component_Version_Formats(t *testing.T) {
 	// Setup test repository with a single component version
@@ -211,14 +227,25 @@ COMPONENT                   │ VERSION │ PROVIDER
 // Test_Get_Component_Version_WideTree tests the `-o widetree` output format,
 func Test_Get_Component_Version_WideTree(t *testing.T) {
 	leaf := createTestDescriptor("ocm.software/leaf", "0.0.1")
+	// Two resources sharing a name, distinguished only by their extra identity.
 	leaf.Component.Resources = []descriptor.Resource{
 		{
 			ElementMeta: descriptor.ElementMeta{
-				ObjectMeta: descriptor.ObjectMeta{Name: "leaf-image", Version: "2.0.0"},
+				ObjectMeta:    descriptor.ObjectMeta{Name: "umc-server", Version: "3.0"},
+				ExtraIdentity: runtime.Identity{"variant": "legacy"},
 			},
 			Type:     "ociImage",
 			Relation: descriptor.ExternalRelation,
-			Access:   &accessv1.OCIImage{ImageReference: "ghcr.io/example/leaf-image:2.0.0"},
+			Access:   &accessv1.OCIImage{ImageReference: "ghcr.io/example/umc-server:3.0"},
+		},
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta:    descriptor.ObjectMeta{Name: "umc-server", Version: "0.47.1"},
+				ExtraIdentity: runtime.Identity{"variant": "current"},
+			},
+			Type:     "ociImage",
+			Relation: descriptor.ExternalRelation,
+			Access:   &accessv1.OCIImage{ImageReference: "ghcr.io/example/umc-server:0.47.1"},
 		},
 	}
 
@@ -268,27 +295,34 @@ func Test_Get_Component_Version_WideTree(t *testing.T) {
 		{
 			name: "widetree output",
 			args: []string{"get", "cv", path, "--output=widetree"},
-			expectedOutput: `NESTING  COMPONENT          VERSION  PROVIDER      IDENTITY                             
- └─ ●     ocm.software/root  0.0.1    ocm.software  name=ocm.software/root,version=0.0.1 
-    ├─    blueprint          0.0.1                  type=blueprint,relation=local        
-    └─    chart              1.2.3                  type=helmChart,relation=external`,
+			expectedOutput: `
+ NESTING  COMPONENT          NAME       VERSION  PROVIDER      TYPE       RELATION  IDENTITY
+ └─ ●     ocm.software/root             0.0.1    ocm.software                       version=0.0.1
+    ├─                       blueprint  0.0.1                  blueprint  local     version=0.0.1
+    └─                       chart      1.2.3                  helmChart  external  version=1.2.3
+`,
 		},
 		{
 			name: "widetree output recursive",
 			args: []string{"get", "cv", path, "--output=widetree", "--recursive=-1"},
-			expectedOutput: `NESTING   COMPONENT          VERSION  PROVIDER      IDENTITY                             
- └─ ●      ocm.software/root  0.0.1    ocm.software  name=ocm.software/root,version=0.0.1 
-    ├─     blueprint          0.0.1                  type=blueprint,relation=local        
-    ├─     chart              1.2.3                  type=helmChart,relation=external     
-    └─ ●   ocm.software/leaf  0.0.1    ocm.software  name=ocm.software/leaf,version=0.0.1 
-       └─  leaf-image         2.0.0                  type=ociImage,relation=external`,
+			expectedOutput: `
+ NESTING   COMPONENT          NAME        VERSION  PROVIDER      TYPE       RELATION  IDENTITY
+ └─ ●      ocm.software/root              0.0.1    ocm.software                       version=0.0.1
+    ├─                        blueprint   0.0.1                  blueprint  local     version=0.0.1
+    ├─                        chart       1.2.3                  helmChart  external  version=1.2.3
+    └─ ●   ocm.software/leaf              0.0.1    ocm.software                       version=0.0.1
+       ├─                     umc-server  3.0                    ociImage   external  variant=legacy,version=3.0
+       └─                     umc-server  0.47.1                 ociImage   external  variant=current,version=0.47.1
+`,
 		},
 		{
 			name: "tree output does not render resources",
 			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
-			expectedOutput: `NESTING  COMPONENT          VERSION  PROVIDER      IDENTITY                             
- └─ ●     ocm.software/root  0.0.1    ocm.software  name=ocm.software/root,version=0.0.1 
-    └─    ocm.software/leaf  0.0.1    ocm.software  name=ocm.software/leaf,version=0.0.1`,
+			expectedOutput: `
+ NESTING  COMPONENT          VERSION  PROVIDER      IDENTITY
+ └─ ●     ocm.software/root  0.0.1    ocm.software  name=ocm.software/root,version=0.0.1
+    └─    ocm.software/leaf  0.0.1    ocm.software  name=ocm.software/leaf,version=0.0.1
+`,
 		},
 	}
 
@@ -300,7 +334,7 @@ func Test_Get_Component_Version_WideTree(t *testing.T) {
 			_, err := test.OCM(t, test.WithArgs(tt.args...), test.WithOutput(result), test.WithErrorOutput(logs))
 			r.NoError(err, "failed to run command")
 
-			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
+			r.EqualValues(trimTreeOutput(tt.expectedOutput), trimTreeOutput(result.String()), "expected output")
 		})
 	}
 }

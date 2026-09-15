@@ -18,10 +18,12 @@ import (
 )
 
 // Renderer prints a tree from a DirectedAcyclicGraph as a table.
-// Columns: NESTING, COMPONENT, VERSION, PROVIDER, IDENTITY.
-// NESTING shows the tree structure using Unicode box-drawing characters from [TreeStyle].
+// The first column is always NESTING and shows the tree structure using Unicode
+// box-drawing characters from [TreeStyle]. The remaining columns are defined by
+// the header (see [WithHeader]) and are filled from the cells of the Row that
+// the VertexSerializer produces.
 //
-// Example output:
+// Example output with [DefaultHeader]:
 //
 //	NESTING   COMPONENT     VERSION  PROVIDER  IDENTITY
 //	├─ ●      app-frontend  v1.2.0   acme      A
@@ -39,6 +41,8 @@ type Renderer[T cmp.Ordered] struct {
 	// carry nested Children rows, which are rendered below the vertex row.
 	// It MUST perform READ-ONLY access to the vertex and its attributes.
 	vertexSerializer VertexSerializer[T]
+	// header holds the column headings that follow the NESTING column.
+	header []string
 	// Tree drawing style used for the NESTING column.
 	style TreeStyle
 	// Table style used for the go-pretty table renderer.
@@ -65,6 +69,10 @@ func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcycli
 		options.VertexSerializer = VertexSerializerFunc[T](defaultVertexSerializer[T])
 	}
 
+	if len(options.Header) == 0 {
+		options.Header = DefaultHeader
+	}
+
 	if len(options.Roots) == 0 {
 		slog.DebugContext(ctx, "no roots provided, dynamically determining roots from graph")
 	}
@@ -72,6 +80,7 @@ func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcycli
 	return &Renderer[T]{
 		tableWriter:      table.NewWriter(),
 		vertexSerializer: options.VertexSerializer,
+		header:           options.Header,
 		style:            DefaultTreeStyle,
 		tableStyle:       defaultTableStyle(),
 		roots:            options.Roots,
@@ -85,7 +94,7 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	defer t.tableWriter.ResetHeaders()
 	defer t.tableWriter.ResetRows()
 	t.tableWriter.SetStyle(t.tableStyle)
-	t.tableWriter.AppendHeader(table.Row{"NESTING", "COMPONENT", "VERSION", "PROVIDER", "IDENTITY"})
+	t.tableWriter.AppendHeader(nestingRow(NestingColumn, t.header))
 
 	roots := t.roots
 	if len(roots) == 0 {
@@ -164,7 +173,7 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, lockedGraph *dag.Direct
 	totalChildren := len(subRows) + len(children)
 	hasChildren := totalChildren > 0
 	nesting := buildNesting(t.style, ancestorsHasMore, isLast, hasChildren)
-	t.tableWriter.AppendRow(table.Row{nesting, row.Component, row.Version, row.Provider, row.Identity})
+	t.tableWriter.AppendRow(nestingRow(nesting, row.Cells))
 
 	// The connector state passed down to all children of the current node.
 	nextAncestors := make([]bool, 0, len(ancestorsHasMore)+1)
@@ -190,12 +199,22 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, lockedGraph *dag.Direct
 	return nil
 }
 
+// nestingRow builds a table row whose first column is the NESTING column
+func nestingRow(nesting string, cells []string) table.Row {
+	row := make(table.Row, 0, len(cells)+1)
+	row = append(row, nesting)
+	for _, cell := range cells {
+		row = append(row, cell)
+	}
+	return row
+}
+
 // appendRowTree appends a row and, recursively, its nested Children rows.
 // Nested rows do not correspond to vertices of the graph, so no graph traversal
 // takes place here.
 func (t *Renderer[T]) appendRowTree(row Row, ancestorsHasMore []bool, isLast bool) {
 	nesting := buildNesting(t.style, ancestorsHasMore, isLast, len(row.Children) > 0)
-	t.tableWriter.AppendRow(table.Row{nesting, row.Component, row.Version, row.Provider, row.Identity})
+	t.tableWriter.AppendRow(nestingRow(nesting, row.Cells))
 
 	if len(row.Children) == 0 {
 		return
