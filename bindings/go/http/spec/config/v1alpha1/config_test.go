@@ -210,12 +210,12 @@ configurations:
 }
 
 func TestResolveHTTPConfig(t *testing.T) {
-	t.Run("nil input returns Config with default timeout", func(t *testing.T) {
+	t.Run("nil input returns Config with unlimited timeout", func(t *testing.T) {
 		cfg, err := httpspec.ResolveHTTPConfig(nil)
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
 		require.NotNil(t, cfg.Timeout)
-		assert.Equal(t, httpspec.Timeout(time.Duration(httpspec.DefaultTimeout)), *cfg.Timeout)
+		assert.Zero(t, time.Duration(*cfg.Timeout))
 	})
 
 	t.Run("valid config returns resolved Config", func(t *testing.T) {

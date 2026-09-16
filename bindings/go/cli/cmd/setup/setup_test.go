@@ -600,8 +600,8 @@ func TestPluginManager_ResolveHTTPConfig(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, httpCfg)
 		require.NotNil(t, httpCfg.Timeout)
-		assert.Equal(t, httpv1alpha1.Timeout(time.Duration(httpv1alpha1.DefaultTimeout)), *httpCfg.Timeout,
-			"default timeout should be 30s when not configured")
+		assert.Zero(t, time.Duration(*httpCfg.Timeout),
+			"default timeout should allow response bodies to stream indefinitely")
 	})
 
 	t.Run("resolves custom HTTP config from YAML", func(t *testing.T) {
