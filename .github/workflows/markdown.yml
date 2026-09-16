@@ -9,6 +9,7 @@ on:
       - '.github/workflows/markdown.yml'
       - '.github/config/linkspector-all.yaml'
       - '.github/config/linkspector-changed.yaml'
+      - '.github/scripts/check-adr-numbers.js'
   pull_request:
     branches:
       - main
@@ -18,6 +19,7 @@ on:
       - '.github/workflows/markdown.yml'
       - '.github/config/linkspector-all.yaml'
       - '.github/config/linkspector-changed.yaml'
+      - '.github/scripts/check-adr-numbers.js'
 
 permissions:
   contents: read
@@ -213,3 +215,5 @@ jobs:
         env:
           MARKDOWNLINT_VERSION: ${{ steps.versions.outputs.markdownlint_cli2 }}
         run: npx "markdownlint-cli2@${MARKDOWNLINT_VERSION}" --config .github/config/.markdownlint-cli2.yaml "**/*.md"
+      - name: Check ADR numbers are unique
+        run: node .github/scripts/check-adr-numbers.js docs/adr

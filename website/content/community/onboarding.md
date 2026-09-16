@@ -92,7 +92,7 @@ graph TD
 The [ocm](https://github.com/open-component-model/ocm) and
 [ocm-controller](https://github.com/open-component-model/ocm-controller) repositories are the previous generation of
 OCM tooling. They are maintained but no longer receive new features. All new development targets the mono-repo above.
-Read the [OCM v2 announcement]({{< relref "blog/ocm_v2_announcement.md" >}}) for background on the rewrite.
+Read the [OCM v2 announcement](/blog/ocmv2/) for background on the rewrite.
 {{</callout>}}
 
 ## Technical Layers
@@ -208,7 +208,6 @@ label across our repositories.
 
 {{<callout context="tip" title="Say Hello" icon="outline/heart-handshake">}}
 The easiest way to get started is to say hello. Join our monthly
-[community call](/community/#community-call) or ask for an invite to the
-[daily standup](/community/how-we-work/#meetings) - it is a casual sync, not mandatory, and not necessarily work-related.
+[community call](/community/#community-call) - open to everyone, no invite needed.
 You can reach us on [Slack](/community/#slack) or [Zulip](/community/#zulip) anytime.
 {{</callout>}}
