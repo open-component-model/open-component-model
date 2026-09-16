@@ -3,7 +3,6 @@ package v1alpha1
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -91,13 +90,6 @@ type DiscoverySpec struct {
 	// objects providing configuration data including credentials.
 	// +optional
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
-
-	// Interval at which the component graph is re-discovered. Watches on the
-	// referenced Component usually trigger reconcile events. The interval can
-	// be set to avoid missed events. Unset or zero disables periodic
-	// re-discovery.
-	// +optional
-	Interval metav1.Duration `json:"interval,omitempty"`
 
 	// Suspend tells the controller to suspend the reconciliation of this
 	// Discovery.
@@ -209,16 +201,6 @@ func (in *Discovery) GetVID() map[string]string {
 	metadata[GroupVersion.Group+"/discovery_version"] = vid
 
 	return metadata
-}
-
-// GetRequeueAfter returns the duration after which the Discovery must be
-// reconciled again.
-func (in *Discovery) GetRequeueAfter() time.Duration {
-	if in == nil {
-		return 0
-	}
-
-	return in.Spec.Interval.Duration
 }
 
 func (in *Discovery) SetObservedGeneration(v int64) {

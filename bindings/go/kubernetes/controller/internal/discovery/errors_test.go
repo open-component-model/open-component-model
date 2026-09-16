@@ -76,12 +76,11 @@ func TestIsMissingAccessRejectsGenuineErrors(t *testing.T) {
 	r.False(missing, "no such overload must never be treated as a missing access")
 }
 
-// TestEvalResultCancellationIsRetryable covers the case the pre-evaluation
-// context check cannot: the context is live on entry and cel-go's interrupt
-// fires mid-evaluation. The resulting error must not be wrapped in a
-// *SelectorError or *ExtractError, or a manager shutdown would stall the
-// Discovery permanently.
-func TestEvalResultCancellationIsRetryable(t *testing.T) {
+// TestEvalResultCatchesMidEvaluationCancellation covers the case the loop-head
+// context checks cannot: the context is live on entry and dies during the
+// evaluation. evalResult must report it rather than let the pipeline carry on
+// against a dead context until the next loop head.
+func TestEvalResultCatchesMidEvaluationCancellation(t *testing.T) {
 	r := require.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -90,19 +89,6 @@ func TestEvalResultCancellationIsRetryable(t *testing.T) {
 	expr := `size(lists.range(1000000).map(x, x*2).map(x, x*2).map(x, x*2).map(x, x*2).map(x, x*2).map(x, x*2))`
 	missing, cause := evalExpr(t, ctx, expr, map[string]any{"components": []any{}, "component": map[string]any{}})
 
-	r.False(missing)
-	r.ErrorIs(cause, errCancelled)
+	r.False(missing, "a cancellation is not a missing access")
 	r.ErrorIs(cause, context.DeadlineExceeded)
-
-	var selErr *SelectorError
-	var extErr *ExtractError
-	r.NotErrorAs(selectorEvalError(StageComponent, cause), &selErr, "cancellation must not become a terminal selector error")
-	r.NotErrorAs(extractEvalError("field", cause), &extErr, "cancellation must not become a terminal extract error")
-
-	// A genuine failure still wraps.
-	_, genuine := evalExpr(t, t.Context(), `size(component.resources)`, map[string]any{
-		"components": []any{}, "component": map[string]any{"resources": nil},
-	})
-	r.ErrorAs(selectorEvalError(StageComponent, genuine), &selErr)
-	r.ErrorAs(extractEvalError("field", genuine), &extErr)
 }

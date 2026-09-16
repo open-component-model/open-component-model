@@ -2,7 +2,6 @@ package discovery
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -33,6 +32,8 @@ func (e *SelectorError) Unwrap() error {
 	return e.Cause
 }
 
+// selectorErrorf builds a *SelectorError. Callers pass the cause with %w so
+// errors.Is and errors.As keep working through the wrapper.
 func selectorErrorf(stage, format string, args ...any) *SelectorError {
 	return &SelectorError{Stage: stage, Cause: fmt.Errorf(format, args...)}
 }
@@ -56,6 +57,8 @@ func (e *ExtractError) Unwrap() error {
 	return e.Cause
 }
 
+// extractErrorf builds an *ExtractError. Callers pass the cause with %w so
+// errors.Is and errors.As keep working through the wrapper.
 func extractErrorf(field, format string, args ...any) *ExtractError {
 	return &ExtractError{Field: field, Cause: fmt.Errorf(format, args...)}
 }
@@ -85,9 +88,15 @@ var missingAccessPrefixes = []string{
 	"index out of bounds:",
 }
 
-// isMissingAccess reports whether err is a CEL attribute-resolution failure,
-// i.e. access to a missing map key, a missing attribute, or an out-of-range
-// list index.
+// isMissingAccess we use this if the element in question doesn't have
+// the field CEL is trying to assert. That shouldn't be a hard error.
+// That should simply mean that the element in question does not match
+// our selector. And that's it. That's the reason for the above
+// missingAccessPrefix's existence. We need to assert those prefixes
+// to figure out that our check was incorrect OR that the item in question
+// simply doesn't match. For example, given a CEL expression that checks
+// whether platform equals `linux` should NOT FAIL on an element that
+// doesn't have a platform field.
 func isMissingAccess(err error) bool {
 	if err == nil {
 		return false
@@ -106,13 +115,9 @@ func isMissingAccess(err error) bool {
 // cause for callers that treat missing access as an error. All other CEL
 // errors are reported as failures.
 //
-// ctx is re-checked first because cel-go reports cancellation as an ordinary
-// evaluation error ("operation interrupted"), which matches no missing-access
-// prefix and would otherwise be classified as a semantic failure. Callers wrap
-// failures in *SelectorError or *ExtractError, which the controller treats as
-// terminal, so a cancelled reconcile would stall the object permanently. Every
-// ContextEval in this package goes through here so it's enough to do a checkContext
-// in this function.
+// ctx is re-checked first so a cancellation is caught even when cel-go returns
+// a successful value just as the context dies: without it the pipeline would
+// keep working against a dead context until the next loop head.
 func evalResult(ctx context.Context, val ref.Val, err error) (missing bool, cause error) {
 	if ctxErr := checkContext(ctx); ctxErr != nil {
 		return false, ctxErr
@@ -133,39 +138,12 @@ func evalResult(ctx context.Context, val ref.Val, err error) (missing bool, caus
 	return false, nil
 }
 
-// errCancelled marks a context failure observed during evaluation. It is never
-// wrapped in a *SelectorError or *ExtractError, so cancellation stays
-// retryable instead of stalling the object.
-var errCancelled = errors.New("discovery evaluation cancelled")
-
-// checkContext maps an in-flight context error to a plain error so a cancelled
+// checkContext maps an in-flight context error to an error so a cancelled
 // evaluation is never mistaken for an empty stage or a nonmatch.
 func checkContext(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("%w: %w", errCancelled, err)
+		return fmt.Errorf("discovery evaluation cancelled: %w", err)
 	}
 
 	return nil
-}
-
-// selectorEvalError wraps a selector evaluation failure for a stage. A
-// cancellation passes through untouched: only this constructor and
-// extractEvalError are used on evaluation paths, so it is not possible to
-// wrap a cancelled evaluation in a terminal error by forgetting a check.
-func selectorEvalError(stage string, cause error) error {
-	if errors.Is(cause, errCancelled) {
-		return cause
-	}
-
-	return &SelectorError{Stage: stage, Cause: fmt.Errorf("failed to evaluate selector expression: %w", cause)}
-}
-
-// extractEvalError wraps an extraction evaluation failure for a field, passing
-// a cancellation through untouched. See selectorEvalError.
-func extractEvalError(field string, cause error) error {
-	if errors.Is(cause, errCancelled) {
-		return cause
-	}
-
-	return &ExtractError{Field: field, Cause: fmt.Errorf("failed to evaluate extract expression: %w", cause)}
 }

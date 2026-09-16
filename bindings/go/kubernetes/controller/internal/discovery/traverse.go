@@ -92,8 +92,8 @@ func (g Graph) DigestsComplete() bool {
 // identity. The graph is only consumed after the entire traversal succeeded;
 // on error no partial graph is returned.
 //
-// A reference cycle is reported by the DAG as a *dag.CycleError and fails the
-// traversal; it is not detected here.
+// Cycle detection is not implemented here; it belongs to the shared DAG
+// package (open-component-model/ocm-project#705).
 func Traverse(ctx context.Context, root ComponentKey, resolver resolvers.ComponentVersionRepositoryResolver) (*Graph, error) {
 	if resolver == nil {
 		return nil, fmt.Errorf("component version repository resolver must not be nil")

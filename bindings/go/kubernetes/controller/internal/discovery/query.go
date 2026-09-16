@@ -109,7 +109,7 @@ func compileSelector(_ context.Context, env *cel.Env, stage string, sel *v1alpha
 	if sel.Expression != "" {
 		prog, err := compileProgram(env, sel.Expression)
 		if err != nil {
-			return nil, selectorErrorf(stage, "failed to compile expression: %s", err)
+			return nil, selectorErrorf(stage, "failed to compile expression: %w", err)
 		}
 		cs.prog = prog
 	}
@@ -158,7 +158,7 @@ func compileExtract(ctx context.Context, base *cel.Env, extract *v1alpha1.Extrac
 		}
 		prog, err := compileProgram(env, extract.Expression)
 		if err != nil {
-			return nil, extractErrorf("", "failed to compile expression: %s", err)
+			return nil, extractErrorf("", "failed to compile expression: %w", err)
 		}
 		return &compiledExtract{mode: extractExpression, expression: prog}, nil
 	}
@@ -171,7 +171,7 @@ func compileFields(_ context.Context, env *cel.Env, exprs map[string]string) ([]
 	for _, name := range slices.Sorted(maps.Keys(exprs)) {
 		prog, err := compileProgram(env, exprs[name])
 		if err != nil {
-			return nil, extractErrorf(name, "failed to compile expression: %s", err)
+			return nil, extractErrorf(name, "failed to compile expression: %w", err)
 		}
 		fields = append(fields, extractedField{name: name, prog: prog})
 	}
@@ -193,8 +193,7 @@ func compileProgram(env *cel.Env, expr string) (cel.Program, error) {
 // matches reports whether the element with the given identity and labels
 // survives the selector. All clauses are ANDed. A missing field, key or index
 // access in the selector expression is a nonmatch; a nonboolean result or any
-// other evaluation error is a *SelectorError. A cancelled evaluation is a
-// plain error, never a *SelectorError, so it stays retryable.
+// other evaluation error is a *SelectorError.
 func (s *compiledSelector) matches(ctx context.Context, identity runtime.Identity, labels map[string]any) (bool, error) {
 	if s == nil {
 		return true, nil
@@ -217,11 +216,11 @@ func (s *compiledSelector) matches(ctx context.Context, identity runtime.Identit
 		return false, nil
 	}
 	if failure != nil {
-		return false, selectorEvalError(s.stage, failure)
+		return false, selectorErrorf(s.stage, "failed to evaluate expression: %w", failure)
 	}
 	native, err := conversion.GoNativeType(val)
 	if err != nil {
-		return false, selectorErrorf(s.stage, "failed to convert expression result: %s", err)
+		return false, selectorErrorf(s.stage, "failed to convert expression result: %w", err)
 	}
 	b, ok := native.(bool)
 	if !ok {
