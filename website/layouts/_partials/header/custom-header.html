@@ -56,7 +56,7 @@
                         {{ range site.Menus.main }}
                         {{ $active := or ($currentPage.IsMenuCurrent "main" .) ($currentPage.HasMenuCurrent "main" .) }}
                         {{ $url := .URL }}
-                        {{ $isAbs := or (strings.HasPrefix $url "http://") (strings.HasPrefix $url "https://") }}
+                        {{ $isAbs := or (strings.HasPrefix $url "http://") (strings.HasPrefix $url "https://") (strings.HasPrefix $url "/") }}
                         {{ $path := strings.TrimPrefix "/" $url }}
                         {{ $href := cond $isAbs $url (printf "%s/%s" $siteRoot $path) }}
                         <li class="nav-item">
@@ -114,8 +114,11 @@
                         </a>
                         {{ end }}
 
-                        <!-- Version switcher using Hugo's built-in versions. Always show global versions via Home.Rotate. -->
-                        <div class="dropdown me-3 d-none d-lg-flex">
+                        <!-- Version switcher using Hugo's built-in versions. Always show global versions via Home.Rotate. On unversioned top-level sections (community, governance, blog) the dropdown is hidden with visibility:hidden so the surrounding items keep their position. -->
+                        {{ $section := .Section }}
+                        {{ $unversioned := slice "community" "governance" "blog" }}
+                        {{ $hideVersion := in $unversioned $section }}
+                        <div class="dropdown me-3 d-none d-lg-flex"{{ if $hideVersion }} style="visibility:hidden" aria-hidden="true"{{ end }}>
                             <button class="btn btn-link nav-link p-0 dropdown-toggle btn-dropdown" id="doks-versions"
                                 data-bs-toggle="dropdown" aria-expanded="false" data-bs-display="static"
                                 aria-label="Toggle version menu">

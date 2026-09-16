@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/http/internal/retry"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
-	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 )
 
 func TestNew(t *testing.T) {
@@ -28,6 +28,15 @@ func TestNew(t *testing.T) {
 		c := ocmhttp.New(ocmhttp.WithConfig(nil))
 		_, ok := c.Transport.(*retry.Transport)
 		assert.True(t, ok)
+		assert.Zero(t, c.Timeout)
+	})
+
+	t.Run("resolved default leaves overall deadline disabled", func(t *testing.T) {
+		cfg, err := httpv1alpha1.ResolveHTTPConfig(nil)
+		require.NoError(t, err)
+
+		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
+
 		assert.Zero(t, c.Timeout)
 	})
 
