@@ -1,0 +1,62 @@
+name: "Website: Update security.txt"
+
+on:
+  schedule:
+    # Run every weekday in December at 09:00 UTC. The create-pull-request
+    # action is idempotent so repeated runs simply update the same PR branch.
+    - cron: '0 9 * 12 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        sparse-checkout: website/static/.well-known/security.txt
+        sparse-checkout-cone-mode: false
+        persist-credentials: false
+
+    - name: Set Expires to end of next year
+      run: |
+        set -euo pipefail
+        FILE=website/static/.well-known/security.txt
+        YEAR=$(( $(date +%Y) + 1 ))
+        NEW="${YEAR}-12-31T00:00:00.000Z"
+        sed -i "s|^Expires:.*|Expires: ${NEW}|" "$FILE"
+        echo "Set Expires: ${NEW}"
+
+    - name: Generate token
+      id: generate_token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ secrets.OCMBOT_APP_ID }}
+        private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+        repositories: ${{ github.event.repository.name }}
+        permission-pull-requests: write
+        permission-contents: write
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+      with:
+        token: ${{ steps.generate_token.outputs.token }}
+        title: "chore: renew security.txt expiry date"
+        commit-message: "chore: renew security.txt expiry date"
+        branch: security/renew-security-txt
+        delete-branch: true
+        sign-commits: true
+        labels: |
+          kind/chore
+        body: |
+          Automated renewal of the `Expires` field in `website/static/.well-known/security.txt`.
+
+          Sets the expiry date to December 31st of next year. Please review and merge to keep
+          the security.txt valid per [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116).
