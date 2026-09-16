@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS } = require('./register-docs-version');
+const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, syncUnversionedMountVersions, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS } = require('./register-docs-version');
 
 const MODULE_PREFIX = 'ocm.software/open-component-model';
 
@@ -143,7 +143,7 @@ test('buildModuleBlocks: website import has correct tag format', () => {
     // project owns the module graph (ignoreImports) and config (ignoreConfig).
     assert.equal(website.ignoreImports, true);
     assert.equal(website.ignoreConfig, true);
-    assert.deepEqual(website.mounts[0].files, ['**', '!blog/**']);
+    assert.deepEqual(website.mounts[0].files, ['! blog/**', '! community/**', '! governance/**']);
     assert.equal(website.mounts[0].source, 'content/');
     assert.equal(website.mounts[0].target, 'content');
     assert.deepEqual(website.mounts[0].sites.matrix.versions, ['0.3']);
@@ -809,4 +809,69 @@ test('hasAllImportsForVersion: consistent for post-merge layout', () => {
     const deps = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0' };
     const { imports } = buildModuleBlocks('0.16', '0.16.0', deps);
     assert.equal(hasAllImportsForVersion({ imports }, '0.16', deps), true);
+});
+
+// syncUnversionedMountVersions - keeps blog/community/governance mounts in sync
+// with the registered version set. See register-docs-version.js for rationale.
+
+function unversionedFixture(versions) {
+    return {
+        mounts: [
+            { source: 'content/blog',       target: 'content/blog',       sites: { matrix: { versions: [...versions] } } },
+            { source: 'content/community',  target: 'content/community',  sites: { matrix: { versions: [...versions] } } },
+            { source: 'content/governance', target: 'content/governance', sites: { matrix: { versions: [...versions] } } },
+            { source: 'content', target: 'content', sites: { matrix: { versions: ['main'] } } }, // untouched
+        ],
+    };
+}
+
+test('syncUnversionedMountVersions: appends added version to all three target mounts', () => {
+    const parsed = unversionedFixture(['main', '0.15', 'legacy']);
+    syncUnversionedMountVersions(parsed, { added: '0.16' });
+    for (const src of ['content/blog', 'content/community', 'content/governance']) {
+        const m = parsed.mounts.find(x => x.source === src);
+        assert.deepEqual(m.sites.matrix.versions, ['main', '0.16', '0.15', 'legacy'], `${src}: added between main and legacy, semver descending`);
+    }
+});
+
+test('syncUnversionedMountVersions: drops retired version from all three target mounts', () => {
+    const parsed = unversionedFixture(['main', '0.15', '0.14', '0.9', 'legacy']);
+    syncUnversionedMountVersions(parsed, { retired: '0.9' });
+    for (const src of ['content/blog', 'content/community', 'content/governance']) {
+        const m = parsed.mounts.find(x => x.source === src);
+        assert.deepEqual(m.sites.matrix.versions, ['main', '0.15', '0.14', 'legacy']);
+    }
+});
+
+test('syncUnversionedMountVersions: adds and retires in one pass, preserves main and legacy', () => {
+    const parsed = unversionedFixture(['main', '0.15', '0.14', '0.9', 'legacy']);
+    syncUnversionedMountVersions(parsed, { added: '0.16', retired: '0.9' });
+    for (const src of ['content/blog', 'content/community', 'content/governance']) {
+        const m = parsed.mounts.find(x => x.source === src);
+        assert.deepEqual(m.sites.matrix.versions, ['main', '0.16', '0.15', '0.14', 'legacy']);
+        assert.ok(m.sites.matrix.versions.includes('main'), `${src}: main preserved`);
+        assert.ok(m.sites.matrix.versions.includes('legacy'), `${src}: legacy preserved`);
+    }
+});
+
+test('syncUnversionedMountVersions: re-registering an existing version is a no-op', () => {
+    const parsed = unversionedFixture(['main', '0.15', 'legacy']);
+    const before = JSON.stringify(parsed);
+    syncUnversionedMountVersions(parsed, { added: '0.15' });
+    assert.equal(JSON.stringify(parsed), before);
+});
+
+test('syncUnversionedMountVersions: leaves non-target mounts untouched', () => {
+    const parsed = unversionedFixture(['main', '0.15', 'legacy']);
+    const other = parsed.mounts.find(m => m.source === 'content');
+    const otherBefore = JSON.stringify(other);
+    syncUnversionedMountVersions(parsed, { added: '0.16', retired: '0.15' });
+    assert.equal(JSON.stringify(parsed.mounts.find(m => m.source === 'content')), otherBefore);
+});
+
+test('syncUnversionedMountVersions: sorts semver descending regardless of input order', () => {
+    const parsed = unversionedFixture(['main', '0.9', '0.15', '0.14', 'legacy']);
+    syncUnversionedMountVersions(parsed, { added: '0.16' });
+    const m = parsed.mounts.find(x => x.source === 'content/community');
+    assert.deepEqual(m.sites.matrix.versions, ['main', '0.16', '0.15', '0.14', '0.9', 'legacy']);
 });
