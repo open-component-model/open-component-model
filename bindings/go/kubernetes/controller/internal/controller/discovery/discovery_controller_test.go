@@ -1,11 +1,14 @@
 package discovery
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,6 +28,7 @@ import (
 	desc "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	internaldiscovery "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/discovery"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
@@ -171,6 +175,23 @@ func TestReconcile_TerminalSelectorFailureIsStalledAndNotRequeued(t *testing.T) 
 	g.Zero(fresh.Status.ObservedGeneration, "failures do not advance the observed generation")
 }
 
+// drainEvents returns everything the reconciler recorded so far, joined.
+func drainEvents(t *testing.T, rec *Reconciler) string {
+	t.Helper()
+	recorder, ok := rec.EventRecorder.(*record.FakeRecorder)
+	require.True(t, ok, "the test reconciler must use a FakeRecorder")
+
+	var recorded []string
+	for {
+		select {
+		case e := <-recorder.Events:
+			recorded = append(recorded, e)
+		default:
+			return strings.Join(recorded, "\n")
+		}
+	}
+}
+
 func TestReconcile_PublishesRawAndExtractedPayloads(t *testing.T) {
 	r := require.New(t)
 
@@ -220,6 +241,11 @@ func TestReconcile_PublishesRawAndExtractedPayloads(t *testing.T) {
 	result, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.NoError(err)
 	r.Equal(ctrl.Result{}, result)
+
+	// Discovery does not use the shared UpdateBeforePatch defer, so it emits the
+	// reconciliation-finished event itself; without it `kubectl describe` shows
+	// less than it does for the other kinds.
+	r.Contains(drainEvents(t, rec), "Reconciliation finished")
 
 	current := &v1alpha1.Discovery{}
 	r.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), current))
@@ -310,4 +336,83 @@ func TestUpToDate(t *testing.T) {
 			require.Equal(t, tc.want, upToDate(tc.discover, tc.info))
 		})
 	}
+}
+
+func TestSetPayloadRejectsOversizedPayload(t *testing.T) {
+	r := require.New(t)
+	rec, _ := newReconciler(t)
+
+	big := bytes.Repeat([]byte("a"), maxPayloadBytes/2)
+	oversized := &internaldiscovery.Payload{Components: []json.RawMessage{
+		json.RawMessage(fmt.Sprintf("%q", big)),
+		json.RawMessage(fmt.Sprintf("%q", big)),
+		json.RawMessage(fmt.Sprintf("%q", big)),
+	}}
+
+	discovery := &v1alpha1.Discovery{}
+	discovery.Status.Components = []apiextensionsv1.JSON{{Raw: []byte(`{"kept":true}`)}}
+
+	err := rec.setPayload(discovery, oversized)
+	r.ErrorIs(err, errPayloadTooLarge)
+	r.ErrorContains(err, "limit is")
+	r.Equal([]apiextensionsv1.JSON{{Raw: []byte(`{"kept":true}`)}}, discovery.Status.Components,
+		"the persisted payload must survive an oversized computation")
+
+	// Extracted mode is guarded the same way.
+	discovery = &v1alpha1.Discovery{}
+	records := make([]map[string]any, 0, 3)
+	for range 3 {
+		records = append(records, map[string]any{"blob": string(big)})
+	}
+	r.ErrorIs(rec.setPayload(discovery, &internaldiscovery.Payload{Extracted: records}), errPayloadTooLarge)
+	r.Nil(discovery.Status.Extracted)
+
+	// A payload under the limit is written.
+	small := &internaldiscovery.Payload{Components: []json.RawMessage{json.RawMessage(`{"ok":true}`)}}
+	discovery = &v1alpha1.Discovery{}
+	r.NoError(rec.setPayload(discovery, small))
+	r.Len(discovery.Status.Components, 1)
+}
+
+// TestMapComponentToDiscoveries pins the root-reference routing: a Component
+// change must reach exactly the same-namespace Discoveries that discover it.
+// This is the only path that wakes a Discovery from upstream, so a miss here is
+// a Discovery that silently stops updating.
+func TestMapComponentToDiscoveries(t *testing.T) {
+	r := require.New(t)
+
+	discoveries := []client.Object{
+		&v1alpha1.Discovery{
+			ObjectMeta: metav1.ObjectMeta{Name: "root", Namespace: "default"},
+			Spec:       v1alpha1.DiscoverySpec{ComponentRef: corev1.LocalObjectReference{Name: "component"}},
+		},
+		&v1alpha1.Discovery{
+			ObjectMeta: metav1.ObjectMeta{Name: "other-namespace", Namespace: "other"},
+			Spec:       v1alpha1.DiscoverySpec{ComponentRef: corev1.LocalObjectReference{Name: "component"}},
+		},
+		&v1alpha1.Discovery{
+			ObjectMeta: metav1.ObjectMeta{Name: "other-root", Namespace: "default"},
+			Spec:       v1alpha1.DiscoverySpec{ComponentRef: corev1.LocalObjectReference{Name: "other"}},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(newTestScheme(t)).
+		WithObjects(discoveries...).
+		WithIndex(&v1alpha1.Discovery{}, componentRefIndex, func(obj client.Object) []string {
+			return []string{obj.(*v1alpha1.Discovery).Spec.ComponentRef.Name}
+		}).
+		Build()
+	reconciler := &Reconciler{BaseReconciler: &ocm.BaseReconciler{Client: fakeClient}}
+
+	requests := reconciler.mapComponentToDiscoveries(t.Context(), &v1alpha1.Component{
+		ObjectMeta: metav1.ObjectMeta{Name: "component", Namespace: "default"},
+	})
+
+	r.Equal([]reconcile.Request{
+		{NamespacedName: types.NamespacedName{Name: "root", Namespace: "default"}},
+	}, requests, "only same-namespace references to this component match")
+
+	r.Nil(reconciler.mapComponentToDiscoveries(t.Context(), &v1alpha1.Resource{}),
+		"a wrong object type yields no requests")
 }

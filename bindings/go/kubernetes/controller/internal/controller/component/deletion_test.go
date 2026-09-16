@@ -11,7 +11,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/indexes"
 )
 
 func TestReconcileDeleteDiscoveryReferences(t *testing.T) {
@@ -37,7 +36,7 @@ func TestReconcileDeleteDiscoveryReferences(t *testing.T) {
 		WithIndex(&v1alpha1.Resource{}, resourceIndex, func(obj client.Object) []string {
 			return []string{obj.(*v1alpha1.Resource).Spec.ComponentRef.Name}
 		}).
-		WithIndex(&v1alpha1.Discovery{}, indexes.DiscoveryComponentRef, func(obj client.Object) []string {
+		WithIndex(&v1alpha1.Discovery{}, discoveryIndex, func(obj client.Object) []string {
 			return []string{obj.(*v1alpha1.Discovery).Spec.ComponentRef.Name}
 		}).
 		Build()

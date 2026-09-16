@@ -6,11 +6,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
+	"golang.org/x/time/rate"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -18,6 +25,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	internaldiscovery "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/discovery"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
@@ -43,6 +51,67 @@ type Reconciler struct {
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
+
+// componentRefIndex keys Discoveries by the Component they discover.
+const componentRefIndex = "spec.componentRef.name"
+
+// SetupWithManager sets up the Discovery controller with the Manager.
+func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	// Build index for discoveries that reference a component to make sure that we
+	// get notified when a component changes.
+	if err := mgr.GetFieldIndexer().IndexField(ctx, &v1alpha1.Discovery{}, componentRefIndex, func(obj client.Object) []string {
+		discovery, ok := obj.(*v1alpha1.Discovery)
+		if !ok {
+			return nil
+		}
+
+		return []string{discovery.Spec.ComponentRef.Name}
+	}); err != nil {
+		return fmt.Errorf("failed setting index fields: %w", err)
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.Discovery{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(
+			&v1alpha1.Component{},
+			handler.EnqueueRequestsFromMapFunc(r.mapComponentToDiscoveries),
+			builder.WithPredicates(ocm.ComponentInfoChangedPredicate{})).
+		WithOptions(controller.Options{
+			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
+				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
+				&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(10, 100)},
+			),
+		}).
+		Complete(r)
+}
+
+// mapComponentToDiscoveries maps a Component to the Discoveries that reference
+// it as their graph root, via the same-namespace componentRef index.
+func (r *Reconciler) mapComponentToDiscoveries(ctx context.Context, obj client.Object) []reconcile.Request {
+	component, ok := obj.(*v1alpha1.Component)
+	if !ok {
+		return nil
+	}
+
+	referencing := &v1alpha1.DiscoveryList{}
+	if err := r.List(ctx, referencing,
+		client.InNamespace(component.GetNamespace()),
+		client.MatchingFields{componentRefIndex: component.GetName()}); err != nil {
+		log.FromContext(ctx).Error(err, "failed to list discoveries referencing component as root",
+			"component", client.ObjectKeyFromObject(component))
+
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0, len(referencing.Items))
+	for i := range referencing.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(&referencing.Items[i]),
+		})
+	}
+
+	return requests
+}
 
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=discoveries,verbs=get;list;watch
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=discoveries/status,verbs=get;update;patch
@@ -70,18 +139,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	old := discovery.DeepCopy()
 	result, rerr := r.reconcile(ctx, discovery)
 	if perr := r.publish(ctx, old, discovery); perr != nil {
-		if rerr == nil && isPayloadTooLarge(perr) {
-			// The freshly computed payload is rejected by the API server. The
-			// fallback re-reads the object and writes only failure conditions,
-			// retaining the persisted payload, config, and observed generation.
-			// A successful fallback is terminal (no requeue); a failing
-			// fallback write is retryable.
-			if ferr := r.publishPayloadTooLarge(ctx, discovery); ferr != nil {
-				return ctrl.Result{}, ferr
-			}
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, perr
+		// Status write failures are re-tried.
+		return ctrl.Result{}, errors.Join(rerr, perr)
 	}
 
 	return result, rerr
@@ -225,7 +284,11 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	}
 
 	if err := r.setPayload(discovery, payload); err != nil {
-		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.MarshalFailedReason, err.Error())
+		reason := v1alpha1.MarshalFailedReason
+		if errors.Is(err, errPayloadTooLarge) {
+			reason = v1alpha1.PayloadTooLargeReason
+		}
+		status.MarkAsStalled(r.EventRecorder, discovery, reason, err.Error())
 
 		return ctrl.Result{}, reconcile.TerminalError(err)
 	}
@@ -239,15 +302,25 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	// Discovery advances the observed generation here because it does not use
 	// the shared UpdateBeforePatch defer the other controllers rely on.
 	discovery.SetObservedGeneration(discovery.GetGeneration())
+	event.New(r.EventRecorder, discovery, discovery.GetVID(), v1alpha1.EventSeverityInfo,
+		"Reconciliation finished, no further runs scheduled until next change")
 
 	// Purely watch-driven: no periodic requeue.
 	return ctrl.Result{}, nil
 }
 
+// maxPayloadBytes etcd cap.
+const maxPayloadBytes = 1 << 20
+
+// errPayloadTooLarge happens if the status would be too large to store.
+var errPayloadTooLarge = errors.New("status payload exceeds the size limit")
+
 // setPayload swaps the status payload in one in-memory update: the selected
-// field is set (possibly to an empty list), the other field is cleared. The
-// payload of a previous output mode is replaced atomically on success.
+// field is set (possibly to an empty list), the other field is cleared. If the payload
+// was too large, return errPayloadTooLarge instead so we can surface that and set
+// the object to Ready=False.
 func (r *Reconciler) setPayload(discovery *v1alpha1.Discovery, payload *internaldiscovery.Payload) error {
+	var size int
 	if payload.Extracted != nil {
 		records := make([]v1alpha1.ExtractedRecord, 0, len(payload.Extracted))
 		for _, record := range payload.Extracted {
@@ -257,9 +330,15 @@ func (r *Reconciler) setPayload(discovery *v1alpha1.Discovery, payload *internal
 				if err != nil {
 					return fmt.Errorf("failed to marshal extracted field %q: %w", name, err)
 				}
+				// this is a rough estimate, but is enough for our purposes.
+				size += len(name) + len(raw)
 				typed[name] = apiextensionsv1.JSON{Raw: raw}
 			}
 			records = append(records, typed)
+		}
+		if size > maxPayloadBytes {
+			return fmt.Errorf("%w: %d extracted records total %d bytes, limit is %d",
+				errPayloadTooLarge, len(records), size, maxPayloadBytes)
 		}
 		discovery.Status.Extracted = records
 		discovery.Status.Components = nil
@@ -269,7 +348,12 @@ func (r *Reconciler) setPayload(discovery *v1alpha1.Discovery, payload *internal
 
 	components := make([]apiextensionsv1.JSON, 0, len(payload.Components))
 	for _, raw := range payload.Components {
+		size += len(raw)
 		components = append(components, apiextensionsv1.JSON{Raw: raw})
+	}
+	if size > maxPayloadBytes {
+		return fmt.Errorf("%w: %d descriptors total %d bytes, limit is %d",
+			errPayloadTooLarge, len(components), size, maxPayloadBytes)
 	}
 	discovery.Status.Components = components
 	discovery.Status.Extracted = nil
