@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Timeout is a Go time.Duration that marshals as a human-readable duration string (e.g. \"30s\", \"5m\", \"1h\") or as a nanoseconds integer.",
+  "title": "Timeout",
+  "description": "Timeout wraps time.Duration to support JSON/YAML marshaling\nof human-readable duration strings (e.g. \"30s\", \"5m\", \"1h\").",
+  "anyOf": [
+    {
+      "type": "string",
+      "examples": ["30s", "5m", "1h", "0s"]
+    },
+    {
+      "type": "integer",
+      "description": "Duration in nanoseconds."
+    }
+  ]
+}
