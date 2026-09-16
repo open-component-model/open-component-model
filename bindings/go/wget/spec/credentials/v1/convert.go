@@ -48,7 +48,13 @@ func ConvertToWgetCredentials(creds runtime.Typed) (*WgetCredentials, error) {
 		return nil, fmt.Errorf("error converting credential type: %w", err)
 	}
 
-	if err = convertScheme.Convert(creds, typed); err != nil {
+	if _, ok := typed.(*WgetCredentials); ok {
+		// Decode strictly: a field that WgetCredentials does not declare
+		// is an error here instead of being silently dropped
+		if err := runtime.DecodeStrict(creds, typed); err != nil {
+			return nil, fmt.Errorf("error converting credential type: %w", err)
+		}
+	} else if err = convertScheme.Convert(creds, typed); err != nil {
 		return nil, fmt.Errorf("error converting credential type: %w", err)
 	}
 

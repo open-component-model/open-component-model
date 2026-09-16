@@ -18,10 +18,11 @@ func (f *fakeTyped) DeepCopyTyped() runtime.Typed { return &fakeTyped{} }
 
 func TestConvertToWgetCredentials(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   runtime.Typed
-		want    *WgetCredentials
-		wantErr bool
+		name        string
+		input       runtime.Typed
+		want        *WgetCredentials
+		wantErr     bool
+		errContains string
 	}{
 		{
 			name: "WgetCredentials passthrough",
@@ -116,6 +117,27 @@ func TestConvertToWgetCredentials(t *testing.T) {
 			},
 		},
 		{
+			name: "Raw WgetCredentials with legacy properties field is rejected",
+			input: &runtime.Raw{
+				Type: WgetCredentialsVersionedType,
+				Data: []byte(`{"type":"WgetCredentials/v1","properties":{"username":"user","password":"pass"}}`),
+			},
+			wantErr:     true,
+			errContains: `unknown field "properties"`,
+		},
+		{
+			name: "Raw legacy Credentials/v1 with free-form properties converts via DirectCredentials",
+			input: &runtime.Raw{
+				Type: runtime.NewVersionedType(credv1.CredentialsType, credv1.Version),
+				Data: []byte(`{"type":"Credentials/v1","properties":{"username":"user","password":"pass","other":"kept"}}`),
+			},
+			want: &WgetCredentials{
+				Type:     WgetCredentialsVersionedType,
+				Username: "user",
+				Password: "pass",
+			},
+		},
+		{
 			name:    "unknown type returns error",
 			input:   &fakeTyped{},
 			wantErr: true,
@@ -127,6 +149,9 @@ func TestConvertToWgetCredentials(t *testing.T) {
 			got, err := ConvertToWgetCredentials(tt.input)
 			if tt.wantErr {
 				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
 				return
 			}
 			require.NoError(t, err)
