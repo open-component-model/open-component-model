@@ -48,7 +48,7 @@ func removeTempFile(path string) error {
 func newBlob(path, digest string) (*Blob, error) {
 	inner, err := filesystem.GetBlobFromOSPath(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot open git archive file %q: %w", path, err)
 	}
 
 	// The cleanup takes the path rather than the blob: an argument that can reach
