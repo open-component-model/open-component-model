@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
@@ -49,7 +50,7 @@ func Test_Integration_Git(t *testing.T) {
 	url := server.URL + "/" + filepath.Base(path)
 	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
 	tempDir := t.TempDir()
-	repo := repository.NewResourceRepository(repository.WithCABundle(ca), repository.WithTempDir(tempDir))
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, repository.WithCABundle(ca))
 	resourceFor := func(t *testing.T, ref, commit string) *descriptor.Resource {
 		t.Helper()
 
@@ -80,9 +81,11 @@ func Test_Integration_Git(t *testing.T) {
 		})
 	}
 
+	// Each case downloads once and processes one digest; only the archives handed
+	// to the caller survive, digest processing removes its own scratch directory.
 	entries, err := os.ReadDir(tempDir)
 	r.NoError(err)
-	r.Empty(entries, "downloads and digest processing must remove temporary files")
+	r.Len(entries, 2)
 }
 
 func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme string) []byte {
@@ -90,7 +93,6 @@ func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme strin
 
 	r := require.New(t)
 
-	defer func() { r.NoError(content.(io.Closer).Close()) }()
 	reader, err := content.ReadCloser()
 	r.NoError(err)
 
