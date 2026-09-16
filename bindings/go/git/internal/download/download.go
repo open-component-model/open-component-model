@@ -125,7 +125,9 @@ func fetchCommit(ctx context.Context, dir string, access *accessv1.Git, auth tra
 	}
 
 	// Asking for the pinned commit alone avoids transferring every ref and its
-	// history. Servers without the capability reject it before any transfer.
+	// history. Servers that do not advertise allow-tip-sha1-in-want or
+	// allow-reachable-sha1-in-want reject the request before any transfer; the
+	// fetch of all refs below is the fallback.
 	err = repo.FetchContext(ctx, &git.FetchOptions{
 		Auth:     auth,
 		CABundle: opts.CABundle,
@@ -148,6 +150,8 @@ func fetchCommit(ctx context.Context, dir string, access *accessv1.Git, auth tra
 	return repo, nil
 }
 
+// peelCommit follows an annotated tag to the commit it points at. A tag can
+// target another tag, so the loop repeats; the bound stops a tag cycle.
 func peelCommit(repo *git.Repository, hash plumbing.Hash) (*object.Commit, error) {
 	for range 32 {
 		obj, err := repo.Object(plumbing.AnyObject, hash)

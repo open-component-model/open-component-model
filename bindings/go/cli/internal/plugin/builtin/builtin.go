@@ -86,7 +86,8 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := git.Register(manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
 		manager.CredentialRepositoryRegistry,
-		filesystemConfig); err != nil {
+		filesystemConfig,
+		httpConfig); err != nil {
 		return fmt.Errorf("could not register git inbuilt plugin: %w", err)
 	}
 

@@ -10,10 +10,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
+	"time"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -25,26 +27,29 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Test_Integration_Git downloads real Git objects over HTTPS through git http-backend.
+// Test_Integration_Git downloads real Git objects over HTTPS through git
+// http-backend, covering both transport paths: a clone for a ref and a fetch
+// for a pinned commit, which needs the server to negotiate a commit in want.
+// Ref resolution, archive contents, digest pinning and size limits are covered
+// against a local repository in internal/download and repository.
 func Test_Integration_Git(t *testing.T) {
 	r := require.New(t)
 
-	fixture := newRepository(t)
+	path, first := newRepository(t)
 	executable, err := exec.LookPath("git")
 	r.NoError(err)
 
 	server := httptest.NewTLSServer(&cgi.Handler{
 		Path: executable,
 		Args: []string{"http-backend"},
-		Env:  []string{"GIT_PROJECT_ROOT=" + filepath.Dir(fixture.Path), "GIT_HTTP_EXPORT_ALL=1"},
+		Env:  []string{"GIT_PROJECT_ROOT=" + filepath.Dir(path), "GIT_HTTP_EXPORT_ALL=1"},
 	})
 	t.Cleanup(server.Close)
 
-	url := server.URL + "/" + filepath.Base(fixture.Path)
+	url := server.URL + "/" + filepath.Base(path)
 	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
 	tempDir := t.TempDir()
-	opts := []repository.Option{repository.WithCABundle(ca), repository.WithTempDir(tempDir)}
-	repo := repository.NewResourceRepository(opts...)
+	repo := repository.NewResourceRepository(repository.WithCABundle(ca), repository.WithTempDir(tempDir))
 	resourceFor := func(t *testing.T, ref, commit string) *descriptor.Resource {
 		t.Helper()
 
@@ -58,83 +63,22 @@ func Test_Integration_Git(t *testing.T) {
 		return &descriptor.Resource{Access: raw}
 	}
 
-	t.Run("branches tags and commits", func(t *testing.T) {
-		for _, tc := range []struct {
-			name, ref, commit, content string
-		}{
-			{"HEAD", "HEAD", "", "second\n"},
-			{"branch", "main", "", "second\n"},
-			{"full branch", "refs/heads/main", "", "second\n"},
-			{"lightweight tag", "v1", "", "first\n"},
-			{"annotated tag", "refs/tags/annotated", "", "first\n"},
-			{"pinned commit", "", fixture.First.String(), "first\n"},
-			{"informational ref", "refs/heads/deleted", fixture.First.String(), "first\n"},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				r := require.New(t)
+	for _, tc := range []struct{ name, ref, commit, content string }{
+		{"clone for ref", "main", "", "second\n"},
+		{"fetch for pinned commit", "", first.String(), "first\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
 
-				b, err := repo.DownloadResource(t.Context(), resourceFor(t, tc.ref, tc.commit), nil)
-				r.NoError(err)
-				assertArchive(t, b, tc.content)
-			})
-		}
-	})
+			b, err := repo.DownloadResource(t.Context(), resourceFor(t, tc.ref, tc.commit), nil)
+			r.NoError(err)
 
-	t.Run("pin and verify after branch movement", func(t *testing.T) {
-		r := require.New(t)
-
-		r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.First)))
-		t.Cleanup(func() {
-			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.Second)))
+			data := assertArchive(t, b, tc.content)
+			pinned, err := repo.ProcessResourceDigest(t.Context(), resourceFor(t, tc.ref, tc.commit), nil)
+			r.NoError(err)
+			r.Equal(digest.FromBytes(data).Encoded(), pinned.Digest.Value)
 		})
-
-		original := resourceFor(t, "refs/heads/main", "")
-		before := original.DeepCopy()
-		pinned, err := repo.ProcessResourceDigest(t.Context(), original, nil)
-		r.NoError(err)
-		r.Equal(before, original)
-
-		var spec accessv1.Git
-		r.NoError(access.Scheme.Convert(pinned.Access, &spec))
-		r.Equal(fixture.First.String(), spec.Commit)
-		r.Equal("refs/heads/main", spec.Ref)
-		r.Equal("SHA-256", pinned.Digest.HashAlgorithm)
-		r.Equal("genericBlobDigest/v1", pinned.Digest.NormalisationAlgorithm)
-		r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.Second)))
-
-		first, err := repo.DownloadResource(t.Context(), pinned, nil)
-		r.NoError(err)
-
-		firstBytes := assertArchive(t, first, "first\n")
-		r.Equal(digest.FromBytes(firstBytes).Encoded(), pinned.Digest.Value)
-
-		again, err := repo.DownloadResource(t.Context(), pinned, nil)
-		r.NoError(err)
-		r.Equal(firstBytes, assertArchive(t, again, "first\n"))
-
-		verified, err := repo.ProcessResourceDigest(t.Context(), pinned, nil)
-		r.NoError(err)
-		r.Equal(pinned, verified)
-
-		mismatched := pinned.DeepCopy()
-		mismatched.Digest.Value = strings.Repeat("0", 64)
-		_, err = repo.DownloadResource(t.Context(), mismatched, nil)
-		r.ErrorContains(err, "digest mismatch")
-
-		_, err = repo.ProcessResourceDigest(t.Context(), mismatched, nil)
-		r.ErrorContains(err, "digest mismatch")
-	})
-
-	t.Run("missing revision and output limit", func(t *testing.T) {
-		r := require.New(t)
-
-		_, err := repo.DownloadResource(t.Context(), resourceFor(t, "missing-ref", ""), nil)
-		r.Error(err)
-
-		limited := repository.NewResourceRepository(append(opts, repository.WithMaxDownloadSize(1))...)
-		_, err = limited.DownloadResource(t.Context(), resourceFor(t, "main", ""), nil)
-		r.ErrorContains(err, "maximum download size")
-	})
+	}
 
 	entries, err := os.ReadDir(tempDir)
 	r.NoError(err)
@@ -175,22 +119,53 @@ func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme strin
 		names = append(names, header.Name)
 		payload, err := io.ReadAll(tr)
 		r.NoError(err)
-
-		switch header.Name {
-		case "README.md":
-			r.Equal(expectedReadme, string(payload))
-		case "docs/guide.txt":
-			r.Equal("guide\n", string(payload))
-		case "run.sh":
-			r.Equal("#!/bin/sh\necho fixture\n", string(payload))
-			r.NotZero(header.Mode & 0o111)
-		case "link":
-			r.Equal(byte(tar.TypeSymlink), header.Typeflag)
-			r.Equal("docs/guide.txt", header.Linkname)
-			r.Empty(payload)
-		}
+		r.Equal(expectedReadme, string(payload))
 	}
-	r.Equal([]string{"README.md", "docs/guide.txt", "link", "run.sh"}, names)
+	r.Equal([]string{"README.md"}, names)
 
 	return data
+}
+
+// newRepository creates a bare repository with two commits on main and returns
+// its path and the first commit. That is all a real transport needs to exercise
+// a clone for a ref and a fetch for a pinned commit; ref resolution, archive
+// contents and size limits are covered against a local repository in
+// internal/download.
+func newRepository(t *testing.T) (path string, first plumbing.Hash) {
+	t.Helper()
+
+	r := require.New(t)
+
+	work := t.TempDir()
+	repo, err := git.PlainInit(work, false)
+	r.NoError(err)
+	r.NoError(repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
+
+	tree, err := repo.Worktree()
+	r.NoError(err)
+
+	commit := func(content string) plumbing.Hash {
+		r.NoError(os.WriteFile(filepath.Join(work, "README.md"), []byte(content), 0o600))
+
+		_, err := tree.Add("README.md")
+		r.NoError(err)
+
+		hash, err := tree.Commit(content, &git.CommitOptions{Author: &object.Signature{
+			Name:  "OCM fixture",
+			Email: "fixture@example.invalid",
+			When:  time.Unix(1700000000, 0).UTC(),
+		}})
+		r.NoError(err)
+
+		return hash
+	}
+
+	first = commit("first\n")
+	commit("second\n")
+
+	path = filepath.Join(t.TempDir(), "fixture.git")
+	_, err = git.PlainClone(path, true, &git.CloneOptions{URL: work})
+	r.NoError(err)
+
+	return path, first
 }

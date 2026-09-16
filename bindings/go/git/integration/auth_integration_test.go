@@ -35,7 +35,7 @@ import (
 func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 	r := require.New(t)
 
-	fixture := newRepository(t)
+	path, _ := newRepository(t)
 	executable, err := exec.LookPath("git")
 	r.NoError(err)
 
@@ -81,7 +81,7 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 			backend := &cgi.Handler{
 				Path: executable,
 				Args: []string{"http-backend"},
-				Env:  []string{"GIT_PROJECT_ROOT=" + filepath.Dir(fixture.Path), "GIT_HTTP_EXPORT_ALL=1"},
+				Env:  []string{"GIT_PROJECT_ROOT=" + filepath.Dir(path), "GIT_HTTP_EXPORT_ALL=1"},
 			}
 
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -98,7 +98,7 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 			spec := &descriptor.Resource{
 				Access: &accessv1.Git{
 					Type:       runtime.NewVersionedType("Git", "v1"),
-					Repository: server.URL + "/" + filepath.Base(fixture.Path),
+					Repository: server.URL + "/" + filepath.Base(path),
 					Ref:        "main",
 				},
 			}
@@ -147,14 +147,14 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 func Test_Integration_GitSSHAuthentication(t *testing.T) {
 	r := require.New(t)
 
-	fixture := newRepository(t)
+	path, _ := newRepository(t)
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	r.NoError(err)
 
 	clientPublic, err := ssh.NewPublicKey(public)
 	r.NoError(err)
 
-	repoPath := "/srv/" + filepath.Base(fixture.Path)
+	repoPath := "/srv/" + filepath.Base(path)
 	container, err := testcontainers.GenericContainer(t.Context(), testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        "rockstorm/git-server:2.38",
@@ -162,7 +162,7 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 			Env:          map[string]string{"GIT_REPOSITORIES_PATH": "/srv"},
 			ExposedPorts: []string{"22/tcp"},
 			Files: []testcontainers.ContainerFile{
-				{HostFilePath: fixture.Path, ContainerFilePath: repoPath, FileMode: 0o700},
+				{HostFilePath: path, ContainerFilePath: repoPath, FileMode: 0o700},
 				{
 					Reader:            bytes.NewReader(ssh.MarshalAuthorizedKey(clientPublic)),
 					ContainerFilePath: "/home/git/.ssh/authorized_keys",

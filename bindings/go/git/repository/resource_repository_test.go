@@ -3,10 +3,14 @@ package repository_test
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -106,4 +110,58 @@ func TestInvalidResource(t *testing.T) {
 	_, err := repo.UploadResource(t.Context(), nil, nil, nil)
 	r.ErrorContains(err, "do not support upload")
 	r.Same(access.Scheme, repo.GetResourceRepositoryScheme())
+}
+
+type repositoryFixture struct {
+	Path          string
+	Git           *git.Repository
+	First, Second plumbing.Hash
+}
+
+// newRepository creates a bare repository with two commits on main and an
+// annotated tag on the first. The wrapper needs a moving branch to pin and a
+// tag object to peel; ref resolution and archive contents are covered in
+// internal/download.
+func newRepository(t *testing.T) repositoryFixture {
+	t.Helper()
+
+	r := require.New(t)
+
+	signature := &object.Signature{
+		Name:  "OCM fixture",
+		Email: "fixture@example.invalid",
+		When:  time.Unix(1700000000, 0).UTC(),
+	}
+
+	work := t.TempDir()
+	repo, err := git.PlainInit(work, false)
+	r.NoError(err)
+	r.NoError(repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
+
+	tree, err := repo.Worktree()
+	r.NoError(err)
+
+	commit := func(content string) plumbing.Hash {
+		r.NoError(os.WriteFile(filepath.Join(work, "README.md"), []byte(content), 0o600))
+
+		_, err := tree.Add("README.md")
+		r.NoError(err)
+
+		hash, err := tree.Commit(content, &git.CommitOptions{Author: signature})
+		r.NoError(err)
+
+		return hash
+	}
+
+	first := commit("first\n")
+	second := commit("second\n")
+
+	path := filepath.Join(t.TempDir(), "fixture.git")
+	bare, err := git.PlainClone(path, true, &git.CloneOptions{URL: work})
+	r.NoError(err)
+
+	_, err = bare.CreateTag("annotated", first, &git.CreateTagOptions{Tagger: signature, Message: "release\n"})
+	r.NoError(err)
+
+	return repositoryFixture{Path: path, Git: bare, First: first, Second: second}
 }
