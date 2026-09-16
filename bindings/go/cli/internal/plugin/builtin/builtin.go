@@ -74,7 +74,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := s3.Register(manager.InputRegistry,
 		manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
-		manager.CredentialRepositoryRegistry,
+		manager.CredentialTypeRegistry,
 		httpConfig,
 		filesystemConfig); err != nil {
 		return fmt.Errorf("could not register s3 inbuilt plugin: %w", err)
