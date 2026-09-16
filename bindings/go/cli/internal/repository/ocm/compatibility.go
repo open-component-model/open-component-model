@@ -41,13 +41,20 @@ func NewComponentRepositoryResolver(
 		opt(options)
 	}
 
+	fallbackResolvers, pathMatchers, err := resolvers.ExtractResolvers(options.config, ocirepository.Scheme)
+	if err != nil {
+		return nil, err
+	}
+
 	providerOpts := resolvers.Options{
 		RepoProvider:      repoProvider,
 		CredentialGraph:   credentialGraph,
+		PathMatchers:      pathMatchers,
+		FallbackResolvers: fallbackResolvers,
 		ComponentPatterns: options.componentPatterns,
 	}
 
-	return resolvers.NewFromConfig(ctx, options.config, ocirepository.Scheme, providerOpts, options.repository)
+	return resolvers.New(ctx, providerOpts, options.repository)
 }
 
 // RepositoryResolverOptions holds configuration for NewComponentRepositoryProvider.

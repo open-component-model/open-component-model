@@ -137,13 +137,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	old := discovery.DeepCopy()
-	result, rerr := r.reconcile(ctx, discovery)
+	result, err := r.reconcile(ctx, discovery)
 	if perr := r.publish(ctx, old, discovery); perr != nil {
-		// Status write failures are re-tried.
-		return ctrl.Result{}, errors.Join(rerr, perr)
+		// log the error of the reconcile since we weren't able to update the state of the object.
+		if err != nil {
+			logger.Error(err, "reconciliation failed and the status could not be published")
+		}
+
+		return ctrl.Result{}, fmt.Errorf("updating status failed for discovery: %w", perr)
 	}
 
-	return result, rerr
+	return result, err
 }
 
 // reconcile executes the discovery pipeline against discovery and mutates its
