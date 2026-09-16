@@ -290,22 +290,6 @@ const MONOLITHIC_BINDINGS_MODULE = `${MODULE_PREFIX}/bindings/go`;
 // paths, whose git tags exist only at the old locations.
 const CLI_CONTROLLER_MERGE_MINOR = '0.16';
 
-// Return the cli module import path for a docs version. Post-merge the cli is a
-// package inside the bindings/go module.
-function cliModulePath(version) {
-    return compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) >= 0
-        ? `${MODULE_PREFIX}/bindings/go/cli`
-        : `${MODULE_PREFIX}/cli`;
-}
-
-// Return the controller module import path for a docs version. Post-merge the
-// controller is a package inside the bindings/go module.
-function controllerModulePath(version) {
-    return compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) >= 0
-        ? `${MODULE_PREFIX}/bindings/go/kubernetes/controller`
-        : `${MODULE_PREFIX}/kubernetes/controller`;
-}
-
 // One row per schema directory the website mounts.
 //     * `pkg` is the directory of the package inside bindings/go
 //     * `source` the schema directory relative to the package root (non-monolith)
@@ -313,7 +297,7 @@ function controllerModulePath(version) {
 // Order defines the order of the generated import blocks and must match the
 // historical module.yaml entry order.
 // New packages need to be appended to this list.
-const BINDING_SCHEMA_MOUNTS = [
+const BINDING_MOUNTS = [
     { pkg: 'constructor',   source: 'spec/v1/resources',                                 target: 'schemas/bindings/go/constructor' },
     { pkg: 'descriptor/v2', source: 'resources',                                         target: 'schemas/bindings/go/descriptor/v2' },
     { pkg: 'github', source: 'spec/credentials/v1/schemas', target: 'schemas/bindings/go/credentials/github/v1' },
@@ -338,18 +322,38 @@ const BINDING_SCHEMA_MOUNTS = [
 function bindingSchemaImports(version, deps) {
     const monolithVersion = deps?.[MONOLITHIC_BINDINGS_MODULE];
     if (monolithVersion) {
+        const mounts = BINDING_MOUNTS.map(m => ({
+            source: `${m.pkg}/${m.source}`,
+            target: `static/${version}/${m.target}`,
+            sites: { matrix: { versions: [version] } },
+        }));
+
+        // If version is >= 0.16.0 cli and kubernetes/controller were added to bindings/go, so we need to add them to
+        // BINDING_MOUNTS.
+        if (compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) >= 0) {
+            mounts.push(
+                {
+                    source: 'cli/docs/reference',
+                    target: 'content/docs/reference/ocm-cli',
+                    sites: { matrix: { versions: [version] } }
+                },
+                {
+                    source: 'kubernetes/controller/config/crd/bases',
+                    target: `static/${version}/schemas/kubernetes/controller`,
+                    sites: { matrix: { versions: [version] } }
+                }
+            );
+        }
+
         return [{
             path: MONOLITHIC_BINDINGS_MODULE,
             version: monolithVersion,
-            mounts: BINDING_SCHEMA_MOUNTS.map(m => ({
-                source: `${m.pkg}/${m.source}`,
-                target: `static/${version}/${m.target}`,
-                sites: { matrix: { versions: [version] } },
-            })),
+            mounts,
         }];
     }
+
     const byPackage = new Map();
-    for (const m of BINDING_SCHEMA_MOUNTS) {
+    for (const m of BINDING_MOUNTS) {
         if (!byPackage.has(m.pkg)) {
             byPackage.set(m.pkg, []);
         }
@@ -393,27 +397,39 @@ function buildModuleBlocks(version, fullVersion, deps) {
                 target: 'content',
                 sites: { matrix: { versions: [version] } }
             }]
-        },
-        {
-            path: cliModulePath(version),
-            version: `v${fullVersion}`,
-            mounts: [{
-                source: 'docs/reference',
-                target: 'content/docs/reference/ocm-cli',
-                sites: { matrix: { versions: [version] } }
-            }]
-        },
-        ...bindingSchemaImports(version, deps),
-        {
-            path: controllerModulePath(version),
-            version: `v${fullVersion}`,
-            mounts: [{
-                source: 'config/crd/bases',
-                target: `static/${version}/schemas/kubernetes/controller`,
-                sites: { matrix: { versions: [version] } }
-            }]
-        },
+        }
     ];
+
+    // If version is < 0.16.0 cli and kubernetes/controller are separate modules
+    if (compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) < 0) {
+        imports.push(
+            {
+                path: `${MODULE_PREFIX}/cli`,
+                version: `v${fullVersion}`,
+                mounts: [{
+                    source: 'docs/reference',
+                    target: 'content/docs/reference/ocm-cli',
+                    sites: { matrix: { versions: [version] } }
+                }]
+            },
+        );
+    }
+
+    imports.push(...bindingSchemaImports(version, deps));
+
+    if (compareSemver(version, CLI_CONTROLLER_MERGE_MINOR) < 0) {
+        imports.push(
+            {
+                path: `${MODULE_PREFIX}/kubernetes/controller`,
+                version: `v${fullVersion}`,
+                mounts: [{
+                    source: 'config/crd/bases',
+                    target: `static/${version}/schemas/kubernetes/controller`,
+                    sites: {matrix: {versions: [version]}}
+                }]
+            },
+        );
+    }
 
     // Drop CLI-derived bindings whose version didn't resolve from cli-go.mod.
     // resolveGoModVersions emits a warning for those; here we just filter out
@@ -674,4 +690,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, resolveGoModVersions, syncUnversionedMountVersions, CLI_DERIVED_MODULES, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS };
+module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, resolveGoModVersions, syncUnversionedMountVersions, CLI_DERIVED_MODULES, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS: BINDING_MOUNTS };
