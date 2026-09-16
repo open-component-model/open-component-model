@@ -47,7 +47,7 @@ func Test_Integration_TransferS3Resource_CopyModeAllResources(t *testing.T) {
 	container, err := testcontainers.Run(ctx, "rustfs/rustfs:1.0.0-rc.6",
 		testcontainers.WithExposedPorts("9000/tcp"),
 		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": s3AccessKey, "RUSTFS_SECRET_KEY": s3SecretKey}),
-		testcontainers.WithWaitStrategy(wait.ForHTTP("/health").WithPort("9000/tcp")),
+		testcontainers.WithWaitStrategy(wait.ForHTTP("/health/ready").WithPort("9000/tcp")),
 	)
 	r.NoError(err)
 	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })

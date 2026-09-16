@@ -41,7 +41,7 @@ func startRustFS(t *testing.T, ctx context.Context) string {
 	container, err := testcontainers.Run(ctx, rustfsImage,
 		testcontainers.WithExposedPorts("9000/tcp"),
 		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": rustfsAccessKey, "RUSTFS_SECRET_KEY": rustfsSecretKey}),
-		testcontainers.WithWaitStrategy(wait.ForHTTP("/health").WithPort("9000/tcp")),
+		testcontainers.WithWaitStrategy(wait.ForHTTP("/health/ready").WithPort("9000/tcp")),
 	)
 	r.NoError(err)
 	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
