@@ -64,6 +64,9 @@ func (c *WgetCredentials) Validate() error {
 	if c.PrivateKey != "" && c.Certificate == "" {
 		return errors.New("privateKey is set but certificate is empty: mTLS requires both certificate and privateKey")
 	}
+	if c.Certificate != "" && c.PrivateKey == "" {
+		return errors.New("certificate is set but privateKey is empty: mTLS requires both certificate and privateKey")
+	}
 	if c.CertificateAuthority != "" && c.Certificate == "" {
 		return errors.New("certificateAuthority is set but certificate is empty: the certificate authority is only evaluated together with a client certificate")
 	}

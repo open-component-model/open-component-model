@@ -58,12 +58,21 @@ func ConvertToWgetCredentials(creds runtime.Typed) (*WgetCredentials, error) {
 		return nil, fmt.Errorf("error converting credential type: %w", err)
 	}
 
+	var result *WgetCredentials
 	switch t := typed.(type) {
 	case *directcredsv1.DirectCredentials:
-		return fromDirectCredentials(t.Properties), nil
+		result = fromDirectCredentials(t.Properties)
 	case *WgetCredentials:
-		return t, nil
+		result = t
+	default:
+		return nil, fmt.Errorf("unsupported credential type %v", typed.GetType())
 	}
 
-	return nil, fmt.Errorf("unsupported credential type %v", typed.GetType())
+	// Validate the converted credential so that empty, null or partially set
+	// credentials are rejected instead of producing an unauthenticated request.
+	if err := result.Validate(); err != nil {
+		return nil, fmt.Errorf("error converting credential type: %w", err)
+	}
+
+	return result, nil
 }

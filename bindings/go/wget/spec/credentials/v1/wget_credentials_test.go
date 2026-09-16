@@ -52,6 +52,11 @@ func TestWgetCredentialsValidate(t *testing.T) {
 			errContains: "privateKey is set but certificate is empty",
 		},
 		{
+			name:        "certificate without private key",
+			creds:       WgetCredentials{Certificate: "cert"},
+			errContains: "certificate is set but privateKey is empty",
+		},
+		{
 			name:        "certificate authority without certificate",
 			creds:       WgetCredentials{CertificateAuthority: "ca"},
 			errContains: "certificateAuthority is set but certificate is empty",

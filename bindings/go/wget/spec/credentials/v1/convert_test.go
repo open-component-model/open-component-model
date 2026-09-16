@@ -142,6 +142,33 @@ func TestConvertToWgetCredentials(t *testing.T) {
 			input:   &fakeTyped{},
 			wantErr: true,
 		},
+		{
+			name: "empty WgetCredentials is rejected at the conversion boundary",
+			input: &runtime.Raw{
+				Type: WgetCredentialsVersionedType,
+				Data: []byte(`{"type":"WgetCredentials/v1"}`),
+			},
+			wantErr:     true,
+			errContains: "no authentication material",
+		},
+		{
+			name: "password without username is rejected at the conversion boundary",
+			input: &runtime.Raw{
+				Type: WgetCredentialsVersionedType,
+				Data: []byte(`{"type":"WgetCredentials/v1","password":"pass"}`),
+			},
+			wantErr:     true,
+			errContains: "password is set but username is empty",
+		},
+		{
+			name: "certificate without privateKey is rejected at the conversion boundary",
+			input: &runtime.Raw{
+				Type: WgetCredentialsVersionedType,
+				Data: []byte(`{"type":"WgetCredentials/v1","certificate":"/cert"}`),
+			},
+			wantErr:     true,
+			errContains: "certificate is set but privateKey is empty",
+		},
 	}
 
 	for _, tt := range tests {
