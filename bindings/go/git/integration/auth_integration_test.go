@@ -25,6 +25,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -112,12 +113,13 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 						creds = method.invalidCredentials
 					}
 
-					opts := []repository.Option{repository.WithTempDir(t.TempDir())}
+					var opts []repository.Option
 					if scenario.trustCertificate {
 						opts = append(opts, repository.WithCABundle(ca))
 					}
 
-					repo := repository.NewResourceRepository(opts...)
+					tempDir := t.TempDir()
+					repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, opts...)
 					b, downloadErr := repo.DownloadResource(t.Context(), spec, creds)
 					if !scenario.wantError {
 						r.NoError(downloadErr)
@@ -212,7 +214,8 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 				Ref:        "main",
 			},
 		}
-		repo := repository.NewResourceRepository(repository.WithHostKeyCallback(ssh.FixedHostKey(hostKey)), repository.WithTempDir(t.TempDir()))
+		tempDir := t.TempDir()
+		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, repository.WithHostKeyCallback(ssh.FixedHostKey(hostKey)))
 		b, err := repo.DownloadResource(t.Context(), spec, gitCreds)
 		r.NoError(err)
 		assertArchive(t, b, "second\n")
@@ -220,7 +223,8 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 		_, err = repo.ProcessResourceDigest(t.Context(), spec, gitCreds)
 		r.NoError(err)
 
-		reject := repository.NewResourceRepository(repository.WithHostKeyCallback(ssh.FixedHostKey(clientPublic)), repository.WithTempDir(t.TempDir()))
+		rejectDir := t.TempDir()
+		reject := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &rejectDir}, repository.WithHostKeyCallback(ssh.FixedHostKey(clientPublic)))
 		_, err = reject.DownloadResource(t.Context(), spec, gitCreds)
 		r.Error(err)
 	}

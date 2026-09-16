@@ -19,6 +19,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 )
 
@@ -61,6 +62,7 @@ func TestDownloadRevisions(t *testing.T) {
 			r.True(ok)
 			r.Equal(digest.FromBytes(data).String(), raw)
 
+			// The archive file outlives the download and belongs to the caller.
 			files, err := os.ReadDir(dir)
 			r.NoError(err)
 			r.Len(files, 1)
@@ -83,17 +85,11 @@ func TestDownloadRevisions(t *testing.T) {
 				}
 			}
 			r.Equal([]string{"README.md", "docs/guide.txt", "link", "run.sh"}, names)
-			r.NoError(b.Close())
-			r.NoError(b.Close())
-
-			files, err = os.ReadDir(dir)
-			r.NoError(err)
-			r.Empty(files)
 		})
 	}
 }
 
-func readBlob(t *testing.T, b *Blob) []byte {
+func readBlob(t *testing.T, b *filesystem.Blob) []byte {
 	t.Helper()
 
 	r := require.New(t)
@@ -118,7 +114,6 @@ func TestDownloadDeterministic(t *testing.T) {
 		r.NoError(err)
 
 		data := readBlob(t, b)
-		r.NoError(b.Close())
 		if previous != nil {
 			r.Equal(previous, data)
 		}
@@ -184,7 +179,6 @@ func TestSubmoduleArchive(t *testing.T) {
 	b, _, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: commitHash.String()}, nil, Options{TempDir: t.TempDir()})
 	r.NoError(err)
 
-	defer b.Close()
 	tr := tar.NewReader(bytes.NewReader(readBlob(t, b)))
 	_, err = tr.Next()
 	r.ErrorIs(err, io.EOF, "submodule content is not part of the archive")
@@ -199,7 +193,7 @@ func TestPinnedCommitWithoutRemoteHEAD(t *testing.T) {
 	b, commit, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String(), Ref: "refs/heads/main"}, nil, Options{TempDir: t.TempDir()})
 	r.NoError(err)
 	r.Equal(fixture.First.String(), commit)
-	r.NoError(b.Close())
+	r.NotNil(b)
 }
 
 func TestArchiveSizeBoundary(t *testing.T) {
@@ -211,11 +205,10 @@ func TestArchiveSizeBoundary(t *testing.T) {
 	r.NoError(err)
 
 	size := b.Size()
-	r.NoError(b.Close())
 
 	b, _, err = Download(t.Context(), spec, nil, Options{TempDir: t.TempDir(), MaxDownloadSize: size})
 	r.NoError(err)
-	r.NoError(b.Close())
+	r.NotNil(b)
 
 	dir := t.TempDir()
 	b, _, err = Download(t.Context(), spec, nil, Options{TempDir: dir, MaxDownloadSize: size - 1})
@@ -233,14 +226,14 @@ func TestPinnedArchiveContainsSelectedCommit(t *testing.T) {
 	first, err := fixture.Git.CommitObject(fixture.First)
 	r.NoError(err)
 
-	expected, err := archive(t.Context(), first, Options{TempDir: t.TempDir()})
+	file, err := os.CreateTemp(t.TempDir(), "archive-*.tar")
 	r.NoError(err)
 
-	defer expected.Close()
+	expected, err := archive(t.Context(), first, file, Options{})
+	r.NoError(err)
+
 	actual, _, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String(), Ref: "main"}, nil, Options{TempDir: t.TempDir()})
 	r.NoError(err)
-
-	defer actual.Close()
 	r.Equal(readBlob(t, expected), readBlob(t, actual))
 }
 

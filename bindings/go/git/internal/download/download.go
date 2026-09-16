@@ -14,13 +14,16 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 )
 
 // Download resolves one snapshot and returns its archive and full commit SHA.
-func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (_ *Blob, commit string, err error) {
+// The archive is backed by a file on disk that outlives the call and is owned by
+// the caller.
+func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (_ *filesystem.Blob, commit string, err error) {
 	if err := access.Validate(); err != nil {
 		return nil, "", err
 	}
@@ -44,11 +47,13 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		return nil, "", fmt.Errorf("cannot create git storage: %w", err)
 	}
 
-	var result *Blob
+	// The archive file is removed only when this call fails; on success it belongs
+	// to the caller.
+	var archivePath string
 	defer func() {
 		err = errors.Join(err, os.RemoveAll(dir))
-		if err != nil && result != nil {
-			err = errors.Join(err, result.Close())
+		if err != nil && archivePath != "" {
+			err = errors.Join(err, removeIgnoringMissing(archivePath))
 		}
 	}()
 
@@ -104,12 +109,18 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		return nil, "", err
 	}
 
-	result, err = archive(ctx, selected, opts)
+	file, err := os.CreateTemp(opts.TempDir, "ocm-git-archive-*.tar")
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot create git archive file: %w", err)
+	}
+	archivePath = file.Name()
+
+	b, err := archive(ctx, selected, file, opts)
 	if err != nil {
 		return nil, "", err
 	}
 
-	return result, selected.Hash.String(), nil
+	return b, selected.Hash.String(), nil
 }
 
 // fetchCommit fetches a pinned commit without depending on a valid remote HEAD.
@@ -170,6 +181,15 @@ func peelCommit(repo *git.Repository, hash plumbing.Hash) (*object.Commit, error
 	}
 
 	return nil, fmt.Errorf("git tag nesting exceeds the limit")
+}
+
+// removeIgnoringMissing deletes path, treating an already deleted file as success.
+func removeIgnoringMissing(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	return nil
 }
 
 // Transport errors can contain credentials from the remote URL or server body.

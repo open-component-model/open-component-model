@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -62,9 +63,11 @@ func TestArchiveUsesGitTree(t *testing.T) {
 	c, err := repo.CommitObject(commit)
 	r.NoError(err)
 
-	b, err := archive(t.Context(), c, Options{TempDir: t.TempDir()})
+	file, err := os.CreateTemp(t.TempDir(), "archive-*.tar")
 	r.NoError(err)
-	defer b.Close()
+
+	b, err := archive(t.Context(), c, file, Options{})
+	r.NoError(err)
 
 	type entry struct {
 		typeflag byte

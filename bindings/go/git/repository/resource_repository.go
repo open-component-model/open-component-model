@@ -2,18 +2,26 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"reflect"
 	"strings"
 
+	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"golang.org/x/crypto/ssh"
+
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -24,7 +32,10 @@ const (
 )
 
 type ResourceRepository struct {
-	options download.Options
+	maxDownloadSize  *int64
+	caBundle         []byte
+	hostKeyCallback  ssh.HostKeyCallback
+	filesystemConfig *filesystemv1alpha1.Config
 }
 
 var (
@@ -32,13 +43,56 @@ var (
 	_ repository.ResourceDigestProcessor = (*ResourceRepository)(nil)
 )
 
-func NewResourceRepository(opts ...Option) *ResourceRepository {
-	r := &ResourceRepository{options: download.Options{MaxDownloadSize: download.DefaultMaxDownloadSize}}
+// NewResourceRepository creates a new Git resource repository. If filesystemConfig
+// is non-nil, its TempFolder holds the Git objects and archives a download creates;
+// otherwise the default directory of os.MkdirTemp is used.
+func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
+	if filesystemConfig == nil {
+		filesystemConfig = &filesystemv1alpha1.Config{}
+	}
+	options := &Options{}
 	for _, opt := range opts {
-		opt(r)
+		opt(options)
 	}
 
-	return r
+	if options.HTTPConfig != nil {
+		transport := githttp.NewClient(ocmhttp.New(ocmhttp.WithConfig(options.HTTPConfig)))
+		gitclient.InstallProtocol("http", transport)
+		gitclient.InstallProtocol("https", transport)
+	}
+
+	return &ResourceRepository{
+		maxDownloadSize:  options.MaxDownloadSize,
+		caBundle:         options.CABundle,
+		hostKeyCallback:  options.HostKeyCallback,
+		filesystemConfig: filesystemConfig,
+	}
+}
+
+// tempFolder is the configured directory for temporary data, empty for the
+// default of the operating system.
+func (r *ResourceRepository) tempFolder() string {
+	if r.filesystemConfig.TempFolder == nil {
+		return ""
+	}
+
+	return *r.filesystemConfig.TempFolder
+}
+
+// downloadOptions resolves the per-download configuration, applying the defaults
+// for anything the caller left unset.
+func (r *ResourceRepository) downloadOptions(tempDir string) download.Options {
+	maxDownloadSize := download.DefaultMaxDownloadSize
+	if r.maxDownloadSize != nil {
+		maxDownloadSize = *r.maxDownloadSize
+	}
+
+	return download.Options{
+		TempDir:         tempDir,
+		MaxDownloadSize: maxDownloadSize,
+		CABundle:        r.caBundle,
+		HostKeyCallback: r.hostKeyCallback,
+	}
 }
 
 func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
@@ -58,8 +112,11 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 	return identityv1.IdentityFromURL(spec.Repository)
 }
 
+// DownloadResource returns the archive of the resolved commit. It is backed by a
+// file under the configured TempFolder, which outlives this call and is owned by
+// the caller.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
-	b, _, err := r.download(ctx, res, creds)
+	b, _, err := r.download(ctx, res, creds, r.tempFolder())
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +124,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 	return b, nil
 }
 
-func (r *ResourceRepository) download(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (*download.Blob, string, error) {
+func (r *ResourceRepository) download(ctx context.Context, res *descriptor.Resource, creds runtime.Typed, tempDir string) (*filesystem.Blob, string, error) {
 	if res == nil {
 		return nil, "", fmt.Errorf("resource is required")
 	}
@@ -84,14 +141,14 @@ func (r *ResourceRepository) download(ctx context.Context, res *descriptor.Resou
 		}
 	}
 
-	b, commit, err := download.Download(ctx, spec, typed, r.options)
+	b, commit, err := download.Download(ctx, spec, typed, r.downloadOptions(tempDir))
 	if err != nil {
 		return nil, "", err
 	}
 
 	raw, _ := b.Digest()
 	if err := verifyDigest(res.Digest, strings.TrimPrefix(raw, "sha256:")); err != nil {
-		return nil, "", errors.Join(err, b.Close())
+		return nil, "", err
 	}
 
 	return b, commit, nil
@@ -106,12 +163,24 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 }
 
 // ProcessResourceDigest pins the access and hashes the same snapshot in one download.
+// The archive is only read here, so it is downloaded into a directory of its own
+// that this call removes again.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (_ *descriptor.Resource, err error) {
-	b, commit, err := r.download(ctx, res, creds)
+	tempDir, err := os.MkdirTemp(r.tempFolder(), "ocm-git-digest-*")
+	if err != nil {
+		return nil, fmt.Errorf("cannot create temporary directory for digest processing: %w", err)
+	}
+	defer func() {
+		if rmErr := os.RemoveAll(tempDir); rmErr != nil {
+			slog.WarnContext(ctx, "failed to remove temporary directory after digest processing", "path", tempDir, "err", rmErr)
+		}
+	}()
+
+	b, commit, err := r.download(ctx, res, creds, tempDir)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { err = errors.Join(err, b.Close()) }()
+
 	result := res.DeepCopy()
 	spec, err := accessFrom(result.Access)
 	if err != nil {
