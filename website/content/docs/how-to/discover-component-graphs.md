@@ -219,7 +219,7 @@ Notes:
   example `component.name`, `resource.access.imageReference`). An explicitly
   empty map (`byResources: {}`) emits one empty record per iteration.
 - The whole-`expression` mode binds full v2 descriptors (for example
-  `components[0].component.name`, `components[0].componentReferences`) and is
+  `components[0].component.name`, `components[0].component.componentReferences`) and is
   strict: it must produce objects with string keys.
 - Map-mode missing field access is not an error — the field is omitted from the
   record, and the per-iteration record is kept even if all its fields disappear.
