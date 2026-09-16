@@ -320,9 +320,10 @@ Failures are surfaced as is:
   evaluation or type error.
 - **`ExtractFailed`** (`Ready=False`, `Stalled=True`): Extraction compilation,
   evaluation or output-type error.
-- **`PayloadTooLarge`** (`Ready=False`, `Stalled=True`): The status payload
-  exceeds the API server size limit; refine the selectors or extraction. The
-  oversized candidate is discarded and the persisted payload is retained.
+- **`PayloadTooLarge`** (`Ready=False`, `Stalled=True`): The computed payload
+  exceeds the 1MiB size limit; refine the selectors or extraction. The size is
+  checked before writing, so the oversized candidate never reaches the API
+  server and the persisted payload is retained.
 
 {{< callout context="note" title="Stale retained status" icon="outline/info-circle" >}}
 Because failures retain the last successful payload, `status.components` /
@@ -334,14 +335,20 @@ retains an old `Ready` condition.
 
 ## Scheduling
 
-Discovery is watch-driven: it reacts to `Discovery` generation changes,
-`Component` resolved-info/config/readiness/termination changes, and to the
-referenced configuration sources (explicit OCM config providers and the
-effective `Secret`s/`ConfigMap`s).
+Discovery is watch-driven and watches exactly two things: its own generation,
+and the referenced `Component`'s resolved info, effective config, readiness and
+termination. Configuration sources are not watched, so rotating a credential
+does not by itself trigger a re-discovery.
 
-There is no interval. Every input of a Discovery is either watched or
-version-pinned: references resolve by version, so the graph cannot change
+There is no interval. Every input that can change the _graph_ is either watched
+or version-pinned: references resolve by version, so the graph cannot change
 without the `Component`'s resolved version changing, which is watched.
+
+Configuration is the exception, and deliberately so: credentials decide whether
+the graph can be fetched, not what it contains. Combined with the absence of
+retries, that means a Discovery that failed on credentials stays failed until
+its spec changes or its `Component` moves. Fixing the `Secret` alone will not
+revive it.
 
 `status.observedComponentDigest` is used to check if another walk is necessary.
 If the digest is the same for the root component as observed last time, we don't

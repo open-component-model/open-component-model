@@ -29,7 +29,6 @@ import (
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/indexes"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
@@ -54,10 +53,12 @@ type Reconciler struct {
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
 
-var resourceIndex = ".spec.componentRef.Name"
+var (
+	resourceIndex  = ".spec.componentRef.Name"
+	discoveryIndex = "Discovery.spec.componentRef.name"
+)
 
 // SetupWithManager sets up the controller with the Manager. Manager bootstrap
-// must register indexes.DiscoveryComponentRef before calling this method.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Create index for repository reference name from components to make sure to reconcile, when the base ocm-
 	// repository changes.
@@ -85,6 +86,19 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 	}); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
+	// This index is required to get all discoveries that reference a component. This is required to make sure that when
+	// deleting the component, no discovery exists anymore that references that component.
+	if err := mgr.GetFieldIndexer().IndexField(ctx, &v1alpha1.Discovery{}, discoveryIndex, func(obj client.Object) []string {
+		discovery, ok := obj.(*v1alpha1.Discovery)
+		if !ok {
+			return nil
+		}
+
+		return []string{discovery.Spec.ComponentRef.Name}
+	}); err != nil {
+		return fmt.Errorf("failed setting index fields: %w", err)
+	}
+
 	// event source from resolver's worker pool to get notified when resolutions complete
 	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
 	return ctrl.NewControllerManagedBy(mgr).
@@ -391,7 +405,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Co
 	if err := r.List(ctx, discoveryList, &client.ListOptions{
 		Namespace: component.GetNamespace(),
 		FieldSelector: fields.OneTermEqualSelector(
-			indexes.DiscoveryComponentRef,
+			discoveryIndex,
 			client.ObjectKeyFromObject(component).Name,
 		),
 	}); err != nil {
