@@ -613,3 +613,89 @@ the content, in OCM v1 and in OCM v2. It does not come from the S3 `ETag`.
 **Credentials.** The consumer identity type is `S3` in both versions, but the attribute that holds the object location
 and the credential property names changed. See
 [Credential Consumer Identities: Migrating from OCM v1]({{< relref "credential-consumer-identities.md" >}}#s3-identity-migration-from-ocm-v1).
+
+### `PyPI/v1alpha1` {#pypiv1alpha1-access}
+
+References one or more distribution files (wheels, source distributions) of a
+Python project at a fixed version on a PyPI-compatible index (PyPI, Nexus,
+Artifactory, GitHub Packages). The files stay on the index and are fetched when
+the resource is downloaded, when its digest is computed, and when the component
+version is transferred.
+
+`pypi/v1alpha1` is the canonical type name; `PyPI/v1alpha1` is also accepted.
+
+Unlike the coordinate-based access types, the files are **discovered** from the
+index rather than computed from the spec: PyPI file names carry Python, ABI and
+platform tags that cannot be reconstructed from the project name and version.
+OCM reads the project detail page of the Simple Repository API
+(`<indexUrl>/<normalized-project>/`), preferring the PEP 691 JSON serialization
+and falling back to the PEP 503 HTML serialization, and keeps the files whose
+parsed version matches `version`.
+
+| Field           | Type            | Required | Description                                                                                                                               |
+|-----------------|-----------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `indexUrl`      | string          | yes      | Base URL of the Simple Repository API index, for example `https://pypi.org/simple`.                                                       |
+| `project`       | string          | yes      | Project (distribution) name, for example `requests`. Normalized per PEP 503 before use, so `Foo.Bar` and `foo-bar` address the same page. |
+| `version`       | string          | yes      | Released project version, for example `2.32.3`.                                                                                           |
+| `distributions` | array of object | no       | Subset of files to access. When omitted, every non-yanked file of the version is taken.                                                   |
+
+Each `distributions` entry selects files by kind or by exact name:
+
+| Field      | Type   | Required | Description                                                                                       |
+|------------|--------|----------|---------------------------------------------------------------------------------------------------|
+| `kind`     | string | no       | `sdist` or `wheel`. Ignored when `filename` is set. Empty (with no `filename`) selects any file.  |
+| `filename` | string | no       | Exact file name, for example `requests-2.32.3-py3-none-any.whl`. Takes precedence over `kind`.    |
+
+```yaml
+resources:
+  - name: requests
+    type: pythonPackage
+    version: 2.32.3
+    relation: external
+    access:
+      type: pypi/v1alpha1
+      indexUrl: https://pypi.org/simple
+      project: requests
+      version: 2.32.3
+```
+
+Select only the wheel:
+
+```yaml
+resources:
+  - name: requests
+    type: pythonPackage
+    version: 2.32.3
+    relation: external
+    access:
+      type: pypi/v1alpha1
+      indexUrl: https://pypi.org/simple
+      project: requests
+      version: 2.32.3
+      distributions:
+        - kind: wheel
+```
+
+A download returns one `application/x-tgz` holding the selected files, each
+followed by its detached PGP signature (`.asc`) when the index advertises one.
+A PyPI release version is immutable, so the file set — and therefore the digest
+— is stable over time; there is no `LATEST`/`SNAPSHOT` concept as in Maven.
+
+{{< callout context="note" >}}
+The specification carries no credentials. Configure authentication through the
+[credential system]({{< relref "credential-consumer-identities.md" >}}#pypirepository), which
+resolves a `PyPIRepository` consumer entry from `.ocmconfig`. A `PyPI` index is
+readable anonymously by default, so credentials are only needed for a private
+index.
+{{< /callout >}}
+
+{{< callout context="note" >}}
+Upload targets a writable index (a Nexus or Artifactory PyPI-hosted repository)
+with a file-addressed `PUT`. Publishing to `upload.pypi.org`, which uses a
+`twine` multipart upload to a separate endpoint, is not supported. When a
+transfer copies a PyPI resource by value, its files are stored as a
+[`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1) in the target.
+{{< /callout >}}
+
+See the [PyPI resource repository]({{< relref "resource-repositories.md" >}}#pypi-resource-repository)
+for download, upload and digest behavior.

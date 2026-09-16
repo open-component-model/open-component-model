@@ -12,6 +12,8 @@ import (
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	ocitransformer "ocm.software/open-component-model/bindings/go/oci/transformer"
+	pypitransformer "ocm.software/open-component-model/bindings/go/pypi/transformation"
+	pypiv1alpha1 "ocm.software/open-component-model/bindings/go/pypi/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3transformer "ocm.software/open-component-model/bindings/go/s3/transformation"
@@ -22,7 +24,7 @@ import (
 )
 
 // NewDefaultBuilder creates a builder.Builder pre-configured with all standard OCI, CTF,
-// Helm, wget, s3, and GitHub transformers.
+// Helm, wget, s3, GitHub, and PyPI transformers.
 // It accepts the repository provider, resource repository, and credential resolver interfaces
 // that are needed by the transformers to interact with repositories.
 func NewDefaultBuilder(
@@ -38,6 +40,7 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(wgetv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(s3v1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(githubv1alpha1.Scheme)
+	transformerScheme.MustRegisterScheme(pypiv1alpha1.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
 		Scheme:             transformerScheme,
@@ -128,6 +131,13 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 	}
 
+	// PyPI transformer
+	getPyPIArtifact := &pypitransformer.GetPyPIArtifact{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
 	// File cleanup transformer
 	transformerScheme.MustRegisterWithAlias(&FileCleanupTransformation{}, FileCleanupVersionedType)
 	fileCleanup := &FileCleanup{
@@ -151,5 +161,6 @@ func NewDefaultBuilder(
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
+		WithTransformer(&pypiv1alpha1.GetPyPIArtifact{}, getPyPIArtifact).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }

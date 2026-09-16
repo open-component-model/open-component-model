@@ -320,6 +320,64 @@ Configuring no consumer at all is valid: the GitHub REST API is then called anon
 
 ---
 
+## PyPICredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/pypi/v1/PyPICredentials.schema.json" >}}
+
+### Example
+
+HTTP Basic Auth:
+
+```yaml
+consumers:
+  - identity:
+      type: PyPIRepository
+      hostname: nexus.example.com
+      scheme: https
+    credentials:
+      - type: PyPICredentials/v1
+        username: ci-user
+        password: ci-password
+```
+
+API token (set `username` to `__token__` and put the token in `password`):
+
+```yaml
+consumers:
+  - identity:
+      type: PyPIRepository
+      hostname: pypi.org
+      scheme: https
+    credentials:
+      - type: PyPICredentials/v1
+        username: __token__
+        password: pypi-AgEIcHlwaS5vcmcC...
+```
+
+Bearer token:
+
+```yaml
+consumers:
+  - identity:
+      type: PyPIRepository
+      hostname: pypi.internal.example
+      scheme: https
+    credentials:
+      - type: PyPICredentials/v1
+        identityToken: eyJhbGciOi...
+```
+
+{{< callout context="note" >}}
+`username`/`password` and `identityToken` both set the `Authorization` header and are mutually exclusive. When both are
+present, the bearer token is used. A public index is readable anonymously, so configuring no consumer at all is valid.
+{{< /callout >}}
+
+### Used With
+
+[`PyPIRepository`]({{< relref "credential-consumer-identities.md#pypirepository" >}}) consumer identities.
+
+---
+
 ## RSACredentials/v1
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/rsa/v1/RSACredentials.schema.json" >}}

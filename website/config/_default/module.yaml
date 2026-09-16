@@ -217,6 +217,18 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/pypi/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/pypi/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/pypi/spec/access/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/access/pypi/v1alpha1
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../bindings/go/kubernetes/controller/config/crd/bases
     target: static/main/schemas/kubernetes/controller
     sites:

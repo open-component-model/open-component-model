@@ -970,3 +970,17 @@ RGW
 Cloudflare
 unversioned
 BuildKit
+PyPI
+sdist
+sdists
+Nexus
+Artifactory
+manylinux
+twine
+PEP
+unpinned
+digestable
+lowercased
+ABI
+PyPIRepository
+PyPICredentials

@@ -44,6 +44,7 @@ The following types are defined by the core OCM modules:
 | [`Wget`](#wget)                               | Authenticating against plain HTTP/HTTPS servers     |
 | [`S3`](#s3)                                   | Authenticating against S3 and S3-compatible buckets |
 | [`GitHubRepository`](#githubrepository)       | Authenticating against the GitHub REST API          |
+| [`PyPIRepository`](#pypirepository)           | Authenticating against PyPI-compatible indexes      |
 | [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys             |
 
 ---
@@ -523,6 +524,82 @@ optional; see the note on anonymous access under
 ```
 
 Omitting `path` matches every repository on that host.
+
+---
+
+## PyPIRepository
+
+Used when OCM fetches or uploads a distribution through the
+[`PyPI/v1alpha1` access type]({{< relref "input-and-access-types.md#pypiv1alpha1-access" >}}). The identity is derived
+from the `indexUrl` field.
+
+### Identity Attributes
+
+| Attribute  | Required | Description                                                                                                                                              |
+|------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `PyPIRepository`                                                                                                                                 |
+| `hostname` | Yes      | Index hostname (e.g. `pypi.org`)                                                                                                                         |
+| `path`     | No       | Index path without the leading `/` (e.g. `simple`). Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
+| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                                                |
+| `port`     | No       | Port number as string. During matching, default ports are applied when `scheme` is set: `https` defaults to `443`, `http` to `80`.                       |
+
+**Example derivation:** for `indexUrl: https://pypi.org/simple`, the lookup identity is:
+
+| Attribute  | Value            |
+|------------|------------------|
+| `type`     | `PyPIRepository` |
+| `hostname` | `pypi.org`       |
+| `scheme`   | `https`          |
+| `path`     | `simple`         |
+
+### Credential Properties
+
+| Property        | Description                                                                                     |
+|-----------------|-------------------------------------------------------------------------------------------------|
+| `username`      | Username for HTTP Basic Authentication. For an API token, set this to `__token__`.              |
+| `password`      | Password for HTTP Basic Authentication (the API token when `username` is `__token__`).          |
+| `identityToken` | Bearer token sent as `Authorization: Bearer <token>`. Takes precedence over Basic Auth.         |
+
+Use [`PyPICredentials/v1`]({{< relref "credential-types.md#pypicredentialsv1" >}}) for the typed field reference.
+
+Basic Auth and a bearer token both set the `Authorization` header and are therefore mutually exclusive; the bearer
+token wins when both are set. A public index is readable anonymously, so a request without a matching consumer entry
+goes out unauthenticated.
+
+### Matching Behavior
+
+The same chained checks as [`Wget`](#wget) apply: path glob, URL (scheme, hostname, port with default-port handling),
+then exact equality on the remaining attributes. The identity type is matched by exact string and is **unversioned**,
+so it must be written as `type: PyPIRepository`.
+
+### Examples
+
+**Private index with an API token:**
+
+```yaml
+- identity:
+    type: PyPIRepository
+    hostname: pypi.internal.example
+    scheme: https
+  credentials:
+    - type: PyPICredentials/v1
+      username: __token__
+      password: pypi-AgEIcHlwaS5vcmcC...
+```
+
+**Username and password against a Nexus PyPI-hosted repository:**
+
+```yaml
+- identity:
+    type: PyPIRepository
+    hostname: nexus.example.com
+    scheme: https
+    path: repository/pypi-hosted/*
+  credentials:
+    - type: PyPICredentials/v1
+      username: ci-user
+      password: ci-password
+```
 
 ---
 

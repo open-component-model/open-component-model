@@ -48,3 +48,19 @@ func TestNewDefaultBuilder_CanBuildGitHubGraph(t *testing.T) {
 	_, err = NewDefaultBuilder(nil, nil, nil, nil).BuildAndCheck(tgd)
 	require.NoError(t, err, "default builder must resolve the GetGitHubCommit transformer")
 }
+
+func TestNewDefaultBuilder_CanBuildPyPIGraph(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{pypiResource("requests", "2.32.3", "https://pypi.org/simple")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
+		CopyMode: transferv1alpha1.CopyModeAllResources,
+	})
+	require.NoError(t, err)
+
+	_, err = NewDefaultBuilder(nil, nil, nil, nil).BuildAndCheck(tgd)
+	require.NoError(t, err, "default builder must resolve the GetPyPIArtifact transformer")
+}
