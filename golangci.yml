@@ -513,9 +513,11 @@ linters:
           files: ["**/bindings/go/git/**"]
           allow:
             - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/configuration"
             - "ocm.software/open-component-model/bindings/go/credentials"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/git"
+            - "ocm.software/open-component-model/bindings/go/http"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/runtime"
           deny:
