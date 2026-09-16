@@ -149,10 +149,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 // reconcile executes the discovery pipeline against discovery and mutates its
 // status in memory. Status publication happens separately in Reconcile.
 //
-// Every failure is terminal: the error is reported on the status and returned as
-// a reconcile.TerminalError, so nothing is retried. Recovery comes from a spec
-// change or from a watch event on the referenced Component or a configuration
-// source, never from a backoff.
+// The following errors are Terminal: selector and extraction compilation and
+// evaluation and payload to large. The rest, backoff.
 //
 //nolint:funlen,cyclop // the pipeline is intentionally linear; splitting it would obscure the failure-semantics
 func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discovery) (ctrl.Result, error) {
@@ -166,7 +164,7 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.ResourceIsNotAvailable, err.Error())
 		logger.Info("component is not available", "error", err)
 
-		return ctrl.Result{}, reconcile.TerminalError(fmt.Errorf("failed to get ready component: %w", err))
+		return ctrl.Result{}, fmt.Errorf("failed to get ready component: %w", err)
 	}
 
 	info := component.Status.Component
@@ -174,14 +172,14 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		err := fmt.Errorf("component %s has no complete resolved identity and repository spec", component.GetName())
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.ResourceIsNotAvailable, err.Error())
 
-		return ctrl.Result{}, reconcile.TerminalError(err)
+		return ctrl.Result{}, err
 	}
 
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), discovery, component)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetConfigurationFailedReason, err.Error())
 
-		return ctrl.Result{}, reconcile.TerminalError(fmt.Errorf("failed to get effective config: %w", err))
+		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
 
 	// Record the effective config in memory. Reconcile publishes the mutated
@@ -208,14 +206,14 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetConfigurationFailedReason, err.Error())
 
-		return ctrl.Result{}, reconcile.TerminalError(fmt.Errorf("failed to load configurations: %w", err))
+		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
 	if r.NewPluginManager == nil {
 		err := errors.New("no plugin manager factory configured on the reconciler")
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetConfigurationFailedReason, err.Error())
 
-		return ctrl.Result{}, reconcile.TerminalError(err)
+		return ctrl.Result{}, err
 	}
 	var genericCfg *genericv1.Config
 	if cfg != nil {
@@ -225,14 +223,14 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetConfigurationFailedReason, err.Error())
 
-		return ctrl.Result{}, reconcile.TerminalError(fmt.Errorf("failed to create plugin manager: %w", err))
+		return ctrl.Result{}, fmt.Errorf("failed to create plugin manager: %w", err)
 	}
 
 	spec := &runtime.Raw{}
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(info.RepositorySpec.Raw), spec); err != nil {
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetRepositoryFailedReason, err.Error())
 
-		return ctrl.Result{}, reconcile.TerminalError(fmt.Errorf("failed to decode repository spec: %w", err))
+		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
 	var credentialGraph credentials.Resolver
@@ -244,7 +242,7 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetRepositoryFailedReason, err.Error())
 
-			return ctrl.Result{}, reconcile.TerminalError(fmt.Errorf("failed to create credential graph: %w", err))
+			return ctrl.Result{}, fmt.Errorf("failed to create credential graph: %w", err)
 		}
 	}
 
@@ -256,7 +254,7 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetRepositoryFailedReason, err.Error())
 
-		return ctrl.Result{}, reconcile.TerminalError(fmt.Errorf("failed to create repository resolver: %w", err))
+		return ctrl.Result{}, fmt.Errorf("failed to create repository resolver: %w", err)
 	}
 
 	graph, err := internaldiscovery.Traverse(ctx,
@@ -265,7 +263,7 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.ResolutionFailedReason, err.Error())
 
-		return ctrl.Result{}, reconcile.TerminalError(fmt.Errorf("failed to resolve the transitive component graph: %w", err))
+		return ctrl.Result{}, fmt.Errorf("failed to resolve the transitive component graph: %w", err)
 	}
 	logger.V(1).Info("resolved transitive component graph", "components", len(graph.Descriptors))
 
