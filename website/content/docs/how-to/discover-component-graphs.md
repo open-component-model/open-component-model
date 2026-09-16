@@ -86,7 +86,6 @@ metadata:
   name: platform-components
   namespace: default
 spec:
-  interval: 10m
   componentRef:
     name: releasechannel
   componentSelector:
@@ -137,7 +136,6 @@ metadata:
   name: flux-images
   namespace: default
 spec:
-  interval: 10m
   componentRef:
     name: releasechannel
   componentSelector:
@@ -310,19 +308,21 @@ removes `Stalled`/`Reconciling`, and advances `status.observedGeneration`. The
   (`components: []` / `extracted: []`).
 - **`NoComponentsMatched`** — The component selector matched no components.
 
-On failure, the controller **retains the last successful payload** — even if it
-belongs to the previous output mode — and updates only the failure conditions:
+On failure, the controller **retains the last successful payload**, even if it
+belongs to the previous output mode, and updates only the failure conditions.
 
-- **`ResolutionFailed`** (`Ready=False`) — Retryable repository/auth/network
-  failure. Requeued with backoff; the last successful payload is retained.
-- **`SelectorFailed`** (`Ready=False`) — Selector compilation/type errors that
-  require a spec change are terminal and also set `Stalled=True`; transient
-  evaluation errors are retryable.
-- **`ExtractFailed`** (`Ready=False`) — Extraction compilation, evaluation, or
-  output-type errors. Terminal ones also set `Stalled=True`.
-- **`PayloadTooLarge`** (`Ready=False`, `Stalled=True`) — The status payload
+Failures are surfaced as is:
+
+- **`ResolutionFailed`** (`Ready=False`): The component graph could not be
+  resolved: repository, auth or network failure, or a reference that does not
+  resolve.
+- **`SelectorFailed`** (`Ready=False`, `Stalled=True`): Selector compilation,
+  evaluation or type error.
+- **`ExtractFailed`** (`Ready=False`, `Stalled=True`): Extraction compilation,
+  evaluation or output-type error.
+- **`PayloadTooLarge`** (`Ready=False`, `Stalled=True`): The status payload
   exceeds the API server size limit; refine the selectors or extraction. The
-  oversized candidate is never retried and the persisted payload is retained.
+  oversized candidate is discarded and the persisted payload is retained.
 
 {{< callout context="note" title="Stale retained status" icon="outline/info-circle" >}}
 Because failures retain the last successful payload, `status.components` /
@@ -339,15 +339,16 @@ Discovery is watch-driven: it reacts to `Discovery` generation changes,
 referenced configuration sources (explicit OCM config providers and the
 effective `Secret`s/`ConfigMap`s).
 
-`spec.interval` is optional. If unset or 0 it will not reconcile and instead
-will completely rely on watch events. Set an interval only as insurance against
-possible missed events.
+There is no interval. Every input of a Discovery is either watched or
+version-pinned: references resolve by version, so the graph cannot change
+without the `Component`'s resolved version changing, which is watched.
 
 `status.observedComponentDigest` is used to check if another walk is necessary.
 If the digest is the same for the root component as observed last time, we don't
 need to re-walk the entire graph. This field is only set if ALL references have
 a digest field for the root component since a missing digest breaks the chain
-of trust.
+of trust. This is not considered if there is an observed generation update
+of the Discovery object itself. That will always result in a full graph walk.
 
 Suspended, deleting, and terminally failed (`Stalled=True`) objects do not
 schedule periodic work.

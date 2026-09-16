@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -82,21 +81,6 @@ func readyComponent(name, namespace string) *v1alpha1.Component {
 			}},
 		},
 	}
-}
-
-// TestRequeueAfterUsesSpecInterval pins that the requeue comes from the object,
-// not from a controller-wide default.
-func TestRequeueAfterUsesSpecInterval(t *testing.T) {
-	r := require.New(t)
-
-	discovery := &v1alpha1.Discovery{}
-	r.Zero(discovery.GetRequeueAfter(), "an unset interval schedules no requeue")
-
-	discovery.Spec.Interval = metav1.Duration{Duration: 10 * time.Minute}
-	r.Equal(10*time.Minute, discovery.GetRequeueAfter())
-
-	var nilDiscovery *v1alpha1.Discovery
-	r.Zero(nilDiscovery.GetRequeueAfter())
 }
 
 func TestReconcile_NotFound(t *testing.T) {
@@ -257,7 +241,7 @@ func TestReconcile_PublishesRawAndExtractedPayloads(t *testing.T) {
 	r.Contains(string(current.Status.Extracted[1]["name"].Raw), "root")
 }
 
-func TestReconcile_UnreadyComponentIsRetryable(t *testing.T) {
+func TestReconcile_UnreadyComponentIsTerminal(t *testing.T) {
 	g := require.New(t)
 
 	discovery := &v1alpha1.Discovery{
@@ -270,7 +254,7 @@ func TestReconcile_UnreadyComponentIsRetryable(t *testing.T) {
 
 	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	g.Error(err)
-	g.False(errors.Is(err, reconcile.TerminalError(nil)), "missing dependencies remain retryable")
+	g.True(errors.Is(err, reconcile.TerminalError(nil)), "nothing is retried; recovery comes from the Component watch")
 
 	fresh := &v1alpha1.Discovery{}
 	g.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), fresh))
@@ -278,7 +262,6 @@ func TestReconcile_UnreadyComponentIsRetryable(t *testing.T) {
 	g.NotNil(ready)
 	g.Equal(metav1.ConditionFalse, ready.Status)
 	g.Equal(v1alpha1.ResourceIsNotAvailable, ready.Reason)
-	g.False(status.IsStalled(fresh))
 }
 
 func TestUpToDate(t *testing.T) {

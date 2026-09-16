@@ -162,23 +162,13 @@ func realPluginReconciler(t *testing.T, objs ...client.Object) (*Reconciler, cli
 	return rec, c
 }
 
-// reconcileUntilSettled reconciles repeatedly, skipping the initial
-// "effective ocm config changed" publications, and returns the first result
-// and error of a settled reconcile (or a terminal condition).
+// reconcileUntilSettled is a single reconcile. The effective config is now
+// recorded in memory and published with the rest of the status, so there is no
+// longer an extra "effective ocm config changed" round to skip.
 func reconcileUntilSettled(t *testing.T, rec *Reconciler, key client.ObjectKey) (ctrl.Result, error) {
 	t.Helper()
-	var (
-		result ctrl.Result
-		err    error
-	)
-	for range 5 {
-		result, err = rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
-		if err == nil || err.Error() != "effective ocm config changed" {
-			return result, err
-		}
-	}
-	t.Fatalf("discovery did not settle past effective-config publication")
-	return result, err
+
+	return rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
 }
 
 func componentNamesFromStatus(t *testing.T, d *v1alpha1.Discovery) []string {

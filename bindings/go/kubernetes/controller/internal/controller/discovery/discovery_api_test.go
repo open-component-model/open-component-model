@@ -1,8 +1,6 @@
 package discovery
 
 import (
-	"time"
-
 	"encoding/json"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -95,7 +93,6 @@ func newUnstructured(namespace string, mutate func(spec map[string]any)) *unstru
 	obj.SetGenerateName("discovery-")
 	obj.SetNamespace(namespace)
 	spec := map[string]any{
-		"interval":     "10m",
 		"componentRef": map[string]any{"name": "releasechannel"},
 	}
 	mutate(spec)
@@ -184,7 +181,6 @@ var _ = Describe("Discovery API", func() {
 					Namespace:    namespace.Name,
 				},
 				Spec: v1alpha1.DiscoverySpec{
-					Interval:     metav1.Duration{Duration: 10 * time.Minute},
 					ComponentRef: corev1.LocalObjectReference{Name: "releasechannel"},
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
@@ -212,7 +208,6 @@ var _ = Describe("Discovery API", func() {
 					Namespace:    namespace.Name,
 				},
 				Spec: v1alpha1.DiscoverySpec{
-					Interval:     metav1.Duration{Duration: 10 * time.Minute},
 					ComponentRef: corev1.LocalObjectReference{Name: "releasechannel"},
 				},
 			}

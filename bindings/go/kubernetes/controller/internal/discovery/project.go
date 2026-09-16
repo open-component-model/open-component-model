@@ -32,8 +32,7 @@ type Payload struct {
 //
 // Descriptor conversion, marshalling, or decoding failures are returned as
 // ordinary wrapped errors carrying the component name/version, not as
-// *ExtractError, so the controller treats them as retryable rather than
-// terminal configuration failures.
+// *ExtractError, so they are not reported as configuration failures.
 //
 // An empty filtered view with a stage reason deterministically produces an
 // empty selected list: whole-expression extraction must not fabricate records
@@ -219,11 +218,11 @@ func (q *Query) projectExpression(ctx context.Context, descriptors []map[string]
 	// map-field extraction where it only omits the field, so both outcomes of
 	// evalResult are handled the same way here.
 	if _, cause := evalResult(ctx, val, err); cause != nil {
-		return nil, extractEvalError("", cause)
+		return nil, extractErrorf("", "failed to evaluate expression: %w", cause)
 	}
 	native, err := conversion.GoNativeType(val)
 	if err != nil {
-		return nil, extractErrorf("", "failed to convert expression result: %s", err)
+		return nil, extractErrorf("", "failed to convert expression result: %w", err)
 	}
 	list, ok := native.([]any)
 	if !ok {
@@ -254,11 +253,11 @@ func (q *Query) evalFields(ctx context.Context, activation map[string]any) (map[
 			continue
 		}
 		if cause != nil {
-			return nil, extractEvalError(field.name, cause)
+			return nil, extractErrorf(field.name, "failed to evaluate expression: %w", cause)
 		}
 		native, err := conversion.GoNativeType(val)
 		if err != nil {
-			return nil, extractErrorf(field.name, "failed to convert expression result: %s", err)
+			return nil, extractErrorf(field.name, "failed to convert expression result: %w", err)
 		}
 		record[field.name] = native
 	}

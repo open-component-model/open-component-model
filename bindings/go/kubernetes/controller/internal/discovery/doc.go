@@ -45,11 +45,10 @@
 //     null rather than omitting the field.
 //
 // All other CEL errors are SelectorError or ExtractError, which the controller
-// treats as terminal. Cancellation is excluded: evalResult re-checks the context
-// so it stays a plain retryable error. Descriptor conversion, marshalling, or
-// decoding failures surface from `Project` as ordinary wrapped errors with the
-// component name/version, so they are retryable too. A resource removed by
-// selection is not serialized, so a `bad access` on a discarded resource will never fail.
+// reports as a configuration failure. Descriptor conversion, marshalling, or
+// decoding failures surface from Project as ordinary wrapped errors with the
+// component name/version. A resource removed by selection is not serialized, so
+// a bad access on a discarded resource will never fail.
 //
 // Empty reference or component selector stages are not failures: Filter reports
 // them with a distinct EmptyReason and Project deterministically emits an empty list.

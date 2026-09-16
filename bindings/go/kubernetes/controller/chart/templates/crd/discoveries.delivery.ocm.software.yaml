@@ -147,13 +147,6 @@ spec:
                     must be specified
                   rule: '(has(self.byResources) ? 1 : 0) + (has(self.byComponents)
                     ? 1 : 0) + (has(self.expression) ? 1 : 0) == 1'
-              interval:
-                description: |-
-                  Interval at which the component graph is re-discovered. Watches on the
-                  referenced Component usually trigger reconcile events. The interval can
-                  be set to avoid missed events. Unset or zero disables periodic
-                  re-discovery.
-                type: string
               ocmConfig:
                 description: |-
                   OCMConfig defines references to secrets, config maps or ocm api
