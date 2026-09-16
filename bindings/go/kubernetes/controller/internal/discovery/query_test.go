@@ -281,3 +281,23 @@ func TestCompileCancellation(t *testing.T) {
 	r.Error(err)
 	r.ErrorIs(err, context.Canceled)
 }
+
+// TestSelectorCostLimit pins that a runaway expression is aborted rather than
+// running to completion. Expressions come from a user-writable spec and the
+// reconcile has no deadline, so this is the only bound on evaluation time.
+func TestSelectorCostLimit(t *testing.T) {
+	r := require.New(t)
+	q := mustCompileSelector(t, &v1alpha1.Selector{
+		Expression: `size(lists.range(50000).map(x, x*2).map(x, x*2).map(x, x*2)) > 0`,
+	})
+
+	_, err := q.matches(t.Context(), runtime.Identity{"name": "x"}, nil)
+
+	r.Error(err)
+	r.ErrorContains(err, "cost limit exceeded")
+
+	// Terminal, not a nonmatch and not retryable: only a spec change fixes it.
+	var selErr *SelectorError
+	r.ErrorAs(err, &selErr)
+	r.False(isMissingAccess(err))
+}

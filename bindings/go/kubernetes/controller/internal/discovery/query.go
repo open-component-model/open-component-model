@@ -19,6 +19,12 @@ import (
 // check frequency is at least 1.
 const celInterruptCheckFrequency = 100
 
+// celCostLimit bounds the runtime cost of a single evaluation
+//
+// Roughly measured with unit tests. A 10_000 component graph would eat
+// approximately half of this budget.
+const celCostLimit = 1_000_000
+
 type extractMode int
 
 const (
@@ -183,7 +189,9 @@ func compileProgram(env *cel.Env, expr string) (cel.Program, error) {
 	if issues.Err() != nil {
 		return nil, issues.Err()
 	}
-	prog, err := env.Program(ast, cel.InterruptCheckFrequency(celInterruptCheckFrequency))
+	prog, err := env.Program(ast,
+		cel.InterruptCheckFrequency(celInterruptCheckFrequency),
+		cel.CostLimit(celCostLimit))
 	if err != nil {
 		return nil, fmt.Errorf("failed to build CEL program %q: %w", expr, err)
 	}

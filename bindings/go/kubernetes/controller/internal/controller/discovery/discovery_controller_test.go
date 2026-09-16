@@ -267,7 +267,7 @@ func TestReconcile_PublishesRawAndExtractedPayloads(t *testing.T) {
 	r.Contains(string(current.Status.Extracted[1]["name"].Raw), "root")
 }
 
-func TestReconcile_UnreadyComponentIsTerminal(t *testing.T) {
+func TestReconcile_UnreadyComponentIsRetryable(t *testing.T) {
 	g := require.New(t)
 
 	discovery := &v1alpha1.Discovery{
@@ -280,7 +280,7 @@ func TestReconcile_UnreadyComponentIsTerminal(t *testing.T) {
 
 	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	g.Error(err)
-	g.True(errors.Is(err, reconcile.TerminalError(nil)), "nothing is retried; recovery comes from the Component watch")
+	g.False(errors.Is(err, reconcile.TerminalError(nil)), "a dependency that is not ready yet backs off, like the other controllers")
 
 	fresh := &v1alpha1.Discovery{}
 	g.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), fresh))
@@ -415,4 +415,27 @@ func TestMapComponentToDiscoveries(t *testing.T) {
 
 	r.Nil(reconciler.mapComponentToDiscoveries(t.Context(), &v1alpha1.Resource{}),
 		"a wrong object type yields no requests")
+}
+
+func TestReconcile_ResolutionFailureIsRetryable(t *testing.T) {
+	r := require.New(t)
+
+	component := readyComponent("component", "default")
+	discovery := &v1alpha1.Discovery{
+		ObjectMeta: metav1.ObjectMeta{Name: "discovery", Namespace: "default"},
+		Spec:       v1alpha1.DiscoverySpec{ComponentRef: corev1.LocalObjectReference{Name: component.Name}},
+	}
+	rec, c := newReconciler(t, component, discovery)
+	rec.NewPluginManager = func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
+		return setup.NewPluginManager(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}
+
+	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
+	r.Error(err)
+	r.False(errors.Is(err, reconcile.TerminalError(nil)), "an unreachable repository must back off, not stall")
+
+	current := &v1alpha1.Discovery{}
+	r.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), current))
+	r.Equal(v1alpha1.ResolutionFailedReason, status.FindCondition(current, v1alpha1.ReadyCondition).Reason)
+	r.False(status.IsStalled(current), "a transient resolution failure is not a stall")
 }

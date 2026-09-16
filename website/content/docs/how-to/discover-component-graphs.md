@@ -314,8 +314,9 @@ belongs to the previous output mode, and updates only the failure conditions.
 Failures are surfaced as is:
 
 - **`ResolutionFailed`** (`Ready=False`): The component graph could not be
-  resolved: repository, auth or network failure, or a reference that does not
-  resolve.
+  resolved: repository, auth or network failure, or a component version that is
+  not available. **Retried with backoff**, since the cause is usually transient
+  and a failure below the root produces no watch event to recover from.
 - **`SelectorFailed`** (`Ready=False`, `Stalled=True`): Selector compilation,
   evaluation or type error.
 - **`ExtractFailed`** (`Ready=False`, `Stalled=True`): Extraction compilation,
