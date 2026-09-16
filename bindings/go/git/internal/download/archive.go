@@ -27,7 +27,7 @@ func archive(ctx context.Context, commit *object.Commit, opts Options) (_ *Blob,
 
 	file, err := os.CreateTemp(opts.TempDir, "ocm-git-archive-*.tar")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot create git archive file: %w", err)
 	}
 	defer func() {
 		if err != nil {
