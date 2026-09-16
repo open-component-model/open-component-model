@@ -58,9 +58,50 @@ mounts:
       - quicksand-latin-ext-wght-normal.woff2
   - source: content/blog
     target: content/blog
+    sites:
+      matrix:
+        versions:
+          - main
+          - '0.15'
+          - '0.14'
+          - '0.13'
+          - '0.12'
+          - '0.11'
+          - '0.10'
+          - '0.9'
+          - legacy
+  - source: content/community
+    target: content/community
+    sites:
+      matrix:
+        versions:
+          - main
+          - '0.15'
+          - '0.14'
+          - '0.13'
+          - '0.12'
+          - '0.11'
+          - '0.10'
+          - '0.9'
+          - legacy
+  - source: content/governance
+    target: content/governance
+    sites:
+      matrix:
+        versions:
+          - main
+          - '0.15'
+          - '0.14'
+          - '0.13'
+          - '0.12'
+          - '0.11'
+          - '0.10'
+          - '0.9'
+          - legacy
   - files:
-      - '**'
-      - '!blog/**'
+      - '! blog/**'
+      - '! community/**'
+      - '! governance/**'
     source: content_versioned/version-legacy
     target: content
     sites:
@@ -68,8 +109,9 @@ mounts:
         versions:
           - legacy
   - files:
-      - '**'
-      - '!blog/**'
+      - '! blog/**'
+      - '! community/**'
+      - '! governance/**'
     source: content
     target: content
     sites:
@@ -173,8 +215,9 @@ imports:
     ignoreConfig: true
     mounts:
       - files:
-          - '**'
-          - '!blog/**'
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
         source: content/
         target: content
         sites:
@@ -283,8 +326,9 @@ imports:
     ignoreConfig: true
     mounts:
       - files:
-          - '**'
-          - '!blog/**'
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
         source: content/
         target: content
         sites:
@@ -402,8 +446,9 @@ imports:
     ignoreConfig: true
     mounts:
       - files:
-          - '**'
-          - '!blog/**'
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
         source: content/
         target: content
         sites:
@@ -521,8 +566,9 @@ imports:
     ignoreConfig: true
     mounts:
       - files:
-          - '**'
-          - '!blog/**'
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
         source: content/
         target: content
         sites:
@@ -640,8 +686,9 @@ imports:
     ignoreConfig: true
     mounts:
       - files:
-          - '**'
-          - '!blog/**'
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
         source: content/
         target: content
         sites:
@@ -768,8 +815,9 @@ imports:
     ignoreConfig: true
     mounts:
       - files:
-          - '**'
-          - '!blog/**'
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
         source: content/
         target: content
         sites:
@@ -905,8 +953,9 @@ imports:
     ignoreConfig: true
     mounts:
       - files:
-          - '**'
-          - '!blog/**'
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
         source: content/
         target: content
         sites:

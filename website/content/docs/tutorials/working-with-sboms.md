@@ -460,5 +460,5 @@ rm -rf /tmp/ocm-sbom-tutorial
 - [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - `File/v1`, `OCIImage/v1`, and what `--copy-resources` turns them into
 - [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) - Signing the component version, which is what makes a linked SBOM trustworthy
 - [Concept: Software Bills of Materials]({{< relref "docs/concepts/sboms.md" >}}) - What an SBOM is and why OCM binds it to the component version
-- [Blog: Shipping SBOMs with Your Components]({{< relref "blog/2026-07-28-shipping-sboms-with-your-components.md" >}}) - The proof of concept this feature grew out of
+- [Blog: Shipping SBOMs with Your Components](/blog/2026-07-28-shipping-sboms-with-your-components/) - The proof of concept this feature grew out of
 - [Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}) - Sign and verify component versions with cryptographic keys
