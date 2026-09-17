@@ -820,8 +820,8 @@
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.repository.v1.ctf.Repository"
         },
         "sourceRepository": {
-          "type": "object",
-          "additionalProperties": true
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
+          "description": "SourceRepository, when set, is the repository the component version is\ntransferred from. After the component version is added, attestation\nreferrers of its manifest are copied from this source repository to the\ntarget, preserving cosign-verifiable attestations across transfer."
         }
       },
       "required": [
@@ -829,6 +829,22 @@
         "descriptor"
       ],
       "additionalProperties": false
+    },
+    "ocm.software.open-component-model.bindings.go.runtime.Raw": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
+      "title": "Raw",
+      "type": "object",
+      "description": "Raw is used to hold extensions that dynamically define behavior at runtime",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": true
     },
     "ocm.software.open-component-model.bindings.go.runtime.Type": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
