@@ -295,6 +295,28 @@ You can find appropriate icons on this [website](https://tabler.io/icons).
 
 ---
 
+## Page URLs and Renames
+
+A docs page URL is `/docs/<sections>/<slug>/`. The slug defaults to the page title, so a title change moves the page
+and breaks every existing link to it.
+
+- Pin the URL with an explicit `slug` in the front matter if the page is linked from outside this repository, above
+  all from Go code. A released binary prints the URL it was compiled with forever, and that link cannot be corrected
+  afterwards.
+- Keep the old URL alive with `aliases` if a page moves. Hugo writes a redirect page for each alias. GitHub Pages
+  serves the site and does not support server-side redirects, so `aliases` is the only mechanism available.
+
+```yaml
+---
+title: "Sign Component Versions"
+slug: "sign-component-versions"
+aliases:
+  - /docs/getting-started/sign-component-versions/
+---
+```
+
+---
+
 ## Writing Checklists
 
 ### Tutorial Checklist

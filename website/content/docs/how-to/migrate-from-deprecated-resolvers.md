@@ -1,5 +1,6 @@
 ---
 title: "Migrate from Fallback to Deterministic Repository Resolvers"
+slug: "migrate-from-fallback-to-deterministic-repository-resolvers"
 description: "Replace deprecated fallback resolvers with glob-based resolvers for deterministic and efficient component resolution."
 weight: 12
 toc: true
