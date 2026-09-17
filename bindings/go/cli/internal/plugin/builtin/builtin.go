@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	attestationcredentials "ocm.software/open-component-model/bindings/go/attestation/spec/credentials"
 	ocicredentialplugin "ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/credentials/oci"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/github"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/gpg"
@@ -27,6 +28,8 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}
+
+	manager.CredentialRepositoryRegistry.Register(attestationcredentials.Scheme)
 
 	if err := ociplugin.Register(
 		manager.ComponentVersionRepositoryRegistry,

@@ -1,17 +1,21 @@
 package componentversion
 
 import (
+	"context"
 	"crypto"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/attestation"
+	ecdsacredentialsv1 "ocm.software/open-component-model/bindings/go/attestation/spec/credentials/v1"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
@@ -24,6 +28,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
@@ -39,11 +44,15 @@ const (
 	FlagHashAlgorithm          = "hash"
 	FlagDryRun                 = "dry-run"
 	FlagForce                  = "force"
+	FlagPredicate              = "predicate"
+	FlagPredicateType          = "predicate-type"
 )
 
 const (
 	// DefaultSignatureName is the default name of the signature to create or update if not provided by FlagSignature.
 	DefaultSignatureName = "default"
+	// DefaultPredicateType is the in-toto predicate type used for attestations when not overridden.
+	DefaultPredicateType = "https://slsa.dev/provenance/v0.2"
 )
 
 // signingConfigType is the configuration entry that replaced FlagSignerSpec.
@@ -264,6 +273,8 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
 	cmd.Flags().String(FlagNormalisationAlgorithm, v4alpha1.Algorithm, "normalisation algorithm to use (default jsonNormalisation/v4alpha1)")
 	cmd.Flags().String(FlagHashAlgorithm, crypto.SHA256.String(), "hash algorithm to use (SHA256, SHA512)")
 	cmd.Flags().Bool(FlagForce, false, "overwrite existing signatures under the same name")
+	cmd.Flags().String(FlagPredicate, "", "path to an in-toto predicate JSON file. When set, a cosign-compatible SLSA attestation is built from this predicate, signed with an ECDSA P-256 key resolved from the OCM credential graph, and attached to the component version as a discoverable OCI referrer (instead of a component-descriptor signature).")
+	cmd.Flags().String(FlagPredicateType, DefaultPredicateType, "in-toto predicate type of the attestation (also the value passed to `cosign verify-attestation --type`)")
 
 	return cmd
 }
@@ -327,6 +338,13 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	repo, err := repoProvider.GetComponentVersionRepositoryForComponent(cmd.Context(), ref.Component, ref.Version)
 	if err != nil {
 		return fmt.Errorf("could not access ocm repository: %w", err)
+	}
+
+	// Attestation path: when --predicate is set, build a cosign-compatible SLSA
+	// attestation from the predicate, sign it with an ECDSA key resolved from the
+	// credential graph, and attach it as an OCI referrer of the component version.
+	if predicatePath, _ := cmd.Flags().GetString(FlagPredicate); predicatePath != "" {
+		return signAttestation(ctx, cmd, repo, ref, signatureName, predicatePath, logger, credentialGraph)
 	}
 
 	desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
@@ -420,6 +438,79 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		"digest", unsignedDigest.Value,
 		"hashAlgorithm", unsignedDigest.HashAlgorithm,
 		"normalisationAlgorithm", unsignedDigest.NormalisationAlgorithm,
+	)
+	return nil
+}
+
+// signAttestation builds a cosign-compatible SLSA attestation from the predicate
+// file, signs it with an ECDSA P-256 key resolved from the OCM credential graph,
+// and attaches it as an OCI referrer of the component version manifest,
+// verifiable with:
+//
+//	cosign verify-attestation --key <pub> --type <predicate-type> --insecure-ignore-tlog <ref>
+func signAttestation(ctx context.Context, cmd *cobra.Command, repo repository.ComponentVersionRepository, ref *compref.Ref, signatureName, predicatePath string, logger *slog.Logger, credentialGraph credentials.Resolver) error {
+	attestationRepo, ok := repo.(repository.AttestationAwareRepository)
+	if !ok {
+		return fmt.Errorf("target repository %T cannot store attestations (only OCI repositories are supported)", repo)
+	}
+
+	predicateType, _ := cmd.Flags().GetString(FlagPredicateType)
+	if predicateType == "" {
+		predicateType = DefaultPredicateType
+	}
+
+	predicate, err := os.ReadFile(predicatePath)
+	if err != nil {
+		return fmt.Errorf("reading predicate file %q failed: %w", predicatePath, err)
+	}
+	if !json.Valid(predicate) {
+		return fmt.Errorf("predicate file %q is not valid JSON", predicatePath)
+	}
+
+	identity := runtime.Identity{
+		runtime.IdentityAttributeType: ecdsacredentialsv1.ECDSACredentialsType,
+		"signature":                   signatureName,
+	}
+	resolved, err := credentialGraph.Resolve(ctx, identity)
+	if err != nil {
+		return fmt.Errorf("resolving ECDSA attestation signing credentials for signature %q failed: %w", signatureName, err)
+	}
+	creds, err := ecdsacredentialsv1.ConvertToECDSACredentials(resolved)
+	if err != nil {
+		return fmt.Errorf("interpreting attestation signing credentials failed: %w", err)
+	}
+	key, err := ecdsacredentialsv1.PrivateKeyFromCredentials(creds)
+	if err != nil {
+		return fmt.Errorf("loading ECDSA attestation signing key failed: %w", err)
+	}
+	if key == nil {
+		return fmt.Errorf("no ECDSA private key found in credentials for signature %q", signatureName)
+	}
+
+	build := func(manifestDigest string) (artifactType, layerMediaType string, layer []byte, err error) {
+		digest, err := attestation.DigestFromManifestReference(manifestDigest)
+		if err != nil {
+			return "", "", nil, err
+		}
+		subject := attestation.Subject{
+			Name:   fmt.Sprintf("%s:%s", ref.Component, ref.Version),
+			Digest: digest,
+		}
+		bundle, mediaType, err := attestation.SignedBundle(ctx, subject, predicateType, predicate, key)
+		if err != nil {
+			return "", "", nil, err
+		}
+		return mediaType, mediaType, bundle, nil
+	}
+
+	if err := attestationRepo.AddAttestation(ctx, ref.Component, ref.Version, build); err != nil {
+		return fmt.Errorf("attaching attestation failed: %w", err)
+	}
+
+	logger.InfoContext(ctx, "attestation signed and attached successfully",
+		"component", ref.Component,
+		"version", ref.Version,
+		"predicateType", predicateType,
 	)
 	return nil
 }
