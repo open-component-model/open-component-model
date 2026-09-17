@@ -35,4 +35,9 @@ type CTFAddComponentVersionOutput struct{}
 type CTFAddComponentVersionSpec struct {
 	Repository ctf.Repository `json:"repository"`
 	Descriptor *v2.Descriptor `json:"descriptor"`
+	// SourceRepository, when set, is the repository the component version is
+	// transferred from. After the component version is added, attestation
+	// referrers of its manifest are copied from this source repository to the
+	// target, preserving cosign-verifiable attestations across transfer.
+	SourceRepository *runtime.Raw `json:"sourceRepository,omitempty"`
 }

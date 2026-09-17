@@ -50,10 +50,11 @@ import (
 )
 
 var (
-	_            ComponentVersionRepository            = (*Repository)(nil)
-	_            repository.OwnershipAwareRepository   = (*Repository)(nil)
-	_            repository.AttestationAwareRepository = (*Repository)(nil)
-	versionRegex                                       = regexp.MustCompile(compref.VersionRegex)
+	_            ComponentVersionRepository                    = (*Repository)(nil)
+	_            repository.OwnershipAwareRepository           = (*Repository)(nil)
+	_            repository.AttestationAwareRepository         = (*Repository)(nil)
+	_            repository.ComponentVersionReferrerRepository = (*Repository)(nil)
+	versionRegex                                               = regexp.MustCompile(compref.VersionRegex)
 )
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
@@ -175,7 +176,83 @@ func (repo *Repository) AddAttestation(ctx context.Context, component, version s
 	if err != nil {
 		return fmt.Errorf("failed to build attestation for %q: %w", reference, err)
 	}
+	return pushReferrer(ctx, store, subject, artifactType, layerMediaType, layer)
+}
 
+// AddComponentVersionReferrer pushes a pre-built referrer of the stored
+// component version manifest, without rebuilding it.
+func (repo *Repository) AddComponentVersionReferrer(ctx context.Context, component, version string, referrer repository.Referrer) (err error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	done := log.Operation(ctx, "add component version referrer", slog.String("component", component), slog.String("version", version))
+	defer func() {
+		done(err)
+	}()
+
+	reference, store, err := repo.getStore(ctx, component, version)
+	if err != nil {
+		return err
+	}
+	subject, err := store.Resolve(ctx, reference)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component version %q for referrer: %w", reference, err)
+	}
+	return pushReferrer(ctx, store, subject, referrer.ArtifactType, referrer.LayerMediaType, referrer.Layer)
+}
+
+// GetComponentVersionReferrers returns all referrers of the component version
+// manifest that carry a single layer (the shape transfer can copy).
+func (repo *Repository) GetComponentVersionReferrers(ctx context.Context, component, version string) (_ []repository.Referrer, err error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	done := log.Operation(ctx, "get component version referrers", slog.String("component", component), slog.String("version", version))
+	defer func() {
+		done(err)
+	}()
+
+	reference, store, err := repo.getStore(ctx, component, version)
+	if err != nil {
+		return nil, err
+	}
+	subject, err := store.Resolve(ctx, reference)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve component version %q for referrers: %w", reference, err)
+	}
+
+	// An empty artifactType lists all referrers regardless of kind.
+	referrers, err := registry.Referrers(ctx, store, subject, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list referrers for %q: %w", reference, err)
+	}
+
+	result := make([]repository.Referrer, 0, len(referrers))
+	for _, ref := range referrers {
+		manifestBody, err := content.FetchAll(ctx, store, ref)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch referrer %s: %w", ref.Digest, err)
+		}
+		var manifest ociImageSpecV1.Manifest
+		if err := json.Unmarshal(manifestBody, &manifest); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal referrer %s: %w", ref.Digest, err)
+		}
+		if len(manifest.Layers) != 1 {
+			continue
+		}
+		layer, err := content.FetchAll(ctx, store, manifest.Layers[0])
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch referrer layer %s: %w", manifest.Layers[0].Digest, err)
+		}
+		result = append(result, repository.Referrer{
+			ArtifactType:   ref.ArtifactType,
+			LayerMediaType: manifest.Layers[0].MediaType,
+			Layer:          layer,
+		})
+	}
+	return result, nil
+}
+
+// pushReferrer builds and pushes a referrer manifest (subject =
+// the given component version manifest) together with its empty config and
+// single layer.
+func pushReferrer(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, artifactType, layerMediaType string, layer []byte) error {
 	layerDesc := ociImageSpecV1.Descriptor{
 		MediaType: layerMediaType,
 		Digest:    digest.FromBytes(layer),

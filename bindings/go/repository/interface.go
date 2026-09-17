@@ -153,6 +153,33 @@ type AttestationAwareRepository interface {
 	AddAttestation(ctx context.Context, component, version string, build AttestationBuilder) error
 }
 
+// Referrer is a raw OCI referrer of a component version manifest: a manifest
+// that references the component version as its subject. Layer is the referrer's
+// single-layer payload (e.g. a Sigstore attestation bundle); ArtifactType and
+// LayerMediaType are its OCI media types.
+type Referrer struct {
+	ArtifactType   string
+	LayerMediaType string
+	Layer          []byte
+}
+
+// ComponentVersionReferrerRepository is an optional capability of a
+// ComponentVersionRepository that exposes the OCI referrers of a stored
+// component version manifest, so that transfer can carry them (attestations,
+// and any other referrer kind) to the target generically. Transfer preserves
+// the component version manifest digest, so copied referrers' subject still
+// matches and they remain discoverable and verifiable.
+type ComponentVersionReferrerRepository interface {
+	// GetComponentVersionReferrers returns the referrers of the stored component
+	// version manifest. It returns an empty slice (no error) when there are none.
+	GetComponentVersionReferrers(ctx context.Context, component, version string) ([]Referrer, error)
+
+	// AddComponentVersionReferrer pushes a pre-built referrer of the stored
+	// component version manifest, without rebuilding it. The component version
+	// must already exist in the repository.
+	AddComponentVersionReferrer(ctx context.Context, component, version string, referrer Referrer) error
+}
+
 // SourceRepository defines the interface for storing and retrieving OCM sources
 // independently of component versions from a store implementation.
 // TODO https://github.com/open-component-model/ocm-project/issues/857 also provide credentials in UploadSource/DownloadSource

@@ -11,6 +11,10 @@
     },
     "repository": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.repository.v1.ctf.Repository"
+    },
+    "sourceRepository": {
+      "type": "object",
+      "additionalProperties": true
     }
   },
   "required": [

@@ -28,14 +28,21 @@ func (t *AddComponentVersion) Transform(ctx context.Context, step runtime.Typed)
 		return nil, fmt.Errorf("failed converting generic transformation to download component transformation: %w", err)
 	}
 	var repoSpec runtime.Typed
+	var sourceSpec runtime.Typed
 	var v2desc *v2.Descriptor
 	switch tr := transformation.(type) {
 	case *v1alpha1.OCIAddComponentVersion:
 		repoSpec = &tr.Spec.Repository
 		v2desc = tr.Spec.Descriptor
+		if tr.Spec.SourceRepository != nil {
+			sourceSpec = tr.Spec.SourceRepository
+		}
 	case *v1alpha1.CTFAddComponentVersion:
 		repoSpec = &tr.Spec.Repository
 		v2desc = tr.Spec.Descriptor
+		if tr.Spec.SourceRepository != nil {
+			sourceSpec = tr.Spec.SourceRepository
+		}
 	default:
 		return nil, fmt.Errorf("unexpected transformation type: %T", transformation)
 	}
@@ -66,5 +73,55 @@ func (t *AddComponentVersion) Transform(ctx context.Context, step runtime.Typed)
 			desc.Component.Name, desc.Component.Version, err)
 	}
 
+	if sourceSpec != nil {
+		if err := t.copyReferrers(ctx, sourceSpec, repo, desc.Component.Name, desc.Component.Version); err != nil {
+			return nil, fmt.Errorf("failed copying referrers for %s:%s: %w",
+				desc.Component.Name, desc.Component.Version, err)
+		}
+	}
+
 	return transformation, nil
+}
+
+// copyReferrers copies all OCI referrers of the component version manifest from
+// the source repository to the target. It is type-agnostic: attestations and any
+// other referrer kind travel the same way. It is a no-op when either repository
+// does not expose referrers or the source has none. Transfer preserves the
+// component version manifest digest, so copied referrers' subject still matches.
+func (t *AddComponentVersion) copyReferrers(ctx context.Context, sourceSpec runtime.Typed, target repository.ComponentVersionRepository, component, version string) error {
+	targetReferrers, ok := target.(repository.ComponentVersionReferrerRepository)
+	if !ok {
+		return nil
+	}
+
+	var creds runtime.Typed
+	if t.CredentialProvider != nil {
+		if consumerID, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, sourceSpec); err == nil {
+			if resolved, err := t.CredentialProvider.Resolve(ctx, consumerID); err == nil {
+				creds = resolved
+			} else if !errors.Is(err, credentials.ErrNotFound) {
+				return fmt.Errorf("failed resolving source credentials: %w", err)
+			}
+		}
+	}
+
+	source, err := t.RepoProvider.GetComponentVersionRepository(ctx, sourceSpec, creds)
+	if err != nil {
+		return fmt.Errorf("failed getting source repository: %w", err)
+	}
+	sourceReferrers, ok := source.(repository.ComponentVersionReferrerRepository)
+	if !ok {
+		return nil
+	}
+
+	referrers, err := sourceReferrers.GetComponentVersionReferrers(ctx, component, version)
+	if err != nil {
+		return err
+	}
+	for _, referrer := range referrers {
+		if err := targetReferrers.AddComponentVersionReferrer(ctx, component, version, referrer); err != nil {
+			return err
+		}
+	}
+	return nil
 }
