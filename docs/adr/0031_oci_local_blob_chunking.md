@@ -264,7 +264,33 @@ This makes the resulting layout dependent on prior valid boundaries, intentional
 
 #### Alternative: Content-defined chunking
 
-Content-defined chunking was considered for better deduplication after insertions. It requires versioned rolling-hash parameters, variable boundaries, more CPU, and still needs a hard maximum. It has limited benefit for compressed or copy-on-write VM formats and is deferred as a research direction for a future format version.
+Content-defined chunking selects boundaries from the bytes instead of absolute offsets. A rolling fingerprint scans the stream; after a minimum size, a matching fingerprint cuts the chunk, while a hard maximum always forces a cut. FastCDC is a candidate algorithm.
+
+This lets boundaries resynchronize after inserted or removed data. If most of a 50 GiB image remains byte-identical, a target may reuse the unchanged chunk digests and upload only the changed region—for example, about 10 GiB instead of the complete image. The saving depends on the image format and actual byte stability.
+
+Pros:
+
+* substantially better CAS reuse between related image versions;
+* insertions do not shift every subsequent boundary;
+* retains the registry-enforced maximum chunk size.
+
+Cons:
+
+* rolling-fingerprint CPU cost and additional implementation complexity;
+* variable chunk sizes and versioned minimum/target/maximum parameters;
+* limited reuse for compressed, encrypted, or broadly rewritten images;
+* producers need matching algorithm profiles to obtain matching boundaries.
+
+The existing manifest format already supports variable layer sizes; readers concatenate its ordered layers and do not need to understand the boundary algorithm. Content-defined chunking can therefore be added later without a new storage representation by extending the producer config with an optional versioned algorithm and parameters, for example:
+
+```yaml
+algorithm: fastcdc/v1
+minChunkSize: 2Gi
+averageChunkSize: 4Gi
+maxChunkSize: 8Gi
+```
+
+The chunk config may record this generation profile for diagnostics and reproducibility, but reconstruction continues to depend only on the ordered layer descriptors and whole-content metadata. Fixed-size chunking remains the initial algorithm.
 
 #### Follow-up: Built-in registry limits
 
