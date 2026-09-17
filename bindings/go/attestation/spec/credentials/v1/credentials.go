@@ -9,7 +9,6 @@ import (
 	"os"
 )
 
-//nolint:gosec // G101: these are PEM block type names, not credentials.
 const (
 	ECDSAPrivateKeyPEMBlockType = "EC PRIVATE KEY"
 	PKCS8PrivateKeyPEMBlockType = "PRIVATE KEY"
