@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/gobwas/glob"
 	slogcontext "github.com/veqryn/slog-context"
 
@@ -14,15 +13,16 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 // compiledResolver holds a resolver together with its pre-compiled glob pattern
-// and optional semver constraint, so they are validated once at construction time
-// instead of on every call.
+// and optional version constraint, so they are validated once at construction
+// time instead of on every call.
 type compiledResolver struct {
 	resolver             *resolverspec.Resolver
 	componentNamePattern glob.Glob
-	versionConstraint    *semver.Constraints // nil when no version constraint is set
+	hasConstraint        bool // true when a non-empty version constraint is set
 }
 
 // SpecProvider implements a ComponentVersionRepositorySpecProvider with
@@ -33,13 +33,32 @@ type SpecProvider struct {
 	// A list of compiled resolvers to use for matching components to repositories.
 	// This list is immutable after creation.
 	resolvers []compiledResolver
+	// registry defines the versioning schemes used to evaluate version
+	// constraints. Defaults to loose semver.
+	registry *versioning.Registry
+}
+
+// SpecProviderOption configures a [SpecProvider].
+type SpecProviderOption func(*SpecProvider)
+
+// WithVersioningRegistry sets the versioning schemes used to evaluate resolver
+// version constraints. When unset, the loose-semver default is used.
+func WithVersioningRegistry(registry *versioning.Registry) SpecProviderOption {
+	return func(p *SpecProvider) {
+		p.registry = registry
+	}
 }
 
 // NewSpecProvider creates a new SpecProvider with a list of resolvers.
 // The resolvers are used to match component names to repository specifications.
 // A resolver with an empty component name pattern matches any component name.
 // It returns an error if any resolver has an invalid glob pattern or version constraint.
-func NewSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver) (*SpecProvider, error) {
+func NewSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver, opts ...SpecProviderOption) (*SpecProvider, error) {
+	provider := &SpecProvider{registry: versioning.Default()}
+	for _, opt := range opts {
+		opt(provider)
+	}
+
 	compiled := make([]compiledResolver, 0, len(resolvers))
 	for i, r := range resolvers {
 		pattern := strings.TrimSpace(r.ComponentNamePattern)
@@ -51,24 +70,23 @@ func NewSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver) (*Sp
 			return nil, fmt.Errorf("failed to compile glob pattern %q in resolver index %d: %w", pattern, i, err)
 		}
 
-		var constraint *semver.Constraints
 		if r.VersionConstraint != "" {
-			c, err := semver.NewConstraint(r.VersionConstraint)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse version constraint %q in resolver index %d: %w", r.VersionConstraint, i, err)
+			// Validate the constraint once at construction against the configured
+			// schemes so an unusable constraint fails load rather than silently
+			// matching nothing later.
+			if _, err := provider.registry.Filter(nil, r.VersionConstraint); err != nil {
+				return nil, fmt.Errorf("invalid version constraint %q in resolver index %d: %w", r.VersionConstraint, i, err)
 			}
-			constraint = c
 		}
 
 		compiled = append(compiled, compiledResolver{
 			resolver:             r,
 			componentNamePattern: g,
-			versionConstraint:    constraint,
+			hasConstraint:        r.VersionConstraint != "",
 		})
 	}
-	return &SpecProvider{
-		resolvers: compiled,
-	}, nil
+	provider.resolvers = compiled
+	return provider, nil
 }
 
 // GetRepositorySpec returns the repository specification for the given component identity.
@@ -104,7 +122,7 @@ func (r *SpecProvider) GetRepositorySpec(ctx context.Context, componentIdentity 
 			continue
 		}
 
-		if cr.versionConstraint != nil {
+		if cr.hasConstraint {
 			if version == "" {
 				logger.Log(ctx, slog.LevelDebug, "skipping resolver with version constraint because no version was provided",
 					slog.Int("index", index),
@@ -113,17 +131,16 @@ func (r *SpecProvider) GetRepositorySpec(ctx context.Context, componentIdentity 
 				continue
 			}
 
-			ver, err := semver.NewVersion(version)
+			satisfied, err := r.registry.Satisfies(version, cr.resolver.VersionConstraint)
 			if err != nil {
-				logger.Log(ctx, slog.LevelDebug, "skipping resolver because version is not valid semver",
+				logger.Log(ctx, slog.LevelDebug, "skipping resolver because version constraint could not be evaluated",
 					slog.Int("index", index),
 					slog.String("version", version),
 					slog.String("error", err.Error()),
 				)
 				continue
 			}
-
-			if !cr.versionConstraint.Check(ver) {
+			if !satisfied {
 				logger.Log(ctx, slog.LevelDebug, "version does not satisfy constraint",
 					slog.Int("index", index),
 					slog.String("version", version),

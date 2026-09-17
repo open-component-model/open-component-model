@@ -206,10 +206,15 @@ func processComponentReference(cmd *cobra.Command,
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
+	registry, err := ocm.RegistryFromConfig(config)
+	if err != nil {
+		return fmt.Errorf("could not build versioning registry: %w", err)
+	}
 	descs, err := ocm.GetComponentVersions(ctx, ocm.GetComponentVersionsOptions{
 		VersionOptions: ocm.VersionOptions{
 			SemverConstraint: constraint,
 			LatestOnly:       latestOnly,
+			Registry:         registry,
 		},
 	}, ref.Component, ref.Version, repo)
 	if err != nil {

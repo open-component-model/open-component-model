@@ -113,6 +113,12 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		done(err)
 	}()
 
+	// Fail fast if the component version does not map to a valid OCI tag, rather
+	// than storing it under a mangled tag or hitting an opaque registry error.
+	if _, tagErr := VersionToOCITag(ctx, version); tagErr != nil {
+		return fmt.Errorf("cannot add component version: %w", tagErr)
+	}
+
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
 		return err
@@ -164,6 +170,10 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 		return nil, fmt.Errorf("failed to create lister: %w", err)
 	}
 
+	// SortPolicyLooseSemverDescending is a stable default; the OCI binding is
+	// versioning-config-agnostic. Scheme-aware ordering (e.g. calver) is applied
+	// by the CLI layer, which re-sorts the returned versions using the configured
+	// versioning registry.
 	opts := lister.Options{
 		SortPolicy: lister.SortPolicyLooseSemverDescending,
 		TagListerOptions: lister.TagListerOptions{

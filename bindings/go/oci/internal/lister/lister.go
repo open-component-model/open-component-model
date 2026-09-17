@@ -56,6 +56,12 @@ type Options struct {
 	LookupPolicy
 	SortPolicy
 
+	// Comparator, when set, orders discovered versions instead of the
+	// SortPolicy. It follows the cmp.Compare convention (negative if a < b).
+	// Unlike SortPolicyLooseSemverDescending it does not drop versions it
+	// cannot parse; ordering of such versions is delegated to the comparator.
+	Comparator func(a, b string) (int, error)
+
 	TagListerOptions
 	ReferrerListerOptions
 }
@@ -155,8 +161,18 @@ func (lister *Lister) listUnsorted(ctx context.Context, opts Options) ([]string,
 	}
 }
 
-// sort applies the configured sort policy to the discovered versions.
+// sort orders the discovered versions. When opts.Comparator is set it is used
+// directly (without dropping unparseable versions); otherwise the SortPolicy
+// applies.
 func (lister *Lister) sort(_ context.Context, opts Options, candidates []string) ([]string, error) {
+	if opts.Comparator != nil {
+		out := slices.Clone(candidates)
+		slices.SortStableFunc(out, func(a, b string) int {
+			c, _ := opts.Comparator(b, a)
+			return c
+		})
+		return slices.CompactFunc(out, func(a, b string) bool { return a == b }), nil
+	}
 	switch opts.SortPolicy {
 	case SortPolicyLooseSemverDescending:
 		vers := make([]*semver.Version, 0, len(candidates))

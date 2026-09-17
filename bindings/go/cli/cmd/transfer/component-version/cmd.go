@@ -425,9 +425,14 @@ func buildGraphDefinitionFromArgs(
 		if err != nil {
 			return nil, fmt.Errorf("could not access ocm repository: %w", err)
 		}
+		registry, err := ocm.RegistryFromConfig(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("could not build versioning registry: %w", err)
+		}
 		versions, err := ocm.VersionsWithFiltering(ctx, fromSpec.Component, repo, ocm.VersionOptions{
 			SemverConstraint: constraint,
 			LatestOnly:       latestOnly,
+			Registry:         registry,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("listing and filtering component versions failed: %w", err)
