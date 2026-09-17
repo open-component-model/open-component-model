@@ -31,7 +31,7 @@ Open `$HOME/.ocmconfig` and add (or extend) an
 type: generic.config.ocm.software/v1
 configurations:
   - type: http.config.ocm.software/v1alpha1
-    timeout: 15s               # End-to-end deadline per HTTP request (default: 30s)
+    timeout: 15s               # An end-to-end deadline (default: no limit)
     tlsHandshakeTimeout: 10s   # Maximum time for the TLS handshake
     responseHeaderTimeout: 30s # Time to wait for the first response header byte
     idleConnTimeout: 90s       # How long a keep-alive connection stays pooled
@@ -43,8 +43,13 @@ connection, TLS handshake, sending the request body, and reading the full
 response body, **including any automatic retry attempts**. All other fields
 control individual phases of a single attempt.
 
-Set `timeout` to the longest transfer you expect on the slowest link you
-support. A zero value disables the limit entirely.
+By default, OCM does not impose an end-to-end deadline, allowing large response
+bodies to stream to completion. Set `timeout` to the longest transfer you expect
+on the slowest link you support. A zero value disables the limit explicitly.
+
+{{< callout context="caution" title="No overall timeout by default" >}}
+With `timeout` omitted or set to `0s` (the default), OCM does not bound response-body duration. A stalled peer can therefore leave an operation waiting indefinitely. Set a positive `timeout` when bounded completion is more important than allowing arbitrarily long transfers.
+{{< /callout >}}
 
 {{< callout context="caution" >}}
 `timeout` spans the entire request **including all retry attempts and their
@@ -84,11 +89,11 @@ All timeout values must be zero (no limit) or positive. Negative values are
 rejected for every field except `tcpKeepAlive`. Check all fields including
 those inside `hosts` entries.
 
-### Requests hang for 30 seconds before failing
+### Large downloads fail with `context deadline exceeded`
 
-No HTTP config in `.ocmconfig`; the built-in 30-second default applies. Add
-an `http.config.ocm.software/v1alpha1` block with a `timeout` appropriate
-for your network.
+A configured `timeout` covers the complete response body and may be too short
+for large artifacts or slow links. Increase it or set `timeout: 0s` to restore
+the unlimited default while retaining the phase-specific timeouts.
 
 ## Reference
 

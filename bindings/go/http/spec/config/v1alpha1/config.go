@@ -15,9 +15,11 @@ const (
 	ConfigType = "http.config.ocm.software"
 )
 
-// DefaultTimeout is the default HTTP client timeout used when no
-// configuration is provided.
-const DefaultTimeout = Timeout(30 * time.Second)
+// DefaultTimeout disables the overall HTTP client deadline when no
+// configuration is provided. This allows response bodies of arbitrary size to
+// stream to completion; connection-phase timeouts remain independently
+// configurable.
+const DefaultTimeout = Timeout(0)
 
 // Timeout wraps time.Duration to support JSON/YAML marshaling
 // of human-readable duration strings (e.g. "30s", "5m", "1h").
@@ -397,8 +399,8 @@ func (c *Config) ResolveHost(host string) HostConfig {
 }
 
 // ResolveHTTPConfig resolves the HTTP configuration from a central generic V1
-// config and validates it. A nil cfg is allowed; it produces a Config carrying
-// only DefaultTimeout.
+// config and validates it. A nil cfg is allowed; it produces a Config with
+// no overall request deadline.
 func ResolveHTTPConfig(cfg *genericv1.Config) (*Config, error) {
 	c, err := LookupConfig(cfg)
 	if err != nil {
