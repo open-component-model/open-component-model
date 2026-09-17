@@ -17,7 +17,7 @@ func authMethod(ep *transport.Endpoint, creds *credsv1.GitCredentials, opts Opti
 
 	// go-git turns URL userinfo into basic auth, which plain HTTP would send in clear text.
 	if ep.Protocol == "http" && (ep.User != "" || ep.Password != "") {
-		return nil, fmt.Errorf("credentials in the repository URL require an HTTPS repository")
+		return nil, fmt.Errorf("the repository URL contains credentials; use an HTTPS repository so they are not sent in clear text")
 	}
 
 	switch {
