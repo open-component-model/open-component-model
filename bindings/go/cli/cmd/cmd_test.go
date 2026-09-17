@@ -1478,26 +1478,32 @@ resources:
 }
 
 func Test_Version(t *testing.T) {
-	r := require.New(t)
-	logs := test.NewJSONLogReader()
-	_, err := test.OCM(t, test.WithArgs("version"), test.WithOutput(logs))
-	r.NoError(err, "failed to run version command")
-
-	entries, err := logs.List()
-	r.NoError(err, "failed to list log entries")
-
-	r.NotEmpty(entries, "expected log entries for version command")
-
-	found := false
-	for _, entry := range entries {
-		ver, ok := entry.Extras["gitVersion"]
-		if ok {
-			found = true
-			r.Equal(ver, "(devel)")
-			break
-		}
+	// The default (text) output must be human-readable and identify this binary
+	// as the OCM v2 CLI. It is reachable both via the `version` subcommand and
+	// the `--version` / `-v` root flag, which must all produce the same output.
+	for _, args := range [][]string{{"version"}, {"--version"}, {"-v"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			r := require.New(t)
+			var out bytes.Buffer
+			_, err := test.OCM(t, test.WithArgs(args...), test.WithOutput(&out))
+			r.NoError(err, "failed to run version")
+			r.Contains(out.String(), "Open Component Model v2")
+			r.Contains(out.String(), "(devel)")
+		})
 	}
-	r.True(found, "expected to find gitVersion in log entries")
+
+	t.Run("legacyjson", func(t *testing.T) {
+		r := require.New(t)
+		var out bytes.Buffer
+		_, err := test.OCM(t, test.WithArgs("version", "--output", "legacyjson"), test.WithOutput(&out))
+		r.NoError(err, "failed to run version --format legacyjson")
+
+		var info struct {
+			GitVersion string `json:"gitVersion"`
+		}
+		r.NoError(json.Unmarshal(out.Bytes(), &info))
+		r.Equal("(devel)", info.GitVersion)
+	})
 }
 
 func Test_Download_Resource(t *testing.T) {
