@@ -28,13 +28,10 @@ task test
 ## Breaking API Changes
 
 If you change a public API in a package (e.g., `runtime`), other packages that depend on it will fail immediately in
-CI since they are all part of the same module. Fix all call sites in the same PR.
+CI since they are all part of the same module, including cli and controller. Fix all call sites in the same PR.
 
 Mark breaking changes by adding `!` to the PR title (e.g., `feat!: rename Foo to Bar`) so CI applies the
 `!BREAKING-CHANGE!` label.
-
-The CLI and controller depend on the published monolithic module version. They will pick up your changes after the next
-release (see [Releasing](#releasing)).
 
 **Always run `task test` from the repository root** before submitting a PR. This runs tests across all modules and
 catches breakage in dependent modules early.
@@ -108,14 +105,11 @@ Generated files follow the naming convention `zz_generated.deepcopy.go`.
 
 ## Releasing
 
-The library is released as a single unit using the
-[Release Go Bindings](../../.github/workflows/release-go-bindings.yaml) workflow, which is triggered manually via
-`workflow_dispatch` in the GitHub Actions UI.
+The bindings ship together with the CLI and the controller in lockstep. One run of the
+[Release](../../.github/workflows/release.yml) workflow produces three GPG-signed tags on the same commit:
+`v<major>.<minor>.<patch>` (the GitHub release), `bindings/go/v<major>.<minor>.<patch>` (the Go module tag), and
+`website/v<major>.<minor>.<patch>` (the versioned docs tag).
 
-The workflow computes the next version from the latest existing tag, generates a changelog from commits
-touching `bindings/go/`, and creates an annotated Git tag at `bindings/go/v<major>.<minor>.<patch>`.
-
-If your change affects the public API of a published package that external consumers depend on,
-coordinate with the maintainers to ensure a release is published after your PR is merged. Both the CLI and the
-controller reference the bindings module by version in their `go.mod` files and can only pick up your changes once a new
-tag exists.
+Releases are cut from `releases/vX.Y` branches by the release responsible: first a release candidate, then promotion
+to the final version on the same commit. The changelog is generated from conventional commits. For the full process,
+see the [release process](../../RELEASE_PROCESS.md).
