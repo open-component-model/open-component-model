@@ -105,7 +105,8 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (runtime
 	}
 
 	if _, ok := creds.(*v1.DirectCredentials); ok {
-		slog.Warn("resolved credentials for identity using direct credential resolution, consider configuring a CredentialTypeSchemeProvider", "identity", identity.String())
+		slog.Warn("resolved credentials for identity using direct credentials, consider migrating to typed credentials. "+
+			"Follow our migration guide for more details: https://ocm.software/docs/how-to/migrate-legacy-credentials/", "identity", identity.String())
 	}
 
 	return creds, nil
