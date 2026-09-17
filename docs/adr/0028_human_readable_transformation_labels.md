@@ -1,4 +1,4 @@
-# ADR 0023: Human-Readable Labels for Transformation Nodes
+# ADR 0028: Human-Readable Labels for Transformation Nodes
 
 * **Status**: proposed
 * **Deciders**: jakobmoellerdev

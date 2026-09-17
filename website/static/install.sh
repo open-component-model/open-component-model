@@ -212,17 +212,17 @@ verify_binary() {
     fi
 }
 
-# Setup permissions and move binary
+# Ensure the target directory exists, then move the binary into it
 setup_binary() {
-    chmod 755 "${TMP_BIN}"
     info "Installing ocm to ${BIN_DIR}/ocm"
     tar -xzof "${TMP_BIN}" -C "${TMP_DIR}"
+    chmod 755 "${TMP_DIR}/ocm"
 
-    local CMD_MOVE="mv -f \"${TMP_DIR}/ocm\" \"${BIN_DIR}\""
-    if [[ -w "${BIN_DIR}" ]]; then
-        eval "${CMD_MOVE}"
+    if mkdir -p "${BIN_DIR}" 2>/dev/null && [[ -w "${BIN_DIR}" ]]; then
+        mv -f "${TMP_DIR}/ocm" "${BIN_DIR}/ocm"
     else
-        eval "sudo ${CMD_MOVE}"
+        sudo mkdir -p "${BIN_DIR}"
+        sudo mv -f "${TMP_DIR}/ocm" "${BIN_DIR}/ocm"
     fi
 }
 

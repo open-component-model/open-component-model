@@ -80,11 +80,13 @@ configurations:
 
 ## Troubleshooting
 
-### Requests hang for 30 seconds before failing
+### Large downloads fail with `context deadline exceeded`
 
-**Cause:** No HTTP config in `.ocmconfig`; the built-in 30-second default applies.
+**Cause:** A configured end-to-end `timeout` also limits reading response
+bodies and may be too short for large artifacts.
 
-**Fix:** Add a `http.config.ocm.software/v1alpha1` block with a `timeout` appropriate for your network.
+**Fix:** Increase `timeout` or set it to `0s` to use the unlimited default.
+Connection-phase limits remain independently configurable.
 
 ### `invalid http configuration: invalid value for timeout: -5s`
 
