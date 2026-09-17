@@ -264,6 +264,152 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 **Fix:** Either remove `keyFingerprint` from the verifier (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
 
 {{< /tab >}}
+{{< tab "Notation" >}}
+
+Verify a [Notary Project Notation]({{< relref "docs/tutorials/signing/notation.md" >}}) signature using a trusted CA certificate configured in `.ocmconfig`. Verification needs the CA certificate the signer's certificate chain terminates at, supplied via `NotationCredentials` — there is no system trust-root fallback. With Sigstore (other tabs) you don't install a CA certificate at all — you just declare which identity you trust.
+
+<!-- markdownlint-disable-next-line MD024 -->
+## You'll end up with
+
+- Confidence that a Notation-signed component version is authentic and hasn't been tampered with
+
+**Estimated time:** ~3 minutes
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Prerequisites
+
+- [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
+- [Verification credentials configured]({{< relref "configure-signing-credentials.md" >}}) with the trusted CA certificate
+- A Notation-signed component version (see the [Sign Component Versions]({{< relref "sign-component-version.md" >}}) how-to, Notation tab)
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Steps
+
+{{< steps >}}
+
+{{< step >}}
+
+### Point `.ocmconfig` at the trusted CA and the Notation verifier
+
+If you signed locally, the same `.ocmconfig` you wrote on the sign page already works — skip to the next step.
+
+If you're verifying a signature **someone else** produced, follow [How-To: Configure Signing Credentials → Notation]({{< relref "configure-signing-credentials.md" >}}) using only the signer's CA certificate (`trustedCACertificatesPEMFile`); the `privateKeyPEMFile` and `certificateChainPEMFile` entries are not needed for verification.
+
+Add a `verifier` to the same `signing.config.ocm.software/v1alpha1` entry you created as the signer in the [sign how-to → Notation tab]({{< relref "sign-component-version.md" >}}). RSA is the default when no verifier is configured, so this is what tells `ocm verify` to use Notation:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: NotationSigningConfiguration/v1alpha1
+  verifier:
+    type: NotationVerificationConfiguration/v1alpha1                     # added
+```
+
+The consumer entry carrying the trust anchor looks like:
+
+```yaml
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: Notation/v1
+      signature: default
+    credentials:
+    - type: NotationCredentials/v1
+      trustedCACertificatesPEMFile: /path/to/trusted-ca.pem
+```
+
+{{< callout context="note" >}}
+Two optional fields sharpen the check. `trustedIdentities` pins the signer identity with the Notary Project trusted-identity syntax — the default (`["*"]`) trusts any identity that chains to a trusted CA:
+
+```yaml
+  verifier:
+    type: NotationVerificationConfiguration/v1alpha1
+    trustedIdentities:
+      - "x509.subject: CN=acme.org,O=Acme,C=US"
+```
+
+`verificationLevel` controls how strictly Notation evaluates the signature — `strict` (the default), `permissive`, or `audit`.
+{{< /callout >}}
+
+{{< /step >}}
+
+{{< step >}}
+
+### Verify the component version
+
+Run the verify command. The Notation handler comes from the config entry you just added, and the trust anchor from the `NotationCredentials` entry.
+
+```bash
+ocm verify cv --config ./.ocmconfig \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+**Remote OCI registry:**
+
+```bash
+ocm verify cv --config ./.ocmconfig \
+  ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
+```
+
+<details>
+<summary>Expected output</summary>
+
+```text
+time=2026-05-20T15:35:18.412+02:00 level=INFO msg="verifying signature" name=default
+time=2026-05-20T15:35:18.951+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"
+```
+
+</details>
+
+The command exits with status code `0` on success.
+
+{{< /step >}}
+
+{{< step >}}
+
+### Verify a specific signature (optional)
+
+If the component carries multiple signatures (e.g. a Notation signature alongside an RSA one), select the one to verify by name:
+
+```bash
+ocm verify cv --config ./.ocmconfig \
+  --signature prod \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+Without `--signature`, **every** signature on the descriptor is verified. Configuration and credentials are resolved separately for each one, under that signature's own name.
+
+{{< /step >}}
+{{< /steps >}}
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Troubleshooting
+
+### Symptom: `SIGNATURE VERIFICATION FAILED: notation verify blob: ...`
+
+**Cause:** The trusted CA in `.ocmconfig` doesn't match the signer's certificate chain — most often because `trustedCACertificatesPEMFile` points at a different CA than the one that issued the signing certificate, or the CA was rotated after signing. There is no system trust-root fallback: if the chain doesn't terminate at a certificate you supplied, verification fails.
+
+**Fix:** Point `trustedCACertificatesPEMFile` at the CA that issued the signing certificate. You can read the issuer from the embedded chain:
+
+```bash
+ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -o yaml \
+  | yq '.[].signatures[]? | select(.signature.algorithm == "Notation/v1alpha1") | .signature.value' \
+  | head -1 | base64 -d | jq -r '.x5c[]' | base64 -d | openssl x509 -noout -subject -issuer
+```
+
+### Symptom: `SIGNATURE VERIFICATION FAILED: trusted CA certificates not found`
+
+**Cause:** The consumer entry carries no `trustedCACertificatesPEMFile` (or `trustedCACertificatesPEM`).
+
+**Fix:** Add the CA certificate file to the `NotationCredentials` entry under the matching `signature` name.
+
+### Symptom: identity mismatch after pinning `trustedIdentities`
+
+**Cause:** The pinned identity doesn't match the signing certificate's subject — often a typo, a field-order difference, or a certificate re-issued with a different DN.
+
+**Fix:** Read the actual subject from the embedded certificate (same recipe as above — copy the `Subject:` line into the `x509.subject:` filter), or drop `trustedIdentities` to accept any identity that chains to the trusted CA.
+
+{{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}
 
 Verify a [Sigstore](https://www.sigstore.dev/) keyless signature made by a person who logged in via a browser. There's no public key to install on this side either — you tell OCM **which identity you trust**, and it checks the signature was made by that identity.

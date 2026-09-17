@@ -188,13 +188,14 @@ A component version can have **multiple signatures** from different parties, ena
 
 ## Supported Signing Algorithms
 
-OCM's `signature.algorithm` field selects between two signing approaches: classical RSA signatures over a long-lived key pair, and [Sigstore](https://www.sigstore.dev/)-based keyless signing, where each signature is made with a fresh, short-lived key bound to your OIDC identity. The two approaches differ not just in cryptography but in their trust model — see [Trust Models](#trust-models) below.
+OCM's `signature.algorithm` field selects between three signing approaches: classical RSA signatures over a long-lived key pair, [Notation](#notation-notary-project) signatures that wrap the signed digest in a standardized Notary Project JWS or COSE envelope verified against a certificate chain, and [Sigstore](https://www.sigstore.dev/)-based keyless signing, where each signature is made with a fresh, short-lived key bound to your OIDC identity. The approaches differ not just in cryptography but in their trust model — see [Trust Models](#trust-models) below.
 
 | Algorithm | Type | Trust Model | Characteristics |
 | --------- | ---- | ----------- | --------------- |
 | RSASSA-PSS (default) | Asymmetric (RSA) | Public key or certificate chain | Probabilistic, stronger security guarantees, recommended for new RSA-based implementations |
 | RSA-PKCS#1 v1.5 | Asymmetric (RSA) | Public key or certificate chain | Deterministic, widely supported, compatible with legacy systems |
 | Sigstore (keyless, early access) | Asymmetric (ECDSA, ephemeral) | OIDC identity | Short-lived certificate from Fulcio bound to your OIDC identity, transparency-log entry in Rekor; no long-lived keys to manage |
+| Notation (Notary Project) | Asymmetric (X.509), Notary Project JWS/COSE envelope | Certificate chain to a trusted CA | Standardized Notary Project envelope (JWS default or COSE); in-process via notation-go; trust anchor is a CA supplied via credentials |
 
 To override the default signing algorithm or encoding policy, add a `signing.config.ocm.software/v1alpha1` entry to your [`.ocmconfig`]({{< relref "configure-multiple-credentials.md" >}}) and put the signer under its `signer` field. See the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
 The signer configures only the algorithm and encoding policy; credentials are always resolved separately from the credentials configuration.
@@ -315,6 +316,25 @@ For how this changes what verifiers pin, see [Identity-Based Trust](#identity-ba
 Sigstore (keyless) signing is currently being rolled out and we are awaiting feedback. The interface may evolve based on that feedback.
 {{< /callout >}}
 
+### Notation (Notary Project)
+
+Notation signing produces a standardized [Notary Project](https://github.com/notaryproject) signature envelope — JWS (`application/jose+json`, the default) or COSE (`application/cose`) — instead of raw signature bytes.
+The signer supplies a private key and an X.509 certificate chain (leaf + intermediates) via credentials; the certificate is embedded in the envelope
+and must carry the `codeSigning` extended key usage.
+
+Verification is in-process and enforces the Notary Project trust policy: the signer's certificate chain must terminate at a trusted CA
+supplied via credentials (there is no system-root fallback), and optionally match the trusted identities configured for the verifier.
+This shares the PEM certificate-chain trust model — the root CA is the trust anchor — but standardizes the signature format and trust decision.
+
+```yaml
+signature:
+  algorithm: Notation/v1alpha1
+  mediaType: application/jose+json
+  value: <base64-encoded JWS envelope>
+```
+
+For key generation and a full walkthrough, see [Tutorial: Notation (Notary Project)]({{< relref "docs/tutorials/signing/notation.md" >}}).
+
 ## Trust Models
 
 The signing approach you choose determines how verifiers establish trust in a signature. RSA-based algorithms support two models depending on encoding policy (key pinning or certificate chain); Sigstore brings a third, identity-based model. OCM supports three trust models in total.
@@ -357,6 +377,8 @@ The signer authenticates to an OIDC identity provider; Fulcio binds that identit
 | Signature is self-contained | No (public key needed separately) | Yes | Yes (bundle includes cert + log proof) |
 | Audit trail | Build your own | Build your own | Built-in (Rekor) |
 | Recommended for | Simple setups, personal projects | Enterprise environments with existing PKI | Teams that want to skip key management entirely |
+
+The **Notation** approach shares the PEM certificate-chain trust model — a CA-issued key pair with the root CA as the trust anchor — but wraps the signature in a Notary Project JWS or COSE envelope and enforces the Notary Project trust policy (chain terminates at the trusted CA, plus optional trusted-identity matching) on verify. Choose it when you want PEM-style certificate trust with a standardized, interoperable signature format.
 
 For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/tutorials/signing/pem.md" >}}).
 
