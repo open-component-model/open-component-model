@@ -207,6 +207,29 @@ verify component-version ./repo//ocm.software/cli:0.12.0 --config ./sigstore-ver
 
 # Verify a specific signature
 verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
+
+## Example Credential Config (TSA timestamp verification)
+#
+# If a signature includes an RFC 3161 timestamp, the verifier checks it automatically.
+# To enable full PKCS#7 chain verification of the timestamp token, supply the TSA's
+# root CA certificate via the credential graph with a TSA/v1alpha1 identity.
+# Without root certificates, only structural validity is checked.
+#
+# The TSA URL stored in the signed descriptor is used as a hint for credential
+# lookup, enabling URL-specific matching.
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: TSA/v1alpha1
+          hostname: timestamp.digicert.com
+          scheme: https
+        credentials:
+        - type: Credentials/v1
+          properties:
+            root_certs_pem_file: /path/to/digicert-tsa-root.pem
 ```
 
 ### Options
