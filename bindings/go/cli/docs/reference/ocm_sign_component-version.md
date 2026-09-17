@@ -225,6 +225,8 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
                                 (must be one of [json yaml]) (default yaml)
       --signature string        name of the signature to create or update. defaults to "default" (default "default")
       --signer-spec string      DEPRECATED: no longer supported, configure the signer in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "signer")
+      --tsa                     request an RFC 3161 timestamp from a TSA server (default: https://timestamp.digicert.com)
+      --tsa-url string          custom TSA server URL (implies --tsa)
 ```
 
 ### Options inherited from parent commands
