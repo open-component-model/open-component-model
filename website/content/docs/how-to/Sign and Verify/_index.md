@@ -16,4 +16,5 @@ These guides walk you through the complete signing workflow — covering both ke
 - **Generate Signing Keys** — Create RSA key pairs for signing and verification
 - **Configure Signing Credentials** — Set up OCM to use your keys
 - **Sign Component Versions** — Attach cryptographic signatures to component versions, using either RSA or Sigstore (keyless)
+- **Attest a Component Version (cosign-verifiable)** — Attach a cosign-verifiable SLSA attestation as an OCI referrer, signed with an ECDSA key
 - **Verify Component Versions** — Validate signatures to ensure authenticity and integrity, for either RSA or Sigstore (keyless)

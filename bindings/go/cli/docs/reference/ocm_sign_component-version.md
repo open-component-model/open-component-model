@@ -215,16 +215,18 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
 ### Options
 
 ```
-      --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
-      --dry-run                 compute signature but do not persist it to the repository
-      --force                   overwrite existing signatures under the same name
-      --hash string             hash algorithm to use (SHA256, SHA512) (default "SHA-256")
-  -h, --help                    help for component-version
-      --normalisation string    normalisation algorithm to use (default jsonNormalisation/v4alpha1) (default "jsonNormalisation/v4alpha1")
-  -o, --output enum             output format of the resulting signature
-                                (must be one of [json yaml]) (default yaml)
-      --signature string        name of the signature to create or update. defaults to "default" (default "default")
-      --signer-spec string      DEPRECATED: no longer supported, configure the signer in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "signer")
+      --concurrency-limit int                             maximum amount of parallel requests to the repository for resolving component versions (default 4)
+      --dry-run                                           compute signature but do not persist it to the repository
+      --force                                             overwrite existing signatures under the same name
+      --hash string                                       hash algorithm to use (SHA256, SHA512) (default "SHA-256")
+  -h, --help                                              help for component-version
+      --normalisation string                              normalisation algorithm to use (default jsonNormalisation/v4alpha1) (default "jsonNormalisation/v4alpha1")
+  -o, --output enum                                       output format of the resulting signature
+                                                          (must be one of [json yaml]) (default yaml)
+      --predicate string                                  path to an in-toto predicate JSON file. When set, a cosign-compatible SLSA attestation is built from this predicate, signed with an ECDSA P-256 key resolved from the OCM credential graph, and attached to the component version as a discoverable OCI referrer (instead of a component-descriptor signature).
+      --predicate-type cosign verify-attestation --type   in-toto predicate type of the attestation (also the value passed to cosign verify-attestation --type) (default "https://slsa.dev/provenance/v0.2")
+      --signature string                                  name of the signature to create or update. defaults to "default" (default "default")
+      --signer-spec string                                DEPRECATED: no longer supported, configure the signer in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "signer")
 ```
 
 ### Options inherited from parent commands
