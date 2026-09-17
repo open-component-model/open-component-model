@@ -5,15 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"sort"
 
-	"github.com/Masterminds/semver/v3"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 // GetEffectiveConfig returns the effective configuration for the given config
@@ -98,72 +97,64 @@ func RegexpFilter(regex string) (func(string) bool, error) {
 	}, nil
 }
 
-func GetLatestValidVersion(ctx context.Context, versions []string, semvers string, filter ...func(string) bool) (*semver.Version, error) {
+// GetLatestValidVersion returns the newest version satisfying the given semver
+// constraint, ordered by the supplied versioning registry. An optional filter
+// pre-selects candidate versions.
+func GetLatestValidVersion(ctx context.Context, registry *versioning.Registry, versions []string, semvers string, filter ...func(string) bool) (string, error) {
 	logger := log.FromContext(ctx)
-	constraint, err := semver.NewConstraint(semvers)
-	if err != nil {
-		return nil, err
-	}
 
-	var f func(string) bool
-	filtered := versions
-	if len(filter) > 0 {
-		f = filter[0]
+	candidates := versions
+	if len(filter) > 0 && filter[0] != nil {
+		f := filter[0]
+		candidates = make([]string, 0, len(versions))
 		for _, version := range versions {
 			if f(version) {
-				filtered = append(filtered, version)
+				candidates = append(candidates, version)
 			}
 		}
 	}
 
-	var validVersions semver.Collection
-	for _, version := range filtered {
-		if v, err := semver.NewVersion(version); err == nil {
-			validVersions = append(validVersions, v)
-		} else {
-			logger.Info(fmt.Sprintf("Invalid version: %s", version))
-		}
+	matched, err := registry.Filter(candidates, semvers)
+	if err != nil {
+		return "", err
+	}
+	if len(matched) == 0 {
+		return "", fmt.Errorf("no valid versions found for constraint %s", semvers)
+	}
+	if len(matched) < len(candidates) {
+		logger.Info(fmt.Sprintf("filtered %d version(s) not satisfying constraint %s", len(candidates)-len(matched), semvers))
 	}
 
-	var matchedVersions semver.Collection
-	for _, validVersion := range validVersions {
-		if constraint.Check(validVersion) {
-			matchedVersions = append(matchedVersions, validVersion)
-		}
-	}
-
-	sort.Sort(matchedVersions)
-
-	if len(matchedVersions) == 0 {
-		return nil, fmt.Errorf("no valid versions found for constraint %s", semvers)
-	}
-
-	return matchedVersions[len(matchedVersions)-1], nil
+	registry.SortDescending(matched)
+	return matched[0], nil
 }
 
 // ApplyDowngradePolicy returns the candidate version unless it is older than
 // the previously reconciled version and Spec.DowngradePolicy denies it.
-func ApplyDowngradePolicy(component *v1alpha1.Component, candidate *semver.Version) (string, error) {
+func ApplyDowngradePolicy(registry *versioning.Registry, component *v1alpha1.Component, candidate string) (string, error) {
 	// we didn't yet reconcile anything, return whatever the retrieved version is.
-	if component.Status.Component.Version == "" {
-		return candidate.Original(), nil
+	current := component.Status.Component.Version
+	if current == "" {
+		return candidate, nil
 	}
 
-	currentSemver, err := semver.NewVersion(component.Status.Component.Version)
+	if !registry.Valid(current) {
+		return "", reconcile.TerminalError(fmt.Errorf("failed to check reconciled version: %q is not a valid version", current))
+	}
+	c, err := registry.Compare(candidate, current)
 	if err != nil {
 		return "", reconcile.TerminalError(fmt.Errorf("failed to check reconciled version: %w", err))
 	}
-
-	if candidate.GreaterThanEqual(currentSemver) {
-		return candidate.Original(), nil
+	if c >= 0 {
+		return candidate, nil
 	}
 
 	switch component.Spec.DowngradePolicy {
 	case v1alpha1.DowngradePolicyDeny:
 		return "", reconcile.TerminalError(fmt.Errorf("component version cannot be downgraded from version %s "+
-			"to version %s", currentSemver.Original(), candidate.Original()))
+			"to version %s", current, candidate))
 	case v1alpha1.DowngradePolicyAllow:
-		return candidate.Original(), nil
+		return candidate, nil
 	default:
 		return "", reconcile.TerminalError(errors.New("unknown downgrade policy: " + string(component.Spec.DowngradePolicy)))
 	}

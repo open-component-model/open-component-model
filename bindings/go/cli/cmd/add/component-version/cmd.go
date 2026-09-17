@@ -354,6 +354,11 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		graph:              credentialGraph,
 	}
 
+	registry, err := ocm.RegistryFromConfig(config)
+	if err != nil {
+		return fmt.Errorf("could not build versioning registry: %w", err)
+	}
+
 	opts := constructor.Options{
 		TargetRepositoryProvider:            instance,
 		ResourceRepositoryProvider:          instance,
@@ -366,6 +371,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		ConcurrencyLimit:                    concurrencyLimit,
 		ComponentVersionConflictPolicy:      ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 		ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicy(evCopyPolicy).ToConstructorPolicy(),
+		VersioningRegistry:                  registry,
 	}
 	if !skipReferenceDigestProcessing {
 		opts.ResourceDigestProcessorProvider = instance

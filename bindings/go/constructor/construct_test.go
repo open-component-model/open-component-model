@@ -501,14 +501,14 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 			name:           "Invalid component version",
 			policy:         ComponentVersionConflictReplace,
 			existing:       false,
-			expectError:    false,
+			expectError:    true,
 			expectReplaced: false,
 			components: []*constructorruntime.Component{
 				{
 					ComponentMeta: constructorruntime.ComponentMeta{
 						ObjectMeta: constructorruntime.ObjectMeta{
 							Name:    "test-component",
-							Version: "", // Empty version
+							Version: "", // Empty version is rejected by version validation
 						},
 					},
 				},
@@ -803,8 +803,8 @@ func TestConstructComponent_DuplicateResourceIdentity(t *testing.T) {
 						Version: "1.0.0",
 					},
 				},
-				Type:         "ociImage",
-				Relation:     constructorruntime.ExternalRelation,
+				Type:          "ociImage",
+				Relation:      constructorruntime.ExternalRelation,
 				AccessOrInput: constructorruntime.AccessOrInput{Access: access},
 			},
 			{
@@ -814,8 +814,8 @@ func TestConstructComponent_DuplicateResourceIdentity(t *testing.T) {
 						Version: "1.0.0",
 					},
 				},
-				Type:         "ociImage",
-				Relation:     constructorruntime.ExternalRelation,
+				Type:          "ociImage",
+				Relation:      constructorruntime.ExternalRelation,
 				AccessOrInput: constructorruntime.AccessOrInput{Access: access},
 			},
 		},

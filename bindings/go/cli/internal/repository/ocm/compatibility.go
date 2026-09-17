@@ -46,12 +46,18 @@ func NewComponentRepositoryResolver(
 		return nil, err
 	}
 
+	registry, err := RegistryFromConfig(options.config)
+	if err != nil {
+		return nil, err
+	}
+
 	providerOpts := resolvers.Options{
-		RepoProvider:      repoProvider,
-		CredentialGraph:   credentialGraph,
-		PathMatchers:      pathMatchers,
-		FallbackResolvers: fallbackResolvers,
-		ComponentPatterns: options.componentPatterns,
+		RepoProvider:       repoProvider,
+		CredentialGraph:    credentialGraph,
+		PathMatchers:       pathMatchers,
+		FallbackResolvers:  fallbackResolvers,
+		ComponentPatterns:  options.componentPatterns,
+		VersioningRegistry: registry,
 	}
 
 	return resolvers.New(ctx, providerOpts, options.repository)
