@@ -233,6 +233,7 @@ downloadhandlers
 dpop
 dry-run
 dsl
+dsse
 dup
 dups
 dynaml

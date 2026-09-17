@@ -41,7 +41,7 @@ attestation whose subject digest does not match the artifact being verified.
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "docs/getting-started/ocm-cli-installation.md" >}})
-- [`cosign`](https://docs.sigstore.dev/system_config/installation/) (for verification)
+- [`cosign`](https://github.com/sigstore/cosign#installation) (for verification)
 - [`oras`](https://oras.land/docs/installation) (for discovery)
 - An **ECDSA P-256** key pair. Generate one with OpenSSL:
 
