@@ -25,6 +25,7 @@ change in a future release depending on user feedback to offer a better UX.
 - Retrieve both with one command, `ocm download resource --sbom`
 - Collect the SBOMs of an entire component version with a small script
 - Scan the result with Trivy
+- Understand what happens during transferring a component with attached SBOMs
 
 **Estimated time:** ~25 minutes
 

@@ -69,7 +69,7 @@ func (repo *Repository) DiscoverLocalSBOM(ctx context.Context, component, versio
 	}
 
 	if !attestation.IsIndex(local.MediaType) {
-		return nil, fmt.Errorf("the local blob has media type %q and is not an image index: %w", local.MediaType, ocmrepository.ErrSBOMNotInspectable)
+		return nil, fmt.Errorf("the local blob has media type %q and is not an image index", local.MediaType)
 	}
 
 	// LocalReference is always a digest, and this is OCI land, so we should be okay with doing this here.

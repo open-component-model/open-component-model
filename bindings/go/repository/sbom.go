@@ -3,7 +3,6 @@ package repository
 import (
 	"cmp"
 	"context"
-	"errors"
 	goruntime "runtime"
 	"strings"
 
@@ -31,9 +30,6 @@ type SBOMDiscoverer interface {
 	// authenticating against the repository with the given credentials.
 	DiscoverSBOM(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, opts ...SBOMOption) ([]SBOM, error)
 }
-
-// ErrSBOMNotInspectable is used if the resource doesn't
-var ErrSBOMNotInspectable = errors.New("not inspectable")
 
 // LocalSBOMDiscoverer this is an ability to discover SBOMs for local blobs.
 // This follows the GetLocalResource pattern of Interface Composability.

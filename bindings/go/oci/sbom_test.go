@@ -199,7 +199,8 @@ func TestRepository_DiscoverLocalSBOM(t *testing.T) {
 		repo := localBlobComponentVersion(t, component, version, "application/spdx+json")
 
 		_, err := repo.DiscoverLocalSBOM(t.Context(), component, version, runtime.Identity{"name": "image"})
-		require.ErrorIs(t, err, repository.ErrSBOMNotInspectable)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "is not an image index")
 		assert.Contains(t, err.Error(), "application/spdx+json")
 	})
 

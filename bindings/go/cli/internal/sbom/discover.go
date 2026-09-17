@@ -154,11 +154,8 @@ func fromAttestations(ctx context.Context, req Request) ([]repository.SBOM, erro
 			return nil, notInspectable(errors.New("repository does not support local sbom discovery"))
 		}
 		sboms, err := req.DiscoverLocal.DiscoverLocalSBOM(ctx, req.Descriptor.Component.Name, req.Descriptor.Component.Version, targetIdentity, req.Options...)
-		if errors.Is(err, repository.ErrSBOMNotInspectable) {
-			return nil, notInspectable(err)
-		}
 		if err != nil {
-			return nil, err
+			return nil, notInspectable(err)
 		}
 		req.Logger.Info("found sboms attached to the local artifact of the requested resource",
 			slog.String("resource", targetIdentity.String()),
