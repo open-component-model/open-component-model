@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	credv1 "ocm.software/open-component-model/bindings/go/npm/spec/credentials/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // acceptMetadata asks for the abbreviated packument, which carries the dist
@@ -20,8 +19,8 @@ const acceptMetadata = "application/vnd.npm.install-v1+json; q=1.0, application/
 
 // get performs a GET for a registry metadata document, applying credentials when
 // configured.
-func get(ctx context.Context, rawURL string, o *option) (*http.Response, error) {
-	return do(ctx, rawURL, o, true, func(req *http.Request) {
+func get(ctx context.Context, rawURL string, creds *credv1.NPMCredentials, opts Options) (*http.Response, error) {
+	return do(ctx, rawURL, creds, opts, true, func(req *http.Request) {
 		req.Header.Set("Accept", acceptMetadata)
 	})
 }
@@ -30,17 +29,17 @@ func get(ctx context.Context, rawURL string, o *option) (*http.Response, error) 
 // tarball is served by the registry host itself: the URL comes out of a metadata
 // document, so a registry could otherwise point the download at a third-party
 // host and collect the credentials configured for the registry.
-func getTarball(ctx context.Context, rawURL, registry string, o *option) (*http.Response, error) {
+func getTarball(ctx context.Context, rawURL, registry string, creds *credv1.NPMCredentials, opts Options) (*http.Response, error) {
 	trusted, err := sameHost(registry, rawURL)
 	if err != nil {
 		return nil, err
 	}
-	if !trusted && o.Credentials != nil {
+	if !trusted && creds != nil {
 		slog.WarnContext(ctx, "not sending registry credentials to a tarball host that differs from the registry host",
 			"registry", registry, "tarball", rawURL)
 	}
 
-	return do(ctx, rawURL, o, trusted, func(req *http.Request) {
+	return do(ctx, rawURL, creds, opts, trusted, func(req *http.Request) {
 		// Without this the transport asks for gzip and transparently decompresses
 		// the response. A tarball is already gzip, so a registry that labels it
 		// Content-Encoding: gzip would have a layer stripped here and the bytes
@@ -51,7 +50,7 @@ func getTarball(ctx context.Context, rawURL, registry string, o *option) (*http.
 	})
 }
 
-func do(ctx context.Context, rawURL string, o *option, withCredentials bool, prepare func(*http.Request)) (*http.Response, error) {
+func do(ctx context.Context, rawURL string, creds *credv1.NPMCredentials, opts Options, withCredentials bool, prepare func(*http.Request)) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating HTTP request: %w", err)
@@ -59,14 +58,12 @@ func do(ctx context.Context, rawURL string, o *option, withCredentials bool, pre
 
 	prepare(req)
 
-	client := o.client()
-	if withCredentials {
-		if err := applyCredentials(ctx, req, o.Credentials); err != nil {
+	client := opts.client()
+	if withCredentials && creds != nil {
+		if err := applyCredentials(ctx, req, creds); err != nil {
 			return nil, fmt.Errorf("error applying credentials: %w", err)
 		}
-		if o.Credentials != nil {
-			client = refusingDowngrade(client)
-		}
+		client = refusingDowngrade(client)
 	}
 
 	resp, err := client.Do(req)
@@ -136,7 +133,7 @@ func refusingDowngrade(client *http.Client) *http.Client {
 	return &clone
 }
 
-// applyCredentials applies OCM credentials to the request. Supported credentials:
+// applyCredentials applies npm credentials to the request. Supported credentials:
 //   - username + password: HTTP basic authentication
 //   - token: bearer token in the Authorization header, the credential an
 //     "npm login" stores as _authToken
@@ -146,18 +143,7 @@ func refusingDowngrade(client *http.Client) *http.Client {
 // registry: a configuration carrying both is a v1 configuration whose token was
 // left over from a login, and honouring the token instead would turn a working
 // setup into a 401.
-//
-// Both NPMCredentials/v1 and generic Credentials/v1 are accepted.
-func applyCredentials(ctx context.Context, req *http.Request, credentials runtime.Typed) error {
-	if credentials == nil {
-		return nil
-	}
-
-	creds, err := credv1.ConvertToNPMCredentials(credentials)
-	if err != nil {
-		return fmt.Errorf("error converting credentials: %w", err)
-	}
-
+func applyCredentials(ctx context.Context, req *http.Request, creds *credv1.NPMCredentials) error {
 	// A user name without a password cannot authenticate anywhere; sending it
 	// anyway turns a misconfiguration into a 401 from the registry.
 	if creds.Username != "" && creds.Password == "" && creds.Token == "" {

@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -20,6 +21,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	directv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/npm/repository"
 	accessv1 "ocm.software/open-component-model/bindings/go/npm/spec/access/v1"
@@ -49,13 +51,30 @@ func tgz(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-// newRegistry serves the version document and tarball of a single package.
-func newRegistry(t *testing.T) (string, []byte) {
+// basicAuth guards a registry with HTTP basic authentication.
+func basicAuth(user, password string) func(*http.Request) bool {
+	return func(req *http.Request) bool {
+		gotUser, gotPassword, ok := req.BasicAuth()
+		return ok && gotUser == user && gotPassword == password
+	}
+}
+
+// newRegistry serves the version document and tarball of a single package. When
+// auth is given, every request has to pass it.
+func newRegistry(t *testing.T, auth ...func(*http.Request) bool) (string, []byte) {
 	t.Helper()
 
 	tarball := tgz(t)
 	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		for _, guard := range auth {
+			if !guard(req) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+		mux.ServeHTTP(w, req)
+	}))
 	t.Cleanup(srv.Close)
 
 	sum := sha512.Sum512(tarball)
@@ -118,7 +137,6 @@ func TestDownloadResource(t *testing.T) {
 
 	b, err := repo.DownloadResource(t.Context(), resource(t, npmAccess(registryURL, pkg, version)), nil)
 	r.NoError(err)
-	t.Cleanup(func() { r.NoError(b.(io.Closer).Close()) })
 
 	rc, err := b.ReadCloser()
 	r.NoError(err)
@@ -176,6 +194,39 @@ func TestInvalidResources(t *testing.T) {
 		_, err := repo.DownloadResource(t.Context(), resource(t, npmAccess("https://registry.npmjs.org", pkg, "latest")), nil)
 		r.ErrorContains(err, "invalid npm access spec")
 	})
+
+	t.Run("unsupported credentials", func(t *testing.T) {
+		r := require.New(t)
+
+		_, err := repo.DownloadResource(t.Context(), resource(t, npmAccess("https://registry.npmjs.org", pkg, version)),
+			&runtime.Raw{Type: runtime.NewUnversionedType("NotCredentials")})
+		r.ErrorContains(err, "unsupported npm credential type")
+	})
+}
+
+// TestDownloadResourceWithCredentials covers a legacy .ocmconfig that configures
+// npm credentials as generic Credentials/v1 properties: the repository converts
+// them before the download applies them.
+func TestDownloadResourceWithCredentials(t *testing.T) {
+	r := require.New(t)
+
+	registryURL, tarball := newRegistry(t, basicAuth("user", "secret"))
+	repo := newRepository(t)
+
+	b, err := repo.DownloadResource(t.Context(), resource(t, npmAccess(registryURL, pkg, version)),
+		&directv1.DirectCredentials{
+			Type:       runtime.NewVersionedType(directv1.CredentialsType, directv1.Version),
+			Properties: map[string]string{"username": "user", "password": "secret"},
+		})
+	r.NoError(err)
+
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(rc.Close()) }()
+
+	data, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.Equal(tarball, data)
 }
 
 func TestUploadResourceIsNotSupported(t *testing.T) {
@@ -189,7 +240,8 @@ func TestUploadResourceIsNotSupported(t *testing.T) {
 
 func TestProcessResourceDigest(t *testing.T) {
 	registryURL, tarball := newRegistry(t)
-	repo := newRepository(t)
+	tempDir := t.TempDir()
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
 
 	want := sha256.Sum256(tarball)
 	wantHex := hex.EncodeToString(want[:])
@@ -203,6 +255,11 @@ func TestProcessResourceDigest(t *testing.T) {
 		r.Equal("SHA-256", res.Digest.HashAlgorithm)
 		r.Equal("genericBlobDigest/v1", res.Digest.NormalisationAlgorithm)
 		r.Equal(wantHex, res.Digest.Value)
+
+		// the tarball is only read here, so nothing of it stays in the temp folder
+		entries, err := os.ReadDir(tempDir)
+		r.NoError(err)
+		r.Empty(entries)
 	})
 
 	t.Run("verifies a matching digest", func(t *testing.T) {

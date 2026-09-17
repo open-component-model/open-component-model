@@ -21,6 +21,10 @@ import (
 	"os"
 	"slices"
 	"strings"
+
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	accessv1 "ocm.software/open-component-model/bindings/go/npm/spec/access/v1"
+	credv1 "ocm.software/open-component-model/bindings/go/npm/spec/credentials/v1"
 )
 
 const (
@@ -30,61 +34,36 @@ const (
 	MediaTypeTGZ = "application/x-tgz"
 )
 
-// Request describes the npm package to download.
-type Request struct {
-	// Registry is the base URL of the npm registry.
-	Registry string
-	// Package is the package name, optionally scoped (@scope/name).
-	Package string
-	// Version is the exact version to download.
-	Version string
-}
-
 // Download resolves the version metadata of the requested package, downloads
 // its tarball and returns it as a blob backed by a file on disk. The tarball is
 // streamed rather than buffered, so memory use stays flat regardless of package
-// size; the file is created under the directory given by [WithTempDir] and
-// outlives this call.
+// size; the file is created under [Options.TempDir], outlives this call and is
+// owned by the caller.
 //
 // The tarball is verified against dist.integrity and dist.shasum before the blob
 // is returned, so a blob that reaches the caller has the content the registry
 // published. A checksum mismatch fails the download and removes the file.
-//
-// The returned [Blob] owns that file: callers should [Blob.Close] it once they
-// are done, and an unclosed blob has its file removed when it becomes
-// unreachable.
-func Download(ctx context.Context, req Request, opts ...Option) (*Blob, error) {
-	o := &option{}
-	for _, opt := range opts {
-		opt(o)
-	}
-
-	if req.Registry == "" {
-		return nil, fmt.Errorf("registry is required")
-	}
-	if req.Package == "" {
-		return nil, fmt.Errorf("package is required")
-	}
-	if req.Version == "" {
-		return nil, fmt.Errorf("version is required")
-	}
-
-	if _, err := registryURL(req.Registry); err != nil {
+func Download(ctx context.Context, access *accessv1.NPM, creds *credv1.NPMCredentials, opts Options) (*filesystem.Blob, error) {
+	if err := access.Validate(); err != nil {
 		return nil, err
 	}
 
-	meta, err := resolveVersion(ctx, req, o)
+	if opts.MaxMetadataSize == 0 {
+		opts.MaxMetadataSize = DefaultMaxMetadataSize
+	}
+
+	meta, err := resolveVersion(ctx, access, creds, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	return downloadTarball(ctx, req, meta, o)
+	return downloadTarball(ctx, access, meta, creds, opts)
 }
 
 // downloadTarball streams dist.tarball into a temporary file, hashing it on the
 // way, and fails if a published checksum does not match what was written.
-func downloadTarball(ctx context.Context, req Request, meta Version, o *option) (_ *Blob, err error) {
-	registry, err := registryURL(req.Registry)
+func downloadTarball(ctx context.Context, access *accessv1.NPM, meta Version, creds *credv1.NPMCredentials, opts Options) (_ *filesystem.Blob, err error) {
+	registry, err := registryURL(access.Registry)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +80,7 @@ func downloadTarball(ctx context.Context, req Request, meta Version, o *option) 
 
 	if meta.Deprecated != "" {
 		slog.WarnContext(ctx, "npm registry reports this package version as deprecated",
-			"package", req.Package, "version", req.Version, "message", meta.Deprecated)
+			"package", access.Package, "version", access.Version, "message", meta.Deprecated)
 	}
 
 	check, err := verifierFor(ctx, meta.Dist)
@@ -109,7 +88,7 @@ func downloadTarball(ctx context.Context, req Request, meta Version, o *option) 
 		return nil, err
 	}
 
-	resp, err := getTarball(ctx, tarball.String(), req.Registry, o)
+	resp, err := getTarball(ctx, tarball.String(), access.Registry, creds, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +98,7 @@ func downloadTarball(ctx context.Context, req Request, meta Version, o *option) 
 		return nil, fmt.Errorf("tarball request to %s returned status %d", safeURL(tarball), resp.StatusCode)
 	}
 
-	maxDownloadSize := o.maxDownloadSize()
+	maxDownloadSize := opts.MaxDownloadSize
 
 	// When the server announces the size up front, an oversized tarball is
 	// rejected before any of it is transferred. ContentLength is negative when unknown.
@@ -132,7 +111,7 @@ func downloadTarball(ctx context.Context, req Request, meta Version, o *option) 
 		body = io.LimitReader(resp.Body, maxDownloadSize+1)
 	}
 
-	file, err := os.CreateTemp(o.TempDir, tempFilePattern)
+	file, err := os.CreateTemp(opts.TempDir, tempFilePattern)
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary file for %s: %w", safeURL(tarball), err)
 	}
@@ -166,14 +145,14 @@ func downloadTarball(ctx context.Context, req Request, meta Version, o *option) 
 	if check != nil {
 		if got := hex.EncodeToString(check.hash.Sum(nil)); !slices.Contains(check.expected, got) {
 			return nil, fmt.Errorf("%s mismatch for %s@%s: registry published %s, downloaded tarball has %s",
-				check.name, req.Package, req.Version, strings.Join(check.expected, " or "), got)
+				check.name, access.Package, access.Version, strings.Join(check.expected, " or "), got)
 		}
 	} else {
 		slog.WarnContext(ctx, "npm registry published no checksum for package, tarball content is unverified",
-			"package", req.Package, "version", req.Version, "registry", req.Registry)
+			"package", access.Package, "version", access.Version, "registry", access.Registry)
 	}
 
-	b, err := newBlob(path)
+	b, err := filesystem.GetBlobFromOSPath(path)
 	if err != nil {
 		return nil, fmt.Errorf("error creating blob for %s from %s: %w", safeURL(tarball), path, err)
 	}

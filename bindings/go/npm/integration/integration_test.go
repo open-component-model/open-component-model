@@ -256,7 +256,6 @@ func Test_Integration_NPM(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		t.Cleanup(func() { require.NoError(t, b.(io.Closer).Close()) })
 
 		rc, err := b.ReadCloser()
 		require.NoError(t, err)

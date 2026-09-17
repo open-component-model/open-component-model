@@ -1,10 +1,8 @@
 package access_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -30,6 +28,7 @@ func TestLegacyDocuments(t *testing.T) {
 			obj, err := access.Scheme.NewObject(parsed)
 			r.NoError(err)
 
+			// the documents OCM v1 serialised, in both encodings it used
 			for _, document := range []string{
 				fmt.Sprintf(`{"type":%q,"registry":"https://registry.npmjs.org","package":"@types/node","version":"20.11.5"}`, typ),
 				fmt.Sprintf("type: %s\nregistry: https://registry.npmjs.org\npackage: \"@types/node\"\nversion: 20.11.5\n", typ),
@@ -78,19 +77,4 @@ func TestGeneratedSchemaAliases(t *testing.T) {
 		"package":  "lodash",
 		"version":  "4.17.21",
 	}))
-}
-
-func TestOCMV1SerializedDocument(t *testing.T) {
-	r := require.New(t)
-
-	data, err := os.ReadFile("testdata/ocmv1.json")
-	r.NoError(err)
-
-	var spec v1.NPM
-	r.NoError(access.Scheme.Decode(bytes.NewReader(data), &spec))
-	r.NoError(spec.Validate())
-	r.Equal("npm", spec.Type.String())
-	r.Equal("https://registry.npmjs.org/", spec.Registry)
-	r.Equal("yargs", spec.Package)
-	r.Equal("17.7.2", spec.Version)
 }

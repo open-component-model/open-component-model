@@ -27,10 +27,8 @@
 // one, http.DefaultClient is used, which imposes no timeout.
 //
 // Tarballs are streamed into a file under the configured temp folder rather than
-// buffered, so memory use stays flat regardless of package size. The returned
-// blob owns that file: closing it removes the file, and a blob that is dropped
-// without being closed has its file removed once it becomes unreachable, so
-// downloads do not pile up in a long-running process. There is no size limit by
+// buffered, so memory use stays flat regardless of package size. That file
+// outlives the download and is owned by the caller. There is no size limit by
 // default; [repository.WithMaxDownloadSize] adds one.
 //
 // Credentials are optional and resolved through the NpmRegistry consumer

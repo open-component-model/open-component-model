@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"path"
 	"strings"
+
+	accessv1 "ocm.software/open-component-model/bindings/go/npm/spec/access/v1"
+	credv1 "ocm.software/open-component-model/bindings/go/npm/spec/credentials/v1"
 )
 
 // Dist is the distribution section of an npm version document. It carries the
@@ -76,10 +79,10 @@ func packageVersionURL(registry, pkg, version string) string {
 // (https://github.com/sonatype/nexus-public/issues/224). Any client error on the
 // version URL therefore falls back rather than failing, except one saying the
 // caller is not allowed in, which the packument would answer the same way.
-func resolveVersion(ctx context.Context, req Request, o *option) (Version, error) {
-	versionURL := packageVersionURL(req.Registry, req.Package, req.Version)
+func resolveVersion(ctx context.Context, access *accessv1.NPM, creds *credv1.NPMCredentials, opts Options) (Version, error) {
+	versionURL := packageVersionURL(access.Registry, access.Package, access.Version)
 
-	doc, status, err := getDocument(ctx, versionURL, o)
+	doc, status, err := getDocument(ctx, versionURL, creds, opts)
 	switch {
 	case errors.Is(err, errMetadataTooLarge):
 		return Version{}, err
@@ -88,7 +91,7 @@ func resolveVersion(ctx context.Context, req Request, o *option) (Version, error
 		// 200 with an HTML login page, and the packument is still worth a try.
 		slog.DebugContext(ctx, "version metadata unusable, falling back to the packument", "url", versionURL, "err", err)
 	case status == http.StatusOK:
-		if v, ok := doc.version(req.Version); ok {
+		if v, ok := doc.version(access.Version); ok {
 			return v, nil
 		}
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
@@ -97,9 +100,9 @@ func resolveVersion(ctx context.Context, req Request, o *option) (Version, error
 		return Version{}, fmt.Errorf("version metadata request to %s returned status %d", versionURL, status)
 	}
 
-	packumentURL := packageURL(req.Registry, req.Package)
+	packumentURL := packageURL(access.Registry, access.Package)
 
-	doc, status, err = getDocument(ctx, packumentURL, o)
+	doc, status, err = getDocument(ctx, packumentURL, creds, opts)
 	if err != nil {
 		return Version{}, err
 	}
@@ -107,9 +110,9 @@ func resolveVersion(ctx context.Context, req Request, o *option) (Version, error
 		return Version{}, fmt.Errorf("package metadata request to %s returned status %d", packumentURL, status)
 	}
 
-	v, ok := doc.version(req.Version)
+	v, ok := doc.version(access.Version)
 	if !ok {
-		return Version{}, fmt.Errorf("version %q of package %q not found in registry %s", req.Version, req.Package, req.Registry)
+		return Version{}, fmt.Errorf("version %q of package %q not found in registry %s", access.Version, access.Package, access.Registry)
 	}
 
 	return v, nil
@@ -119,8 +122,8 @@ func resolveVersion(ctx context.Context, req Request, o *option) (Version, error
 // It returns the status code so the caller can decide about a fallback. A
 // syntactically valid body that carries no dist.tarball decodes into an empty
 // document, which the caller treats like a missing version.
-func getDocument(ctx context.Context, url string, o *option) (document, int, error) {
-	resp, err := get(ctx, url, o)
+func getDocument(ctx context.Context, url string, creds *credv1.NPMCredentials, opts Options) (document, int, error) {
+	resp, err := get(ctx, url, creds, opts)
 	if err != nil {
 		return document{}, 0, err
 	}
@@ -131,7 +134,7 @@ func getDocument(ctx context.Context, url string, o *option) (document, int, err
 	}
 
 	body := io.Reader(resp.Body)
-	if limit := o.maxMetadataSize(); limit > 0 {
+	if limit := opts.MaxMetadataSize; limit > 0 {
 		if resp.ContentLength > limit {
 			return document{}, resp.StatusCode, fmt.Errorf("%w: %s is %d bytes, limit is %d", errMetadataTooLarge, url, resp.ContentLength, limit)
 		}

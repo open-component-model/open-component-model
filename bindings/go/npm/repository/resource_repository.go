@@ -8,17 +8,20 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpclient "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/npm/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/npm/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/npm/spec/access/v1"
+	credv1 "ocm.software/open-component-model/bindings/go/npm/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/npm/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -93,11 +96,10 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 
 // DownloadResource downloads the package tarball described by the npm access spec.
 // The returned blob is backed by a file under the configured temp folder that outlives
-// this call, and its content is verified against the checksums the registry published.
-// The blob owns that file: callers should close it (it implements io.Closer) once they
-// are done, and an unclosed blob has its file removed when it becomes unreachable.
+// this call and is owned by the caller, and its content is verified against the
+// checksums the registry published.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	b, err := r.download(ctx, resource, credentials)
+	b, err := r.download(ctx, resource, credentials, r.tempFolder())
 	if err != nil {
 		return nil, err
 	}
@@ -124,29 +126,36 @@ func (r *ResourceRepository) access(resource *descriptor.Resource) (*v1.NPM, err
 	return access, nil
 }
 
-// download streams the package tarball into the configured temp folder and returns
-// it as a file-backed blob owning that file.
-func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*download.Blob, error) {
+// tempFolder is the configured directory for temporary data, empty for the
+// default of the operating system.
+func (r *ResourceRepository) tempFolder() string {
+	if r.filesystemConfig.TempFolder == nil {
+		return ""
+	}
+
+	return *r.filesystemConfig.TempFolder
+}
+
+// download streams the package tarball into tempDir and returns it as a
+// file-backed blob. The file outlives this call and is owned by the caller.
+func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, tempDir string) (*filesystem.Blob, error) {
 	access, err := r.access(resource)
 	if err != nil {
 		return nil, err
 	}
 
-	var tempDir string
-	if r.filesystemConfig.TempFolder != nil {
-		tempDir = *r.filesystemConfig.TempFolder
+	var creds *credv1.NPMCredentials
+	if credentials != nil {
+		if creds, err = credv1.ConvertToNPMCredentials(credentials); err != nil {
+			return nil, err
+		}
 	}
 
-	return download.Download(ctx, download.Request{
-		Registry: access.Registry,
-		Package:  access.Package,
-		Version:  access.Version,
-	},
-		download.WithClient(r.client),
-		download.WithMaxDownloadSize(r.maxDownloadSize),
-		download.WithCredentials(credentials),
-		download.WithTempDir(tempDir),
-	)
+	return download.Download(ctx, access, creds, download.Options{
+		Client:          r.client,
+		MaxDownloadSize: r.maxDownloadSize,
+		TempDir:         tempDir,
+	})
 }
 
 // UploadResource is not supported for npm access types.
@@ -163,19 +172,23 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 
 // ProcessResourceDigest computes the digest of an npm resource by downloading the
 // referenced tarball and hashing it. When the resource already carries a digest, the
-// computed value is verified against it.
+// computed value is verified against it. The tarball is only read here, so it is
+// downloaded into a directory of its own that this call removes again.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
-	data, err := r.download(ctx, resource, credentials)
+	tempDir, err := os.MkdirTemp(r.tempFolder(), "ocm-npm-digest-*")
+	if err != nil {
+		return nil, fmt.Errorf("error creating temporary directory for digest processing: %w", err)
+	}
+	defer func() {
+		if rmErr := os.RemoveAll(tempDir); rmErr != nil {
+			slog.WarnContext(ctx, "failed to remove temporary directory after digest processing", "path", tempDir, "err", rmErr)
+		}
+	}()
+
+	data, err := r.download(ctx, resource, credentials, tempDir)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource for digest processing: %w", err)
 	}
-	// The blob never leaves this function, so its file is released right away
-	// instead of waiting for the caller or the cleanup to reclaim it.
-	defer func() {
-		if closeErr := data.Close(); closeErr != nil {
-			slog.WarnContext(ctx, "failed to remove temporary file after digest processing", "err", closeErr)
-		}
-	}()
 
 	rc, err := data.ReadCloser()
 	if err != nil {
