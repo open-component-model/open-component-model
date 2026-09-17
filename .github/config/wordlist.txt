@@ -258,6 +258,7 @@ extensibility
 extraidentity
 fabianburth
 fallbacks
+facto
 fapi
 filepath
 filesystem
@@ -359,6 +360,7 @@ https
 hxr
 iaas
 iam
+iana
 ical
 ics
 ikhandamirov
@@ -593,6 +595,7 @@ packagespec
 packageversion
 parallelize
 parameterization
+pascalcase
 patchstrategicmerge
 patchstrategicmergesource
 patchstrategicmergetarget
@@ -788,6 +791,7 @@ subsitution
 subst
 substsitution
 subtree
+subtype
 supermajority
 superset
 suppresstitle
@@ -873,6 +877,8 @@ verifiers
 versionability
 versionable
 versionedtypedobjects
+vhd
+vhdx
 vm
 walkthrough
 warroom
