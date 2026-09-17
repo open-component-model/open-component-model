@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -47,6 +48,19 @@ func New() *cobra.Command {
 		DisableAutoGenTag: true,
 		SilenceUsage:      true,
 	}
+
+	// Enable the built-in --version / -v flag. The value is a sentinel; the
+	// template below ignores it and renders the same human-readable output as
+	// the `ocm version` subcommand, so `ocm --version` and `ocm version` match.
+	cmd.Version = "(see template)"
+	cmd.SetVersionTemplate("{{ ocmVersion }}")
+	cobra.AddTemplateFunc("ocmVersion", func() (string, error) {
+		var buf strings.Builder
+		if err := version.Write(&buf, version.OutputText); err != nil {
+			return "", err
+		}
+		return buf.String(), nil
+	})
 
 	configuration.RegisterConfigFlag(cmd)
 

@@ -1,4 +1,4 @@
-// Package blob provides various interfaces and types for working with Binary Large Object's (BLOBs).
+// Package blob provides various interfaces and types for working with Binary Large Objects (BLOBs).
 //
 // When working with BLOBs through this package, it is important to understand the following concepts:
 //   - ReadOnlyBlob: An interface that represents a read-only BLOB.
