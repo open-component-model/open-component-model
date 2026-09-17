@@ -14,6 +14,7 @@ import (
 	"regexp"
 
 	"github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
@@ -49,9 +50,10 @@ import (
 )
 
 var (
-	_            ComponentVersionRepository          = (*Repository)(nil)
-	_            repository.OwnershipAwareRepository = (*Repository)(nil)
-	versionRegex                                     = regexp.MustCompile(compref.VersionRegex)
+	_            ComponentVersionRepository            = (*Repository)(nil)
+	_            repository.OwnershipAwareRepository   = (*Repository)(nil)
+	_            repository.AttestationAwareRepository = (*Repository)(nil)
+	versionRegex                                       = regexp.MustCompile(compref.VersionRegex)
 )
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
@@ -143,6 +145,73 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
 
+	return nil
+}
+
+// AddAttestation attaches a signed attestation to a stored component version as
+// an OCI referrer of the component version manifest. It resolves the manifest,
+// lets build produce the referrer payload bound to the manifest digest, and
+// pushes a referrer manifest (subject = component version manifest, artifactType
+// and single layer media type as returned by build). Discoverable through the
+// OCI Referrers API (and the referrers-tag fallback for CTF).
+func (repo *Repository) AddAttestation(ctx context.Context, component, version string, build repository.AttestationBuilder) (err error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	done := log.Operation(ctx, "add attestation", slog.String("component", component), slog.String("version", version))
+	defer func() {
+		done(err)
+	}()
+
+	reference, store, err := repo.getStore(ctx, component, version)
+	if err != nil {
+		return err
+	}
+
+	subject, err := store.Resolve(ctx, reference)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component version %q for attestation: %w", reference, err)
+	}
+
+	artifactType, layerMediaType, layer, err := build(subject.Digest.String())
+	if err != nil {
+		return fmt.Errorf("failed to build attestation for %q: %w", reference, err)
+	}
+
+	layerDesc := ociImageSpecV1.Descriptor{
+		MediaType: layerMediaType,
+		Digest:    digest.FromBytes(layer),
+		Size:      int64(len(layer)),
+	}
+	empty := ociImageSpecV1.DescriptorEmptyJSON
+	manifest := ociImageSpecV1.Manifest{
+		Versioned:    specs.Versioned{SchemaVersion: 2},
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: artifactType,
+		Config:       empty,
+		Layers:       []ociImageSpecV1.Descriptor{layerDesc},
+		Subject:      &subject,
+	}
+	manifestBody, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal attestation referrer manifest: %w", err)
+	}
+	manifestDesc := ociImageSpecV1.Descriptor{
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: artifactType,
+		Digest:       digest.FromBytes(manifestBody),
+		Size:         int64(len(manifestBody)),
+	}
+
+	// Registries reject a manifest referencing blobs not yet present, so push
+	// the empty config blob and the attestation layer before the manifest.
+	if err := store.Push(ctx, empty, bytes.NewReader(empty.Data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		return fmt.Errorf("failed to push attestation empty config %s: %w", empty.Digest, err)
+	}
+	if err := store.Push(ctx, layerDesc, bytes.NewReader(layer)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		return fmt.Errorf("failed to push attestation layer %s: %w", layerDesc.Digest, err)
+	}
+	if err := store.Push(ctx, manifestDesc, bytes.NewReader(manifestBody)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		return fmt.Errorf("failed to push attestation referrer %s: %w", manifestDesc.Digest, err)
+	}
 	return nil
 }
 

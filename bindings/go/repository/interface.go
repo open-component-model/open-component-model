@@ -133,6 +133,26 @@ type OwnershipAwareRepository interface {
 	AddOwnership(ctx context.Context, component, version string, res *descriptor.Resource, credentials runtime.Typed) error
 }
 
+// AttestationBuilder produces the attestation payload to attach to a component
+// version, given the resolved OCI manifest digest of that component version
+// (in "sha256:<hex>" form). Returning artifactType and the referrer layer bytes
+// lets the builder bind the attestation subject to the exact manifest digest,
+// which cosign-style verification requires.
+type AttestationBuilder func(manifestDigest string) (artifactType, layerMediaType string, layer []byte, err error)
+
+// AttestationAwareRepository is an optional capability of a
+// ComponentVersionRepository. It attaches a signed attestation (e.g. a
+// cosign-compatible Sigstore bundle wrapping an in-toto/SLSA statement) to a
+// stored component version as an OCI referrer of the component version
+// manifest, discoverable through the OCI Referrers API.
+type AttestationAwareRepository interface {
+	// AddAttestation resolves the manifest of the stored component version,
+	// invokes build with its digest to obtain the referrer payload, and pushes
+	// the attestation as a referrer of that manifest. The component version must
+	// already exist in the repository.
+	AddAttestation(ctx context.Context, component, version string, build AttestationBuilder) error
+}
+
 // SourceRepository defines the interface for storing and retrieving OCM sources
 // independently of component versions from a store implementation.
 // TODO https://github.com/open-component-model/ocm-project/issues/857 also provide credentials in UploadSource/DownloadSource
