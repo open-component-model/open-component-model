@@ -136,10 +136,12 @@ upload. The transformer is chosen by `stream.type`.
 
 Streams a matched resource's content directly to an HTTP endpoint (typically a
 `PUT` upload) and rewrites the resource to a `Wget/v1` access pointing at the
-uploaded location. The source content is piped straight into the request body, so
-it is never buffered in memory or on disk. The digest is computed during the
-stream, or — when the source resource already carries one — verified as the bytes
-pass through.
+uploaded location. The **source** may be any access type (wget, OCI, S3, GitHub,
+…) — its content is fetched through the access-type-specific downloader; only the
+**target** is always an HTTP endpoint. The source content is piped straight into
+the request body, so it is never buffered in memory or on disk. The digest is
+computed during the stream, or — when the source resource already carries one —
+verified as the bytes pass through.
 
 Its fields map field-for-field onto the resulting
 [`Wget/v1`]({{< relref "docs/reference/input-and-access-types.md" >}}) access:
@@ -163,19 +165,32 @@ resolved by the transfer runtime, so the produced plan is deterministic. CEL str
 concatenation (`+`), conditionals (`cond ? a : b`), and comparisons are all
 available. Append any static query string inside the expression.
 
-The `resource` alias exposes:
+The `resource` alias always exposes:
 
 | Expression                        | Value                                                        |
 |-----------------------------------|--------------------------------------------------------------|
 | `resource.name`                   | Resource name.                                               |
 | `resource.version`                | Resource version.                                            |
-| `resource.access.url`             | Full source URL.                                             |
-| `resource.access.path`            | Path component of the source URL.                            |
-| `resource.access.host`            | Host component of the source URL.                            |
-| `resource.access.scheme`          | Scheme (`http`/`https`) of the source URL.                   |
-| `resource.access.mediaType`       | Media type of the source access.                             |
+| `resource.type`                   | Resource type.                                               |
 | `resource.extraIdentity.<key>`    | A value from the resource's extra identity.                  |
 | `resource.labels.<name>`          | A resource label value (JSON string values are unquoted).    |
+
+Every field of the **source access** is exposed dynamically under
+`resource.access.<field>`, so the expression works with any access type — the
+field names are exactly those of that access. For example:
+
+| Source access | Available under `resource.access` |
+|---------------|-----------------------------------|
+| `Wget/v1`     | `url`, `mediaType`                |
+| `OCIImage/v1` | `imageReference`                  |
+| `S3/v1`       | `bucket`, `key`, `region`, …      |
+
+When the access carries a `url`, the parsed parts `resource.access.path`,
+`resource.access.host`, and `resource.access.scheme` are added as a convenience
+(CEL has no URL parser). Because the field set is derived from the matched
+resource's own access, an expression may only reference fields that exist on every
+resource the uploader matches — scope the rule with `match.accessType` so all
+matched resources share a shape.
 
 Examples:
 
@@ -191,6 +206,9 @@ targetURL: '${"https://" + resource.labels.region + ".example.com/" + resource.e
 
 # Conditional target
 targetURL: '${resource.labels.tier == "public" ? "https://cdn.example.com" + resource.access.path : "https://internal.example.com" + resource.access.path}'
+
+# Non-wget source: reference an access-specific field (OCI imageReference)
+targetURL: '${"https://mirror.example.com/" + resource.access.imageReference}'
 ```
 
 Referencing a field that is absent at execution time fails the transfer with a

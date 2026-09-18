@@ -97,13 +97,12 @@ const resourceAlias = "resource"
 const uploadsEnvKey = "uploads"
 
 // buildResourceNode builds the CEL node value exposed to a targetURL expression as
-// `resource`. It carries the resource identity/labels and the parsed parts of the
-// source access URL, since CEL has no url parsing function.
-func buildResourceNode(resource descriptorv2.Resource, srcAccess *wgetaccessv1.Wget) (map[string]any, error) {
-	parsedSource, err := url.Parse(srcAccess.URL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid source url %q: %w", srcAccess.URL, err)
-	}
+// `resource`. It works with any access type: the access is decoded generically from
+// its raw JSON so every access field is addressable under resource.access.<field>
+// (e.g. resource.access.url for wget, resource.access.imageReference for OCI,
+// resource.access.bucket for S3). When the access carries a URL, the parsed parts
+// (path/host/scheme) are added as a convenience since CEL has no URL parser.
+func buildResourceNode(resource descriptorv2.Resource) (map[string]any, error) {
 	labels := make(map[string]any, len(resource.Labels))
 	for _, l := range resource.Labels {
 		labels[l.Name] = labelValueString(l.Value)
@@ -112,19 +111,47 @@ func buildResourceNode(resource descriptorv2.Resource, srcAccess *wgetaccessv1.W
 	for k, v := range resource.ExtraIdentity {
 		extraIdentity[k] = v
 	}
+
+	access, err := decodeAccessFields(resource.Access)
+	if err != nil {
+		return nil, err
+	}
+	// Best-effort URL decomposition for URL-bearing accesses (wget, http, ...).
+	if rawURL, ok := access["url"].(string); ok && rawURL != "" {
+		if parsed, perr := url.Parse(rawURL); perr == nil {
+			access["path"] = parsed.Path
+			access["host"] = parsed.Host
+			access["scheme"] = parsed.Scheme
+		}
+	}
+
 	return map[string]any{
 		"name":          resource.Name,
 		"version":       resource.Version,
+		"type":          resource.Type,
 		"extraIdentity": extraIdentity,
 		"labels":        labels,
-		"access": map[string]any{
-			"url":       srcAccess.URL,
-			"path":      parsedSource.Path,
-			"host":      parsedSource.Host,
-			"scheme":    parsedSource.Scheme,
-			"mediaType": srcAccess.MediaType,
-		},
+		"access":        access,
 	}, nil
+}
+
+// decodeAccessFields decodes a resource access into a generic field map so an
+// uploader's targetURL CEL expression can reference any access field by name.
+func decodeAccessFields(access runtime.Typed) (map[string]any, error) {
+	if access == nil {
+		return nil, fmt.Errorf("resource access is required")
+	}
+	raw := &runtime.Raw{}
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(access, raw); err != nil {
+		return nil, fmt.Errorf("cannot decode resource access: %w", err)
+	}
+	fields := map[string]any{}
+	if len(raw.Data) > 0 {
+		if err := json.Unmarshal(raw.Data, &fields); err != nil {
+			return nil, fmt.Errorf("cannot decode resource access fields: %w", err)
+		}
+	}
+	return fields, nil
 }
 
 // celTargetURLField validates that the user-supplied targetURL is a single
@@ -240,19 +267,17 @@ func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.Uploade
 		return fmt.Errorf("uploader stream.targetURL is required")
 	}
 
-	srcWget := wgetaccessv1.Wget{}
 	if resource.Access == nil {
 		return fmt.Errorf("resource access is required")
-	}
-	if err := wgetaccess.Scheme.Convert(resource.Access, &srcWget); err != nil {
-		return fmt.Errorf("uploader requires a wget source access: %w", err)
 	}
 
 	resourceID := identityToTransformationID(resource.ToIdentity())
 	uploadID := fmt.Sprintf("%sUpload%s", id, resourceID)
 
 	// Inject the source resource as a CEL node the targetURL expression can reference.
-	node, err := buildResourceNode(resource, &srcWget)
+	// The node exposes every access field generically under resource.access.<field>,
+	// so an uploader works with any source access type, not only wget.
+	node, err := buildResourceNode(resource)
 	if err != nil {
 		return err
 	}
@@ -269,9 +294,15 @@ func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.Uploade
 		return err
 	}
 
+	// The target media type defaults to the uploader's explicit value, then to the
+	// source access media type when it exposes one (wget, OCI, ...).
 	mediaType := cfg.MediaType
 	if mediaType == "" {
-		mediaType = srcWget.MediaType
+		if access, ok := node["access"].(map[string]any); ok {
+			if mt, ok := access["mediaType"].(string); ok {
+				mediaType = mt
+			}
+		}
 	}
 	targetAccess := &wgetaccessv1.Wget{
 		Type:       wgetaccess.V1VersionedType,

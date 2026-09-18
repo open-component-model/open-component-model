@@ -77,7 +77,7 @@
       "properties": {
         "accessType": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-          "description": "AccessType is the resource access type this uploader matches (e.g. Wget/v1alpha1)."
+          "description": "AccessType is the resource access type this uploader matches (e.g. Wget/v1)."
         },
         "extraIdentity": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",

@@ -88,8 +88,10 @@ evaluated against the source resource, exposed as `resource`. Here
 (`/artifacts/docs.tar`), so the expression resolves to
 `https://mytarget.example.com/uploads/artifacts/docs.tar`. You can also use
 `resource.name`, `resource.version`, `resource.access.host`,
-`resource.extraIdentity.<key>`, `resource.labels.<name>`, and CEL conditionals —
-see the
+`resource.extraIdentity.<key>`, `resource.labels.<name>`, and CEL conditionals.
+The uploader is not limited to wget sources: every field of the source access is
+exposed under `resource.access.<field>` (e.g. `resource.access.imageReference` for
+an OCI source), so you can route any access type to an HTTP target — see the
 [Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration.md" >}}#target-url-expressions).
 
 {{< callout context="note" title="Why copyMode: allResources" >}}
