@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
@@ -20,17 +21,20 @@ const mediaTypeTar = "application/x-tar"
 
 // archive writes the files of the commit tree as tar, so names, modes and symlinks
 // come from git and not from a checkout on the host file system. The archive stays
-// uncompressed: its digest is pinned into the descriptor and verified on other
-// machines, and compress/flate output is not stable across Go releases.
+// uncompressed because its digest is verified on other machines, and the output of
+// the standard library compressors is not stable across Go releases.
 // Directories are implied by the file paths, submodules are not part of the tree content.
 // It writes into file, which it closes but never removes; the caller owns it.
-func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Options) (_ *filesystem.Blob, err error) {
+// The digest is taken while writing, so no caller has to read the archive back.
+func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Options) (_ *filesystem.Blob, _ digest.Digest, err error) {
 	tree, err := commit.Tree()
 	if err != nil {
-		return nil, fmt.Errorf("cannot read git tree: %w", err)
+		return nil, "", fmt.Errorf("cannot read git tree: %w", err)
 	}
 
-	tw := tar.NewWriter(&limitedWriter{Writer: file, limit: opts.MaxDownloadSize})
+	digester := digest.Canonical.Digester()
+	limited := &limitedWriter{Writer: file, limit: opts.MaxDownloadSize}
+	tw := tar.NewWriter(io.MultiWriter(limited, digester.Hash()))
 	err = tree.Files().ForEach(func(f *object.File) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -40,17 +44,17 @@ func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Opt
 	})
 	err = errors.Join(err, tw.Close(), file.Close())
 	if err != nil {
-		return nil, fmt.Errorf("cannot create git archive: %w", err)
+		return nil, "", fmt.Errorf("cannot create git archive: %w", err)
 	}
 
 	b, err := filesystem.GetBlobFromOSPath(file.Name())
 	if err != nil {
-		return nil, fmt.Errorf("cannot open git archive file %q: %w", file.Name(), err)
+		return nil, "", fmt.Errorf("cannot open git archive file %q: %w", file.Name(), err)
 	}
 
 	b.SetMediaType(mediaTypeTar)
 
-	return b, nil
+	return b, digester.Digest(), nil
 }
 
 func writeFile(tw *tar.Writer, f *object.File) error {
