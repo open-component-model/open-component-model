@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
 
@@ -31,6 +32,9 @@ const (
 	hashAlgorithmSHA256 = "SHA-256"
 	// genericBlobDigestV1 is the normalisation algorithm for a plain streamed blob.
 	genericBlobDigestV1 = "genericBlobDigest/v1"
+	// maxErrorBodyBytes bounds how much of a non-2xx response body is read into an
+	// error message, so a hostile or verbose server cannot force unbounded reads.
+	maxErrorBodyBytes = 4 << 10
 )
 
 // HTTPStreamingTransformer streams a resource's content from its source access
@@ -154,6 +158,12 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Include a bounded excerpt of the response body to aid debugging without
+		// risking unbounded memory use on a hostile or verbose server.
+		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+		if len(excerpt) > 0 {
+			return nil, fmt.Errorf("upload to %s returned status %d: %s", safeURL.String(), resp.StatusCode, strings.TrimSpace(string(excerpt)))
+		}
 		return nil, fmt.Errorf("upload to %s returned status %d", safeURL.String(), resp.StatusCode)
 	}
 
@@ -192,15 +202,15 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 }
 
 // resolveSourceCredentials resolves credentials for the source resource by its consumer
-// identity. A missing provider, identity, or ErrNotFound yields nil credentials.
+// identity. A missing provider or ErrNotFound yields nil credentials; a failure to
+// derive the consumer identity is a real error and is propagated.
 func (t *HTTPStreamingTransformer) resolveSourceCredentials(ctx context.Context, resource *descriptor.Resource) (runtime.Typed, error) {
 	if t.CredentialProvider == nil {
 		return nil, nil
 	}
 	consumerID, err := t.ResourceRepository.GetResourceCredentialConsumerIdentity(ctx, resource)
 	if err != nil {
-		// A resource without a resolvable identity simply has no credentials.
-		return nil, nil
+		return nil, fmt.Errorf("failed deriving source consumer identity: %w", err)
 	}
 	if consumerID == nil {
 		return nil, nil

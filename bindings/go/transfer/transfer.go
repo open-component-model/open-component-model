@@ -32,6 +32,11 @@ func BuildGraphDefinition(
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid transfer config: %w", err)
 	}
+	for i, u := range uploaders {
+		if err := u.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid uploader config at index %d: %w", i, err)
+		}
+	}
 
 	resolved := transferv1alpha1.Config{}
 	if cfg != nil {

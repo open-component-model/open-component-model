@@ -201,6 +201,9 @@ func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.Uploade
 	if err := json.Unmarshal(u.Stream.Data, &cfg); err != nil {
 		return fmt.Errorf("cannot decode uploader stream config: %w", err)
 	}
+	if strings.TrimSpace(cfg.TargetURL) == "" {
+		return fmt.Errorf("uploader stream.targetURL is required")
+	}
 
 	srcWget := wgetaccessv1.Wget{}
 	if resource.Access == nil {
