@@ -84,7 +84,7 @@ func Test_Integration_TransferLocalBlob_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil, nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,
@@ -166,7 +166,7 @@ func Test_Integration_TransferDescriptorOnly_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil, nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,
@@ -235,7 +235,7 @@ func Test_Integration_TransferMultipleResources_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil, nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,
@@ -305,7 +305,7 @@ func Test_Integration_TransferCTFToCTF(t *testing.T) {
 		AccessMode: "readwrite|create",
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil, nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,
@@ -366,7 +366,7 @@ func Test_Integration_TransferMultipleComponents_CTFToOCI(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil, nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{
 				{Component: component1Name, Version: component1Version},
@@ -440,7 +440,7 @@ func Test_Integration_TransferWithFromRepository(t *testing.T) {
 		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil,
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil, nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,
@@ -547,6 +547,7 @@ func Test_Integration_TransferRecursive_CTFToOCI(t *testing.T) {
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
 		&transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite},
+		nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: parentName, Version: parentVersion}},
 			Target:     targetSpec,
