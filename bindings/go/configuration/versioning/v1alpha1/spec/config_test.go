@@ -67,7 +67,6 @@ const calverWithSemverEntry = `{
       "comparisonGroups": ["year", "month", "day"]
     },
     {
-      "name": "semver",
       "builtin": "loose-semver"
     }
   ]
@@ -97,7 +96,16 @@ func TestRegistry_BuiltinConflictsAndUnknown(t *testing.T) {
 	// builtin is mutually exclusive with pattern.
 	_, err := (&versioningspec.Config{
 		Schemes: []*versioningspec.VersionScheme{
-			{Name: "bad", Builtin: versioningspec.BuiltinLooseSemver, Pattern: "^v?.+$"},
+			{Builtin: versioningspec.BuiltinLooseSemver, Pattern: "^v?.+$"},
+		},
+	}).Registry()
+	r.Error(err)
+	r.Contains(err.Error(), "mutually exclusive")
+
+	// builtin is mutually exclusive with a name (the builtin carries its own).
+	_, err = (&versioningspec.Config{
+		Schemes: []*versioningspec.VersionScheme{
+			{Name: "semver", Builtin: versioningspec.BuiltinLooseSemver},
 		},
 	}).Registry()
 	r.Error(err)
@@ -106,7 +114,7 @@ func TestRegistry_BuiltinConflictsAndUnknown(t *testing.T) {
 	// unknown builtin is rejected.
 	_, err = (&versioningspec.Config{
 		Schemes: []*versioningspec.VersionScheme{
-			{Name: "bad", Builtin: "calver"},
+			{Builtin: "calver"},
 		},
 	}).Registry()
 	r.Error(err)
@@ -134,10 +142,10 @@ func TestRegistry_BuiltinCatalogSchemes(t *testing.T) {
 	// behaves like the equivalent regex scheme.
 	cfg := &versioningspec.Config{
 		Schemes: []*versioningspec.VersionScheme{
-			{Name: "cal", Builtin: "calver-full"},
-			{Name: "ubuntu", Builtin: "calver-ubuntu"},
-			{Name: "build", Builtin: "build-number"},
-			{Name: "semver", Builtin: "loose-semver"},
+			{Builtin: "calver-full"},
+			{Builtin: "calver-ubuntu"},
+			{Builtin: "build-number"},
+			{Builtin: "loose-semver"},
 		},
 	}
 	reg, err := cfg.Registry()
@@ -150,11 +158,18 @@ func TestRegistry_BuiltinCatalogSchemes(t *testing.T) {
 
 	// Unknown builtin lists the valid names.
 	_, err = (&versioningspec.Config{
-		Schemes: []*versioningspec.VersionScheme{{Name: "bad", Builtin: "calver"}},
+		Schemes: []*versioningspec.VersionScheme{{Builtin: "calver"}},
 	}).Registry()
 	r.Error(err)
 	r.Contains(err.Error(), "unknown builtin")
 	r.Contains(err.Error(), "calver-full")
+
+	// A name on a builtin entry is rejected: the builtin carries its own name.
+	_, err = (&versioningspec.Config{
+		Schemes: []*versioningspec.VersionScheme{{Name: "cal", Builtin: "calver-full"}},
+	}).Registry()
+	r.Error(err)
+	r.Contains(err.Error(), "mutually exclusive")
 }
 
 func TestRegistry_NilOrEmptyConfigIsDefault(t *testing.T) {

@@ -58,16 +58,13 @@
         },
         "name": {
           "type": "string",
-          "description": "Name is a stable identifier for the scheme (e.g. \"calver\", \"build-number\")."
+          "description": "Name is an optional human-facing label for a regex (pattern) scheme, used\nonly in diagnostics (e.g. \"calver\", \"build-number\"); when omitted the\npattern is used instead. It must not be set on a Builtin entry, which\ncarries its own canonical name."
         },
         "pattern": {
           "type": "string",
           "description": "Pattern is a Go (RE2) regular expression that a version must match for\nthis scheme to claim it. Use named capture groups for the fields that\ndetermine ordering, e.g.\n\"^(?P\u003cyear\u003e\\\\d{4})\\\\.(?P\u003cmonth\u003e\\\\d{2})\\\\.(?P\u003cday\u003e\\\\d{2})$\". Mutually\nexclusive with Builtin."
         }
       },
-      "required": [
-        "name"
-      ],
       "additionalProperties": false
     },
     "ocm.software.open-component-model.bindings.go.runtime.Type": {

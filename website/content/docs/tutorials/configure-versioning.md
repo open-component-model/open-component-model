@@ -47,10 +47,8 @@ type: generic.config.ocm.software/v1
 configurations:
   - type: versioning.config.ocm.software/v1alpha1
     schemes:
-      - name: calver
-        builtin: calver-full
-      - name: semver
-        builtin: loose-semver
+      - builtin: calver-full
+      - builtin: loose-semver
 ```
 
 {{< /step >}}
