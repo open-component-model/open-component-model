@@ -294,6 +294,30 @@ func TestRemoteStore_Push_ThresholdKeepsSmallBlobsMonolithic(t *testing.T) {
 	require.Equal(t, data, reg.monolithicBlobs[dig.String()])
 }
 
+func TestRemoteStore_Push_SingleChunkBlobStaysMonolithic(t *testing.T) {
+	// A blob smaller than one chunk must never chunk, even when ChunkThreshold
+	// is configured below ChunkSize: a lone PATCH plus the closing PUT is
+	// strictly worse than a monolithic POST/PUT. The effective threshold is
+	// raised to ChunkSize.
+	reg := newChunkedRegistry(t)
+	srv := httptest.NewServer(reg.monolithicHandler())
+	t.Cleanup(srv.Close)
+
+	data := bytes.Repeat([]byte("q"), 500) // < ChunkSize
+	dig := digest.FromBytes(data)
+	desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: dig, Size: int64(len(data))}
+
+	// ChunkThreshold (1) is deliberately below ChunkSize (1024): the floor at
+	// ChunkSize must still keep this 500-byte blob monolithic.
+	store := newTestStore(t, srv, 1024 /*chunk*/, 1 /*threshold below chunk*/)
+	require.NoError(t, store.Push(t.Context(), desc, bytes.NewReader(data)))
+
+	for _, m := range reg.methods() {
+		require.NotEqual(t, http.MethodPatch, m, "single-chunk blob must not chunk")
+	}
+	require.Equal(t, data, reg.monolithicBlobs[dig.String()])
+}
+
 func TestRemoteStore_Push_ManifestExcludedFromChunking(t *testing.T) {
 	// A manifest descriptor must never take the chunked blob path; it goes to
 	// the manifests endpoint via the embedded repository. Serve a valid

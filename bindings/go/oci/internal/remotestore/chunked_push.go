@@ -53,18 +53,24 @@ type StreamingPusher interface {
 var _ StreamingPusher = (*RemoteStore)(nil)
 
 // Push pushes the content matching the expected descriptor. Blobs at or above
-// the configured chunk threshold are uploaded in chunks per the OCI
-// Distribution Spec (POST session, PATCH chunks, PUT close); manifests and
-// small blobs delegate to the embedded monolithic push. If chunking is
-// disabled (ChunkSize <= 0) or the chunk protocol fails before any byte is
-// consumed, Push falls back to the embedded monolithic push so no registry
-// regresses.
+// the effective chunk threshold (max of ChunkThreshold and ChunkSize) are
+// uploaded in chunks per the OCI Distribution Spec (POST session, PATCH chunks,
+// PUT close); manifests, blobs that fit in a single chunk, and blobs below the
+// threshold delegate to the embedded monolithic push. If chunking is disabled
+// (ChunkSize <= 0) or the chunk protocol fails before any byte is consumed,
+// Push falls back to the embedded monolithic push so no registry regresses.
 //
 // Reference: https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#pushing-a-blob-in-chunks
 func (r *RemoteStore) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, content io.Reader) error {
 	threshold := r.ChunkThreshold
 	if threshold <= 0 {
 		threshold = DefaultChunkThreshold
+	}
+	// Never chunk a blob that fits in a single chunk: a lone PATCH plus the
+	// closing PUT is strictly worse than a monolithic POST/PUT. This holds even
+	// when a caller configures ChunkThreshold below ChunkSize.
+	if threshold < r.ChunkSize {
+		threshold = r.ChunkSize
 	}
 	if r.ChunkSize <= 0 || expected.Size < threshold || introspection.IsOCICompliantManifest(expected) {
 		return r.Repository.Push(ctx, expected, content)

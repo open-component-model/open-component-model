@@ -44,7 +44,9 @@ type RemoteStore struct {
 
 	// ChunkThreshold is the minimum blob size in bytes for chunked upload to
 	// engage. Blobs of Size < ChunkThreshold (and all manifests) use the
-	// embedded monolithic Push. If <= 0, DefaultChunkThreshold is used.
+	// embedded monolithic Push. If <= 0, DefaultChunkThreshold is used. The
+	// effective threshold is never below ChunkSize, so a blob that fits in a
+	// single chunk is always pushed monolithically.
 	ChunkThreshold int64
 }
 
