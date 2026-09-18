@@ -51,13 +51,25 @@ type UploaderConfig struct {
 	Stream *runtime.Raw `json:"stream"`
 }
 
-// UploaderMatch selects resources by their access type.
+// UploaderMatch selects resources by their access type and, optionally, their
+// identity. A resource matches when its access type matches AccessType and every
+// specified identity constraint (Name, ExtraIdentity) also matches. This lets
+// multiple uploaders target the same access type while routing different resources
+// to different upload targets; the first matching uploader (in declaration order)
+// wins, so more specific rules should be declared before broader ones.
 //
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type UploaderMatch struct {
 	// AccessType is the resource access type this uploader matches (e.g. Wget/v1alpha1).
 	AccessType runtime.Type `json:"accessType"`
+	// Name optionally restricts the match to resources with this exact name.
+	// When empty, resources of any name match.
+	Name string `json:"name,omitempty"`
+	// ExtraIdentity optionally restricts the match to resources whose identity
+	// contains all of these key/value pairs. When empty, no extra-identity
+	// constraint is applied.
+	ExtraIdentity runtime.Identity `json:"extraIdentity,omitempty"`
 }
 
 // Validate rejects a non-matching [UploaderConfig.Type], an empty match access type,

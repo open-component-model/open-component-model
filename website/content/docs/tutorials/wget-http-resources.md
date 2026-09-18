@@ -55,9 +55,9 @@ is the authoritative location and should be used for accessing the resource.
 
 ## How transfer works {#how-transfer-works}
 
-A Wget resource is always transferred by value.
+By default, a Wget resource is transferred by value.
 
-When you run `ocm transfer cv`, an access-type resource does not stay a `Wget/v1` access in the target. OCM fetches the
+Without an uploader configuration, when you run `ocm transfer cv` an access-type resource does not stay a `Wget/v1` access in the target. OCM fetches the
 bytes and writes them into the target as a [`LocalBlob/v1`]({{< relref "docs/reference/input-and-access-types.md#localblobv1" >}}). After a transfer
 both will end up as local blobs.
 
@@ -69,6 +69,51 @@ This means:
    changed since the component version was built, the transfer fails instead of copying different content.
 
 The file stays on the remote server only if the component version is never transferred. Transfer converts the `Wget/v1` reference into a `LocalBlob/v1`.
+
+To keep a resource behind a URL instead of embedding it — streaming it to a custom HTTP target and rewriting the access to a new `Wget/v1` URL — configure an uploader; see [Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}}).
+
+### Forward a digest header to the upload target {#uploader-digest-header}
+
+An uploader can template its `header` values as `${…}` CEL expressions over the source resource, so
+the upload `PUT` can carry a checksum the source already advertised, read from
+`resource.digest`. To emit a standards-compliant
+[`Content-Digest`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Digest)
+(RFC 9530), map the OCM algorithm name to the RFC 9530 key with `contentDigestAlgorithm()`
+and convert the hex digest to base64 with `base64.encode(hex.decode(...))`:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    copyMode: allResources
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Wget/v1
+    targetURL: '${"https://mytarget.example.com/uploads" + url(resource.access.url).path}'
+    method: PUT
+    header:
+      # RFC 9530 Content-Digest: sha-256=:<base64>:
+      Content-Digest: ['${contentDigestAlgorithm(resource.digest.hashAlgorithm) + "=:" + base64.encode(hex.decode(resource.digest.value)) + ":"}']
+```
+
+`resource.digest` is only present when the source resource carries a digest (for
+example when it is pinned from the source via the checksum-http configuration). See
+[Templating Headers]({{< relref "docs/reference/transfer-configuration.md" >}}#templating-headers)
+for the full field reference.
+
+For a target such as JFrog Artifactory, which verifies uploads against a **hex**
+`X-Checksum-*` header, `resource.digest.value` maps on directly — no base64
+conversion:
+
+```yaml
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Wget/v1
+    targetURL: '${"https://myorg.jfrog.io/artifactory/my-repo" + url(resource.access.url).path}'
+    method: PUT
+    header:
+      X-Checksum-Sha256: ['${resource.digest.value}']
+```
 
 ## Set the media type {#set-the-media-type}
 
@@ -184,10 +229,10 @@ Three things changed between OCM v1 and v2: credential matching, constructor syn
 
 Identity matching has been updated.
 
-| Field             | OCM v1                             | OCM v2             | What to do                                                                                 |
-|-------------------|------------------------------------|--------------------|--------------------------------------------------------------------------------------------|
-| Consumer identity | `type: wget`                       | `type: Wget`       | Rename the type.                                                                           |
-| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute. `*` matches one path segment; omit `path` to match the whole host.   |
+| Field             | OCM v1                             | OCM v2             | What to do                                                                               |
+|-------------------|------------------------------------|--------------------|------------------------------------------------------------------------------------------|
+| Consumer identity | `type: wget`                       | `type: Wget`       | Rename the type.                                                                         |
+| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute. `*` matches one path segment; omit `path` to match the whole host. |
 
 Further matching changes:
 
@@ -199,9 +244,9 @@ Further matching changes:
 
 ### Constructor changes {#constructor-changes}
 
-| Field        | OCM v1       | OCM v2                    | What to do                                    |
-|--------------|--------------|---------------------------|-----------------------------------------------|
-| `input.body` | Plain string | Base64-encoded byte slice | Base64-encode the body in the constructor.    |
+| Field        | OCM v1       | OCM v2                    | What to do                                 |
+|--------------|--------------|---------------------------|--------------------------------------------|
+| `input.body` | Plain string | Base64-encoded byte slice | Base64-encode the body in the constructor. |
 
 In OCM v1 the body was an `io.Reader`, which has no YAML form. In OCM v2 it is a byte slice, therefore it needs to be base64.
 

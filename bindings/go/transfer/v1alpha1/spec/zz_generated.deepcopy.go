@@ -38,7 +38,7 @@ func (in *Config) DeepCopyTyped() runtime.Typed {
 func (in *UploaderConfig) DeepCopyInto(out *UploaderConfig) {
 	*out = *in
 	out.Type = in.Type
-	out.Match = in.Match
+	in.Match.DeepCopyInto(&out.Match)
 	if in.Stream != nil {
 		in, out := &in.Stream, &out.Stream
 		*out = new(runtime.Raw)
@@ -69,6 +69,13 @@ func (in *UploaderConfig) DeepCopyTyped() runtime.Typed {
 func (in *UploaderMatch) DeepCopyInto(out *UploaderMatch) {
 	*out = *in
 	out.AccessType = in.AccessType
+	if in.ExtraIdentity != nil {
+		in, out := &in.ExtraIdentity, &out.ExtraIdentity
+		*out = make(runtime.Identity, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	return
 }
 
