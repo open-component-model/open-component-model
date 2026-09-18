@@ -1,11 +1,14 @@
 package resource
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -73,6 +76,87 @@ func TestAddOwnership_RawAccessType(t *testing.T) {
 	// conversion error can't make this pass for the wrong reason.
 	require.ErrorContains(t, err, "nonexistent.invalid",
 		"AddOwnership must convert *runtime.Raw access to typed and reach the inner repository")
+}
+
+// rawOCIImageLayer builds the *runtime.Raw access a resource carries when read
+// back from a component descriptor.
+func rawOCIImageLayer(t *testing.T, reference string) *runtime.Raw {
+	t.Helper()
+	raw := &runtime.Raw{}
+	require.NoError(t, ociaccess.Scheme.Convert(&v1.OCIImageLayer{
+		Type:      runtime.NewVersionedType(v1.OCIImageLayerType, v1.Version),
+		Reference: reference,
+		MediaType: "application/octet-stream",
+		Digest:    digest.FromString("layer"),
+		Size:      5,
+	}, raw))
+	return raw
+}
+
+func layerResource(t *testing.T, reference string) *descriptor.Resource {
+	t.Helper()
+	return &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "test", Version: "1.0.0"},
+		},
+		Type:   "helmChart",
+		Access: rawOCIImageLayer(t, reference),
+	}
+}
+
+// The repository registers OCIImageLayer in its scheme, so the plugin manager routes
+// such resources here and every read path has to accept the type.
+func TestOCIImageLayer_ReadPathsAccepted(t *testing.T) {
+	ref := "nonexistent.invalid/test@" + digest.FromString("layer").String()
+
+	t.Run("credential consumer identity", func(t *testing.T) {
+		repo := NewResourceRepository(nil)
+		identity, err := repo.GetResourceCredentialConsumerIdentity(t.Context(), layerResource(t, ref))
+		require.NoError(t, err)
+		require.Equal(t, "nonexistent.invalid", identity["hostname"])
+	})
+
+	t.Run("digest processor identity", func(t *testing.T) {
+		repo := NewResourceRepository(nil)
+		identity, err := repo.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), layerResource(t, ref))
+		require.NoError(t, err)
+		require.Equal(t, "nonexistent.invalid", identity["hostname"])
+	})
+
+	t.Run("digest processing reaches the registry", func(t *testing.T) {
+		repo := NewResourceRepository(nil)
+		_, err := repo.ProcessResourceDigest(t.Context(), layerResource(t, ref), nil)
+		// Asserting on the host, not on the absence of a rejection: reaching DNS is
+		// what proves the access type was accepted.
+		require.ErrorContains(t, err, "nonexistent.invalid")
+	})
+
+	t.Run("download reaches the registry", func(t *testing.T) {
+		repo := NewResourceRepository(nil)
+		_, err := repo.DownloadResource(t.Context(), layerResource(t, ref), nil)
+		require.ErrorContains(t, err, "nonexistent.invalid")
+	})
+}
+
+// A layer addresses one existing blob and cannot be an upload destination, so the
+// upload paths reject it up front rather than deep inside the inner repository.
+func TestOCIImageLayer_RejectedAsUploadTarget(t *testing.T) {
+	ref := "nonexistent.invalid/test@" + digest.FromString("layer").String()
+
+	repo := NewResourceRepository(nil)
+	_, err := repo.UploadResource(t.Context(), layerResource(t, ref), nil, nil)
+	require.ErrorContains(t, err, "as upload target")
+
+	_, err = repo.UploadResourceStream(t.Context(), layerResource(t, ref), nil, nil)
+	require.ErrorContains(t, err, "as upload target")
+}
+
+// An access that spells the reference field wrong deserializes into an empty one,
+// which has to be reported against the field the type actually uses.
+func TestOCIImageLayer_MissingReferenceNamesField(t *testing.T) {
+	repo := NewResourceRepository(nil)
+	_, err := repo.ProcessResourceDigest(t.Context(), layerResource(t, ""), nil)
+	require.ErrorContains(t, err, `set it in field "ref"`)
 }
 
 func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
@@ -183,6 +267,111 @@ func TestNewResourceRepositoryHTTPConfig_InsecureSkipVerify(t *testing.T) {
 				require.ErrorContains(t, err, tt.expectErrMsgContains)
 			}
 			require.Equal(t, tt.expectHit, serverHit, "expected HTTP request to reach test server")
+		})
+	}
+}
+
+func TestAccessToBaseURL(t *testing.T) {
+	for _, accessType := range []string{v1.OCIImageType, v1.OCIImageLayerType} {
+		t.Run(accessType, func(t *testing.T) {
+			for _, tt := range []struct {
+				reference string
+				wantURL   string
+				wantErr   string
+			}{
+				{reference: "example.com/repo", wantURL: "example.com"},
+				{reference: "example.com/repo:latest", wantURL: "example.com"},
+				{reference: "example.com/repo@" + digest.FromString("layer").String(), wantURL: "example.com"},
+				{reference: "http://localhost:5000/repo", wantURL: "http://localhost:5000"},
+				{reference: "https://example.com/repo", wantURL: "https://example.com"},
+				{reference: "nginx:latest", wantErr: "must include a registry"},
+				{reference: "nginx", wantErr: "must include a registry"},
+				{reference: "nginx@" + digest.FromString("layer").String(), wantErr: "must include a registry"},
+				{reference: "", wantErr: "empty reference"},
+			} {
+				t.Run(tt.reference, func(t *testing.T) {
+					r := require.New(t)
+					var access runtime.Typed
+					wantErr := tt.wantErr
+					if accessType == v1.OCIImageType {
+						access = &v1.OCIImage{ImageReference: tt.reference}
+						wantErr = ""
+					} else {
+						access = &v1.OCIImageLayer{Reference: tt.reference}
+					}
+					baseURL, err := accessToBaseURL(access)
+					if wantErr != "" {
+						r.ErrorContains(err, wantErr)
+						r.ErrorContains(err, `field "ref"`)
+						return
+					}
+					r.NoError(err)
+					r.Equal(tt.wantURL, baseURL)
+				})
+			}
+		})
+	}
+}
+
+func TestOCIImageLayer_RegistryEndpoint(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		mediaType string
+		endpoint  string
+	}{
+		{name: "layer", mediaType: ocispec.MediaTypeImageLayer, endpoint: "blobs"},
+		{name: "unspecified", endpoint: "blobs"},
+		{name: "manifest", mediaType: ocispec.MediaTypeImageManifest, endpoint: "manifests"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, suffix := range []string{"", ":latest", "@" + digest.FromString("layer").String()} {
+				t.Run(suffix, func(t *testing.T) {
+					r := require.New(t)
+					dig := digest.FromString("layer")
+					requests := make(chan string, 8)
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+						requests <- req.Method + " " + req.URL.Path
+						w.Header().Set("Content-Length", "5")
+						w.Header().Set("Docker-Content-Digest", dig.String())
+						mediaType := tt.mediaType
+						if mediaType == "" {
+							mediaType = "application/octet-stream"
+						}
+						w.Header().Set("Content-Type", mediaType)
+						if req.Method == http.MethodGet {
+							_, _ = io.WriteString(w, "layer")
+						}
+					}))
+					t.Cleanup(server.Close)
+
+					res := layerResource(t, server.URL+"/repo"+suffix)
+					raw := &runtime.Raw{}
+					r.NoError(ociaccess.Scheme.Convert(&v1.OCIImageLayer{
+						Type:      runtime.NewVersionedType(v1.OCIImageLayerType, v1.Version),
+						Reference: server.URL + "/repo" + suffix,
+						Digest:    dig,
+						Size:      5,
+						MediaType: tt.mediaType,
+					}, raw))
+					res.Access = raw
+					repo := NewResourceRepository(nil)
+					processed, err := repo.ProcessResourceDigest(t.Context(), res, nil)
+					r.NoError(err)
+					r.Equal(dig.Encoded(), processed.Digest.Value)
+					path := "/v2/repo/" + tt.endpoint + "/" + dig.String()
+					r.Equal("HEAD "+path, <-requests)
+
+					b, err := repo.DownloadResource(t.Context(), res, nil)
+					r.NoError(err)
+					r.Equal("GET "+path, <-requests)
+					rc, err := b.ReadCloser()
+					r.NoError(err)
+					data, err := io.ReadAll(rc)
+					r.NoError(err)
+					r.NoError(rc.Close())
+					r.Equal("layer", string(data))
+				})
+			}
 		})
 	}
 }
