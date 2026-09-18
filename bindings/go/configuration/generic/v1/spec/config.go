@@ -20,7 +20,7 @@ const NestedConfigIgnoredWarning = "ignoring nested configuration: nested generi
 	"move the nested entries to the top-level configurations list"
 
 func IsGenericConfig(t runtime.Type) bool {
-	return t.Name == ConfigType
+	return Scheme.IsRegistered(t)
 }
 
 // Config holds configuration entities loaded through a configuration file.
