@@ -488,7 +488,37 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		}
 		return nil, nil, err
 	}
-	return b, artifact.(*descriptor.Resource), nil
+
+	res := artifact.(*descriptor.Resource)
+	if err = verifyLocalReference(ctx, res); err != nil {
+		return nil, nil, err
+	}
+
+	return b, res, nil
+}
+
+// verifyLocalReference holds the local reference a resource is served from to the
+// digest the resource declares.
+//
+// The two are written from the same descriptor when the resource is stored, but
+// only the digest is covered by a signature: an access is excluded from the
+// normalised form a signature is taken over. Without this check, editing the
+// local reference redirects the download to a different blob, whose content then
+// verifies happily against the descriptor that blob was fetched by.
+func verifyLocalReference(ctx context.Context, res *descriptor.Resource) error {
+	local := &v2.LocalBlob{}
+	if err := v2.Scheme.Convert(res.Access, local); err != nil {
+		// Not a local blob, so there is no local reference to hold to the digest.
+		return nil
+	}
+
+	served, err := digest.Parse(local.LocalReference)
+	if err != nil {
+		// A local reference that is not a digest names nothing this can compare.
+		return nil
+	}
+
+	return repository.VerifyDigest(ctx, res, served)
 }
 
 func (repo *Repository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
@@ -602,12 +632,10 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	if err != nil {
 		return nil, fmt.Errorf("fetch layer: %w", err)
 	}
-	// data cannot be closed, as it is used by the blob
-	b := ociblob.NewDescriptorBlob(data, artifact)
-	if actual, _ := b.Digest(); actual != artifact.Digest.String() {
-		return nil, fmt.Errorf("digest mismatch: expected %q, got %q", artifact.Digest, actual)
-	}
-	return b, nil
+	// data cannot be closed, as it is used by the blob.
+	// The blob's reader holds the content to the artifact digest, so the content is
+	// verified as it is read rather than here.
+	return ociblob.NewDescriptorBlob(data, artifact), nil
 }
 
 func (repo *Repository) getStore(ctx context.Context, component string, version string) (ref string, store spec.Store, err error) {
@@ -1030,12 +1058,26 @@ func (repo *Repository) RemoveComponentVersionAlias(ctx context.Context, compone
 
 // DownloadResourceStream returns a lazy ResourceStream for the given resource.
 // No data is downloaded — content streams on demand via Fetch calls.
+//
+// The manifest the access resolves to is held to the digest the resource declares
+// before any content is streamed, which is what pins an access that names a tag.
+// An access that already names a digest is served by the registry content-addressed,
+// so the check confirms it describes the resource it is attached to.
 func (repo *Repository) DownloadResourceStream(ctx context.Context, res *descriptor.Resource) (ocistream.ResourceStream, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
 	}
-	return repo.downloadStream(ctx, res.Access)
+	stream, err := repo.downloadStream(ctx, res.Access)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := repository.VerifyDigest(ctx, res, stream.Root().Digest); err != nil {
+		return nil, err
+	}
+
+	return stream, nil
 }
 
 func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed) (ocistream.ResourceStream, error) {

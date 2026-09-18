@@ -99,6 +99,9 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 //
 // The blob is buffered eagerly in memory and can be read any number of times;
 // it needs no cleanup and holds the whole archive until released.
+//
+// The archive is compared to the digest the resource declares, which is the generic
+// blob digest, so an archive that differs fails the read.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	gitHub, err := githubinternal.AccessFrom(resource.Access)
 	if err != nil {
@@ -128,6 +131,27 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 			slog.WarnContext(ctx, "GitHub ref no longer points at the pinned commit; downloading the pinned commit",
 				"ref", gitHub.Ref, "refCommit", resolved, "commit", gitHub.Commit)
 		}
+	}
+
+	archive, err := r.DownloadCommitArchive(ctx, gitHub, credentials)
+	if err != nil {
+		return nil, err
+	}
+
+	return repository.VerifyDownload(ctx, resource, archive)
+}
+
+// DownloadCommitArchive fetches the archive of the commit pinned in GitHub, which
+// [download.Download] rejects the access without.
+//
+// It takes an access rather than a resource because there is no resource here, and
+// so no digest to compare the archive to. The digest processor calls it while
+// establishing that digest, which cannot be verified before it exists. Callers
+// holding a resource want DownloadResource, which verifies.
+func (r *ResourceRepository) DownloadCommitArchive(ctx context.Context, gitHub *v1.GitHub, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	gitHubCredentials, err := credsv1.ConvertToGitHubCredentials(credentials)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving GitHub credentials: %w", err)
 	}
 
 	return download.Download(ctx, gitHub, gitHubCredentials, r.httpClient)

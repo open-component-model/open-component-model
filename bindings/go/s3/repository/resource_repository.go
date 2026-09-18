@@ -82,6 +82,9 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 // The object is streamed into a file under the configured TempFolder, and the
 // returned blob reads from that file, which outlives this call and is owned by the
 // caller.
+//
+// The content is held to the digest the resource declares, which is the digest over
+// exactly these bytes, so a store serving something else fails the read.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := r.convertAccess(resource)
 	if err != nil {
@@ -98,7 +101,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, err
 	}
 
-	return result.Blob, nil
+	return repository.VerifyDownload(ctx, resource, result.Blob)
 }
 
 func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v2.S3, error) {

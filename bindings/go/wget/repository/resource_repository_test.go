@@ -157,6 +157,91 @@ func TestDownloadResource(t *testing.T) {
 	})
 }
 
+func TestDownloadResource_DigestVerification(t *testing.T) {
+	t.Parallel()
+
+	const served = "hello world"
+
+	// serve returns a repository and a resource for a server answering with body.
+	serve := func(t *testing.T, body string) (*repository.ResourceRepository, *descruntime.Resource) {
+		t.Helper()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(body))
+		}))
+		t.Cleanup(server.Close)
+
+		return repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client())),
+			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
+	}
+
+	t.Run("accepts content matching the resource digest", func(t *testing.T) {
+		repo, resource := serve(t, served)
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.FromString(served).Encoded(),
+		}
+
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		assert.Equal(t, []byte(served), readBlob(t, b))
+	})
+
+	t.Run("rejects content that does not match the resource digest", func(t *testing.T) {
+		repo, resource := serve(t, "not what was promised")
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.FromString(served).Encoded(),
+		}
+
+		// Verification is streaming, so the download itself still succeeds.
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		_, err = io.ReadAll(rc)
+		require.ErrorContains(t, err, "digest mismatch")
+		require.ErrorContains(t, rc.Close(), "digest mismatch")
+	})
+
+	t.Run("serves content unverified when the resource carries no digest", func(t *testing.T) {
+		repo, resource := serve(t, served)
+		resource.Digest = nil
+
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		assert.Equal(t, []byte(served), readBlob(t, b))
+	})
+
+	t.Run("serves content unverified when the resource is excluded from signing", func(t *testing.T) {
+		repo, resource := serve(t, served)
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          descruntime.NoDigest,
+			NormalisationAlgorithm: descruntime.ExcludeFromSignature,
+			Value:                  descruntime.NoDigest,
+		}
+
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		assert.Equal(t, []byte(served), readBlob(t, b))
+	})
+
+	t.Run("refuses content when the digest is present but unusable", func(t *testing.T) {
+		repo, resource := serve(t, served)
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "MD5",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.FromString(served).Encoded(),
+		}
+
+		_, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported hash algorithm")
+	})
+}
+
 func TestUploadResource(t *testing.T) {
 	t.Parallel()
 

@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	godigest "github.com/opencontainers/go-digest"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
@@ -88,6 +90,10 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 // DownloadResource fetches a helm chart (and optional provenance file) from the
 // remote repository specified in the resource's helm access. The returned blob
 // is a [helmblob.ChartBlob] wrapping a tar archive of the downloaded files.
+//
+// The chart archive is compared to the digest the resource has before it is
+// repacked. A chart from an OCI registry contains the _manifest's_ digest instead,
+// which is not the archive content's digest.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	helm, err := r.convertAccess(resource)
 	if err != nil {
@@ -120,9 +126,11 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 	slog.DebugContext(ctx, "Created temporary download directory", "dir", downloadDir)
 
+	isOCI := strings.HasPrefix(helmURL, "oci://")
+
 	opts := []helmdownload.Option{helmdownload.WithAlwaysDownloadProv(true)}
 	if credentials != nil {
-		if strings.HasPrefix(helmURL, "oci://") {
+		if isOCI {
 			ociCreds, err := helmcredsv1.ConvertToOCICredentials(credentials)
 			if err != nil {
 				return nil, fmt.Errorf("error converting credentials: %w", err)
@@ -143,6 +151,13 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	result, err := helmdownload.NewReadOnlyChartFromRemote(ctx, helmURL, downloadDir, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart %q: %w", helmURL, err)
+	}
+
+	if isOCI {
+		slog.WarnContext(ctx, "a helm chart from an OCI registry has the digest of its manifest rather than of its archive, so the downloaded chart cannot be verified against it",
+			slog.String("chartReference", helmURL))
+	} else if err := verifyChartArchive(ctx, resource, result.ChartBlob); err != nil {
+		return nil, fmt.Errorf("error verifying downloaded helm chart %q: %w", helmURL, err)
 	}
 
 	slog.DebugContext(ctx, "Helm chart downloaded successfully, creating tar archive", "chartReference", helmURL)
@@ -166,6 +181,22 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	slog.DebugContext(ctx, "Created tar archive from downloaded helm chart files")
 
 	return tarBlob, nil
+}
+
+// verifyChartArchive compares the downloaded chart archive to the digest the resource
+// declares.
+func verifyChartArchive(ctx context.Context, resource *descriptor.Resource, chart *filesystem.Blob) error {
+	raw, ok := chart.Digest()
+	if !ok {
+		return fmt.Errorf("error computing the digest of the downloaded chart archive")
+	}
+
+	actual, err := godigest.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("downloaded chart archive has an unparsable digest %q: %w", raw, err)
+	}
+
+	return repository.VerifyDigest(ctx, resource, actual)
 }
 
 // UploadResource is not supported for Helm repositories and always returns an error.
