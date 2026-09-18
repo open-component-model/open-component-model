@@ -52,12 +52,12 @@ ocm get config
 
 ### Scheme Entry Schema
 
-| Field              | Type     | Required        | Description                                                                                             |
-|--------------------|----------|-----------------|---------------------------------------------------------------------------------------------------------|
-| `name`             | string   | Yes             | Stable identifier for the scheme (e.g. `calver`, `build-number`, `semver`).                             |
-| `builtin`          | string   | No              | Selects a built-in scheme instead of a `pattern`. Only `loose-semver` is supported. Mutually exclusive with `pattern`/`comparisonGroups`. |
-| `pattern`          | string   | Unless `builtin` | Go (RE2) regular expression a version must match for the scheme to claim it. Use named capture groups.  |
-| `comparisonGroups` | array    | No              | Named capture groups from `pattern` used to order versions, most significant first. Empty = lexical.    |
+| Field              | Type   | Required          | Description                                                                                             |
+|--------------------|--------|-------------------|---------------------------------------------------------------------------------------------------------|
+| `name`             | string | Yes               | Stable identifier for the scheme (e.g. `calver`, `build-number`, `semver`).                             |
+| `builtin`          | string | No                | Built-in scheme instead of a `pattern`. Only `loose-semver`. Mutually exclusive with `pattern`.         |
+| `pattern`          | string | Unless `builtin`  | Go (RE2) regular expression a version must match for the scheme to claim it. Use named capture groups.  |
+| `comparisonGroups` | array  | No                | Named capture groups from `pattern` used to order versions, most significant first. Empty = lexical.    |
 
 Numeric capture groups are compared as integers (so `22.10` sorts after `22.04`, and `1900` after `1838`); non-numeric
 groups compare lexically.
