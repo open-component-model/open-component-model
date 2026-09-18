@@ -5,7 +5,6 @@
 title: Open Component Model
 baseurl: https://ocm.software
 canonifyURLs: false
-disableAliases: true
 disableHugoGeneratorInject: true
 enableEmoji: true
 enableGitInfo: false
@@ -62,7 +61,7 @@ taxonomies:
   category: categories
   tag: tags
 permalinks:
-  docs: /docs/:sections[1:]/:title/
+  docs: /docs/:sections[1:]/:slug/
 minify:
   disableSVG: true
   tdewolff:
