@@ -2,10 +2,12 @@ package internal
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base32"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 
@@ -229,35 +231,28 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 	return children, nil
 }
 
-var toWordRunes = []rune{',', '.', '/', '-'}
-
-// identityToTransformationID converts a component identity (name + version) to a camelCase
-// transformation ID suitable for use as a DAG vertex key. The identity map keys are sorted
-// alphabetically for determinism, and separator characters (dots, slashes, dashes, commas)
-// are treated as word boundaries for camelCase conversion.
+// identityToTransformationID derives a stable, opaque transformation ID from a component or
+// resource identity. The identity map keys are sorted alphabetically and the key/value pairs
+// are serialized with NUL separators, then hashed with SHA-256. The sorting makes the digest
+// independent of map iteration order, and the NUL separators prevent key/value pairs from
+// combining into the same byte stream, e.g. {"ab": "c"} and {"a": "bc"}.
 //
-// Example: {"name": "ocm.software/my-app", "version": "1.0.0"} → "transformOcmSoftwareMyApp100"
+// IDs must satisfy (^[a-z][a-zA-Z0-9]*$), so we prefix with a 't' and use base32 for the
+// rest of the ID. We use 8 bytes of the 32 byte digest to not explode the ID length.
+// 8 bytes of entropy is plenty, collision probability ~1 in 10⁹ chance at around 6000 nodes
+//
+// Example: {"name": "ocm.software/my-app", "version": "1.0.0"} -> "tamgtopseg3tay"
 func identityToTransformationID(id runtime.Identity) string {
-	// TODO(jakobmoellerdev): decide if we really wanna keep such strict limits on transformation ids,
-	//   if we really dont need them to be that strict.
-	//   Currently Im forced to convert a map to a camel case string here.
-	words := []string{"transform"}
-	keys := make([]string, 0, len(id))
-	for k := range id {
-		keys = append(keys, k)
+	keys := slices.Sorted(maps.Keys(id))
+	hash := sha256.New()
+	for _, key := range keys {
+		hash.Write([]byte(key))
+		hash.Write([]byte{0})
+		hash.Write([]byte(id[key]))
+		hash.Write([]byte{0})
 	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		words = append(words, strings.FieldsFunc(id[k], func(r rune) bool {
-			return slices.Contains(toWordRunes, r)
-		})...)
-	}
-	result := strings.ToLower(words[0])
-	for i := 1; i < len(words); i++ {
-		w := strings.ToLower(words[i])
-		if len(w) > 0 {
-			result += strings.ToUpper(w[:1]) + w[1:]
-		}
-	}
-	return result
+	return "t" + base32Lower.EncodeToString(hash.Sum(nil)[:8])
 }
+
+// Standard base32 is shouty due to uppercase characters, use lowercase instead, no other difference
+var base32Lower = base32.NewEncoding("abcdefghijklmnopqrstuvwxyz234567").WithPadding(base32.NoPadding)

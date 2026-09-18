@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sync"
 	"testing"
 
@@ -85,36 +86,74 @@ func TestIdentityToTransformationID(t *testing.T) {
 		{
 			name:     "single key",
 			identity: runtime.Identity{"name": "mycomponent"},
-			want:     "transformMycomponent",
+			want:     "tc3hzgygjcerfg",
 		},
 		{
-			name: "name and version sorted by key",
+			name: "name and version",
 			identity: runtime.Identity{
 				descriptor.IdentityAttributeName:    "ocm.software/test",
 				descriptor.IdentityAttributeVersion: "1.0.0",
 			},
-			// keys sorted: "name" < "version", so name values come first
-			want: "transformOcmSoftwareTest100",
+			want: "tiffkl6vme77t4",
 		},
 		{
 			name: "with dots and slashes",
 			identity: runtime.Identity{
 				"name": "ocm.software/my-component",
 			},
-			want: "transformOcmSoftwareMyComponent",
+			want: "tftem6xib4b2uy",
 		},
 		{
 			name:     "empty identity",
 			identity: runtime.Identity{},
-			want:     "transform",
+			want:     "t4oymiquy7qobi",
+		},
+		{
+			name: "semver build metadata and pre-release yield distinct IDs",
+			identity: runtime.Identity{
+				descriptor.IdentityAttributeName:    "ocm.software/test",
+				descriptor.IdentityAttributeVersion: "1.0.0+meta",
+			},
+			want: "tqmatta77pmuzy",
+		},
+		{
+			name: "non-ascii content is hashed, not mangled",
+			identity: runtime.Identity{
+				"name": "ünïcode_res",
+			},
+			want: "tljskb3wwwuekg",
 		},
 	}
 
+	idRegex := regexp.MustCompile(`^[a-z][a-zA-Z0-9]*$`)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
 			got := identityToTransformationID(tt.identity)
-			assert.Equal(t, tt.want, got)
+			r.Equal(tt.want, got, "transformation ID scheme changed")
+			r.Regexp(idRegex, got, "ID must satisfy the transformation ID character set")
+			r.Equal(got, identityToTransformationID(tt.identity), "ID derivation must be deterministic")
 		})
+	}
+}
+
+func TestIdentityToTransformationID_DistinctIdentitiesGetDistinctIDs(t *testing.T) {
+	r := require.New(t)
+	identities := []runtime.Identity{
+		{descriptor.IdentityAttributeName: "ocm.software/test", descriptor.IdentityAttributeVersion: "1.0.0+meta"},
+		{descriptor.IdentityAttributeName: "ocm.software/test", descriptor.IdentityAttributeVersion: "1.0.0-meta"},
+		{descriptor.IdentityAttributeName: "ocm.software/test", descriptor.IdentityAttributeVersion: "1.0.0"},
+		{descriptor.IdentityAttributeName: "ocm.software/test-a", descriptor.IdentityAttributeVersion: "1.0.0"},
+		{descriptor.IdentityAttributeName: "ocm.software/test", descriptor.IdentityAttributeVersion: "1.0.0", "extra": "a"},
+	}
+	seen := make(map[string]runtime.Identity, len(identities))
+	for _, id := range identities {
+		got := identityToTransformationID(id)
+		if other, ok := seen[got]; ok {
+			r.Failf("ID collision", "identities %v and %v both hash to %s", other, id, got)
+		}
+		seen[got] = id
 	}
 }
 

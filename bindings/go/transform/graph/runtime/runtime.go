@@ -106,7 +106,7 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 	res := resolver.NewResolver(transformation.Spec.Data, b.EvaluatedExpressionCache, specSubSchema(transformation.Schema))
 	summary := res.Resolve(transformation.FieldDescriptors)
 	if len(summary.Errors) > 0 {
-		return fmt.Errorf("failed to resolve transformation %q: %w", transformation.ID, errors.Join(summary.Errors...))
+		return fmt.Errorf("failed to resolve transformation %q: %w", transformation.DisplayName(), errors.Join(summary.Errors...))
 	}
 
 	unstructuredTransformationData := transformation.GenericTransformation.AsUnstructured().Data
@@ -115,10 +115,10 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 		transformation.Schema,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to parse resolved transformation %q: %w", transformation.ID, err)
+		return fmt.Errorf("failed to parse resolved transformation %q: %w", transformation.DisplayName(), err)
 	}
 	if len(fieldDescriptors) > 0 {
-		return fmt.Errorf("transformation %q has unresolved fields after resolution", transformation.ID)
+		return fmt.Errorf("transformation %q has unresolved fields after resolution", transformation.DisplayName())
 	}
 
 	runtimeType := transformation.GetType()
@@ -133,11 +133,11 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 
 	transformed, err := transformer.Transform(ctx, transformation.AsRaw())
 	if err != nil {
-		return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
+		return fmt.Errorf("failed to transform transformation %q: %w", transformation.DisplayName(), err)
 	}
 	updated, err := v1alpha1.GenericTransformationFromTyped(transformed)
 	if err != nil {
-		return fmt.Errorf("failed to convert updated transformation %q to generic transformation: %w", transformation.ID, err)
+		return fmt.Errorf("failed to convert updated transformation %q to generic transformation: %w", transformation.DisplayName(), err)
 	}
 	evaluatedTransformation := updated.AsUnstructured().Data
 
@@ -146,10 +146,10 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 		transformation.Schema,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to parse evaluated transformation %q: %w", transformation.ID, err)
+		return fmt.Errorf("failed to parse evaluated transformation %q: %w", transformation.DisplayName(), err)
 	}
 	if len(fieldDescriptors) > 0 {
-		return fmt.Errorf("transformation %q has unresolved fields after evaluation", transformation.ID)
+		return fmt.Errorf("transformation %q has unresolved fields after evaluation", transformation.DisplayName())
 	}
 
 	b.EvaluatedTransformations[transformation.ID] = evaluatedTransformation
