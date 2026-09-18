@@ -22,9 +22,9 @@ registry.internal/mirror/acme/payments:1.4.0
 | Concern | Decision |
 | --- | --- |
 | Portable coordinates | List of typed, versioned artifact coordinates in one resource label. No endpoints or credentials. |
-| Destination policy | Flat OCM config type per target access family. |
+| Destination policy | Flat OCM config type per uploader kind. |
 | User interface | Destination settings; no CEL or templates initially. |
-| Execution | Planner generates CEL; existing transformations perform uploads. |
+| Execution | Planner generates CEL; registered transformations perform uploads. |
 | Coordinate cleanup | Remove after successful external upload **only if returned access preserves the required coordinates**. |
 
 The following names, fields, and derivation rules define the proposed API. Package locations are implementation suggestions.
@@ -36,7 +36,7 @@ The following names, fields, and derivation rules define the proposed API. Packa
 | Access | Downloaded representation | Coordinate-list entry | Upload configuration |
 | --- | --- | --- | --- |
 | `OCIImage/v1` | OCI layout containing the selected artifact graph | `OCIArtifactCoordinates/v1alpha1` | `oci.upload.config.ocm.software/v1alpha1` |
-| `Helm/v1` | Chart + optional provenance, then converted to OCI layout | `OCIArtifactCoordinates/v1alpha1`, after conversion | Same OCI config; no classic Helm config |
+| `Helm/v1` | Native chart `.tgz` + optional provenance; optionally converted to OCI layout | `HelmChartCoordinates/v1alpha1`; add `OCIArtifactCoordinates/v1alpha1` after conversion | `jfrog.helm.upload.config.ocm.software/v1alpha1` for classic JFrog; OCI config after conversion |
 | `S3/v2` | Exact object bytes | `S3ObjectCoordinates/v1alpha1` | `s3.upload.config.ocm.software/v1alpha1`; requires a new upload backend |
 | `Wget/v1` | HTTP response body | `HTTPResourceCoordinates/v1alpha1` | None: download access does not specify an upload protocol |
 | `GitHub/v1` | Exact commit tarball, `application/x-tgz` | `GitHubSourceCoordinates/v1alpha1` | None: a tarball cannot recreate a Git repository/commit |
@@ -44,7 +44,7 @@ The following names, fields, and derivation rules define the proposed API. Packa
 | `OCIImageLayer/v1` | Raw layer, not an OCI artifact | No new producer in this increment | None: no standalone transfer handler; durable upload needs a referencing manifest |
 | `File/v1alpha1` | Transformation staging file | Preserve resource coordinates alongside file | None: internal blob locator |
 
-Access aliases resolve through existing schemes. New coordinate/config types accept **only their canonical, versioned spelling**; no legacy aliases exist to support. Maven is absent from the current Go implementation and outside this API contract.
+Access aliases resolve through existing schemes. New coordinate/config types accept **only their canonical, versioned spelling**; no legacy aliases exist to support. Classic Helm repositories have no standard upload protocol; JFrog support is therefore a vendor-specific uploader, not generic `Helm/v1` upload behavior. Maven is absent from the current Go implementation and outside this API contract.
 
 ## Shared Artifact Coordinates Label
 
@@ -65,15 +65,13 @@ labels:
     value:
       - type: OCIArtifactCoordinates/v1alpha1
         repository: acme/payments
-        tag: "1.4.0"
-      - type: MavenArtifactCoordinates/v1alpha1
-        groupId: com.acme
-        artifactId: payments
-        version: "1.4.0"
-        extension: jar
+        tag: "1.4.0_build.1"
+      - type: HelmChartCoordinates/v1alpha1
+        name: payments
+        version: "1.4.0+build.1"
 ```
 
-The Maven entry illustrates the envelope only; Maven remains outside the current implementation.
+The same envelope can later carry Maven coordinates; Maven remains outside the current implementation.
 
 * Exactly one reserved label. Its value is a JSON/YAML array of typed coordinate payloads. Each payload `type` owns versioning; omit `Label.Version`.
 * At most one entry per target access family. The family key is `runtime.Type.Name`; versions of the same name therefore compete. Reject duplicate type names, regardless of version. Producers upsert their family entry rather than append blindly.
@@ -139,23 +137,83 @@ baseUrl: registry.internal/mirror
 * Initially accept only the `OCIArtifactCoordinates` entry. Preserve other entries; no implicit wrapping of arbitrary S3/Wget/GitHub blobs as OCI artifacts.
 * Reuse `AddOCIArtifact` and streaming `TransferOCIArtifact`. Buffered upload currently requires a tag: remove that limitation for digest-only and tag-plus-digest targets.
 
-### Helm → OCI Derivation
+## Helm API
 
-No separate persisted `HelmArtifactCoordinates` for the **current transfer path**:
+Suggested package: `bindings/go/helm/spec/coordinates/v1alpha1`.
 
-```text
-GetHelmChart → ConvertHelmToOCI → OCIArtifactCoordinates → AddLocalResource / AddOCIArtifact
+```go
+type Coordinates struct {
+    Type    runtime.Type `json:"type"`
+    Name    string       `json:"name"`
+    Version string       `json:"version"`
+}
 ```
 
-| Value | Derivation |
+Wire type: **`HelmChartCoordinates/v1alpha1`**. `name` and `version` are required and come from the downloaded archive's `Chart.yaml`; requested access values and the OCM resource version are not authoritative. The uploader verifies that the archive metadata exactly matches the coordinates. Source repository URLs and provenance do not belong in the coordinates.
+
+`GetHelmChart` attaches the coordinates before access metadata is lost. They are compatible with either a native chart `.tgz` or a Helm OCI layout from which exactly one chart layer can be extracted. The OCI layout may also contain one provenance layer.
+
+### Helm → OCI Derivation
+
+Conversion preserves Helm coordinates and adds OCI coordinates:
+
+```text
+GetHelmChart
+  → HelmChartCoordinates
+  → ConvertHelmToOCI
+  → HelmChartCoordinates + OCIArtifactCoordinates
+  → AddLocalResource / AddOCIArtifact
+```
+
+| OCI value | Derivation |
 | --- | --- |
-| Repository | Source `helmRepository` URL path + resolved `Chart.yaml.name`; remove only endpoint and boundary slashes. Preserve current repository-path behavior. |
-| Tag | Resolved `Chart.yaml.version`, with Helm's OCI mapping of `+` to `_`. Apply consistently to layout tagging and target reference. |
+| Repository | Source `helmRepository` URL path + resolved chart name; remove only endpoint and boundary slashes. Preserve current repository-path behavior. |
+| Tag | Resolved chart version, with Helm's OCI mapping of `+` to `_`. Apply consistently to layout tagging and target reference. |
 | Digest | Root manifest digest returned by `CopyChartToOCILayout`. |
 
-Example: `https://charts.example/team/charts` + chart `payments`, version `1.4.0+build.1` → repository `team/charts/payments`, tag `1.4.0_build.1`.
+Example: `https://charts.example/team/charts` + chart `payments`, version `1.4.0+build.1` → Helm coordinates `payments:1.4.0+build.1` and OCI coordinates `team/charts/payments:1.4.0_build.1`.
 
-Use resolved chart metadata, not requested version or OCM resource version. Reject invalid OCI repository names; do not silently lowercase/slugify. Preserve provenance inside the OCI layout. A future raw chart-bundle local-blob path needs a distinct coordinate type; never label a raw `.tgz` as an OCI layout.
+Reject invalid OCI repository names; do not silently lowercase/slugify. Preserve provenance inside the OCI layout. Never label a raw `.tgz` as an OCI layout.
+
+### JFrog Helm Upload Config
+
+Classic Helm repositories have no standard upload API. This config selects the JFrog Artifactory implementation while keeping chart identity in `HelmChartCoordinates`.
+
+Suggested package: `bindings/go/jfrog/helm/spec/config/upload/v1alpha1`.
+
+```go
+type Config struct {
+    Type               runtime.Type `json:"type"`
+    BaseURL            string       `json:"baseUrl"`
+    Repository         string       `json:"repository"`
+    ReindexAfterUpload bool         `json:"reindexAfterUpload,omitempty"`
+}
+```
+
+```yaml
+type: jfrog.helm.upload.config.ocm.software/v1alpha1
+baseUrl: https://acme.jfrog.io
+repository: helm-local
+reindexAfterUpload: true
+```
+
+* `baseUrl`: required absolute HTTP(S) JFrog server URL. Do not include `/artifactory`. Reject userinfo, query, fragment, and non-root paths.
+* `repository`: required JFrog local or federated Helm repository key. Treat it as one path segment; reject separators and traversal.
+* HTTP timeouts, TLS, proxy, and retry behavior come from `http.config.ocm.software`; credentials remain outside this config.
+* Preserve the OCM v1 credential consumer identity: type `JFrogHelm`, hostname, optional port, and repository. Support bearer-token and username/password credentials through the standard resolver.
+* Upload the chart archive with `PUT <baseUrl>/artifactory/<repository>/<name>-<version>.tgz`. URL-escape segments structurally. Send the verified SHA-256 through `X-Checksum-Sha256` and disable checksum-only deployment; do not copy the OCI manifest digest.
+* If requested, reindex with `POST <baseUrl>/artifactory/api/helm/<repository>/reindex` after successful upload. Reindex failure fails the transformation but cannot roll back the uploaded chart.
+* Construct the returned `Helm/v1` access from validated config and chart coordinates rather than trusting response-provided URLs:
+
+  ```yaml
+  type: Helm/v1
+  helmRepository: https://acme.jfrog.io/artifactory/api/helm/helm-local
+  helmChart: payments:1.4.0+build.1
+  ```
+
+The direct path uploads a native `.tgz` unchanged. For a Helm OCI layout, an explicit `ExtractHelmChartFromOCI` conversion selects the Helm chart layer by media type and verifies `Chart.yaml`. JFrog receives only the chart `.tgz`; a provenance layer is not published by this API path. The returned resource digest is therefore the chart archive digest, not the OCI manifest digest. Remove the consumed Helm coordinates because the returned access preserves them, and remove now-invalid OCI coordinates.
+
+The implementation should port the behavior of the [OCM v1 JFrog Helm uploader](https://github.com/open-component-model/ocm/tree/main/cmds/jfrogplugin/uploaders/helm), not depend on its legacy uploader-plugin protocol. A dedicated JFrog transformation/backend returns the standard `Helm/v1` access; generic Helm `ResourceRepository.UploadResource` remains unsupported.
 
 ## S3 API
 
@@ -293,8 +351,8 @@ copyMode permits copying?
   → upload; use returned resource in the descriptor
 ```
 
-* One effective config per target family. After generic flattening, later complete entries replace earlier ones **as a whole**. Validate each entry; nil/missing means no policy.
-* Matching is configuration policy, not label semantics. Future matchers may select by resource identity or metadata. Select the uploader first, then look up its declared coordinate-family name; list order never breaks ties. Multiple matching uploaders without explicit precedence are an error.
+* One effective config per uploader kind. After generic flattening, later complete entries replace earlier ones **as a whole**. Validate each entry; nil/missing means no policy.
+* Matching is configuration policy, not label semantics. Future matchers may select by resource identity or metadata. Select the uploader first, then look up its declared coordinate-family name; list order never breaks ties. Multiple matching uploaders without explicit precedence are an error. In particular, a Helm OCI layout may carry both Helm and OCI coordinates; if both JFrog Helm and OCI configs are effective, policy must select one rather than relying on implicit format preference.
 * Explicit compatible uploader overrides `uploadType` / `--upload-as`. Unmatched resources retain existing placement; selected-upload failures are errors, never fallback signals.
 * Resource destinations are independent of the component repository: OCI resource upload may accompany a CTF component target.
 * Credentials and HTTP settings retain their existing config types. No implicit field merging, matchers, user CEL, or credentials in uploader configs.
@@ -315,7 +373,8 @@ copyMode permits copying?
 | Empty list | Remove the reserved label. |
 
 * Cleanup runs **after backend success**, on a copied output resource. Remove only the consumed entry; remove the label only when its list becomes empty. Preserve unrelated labels, compatible coordinates, and shared source branches. Later descriptor-publication failure may leave uploaded artifacts; transfer is not transactional.
-* Artifact coordinates are transport metadata, not provenance. OCI/S3 prefixes become part of new accesses; subsequent downloads do not guess them away.
+* Artifact coordinates are transport metadata, not provenance. OCI, S3, and JFrog prefixes become part of new accesses; subsequent downloads do not guess them away.
+* Helm OCI layout → JFrog Helm is an explicit representation conversion. Set the returned resource digest to the extracted chart archive digest, remove incompatible OCI coordinates, and do not claim provenance preservation.
 * Unsigned coordinate changes preserve descriptor normalization **if other signing-relevant fields remain unchanged**. Reject automatic mutation of signing-relevant coordinate labels.
 * Verify resource digests independently. Helm → OCI conversion is not automatically signature-preserving; component signatures and OCI artifact signatures are separate.
 * Reject endpoint overrides, namespace escapes, and conflicting target coordinates within a transfer. Do not assume identical content when equality cannot be established. Apply technology-specific path/key semantics above.
@@ -325,16 +384,17 @@ copyMode permits copying?
 | Area | Required work / existing constraint |
 | --- | --- |
 | `descriptor/coordinates` (new) | `List` plus technology-neutral label decode/encode/find/upsert/remove helpers, copying, duplicate-family/signing guards. Family key is `runtime.Type.Name`; no technology imports. |
-| `<technology>/spec/coordinates/v1alpha1` (new) | Four payloads above; registration, strict validation, generated schemas/deepcopy/type methods. |
-| `<technology>/spec/config/upload/v1alpha1` (new) | OCI first; S3 with its backend. Reuse [generic filtering](../../bindings/go/configuration/generic/v1/spec/filter.go), scheme conversion, and flattened priority. |
+| `<technology>/spec/coordinates/v1alpha1` (new) | Five payloads above; registration, strict validation, generated schemas/deepcopy/type methods. |
+| `<technology>/spec/config/upload/v1alpha1` (new) | OCI first; S3 with its backend; JFrog Helm with explicit OCI-layout extraction. Reuse [generic filtering](../../bindings/go/configuration/generic/v1/spec/filter.go), scheme conversion, and flattened priority. |
 | Technology transformations | Produce coordinates before access/resolved metadata is lost; copy output resources. |
+| JFrog Helm backend (new) | Port OCM v1 PUT/checksum/auth/reindex behavior; reuse HTTP config; return `Helm/v1`. Do not make generic Helm uploadable. |
 | [Transfer planner](../../bindings/go/transfer/internal/graph.go) | Separate upload-policy input; existing `BuildGraphDefinition` remains the no-policy wrapper. CLI/controller share the compiler. |
 | [Transformations](../../bindings/go/transform/graph/builder/builder.go) | Reuse CEL/DAG execution, `AddOCIArtifact`, `TransferOCIArtifact`, and `ResourceRepository.UploadResource`. No new execution registry. |
 | [Controller config](../../bindings/go/kubernetes/controller/pkg/configuration/config.go) | Explicitly allowlist implemented uploader types; otherwise they are dropped before hashing. |
 | [Replication](../../bindings/go/kubernetes/controller/internal/controller/replication/replication_controller.go) | Replace source-digest-only skipping with a fingerprint of successful source identity/digest + effective policy + target. Load config before skipping; watch Secret/ConfigMap changes. Persist fingerprint only after descriptor publication succeeds. |
 | [OCI backend](../../bindings/go/oci/repository.go) | Align buffered digest-only/tag-plus-digest upload with streaming; never invent tags or drop pins. |
 
-**First increment:** OCI → coordinate-bearing local blob → configured OCI upload; Helm-to-OCI coordinates; streaming parity. Add S3 upload support separately from S3 coordinate production.
+**First increment:** OCI → coordinate-bearing local blob → configured OCI upload; Helm-to-OCI coordinates; streaming parity. Add S3 and JFrog Helm upload support as separate backend increments.
 
 **Constructor integration is separate:** S3/Wget inputs return only `ProcessedBlobData`; `constructor/construct.go` ignores `ProcessedResource` when blob data is also present. Metadata propagation must be explicit before claiming constructor-produced blobs automatically carry artifact coordinates.
 
@@ -342,7 +402,8 @@ copyMode permits copying?
 
 * Golden JSON/YAML, list decode/encode, multi-family round trip, duplicate-family/version rejection, order-independent selection, strict validation, canonical new type versions, config last-wins behavior, ambiguous-uploader errors, capability errors, allowlisting.
 * OCI host:port removal, relative paths, tag/digest variants, root-digest verification, offline round trips, buffered/streaming parity.
-* Helm resolved metadata, repository paths, `+` → `_`, provenance, coordinates attached after conversion.
+* Helm resolved metadata, repository paths, `+` → `_`, provenance, both coordinate families attached after conversion.
+* JFrog native-chart and OCI-layout inputs, metadata mismatch, path escaping, checksum header, auth, response validation, optional reindex, returned Helm access, digest replacement, provenance loss, retry behavior.
 * S3 opaque keys/prefixes, bucket/version omission, destination version capture, media type, cross-bucket collisions.
 * Wget escapes, empty path, request/query omission, redirects, no inferred destination.
 * GitHub `.git` normalization, pinned commit versus ref, enterprise host removal, ref-only rejection.
@@ -360,4 +421,4 @@ Publish label/config schemas and examples with implementation. Do not advertise 
 | Extend `LocalBlob` | New access fields, schemas, specification change. | Dedicated schema location, but expands generic transport access. |
 | Graph-only coordinates | Pass coordinates between nodes without persistence. | No persistent metadata, but fails disconnected/multi-hop transfers. |
 
-**Deferred:** per-resource routing, coordinate overrides, user CEL, multiple destinations per access family, arbitrary reverse conversions, general HTTP publishing, Maven API, and blob-to-OCI wrapping. Existing blobs with insufficient metadata cannot gain round-trip support automatically.
+**Deferred:** per-resource routing, coordinate overrides, user CEL, multiple destinations per uploader kind, arbitrary reverse conversions beyond Helm OCI layout → chart archive, general HTTP publishing, Maven API, and blob-to-OCI wrapping. Existing blobs with insufficient metadata cannot gain round-trip support automatically.
