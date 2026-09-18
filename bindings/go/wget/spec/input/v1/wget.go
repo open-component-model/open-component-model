@@ -42,6 +42,83 @@ type Wget struct {
 
 	// NoRedirect disables following HTTP redirects when set to true.
 	NoRedirect bool `json:"noRedirect,omitempty"`
+
+	// ChecksumPolicy optionally configures how an expected checksum for the
+	// downloaded content is obtained and verified when the resource carries no
+	// digest of its own. When unset, the digest is computed from the downloaded
+	// stream without external verification. See [ChecksumPolicy].
+	ChecksumPolicy *ChecksumPolicy `json:"checksumPolicy,omitempty"`
+}
+
+// OnMissingChecksum controls what happens when a [ChecksumPolicy] is configured
+// but none of its sources yields an expected checksum.
+type OnMissingChecksum string
+
+const (
+	// OnMissingFail aborts the input with an error when no source yields a checksum.
+	// This is the default when a ChecksumPolicy is set.
+	OnMissingFail OnMissingChecksum = "fail"
+	// OnMissingCompute falls back to computing the digest from the stream without
+	// external verification when no source yields a checksum.
+	OnMissingCompute OnMissingChecksum = "compute"
+)
+
+// ChecksumSourceType selects a strategy for obtaining an expected checksum,
+// modelled on Maven's expected-checksum strategies.
+type ChecksumSourceType string
+
+const (
+	// ChecksumSourceHTTPHeader reads the checksum from the download response
+	// headers ("Remote Included"): the RFC 9530 Content-Digest field and the
+	// non-standard x-checksum-* family.
+	ChecksumSourceHTTPHeader ChecksumSourceType = "httpHeader"
+	// ChecksumSourceExternalURL fetches the checksum from a sibling URL
+	// ("Remote External"), e.g. <url>.sha256.
+	ChecksumSourceExternalURL ChecksumSourceType = "externalUrl"
+	// ChecksumSourceStream computes the digest from the downloaded stream without
+	// an external expected checksum.
+	ChecksumSourceStream ChecksumSourceType = "stream"
+)
+
+// ChecksumPolicy is an ordered list of checksum sources evaluated first-match
+// wins, plus the behaviour when none yields a checksum. The digest recorded on
+// the resource is always SHA-256; a source may verify the transferred bytes
+// against a different algorithm (e.g. SHA-1 from a Maven repository) without
+// changing the stored algorithm.
+//
+// +k8s:deepcopy-gen=true
+// +ocm:jsonschema-gen=true
+type ChecksumPolicy struct {
+	// Sources are the checksum strategies to try, in order. The first that yields
+	// an expected checksum is used to verify the download.
+	Sources []ChecksumSource `json:"sources,omitempty"`
+	// OnMissing controls the behaviour when no source yields a checksum. Defaults
+	// to "fail".
+	// +ocm:jsonschema-gen:enum=fail,compute
+	OnMissing OnMissingChecksum `json:"onMissing,omitempty"`
+}
+
+// ChecksumSource configures a single checksum-retrieval strategy within a
+// [ChecksumPolicy].
+//
+// +k8s:deepcopy-gen=true
+// +ocm:jsonschema-gen=true
+type ChecksumSource struct {
+	// Type selects the retrieval strategy.
+	// +ocm:jsonschema-gen:enum=httpHeader,externalUrl,stream
+	Type ChecksumSourceType `json:"type"`
+	// Headers lists additional response header names to inspect for httpHeader
+	// sources, beyond the standard RFC 9530 and x-checksum-* headers. The
+	// algorithm is inferred from a trailing token (e.g. "x-my-sha256").
+	Headers []string `json:"headers,omitempty"`
+	// URLTemplate builds the checksum URL for externalUrl sources from the
+	// artifact URL and an algorithm extension. Supports the tokens {{.url}} and
+	// {{.ext}}. Defaults to "{{.url}}.{{.ext}}".
+	URLTemplate string `json:"urlTemplate,omitempty"`
+	// Algorithms restricts which checksum algorithms this source considers, given
+	// as file extensions (sha256, sha512, sha1, md5), strongest-preferred first.
+	// When empty, all supported algorithms are considered.
+	Algorithms []string `json:"algorithms,omitempty"`
 }
 
 func (t *Wget) String() string {

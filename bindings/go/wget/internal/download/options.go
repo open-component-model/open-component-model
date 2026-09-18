@@ -1,6 +1,7 @@
 package download
 
 import (
+	"hash"
 	"net/http"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -27,6 +28,13 @@ type option struct {
 	// TempDir is the directory the response body is written to. Empty uses the OS
 	// temporary directory.
 	TempDir string
+
+	// DigestAlgorithms names the hashes computed over the body during download, in
+	// addition to the media type handling. Each name is a crypto.Hash algorithm
+	// (identified by the caller); the computed hex digests are exposed on the
+	// returned Blob via [Blob.Digests]. When empty, no digest is computed during
+	// the stream (the Blob still computes SHA-256 lazily on demand).
+	DigestAlgorithms []DigestAlgorithm
 }
 
 // Option configures the behavior of [Download].
@@ -54,6 +62,24 @@ func WithMaxDownloadSize(size int64) Option {
 func WithTempDir(dir string) Option {
 	return func(o *option) {
 		o.TempDir = dir
+	}
+}
+
+// DigestAlgorithm pairs a caller-defined name with the hash used to compute it.
+// The name is echoed back as the key in [Blob.Digests], letting the caller map a
+// computed hex digest back to its own algorithm identifier.
+type DigestAlgorithm struct {
+	// Name is the key the computed hex digest is exposed under in [Blob.Digests].
+	Name string
+	// New constructs a fresh hash for the algorithm.
+	New func() hash.Hash
+}
+
+// WithDigestAlgorithms computes the given hashes over the response body while it
+// is streamed to disk, exposing the hex results on the returned [Blob.Digests].
+func WithDigestAlgorithms(algs ...DigestAlgorithm) Option {
+	return func(o *option) {
+		o.DigestAlgorithms = algs
 	}
 }
 

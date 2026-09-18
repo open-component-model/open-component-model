@@ -9,8 +9,24 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/ChecksumPolicy.schema.json
+var schemaChecksumPolicy []byte
+
+//go:embed schemas/ChecksumSource.schema.json
+var schemaChecksumSource []byte
+
 //go:embed schemas/Wget.schema.json
 var schemaWget []byte
+
+// JSONSchema returns the JSON Schema for ChecksumPolicy.
+func (ChecksumPolicy) JSONSchema() []byte {
+	return schemaChecksumPolicy
+}
+
+// JSONSchema returns the JSON Schema for ChecksumSource.
+func (ChecksumSource) JSONSchema() []byte {
+	return schemaChecksumSource
+}
 
 // JSONSchema returns the JSON Schema for Wget.
 func (Wget) JSONSchema() []byte {
