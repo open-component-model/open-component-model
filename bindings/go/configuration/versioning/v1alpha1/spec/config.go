@@ -156,6 +156,9 @@ func (c *Config) Registry() (*versioning.Registry, error) {
 		if s == nil {
 			return nil, fmt.Errorf("versioning scheme at index %d is null", i)
 		}
+		if s.Builtin == "" && s.Pattern == "" {
+			return nil, fmt.Errorf("versioning scheme %q (index %d): must set exactly one of pattern or builtin", s.Name, i)
+		}
 		if s.Builtin != "" {
 			if s.Pattern != "" || len(s.ComparisonGroups) > 0 {
 				return nil, fmt.Errorf("versioning scheme %q (index %d): builtin is mutually exclusive with pattern and comparisonGroups", s.Name, i)

@@ -219,3 +219,99 @@ func TestVersioning_ExplicitLooseSemverSchemeOrdersAndRanks(t *testing.T) {
 	r.NoError(reg.SortDescending(versions))
 	r.Equal([]string{"2024.03.15", "2023.12.31", "1.10.0", "1.2.3"}, versions)
 }
+
+func TestVersioning_RegexSchemeSatisfiesRelational(t *testing.T) {
+	r := require.New(t)
+	calver := calverFull()
+
+	cases := []struct {
+		constraint string
+		want       bool
+	}{
+		{">=2024.01.01", true},
+		{">=2024.06.01", false},
+		{">=2024.03.15 <2024.10.01", true},
+		{"<2024.03.15", false},
+		{"<=2024.03.15", true},
+		{"2024.03.15", true}, // bare operand means equality
+		{"!=2024.03.15", false},
+		{">=2024.06.01, <2025.01.01", false}, // comma-composed AND; first term fails
+		{"", true},
+	}
+	for _, tc := range cases {
+		ok, err := calver.Satisfies("2024.03.15", tc.constraint)
+		r.NoError(err, "constraint %q", tc.constraint)
+		r.Equal(tc.want, ok, "constraint %q", tc.constraint)
+	}
+
+	// An operand that is not a version of this scheme means the constraint belongs
+	// to a foreign grammar: not applicable, not a hard error.
+	_, err := calver.Satisfies("2024.03.15", ">=not-a-date")
+	r.ErrorIs(err, versioning.ErrConstraintNotApplicable)
+	r.ErrorIs(calver.ValidateConstraint(">=not-a-date"), versioning.ErrConstraintNotApplicable)
+	r.NoError(calver.ValidateConstraint(">=2024.01.01 <2025.01.01"))
+}
+
+func TestVersioning_FilterForeignAndMalformedConstraints(t *testing.T) {
+	r := require.New(t)
+
+	// Foreign grammar: a semver range over a calver-only registry is not
+	// applicable, so calver versions are retained (used by "get cv" whose default
+	// constraint "> 0.0.0-0" is semver).
+	regCal := versioning.NewRegistry(calverFull())
+	out, err := regCal.Filter([]string{"2024.03.15", "2024.10.01"}, "> 0.0.0-0")
+	r.NoError(err)
+	r.Equal([]string{"2024.03.15", "2024.10.01"}, out)
+
+	// Foreign grammar in a mixed registry: calver retained, semver constrained.
+	regMix := versioning.NewRegistry(calverFull(), versioning.NewLooseSemverScheme())
+	out, err = regMix.Filter([]string{"2024.03.15", "1.0.0", "2.0.0"}, ">=2.0.0")
+	r.NoError(err)
+	r.Equal([]string{"2024.03.15", "2.0.0"}, out)
+
+	// Malformed semver: a semver version with an unparseable constraint errors.
+	_, err = versioning.Default().Filter([]string{"1.0.0"}, "not-a-constraint")
+	r.Error(err)
+}
+
+func TestVersioning_RegexSchemeSatisfiesNumeric(t *testing.T) {
+	r := require.New(t)
+	builds := buildNumber()
+	// Numeric ordering, not lexical: 12000 >= 1000 holds though "12000" < "1000".
+	ok, err := builds.Satisfies("12000", ">=1000")
+	r.NoError(err)
+	r.True(ok)
+	ok, err = builds.Satisfies("1837", ">=2000")
+	r.NoError(err)
+	r.False(ok)
+}
+
+func TestVersioning_FilterCalverRelationalConstraint(t *testing.T) {
+	r := require.New(t)
+	reg := versioning.NewRegistry(calverFull())
+
+	out, err := reg.Filter([]string{"2024.03.15", "2024.10.01", "2023.12.31"}, ">=2024.01.01")
+	r.NoError(err)
+	r.Equal([]string{"2024.03.15", "2024.10.01"}, out) // input order preserved
+
+	out, err = reg.Filter([]string{"2024.03.15", "2024.10.01"}, ">=2024.06.01 <2025.01.01")
+	r.NoError(err)
+	r.Equal([]string{"2024.10.01"}, out)
+}
+
+func TestVersioning_SatisfiesCalverRelationalAndUnknown(t *testing.T) {
+	r := require.New(t)
+	reg := versioning.NewRegistry(calverFull())
+
+	ok, err := reg.Satisfies("2024.10.01", ">=2024.06.01")
+	r.NoError(err)
+	r.True(ok)
+	ok, err = reg.Satisfies("2024.03.15", ">=2024.06.01")
+	r.NoError(err)
+	r.False(ok)
+
+	// A version no scheme claims never satisfies a constraint.
+	ok, err = reg.Satisfies("zzz", ">=2024.01.01")
+	r.NoError(err)
+	r.False(ok)
+}
