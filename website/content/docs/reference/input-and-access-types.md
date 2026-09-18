@@ -154,14 +154,15 @@ want the bytes captured in the component version rather than fetched again at co
 
 Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical.
 
-| Field        | Type                  | Required | Description                                                                                                                               |
-|--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| `url`        | string                | yes      | HTTP or HTTPS endpoint to download from. Other URL schemes are rejected.                                                                  |
-| `mediaType`  | string                | no       | Media type of the downloaded content. If omitted, the response `Content-Type` header is used, falling back to `application/octet-stream`. |
-| `header`     | `map[string][]string` | no       | Additional HTTP headers to send with the request.                                                                                         |
-| `verb`       | string                | no       | HTTP method to use. Defaults to `GET`.                                                                                                    |
-| `body`       | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
-| `noRedirect` | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
+| Field            | Type                  | Required | Description                                                                                                                               |
+|------------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `url`            | string                | yes      | HTTP or HTTPS endpoint to download from. Other URL schemes are rejected.                                                                  |
+| `mediaType`      | string                | no       | Media type of the downloaded content. If omitted, the response `Content-Type` header is used, falling back to `application/octet-stream`. |
+| `header`         | `map[string][]string` | no       | Additional HTTP headers to send with the request.                                                                                         |
+| `verb`           | string                | no       | HTTP method to use. Defaults to `GET`.                                                                                                    |
+| `body`           | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
+| `noRedirect`     | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
+| `checksumPolicy` | object                | no       | How to obtain and verify an expected checksum for the downloaded content. See [Checksum policy](#wget-checksum-policy) below.             |
 
 {{< callout context="caution" >}}
 Do not put credentials in `url`, `header`, or `body`. That includes userinfo (`https://user:token@host/...`) and
@@ -206,6 +207,87 @@ resources:
 
 See [Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}) for media type
 resolution, redirects, download tuning, and credential configuration.
+
+#### Verifying a pinned digest {#wget-pinned-digest}
+
+If the resource carries a `digest` (the standard OCM digest info, set alongside
+the resource rather than inside `input`), the wget input verifies the downloaded
+content against it and fails the build on a mismatch. Only the canonical
+SHA-256 / `genericBlobDigest/v1` form is accepted.
+
+```yaml
+resources:
+- name: release-archive
+  type: blob
+  version: 1.0.0
+  digest:
+    hashAlgorithm: SHA-256
+    normalisationAlgorithm: genericBlobDigest/v1
+    value: b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
+  input:
+    type: Wget/v1
+    url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
+```
+
+A pinned `digest` and a `checksumPolicy` can be combined: each is verified
+independently against the downloaded bytes.
+
+#### Checksum policy {#wget-checksum-policy}
+
+A wget input embeds the downloaded bytes as a local blob and records their
+SHA-256 digest. When you also want an **expected** checksum verified against the
+download, configure a `checksumPolicy`. This is useful when the upstream ships a
+checksum out of band, following the strategies described by
+[Maven's expected checksums](https://maven.apache.org/resolver/expected-checksums.html).
+
+```yaml
+resources:
+- name: release-archive
+  type: blob
+  version: 1.0.0
+  input:
+    type: Wget/v1
+    url: https://repo1.maven.org/maven2/xom/xom/1.3.9/xom-1.3.9.jar
+    checksumPolicy:
+      onMissing: fail          # fail | compute (default: fail when a policy is set)
+      sources:                 # tried in order; first that yields a checksum wins
+        - type: httpHeader     # "Remote Included": checksum in the response headers
+        - type: externalUrl    # "Remote External": checksum from <url>.<ext>
+          algorithms: [sha256, sha1]
+```
+
+Each entry in `sources` has a `type`:
+
+- `httpHeader` — the checksum travels in the download response headers. Both the
+  IETF-standard [RFC 9530](https://www.rfc-editor.org/rfc/rfc9530) `Content-Digest`
+  field and the non-standard `x-checksum-sha256`/`x-checksum-sha1`/`x-checksum-md5`
+  family (plus the `x-goog-meta-*` and `x-amz-meta-*` variants) are understood. Add
+  extra header names with `headers: [x-my-sha256]`.
+- `externalUrl` — a sibling resource fetched from a separate URL, by default
+  `<url>.<ext>` (e.g. `.sha256`, `.sha1`). Override the URL shape with `urlTemplate`
+  using the `{{.url}}` and `{{.ext}}` tokens. The file may be a bare hex digest or
+  GNU coreutils format (`<hex>  <name>`).
+- `stream` — no expected checksum; the digest is computed from the downloaded
+  stream. Placing this in the list stops the search and disables verification from
+  that point on.
+
+Fields on a source: `headers` (extra header names for `httpHeader`), `urlTemplate`
+and `algorithms` (file extensions `sha256`, `sha512`, `sha1`, `md5`, strongest
+first, for `externalUrl`).
+
+`onMissing` controls what happens when no source yields a checksum: `fail`
+(default when a policy is set) aborts the build; `compute` falls back to computing
+the digest from the stream without external verification.
+
+{{< callout context="note" >}}
+Verification and storage are decoupled. A policy may verify the transferred bytes
+against any supported algorithm — Maven repositories commonly ship SHA-1 or MD5 —
+but the digest recorded on the resource is **always SHA-256** with the
+`genericBlobDigest/v1` normalisation. A non-SHA-256 transport checksum therefore
+never leaks a weak or non-canonical algorithm into the component descriptor or
+into OCI storage and signing. If the download does not match the expected
+checksum, construction fails before anything is stored.
+{{< /callout >}}
 
 ### `S3/v2` {#s3v2-input}
 
