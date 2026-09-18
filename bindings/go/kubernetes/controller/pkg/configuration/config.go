@@ -229,6 +229,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		if cfg == nil {
 			continue
 		}
+
 		configs = append(configs, cfg)
 	}
 	merged := genericv1.MergeConfigs(log.FromContext(ctx).V(1).Info, configs...)

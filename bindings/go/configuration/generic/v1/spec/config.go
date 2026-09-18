@@ -16,6 +16,9 @@ const (
 	ConfigTypeV1 = Version
 )
 
+// MergeConfigs merges multiple generic configs into one by appending them.
+// It takes `warnFn` as an argument to allow for caller defined warning on
+// any encountered nested generic configs, which are not supported.
 func MergeConfigs(warnFn func(msg string, keysAndValues ...any), configs ...*Config) *Config {
 	merged := new(Config)
 	merged.Configurations = make([]*runtime.Raw, 0)
