@@ -75,6 +75,5 @@ func TestSerializeVertexToDescriptorTree_TypedUnregisteredAccess(t *testing.T) {
 
 	row, err := serializeVertexToDescriptorTree(v)
 	r.NoError(err, "rendering a typed unregistered access must not fail")
-	r.Equal("ocm.software/repro/oci-access", row.Component)
-	r.Equal("1.0.0", row.Version)
+	r.Equal([]string{"ocm.software/repro/oci-access", "1.0.0", "ocm.software", "name=ocm.software/repro/oci-access,version=1.0.0"}, row.Cells)
 }
