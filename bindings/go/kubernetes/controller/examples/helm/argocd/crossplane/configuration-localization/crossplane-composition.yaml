@@ -1,0 +1,210 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: helmargocdcrossplaneconfigurationlocalizations.examples.ocm.software
+spec:
+  group: examples.ocm.software
+  names:
+    kind: HelmArgocdCrossplaneConfigurationLocalization
+    plural: helmargocdcrossplaneconfigurationlocalizations
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                prefix:
+                  type: string
+                  default: helm-argocd-crossplane-configuration-localization
+                podinfo:
+                  type: object
+                  properties:
+                    message:
+                      type: string
+                      default: "hello world"
+                    releaseName:
+                      type: string
+                      default: "podinfo"
+            status:
+              type: object
+              properties:
+                ociRegistry:
+                  type: string
+                ociRepository:
+                  type: string
+                ociTag:
+                  type: string
+                imageRegistry:
+                  type: string
+                imageRepository:
+                  type: string
+                imageTag:
+                  type: string
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: helm-argocd-crossplane-configuration-localization
+spec:
+  compositeTypeRef:
+    apiVersion: examples.ocm.software/v1alpha1
+    kind: HelmArgocdCrossplaneConfigurationLocalization
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: crossplane-contrib-function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: resourceChart
+            base:
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
+              metadata:
+                namespace: default
+              spec:
+                componentRef:
+                  name: helm-argocd-crossplane-configuration-localization-component
+                resource:
+                  byReference:
+                    resource:
+                      name: helm-resource
+                additionalStatusFields:
+                  registry: resource.access.toOCI().registry
+                  repository: resource.access.toOCI().repository
+                  tag: resource.access.toOCI().tag
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-resource-chart"
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.registry
+                toFieldPath: status.ociRegistry
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.repository
+                toFieldPath: status.ociRepository
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.tag
+                toFieldPath: status.ociTag
+          - name: resourceImage
+            base:
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
+              metadata:
+                namespace: default
+              spec:
+                componentRef:
+                  name: helm-argocd-crossplane-configuration-localization-component
+                resource:
+                  byReference:
+                    resource:
+                      name: image-resource
+                additionalStatusFields:
+                  registry: resource.access.toOCI().registry
+                  repository: resource.access.toOCI().repository
+                  tag: resource.access.toOCI().tag
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-resource-image"
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.registry
+                toFieldPath: status.imageRegistry
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.repository
+                toFieldPath: status.imageRepository
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.tag
+                toFieldPath: status.imageTag
+          - name: argocdApplication
+            base:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Application
+              metadata:
+                namespace: argocd
+                finalizers:
+                  - resources-finalizer.argocd.argoproj.io
+              spec:
+                project: default
+                source:
+                  chart: podinfo
+                  helm:
+                    releaseName: PLACEHOLDER
+                    parameters:
+                      - name: image.repository
+                        value: PLACEHOLDER
+                      - name: image.tag
+                        value: PLACEHOLDER
+                      - name: ui.message
+                        value: PLACEHOLDER
+                  path: .
+                destination:
+                  server: https://kubernetes.default.svc
+                  namespace: default-argocd
+                syncPolicy:
+                  automated:
+                    prune: true
+                    selfHeal: true
+                  syncOptions:
+                    - CreateNamespace=true
+            # ArgoCD Application has no status.conditions[type=Ready], so function-auto-ready
+            # would never mark it ready. This MatchString check on status.health.status lets
+            # function-patch-and-transform signal readiness to function-auto-ready directly.
+            readinessChecks:
+              - type: MatchString
+                fieldPath: status.health.status
+                matchString: Healthy
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.podinfo.releaseName
+                toFieldPath: metadata.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.podinfo.releaseName
+                toFieldPath: spec.source.helm.releaseName
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: status.ociRegistry
+                    - fromFieldPath: status.ociRepository
+                  strategy: string
+                  string:
+                    fmt: "oci://%s/%s"
+                toFieldPath: spec.source.repoURL
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.ociTag
+                toFieldPath: spec.source.targetRevision
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: status.imageRegistry
+                    - fromFieldPath: status.imageRepository
+                  strategy: string
+                  string:
+                    fmt: "%s/%s"
+                toFieldPath: spec.source.helm.parameters[0].value
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.imageTag
+                toFieldPath: spec.source.helm.parameters[1].value
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.podinfo.message
+                toFieldPath: spec.source.helm.parameters[2].value
+    - step: auto-ready
+      functionRef:
+        name: crossplane-contrib-function-auto-ready

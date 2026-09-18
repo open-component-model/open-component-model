@@ -1,0 +1,6 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: HelmFluxcdCrossplaneSigning
+metadata:
+  name: helm-fluxcd-crossplane-signing
+spec:
+  prefix: helm-fluxcd-crossplane-signing

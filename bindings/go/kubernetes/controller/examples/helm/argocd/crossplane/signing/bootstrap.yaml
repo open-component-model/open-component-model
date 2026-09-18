@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: helm-argocd-crossplane-signing-secret
+data:
+  # Base64 encoded value of the public key ocm.software.pub
+  ocm.software: "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJDZ0tDQVFFQXJLSHMveXVPeHl3ZHhxdkRYNGExaE1MZ056bGJkQ0lSeUZreXJYY3ArUkp1QmlVVWZrcU4KVWh0bTVhbFN5MjE5UFE5VUlkOWpCMS9zS3JGak5oUy9Rb3hRcC9hUDVZbWNqKzVlSmxOTEp5R3dRVEZlMlhxTQpQa3BqYVF1cHc5cHE4Z2pDU2lLWTBMT3BneEJRaUxPdElxSERzUkh6OCtwTDhPVGl0b045Ny9KeGErcXhlL2x5CjRCdU5pUFZzTjBpYTFaeVFhZ0t2SUt0NjdrU0V6YU4vRkRoeDhnbjVudmN4eGJXVXN3Y3hOTnY2V0xXcVFrVDgKYWcxaGRwcXF4aEF5bjN3dE1FbHJuNnJUaGV0V3lXUU5teDVETzV2elZDZVQ5RTVhalhXY256dzJQdEJKUzZBZApoU2M5S0F1Uk1UOVdPV2dTZitQRWRtS3JHOGNWMCtITUpRSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"
+---
+
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: helm-argocd-crossplane-signing-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: helm-argocd-crossplane-signing-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/helm-argocd-crossplane-signing
+  verify:
+    - signature: ocm.software
+      secretRef:
+        name: helm-argocd-crossplane-signing-secret
+  repositoryRef:
+    name: helm-argocd-crossplane-signing-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-argocd-crossplane-signing-resource-xrd
+spec:
+  componentRef:
+    name: helm-argocd-crossplane-signing-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-argocd-crossplane-signing-deployer
+spec:
+  resourceRef:
+    name: helm-argocd-crossplane-signing-resource-xrd
+    namespace: default

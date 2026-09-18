@@ -1,0 +1,8 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: HelmFluxcdCrossplaneConfigurationLocalization
+metadata:
+  name: helm-fluxcd-crossplane-configuration-localization
+spec:
+  podinfo:
+    message: "helm-fluxcd-crossplane-configuration-localization"
+    releaseName: "helm-fluxcd-crossplane-configuration-localization"

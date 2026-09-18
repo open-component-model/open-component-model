@@ -20,27 +20,17 @@ const (
 
 var _ = Describe("ApplySet Pruning Tests", func() {
 	Context("when testing pruning with OCM deployer", func() {
-		var example os.DirEntry
-		for _, e := range examples {
-			// skip other examples
-			if e.Name() != "applyset-pruning" {
-				continue
-			}
-			fInfo, err := os.Stat(filepath.Join(examplesDir, e.Name()))
-			Expect(err).NotTo(HaveOccurred())
-			if !fInfo.IsDir() {
-				continue
-			}
-			example = e
-		}
+		// applyset-pruning lives at the flat legacy path in examplesDir.
+		const applysetName = "applyset-pruning"
+		applysetDir := filepath.Join(examplesDir, applysetName)
 
 		reqFiles := []string{ComponentConstructor, Bootstrap, BootstrapDeployer}
 
-		It("should deploy the example "+example.Name(), func(ctx SpecContext) {
-			By("validating the example directory " + example.Name())
+		It("should deploy the example "+applysetName, func(ctx SpecContext) {
+			By("validating the example directory " + applysetName)
 			var files []string
 			Expect(filepath.WalkDir(
-				filepath.Join(examplesDir, example.Name()),
+				applysetDir,
 				func(path string, d os.DirEntry, err error) error {
 					if err != nil {
 						return err
@@ -52,46 +42,46 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 					return nil
 				})).To(Succeed())
 
-			Expect(files).To(ContainElements(reqFiles), "required files %s not found in example directory %q", reqFiles, example.Name())
+			Expect(files).To(ContainElements(reqFiles), "required files %s not found in example directory %q", reqFiles, applysetName)
 
-			By("creating and transferring a component version for " + example.Name())
+			By("creating and transferring a component version for " + applysetName)
 			// If directory contains a private key, the component version must signed.
 			signingKey := ""
 			if slices.Contains(files, PrivateKey) {
-				signingKey = filepath.Join(examplesDir, example.Name(), PrivateKey)
+				signingKey = filepath.Join(applysetDir, PrivateKey)
 			}
 			Expect(utils.PrepareOCMComponent(
 				ctx,
-				example.Name(),
-				filepath.Join(examplesDir, example.Name(), ComponentConstructor),
+				applysetName,
+				filepath.Join(applysetDir, ComponentConstructor),
 				imageRegistry,
 				signingKey,
 			)).To(Succeed())
 
 			By("bootstrapping the example")
-			Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
-			Expect(utils.DeployResourceWithoutCleanup(ctx, filepath.Join(examplesDir, example.Name(), BootstrapDeployer))).To(Succeed())
+			Expect(utils.DeployResource(ctx, filepath.Join(applysetDir, Bootstrap))).To(Succeed())
+			Expect(utils.DeployResourceWithoutCleanup(ctx, filepath.Join(applysetDir, BootstrapDeployer))).To(Succeed())
 
 			name := ""
 
 			By("waiting for the first deployment to be ready")
-			name = "deployment.apps/" + example.Name() + "-podinfo"
+			name = "deployment.apps/" + applysetName + "-podinfo"
 			Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
 			Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name)).To(Succeed())
 			Expect(utils.WaitForResource(
 				ctx, "condition=Ready=true",
 				timeout,
-				"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo",
+				"pod", "-l", "app.kubernetes.io/name="+applysetName+"-podinfo",
 			)).To(Succeed())
 
-			name = "deployment.apps/" + example.Name() + "-podinfo-2"
+			name = "deployment.apps/" + applysetName + "-podinfo-2"
 			By("waiting for the second deployment to be ready")
 			Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
 			Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name)).To(Succeed())
 			Expect(utils.WaitForResource(
 				ctx, "condition=Ready=true",
 				timeout,
-				"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo",
+				"pod", "-l", "app.kubernetes.io/name="+applysetName+"-podinfo",
 			)).To(Succeed())
 
 			By("updating the component version to remove podinfo-2 (testing pruning)")
@@ -99,8 +89,8 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			// Create v2 component
 			Expect(utils.PrepareOCMComponent(
 				ctx,
-				example.Name()+"-2",
-				filepath.Join(examplesDir, example.Name(), "component-constructor-2.yaml"),
+				applysetName+"-2",
+				filepath.Join(applysetDir, "component-constructor-2.yaml"),
 				imageRegistry,
 				"", // No signing
 			)).To(Succeed())
@@ -110,7 +100,7 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			//  --type merge \
 			//  -p '{"spec":{"semver":"2.0.0"}}'
 			execCmd := exec.CommandContext(ctx, "kubectl", "patch",
-				"component.delivery.ocm.software/"+example.Name()+"-component",
+				"component.delivery.ocm.software/"+applysetName+"-component",
 				"--type", "merge",
 				"-p", `{"spec":{"semver":"2.0.0"}}`,
 				"-n", "default",
@@ -119,7 +109,7 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			Expect(err).NotTo(HaveOccurred(), "Patching Component semver should succeed")
 
 			By("waiting for the Component to update to v2.0.0")
-			componentName := "component.delivery.ocm.software/" + example.Name() + "-component"
+			componentName := "component.delivery.ocm.software/" + applysetName + "-component"
 			Eventually(func() string {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", componentName, "-n", "default", "-o", "jsonpath={.status.component.version}")
 				output, err := utils.Run(cmd)
@@ -130,7 +120,7 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			}, timeout).Should(Equal("2.0.0"), "Component should update to version 2.0.0")
 
 			By("waiting for the Resource to update")
-			resourceName := "resource.delivery.ocm.software/" + example.Name() + "-resource"
+			resourceName := "resource.delivery.ocm.software/" + applysetName + "-resource"
 			Expect(utils.WaitForResource(ctx, "condition=Ready=true", timeout, resourceName)).To(Succeed())
 
 			By("verifying that podinfo-2 deployment has been pruned")
@@ -153,11 +143,11 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			}, "1m").Should(Equal(0), "podinfo-2 deployment should be pruned")
 
 			By("verifying that podinfo deployment still exists")
-			Expect(utils.WaitForResource(ctx, "condition=Available", timeout, "deployment.apps/"+example.Name()+"-podinfo")).To(Succeed())
+			Expect(utils.WaitForResource(ctx, "condition=Available", timeout, "deployment.apps/"+applysetName+"-podinfo")).To(Succeed())
 
 			// delete deployer
 			By("cleaning up the deployer")
-			deployerName := "deployer.delivery.ocm.software/" + example.Name() + "-deployer"
+			deployerName := "deployer.delivery.ocm.software/" + applysetName + "-deployer"
 			Expect(utils.DeleteResource(ctx, timeout, deployerName)).To(Succeed())
 
 			// make sure that the deployer is deleted
@@ -170,7 +160,7 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 
 			// check that deployed resources are also deleted
 			By("verifying that deployed resources are deleted")
-			res := "deployment.apps/" + example.Name() + "-podinfo"
+			res := "deployment.apps/" + applysetName + "-podinfo"
 			Eventually(func() error {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", res, "-n", "default")
 				_, err := utils.Run(cmd)

@@ -1,0 +1,140 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: helmargocdcrossplanenestedsignedresources.examples.ocm.software
+spec:
+  group: examples.ocm.software
+  names:
+    kind: HelmArgocdCrossplaneNestedSigned
+    plural: helmargocdcrossplanenestedsignedresources
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                prefix:
+                  type: string
+                  default: helm-argocd-crossplane-nested-signed
+            status:
+              type: object
+              properties:
+                ociRegistry:
+                  type: string
+                ociRepository:
+                  type: string
+                ociTag:
+                  type: string
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: helm-argocd-crossplane-nested-signed
+spec:
+  compositeTypeRef:
+    apiVersion: examples.ocm.software/v1alpha1
+    kind: HelmArgocdCrossplaneNestedSigned
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: crossplane-contrib-function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: resourceChart
+            base:
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
+              metadata:
+                namespace: default
+              spec:
+                componentRef:
+                  name: helm-argocd-crossplane-nested-signed-component
+                resource:
+                  byReference:
+                    resource:
+                      name: helm-resource
+                    referencePath:
+                      - name: nested-signed-chart
+                additionalStatusFields:
+                  registry: resource.access.toOCI().registry
+                  repository: resource.access.toOCI().repository
+                  tag: resource.access.toOCI().tag
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-resource-chart"
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.registry
+                toFieldPath: status.ociRegistry
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.repository
+                toFieldPath: status.ociRepository
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.tag
+                toFieldPath: status.ociTag
+          - name: argocdApplication
+            base:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Application
+              metadata:
+                namespace: argocd
+                finalizers:
+                  - resources-finalizer.argocd.argoproj.io
+              spec:
+                project: default
+                source:
+                  chart: podinfo
+                  helm:
+                    releaseName: PLACEHOLDER
+                  path: .
+                destination:
+                  server: https://kubernetes.default.svc
+                  namespace: default-argocd
+                syncPolicy:
+                  automated:
+                    prune: true
+                    selfHeal: true
+                  syncOptions:
+                    - CreateNamespace=true
+            # ArgoCD Application has no status.conditions[type=Ready], so function-auto-ready
+            # would never mark it ready. This MatchString check on status.health.status lets
+            # function-patch-and-transform signal readiness to function-auto-ready directly.
+            readinessChecks:
+              - type: MatchString
+                fieldPath: status.health.status
+                matchString: Healthy
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: spec.source.helm.releaseName
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: status.ociRegistry
+                    - fromFieldPath: status.ociRepository
+                  strategy: string
+                  string:
+                    fmt: "oci://%s/%s"
+                toFieldPath: spec.source.repoURL
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.ociTag
+                toFieldPath: spec.source.targetRevision
+    - step: auto-ready
+      functionRef:
+        name: crossplane-contrib-function-auto-ready

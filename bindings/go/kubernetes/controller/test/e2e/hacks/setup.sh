@@ -187,10 +187,30 @@ stringData:
   enableOCI: "true"
   insecureOCIForceHttp: "true"
 EOF
+  # Also register the Docker-network alias the OCM controller uses in status.additional.registry.
+  kubectl apply -n argocd -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: image-registry-alias-creds
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repo-creds
+stringData:
+  url: oci://image-registry:${reg_port}
+  type: helm
+  enableOCI: "true"
+  insecureOCIForceHttp: "true"
+EOF
 }
 
 install_kro() {
   helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.2
+}
+
+install_crossplane() {
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  bash "${script_dir}/../setup/components/crossplane.sh"
 }
 
 pids=()
@@ -198,6 +218,7 @@ run_step "image-registries"   install_registries & pids+=($!)
 run_step "flux"               install_flux       & pids+=($!)
 run_step "argocd"             install_argocd     & pids+=($!)
 run_step "kro"                install_kro        & pids+=($!)
+run_step "crossplane"         install_crossplane & pids+=($!)
 
 fail=0
 for pid in "${pids[@]}"; do

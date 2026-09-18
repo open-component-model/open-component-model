@@ -1,0 +1,6 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: HelmArgocdCrossplaneNestedSigned
+metadata:
+  name: helm-argocd-crossplane-nested-signed
+spec:
+  prefix: helm-argocd-crossplane-nested-signed

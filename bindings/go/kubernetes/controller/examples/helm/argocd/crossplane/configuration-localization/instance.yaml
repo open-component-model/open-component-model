@@ -1,0 +1,8 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: HelmArgocdCrossplaneConfigurationLocalization
+metadata:
+  name: helm-argocd-crossplane-configuration-localization
+spec:
+  podinfo:
+    message: "helm-argocd-crossplane-configuration-localization"
+    releaseName: "helm-argocd-crossplane-configuration-localization"

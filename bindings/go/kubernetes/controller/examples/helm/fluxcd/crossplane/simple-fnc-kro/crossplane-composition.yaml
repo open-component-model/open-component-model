@@ -1,0 +1,106 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: helmfluxcdcrossplanefnckro1s.examples.ocm.software
+spec:
+  group: examples.ocm.software
+  names:
+    kind: HelmFluxcdCrossplaneFncKro1
+    plural: helmfluxcdcrossplanefnckro1s
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                prefix:
+                  type: string
+                  default: helm-fluxcd-crossplane-fnc-kro-1
+            status:
+              type: object
+              properties:
+                ociRegistry:
+                  type: string
+                ociRepository:
+                  type: string
+                ociDigest:
+                  type: string
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: helm-fluxcd-crossplane-fnc-kro-1
+spec:
+  compositeTypeRef:
+    apiVersion: examples.ocm.software/v1alpha1
+    kind: HelmFluxcdCrossplaneFncKro1
+  mode: Pipeline
+  pipeline:
+    - step: kro-run
+      functionRef:
+        name: crossplane-contrib-function-kro
+      input:
+        apiVersion: kro.fn.crossplane.io/v1beta1
+        kind: ResourceGraph
+        status:
+          ociRegistry: ${resourceChart.status.additional.registry}
+          ociRepository: ${resourceChart.status.additional.repository}
+          ociDigest: ${resourceChart.status.additional.digest}
+        resources:
+          - id: resourceChart
+            template:
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
+              metadata:
+                name: ${schema.spec.prefix + "-resource-chart"}
+                namespace: default
+              spec:
+                componentRef:
+                  name: helm-fluxcd-crossplane-fnc-kro-1-component
+                resource:
+                  byReference:
+                    resource:
+                      name: helm-resource
+                additionalStatusFields:
+                  registry: resource.access.toOCI().registry
+                  repository: resource.access.toOCI().repository
+                  digest: resource.access.toOCI().digest
+          - id: ocirepository
+            template:
+              apiVersion: source.toolkit.fluxcd.io/v1
+              kind: OCIRepository
+              metadata:
+                name: ${schema.spec.prefix + "-oci-repository"}
+                namespace: default
+              spec:
+                interval: 1m0s
+                insecure: true
+                url: ${"oci://" + resourceChart.status.additional.registry + "/" + resourceChart.status.additional.repository}
+                ref:
+                  digest: ${resourceChart.status.additional.digest}
+                layerSelector:
+                  mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+                  operation: copy
+          - id: helmrelease
+            template:
+              apiVersion: helm.toolkit.fluxcd.io/v2
+              kind: HelmRelease
+              metadata:
+                name: ${schema.spec.prefix + "-helm-release"}
+                namespace: default
+              spec:
+                releaseName: helm-fluxcd-crossplane-fnc-kro-1
+                interval: 1m
+                timeout: 5m
+                chartRef:
+                  kind: OCIRepository
+                  name: ${schema.spec.prefix + "-oci-repository"}
+                  namespace: default
+    - step: auto-ready
+      functionRef:
+        name: crossplane-contrib-function-auto-ready

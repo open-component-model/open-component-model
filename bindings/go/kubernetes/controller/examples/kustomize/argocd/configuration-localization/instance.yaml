@@ -1,0 +1,8 @@
+apiVersion: kro.run/v1alpha1
+kind: KustomizeArgocdConfigurationLocalization
+metadata:
+  name: kustomize-argocd-configuration-localization
+spec:
+  prefix: kustomize-argocd-configuration-localization
+  podinfo:
+    message: "kustomize-argocd-configuration-localization"

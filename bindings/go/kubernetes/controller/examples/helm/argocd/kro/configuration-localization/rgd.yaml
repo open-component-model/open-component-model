@@ -1,0 +1,85 @@
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: helm-argocd-configuration-localization
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: HelmArgocdConfigurationLocalization
+    spec:
+      prefix: string | default="helm-argocd-configuration-localization"
+      podinfo:
+        message: string | default="hello world"
+        releaseName: string | default="podinfo"
+  resources:
+    - id: resourceChart
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.prefix}-resource-chart-name"
+        spec:
+          componentRef:
+            name: helm-argocd-configuration-localization-component
+          resource:
+            byReference:
+              resource:
+                name: helm-resource
+          additionalStatusFields:
+            registry: resource.access.toOCI().registry
+            repository: resource.access.toOCI().repository
+            digest: resource.access.toOCI().digest
+            tag: resource.access.toOCI().tag
+    - id: resourceImage
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.prefix}-resource-image-name"
+        spec:
+          componentRef:
+            name: helm-argocd-configuration-localization-component
+          resource:
+            byReference:
+              resource:
+                name: image-resource
+          additionalStatusFields:
+            registry: resource.access.toOCI().registry
+            repository: resource.access.toOCI().repository
+            tag: resource.access.toOCI().tag
+    - id: argocdApplication
+      template:
+        apiVersion: argoproj.io/v1alpha1
+        kind: Application
+        metadata:
+          name: "${schema.spec.prefix}"
+          namespace: argocd
+          finalizers:
+            - resources-finalizer.argocd.argoproj.io
+        spec:
+          project: default
+          source:
+            chart: podinfo
+            helm:
+              releaseName: ${schema.spec.prefix}
+              # Localize image to the OCM-published image-resource and configure UI message,
+              # mirroring what the Flux variant does via HelmRelease.spec.values.
+              parameters:
+                - name: image.repository
+                  value: ${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}
+                - name: image.tag
+                  value: ${resourceImage.status.additional.tag}
+                - name: ui.message
+                  value: ${schema.spec.podinfo.message}
+            path: .
+            repoURL: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
+            targetRevision: ${resourceChart.status.additional.tag}
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: default-argocd
+          syncPolicy:
+            automated:
+              prune: true
+              selfHeal: true
+            syncOptions:
+              - CreateNamespace=true

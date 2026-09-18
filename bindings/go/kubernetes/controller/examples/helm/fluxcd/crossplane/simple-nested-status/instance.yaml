@@ -1,0 +1,6 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: HelmFluxcdCrossplaneSimpleNestedStatus
+metadata:
+  name: helm-fluxcd-crossplane-simple-nested-status
+spec:
+  prefix: helm-fluxcd-crossplane-simple-nested-status

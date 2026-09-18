@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: KustomizeArgocdSimple
+metadata:
+  name: kustomize-argocd-simple
+spec:
+  prefix: kustomize-argocd-simple

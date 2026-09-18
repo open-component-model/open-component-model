@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: helm-fluxcd-crossplane-nested-signed-secret
+data:
+  # Base64 encoded value of the public key ocm.software.pub
+  ocm.software: "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJDZ0tDQVFFQW9XRjVGRUdTSWN6MUtSVDdkM1ZOZE1xV1hOV1VWeDk1OFdQZGU5WU5XdnIxbmFEbm1IQ1kKTmVvN2dyRGNnOWVhOHlhSDlmUnVwZVRUUzNldU5BRC9xdzhoelUyWmprVW1tamhsTEp2ZmZXd2lWUFVld010SgpEWDhpa0p0MW53RnhOVStkZGRadkw4TzVHOXhDRTR1aVphcHk0a3ppdzRsNkJham1rSGVObHZsd3RreWgwS1c4ClJJNFhIUDN3NDNPeWVzQ2MrVDcvc01mNWRaWlN6THlGT2dHUVJ5WHV3OFdkalFwaDNXTk05cmFQR1hyZEZVTnIKV0NaZVppb1lpMzFBYjNiNHNLN3hMMDdGbkdGKzZKbTVYOWlmbDV1TkN0TGxTS0JmSFBySXhOUnA5Y2hjTndyYQp0MCtlbW1EQU1DbGo3aFJCTG9Na1BGTHF6ak51YlR3a0V3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"
+---
+
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: helm-fluxcd-crossplane-nested-signed-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: helm-fluxcd-crossplane-nested-signed-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/helm-fluxcd-crossplane-nested-signed
+  verify:
+    - signature: ocm.software
+      secretRef:
+        name: helm-fluxcd-crossplane-nested-signed-secret
+  repositoryRef:
+    name: helm-fluxcd-crossplane-nested-signed-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-fluxcd-crossplane-nested-signed-resource-xrd
+spec:
+  componentRef:
+    name: helm-fluxcd-crossplane-nested-signed-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+      referencePath:
+        - name: nested-signed-extended
+        - name: nested-signed-xrd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-fluxcd-crossplane-nested-signed-deployer
+spec:
+  resourceRef:
+    name: helm-fluxcd-crossplane-nested-signed-resource-xrd
+    namespace: default

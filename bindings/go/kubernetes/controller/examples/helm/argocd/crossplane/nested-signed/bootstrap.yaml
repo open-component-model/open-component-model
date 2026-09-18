@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: helm-argocd-crossplane-nested-signed-secret
+data:
+  # Base64 encoded value of the public key ocm.software.pub
+  ocm.software: "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJDZ0tDQVFFQXpseWpYek9RVzZwK1ZWWDNja2RwTE52OGNqWXJDdjdnTTRBci8xZFZnK3ZqN3FJaTJydVYKWXRhamxqRGQzb1BBaEx5MEpHWjIxK1R2YzhncFR6Vk9YRFd4R1lGRjlwSjRoQkIwd1RPcXkxN2VxWi8vb3JLTgpuOTZvcUpsZDMvWXlVU2p1amdoM1U0VmN1N09SR2hZMEFIMzlpNUhpbzZJbmV1MVNFUDZ4WTd3YTJvK2xKT1ViCldBUERzRmoxVjlUVStkSGhaUU1LQURSbVBiNzB1OG5nRzY3SnQvaWNFS0FBZkJTWXZKSXd1OTQrUXNOUWFlM2cKWHVCdUdKV1RrMlVrNDN5SC81SktJaHQrNytOSmprOW05Tno0N3pPc0VsK2NjalNGWUxOd1AraWs3c2tzNWNneQorbi80RllsOTJrVjdaeVN6ZTdQbVFnNVV0cEhPdG5OY0xRSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"
+---
+
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: helm-argocd-crossplane-nested-signed-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: helm-argocd-crossplane-nested-signed-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/helm-argocd-crossplane-nested-signed
+  verify:
+    - signature: ocm.software
+      secretRef:
+        name: helm-argocd-crossplane-nested-signed-secret
+  repositoryRef:
+    name: helm-argocd-crossplane-nested-signed-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-argocd-crossplane-nested-signed-resource-xrd
+spec:
+  componentRef:
+    name: helm-argocd-crossplane-nested-signed-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+      referencePath:
+        - name: nested-signed-extended
+        - name: nested-signed-xrd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-argocd-crossplane-nested-signed-deployer
+spec:
+  resourceRef:
+    name: helm-argocd-crossplane-nested-signed-resource-xrd
+    namespace: default

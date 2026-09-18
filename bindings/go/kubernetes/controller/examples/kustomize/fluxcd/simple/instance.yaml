@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: KustomizeFluxcdSimple
+metadata:
+  name: kustomize-fluxcd-simple
+spec:
+  prefix: kustomize-fluxcd-simple
