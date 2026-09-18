@@ -28,7 +28,6 @@ func MergeConfigs(warnFn func(msg string, keysAndValues ...any), configs ...*Con
 				warnFn(
 					"ignoring nested configuration: nested generic configurations are not supported, move the nested entries to the top-level configurations list",
 					"type", entry.GetType().String(),
-					"value", entry.Data,
 				)
 				continue
 			}
