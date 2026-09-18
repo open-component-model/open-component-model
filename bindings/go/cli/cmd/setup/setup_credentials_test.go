@@ -23,6 +23,8 @@ import (
 	rsacredsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
 	rsaidentityv1 "ocm.software/open-component-model/bindings/go/rsa/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	tsahelper "ocm.software/open-component-model/bindings/go/signing/tsa"
+	tsacredsv1alpha1 "ocm.software/open-component-model/bindings/go/signing/tsa/spec/credentials/v1alpha1"
 	oidctokenv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1"
 	trustedrootv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1"
 	sigstoresignerv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
@@ -49,6 +51,7 @@ func TestCredentialTypeSchemePopulatedByBuiltinRegister(t *testing.T) {
 		{"GPGCredentials/v1alpha1", runtime.NewVersionedType(gpgcredsv1alpha1.GPGCredentialsType, gpgcredsv1alpha1.Version)},
 		{"OIDCIdentityToken/v1alpha1", oidctokenv1alpha1.VersionedType},
 		{"TrustedRoot/v1alpha1", trustedrootv1alpha1.VersionedType},
+		{"TSACredentials/v1alpha1", tsacredsv1alpha1.VersionedType},
 	}
 
 	for _, tc := range tests {
@@ -178,6 +181,22 @@ func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
 				creds, ok := resolved.(*trustedrootv1alpha1.TrustedRoot)
 				require.True(t, ok, "expected *TrustedRoot, got %T", resolved)
 				require.Equal(t, "{}", creds.TrustedRootJSON)
+			},
+		},
+		{
+			name: "TSACredentials/v1alpha1",
+			identity: runtime.Identity{
+				"type": tsahelper.IdentityTypeTSA.String(),
+			},
+			credential: &tsacredsv1alpha1.TSACredentials{
+				Type:             tsacredsv1alpha1.VersionedType,
+				RootCertsPEMFile: "/path/to/tsa-root.pem",
+			},
+			assertType: func(t *testing.T, resolved runtime.Typed) {
+				t.Helper()
+				creds, ok := resolved.(*tsacredsv1alpha1.TSACredentials)
+				require.True(t, ok, "expected *TSACredentials, got %T", resolved)
+				require.Equal(t, "/path/to/tsa-root.pem", creds.RootCertsPEMFile)
 			},
 		},
 		{

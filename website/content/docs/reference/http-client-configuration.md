@@ -108,13 +108,30 @@ Proxy configuration is not a field in this type. OCM inherits Go's standard
 environment variables. See
 [Route Traffic Through a Proxy]({{< relref "docs/how-to/configure-http/proxy.md" >}}).
 
-### TLS Trust: SSL_CERT_FILE and SSL_CERT_DIR
+### TLS Trust: Custom Root CAs
 
-`insecureSkipVerify` is the only TLS field in this config type. To trust a
-private CA without disabling verification, use the `SSL_CERT_FILE` /
-`SSL_CERT_DIR` environment variables — they are **replacements** for the
-built-in system CA path lists in Go's `crypto/x509` loader, not additions.
-See [TLS and Custom CA]({{< relref "docs/how-to/configure-http/tls.md" >}}).
+To trust a private CA without disabling verification, set `rootCAsPEM` (inline PEM
+bundle) or `rootCAsPEMFile` (path) — globally or per host (these TLS fields are
+top-level, inlined alongside `insecureSkipVerify`). These
+certificates are **appended** to the system trust pool, so publicly-issued servers
+keep verifying. This is the recommended way to reach a self-hosted OCI registry,
+Helm repository, or RFC 3161 timestamping server presenting an internal certificate.
+`rootCAsPEM` takes precedence over `rootCAsPEMFile`; both are ignored when
+`insecureSkipVerify` is `true`. An invalid or unreadable bundle fails requests
+closed rather than silently falling back to system trust.
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    hosts:
+      timestamp.internal:8443:
+        rootCAsPEMFile: /etc/ocm/internal-ca.pem
+```
+
+Alternatively, Go's `SSL_CERT_FILE` / `SSL_CERT_DIR` environment variables **replace**
+(not extend) the built-in system CA path lists in `crypto/x509`. Prefer `rootCAsPEM`
+for additive, per-host trust. See [TLS and Custom CA]({{< relref "docs/how-to/configure-http/tls.md" >}}).
 
 ## Related Documentation
 

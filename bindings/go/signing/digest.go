@@ -48,7 +48,7 @@ func VerifyDigestMatchesDescriptor(
 		return fmt.Errorf("normalising component version failed: %w", err)
 	}
 
-	hash, err := getSupportedHash(signature.Digest.HashAlgorithm)
+	hash, err := GetSupportedHash(signature.Digest.HashAlgorithm)
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func GenerateDigest(
 		return nil, fmt.Errorf("normalising component version failed: %w", err)
 	}
 
-	hash, err := getSupportedHash(hashAlgorithm)
+	hash, err := GetSupportedHash(hashAlgorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -180,9 +180,9 @@ var supportedHashes = map[string]crypto.Hash{
 	crypto.SHA512.String(): crypto.SHA512,
 }
 
-// getSupportedHash looks up a crypto.Hash from its string identifier.
+// GetSupportedHash looks up a crypto.Hash from its string identifier.
 // Returns an error if the identifier is not in supportedHashes.
-func getSupportedHash(name string) (crypto.Hash, error) {
+func GetSupportedHash(name string) (crypto.Hash, error) {
 	n := strings.ToUpper(name)
 	h, ok := supportedHashes[n]
 	if !ok {

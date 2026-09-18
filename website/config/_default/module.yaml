@@ -199,6 +199,12 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/signing/tsa/spec/credentials/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/credentials/tsa/v1alpha1
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../bindings/go/credentials/spec/config/v1/schemas
     target: static/main/schemas/bindings/go/credentials/direct/v1
     sites:

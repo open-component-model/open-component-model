@@ -18,6 +18,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.2
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
+	github.com/digitorus/pkcs7 v0.0.0-20250730155240-ffadbf3f398c
 	github.com/docker/cli v29.7.2+incompatible
 	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/go-logr/logr v1.4.4
