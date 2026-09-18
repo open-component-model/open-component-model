@@ -113,6 +113,20 @@ func TestRegistry_BuiltinConflictsAndUnknown(t *testing.T) {
 	r.Contains(err.Error(), "unknown builtin")
 }
 
+func TestRegistry_SelectorlessSchemeFails(t *testing.T) {
+	r := require.New(t)
+
+	// A scheme setting neither pattern nor builtin must be rejected; otherwise it
+	// would compile an empty catch-all regex claiming every version.
+	_, err := (&versioningspec.Config{
+		Schemes: []*versioningspec.VersionScheme{
+			{Name: "bad"},
+		},
+	}).Registry()
+	r.Error(err)
+	r.Contains(err.Error(), "must set exactly one of pattern or builtin")
+}
+
 func TestRegistry_NilOrEmptyConfigIsDefault(t *testing.T) {
 	r := require.New(t)
 

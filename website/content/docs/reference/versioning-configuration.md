@@ -10,10 +10,10 @@ This page is the technical reference for OCM versioning configuration. It lets O
 component versions that do not follow semantic versioning — for example calendar versioning (CalVer) or monotonic
 build numbers.
 
-By default, and when no versioning configuration is present, OCM uses **loose semantic versioning** exactly as before.
-Once you configure schemes, only the schemes you list apply — the built-in loose-semver scheme is **not** appended
-automatically. To keep recognizing semver versions alongside a custom scheme, add an explicit `builtin: loose-semver`
-entry (typically last, so it acts as a fallback).
+By default — when no versioning configuration is present, or when `schemes` is present but empty (`schemes: []`) — OCM
+uses **loose semantic versioning** exactly as before. Once you configure at least one scheme, only the schemes you list
+apply — the built-in loose-semver scheme is **not** appended automatically. To keep recognizing semver versions
+alongside a custom scheme, add an explicit `builtin: loose-semver` entry (typically last, so it acts as a fallback).
 
 ## Configuration File
 
@@ -169,11 +169,26 @@ integers and non-numeric groups lexically. With no comparison groups, the whole 
 
 ## Version Constraints
 
-Version *constraints* (for example `>=1.0.0 <2.0.0`, used by resolver `versionConstraint`) are a **semver** concept.
-A constraint is applied only to versions whose resolved scheme is loose semver; versions claimed by a non-semver scheme
-(such as calver) do not satisfy a semver constraint's notion of ordering and are retained unchanged. This means a semver
-constraint filters the semver-versioned entries and never silently discards a non-semver history. A malformed constraint
-string is rejected with an error.
+Version *constraints* (for example `>=1.0.0 <2.0.0`, used by resolver `versionConstraint` and CLI `--constraint`) are
+interpreted by the **version's resolved scheme**, not globally as semver:
+
+- **Loose-semver** versions use full semver range syntax: `>=1.0.0 <2.0.0`, `^1.2`, `~1.2.0`.
+- **Custom (regex)** schemes use **relational operators** — `>=`, `>`, `<=`, `<`, `=`, `!=` — over the scheme's own
+  ordering. Each operand must itself match the scheme's `pattern`; terms are AND-composed by spaces or commas. The
+  `^`, `~`, and x-range operators are semver-only and are **not** available for custom schemes, as they have no
+  scheme-independent meaning.
+
+A constraint expressed in a foreign grammar (for example a semver range applied to a calver history) is *not applicable*
+to that scheme: such versions are **retained** by listing (`get`/`transfer`) and treated as **not matching** by a
+resolver gate (`versionConstraint`). A version no configured scheme claims is likewise retained by listing and rejected
+by gating. This means a constraint never silently discards an unrecognized history.
+
+For example, with the CalVer scheme above, `versionConstraint: '>=2024.03.15 <2024.10.01'` keeps only CalVer versions in
+that half-open window: `>=2024.03.15` matches `2024.03.15` and later, `<2024.10.01` excludes `2024.10.01` and later. A
+build-number scheme (`^(?P<build>\d+)$`) with `versionConstraint: '>=1000'` keeps builds `1000`, `1837`, `12000` —
+compared numerically, so `12000 >= 1000` holds even though `12000` is lexically smaller than `1000`.
+
+A constraint that is malformed **in its own grammar** — for example an unparseable semver range like `>= not a version` evaluated against a semver version — is rejected with an error. This is distinct from the *foreign grammar* case above: a well-formed semver range applied to a calver history is not an error, it is simply not applicable (the calver versions are retained).
 
 ## OCI Tag Constraints
 
@@ -205,6 +220,10 @@ Without a versioning configuration, OCM uses loose semantic versioning for every
 reference version — identical to previous behavior. Non-semver versions are rejected on write unless a matching scheme
 is configured. Once you configure schemes, semver versions are also rejected unless you keep them with a
 `builtin: loose-semver` entry, because the fallback is no longer added automatically.
+
+An explicit empty list (`schemes: []`) behaves exactly like omitting the configuration entirely: loose semantic
+versioning for everything. The `builtin: loose-semver` fallback is required only once you list at least one custom
+scheme.
 
 ## Related Documentation
 

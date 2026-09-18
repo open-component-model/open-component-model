@@ -16,6 +16,7 @@ package versioning
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"math/big"
 	"regexp"
@@ -24,6 +25,15 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 )
+
+// ErrConstraintNotApplicable signals that a constraint cannot be expressed in a
+// scheme's grammar — for example a semver range applied to a calver scheme whose
+// operands are dates, not semver versions. It is distinct from a malformed
+// constraint (a syntax error in the scheme's own grammar). A registry retains a
+// not-applicable version when listing ([Registry.Filter]) and treats it as not
+// matching when gating ([Registry.Satisfies]), so a constraint never silently
+// discards a history expressed in a different scheme.
+var ErrConstraintNotApplicable = errors.New("constraint not applicable to scheme")
 
 // Scheme describes how a single family of version strings is recognized and
 // ordered.
@@ -40,6 +50,16 @@ type Scheme interface {
 	// Valid reports whether the version is well-formed for this scheme. For
 	// regex schemes this is identical to Matches.
 	Valid(version string) bool
+	// Satisfies reports whether a version this scheme claims satisfies the given
+	// constraint, interpreted in the scheme's own grammar. An empty constraint is
+	// satisfied by any claimed version. It returns an error if the version is not
+	// claimed or the constraint is not well-formed for this scheme (see
+	// ValidateConstraint).
+	Satisfies(version, constraint string) (bool, error)
+	// ValidateConstraint reports whether the constraint expression is well-formed
+	// in this scheme's grammar, independent of any version. An empty constraint
+	// is always valid. It returns an error describing the first problem otherwise.
+	ValidateConstraint(constraint string) error
 }
 
 // Registry is an ordered collection of [Scheme] implementations.
@@ -132,76 +152,99 @@ func (r *Registry) SortDescending(versions []string) error {
 
 // Filter returns the versions satisfying the given constraint.
 //
-// Version constraints (e.g. ">=1.0.0", "^1.2") are a semver concept. The
-// constraint is applied to versions that parse as semver; versions belonging to
-// a non-semver scheme (e.g. calver) do not satisfy a semver constraint's notion
-// of ordering and are retained unchanged, so a semver constraint never silently
-// discards an entire non-semver history. An empty or unparseable-as-semver
-// constraint that is nonetheless a valid semver range still applies to semver
-// versions only.
+// The constraint is interpreted by each version's authoritative scheme, not
+// globally as semver: loose-semver versions use semver range syntax (">=1.0.0",
+// "^1.2"), while a regex scheme uses its own relational grammar (">=2024.03.15
+// <2024.10.01"). A version no scheme claims is retained unchanged, so a
+// constraint never silently discards an unrecognized history.
 //
-// An empty constraint returns the input unchanged. A malformed constraint
-// returns an error.
+// An empty constraint returns the input unchanged. A constraint no registered
+// scheme can parse is malformed and returns an error.
 func (r *Registry) Filter(versions []string, constraint string) ([]string, error) {
 	if constraint == "" {
 		return versions, nil
 	}
-	constraints, err := semver.NewConstraint(constraint)
-	if err != nil {
-		return nil, fmt.Errorf("parsing semantic version constraint failed: %w", err)
-	}
 	filtered := make([]string, 0, len(versions))
 	for _, version := range versions {
-		// Only versions whose resolved scheme is loose semver are subject to a
-		// semver constraint. Versions claimed first by a non-semver scheme (e.g.
-		// calver) are retained, so a semver constraint never discards a
-		// non-semver history — even when the version also happens to parse as
-		// semver (e.g. "2024.03.15").
-		if _, ok := r.schemeFor(version).(*looseSemverScheme); !ok {
+		// A version no scheme claims, or one whose scheme cannot express the
+		// constraint (a foreign grammar, e.g. a semver range over a calver
+		// history), is retained unchanged so a constraint never silently discards
+		// an unrecognized history. A constraint malformed in the scheme's own
+		// grammar surfaces as an error.
+		s := r.schemeFor(version)
+		if s == nil {
 			filtered = append(filtered, version)
 			continue
 		}
-		v, err := semver.NewVersion(version)
+		ok, err := s.Satisfies(version, constraint)
+		if errors.Is(err, ErrConstraintNotApplicable) {
+			filtered = append(filtered, version)
+			continue
+		}
 		if err != nil {
+			return nil, err
+		}
+		if ok {
 			filtered = append(filtered, version)
-			continue
 		}
-		if !constraints.Check(v) {
-			continue
-		}
-		filtered = append(filtered, version)
 	}
 	return filtered, nil
 }
 
-// Satisfies reports whether a single version satisfies the given semver
-// constraint. Constraints are a semver concept: a version that does not parse
-// as semver never satisfies one. Unlike [Registry.Filter], this is a strict
-// membership test intended for gating (e.g. resolver version constraints),
-// where a non-evaluable version must be treated as not matching.
+// Satisfies reports whether a single version satisfies the given constraint,
+// interpreted by the version's authoritative scheme (semver range syntax for
+// loose-semver versions, a relational grammar for regex schemes). Unlike
+// [Registry.Filter], this is a strict membership test intended for gating (e.g.
+// resolver version constraints): a version no scheme claims is treated as not
+// matching.
 //
-// An empty constraint is satisfied by any version. A malformed constraint
-// returns an error.
+// An empty constraint is satisfied by any version. A constraint no registered
+// scheme can parse is malformed and returns an error.
 func (r *Registry) Satisfies(version, constraint string) (bool, error) {
 	if constraint == "" {
 		return true, nil
 	}
-	constraints, err := semver.NewConstraint(constraint)
-	if err != nil {
-		return false, fmt.Errorf("parsing semantic version constraint failed: %w", err)
-	}
-	// A semver constraint is only meaningful for versions the loose-semver
-	// scheme claims. A version whose authoritative scheme is non-semver (e.g.
-	// calver "2024.03.15", which also happens to parse as semver) must not be
-	// evaluated against a semver constraint.
-	if _, ok := r.schemeFor(version).(*looseSemverScheme); !ok {
+	// A version no scheme claims, or one whose scheme cannot express the
+	// constraint (a foreign grammar), never satisfies it (strict gate). A
+	// constraint malformed in the scheme's own grammar surfaces as an error.
+	s := r.schemeFor(version)
+	if s == nil {
 		return false, nil
 	}
-	v, err := semver.NewVersion(version)
-	if err != nil {
+	ok, err := s.Satisfies(version, constraint)
+	if errors.Is(err, ErrConstraintNotApplicable) {
 		return false, nil
 	}
-	return constraints.Check(v), nil
+	return ok, err
+}
+
+// ValidateConstraint reports whether the constraint is well-formed for at least
+// one registered scheme, independent of any version. An empty constraint is
+// always valid. This is intended for eager validation at configuration load
+// time, so an unusable constraint fails fast rather than silently matching
+// nothing later. It returns the loose-semver parse error when a semver scheme is
+// present, otherwise a joined error across all schemes.
+func (r *Registry) ValidateConstraint(constraint string) error {
+	if constraint == "" {
+		return nil
+	}
+	var malformed []error
+	for _, s := range r.schemes {
+		err := s.ValidateConstraint(constraint)
+		if err == nil {
+			return nil // a scheme accepts the constraint in its own grammar.
+		}
+		if !errors.Is(err, ErrConstraintNotApplicable) {
+			// A genuine syntax error (e.g. a malformed semver range) rather than a
+			// constraint that merely belongs to a different scheme's grammar.
+			malformed = append(malformed, err)
+		}
+	}
+	// Every scheme rejected the constraint. If any rejection was a real syntax
+	// error, the constraint is malformed; otherwise it is simply not applicable to
+	// any configured scheme (still a usable configuration — it just matches
+	// nothing until a suitable scheme is added), which is not an error.
+	return errors.Join(malformed...)
 }
 
 // schemeFor returns the first scheme that claims the version, or nil if none do.
@@ -253,6 +296,36 @@ func (looseSemverScheme) Compare(a, b string) (int, error) {
 	return va.Compare(vb), nil
 }
 
+// Satisfies evaluates a semver range constraint (e.g. ">=1.0.0 <2.0.0", "^1.2")
+// against a semver version. A version that does not parse as semver never
+// satisfies a constraint. A malformed constraint returns an error.
+func (looseSemverScheme) Satisfies(version, constraint string) (bool, error) {
+	if constraint == "" {
+		return true, nil
+	}
+	constraints, err := semver.NewConstraint(constraint)
+	if err != nil {
+		return false, fmt.Errorf("parsing semantic version constraint failed: %w", err)
+	}
+	v, err := semver.NewVersion(version)
+	if err != nil {
+		return false, nil
+	}
+	return constraints.Check(v), nil
+}
+
+// ValidateConstraint reports whether the constraint is a well-formed semver
+// range.
+func (looseSemverScheme) ValidateConstraint(constraint string) error {
+	if constraint == "" {
+		return nil
+	}
+	if _, err := semver.NewConstraint(constraint); err != nil {
+		return fmt.Errorf("parsing semantic version constraint failed: %w", err)
+	}
+	return nil
+}
+
 // regexScheme claims versions matching a regular expression and orders them by
 // a list of named capture groups, most significant first.
 type regexScheme struct {
@@ -294,6 +367,100 @@ func (s *regexScheme) Compare(a, b string) (int, error) {
 		}
 	}
 	return 0, nil
+}
+
+// Satisfies evaluates a relational constraint against a version this scheme
+// claims. The constraint is a whitespace- or comma-separated conjunction of
+// terms; each term is a relational operator (">=", ">", "<=", "<", "=", "==",
+// "!=") followed by a version operand that must itself match the scheme's
+// pattern. A bare operand with no operator means equality. Ordering follows the
+// scheme's own [regexScheme.Compare], so it is identical to the sort order.
+//
+// Unlike loose semver, range operators such as "^", "~", and x-ranges are not
+// supported: they have no scheme-independent meaning.
+func (s *regexScheme) Satisfies(version, constraint string) (bool, error) {
+	if constraint == "" {
+		return true, nil
+	}
+	if !s.pattern.MatchString(version) {
+		return false, fmt.Errorf("version %q does not match scheme %q", version, s.name)
+	}
+	if err := s.ValidateConstraint(constraint); err != nil {
+		return false, err
+	}
+	for _, term := range splitConstraintTerms(constraint) {
+		op, operand := parseConstraintTerm(term)
+		c, err := s.Compare(version, operand)
+		if err != nil {
+			return false, err
+		}
+		if !satisfiesOp(op, c) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// ValidateConstraint reports whether every term of the relational constraint is
+// parseable and its operand matches the scheme pattern.
+func (s *regexScheme) ValidateConstraint(constraint string) error {
+	if constraint == "" {
+		return nil
+	}
+	for _, term := range splitConstraintTerms(constraint) {
+		_, operand := parseConstraintTerm(term)
+		if !s.pattern.MatchString(operand) {
+			// A regex scheme has no notion of a syntactically malformed constraint:
+			// any operand that is not one of its versions simply means the
+			// constraint belongs to a different grammar.
+			return fmt.Errorf("scheme %q: constraint operand %q does not match the scheme pattern: %w", s.name, operand, ErrConstraintNotApplicable)
+		}
+	}
+	return nil
+}
+
+// constraintOperators lists the relational operators a regex scheme constraint
+// term may start with, longest first so the two-character operators win over
+// their single-character prefixes.
+var constraintOperators = []string{">=", "<=", "!=", "==", "=", ">", "<"}
+
+// splitConstraintTerms splits a constraint expression into conjunctive terms on
+// commas and runs of whitespace, dropping empty terms.
+func splitConstraintTerms(constraint string) []string {
+	return strings.FieldsFunc(constraint, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	})
+}
+
+// parseConstraintTerm strips a leading relational operator from a term and
+// returns the operator and the trimmed version operand. A term with no
+// recognized operator defaults to equality ("=").
+func parseConstraintTerm(term string) (op, operand string) {
+	for _, candidate := range constraintOperators {
+		if strings.HasPrefix(term, candidate) {
+			return candidate, strings.TrimSpace(strings.TrimPrefix(term, candidate))
+		}
+	}
+	return "=", strings.TrimSpace(term)
+}
+
+// satisfiesOp reports whether a [regexScheme.Compare] result c (negative when
+// version < operand) satisfies the relational operator op.
+func satisfiesOp(op string, c int) bool {
+	switch op {
+	case ">=":
+		return c >= 0
+	case ">":
+		return c > 0
+	case "<=":
+		return c <= 0
+	case "<":
+		return c < 0
+	case "!=":
+		return c != 0
+	default: // "=", "=="
+		return c == 0
+	}
 }
 
 // groups extracts the named capture groups of a matched version into a map.

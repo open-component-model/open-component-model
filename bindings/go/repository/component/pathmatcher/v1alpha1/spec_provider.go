@@ -74,7 +74,7 @@ func NewSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver, opts
 			// Validate the constraint once at construction against the configured
 			// schemes so an unusable constraint fails load rather than silently
 			// matching nothing later.
-			if _, err := provider.registry.Filter(nil, r.VersionConstraint); err != nil {
+			if err := provider.registry.ValidateConstraint(r.VersionConstraint); err != nil {
 				return nil, fmt.Errorf("invalid version constraint %q in resolver index %d: %w", r.VersionConstraint, i, err)
 			}
 		}
