@@ -219,7 +219,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		return nil, err
 	}
 
-	merged := &genericv1.Config{Configurations: []*runtime.Raw{}}
+	var configs []*genericv1.Config
 	for _, obj := range objects {
 		cfg, err := GetConfigFromObject(obj)
 		if err != nil {
@@ -229,18 +229,9 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		if cfg == nil {
 			continue
 		}
-
-		for _, entry := range cfg.Configurations {
-			if genericv1.IsGenericConfig(entry.GetType()) {
-				log.FromContext(ctx).V(1).Info(genericv1.NestedConfigIgnoredWarning,
-					"type", entry.GetType().String(),
-					"source", client.ObjectKeyFromObject(obj).String(),
-				)
-				continue
-			}
-			merged.Configurations = append(merged.Configurations, entry)
-		}
+		configs = append(configs, cfg)
 	}
+	merged := genericv1.MergeConfigs(log.FromContext(ctx).V(1).Info, configs...)
 
 	filtered, err := filterAllowedConfigTypes(ctx, merged)
 	if err != nil {

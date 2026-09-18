@@ -12,7 +12,6 @@ import (
 
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // OCM Configuration file and directory constants
@@ -92,7 +91,7 @@ func GetOCMConfig(options OCMConfigOptions, additional ...string) (*genericv1.Co
 }
 
 func loadAndMergeConfigs(paths []string, strict bool) (*genericv1.Config, error) {
-	merged := &genericv1.Config{Configurations: []*runtime.Raw{}}
+	cfgs := make([]*genericv1.Config, 0, len(paths))
 	for _, path := range paths {
 		cfg, err := GetConfigFromPath(path)
 		if err != nil {
@@ -106,18 +105,9 @@ func loadAndMergeConfigs(paths []string, strict bool) (*genericv1.Config, error)
 			continue
 		}
 		slog.Debug("ocm config was loaded successfully", slog.String("path", path))
-		for _, entry := range cfg.Configurations {
-			if genericv1.IsGenericConfig(entry.GetType()) {
-				slog.Warn(genericv1.NestedConfigIgnoredWarning,
-					slog.String("type", entry.GetType().String()),
-					slog.String("path", path),
-				)
-				continue
-			}
-			merged.Configurations = append(merged.Configurations, entry)
-		}
+		cfgs = append(cfgs, cfg)
 	}
-	return merged, nil
+	return genericv1.MergeConfigs(slog.Warn, cfgs...), nil
 }
 
 // GetConfigFromPath reads and decodes the YAML configuration file from the specified path.

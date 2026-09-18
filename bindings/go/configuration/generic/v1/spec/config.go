@@ -16,11 +16,23 @@ const (
 	ConfigTypeV1 = Version
 )
 
-const NestedConfigIgnoredWarning = "ignoring nested configuration: nested generic configurations are not supported, " +
-	"move the nested entries to the top-level configurations list"
-
-func IsGenericConfig(t runtime.Type) bool {
-	return Scheme.IsRegistered(t)
+func MergeConfigs(warnFn func(msg string, keysAndValues ...any), configs ...*Config) *Config {
+	merged := new(Config)
+	merged.Configurations = make([]*runtime.Raw, 0)
+	for _, config := range configs {
+		for _, entry := range config.Configurations {
+			if Scheme.IsRegistered(entry.GetType()) {
+				warnFn(
+					"ignoring nested configuration: nested generic configurations are not supported, move the nested entries to the top-level configurations list",
+					"type", entry.GetType().String(),
+					"value", entry.Data,
+				)
+				continue
+			}
+			merged.Configurations = append(merged.Configurations, entry)
+		}
+	}
+	return merged
 }
 
 // Config holds configuration entities loaded through a configuration file.
