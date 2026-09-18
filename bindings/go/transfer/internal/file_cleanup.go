@@ -130,8 +130,9 @@ func addFileCleanupTransformation(tgd *transformv1alpha1.TransformationGraphDefi
 
 	cleanup := transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type: FileCleanupVersionedType,
-			ID:   "fileBufferCleanup",
+			Type:  FileCleanupVersionedType,
+			ID:    "fileBufferCleanup",
+			Label: cleanupLabel,
 		},
 		Spec: &runtime.Unstructured{Data: map[string]any{
 			"files": files,
