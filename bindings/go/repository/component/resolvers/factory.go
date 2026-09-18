@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math"
 
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -29,6 +30,46 @@ type Options struct {
 	// Used by CLI to route specific component references to the provided repository.
 	// They have no effect if no base repository is provided.
 	ComponentPatterns []string
+}
+
+// NewFromConfig creates a ComponentVersionRepositoryResolver whose resolver
+// lists are the sole responsibility of the given generic configuration.
+//
+// It extracts both path matcher (v1alpha1) and deprecated fallback (v1)
+// resolvers from config via [ExtractResolvers], assigns them onto opts, and
+// delegates to [New]. Callers must not pre-populate opts.PathMatchers or
+// opts.FallbackResolvers: config is the sole source of resolver lists, and
+// supplying either is rejected even when config is nil.
+//
+// repositoryScheme decodes the deprecated fallback repository specifications.
+// Callers pass their repository scheme (all current callers use
+// oci/spec/repository.Scheme). This package must not import OCI, CLI, or
+// controller packages.
+//
+// The provider, credential graph, and component patterns from opts are
+// preserved. A nil config, nil credential graph, and nil baseRepo are
+// supported for config-only resolution; [New] behavior for absent
+// repositories/resolvers is preserved.
+func NewFromConfig(
+	ctx context.Context,
+	config *genericv1.Config,
+	repositoryScheme *runtime.Scheme,
+	opts Options,
+	baseRepo runtime.Typed,
+) (ComponentVersionRepositoryResolver, error) {
+	if len(opts.PathMatchers) > 0 || len(opts.FallbackResolvers) > 0 {
+		return nil, fmt.Errorf("path matcher and fallback resolvers must not be supplied to NewFromConfig; config is the sole source of resolver lists")
+	}
+
+	fallbackResolvers, pathMatchers, err := ExtractResolvers(config, repositoryScheme)
+	if err != nil {
+		return nil, fmt.Errorf("extracting resolvers from configuration failed: %w", err)
+	}
+
+	opts.FallbackResolvers = fallbackResolvers
+	opts.PathMatchers = pathMatchers
+
+	return New(ctx, opts, baseRepo)
 }
 
 // New creates a ComponentVersionRepositoryForComponentProvider based on the provided options.

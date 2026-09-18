@@ -94,7 +94,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		Watches(
 			&v1alpha1.Component{},
 			handler.EnqueueRequestsFromMapFunc(r.replicationsForIndex(componentRefIndex)),
-			builder.WithPredicates(ComponentInfoChangedPredicate{}),
+			builder.WithPredicates(ocm.ComponentInfoChangedPredicate{}),
 		).
 		Watches(
 			&v1alpha1.Repository{},

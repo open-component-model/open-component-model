@@ -908,7 +908,15 @@ For(&v1alpha1.Component{}, builder.WithPredicates(predicate.GenerationChangedPre
 
 ### Field Indexing and Cross-Resource Watches
 
-Field indexes are registered at controller setup for efficient cross-resource lookups. Watch handlers use `handler.EnqueueRequestsFromMapFunc` with `client.MatchingFields{}` to find related objects:
+Field indexes support efficient cross-resource lookups. Controller-private indexes are registered by the owning controller during setup. Indexes shared by multiple controllers are registered exactly once by manager bootstrap, before controller setup; standalone manager-backed test harnesses own the same prerequisite. For example, Component and Discovery share the Discovery component-reference index:
+
+```go
+if err := indexes.RegisterDiscoveryComponentRef(ctx, mgr.GetFieldIndexer()); err != nil {
+    return err
+}
+```
+
+Watch handlers use `handler.EnqueueRequestsFromMapFunc` with `client.MatchingFields{}` to find related objects:
 
 ```go
 Watches(&v1alpha1.Repository{},
