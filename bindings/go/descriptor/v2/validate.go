@@ -3,6 +3,7 @@ package v2
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -10,6 +11,8 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"sigs.k8s.io/yaml"
+
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 // JSONSchema contains the embedded JSON schema for validating Open Component Model descriptors.
@@ -89,4 +92,35 @@ func ValidateRawYAML(raw []byte) error {
 	}
 
 	return schema.Validate(mm)
+}
+
+// ValidateVersions checks the component version and every resource, source, and
+// reference version against the given versioning registry. It is separate from
+// [Validate] (which only performs structural JSON-schema validation) because
+// version-scheme validity is configuration-driven and cannot be expressed in the
+// static schema. It returns a joined error naming each offending field.
+func ValidateVersions(desc *Descriptor, registry *versioning.Registry) error {
+	if registry == nil {
+		registry = versioning.Default()
+	}
+
+	var errs []error
+	check := func(kind, name, version string) {
+		if !registry.Valid(version) {
+			errs = append(errs, fmt.Errorf("%s %q has an invalid version %q for the configured versioning schemes", kind, name, version))
+		}
+	}
+
+	check("component", desc.Component.Name, desc.Component.Version)
+	for _, r := range desc.Component.Resources {
+		check("resource", r.Name, r.Version)
+	}
+	for _, s := range desc.Component.Sources {
+		check("source", s.Name, s.Version)
+	}
+	for _, ref := range desc.Component.References {
+		check("reference", ref.Name, ref.Version)
+	}
+
+	return errors.Join(errs...)
 }

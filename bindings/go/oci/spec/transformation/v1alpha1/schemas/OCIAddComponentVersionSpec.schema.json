@@ -485,13 +485,13 @@
         },
         "relaxedSemver": {
           "type": "string",
-          "description": "Relaxed Semver version that allows optional leading 'v', major-only, and major.minor only",
-          "pattern": "^[v]?(0|[1-9]\\d*)(?:\\.(0|[1-9]\\d*))?(?:\\.(0|[1-9]\\d*))?(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+          "description": "Component version string. Structural validation only requires a non-empty string; the concrete versioning scheme (semver by default, or a configured scheme such as calver) is validated separately at runtime.",
+          "pattern": "^.+$",
           "examples": [
             "v1.0.0",
-            "v1.0",
             "1.0.0",
-            "1.0"
+            "2024.03.15",
+            "22.04"
           ]
         },
         "repositoryContext": {

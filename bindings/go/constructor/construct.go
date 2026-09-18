@@ -24,6 +24,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 // ErrShouldSkipConstruction is an error that indicates that the construction of a component should be skipped,
@@ -230,11 +231,45 @@ func (c *DefaultConstructor) constructComponent(ctx context.Context, component *
 		return nil, fmt.Errorf("component %q failed validation: %w", component.Name, err)
 	}
 
+	if err := c.validateVersions(desc); err != nil {
+		return nil, fmt.Errorf("component %q failed version validation: %w", component.Name, err)
+	}
+
 	if err := repo.AddComponentVersion(ctx, desc); err != nil {
 		return nil, fmt.Errorf("error adding component version to target: %w", err)
 	}
 
 	return desc, nil
+}
+
+// validateVersions checks the component version and every resource, source, and
+// reference version against the configured versioning registry (loose semver by
+// default). It returns a joined error naming each offending element.
+func (c *DefaultConstructor) validateVersions(desc *descriptor.Descriptor) error {
+	registry := c.opts.VersioningRegistry
+	if registry == nil {
+		registry = versioning.Default()
+	}
+
+	var errs []error
+	check := func(kind, name, version string) {
+		if !registry.Valid(version) {
+			errs = append(errs, fmt.Errorf("%s %q has an invalid version %q for the configured versioning schemes", kind, name, version))
+		}
+	}
+
+	check("component", desc.Component.Name, desc.Component.Version)
+	for _, r := range desc.Component.Resources {
+		check("resource", r.Name, r.Version)
+	}
+	for _, s := range desc.Component.Sources {
+		check("source", s.Name, s.Version)
+	}
+	for _, ref := range desc.Component.References {
+		check("reference", ref.Name, ref.Version)
+	}
+
+	return errors.Join(errs...)
 }
 
 // ProcessConflictStrategy checks for existing component versions in the target repository
@@ -513,6 +548,12 @@ func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo Targe
 		res, err = c.processSourceWithInput(ctx, targetRepo, src, component, version)
 	} else {
 		logger.Debug("processing source with existing access")
+		// Sources with existing access may omit their version; default it to the
+		// component version so validateVersions does not reject an otherwise
+		// schema-valid source for an empty version. Explicit versions are kept.
+		if src.Version == "" {
+			src.Version = version
+		}
 		res = constructor.ConvertToDescriptorSource(src)
 	}
 
