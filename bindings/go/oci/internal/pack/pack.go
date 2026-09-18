@@ -84,10 +84,25 @@ func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.
 }
 
 func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
-	b, layer, err := PrepareArtifactBlobForOCI(b, ResourceBlobOCILayerOptions{
+	layerOpts := ResourceBlobOCILayerOptions{
 		BlobMediaType: access.MediaType,
 		BlobDigest:    digest.Digest(access.LocalReference),
-	})
+	}
+
+	// Stream the blob directly when the storage supports streaming chunked
+	// upload and buffering would otherwise be required. Buffering happens
+	// (in PrepareArtifactBlobForOCI) whenever the size OR the digest is unknown,
+	// so we stream in either case: the digest and size are discovered/verified
+	// during the chunked upload instead of by reading the whole blob into memory
+	// first. Blobs that already expose both a size and a digest need no buffer
+	// and take the regular push path (which still chunks large blobs by size).
+	if layer, ok, err := streamResourceLayer(ctx, storage, b, layerOpts); err != nil {
+		return ociImageSpecV1.Descriptor{}, err
+	} else if ok {
+		return finishResourceLayer(b, access, layer, opts, storage)
+	}
+
+	b, layer, err := PrepareArtifactBlobForOCI(b, layerOpts)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create resource layer based on blob: %w", err)
 	}
@@ -96,6 +111,82 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to push blob: %w", err)
 	}
 
+	return finishResourceLayer(b, access, layer, opts, storage)
+}
+
+// streamResourceLayer attempts a streaming chunked upload of b, computing (and
+// verifying, if already known) the digest and size during upload so the blob is
+// never buffered into memory. It returns (descriptor, true, nil) on success.
+//
+// It returns ok=false (no error, no content consumed) when streaming does not
+// apply — the storage is not a [remotestore.StreamingPusher], the blob already
+// exposes BOTH a size and a digest (so no buffering is needed; the regular push
+// path chunks large blobs by size anyway), or the store reports streaming
+// unavailable — so the caller falls back to the buffering push path.
+//
+// A digest known in advance (from the blob or the access LocalReference) is
+// passed through and verified against the streamed bytes; an unknown digest is
+// computed from them.
+func streamResourceLayer(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) (ociImageSpecV1.Descriptor, bool, error) {
+	pusher, ok := storage.(remotestore.StreamingPusher)
+	if !ok {
+		return ociImageSpecV1.Descriptor{}, false, nil
+	}
+
+	knownDigest := opts.BlobDigest
+	if blobDig, digKnown := b.Digest(); digKnown {
+		knownDigest = digest.Digest(blobDig)
+	}
+	sizeKnown := b.Size() != blob.SizeUnknown
+
+	// Both known: no buffering would occur, so let the regular push path handle
+	// it (RemoteStore.Push still chunks large blobs by the configured threshold).
+	if sizeKnown && len(knownDigest) > 0 {
+		return ociImageSpecV1.Descriptor{}, false, nil
+	}
+
+	if len(knownDigest) > 0 {
+		if err := knownDigest.Validate(); err != nil {
+			return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to validate blob digest: %w", err)
+		}
+	}
+
+	mediaType := opts.BlobMediaType
+	if mt, ok := b.MediaType(); ok && mt != "" {
+		mediaType = mt
+	}
+	if mediaType == "" {
+		return ociImageSpecV1.Descriptor{}, false, errors.New("blob media type is unknown and cannot be packed into an oci blob")
+	}
+
+	reader, err := b.ReadCloser()
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to get blob reader: %w", err)
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	partial := ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: knownDigest, Size: blob.SizeUnknown}
+	layer, err := pusher.PushStreaming(ctx, partial, reader)
+	if errors.Is(err, remotestore.ErrStreamingUnavailable) {
+		// No bytes were consumed; fall back to the buffering push path.
+		return ociImageSpecV1.Descriptor{}, false, nil
+	}
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to stream blob: %w", err)
+	}
+
+	layer.Annotations = maps.Clone(opts.BlobLayerAnnotations)
+	if err := identity.Adopt(&layer, b.Artifact); err != nil {
+		return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
+	}
+	return layer, true, nil
+}
+
+// finishResourceLayer applies manifest annotations and updates the artifact
+// access for a pushed resource layer.
+func finishResourceLayer(b *ociblob.ArtifactBlob, access *v2.LocalBlob, layer ociImageSpecV1.Descriptor, opts Options, storage content.Storage) (ociImageSpecV1.Descriptor, error) {
 	annotations := maps.Clone(layer.Annotations)
 	maps.Copy(annotations, opts.ManifestAnnotations)
 
