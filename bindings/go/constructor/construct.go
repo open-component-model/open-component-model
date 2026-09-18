@@ -548,6 +548,12 @@ func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo Targe
 		res, err = c.processSourceWithInput(ctx, targetRepo, src, component, version)
 	} else {
 		logger.Debug("processing source with existing access")
+		// Sources with existing access may omit their version; default it to the
+		// component version so validateVersions does not reject an otherwise
+		// schema-valid source for an empty version. Explicit versions are kept.
+		if src.Version == "" {
+			src.Version = version
+		}
 		res = constructor.ConvertToDescriptorSource(src)
 	}
 

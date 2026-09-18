@@ -1168,6 +1168,45 @@ func TestRepository_ListComponentVersions(t *testing.T) {
 	r.Equal(expectedOrder, versions, "Versions should be sorted in descending order")
 }
 
+// TestRepository_ListComponentVersions_PreservesNonSemver guards against the
+// regression where ListComponentVersions dropped versions that are valid OCI
+// tags but do not parse as loose semver (e.g. "build-1837", "ubuntu22.04").
+// Such versions are legal under a configured versioning scheme, and the OCI
+// binding must return them so the CLI can order them with the active registry.
+func TestRepository_ListComponentVersions_PreservesNonSemver(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	const componentName = "ocm.software/non-semver-component"
+	versionsToAdd := []string{"2.0.0", "build-1837", "ubuntu22.04", "1.0.0"}
+	for _, version := range versionsToAdd {
+		desc := &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider: descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: version},
+				},
+			},
+		}
+		r.NoError(repo.AddComponentVersion(ctx, desc), "adding %s must succeed (valid OCI tag)", version)
+	}
+
+	versions, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.ElementsMatch(versionsToAdd, versions, "non-semver versions must not be dropped from the listing")
+
+	// The default comparator keeps semver versions ranked ahead of non-semver
+	// ones and orders semver newest-first.
+	r.Equal([]string{"2.0.0", "1.0.0"}, []string{versions[0], versions[1]},
+		"semver versions must sort newest-first ahead of non-semver entries")
+}
+
 func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, resource *descriptor.Resource) {
 	r := require.New(t)
 	// Get a repository store for the component
