@@ -14,8 +14,9 @@ const (
 	Version    = "v1alpha1"
 
 	// BuiltinLooseSemver is the VersionScheme.Builtin value selecting the
-	// built-in loose-semver scheme (see [versioning.NewLooseSemverScheme]).
-	BuiltinLooseSemver = "loose-semver"
+	// built-in loose-semver scheme. Deprecated alias kept for callers; prefer
+	// [versioning.BuiltinLooseSemver] and the other versioning.Builtin* names.
+	BuiltinLooseSemver = versioning.BuiltinLooseSemver
 )
 
 var Scheme = runtime.NewScheme()
@@ -69,12 +70,15 @@ type VersionScheme struct {
 	// Name is a stable identifier for the scheme (e.g. "calver", "build-number").
 	Name string `json:"name"`
 
-	// Builtin selects a built-in scheme instead of a regular expression. The only
-	// supported value is "loose-semver", which uses the same loose semantic
-	// versioning behavior OCM applies by default. When set, Pattern and
-	// ComparisonGroups must be empty. Add an entry with builtin: loose-semver
-	// (typically last) to keep recognizing semver versions alongside custom
-	// schemes.
+	// Builtin selects a named built-in scheme instead of a regular expression.
+	// Supported values: "loose-semver" (the historical default), "calver-full"
+	// (YYYY.MM.DD), "calver-month" (YYYY.MM), "calver-ubuntu" (YY.MM),
+	// "calver-micro" (YYYY.M(M).PATCH), "aws-date" (YYYY-MM-DD), and
+	// "build-number" (monotonic integer). Each is exactly the equivalent regex
+	// pattern plus comparison groups, documented in the versioning configuration
+	// reference. When set, Pattern and ComparisonGroups must be empty. Add an
+	// entry with builtin: loose-semver (typically last) to keep recognizing semver
+	// versions alongside custom schemes.
 	Builtin string `json:"builtin,omitempty"`
 
 	// Pattern is a Go (RE2) regular expression that a version must match for
@@ -163,12 +167,11 @@ func (c *Config) Registry() (*versioning.Registry, error) {
 			if s.Pattern != "" || len(s.ComparisonGroups) > 0 {
 				return nil, fmt.Errorf("versioning scheme %q (index %d): builtin is mutually exclusive with pattern and comparisonGroups", s.Name, i)
 			}
-			switch s.Builtin {
-			case BuiltinLooseSemver:
-				schemes = append(schemes, versioning.NewLooseSemverScheme())
-			default:
-				return nil, fmt.Errorf("versioning scheme %q (index %d): unknown builtin %q", s.Name, i, s.Builtin)
+			scheme, ok := versioning.BuiltinScheme(s.Builtin)
+			if !ok {
+				return nil, fmt.Errorf("versioning scheme %q (index %d): unknown builtin %q, valid builtins are %v", s.Name, i, s.Builtin, versioning.BuiltinNames())
 			}
+			schemes = append(schemes, scheme)
 			continue
 		}
 		pattern, err := regexp.Compile(s.Pattern)

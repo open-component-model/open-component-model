@@ -8,7 +8,7 @@
   "properties": {
     "builtin": {
       "type": "string",
-      "description": "Builtin selects a built-in scheme instead of a regular expression. The only\nsupported value is \"loose-semver\", which uses the same loose semantic\nversioning behavior OCM applies by default. When set, Pattern and\nComparisonGroups must be empty. Add an entry with builtin: loose-semver\n(typically last) to keep recognizing semver versions alongside custom\nschemes."
+      "description": "Builtin selects a named built-in scheme instead of a regular expression.\nSupported values: \"loose-semver\" (the historical default), \"calver-full\"\n(YYYY.MM.DD), \"calver-month\" (YYYY.MM), \"calver-ubuntu\" (YY.MM),\n\"calver-micro\" (YYYY.M(M).PATCH), \"aws-date\" (YYYY-MM-DD), and\n\"build-number\" (monotonic integer). Each is exactly the equivalent regex\npattern plus comparison groups, documented in the versioning configuration\nreference. When set, Pattern and ComparisonGroups must be empty. Add an\nentry with builtin: loose-semver (typically last) to keep recognizing semver\nversions alongside custom schemes."
     },
     "comparisonGroups": {
       "type": "array",
