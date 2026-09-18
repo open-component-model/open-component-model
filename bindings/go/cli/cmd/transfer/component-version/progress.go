@@ -14,7 +14,7 @@ import (
 func mapEvent(e graphRuntime.ProgressEvent) progress.Event[*graphPkg.Transformation] {
 	return progress.Event[*graphPkg.Transformation]{
 		ID:    e.Transformation.ID,
-		Name:  formatTransformationName(e.Transformation),
+		Name:  e.Transformation.DisplayName(),
 		State: mapState(e.State),
 		Err:   e.Err,
 		Data:  e.Transformation,
@@ -41,8 +41,8 @@ func formatError(t *graphPkg.Transformation, err error) string {
 	result := bar.SidebarText("", bar.TreeErrorFormatter(err), bar.Red)
 
 	if t != nil && t.Spec != nil {
-		info := fmt.Sprintf("Transformation %q of type %s/%s failed.\nSpec data shown below for debugging.",
-			t.ID, t.Type.Name, t.Type.Version)
+		info := fmt.Sprintf("Transformation %s with version %s failed.\nSpec data shown below for debugging.",
+			t.DisplayName(), t.Type.Version)
 		specJSON, jsonErr := json.MarshalIndent(t.Spec.Data, "", "  ")
 		if jsonErr == nil {
 			result += bar.FramedText(info, string(specJSON), 4)
@@ -50,9 +50,4 @@ func formatError(t *graphPkg.Transformation, err error) string {
 	}
 
 	return result
-}
-
-// formatTransformationName returns a display name as "ID [Type]".
-func formatTransformationName(t *graphPkg.Transformation) string {
-	return fmt.Sprintf("%s [%s]", t.ID, t.Type.Name)
 }
