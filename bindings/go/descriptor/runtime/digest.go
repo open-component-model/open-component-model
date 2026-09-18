@@ -1,0 +1,45 @@
+package runtime
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/opencontainers/go-digest"
+)
+
+// ErrNoDigest indicates that this error can be ignored is skip digest
+// verification is enabled or the resource doesn't have a digest.
+var ErrNoDigest = errors.New("no digest to verify against")
+
+// Parse returns d as a [digest.Digest] in canonical "algorithm:hex" form, so that
+// content can be verified against it.
+//
+// It returns ErrNoDigest when d describes no content, which callers are expected
+// to treat as "nothing to verify" rather than as a failure. Any other error means
+// the digest is present but unusable.
+//
+// Note: There are several places in the code today in which we are parsing digests in
+// one way or another. It will be a separate issue to pull them all together. Not in this one.
+// And we aren't using those to avoid having to import OCI package or some other package
+// and dilute the dependency graph.
+func (d *Digest) Parse() (digest.Digest, error) {
+	if d == nil || d.Value == "" || d.HashAlgorithm == "" {
+		return "", ErrNoDigest
+	}
+	if strings.EqualFold(d.HashAlgorithm, NoDigest) || strings.EqualFold(d.NormalisationAlgorithm, ExcludeFromSignature) {
+		return "", ErrNoDigest
+	}
+
+	// normalize because SHA-256 and sha256 equally appear
+	if !strings.EqualFold(strings.ReplaceAll(d.HashAlgorithm, "-", ""), "sha256") {
+		return "", fmt.Errorf("unsupported hash algorithm %q: only SHA-256 is supported", d.HashAlgorithm)
+	}
+
+	parsed := digest.NewDigestFromEncoded(digest.SHA256, strings.ToLower(d.Value))
+	if err := parsed.Validate(); err != nil {
+		return "", fmt.Errorf("invalid digest %q: %w", d.Value, err)
+	}
+
+	return parsed, nil
+}
