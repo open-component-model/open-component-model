@@ -4,6 +4,8 @@ description: "Bootstrap a Helm chart deployment with OCM and kro, delivered thro
 icon: "⚙️"
 weight: 61
 toc: true
+aliases:
+  - /docs/tutorials/deploy-helm-charts-with-bootstrap-setup/
 ---
 
 ## What You'll Learn
