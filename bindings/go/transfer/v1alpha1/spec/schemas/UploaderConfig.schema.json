@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/UploaderConfig.schema.json",
   "title": "UploaderConfig",
   "type": "object",
-  "description": "UploaderConfig is a declarative rule that routes matching resources through a\ncustom upload transformer during transfer. It is carried as an entry inside the\ncentral generic configuration (generic.config.ocm.software/v1), as a sibling of\n[Config], and extracted with [LookupUploaderConfigs]. Each entry is an independent\nrule; entries are not merged.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: uploader.transfer.config.ocm.software/v1alpha1\nmatch:\naccessType: Wget/v1alpha1\nstream:\ntype: HTTPStreaming/v1alpha1\ntargetURL: 'https://mytarget.registry.com/{{.path}}'\nmethod: PUT\nqueryParams: {}",
+  "description": "UploaderConfig is a declarative rule that routes matching resources through a\ncustom upload transformer during transfer. It is carried as an entry inside the\ncentral generic configuration (generic.config.ocm.software/v1), as a sibling of\n[Config], and extracted with [LookupUploaderConfigs]. Each entry is an independent\nrule; entries are not merged.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: uploader.transfer.config.ocm.software/v1alpha1\nmatch:\naccessType: Wget/v1\nstream:\ntype: HTTPStreaming/v1alpha1\ntargetURL: '${\"https://mytarget.registry.com/uploads\" + resource.access.path}'\nmethod: PUT",
   "properties": {
     "match": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploaderMatch",

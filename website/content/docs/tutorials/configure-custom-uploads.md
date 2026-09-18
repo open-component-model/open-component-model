@@ -75,16 +75,17 @@ configurations:
     copyMode: allResources
   - type: uploader.transfer.config.ocm.software/v1alpha1
     match:
-      accessType: Wget/v1alpha1
+      accessType: Wget/v1
     stream:
       type: HTTPStreaming/v1alpha1
-      targetURL: '"https://mytarget.example.com/uploads" + resource.access.path'
+      targetURL: '${"https://mytarget.example.com/uploads" + resource.access.path}'
       method: PUT
 ```
 
-The `targetURL` is a [CEL](https://cel.dev/) expression evaluated against the
-source resource, exposed as `resource`. Here `resource.access.path` is the path of
-the source resource's URL (`/artifacts/docs.tar`), so the expression resolves to
+The `targetURL` is a [CEL](https://cel.dev/) expression wrapped in `${…}`,
+evaluated against the source resource, exposed as `resource`. Here
+`resource.access.path` is the path of the source resource's URL
+(`/artifacts/docs.tar`), so the expression resolves to
 `https://mytarget.example.com/uploads/artifacts/docs.tar`. You can also use
 `resource.name`, `resource.version`, `resource.access.host`,
 `resource.extraIdentity.<key>`, `resource.labels.<name>`, and CEL conditionals —

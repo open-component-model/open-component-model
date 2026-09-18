@@ -33,9 +33,8 @@ configurations:
       accessType: Wget/v1alpha1
     stream:
       type: HTTPStreaming/v1alpha1
-      targetURL: 'https://mytarget.registry.com/{{.path}}'
+      targetURL: '${"https://mytarget.registry.com/uploads" + resource.access.path}'
       method: PUT
-      queryParams: {}
 `)
 
 		uploaders, err := spec.LookupUploaderConfigs(generic)
@@ -77,13 +76,13 @@ configurations:
       accessType: Wget/v1alpha1
     stream:
       type: HTTPStreaming/v1alpha1
-      targetURL: 'https://first.example/{{.path}}'
+      targetURL: '${"https://first.example/uploads" + resource.access.path}'
   - type: uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: S3/v2
     stream:
       type: HTTPStreaming/v1alpha1
-      targetURL: 'https://second.example/{{.path}}'
+      targetURL: '${"https://second.example/uploads" + resource.access.path}'
 `)
 		uploaders, err := spec.LookupUploaderConfigs(generic)
 		r.NoError(err)
@@ -99,7 +98,7 @@ configurations:
   - type: uploader.transfer.config.ocm.software/v1alpha1
     stream:
       type: HTTPStreaming/v1alpha1
-      targetURL: 'https://example/{{.path}}'
+      targetURL: '${"https://example/uploads" + resource.access.path}'
 `)
 		_, err := spec.LookupUploaderConfigs(generic)
 		require.Error(t, err)

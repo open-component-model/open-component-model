@@ -26,10 +26,10 @@ configurations:
     uploadType: ociArtifact
   - type: uploader.transfer.config.ocm.software/v1alpha1
     match:
-      accessType: Wget/v1alpha1
+      accessType: Wget/v1
     stream:
       type: HTTPStreaming/v1alpha1
-      targetURL: '"https://mytarget.registry.com/uploads" + resource.access.path'
+      targetURL: '${"https://mytarget.registry.com/uploads" + resource.access.path}'
       method: PUT
 ```
 
@@ -113,18 +113,18 @@ configurations:
   # Docs go to the docs bucket.
   - type: uploader.transfer.config.ocm.software/v1alpha1
     match:
-      accessType: Wget/v1alpha1
+      accessType: Wget/v1
       name: docs
     stream:
       type: HTTPStreaming/v1alpha1
-      targetURL: '"https://docs.example.com" + resource.access.path'
+      targetURL: '${"https://docs.example.com" + resource.access.path}'
   # Everything else Wget goes to the generic bucket.
   - type: uploader.transfer.config.ocm.software/v1alpha1
     match:
-      accessType: Wget/v1alpha1
+      accessType: Wget/v1
     stream:
       type: HTTPStreaming/v1alpha1
-      targetURL: '"https://blobs.example.com/" + resource.name + "/" + resource.version'
+      targetURL: '${"https://blobs.example.com/" + resource.name + "/" + resource.version}'
 ```
 
 ## Stream Types
@@ -148,7 +148,6 @@ Its fields map field-for-field onto the resulting
 |---------------|-----------------------|---------------------|---------------------------------------------------------------------|
 | `targetURL`   | CEL expression        | `url`               | The upload URL. See Target URL Expressions below.                   |
 | `method`      | string                | `verb`              | HTTP method for the upload request. Defaults to PUT.                |
-| `queryParams` | `map[string][]string` | appended to `url`   | Static query parameters appended to the resolved target URL.        |
 | `header`      | `map[string][]string` | `header`            | HTTP headers to send with the upload request.                       |
 | `body`        | bytes                 | `body`              | Optional request body carried on the resulting Wget/v1 access.      |
 | `noRedirect`  | bool                  | `noRedirect`        | Disable following HTTP redirects.                                   |
@@ -157,10 +156,12 @@ Its fields map field-for-field onto the resulting
 #### Target URL Expressions
 
 `targetURL` is a [CEL](https://cel.dev/) expression — the same expression language
-the transfer graph uses to resolve every other field. It is evaluated against the
-source resource, exposed under the `resource` alias, and resolved by the transfer
-runtime, so the produced plan is deterministic. CEL string concatenation (`+`),
-conditionals (`cond ? a : b`), and comparisons are all available.
+the transfer graph uses to resolve every other field. It **must be wrapped in
+`${…}`**, matching how every other CEL field is written in the transfer graph. It
+is evaluated against the source resource, exposed under the `resource` alias, and
+resolved by the transfer runtime, so the produced plan is deterministic. CEL string
+concatenation (`+`), conditionals (`cond ? a : b`), and comparisons are all
+available. Append any static query string inside the expression.
 
 The `resource` alias exposes:
 
@@ -180,16 +181,16 @@ Examples:
 
 ```yaml
 # Preserve the source path under a new host
-targetURL: '"https://mytarget.example.com" + resource.access.path'
+targetURL: '${"https://mytarget.example.com" + resource.access.path}'
 
 # Route by name and version
-targetURL: '"https://cdn.example.com/" + resource.name + "/" + resource.version + "/blob"'
+targetURL: '${"https://cdn.example.com/" + resource.name + "/" + resource.version + "/blob"}'
 
 # Use extra identity / labels
-targetURL: '"https://" + resource.labels.region + ".example.com/" + resource.extraIdentity.arch + resource.access.path'
+targetURL: '${"https://" + resource.labels.region + ".example.com/" + resource.extraIdentity.arch + resource.access.path}'
 
 # Conditional target
-targetURL: 'resource.labels.tier == "public" ? "https://cdn.example.com" + resource.access.path : "https://internal.example.com" + resource.access.path'
+targetURL: '${resource.labels.tier == "public" ? "https://cdn.example.com" + resource.access.path : "https://internal.example.com" + resource.access.path}'
 ```
 
 Referencing a field that is absent at execution time fails the transfer with a

@@ -123,7 +123,7 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 		"type": "HTTPStreaming/v1alpha1",
 		// CEL expression: the graph runtime resolves resource.access.path against the
 		// injected source-resource node at execution time.
-		"targetURL": fmt.Sprintf("%q + resource.access.path", targetSrv.URL+"/uploads"),
+		"targetURL": fmt.Sprintf("${%q + resource.access.path}", targetSrv.URL+"/uploads"),
 		"method":    http.MethodPut,
 	})
 	r.NoError(err)
