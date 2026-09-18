@@ -49,13 +49,68 @@ func TestLookup_RoundTripAndRegistryOrdersCalver(t *testing.T) {
 	r.NoError(err)
 
 	versions := []string{"2024.03.15", "2024.10.01", "2023.12.31"}
-	reg.SortDescending(versions)
+	r.NoError(reg.SortDescending(versions))
 	r.Equal([]string{"2024.10.01", "2024.03.15", "2023.12.31"}, versions)
 
-	// semver still works via the appended fallback scheme.
-	semvers := []string{"1.0.0", "2.0.0", "1.5.0"}
-	reg.SortDescending(semvers)
-	r.Equal([]string{"2.0.0", "1.5.0", "1.0.0"}, semvers)
+	// With only calver configured the built-in semver scheme is NOT appended, so
+	// semver versions are not recognized as valid.
+	r.False(reg.Valid("1.0.0"))
+	r.Len(reg.Schemes(), 1)
+}
+
+const calverWithSemverEntry = `{
+  "type": "versioning.config.ocm.software/v1alpha1",
+  "schemes": [
+    {
+      "name": "calver-full",
+      "pattern": "^(?P<year>\\d{4})\\.(?P<month>\\d{2})\\.(?P<day>\\d{2})$",
+      "comparisonGroups": ["year", "month", "day"]
+    },
+    {
+      "name": "semver",
+      "builtin": "loose-semver"
+    }
+  ]
+}`
+
+func TestRegistry_BuiltinSemverFallbackOptIn(t *testing.T) {
+	r := require.New(t)
+
+	cfg, err := versioningspec.Lookup(makeGenericConfig(t, calverWithSemverEntry))
+	r.NoError(err)
+	reg, err := cfg.Registry()
+	r.NoError(err)
+	r.Len(reg.Schemes(), 2)
+
+	// Both schemes now apply: calver and semver versions are valid, and semver
+	// still orders numerically (via the built-in scheme, not lexically).
+	r.True(reg.Valid("2024.03.15"))
+	r.True(reg.Valid("1.0.0"))
+	semvers := []string{"1.0.0", "2.0.0", "1.10.0", "1.5.0"}
+	r.NoError(reg.SortDescending(semvers))
+	r.Equal([]string{"2.0.0", "1.10.0", "1.5.0", "1.0.0"}, semvers)
+}
+
+func TestRegistry_BuiltinConflictsAndUnknown(t *testing.T) {
+	r := require.New(t)
+
+	// builtin is mutually exclusive with pattern.
+	_, err := (&versioningspec.Config{
+		Schemes: []*versioningspec.VersionScheme{
+			{Name: "bad", Builtin: versioningspec.BuiltinLooseSemver, Pattern: "^v?.+$"},
+		},
+	}).Registry()
+	r.Error(err)
+	r.Contains(err.Error(), "mutually exclusive")
+
+	// unknown builtin is rejected.
+	_, err = (&versioningspec.Config{
+		Schemes: []*versioningspec.VersionScheme{
+			{Name: "bad", Builtin: "calver"},
+		},
+	}).Registry()
+	r.Error(err)
+	r.Contains(err.Error(), "unknown builtin")
 }
 
 func TestRegistry_NilOrEmptyConfigIsDefault(t *testing.T) {
