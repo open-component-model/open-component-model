@@ -310,6 +310,8 @@ const BINDING_MOUNTS = [
     { pkg: 'sigstore',      source: 'spec/credentials/trustedroot/v1alpha1/schemas',     target: 'schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1' },
     { pkg: 'credentials',   source: 'spec/config/v1/schemas',                            target: 'schemas/bindings/go/credentials/direct/v1' },
     { pkg: 'wget',          source: 'spec/credentials/v1/schemas',                       target: 'schemas/bindings/go/credentials/wget/v1' },
+    { pkg: 'transfer',      source: 'v1alpha1/spec/schemas',                             target: 'schemas/bindings/go/transfer' },
+    { pkg: 'wget',          source: 'transformation/spec/v1alpha1/schemas',              target: 'schemas/bindings/go/wget/transformation' },
 ];
 
 // Return the bindings schema imports for a version. The layout is auto-detected

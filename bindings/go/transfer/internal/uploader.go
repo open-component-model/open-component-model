@@ -1,12 +1,13 @@
 package internal
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"text/template"
+	"regexp"
+	"strings"
 
+	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -16,9 +17,10 @@ import (
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
-// streamConfig is the decoded uploader stream block. Its fields map field-for-field
-// onto the Wget access type: targetURL+queryParams → Wget.URL, method → Wget.Verb,
-// and header/body/noRedirect/mediaType pass straight through to the same-named fields.
+// streamConfig is the decoded uploader stream block. targetURL is a CEL expression
+// (referencing the source resource via the `resource` alias) that resolves to the
+// upload URL; method/header/body/noRedirect/mediaType map field-for-field onto the
+// resulting Wget access, and queryParams are appended to the resolved URL.
 type streamConfig struct {
 	Type        runtime.Type        `json:"type"`
 	TargetURL   string              `json:"targetURL"`
@@ -30,18 +32,30 @@ type streamConfig struct {
 	MediaType   string              `json:"mediaType,omitempty"`
 }
 
-// matchUploader returns the first uploader whose match access type matches accessType
-// by name (and version, when the uploader specifies one). Returns nil if none match.
-func matchUploader(uploaders []*transferv1alpha1.UploaderConfig, accessType runtime.Type) *transferv1alpha1.UploaderConfig {
+// matchUploader returns the first uploader whose match applies to resource: the
+// access type must match by name (and version, when the uploader specifies one),
+// the optional Name must equal the resource name, and every optional ExtraIdentity
+// entry must be present with an equal value in the resource's identity. Returns nil
+// if none match. Declaration order is significant — the first match wins, so more
+// specific rules should precede broader ones.
+func matchUploader(uploaders []*transferv1alpha1.UploaderConfig, resource descriptorv2.Resource) *transferv1alpha1.UploaderConfig {
+	accessType := resource.Access.Type
+	identity := resource.ToIdentity()
 	for _, u := range uploaders {
 		if u == nil {
 			continue
 		}
-		match := u.Match.AccessType
-		if match.Name != accessType.Name {
+		match := u.Match
+		if match.AccessType.Name != accessType.Name {
 			continue
 		}
-		if match.Version != "" && match.Version != accessType.Version {
+		if match.AccessType.Version != "" && match.AccessType.Version != accessType.Version {
+			continue
+		}
+		if match.Name != "" && match.Name != resource.Name {
+			continue
+		}
+		if !identityContains(identity, match.ExtraIdentity) {
 			continue
 		}
 		return u
@@ -49,59 +63,139 @@ func matchUploader(uploaders []*transferv1alpha1.UploaderConfig, accessType runt
 	return nil
 }
 
-// resolveTargetURL evaluates the target URL template against the source access URL and
-// resource identity, then appends the query params. It is the only build-time computation;
-// a missing template variable fails the build rather than emitting a partial URL.
-func resolveTargetURL(rawTargetURL string, queryParams map[string][]string, srcAccess *wgetaccessv1.Wget, resource descriptorv2.Resource) (string, error) {
+// identityContains reports whether every key/value pair in want is present with an
+// equal value in have. An empty want always matches.
+func identityContains(have, want runtime.Identity) bool {
+	for k, v := range want {
+		if have[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// labelValueString renders a label's raw JSON value for use in a URL template. A
+// JSON string value is unquoted (so "prod" becomes prod); any other JSON value is
+// returned as its compact JSON text.
+func labelValueString(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	return string(raw)
+}
+
+// resourceAlias is the identifier an uploader's targetURL CEL expression uses to
+// reference the source resource. processUploader rewrites it to the concrete
+// environment node path before the graph runtime evaluates the expression.
+const resourceAlias = "resource"
+
+// uploadsEnvKey is the environment map key under which source-resource nodes are
+// injected, addressable in CEL as environment.uploads.<uploadID>.
+const uploadsEnvKey = "uploads"
+
+// buildResourceNode builds the CEL node value exposed to a targetURL expression as
+// `resource`. It carries the resource identity/labels and the parsed parts of the
+// source access URL, since CEL has no url parsing function.
+func buildResourceNode(resource descriptorv2.Resource, srcAccess *wgetaccessv1.Wget) (map[string]any, error) {
 	parsedSource, err := url.Parse(srcAccess.URL)
 	if err != nil {
-		return "", fmt.Errorf("invalid source url %q: %w", srcAccess.URL, err)
+		return nil, fmt.Errorf("invalid source url %q: %w", srcAccess.URL, err)
 	}
-	data := map[string]string{
-		"path":    parsedSource.Path,
-		"host":    parsedSource.Host,
-		"scheme":  parsedSource.Scheme,
-		"name":    resource.Name,
-		"version": resource.Version,
+	labels := make(map[string]any, len(resource.Labels))
+	for _, l := range resource.Labels {
+		labels[l.Name] = labelValueString(l.Value)
 	}
+	extraIdentity := make(map[string]any, len(resource.ExtraIdentity))
+	for k, v := range resource.ExtraIdentity {
+		extraIdentity[k] = v
+	}
+	return map[string]any{
+		"name":          resource.Name,
+		"version":       resource.Version,
+		"extraIdentity": extraIdentity,
+		"labels":        labels,
+		"access": map[string]any{
+			"url":       srcAccess.URL,
+			"path":      parsedSource.Path,
+			"host":      parsedSource.Host,
+			"scheme":    parsedSource.Scheme,
+			"mediaType": srcAccess.MediaType,
+		},
+	}, nil
+}
 
-	tmpl, err := template.New("targetURL").Option("missingkey=error").Parse(rawTargetURL)
-	if err != nil {
-		return "", fmt.Errorf("invalid targetURL template %q: %w", rawTargetURL, err)
-	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("failed evaluating targetURL template %q: %w", rawTargetURL, err)
-	}
+// aliasPattern matches the bare `resource` identifier when it is not a member
+// access (i.e. not preceded by a dot), so `resource.name` is rewritten but a
+// field named `...resource` is not.
+var aliasPattern = regexp.MustCompile(`(^|[^.\w])` + resourceAlias + `\b`)
 
-	resolved, err := url.Parse(buf.String())
-	if err != nil {
-		return "", fmt.Errorf("resolved targetURL %q is invalid: %w", buf.String(), err)
+// celTargetURLField turns a user targetURL CEL expression into a standalone
+// ${...} field value that the graph runtime evaluates. It rewrites the `resource`
+// alias to the concrete environment node path, appends any static query params as
+// a literal suffix, and validates the result is a single CEL expression.
+func celTargetURLField(rawTargetURL, nodePath string, queryParams map[string][]string) (string, error) {
+	trimmed := strings.TrimSpace(rawTargetURL)
+	if trimmed == "" {
+		return "", fmt.Errorf("stream.targetURL is required")
 	}
-	if len(queryParams) > 0 {
-		q := resolved.Query()
-		for k, vals := range queryParams {
-			for _, v := range vals {
-				q.Add(k, v)
+	rewritten := aliasPattern.ReplaceAllString(trimmed, "${1}"+nodePath)
+	if suffix := encodeQuerySuffix(queryParams); suffix != "" {
+		rewritten = "(" + rewritten + ") + " + strconvQuote(suffix)
+	}
+	field := "${" + rewritten + "}"
+	if ok, err := celparser.IsStandaloneExpression(field); err != nil || !ok {
+		return "", fmt.Errorf("invalid targetURL CEL expression %q: %w", rawTargetURL, err)
+	}
+	return field, nil
+}
+
+// encodeQuerySuffix renders query params as a deterministic "?k=v&..." suffix, or
+// an empty string when there are none.
+func encodeQuerySuffix(queryParams map[string][]string) string {
+	if len(queryParams) == 0 {
+		return ""
+	}
+	values := url.Values{}
+	for k, vals := range queryParams {
+		for _, v := range vals {
+			values.Add(k, v)
+		}
+	}
+	return "?" + values.Encode()
+}
+
+// strconvQuote returns a CEL/Go double-quoted string literal for s.
+func strconvQuote(s string) string {
+	return fmt.Sprintf("%q", s)
+}
+
+// targetHostFromExpression best-effort extracts a display host from a raw targetURL
+// expression for the transformation label. It parses the leading string literal (if
+// any); otherwise returns "target".
+func targetHostFromExpression(rawTargetURL string) string {
+	trimmed := strings.TrimSpace(rawTargetURL)
+	for _, quote := range []byte{'"', '\''} {
+		if len(trimmed) > 0 && trimmed[0] == quote {
+			if end := strings.IndexByte(trimmed[1:], quote); end >= 0 {
+				if parsed, err := url.Parse(trimmed[1 : 1+end]); err == nil && parsed.Host != "" {
+					return parsed.Host
+				}
 			}
 		}
-		resolved.RawQuery = q.Encode()
 	}
-	return resolved.String(), nil
+	return "target"
 }
 
-// targetHost extracts the host from an absolute URL for display in labels,
-// falling back to the full URL when it cannot be parsed.
-func targetHost(targetURL string) string {
-	if parsed, err := url.Parse(targetURL); err == nil && parsed.Host != "" {
-		return parsed.Host
-	}
-	return targetURL
-}
-
-// processUploader emits a single HTTPStreaming (or other stream-typed) transformation for
-// resource. The target resource is a copy of the source carrying a Wget access built from
-// the uploader's stream config, so the transfer plan is literal and deterministic.
+// processUploader emits a single HTTPStreaming (or other stream-typed) transformation
+// for resource. It injects the source resource as a CEL node into the graph environment
+// (addressable as environment.uploads.<uploadID>) and sets the target Wget access URL to
+// a CEL expression derived from the uploader's targetURL, so the graph runtime resolves
+// the final URL from the source resource. The rest of the stream config maps onto the
+// target Wget access field-for-field.
 func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.UploaderConfig, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
 	var cfg streamConfig
 	if err := json.Unmarshal(u.Stream.Data, &cfg); err != nil {
@@ -116,7 +210,23 @@ func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.Uploade
 		return fmt.Errorf("uploader requires a wget source access: %w", err)
 	}
 
-	targetURL, err := resolveTargetURL(cfg.TargetURL, cfg.QueryParams, &srcWget, resource)
+	resourceID := identityToTransformationID(resource.ToIdentity())
+	uploadID := fmt.Sprintf("%sUpload%s", id, resourceID)
+
+	// Inject the source resource as a CEL node the targetURL expression can reference.
+	node, err := buildResourceNode(resource, &srcWget)
+	if err != nil {
+		return err
+	}
+	uploads, _ := tgd.Environment.Data[uploadsEnvKey].(map[string]any)
+	if uploads == nil {
+		uploads = map[string]any{}
+		tgd.Environment.Data[uploadsEnvKey] = uploads
+	}
+	uploads[uploadID] = node
+
+	nodePath := fmt.Sprintf("environment.%s.%s", uploadsEnvKey, uploadID)
+	targetURLField, err := celTargetURLField(cfg.TargetURL, nodePath, cfg.QueryParams)
 	if err != nil {
 		return err
 	}
@@ -127,7 +237,7 @@ func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.Uploade
 	}
 	targetAccess := &wgetaccessv1.Wget{
 		Type:       wgetaccess.V1VersionedType,
-		URL:        targetURL,
+		URL:        targetURLField,
 		Verb:       cfg.Method,
 		Header:     cfg.Header,
 		Body:       cfg.Body,
@@ -142,9 +252,6 @@ func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.Uploade
 	targetResource := *resource.DeepCopy()
 	targetResource.Access = targetAccessRaw
 
-	resourceID := identityToTransformationID(resource.ToIdentity())
-	uploadID := fmt.Sprintf("%sUpload%s", id, resourceID)
-
 	spec, err := runtime.UnstructuredFromMixedData(map[string]any{
 		"resource":       resource,
 		"targetResource": targetResource,
@@ -153,7 +260,7 @@ func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.Uploade
 		return fmt.Errorf("cannot create unstructured spec for uploader transformation: %w", err)
 	}
 
-	label := uploaderLabel(&val.Descriptor.Component, resource.Name, targetHost(targetURL))
+	label := uploaderLabel(&val.Descriptor.Component, resource.Name, targetHostFromExpression(cfg.TargetURL))
 	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
 			Type:  u.Stream.GetType(),

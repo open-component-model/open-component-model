@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -52,7 +53,7 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, "https://target.example{{.path}}")}
+	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, `"https://target.example" + resource.access.path`)}
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
 	r.NoError(err)
 
@@ -80,17 +81,32 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	assert.Contains(t, streaming.id, "Upload")
 	assert.False(t, sawDownloadWget, "uploader path must not emit a DownloadWgetResource node")
 
-	// Source reference preserves the original wget URL; target reference carries the resolved URL.
+	// Source reference preserves the original wget URL.
 	srcAccess := streaming.spec["resource"].(map[string]any)["access"].(map[string]any)
 	assert.Equal(t, "https://source.example/artifacts/blob.tar", srcAccess["url"])
 
+	// Target reference carries a CEL expression referencing the injected source node,
+	// resolved to the concrete URL by the graph runtime at execution time.
 	tgtResource := streaming.spec["targetResource"].(map[string]any)
 	tgtAccess := tgtResource["access"].(map[string]any)
 	assert.Equal(t, "Wget/v1", tgtAccess["type"])
-	assert.Equal(t, "https://target.example/artifacts/blob.tar", tgtAccess["url"])
 	assert.Equal(t, "PUT", tgtAccess["verb"])
+	targetURL := tgtAccess["url"].(string)
+	assert.True(t, strings.HasPrefix(targetURL, "${") && strings.HasSuffix(targetURL, "}"),
+		"target url must be a CEL expression field, got %q", targetURL)
+	assert.Contains(t, targetURL, "environment."+"uploads"+".", "target url must reference the injected upload node")
+	assert.Contains(t, targetURL, ".access.path", "resource alias must be rewritten to the node path")
+	assert.NotContains(t, targetURL, "resource.access", "the bare resource alias must not survive the rewrite")
 
-	// ADR 28: the node carries a human-readable label instead of only the hashed ID.
+	// The injected environment node exposes the source resource for the CEL expression.
+	uploads := tgd.Environment.Data["uploads"].(map[string]any)
+	node := uploads[streaming.id].(map[string]any)
+	nodeAccess := node["access"].(map[string]any)
+	assert.Equal(t, "/artifacts/blob.tar", nodeAccess["path"])
+	assert.Equal(t, "blob", node["name"])
+
+	// ADR 28: the node carries a human-readable label; the host is parsed from the
+	// leading string literal of the targetURL expression.
 	assert.Equal(t, "test@1.0.0 [Stream blob to target.example]", streaming.label)
 }
 

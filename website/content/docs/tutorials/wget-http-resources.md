@@ -70,6 +70,8 @@ This means:
 
 The file stays on the remote server only if the component version is never transferred. Transfer converts the `Wget/v1` reference into a `LocalBlob/v1`.
 
+To keep a resource behind a URL instead of embedding it — streaming it to a custom HTTP target and rewriting the access to a new `Wget/v1` URL — configure an uploader; see [Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}}).
+
 ## Set the media type {#set-the-media-type}
 
 For a Wget resource, OCM picks the media type in the following order and stops at the first one it finds:

@@ -262,7 +262,7 @@ func processResources(
 
 		// An uploader is an explicit instruction to move a matched resource, so it
 		// runs regardless of copy mode and takes precedence over the default handlers.
-		if u := matchUploader(uploaders, resource.Access.Type); u != nil {
+		if u := matchUploader(uploaders, resource); u != nil {
 			if err := processUploader(resource, u, id, val, tgd, resourceTransformIDs, i); err != nil {
 				return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 			}

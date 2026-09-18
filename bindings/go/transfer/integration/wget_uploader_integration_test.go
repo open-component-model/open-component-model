@@ -120,8 +120,10 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 
 	// The uploader routes the Wget resource through the HTTP streaming transformer to the target server.
 	stream, err := runtime.UnstructuredFromMixedData(map[string]any{
-		"type":      "HTTPStreaming/v1alpha1",
-		"targetURL": targetSrv.URL + "/uploads{{.path}}",
+		"type": "HTTPStreaming/v1alpha1",
+		// CEL expression: the graph runtime resolves resource.access.path against the
+		// injected source-resource node at execution time.
+		"targetURL": fmt.Sprintf("%q + resource.access.path", targetSrv.URL+"/uploads"),
 		"method":    http.MethodPut,
 	})
 	r.NoError(err)
