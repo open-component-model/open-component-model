@@ -72,6 +72,7 @@ func BuildGraphDefinition(
 	ctx context.Context,
 	roots map[string]TransferRoot,
 	cfg transferv1alpha1.Config,
+	uploaders []*transferv1alpha1.UploaderConfig,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	// Seed the targetMap and resolverMap from explicit roots.
 	// These maps are shared with the discoverer and multiResolver:
@@ -138,7 +139,7 @@ func BuildGraphDefinition(
 	// Phase 2: walk the discovered DAG and generate transformation nodes per (component, target) pair.
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, cfg.CopyMode, cfg.UploadType)
+		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, cfg.CopyMode, cfg.UploadType, uploaders)
 	})
 	if err != nil {
 		return nil, err
@@ -167,13 +168,17 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	tgd *transformv1alpha1.TransformationGraphDefinition,
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
+	uploaders []*transferv1alpha1.UploaderConfig,
 ) error {
 	slog.DebugContext(ctx, "building transformations for discovered components",
 		"components", len(d.Vertices))
 
 	var allFileRefs []string
 
-	for key, v := range d.Vertices {
+	// Iterate vertices in sorted key order so the emitted transformation list is
+	// deterministic across runs (ranging the map directly would randomize order).
+	for _, key := range d.GetVertices() {
+		v := d.Vertices[key]
 		val := v.Attributes[dagsync.AttributeValue].(*discoveryValue)
 		component := val.Descriptor.Component.Name
 		version := val.Descriptor.Component.Version
@@ -209,7 +214,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, id, val, tgd, target, copyMode, uploadType)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, id, val, tgd, target, copyMode, uploadType, uploaders)
 			if err != nil {
 				return err
 			}
@@ -239,6 +244,7 @@ func processResources(
 	toSpec runtime.Typed,
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
+	uploaders []*transferv1alpha1.UploaderConfig,
 ) (map[int]string, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
@@ -254,6 +260,14 @@ func processResources(
 			return nil, nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
 		}
 
+		// An uploader is an explicit instruction to move a matched resource, so it
+		// runs regardless of copy mode and takes precedence over the default handlers.
+		if u := matchUploader(uploaders, resource.Access.Type); u != nil {
+			if err := processUploader(resource, u, id, val, tgd, resourceTransformIDs, i); err != nil {
+				return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
+			}
+			continue
+		}
 		if copyMode == transferv1alpha1.CopyModeLocalBlobResources && !descriptorv2.IsLocalBlob(access) {
 			logSkippedResource(ctx, component, version, resource, copyMode, uploadType)
 			continue

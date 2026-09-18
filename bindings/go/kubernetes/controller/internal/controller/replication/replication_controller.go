@@ -344,7 +344,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	// The process takes turns to complete: resolved descriptors are cache hits, each
 	// pass enqueues the next component version of the graph until all component versions are in the cache and
 	// accounted for.
-	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg, transfer.Mapping{
+	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg, nil, transfer.Mapping{
 		Components: []transfer.ComponentID{{
 			Component: component.Status.Component.Component,
 			Version:   component.Status.Component.Version,

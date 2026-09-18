@@ -6,8 +6,12 @@ import (
 
 var Scheme = runtime.NewScheme()
 
-var DownloadWgetResourceV1alpha1 = runtime.NewVersionedType(DownloadWgetResourceType, Version)
+var (
+	DownloadWgetResourceV1alpha1 = runtime.NewVersionedType(DownloadWgetResourceType, Version)
+	HTTPStreamingV1alpha1        = runtime.NewVersionedType(HTTPStreamingType, Version)
+)
 
 func init() {
 	Scheme.MustRegisterWithAlias(&DownloadWgetResource{}, DownloadWgetResourceV1alpha1)
+	Scheme.MustRegisterWithAlias(&HTTPStreaming{}, HTTPStreamingV1alpha1)
 }

@@ -114,6 +114,7 @@ func Test_Integration_TransferS3Resource_CopyModeAllResources(t *testing.T) {
 
 	tgd, err := transfer.BuildGraphDefinition(ctx,
 		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
+		nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,
