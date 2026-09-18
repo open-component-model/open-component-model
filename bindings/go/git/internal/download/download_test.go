@@ -1,0 +1,364 @@
+package download
+
+import (
+	"archive/tar"
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"testing"
+	"time"
+
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/opencontainers/go-digest"
+	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
+)
+
+func TestDownloadRevisions(t *testing.T) {
+	fixture := newRepository(t)
+	require.NoError(t, fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/feature", fixture.First)))
+	require.NoError(t, fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/feature", fixture.Second)))
+	for _, tc := range []struct {
+		ref, commit string
+		want        plumbing.Hash
+	}{
+		{"HEAD", "", fixture.Second},
+		{"main", "", fixture.Second},
+		{"refs/heads/main", "", fixture.Second},
+		{"feature", "", fixture.First},
+		{"refs/heads/feature", "", fixture.First},
+		{"v1", "", fixture.First},
+		{"refs/tags/annotated", "", fixture.First},
+		{"", fixture.First.String(), fixture.First},
+		{"refs/heads/deleted", fixture.First.String(), fixture.First},
+	} {
+		t.Run(tc.ref+tc.commit, func(t *testing.T) {
+			r := require.New(t)
+
+			dir := t.TempDir()
+			spec := &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}
+			result, err := Download(t.Context(), spec, nil, Options{TempDir: dir})
+			r.NoError(err)
+			r.Equal(tc.want.String(), result.Commit)
+			r.Equal(tc.commit, spec.Commit)
+
+			b := result.Blob
+			mt, ok := b.MediaType()
+			r.True(ok)
+			r.Equal("application/x-tar", mt)
+
+			data := readBlob(t, b)
+			r.Equal(data, readBlob(t, b))
+
+			raw, ok := b.Digest()
+			r.True(ok)
+			r.Equal(digest.FromBytes(data).String(), raw)
+			r.Equal(raw, result.Digest.String())
+
+			// The archive file outlives the download and belongs to the caller.
+			files, err := os.ReadDir(dir)
+			r.NoError(err)
+			r.Len(files, 1)
+			tr := tar.NewReader(bytes.NewReader(data))
+			names := []string{}
+			for {
+				h, err := tr.Next()
+				if err == io.EOF {
+					break
+				}
+				r.NoError(err)
+
+				names = append(names, h.Name)
+				switch h.Name {
+				case "run.sh":
+					r.Equal(int64(0o755), h.Mode)
+				case "link":
+					r.Equal(byte(tar.TypeSymlink), h.Typeflag)
+					r.Equal("docs/guide.txt", h.Linkname)
+				}
+			}
+			r.Equal([]string{"README.md", "docs/guide.txt", "link", "run.sh"}, names)
+		})
+	}
+}
+
+func readBlob(t *testing.T, b *filesystem.Blob) []byte {
+	t.Helper()
+
+	r := require.New(t)
+
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+
+	data, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.NoError(rc.Close())
+
+	return data
+}
+
+func TestDownloadDeterministic(t *testing.T) {
+	r := require.New(t)
+
+	fixture := newRepository(t)
+	var previous []byte
+	for range 3 {
+		result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String()}, nil, Options{TempDir: t.TempDir()})
+		r.NoError(err)
+
+		data := readBlob(t, result.Blob)
+		if previous != nil {
+			r.Equal(previous, data)
+		}
+
+		previous = data
+	}
+}
+
+func TestDownloadFailureCleanup(t *testing.T) {
+	fixture := newRepository(t)
+	for _, tc := range []struct {
+		name, ref, commit string
+		limit             int64
+		cancel            bool
+	}{
+		{name: "limit", ref: "main", limit: 1},
+		{name: "missing ref", ref: "absent"},
+		{name: "missing commit", commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+		{name: "cancel", ref: "main", cancel: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+
+			dir := t.TempDir()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc.cancel {
+				cancel()
+			}
+
+			result, err := Download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{TempDir: dir, MaxArchiveSize: tc.limit})
+			r.Error(err)
+			r.Nil(result)
+			files, err := os.ReadDir(dir)
+			r.NoError(err)
+			r.Empty(files)
+		})
+	}
+}
+
+func TestSubmoduleArchive(t *testing.T) {
+	r := require.New(t)
+
+	fixture := newRepository(t)
+	tree := &object.Tree{Entries: []object.TreeEntry{{Name: "vendor", Mode: filemode.Submodule, Hash: fixture.First}}}
+	encoded := fixture.Git.Storer.NewEncodedObject()
+	r.NoError(tree.Encode(encoded))
+
+	hash, err := fixture.Git.Storer.SetEncodedObject(encoded)
+	r.NoError(err)
+
+	commit, err := fixture.Git.CommitObject(fixture.First)
+	r.NoError(err)
+
+	commit.TreeHash = hash
+	encoded = fixture.Git.Storer.NewEncodedObject()
+	r.NoError(commit.Encode(encoded))
+
+	commitHash, err := fixture.Git.Storer.SetEncodedObject(encoded)
+	r.NoError(err)
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/submodule", commitHash)))
+
+	result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: commitHash.String()}, nil, Options{TempDir: t.TempDir()})
+	r.NoError(err)
+
+	tr := tar.NewReader(bytes.NewReader(readBlob(t, result.Blob)))
+	_, err = tr.Next()
+	r.ErrorIs(err, io.EOF, "submodule content is not part of the archive")
+}
+
+func TestPinnedCommitWithoutRemoteHEAD(t *testing.T) {
+	r := require.New(t)
+
+	fixture := newRepository(t)
+	r.NoError(fixture.Git.Storer.RemoveReference("refs/heads/main"))
+
+	result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String(), Ref: "refs/heads/main"}, nil, Options{TempDir: t.TempDir()})
+	r.NoError(err)
+	r.Equal(fixture.First.String(), result.Commit)
+	r.NotNil(result.Blob)
+}
+
+func TestArchiveSizeBoundary(t *testing.T) {
+	r := require.New(t)
+
+	fixture := newRepository(t)
+	spec := &v1.Git{Repository: fixture.Path, Commit: fixture.First.String()}
+	result, err := Download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+	r.NoError(err)
+
+	size := result.Blob.Size()
+
+	result, err = Download(t.Context(), spec, nil, Options{TempDir: t.TempDir(), MaxArchiveSize: size})
+	r.NoError(err)
+	r.NotNil(result.Blob)
+
+	dir := t.TempDir()
+	result, err = Download(t.Context(), spec, nil, Options{TempDir: dir, MaxArchiveSize: size - 1})
+	r.Error(err)
+	r.Nil(result)
+	entries, err := os.ReadDir(dir)
+	r.NoError(err)
+	r.Empty(entries)
+}
+
+func TestPinnedArchiveContainsSelectedCommit(t *testing.T) {
+	r := require.New(t)
+
+	fixture := newRepository(t)
+	first, err := fixture.Git.CommitObject(fixture.First)
+	r.NoError(err)
+
+	file, err := os.CreateTemp(t.TempDir(), "archive-*.tar")
+	r.NoError(err)
+
+	expected, expectedDigest, err := archive(t.Context(), first, file, Options{})
+	r.NoError(err)
+
+	actual, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String(), Ref: "main"}, nil, Options{TempDir: t.TempDir()})
+	r.NoError(err)
+	r.Equal(readBlob(t, expected), readBlob(t, actual.Blob))
+	r.Equal(expectedDigest, actual.Digest)
+}
+
+func TestTransportErrorMessages(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{git.ErrRepositoryNotExists, "fetch: repository not found: repository does not exist"},
+		{
+			// What a server says about a rejected login is the actionable part.
+			fmt.Errorf("%w: remote: Invalid username or password", transport.ErrAuthenticationRequired),
+			"fetch: authentication required: authentication required: remote: Invalid username or password",
+		},
+		{transport.ErrAuthorizationFailed, "fetch: authorization failed: authorization failed"},
+		{
+			errors.New(`remote: https://user:token@example.invalid/repo.git rejected`),
+			"fetch: transport failed; check repository access and server trust: remote: https://xxxxx@example.invalid/repo.git rejected",
+		},
+	} {
+		err := transportError(t.Context(), "fetch", tc.err)
+		require.EqualError(t, err, tc.want)
+		require.NotContains(t, err.Error(), "token")
+	}
+}
+
+type repositoryFixture struct {
+	Path          string
+	Git           *git.Repository
+	First, Second plumbing.Hash
+}
+
+func newRepository(t *testing.T) repositoryFixture {
+	t.Helper()
+
+	r := require.New(t)
+
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, true)
+	r.NoError(err)
+
+	store := func(obj interface {
+		Encode(plumbing.EncodedObject) error
+	},
+	) plumbing.Hash {
+		encoded := repo.Storer.NewEncodedObject()
+		r.NoError(obj.Encode(encoded))
+
+		hash, err := repo.Storer.SetEncodedObject(encoded)
+		r.NoError(err)
+
+		return hash
+	}
+
+	blob := func(content string) plumbing.Hash {
+		encoded := repo.Storer.NewEncodedObject()
+		encoded.SetType(plumbing.BlobObject)
+		encoded.SetSize(int64(len(content)))
+
+		w, err := encoded.Writer()
+		r.NoError(err)
+
+		_, err = io.WriteString(w, content)
+		r.NoError(err)
+		r.NoError(w.Close())
+
+		hash, err := repo.Storer.SetEncodedObject(encoded)
+		r.NoError(err)
+
+		return hash
+	}
+
+	signature := object.Signature{
+		Name:  "OCM fixture",
+		Email: "fixture@example.invalid",
+		When:  time.Unix(1700000000, 0).UTC(),
+	}
+	doc := store(&object.Tree{
+		Entries: []object.TreeEntry{
+			{Name: "guide.txt", Mode: filemode.Regular, Hash: blob("guide\n")},
+		},
+	})
+	entries := []object.TreeEntry{
+		{Name: "README.md", Mode: filemode.Regular, Hash: blob("first\n")},
+		{Name: "docs", Mode: filemode.Dir, Hash: doc},
+		{Name: "link", Mode: filemode.Symlink, Hash: blob("docs/guide.txt")},
+		{Name: "run.sh", Mode: filemode.Executable, Hash: blob("#!/bin/sh\necho fixture\n")},
+	}
+
+	first := store(&object.Commit{
+		Author:    signature,
+		Committer: signature,
+		Message:   "first\n",
+		TreeHash:  store(&object.Tree{Entries: entries}),
+	})
+
+	entries[0].Hash = blob("second\n")
+	second := store(&object.Commit{
+		Author:       signature,
+		Committer:    signature,
+		Message:      "second\n",
+		TreeHash:     store(&object.Tree{Entries: entries}),
+		ParentHashes: []plumbing.Hash{first},
+	})
+
+	r.NoError(repo.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", second)))
+	r.NoError(repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
+	r.NoError(repo.Storer.SetReference(plumbing.NewHashReference("refs/tags/v1", first)))
+
+	tag := store(&object.Tag{
+		Name:       "annotated",
+		Tagger:     signature,
+		Message:    "release\n",
+		TargetType: plumbing.CommitObject,
+		Target:     first,
+	})
+	r.NoError(repo.Storer.SetReference(plumbing.NewHashReference("refs/tags/annotated", tag)))
+
+	return repositoryFixture{
+		Path:   dir,
+		Git:    repo,
+		First:  first,
+		Second: second,
+	}
+}
