@@ -16,6 +16,13 @@ const (
 	ConfigTypeV1 = Version
 )
 
+const NestedConfigIgnoredWarning = "ignoring nested configuration: nested generic configurations are not supported, " +
+	"move the nested entries to the top-level configurations list"
+
+func IsGenericConfig(t runtime.Type) bool {
+	return t.Name == ConfigType
+}
+
 // Config holds configuration entities loaded through a configuration file.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true

@@ -219,7 +219,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		return nil, err
 	}
 
-	var configs []*genericv1.Config
+	merged := &genericv1.Config{Configurations: []*runtime.Raw{}}
 	for _, obj := range objects {
 		cfg, err := GetConfigFromObject(obj)
 		if err != nil {
@@ -230,20 +230,24 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 			continue
 		}
 
-		configs = append(configs, cfg)
+		for _, entry := range cfg.Configurations {
+			if genericv1.IsGenericConfig(entry.GetType()) {
+				log.FromContext(ctx).V(1).Info(genericv1.NestedConfigIgnoredWarning,
+					"type", entry.GetType().String(),
+					"source", client.ObjectKeyFromObject(obj).String(),
+				)
+				continue
+			}
+			merged.Configurations = append(merged.Configurations, entry)
+		}
 	}
 
-	flattened := genericv1.FlatMap(configs...)
-	if flattened == nil {
-		return nil, nil
-	}
-
-	flattenedFiltered, err := filterAllowedConfigTypes(ctx, flattened)
+	filtered, err := filterAllowedConfigTypes(ctx, merged)
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply config type allowlist: %w", err)
 	}
 
-	content, err := json.Marshal(flattenedFiltered)
+	content, err := json.Marshal(filtered)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +257,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 	hash := hasher.Sum(nil)
 
 	result := Configuration{
-		Config: flattenedFiltered,
+		Config: filtered,
 		Hash:   hash,
 	}
 

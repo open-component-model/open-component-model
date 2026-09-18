@@ -12,6 +12,7 @@ import (
 
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // OCM Configuration file and directory constants
@@ -54,14 +55,6 @@ Later entries have higher priority.
 Using the option, the specified configuration file(s) will be used instead of the lookup above.`)
 }
 
-func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
-	cfg, err := GetOCMConfigForCommand(cmd)
-	if err != nil {
-		return nil, err
-	}
-	return genericv1.FlatMap(cfg), nil
-}
-
 func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 	flag := cmd.Flag(OCMConfigCommandArgument)
 	if flag != nil && flag.Changed {
@@ -99,7 +92,7 @@ func GetOCMConfig(options OCMConfigOptions, additional ...string) (*genericv1.Co
 }
 
 func loadAndMergeConfigs(paths []string, strict bool) (*genericv1.Config, error) {
-	cfgs := make([]*genericv1.Config, 0, len(paths))
+	merged := &genericv1.Config{Configurations: []*runtime.Raw{}}
 	for _, path := range paths {
 		cfg, err := GetConfigFromPath(path)
 		if err != nil {
@@ -113,9 +106,18 @@ func loadAndMergeConfigs(paths []string, strict bool) (*genericv1.Config, error)
 			continue
 		}
 		slog.Debug("ocm config was loaded successfully", slog.String("path", path))
-		cfgs = append(cfgs, cfg)
+		for _, entry := range cfg.Configurations {
+			if genericv1.IsGenericConfig(entry.GetType()) {
+				slog.Warn(genericv1.NestedConfigIgnoredWarning,
+					slog.String("type", entry.GetType().String()),
+					slog.String("path", path),
+				)
+				continue
+			}
+			merged.Configurations = append(merged.Configurations, entry)
+		}
 	}
-	return genericv1.FlatMap(cfgs...), nil
+	return merged, nil
 }
 
 // GetConfigFromPath reads and decodes the YAML configuration file from the specified path.

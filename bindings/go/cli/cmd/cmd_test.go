@@ -2804,5 +2804,30 @@ func TestGetOCMConfigForCommand(t *testing.T) {
 		r.NoError(err)
 		// .ocmconfig-1 has 5 configurations, .ocmconfig-2 has 1
 		r.Len(cfg.Configurations, 6)
+		types := make([]string, 0, len(cfg.Configurations))
+		for _, entry := range cfg.Configurations {
+			types = append(types, entry.GetType().String())
+		}
+		r.Equal([]string{
+			"credentials.config.ocm.software",
+			"attributes.config.ocm.software",
+			"credentials.config.ocm.software",
+			"credentials.config.ocm.software",
+			"uploader.ocm.config.ocm.software",
+			"credentials.config.ocm.software",
+		}, types, "configurations must be merged in file order, preserving order within files")
+	})
+
+	t.Run("config with nested generic configuration ignores the nested entries", func(t *testing.T) {
+		r := require.New(t)
+		cmd, err := test.OCM(t, test.WithArgs([]string{
+			"--" + configuration.OCMConfigCommandArgument, "configuration/testdata/.ocmconfig-nested",
+		}...))
+		r.NoError(err)
+		cfg, err := configuration.GetOCMConfigForCommand(cmd)
+		r.NoError(err)
+		// .ocmconfig-nested has 1 direct and 3 nested entries; the nested entries are ignored
+		r.Len(cfg.Configurations, 1)
+		r.Equal("credentials.config.ocm.software", cfg.Configurations[0].GetType().String())
 	})
 }
