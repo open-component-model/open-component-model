@@ -467,7 +467,7 @@ func toFailedTransferEvent(e graphRuntime.ProgressEvent) v1alpha1.TransferEvent 
 
 	return v1alpha1.TransferEvent{
 		ID:    t.ID,
-		Name:  fmt.Sprintf("%s [%s]", t.ID, t.Type.Name),
+		Name:  t.DisplayName(),
 		Error: e.Err.Error(),
 	}
 }

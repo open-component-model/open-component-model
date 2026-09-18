@@ -19,7 +19,7 @@ organizes content into tutorials, how-to guides, explanations, and reference mat
 ```bash
 # Install dependencies (includes Hugo)
 cd website
-npm install
+npm ci
 
 # Start the development server
 npm run dev
@@ -257,13 +257,13 @@ What are you documenting?
 CLI command/flag in the legacy CLI (open-component-model/ocm)?
   -> website/content_versioned/version-legacy/docs/reference/
 CLI command/flag in the current CLI?
-  -> cli/docs/reference/ (Hugo mounts this into the website automatically)
+  -> bindings/go/cli/docs/reference/ (Hugo mounts this into the website automatically)
 
 Go library function/type?
   -> Source repo documentation, available as Go package documentation
 
 Kubernetes controller / CRD / Helm Chart?
-  -> kubernetes/controller/ has CRD definitions and controller Helm Charts
+  -> bindings/go/kubernetes/controller/ has CRD definitions and controller Helm Charts
 
 A new way to start using OCM?
   -> website/content/docs/getting-started/
