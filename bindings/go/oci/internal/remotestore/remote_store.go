@@ -2,18 +2,15 @@ package remotestore
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"path"
 
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
@@ -65,26 +62,13 @@ func (r *RemoteStore) Untag(ctx context.Context, reference string) error {
 	}
 	ctx = auth.AppendRepositoryScope(ctx, ref, auth.ActionDelete)
 
-	scheme := "https"
-	if r.PlainHTTP {
-		scheme = "http"
-	}
-	endpoint := &url.URL{
-		Scheme: scheme,
-		Host:   ref.Host(),
-		Path:   path.Join("/v2", ref.Repository, "manifests", reference),
-	}
-
+	endpoint := r.endpoint(path.Join("/v2", ref.Repository, "manifests", reference))
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint.String(), http.NoBody)
 	if err != nil {
 		return fmt.Errorf("failed to build delete request for alias %q: %w", reference, err)
 	}
 
-	client := r.Client
-	if client == nil {
-		client = auth.DefaultClient
-	}
-	resp, err := client.Do(req)
+	resp, err := r.do(req)
 	if err != nil {
 		return fmt.Errorf("failed to delete alias %q: %w", reference, err)
 	}
@@ -102,17 +86,6 @@ func (r *RemoteStore) Untag(ctx context.Context, reference string) error {
 	case http.StatusMethodNotAllowed:
 		return ErrTagDeletionDisabled
 	default:
-		errResp := &errcode.ErrorResponse{
-			Method:     resp.Request.Method,
-			URL:        resp.Request.URL,
-			StatusCode: resp.StatusCode,
-		}
-		var body struct {
-			Errors errcode.Errors `json:"errors"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&body); err == nil {
-			errResp.Errors = body.Errors
-		}
-		return errResp
+		return parseErrorResponse(resp)
 	}
 }
