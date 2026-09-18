@@ -60,7 +60,7 @@ type UploaderConfig struct {
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type UploaderMatch struct {
-	// AccessType is the resource access type this uploader matches (e.g. Wget/v1alpha1).
+	// AccessType is the resource access type this uploader matches (e.g. Wget/v1).
 	AccessType runtime.Type `json:"accessType"`
 	// Name optionally restricts the match to resources with this exact name.
 	// When empty, resources of any name match.

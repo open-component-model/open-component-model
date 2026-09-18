@@ -27,7 +27,21 @@ func wgetResource(name, version, url string) descriptor.Resource {
 	}
 }
 
-func wgetUploader(t *testing.T, targetURL string) *transferv1alpha1.UploaderConfig {
+func ociResource(name, version, imageRef string) descriptor.Resource {
+	return descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: name, Version: version},
+		},
+		Type:     "ociImage",
+		Relation: descriptor.ExternalRelation,
+		Access: &runtime.Raw{
+			Type: runtime.NewVersionedType("OCIImage", "v1"),
+			Data: []byte(`{"type":"OCIImage/v1","imageReference":"` + imageRef + `"}`),
+		},
+	}
+}
+
+func uploaderFor(t *testing.T, accessType runtime.Type, targetURL string) *transferv1alpha1.UploaderConfig {
 	t.Helper()
 	stream, err := runtime.UnstructuredFromMixedData(map[string]any{
 		"type":      "HTTPStreaming/v1alpha1",
@@ -39,9 +53,14 @@ func wgetUploader(t *testing.T, targetURL string) *transferv1alpha1.UploaderConf
 	require.NoError(t, runtime.NewScheme(runtime.WithAllowUnknown()).Convert(stream, &raw))
 	return &transferv1alpha1.UploaderConfig{
 		Type:   runtime.NewVersionedType(transferv1alpha1.UploaderConfigType, transferv1alpha1.Version),
-		Match:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v1")},
+		Match:  transferv1alpha1.UploaderMatch{AccessType: accessType},
 		Stream: &raw,
 	}
+}
+
+func wgetUploader(t *testing.T, targetURL string) *transferv1alpha1.UploaderConfig {
+	t.Helper()
+	return uploaderFor(t, runtime.NewVersionedType("Wget", "v1"), targetURL)
 }
 
 func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
@@ -164,6 +183,49 @@ func TestBuildGraphDefinition_UploaderPreservesResourceInStringLiteral(t *testin
 		"the literal path segment must not be rewritten")
 	assert.Contains(t, targetURL, "environment.uploads.", "the bare resource identifier must be rewritten")
 	assert.Contains(t, targetURL, ".name", "the rewritten node path must retain the field access")
+}
+
+func TestBuildGraphDefinition_UploaderMatchesNonWgetSource(t *testing.T) {
+	r := require.New(t)
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{ociResource("image", "1.0.0", "ghcr.io/source/image:1.0.0")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	// An OCI source with no URL: the expression references an access-specific field
+	// (imageReference) exposed generically under resource.access.
+	uploaders := []*transferv1alpha1.UploaderConfig{
+		uploaderFor(t, runtime.NewVersionedType("OCIImage", "v1"),
+			`${"https://mirror.example/" + resource.access.imageReference}`),
+	}
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, uploaders)
+	r.NoError(err)
+
+	var streamID string
+	var targetURL string
+	for i := range tgd.Transformations {
+		if tgd.Transformations[i].Type == wgetv1alpha1.HTTPStreamingV1alpha1 {
+			streamID = tgd.Transformations[i].ID
+			tgt := tgd.Transformations[i].Spec.Data["targetResource"].(map[string]any)
+			targetURL = tgt["access"].(map[string]any)["url"].(string)
+		}
+	}
+	r.NotEmpty(streamID, "expected an HTTPStreaming transformation for the OCI source")
+
+	// The generic access field is exposed on the injected node.
+	uploads := tgd.Environment.Data["uploads"].(map[string]any)
+	node := uploads[streamID].(map[string]any)
+	access := node["access"].(map[string]any)
+	assert.Equal(t, "ghcr.io/source/image:1.0.0", access["imageReference"],
+		"the OCI access field must be exposed under resource.access")
+	assert.Equal(t, "ociImage", node["type"], "the resource type must be exposed")
+
+	// The target URL expression references the rewritten node path, not the bare alias.
+	assert.Contains(t, targetURL, "environment.uploads.", "the resource alias must be rewritten to the node path")
+	assert.Contains(t, targetURL, ".access.imageReference", "the access field access must survive the rewrite")
+	assert.NotContains(t, targetURL, "resource.access", "the bare resource alias must not survive the rewrite")
 }
 
 func TestBuildGraphDefinition_UploaderRejectsUnwrappedTargetURL(t *testing.T) {
