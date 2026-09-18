@@ -23,6 +23,10 @@ import (
 	"github.com/digitorus/pkcs7"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	tsacredentialsv1alpha1 "ocm.software/open-component-model/bindings/go/signing/tsa/spec/credentials/v1alpha1"
 )
 
 func TestNewMessageImprint(t *testing.T) {
@@ -283,53 +287,94 @@ func TestTSAConsumerIdentity_InvalidURL(t *testing.T) {
 	assert.Contains(t, err.Error(), "parsing TSA URL")
 }
 
-func TestRootCertPoolFromCredentials_InlinePEM(t *testing.T) {
+func directCreds(props map[string]string) *credconfigv1.DirectCredentials {
+	return &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: props,
+	}
+}
+
+func TestRootCertPool_InlinePEM(t *testing.T) {
 	_, cert := mustTSAKeyAndCert(t)
 	pemData := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
 
-	creds := map[string]string{
-		CredentialKeyRootCertsPEM: string(pemData),
-	}
-	pool, err := RootCertPoolFromCredentials(creds)
+	pool, err := RootCertPool(&tsacredentialsv1alpha1.TSACredentials{
+		Type:         tsacredentialsv1alpha1.VersionedType,
+		RootCertsPEM: string(pemData),
+	})
 	require.NoError(t, err)
 	require.NotNil(t, pool)
 }
 
-func TestRootCertPoolFromCredentials_File(t *testing.T) {
+func TestRootCertPool_File(t *testing.T) {
 	_, cert := mustTSAKeyAndCert(t)
 	pemData := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
 
 	path := filepath.Join(t.TempDir(), "root.pem")
 	require.NoError(t, os.WriteFile(path, pemData, 0o600))
 
-	creds := map[string]string{
-		CredentialKeyRootCertsPEMFile: path,
-	}
-	pool, err := RootCertPoolFromCredentials(creds)
+	pool, err := RootCertPool(&tsacredentialsv1alpha1.TSACredentials{
+		Type:             tsacredentialsv1alpha1.VersionedType,
+		RootCertsPEMFile: path,
+	})
 	require.NoError(t, err)
 	require.NotNil(t, pool)
 }
 
-func TestRootCertPoolFromCredentials_FileNotFound(t *testing.T) {
-	creds := map[string]string{
-		CredentialKeyRootCertsPEMFile: "/nonexistent/path/root.pem",
-	}
-	_, err := RootCertPoolFromCredentials(creds)
+func TestRootCertPool_FileNotFound(t *testing.T) {
+	_, err := RootCertPool(&tsacredentialsv1alpha1.TSACredentials{
+		Type:             tsacredentialsv1alpha1.VersionedType,
+		RootCertsPEMFile: "/nonexistent/path/root.pem",
+	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "reading root certificates")
 }
 
-func TestRootCertPoolFromCredentials_InvalidPEM(t *testing.T) {
-	creds := map[string]string{
-		CredentialKeyRootCertsPEM: "not valid PEM data",
-	}
-	_, err := RootCertPoolFromCredentials(creds)
+func TestRootCertPool_InvalidPEM(t *testing.T) {
+	_, err := RootCertPool(&tsacredentialsv1alpha1.TSACredentials{
+		Type:         tsacredentialsv1alpha1.VersionedType,
+		RootCertsPEM: "not valid PEM data",
+	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no valid certificates")
 }
 
-func TestRootCertPoolFromCredentials_Empty(t *testing.T) {
-	pool, err := RootCertPoolFromCredentials(map[string]string{})
+func TestRootCertPool_Nil(t *testing.T) {
+	pool, err := RootCertPool(nil)
+	require.NoError(t, err)
+	assert.Nil(t, pool)
+}
+
+// RootCertPoolFromCredentials converts resolved credentials (typed or the
+// untyped DirectCredentials fallback) before loading the pool. The fallback
+// still accepts the deprecated snake_case keys used by existing .ocmconfig files.
+func TestRootCertPoolFromCredentials_DirectCredentials_CamelCase(t *testing.T) {
+	_, cert := mustTSAKeyAndCert(t)
+	pemData := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+
+	pool, err := RootCertPoolFromCredentials(directCreds(map[string]string{
+		"rootCertsPEM": string(pemData),
+	}))
+	require.NoError(t, err)
+	require.NotNil(t, pool)
+}
+
+func TestRootCertPoolFromCredentials_DirectCredentials_DeprecatedSnakeCase(t *testing.T) {
+	_, cert := mustTSAKeyAndCert(t)
+	pemData := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+
+	path := filepath.Join(t.TempDir(), "root.pem")
+	require.NoError(t, os.WriteFile(path, pemData, 0o600))
+
+	pool, err := RootCertPoolFromCredentials(directCreds(map[string]string{
+		"root_certs_pem_file": path,
+	}))
+	require.NoError(t, err)
+	require.NotNil(t, pool)
+}
+
+func TestRootCertPoolFromCredentials_Nil(t *testing.T) {
+	pool, err := RootCertPoolFromCredentials(nil)
 	require.NoError(t, err)
 	assert.Nil(t, pool)
 }

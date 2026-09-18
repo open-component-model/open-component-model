@@ -606,6 +606,38 @@ A successful run prints `SIGNATURE VERIFICATION SUCCESSFUL`. The same `--signatu
 {{< /tab >}}
 {{< /tabs >}}
 
+## Verifying signatures with an RFC 3161 timestamp
+
+{{< callout context="note" title="Early access" >}}
+RFC 3161 timestamping is currently being rolled out and we are awaiting feedback. The interface may evolve.
+{{< /callout >}}
+
+When a signature carries a timestamp (added at signing time with `--tsa` / `--tsa-url`), `ocm verify cv` checks it
+automatically — no extra flag. To fully verify the timestamp, provide the TSA's **root certificates** through the
+credential graph with a [`TSA/v1alpha1`]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
+consumer entry:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: TSA/v1alpha1
+          hostname: timestamp.digicert.com
+          scheme: https
+        credentials:
+          - type: TSACredentials/v1alpha1
+            rootCertsPEMFile: /path/to/digicert-tsa-root.pem
+```
+
+With the root certificates present, the timestamp token's chain is verified and the signing certificate is validated
+as of the timestamped time — so a signature stays verifiable after its certificate expires. Without them, verification
+falls back to structural-only mode (the token is parsed and its digest checked, but the chain is not verified) and a
+warning is logged; the signature itself still verifies normally. See
+[Concept: RFC 3161 Timestamping]({{< relref "docs/concepts/signing-and-verification-concept.md#rfc-3161-timestamping" >}})
+for the trust model and the difference between these TSA *token* roots and the HTTP client's TLS trust.
+
 ## CLI Reference
 
 | Command | Description |

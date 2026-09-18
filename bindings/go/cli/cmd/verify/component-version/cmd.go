@@ -474,7 +474,7 @@ func verifyTSATimestamp(
 	var tsaRootPool *x509.CertPool
 	if tsaID, err := tsa.TSAConsumerIdentity(tsaURL); err == nil {
 		if tsaCreds, err := credentialGraph.Resolve(ctx, tsaID); err == nil {
-			pool, err := tsa.RootCertPoolFromCredentials(directCredentialProperties(tsaCreds))
+			pool, err := tsa.RootCertPoolFromCredentials(tsaCreds)
 			if err != nil {
 				return time.Time{}, fmt.Errorf("loading TSA root certificates from credential graph: %w", err)
 			}
@@ -530,9 +530,9 @@ func withVerifiedTime(creds runtime.Typed, verifiedTime time.Time) runtime.Typed
 }
 
 // directCredentialProperties returns the key/value properties of resolved
-// credentials when they are DirectCredentials (the form used for TSA root
-// certificates and PEM trust material). It returns nil for any other credential
-// type or for nil credentials.
+// credentials when they are DirectCredentials. It is used to carry the
+// TSA-verified time forward via withVerifiedTime. It returns nil for any other
+// credential type or for nil credentials.
 func directCredentialProperties(creds runtime.Typed) map[string]string {
 	if dc, ok := creds.(*credconfigv1.DirectCredentials); ok {
 		return dc.Properties

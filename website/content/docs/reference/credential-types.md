@@ -36,6 +36,7 @@ OCM ships with the following built-in credential types:
 | [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
 | [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers      | OIDC token for Sigstore keyless signing via Fulcio              |
 | [`TrustedRoot/v1alpha1`](#trustedrootv1alpha1)             | `SigstoreVerifier/v1alpha1` consumers    | Sigstore trust material for private infrastructure verification |
+| [`TSACredentials/v1alpha1`](#tsacredentialsv1alpha1)       | `TSA/v1alpha1` consumers                 | RFC 3161 timestamp verification root CA certificates            |
 | [`DirectCredentials/v1`](#directcredentialsv1)             | Any consumer                             | Legacy untyped key-value fallback (also `Credentials/v1`)       |
 
 All typed credential types use flat top-level fields. `DirectCredentials/v1` uses a nested `properties:` map — it is the
@@ -432,6 +433,54 @@ consumers:
 ### Used With
 
 `SigstoreVerifier/v1alpha1` consumer identities (Sigstore verification path only; not used during signing).
+
+---
+
+## TSACredentials/v1alpha1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/tsa/v1alpha1/TSACredentials.schema.json" >}}
+
+### Example
+
+URL-specific TSA roots:
+
+```yaml
+consumers:
+  - identity:
+      type: TSA/v1alpha1
+      hostname: timestamp.digicert.com
+      scheme: https
+    credentials:
+      - type: TSACredentials/v1alpha1
+        rootCertsPEMFile: /path/to/digicert-tsa-root.pem
+```
+
+Inline PEM bundle, generic fallback (matches any TSA):
+
+```yaml
+consumers:
+  - identity:
+      type: TSA/v1alpha1
+    credentials:
+      - type: TSACredentials/v1alpha1
+        rootCertsPEM: |
+          -----BEGIN CERTIFICATE-----
+          MIIDdzCCAl+gAwIBAgIEbGVnYWw...
+          -----END CERTIFICATE-----
+```
+
+{{< callout context="note" >}}
+This credential is consumed **only** by the verification path, and only for signatures that carry an RFC 3161
+timestamp. The signing path selects the TSA server via the `--tsa` / `--tsa-url` flags and does not read credentials.
+Without a matching entry, timestamp verification falls back to structural-only mode with a warning. The legacy
+[`Credentials/v1`](#directcredentialsv1) fallback additionally accepts the deprecated snake_case keys
+`root_certs_pem` and `root_certs_pem_file`.
+{{< /callout >}}
+
+### Used With
+
+[`TSA/v1alpha1`]({{< relref "credential-consumer-identities.md#tsav1alpha1" >}}) consumer identities (RFC 3161
+timestamp verification only; not used during signing).
 
 ---
 

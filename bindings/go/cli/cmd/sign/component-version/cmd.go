@@ -23,6 +23,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -417,7 +419,12 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	// digest. Never performed on a dry run (useTSA already excludes dryRun).
 	var tsSpec *descruntime.TimestampSpec
 	if useTSA {
-		tsSpec, err = requestTSATimestamp(ctx, logger, tsaURL, unsignedDigest)
+		httpConfig, err := httpv1alpha1.ResolveHTTPConfig(config)
+		if err != nil {
+			return fmt.Errorf("resolving HTTP configuration for TSA request failed: %w", err)
+		}
+		tsaClient := ocmhttp.New(ocmhttp.WithConfig(httpConfig))
+		tsSpec, err = requestTSATimestamp(ctx, logger, tsaClient, tsaURL, unsignedDigest)
 		if err != nil {
 			return err
 		}
@@ -542,7 +549,7 @@ func addSignedTSALabel(desc *descruntime.Descriptor, signatureName, tsaURL strin
 // requestTSATimestamp obtains an RFC 3161 timestamp for the given digest from
 // the TSA at tsaURL and returns it as a TimestampSpec ready to attach to the
 // signature.
-func requestTSATimestamp(ctx context.Context, logger *slog.Logger, tsaURL string, digest *descruntime.Digest) (*descruntime.TimestampSpec, error) {
+func requestTSATimestamp(ctx context.Context, logger *slog.Logger, client tsa.HTTPClient, tsaURL string, digest *descruntime.Digest) (*descruntime.TimestampSpec, error) {
 	hash, err := signing.GetSupportedHash(digest.HashAlgorithm)
 	if err != nil {
 		return nil, fmt.Errorf("preparing TSA request: %w", err)
@@ -552,7 +559,7 @@ func requestTSATimestamp(ctx context.Context, logger *slog.Logger, tsaURL string
 		return nil, fmt.Errorf("decoding digest for TSA request: %w", err)
 	}
 
-	token, err := tsa.RequestTimestamp(ctx, nil, tsaURL, hash, digestBytes)
+	token, err := tsa.RequestTimestamp(ctx, client, tsaURL, hash, digestBytes)
 	if err != nil {
 		return nil, fmt.Errorf("TSA timestamp request failed: %w", err)
 	}
