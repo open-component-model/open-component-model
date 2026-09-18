@@ -37,8 +37,8 @@ By the end of this tutorial, you will:
 
 ### Write the versioning configuration
 
-Create `versioning.ocmconfig` with a CalVer scheme. The built-in loose-semver scheme is always kept as a fallback, so
-semver versions keep working.
+Create `versioning.ocmconfig` with a CalVer scheme. Once you configure schemes, the built-in loose-semver scheme is no
+longer added automatically, so add an explicit `builtin: loose-semver` entry to keep semver versions working.
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -48,6 +48,8 @@ configurations:
       - name: calver-date
         pattern: '^(?P<year>\d{4})\.(?P<month>\d{2})\.(?P<day>\d{2})$'
         comparisonGroups: [year, month, day]
+      - name: semver
+        builtin: loose-semver
 ```
 
 {{< /step >}}

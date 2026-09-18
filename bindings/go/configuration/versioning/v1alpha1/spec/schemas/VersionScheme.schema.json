@@ -4,11 +4,15 @@
   "$id": "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec/schemas/VersionScheme.schema.json",
   "title": "VersionScheme",
   "type": "object",
-  "description": "VersionScheme describes a single version scheme as a regular expression plus\nan ordered list of named capture groups used for comparison.",
+  "description": "VersionScheme describes a single version scheme, either as a regular\nexpression with an ordered list of named capture groups used for comparison,\nor as a reference to a built-in scheme.",
   "properties": {
+    "builtin": {
+      "type": "string",
+      "description": "Builtin selects a built-in scheme instead of a regular expression. The only\nsupported value is \"loose-semver\", which uses the same loose semantic\nversioning behavior OCM applies by default. When set, Pattern and\nComparisonGroups must be empty. Add an entry with builtin: loose-semver\n(typically last) to keep recognizing semver versions alongside custom\nschemes."
+    },
     "comparisonGroups": {
       "type": "array",
-      "description": "ComparisonGroups lists the named capture groups from Pattern used to order\nversions, most significant first. Numeric groups compare as integers;\nnon-numeric groups compare lexically. When empty, whole matched strings\ncompare lexically.",
+      "description": "ComparisonGroups lists the named capture groups from Pattern used to order\nversions, most significant first. Numeric groups compare as integers;\nnon-numeric groups compare lexically. When empty, whole matched strings\ncompare lexically. Must be empty when Builtin is set.",
       "items": {
         "type": "string"
       }
@@ -19,12 +23,11 @@
     },
     "pattern": {
       "type": "string",
-      "description": "Pattern is a Go (RE2) regular expression that a version must match for\nthis scheme to claim it. Use named capture groups for the fields that\ndetermine ordering, e.g.\n\"^(?P\u003cyear\u003e\\\\d{4})\\\\.(?P\u003cmonth\u003e\\\\d{2})\\\\.(?P\u003cday\u003e\\\\d{2})$\"."
+      "description": "Pattern is a Go (RE2) regular expression that a version must match for\nthis scheme to claim it. Use named capture groups for the fields that\ndetermine ordering, e.g.\n\"^(?P\u003cyear\u003e\\\\d{4})\\\\.(?P\u003cmonth\u003e\\\\d{2})\\\\.(?P\u003cday\u003e\\\\d{2})$\". Mutually\nexclusive with Builtin."
     }
   },
   "required": [
-    "name",
-    "pattern"
+    "name"
   ],
   "additionalProperties": false
 }

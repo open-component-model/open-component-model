@@ -205,3 +205,17 @@ func TestVersioning_SatisfiesRejectsNonSemverScheme(t *testing.T) {
 	r.NoError(err)
 	r.True(ok)
 }
+
+func TestVersioning_ExplicitLooseSemverSchemeOrdersAndRanks(t *testing.T) {
+	r := require.New(t)
+	// calver first, an explicit built-in loose-semver scheme second (fallback).
+	reg := versioning.NewRegistry(calverFull(), versioning.NewLooseSemverScheme())
+	r.True(reg.Valid("2024.03.15"))
+	r.True(reg.Valid("1.2.3"))
+
+	// calver (rank 0) sorts ahead of semver (rank 1); each group ordered by its
+	// own scheme.
+	versions := []string{"1.2.3", "2024.03.15", "1.10.0", "2023.12.31"}
+	r.NoError(reg.SortDescending(versions))
+	r.Equal([]string{"2024.03.15", "2023.12.31", "1.10.0", "1.2.3"}, versions)
+}

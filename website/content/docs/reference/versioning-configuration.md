@@ -11,8 +11,9 @@ component versions that do not follow semantic versioning — for example calend
 build numbers.
 
 By default, and when no versioning configuration is present, OCM uses **loose semantic versioning** exactly as before.
-Adding a versioning configuration is purely additive: the loose-semver scheme is always kept as the final fallback, so
-existing semver versions keep working.
+Once you configure schemes, only the schemes you list apply — the built-in loose-semver scheme is **not** appended
+automatically. To keep recognizing semver versions alongside a custom scheme, add an explicit `builtin: loose-semver`
+entry (typically last, so it acts as a fallback).
 
 ## Configuration File
 
@@ -31,6 +32,9 @@ configurations:
       - name: calver-date
         pattern: '^(?P<year>\d{4})\.(?P<month>\d{2})\.(?P<day>\d{2})$'
         comparisonGroups: [year, month, day]
+      # Keep recognizing semver versions too (optional; omit for calver-only).
+      - name: semver
+        builtin: loose-semver
 ```
 
 To confirm which schemes are active for an invocation, print the effective merged configuration:
@@ -48,11 +52,12 @@ ocm get config
 
 ### Scheme Entry Schema
 
-| Field              | Type     | Required | Description                                                                                             |
-|--------------------|----------|----------|---------------------------------------------------------------------------------------------------------|
-| `name`             | string   | Yes      | Stable identifier for the scheme (e.g. `calver`, `build-number`).                                       |
-| `pattern`          | string   | Yes      | Go (RE2) regular expression a version must match for the scheme to claim it. Use named capture groups.  |
-| `comparisonGroups` | array    | No       | Named capture groups from `pattern` used to order versions, most significant first. Empty = lexical.    |
+| Field              | Type     | Required        | Description                                                                                             |
+|--------------------|----------|-----------------|---------------------------------------------------------------------------------------------------------|
+| `name`             | string   | Yes             | Stable identifier for the scheme (e.g. `calver`, `build-number`, `semver`).                             |
+| `builtin`          | string   | No              | Selects a built-in scheme instead of a `pattern`. Only `loose-semver` is supported. Mutually exclusive with `pattern`/`comparisonGroups`. |
+| `pattern`          | string   | Unless `builtin` | Go (RE2) regular expression a version must match for the scheme to claim it. Use named capture groups.  |
+| `comparisonGroups` | array    | No              | Named capture groups from `pattern` used to order versions, most significant first. Empty = lexical.    |
 
 Numeric capture groups are compared as integers (so `22.10` sorts after `22.04`, and `1900` after `1838`); non-numeric
 groups compare lexically.
@@ -149,9 +154,15 @@ Example — a "release train + hotfix" scheme where `2024Q3.2` orders by train (
 
 ## Comparison and Ordering
 
-For any pair of versions, OCM selects the **first** scheme (in list order) whose `pattern` matches **both** versions and
-uses it to compare them. If no single scheme claims both, OCM falls back to the built-in loose-semver scheme and finally
-to lexical comparison, so ordering is always deterministic.
+Each version is resolved to the **first** scheme (in list order) that claims it — its scheme *rank*. Versions with
+different ranks are ordered by rank, so entries of a higher-priority scheme sort ahead of lower-priority ones. Versions
+sharing a rank are ordered by that scheme. Versions no configured scheme claims share a single "unknown" rank and are
+ordered lexically among themselves, and sort after every claimed version. This rank-based order is total and
+deterministic regardless of input order.
+
+If you have not opted the built-in semver scheme back in (`builtin: loose-semver`), semver versions are unclaimed and
+therefore fall into that lexical, lowest-priority "unknown" bucket — add the fallback entry if you want them ordered
+properly.
 
 Within a scheme, versions are ordered by their `comparisonGroups` left to right; numeric groups are compared as
 integers and non-numeric groups lexically. With no comparison groups, the whole matched string is compared lexically.
@@ -185,13 +196,15 @@ CTF archives use the same reference format, so the same tag grammar applies.
 
 Each scheme's `pattern` is compiled when the configuration is loaded. A malformed pattern fails configuration loading
 with an error naming the offending scheme and index. Every name in `comparisonGroups` must be a named capture group in
-the pattern; otherwise loading fails with an error naming the missing group.
+the pattern; otherwise loading fails with an error naming the missing group. A scheme entry must set exactly one of
+`pattern` or `builtin`; setting both, or an unknown `builtin` value, fails configuration loading.
 
 ## Default Behavior
 
 Without a versioning configuration, OCM uses loose semantic versioning for every component, resource, source, and
 reference version — identical to previous behavior. Non-semver versions are rejected on write unless a matching scheme
-is configured.
+is configured. Once you configure schemes, semver versions are also rejected unless you keep them with a
+`builtin: loose-semver` entry, because the fallback is no longer added automatically.
 
 ## Related Documentation
 

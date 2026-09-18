@@ -59,7 +59,15 @@ func NewRegistry(schemes ...Scheme) *Registry {
 // Default returns a registry containing only the loose-semver scheme. This
 // reproduces OCM's historical version behavior exactly.
 func Default() *Registry {
-	return NewRegistry(newLooseSemverScheme())
+	return NewRegistry(NewLooseSemverScheme())
+}
+
+// NewLooseSemverScheme returns the built-in loose-semver [Scheme], wrapping
+// github.com/Masterminds/semver/v3. Configuration packages reference it to opt
+// the built-in semver behavior back in explicitly (e.g. as a trailing fallback)
+// once custom schemes are configured.
+func NewLooseSemverScheme() Scheme {
+	return newLooseSemverScheme()
 }
 
 // Schemes returns the registry's schemes in priority order.
