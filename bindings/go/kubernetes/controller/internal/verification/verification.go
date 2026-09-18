@@ -1,62 +1,89 @@
 package verification
 
 import (
-	"context"
-	"encoding/base64"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
-	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
+	rsasigningv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	signingspec "ocm.software/open-component-model/bindings/go/signing/v1alpha1/spec"
 )
 
-// Verification is an internal representation of v1alpha1.Verification where the public key is already extracted from
-// the value or secret.
-type Verification struct {
-	Signature string `json:"signature"`
-	PublicKey []byte `json:"publicKey"`
+// signingConfigTypes are the OCM configuration entries that request component signature verification.
+var signingConfigTypes = []runtime.Type{
+	runtime.NewVersionedType(signingspec.ConfigType, signingspec.Version),
+	runtime.NewUnversionedType(signingspec.ConfigType),
 }
 
-func GetVerifications(ctx context.Context, client ctrl.Reader,
-	obj v1alpha1.VerificationProvider,
-) ([]Verification, error) {
-	verifications := obj.GetVerifications()
+// Verification is an internal representation of a requested component signature verification. The public key
+// comes from the credential graph during resolution.
+type Verification struct {
+	Signature string        `json:"signature"`
+	Verifier  runtime.Typed `json:"verifier"`
+}
 
-	var err error
-	var secret corev1.Secret
-	v := make([]Verification, 0, len(verifications))
-	for _, verification := range verifications {
-		internal := Verification{
-			Signature: verification.Signature,
-		}
-		if verification.Value == "" && verification.SecretRef.Name == "" {
-			return nil, reconcile.TerminalError(fmt.Errorf("value and secret ref cannot both be empty for signature: %s", verification.Signature))
-		}
-		if verification.Value != "" && verification.SecretRef.Name != "" {
-			return nil, reconcile.TerminalError(fmt.Errorf("value and secret ref cannot both be set for signature: %s", verification.Signature))
-		}
-		if verification.Value != "" {
-			internal.PublicKey, err = base64.StdEncoding.DecodeString(verification.Value)
-			if err != nil {
-				return nil, reconcile.TerminalError(fmt.Errorf("failed to decode public key value for signature %q: %w", verification.Signature, err))
-			}
-		}
-		if verification.SecretRef.Name != "" {
-			err = client.Get(ctx, ctrl.ObjectKey{Namespace: obj.GetNamespace(), Name: verification.SecretRef.Name}, &secret)
-			if err != nil {
-				return nil, err
-			}
-			certBytes, ok := secret.Data[verification.Signature]
-			if !ok {
-				return nil, fmt.Errorf("secret %q does not contain key %q for signature verification", verification.SecretRef.Name, verification.Signature)
-			}
-			internal.PublicKey = certBytes
-		}
-
-		v = append(v, internal)
+// GetVerifications reads the requested verifications from the OCM configuration. Only entries that have a
+// signature name set are considered.
+func GetVerifications(cfg *configuration.Configuration) ([]Verification, error) {
+	if cfg == nil || cfg.Config == nil {
+		return nil, nil
 	}
 
-	return v, nil
+	filtered, err := genericv1.Filter(cfg.Config, &genericv1.FilterOptions{ConfigTypes: signingConfigTypes})
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter signing configuration: %w", err)
+	}
+
+	var verifications []Verification
+	seen := make(map[string]struct{}, len(filtered.Configurations))
+	for _, entry := range filtered.Configurations {
+		var signingCfg signingspec.Config
+		if err := signingspec.Scheme.Convert(entry, &signingCfg); err != nil {
+			return nil, fmt.Errorf("failed to decode signing configuration: %w", err)
+		}
+
+		if signingCfg.Signature == "" {
+			continue
+		}
+
+		// more than one entry could be here with the same signature
+		if _, ok := seen[signingCfg.Signature]; ok {
+			continue
+		}
+		seen[signingCfg.Signature] = struct{}{}
+
+		verifier, err := verifierForSignature(cfg.Config, signingCfg.Signature)
+		if err != nil {
+			return nil, err
+		}
+
+		verifications = append(verifications, Verification{
+			Signature: signingCfg.Signature,
+			Verifier:  verifier,
+		})
+	}
+
+	return verifications, nil
+}
+
+// verifierForSignature resolves the verifier specification for an already-requested signature, falling back
+// to the default RSASSA-PSS verifier when neither a scoped nor an unscoped entry configures one.
+// This behavior is copied from the CLI.
+func verifierForSignature(cfg *genericv1.Config, signature string) (runtime.Typed, error) {
+	signingCfg, err := signingspec.LookupConfigForSignature(cfg, signature)
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up signing configuration for signature %q: %w", signature, err)
+	}
+
+	if signingCfg != nil && signingCfg.Verifier != nil {
+		return signingCfg.Verifier, nil
+	}
+
+	spec := &rsasigningv1alpha1.Config{}
+	if _, err := rsasigningv1alpha1.Scheme.DefaultType(spec); err != nil {
+		return nil, fmt.Errorf("failed to default verifier specification for signature %q: %w", signature, err)
+	}
+
+	return spec, nil
 }

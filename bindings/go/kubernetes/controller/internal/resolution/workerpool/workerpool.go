@@ -15,13 +15,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	"ocm.software/open-component-model/bindings/go/repository"
-	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
-	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
@@ -49,22 +48,15 @@ func (e *NotSafelyDigestibleError) Unwrap() error {
 	return ErrNotSafelyDigestible
 }
 
-// NewNotSafelyDigestibleError creates a new NotSafelyDigestibleError with component and version information.
-func NewNotSafelyDigestibleError(component, version string, err error) *NotSafelyDigestibleError {
-	return &NotSafelyDigestibleError{
-		Component: component,
-		Version:   version,
-		Err:       err,
-	}
-}
-
 // ResolveOptions contains all the options the resolution service requires to perform a resolve operation.
 type ResolveOptions struct {
 	Component  string
 	Version    string
 	Repository repository.ComponentVersionRepository
-	// Verifications are used to verify against component version signatures and used a cache key.
+	// Verifications are the component signatures to verify and are used as a cache key.
 	Verifications []verification.Verification
+	// CredentialGraph resolves the public keys and trust material used to verify signatures.
+	CredentialGraph credentials.Resolver
 	// Digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
 	Digest          *v2.Digest
 	SigningRegistry *signinghandler.SigningRegistry
@@ -427,6 +419,7 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 	case len(opts.Verifications) > 0:
 		// If verifications are requested, we need to verify that the component version is safely digestible.
 		// Anything that comes after this will, in case of an error, always be skipped until cache TTL expires
+		// TODO: This contradicts a bit with our config now. Wondering if we should still leave this be.
 		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 			return desc, fmt.Errorf("%w: %w", ErrNotSafelyDigestible, err)
 		}
@@ -435,7 +428,7 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 			return nil, fmt.Errorf("signing registry is required when verifications are configured")
 		}
 
-		return verifySignatures(ctx, desc, opts.Verifications, opts.SigningRegistry)
+		return verifySignatures(ctx, desc, opts.Verifications, opts.SigningRegistry, opts.CredentialGraph)
 	default:
 		logger.Info("no digest or verifications provided, skipping integrity and signature verification",
 			"component", opts.Component, "version", opts.Version)
@@ -444,15 +437,16 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 }
 
 // verifySignatures performs signature verification for the provided component version descriptor and the list of
-// verifications.
-func verifySignatures(ctx context.Context, desc *descriptor.Descriptor, verifications []verification.Verification, signingRegistry *signinghandler.SigningRegistry) (*descriptor.Descriptor, error) {
+// verifications. The verifier comes from the OCM configuration, its public key from the credential graph.
+func verifySignatures(
+	ctx context.Context,
+	desc *descriptor.Descriptor,
+	verifications []verification.Verification,
+	signingRegistry *signinghandler.SigningRegistry,
+	graph credentials.Resolver,
+) (*descriptor.Descriptor, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("verifying signature", "component", desc.Component.Name, "version", desc.Component.Version)
-
-	signingHandler, err := signingRegistry.GetPlugin(ctx, &signingv1alpha1.Config{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get signing handler plugin: %w", err)
-	}
 
 	for _, v := range verifications {
 		var descSig *descriptor.Signature
@@ -471,25 +465,55 @@ func verifySignatures(ctx context.Context, desc *descriptor.Descriptor, verifica
 			return nil, fmt.Errorf("digest verification failed for signature %q: %w", descSig.Name, err)
 		}
 
-		// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
-		//       reliable currently. This will probably change, when typed credentials are supported.
-		var credentials runtime.Typed
-		switch signingv1alpha1.SignatureAlgorithm(descSig.Signature.Algorithm) {
-		case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
-			credentials = &rsacredentialsv1.RSACredentials{
-				Type:         rsacredentialsv1.VersionedType,
-				PublicKeyPEM: string(v.PublicKey),
-			}
-		default:
-			return nil, fmt.Errorf("unsupported signature algorithm: %q", descSig.Signature.Algorithm)
+		handler, err := signingRegistry.GetPlugin(ctx, v.Verifier)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get signing handler plugin for signature %q: %w", v.Signature, err)
 		}
 
-		if err := signingHandler.Verify(ctx, *descSig, &signingv1alpha1.Config{}, credentials); err != nil {
+		creds, err := verificationCredentials(ctx, handler, *descSig, v.Verifier, graph, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := handler.Verify(ctx, *descSig, v.Verifier, creds); err != nil {
 			return nil, fmt.Errorf("signature verification failed for signature %s: %w", v.Signature, err)
 		}
 	}
 
 	return desc, nil
+}
+
+// verificationCredentials resolves the public key or trust material the handler needs from the credential graph.
+func verificationCredentials(
+	ctx context.Context,
+	handler signing.Handler,
+	signature descriptor.Signature,
+	verifierSpec runtime.Typed,
+	graph credentials.Resolver,
+	logger logr.Logger,
+) (runtime.Typed, error) {
+	consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(ctx, signature, verifierSpec)
+	if err != nil {
+		logger.V(1).Info("handler requires no credentials for verification", "signature", signature.Name)
+
+		return nil, nil
+	}
+
+	if graph == nil {
+		return nil, fmt.Errorf("credential graph is required to verify signature %q", signature.Name)
+	}
+
+	creds, err := graph.Resolve(ctx, consumerID)
+	switch {
+	case err == nil:
+		return creds, nil
+	case errors.Is(err, credentials.ErrNotFound):
+		logger.V(1).Info("no credentials found for signature verification", "signature", signature.Name)
+
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("failed to resolve credentials for signature %q: %w", signature.Name, err)
+	}
 }
 
 // compareDigest performs integrity verification using the provided digest against a fresh calculated digest of
