@@ -18,7 +18,7 @@ type Handler interface {
 //
 // Implementations MUST:
 // - Expect that ALL unsigned signature digests were already precomputed from scratch for artifacts and component references BEFORE calling Sign.
-// See: https://ocm.software/docs/getting-started/sign-component-versions/
+// See: https://ocm.software/docs/how-to/sign-and-verify/sign-component-versions/
 // - Reject signature specifications without a precalculated digest specification
 // - Not modify the given signature digest specification in any way when signing
 //
@@ -56,7 +56,7 @@ type Signer interface {
 // - Offer versioned, stable verification implementations differentiated by the config type.
 // - Reject verification specifications if there is no credential available that is required for the handler to verify the signature.
 //
-// See: https://ocm.software/docs/reference/ocm-cli/verify/componentversions/
+// See: https://ocm.software/docs/how-to/sign-and-verify/verify-component-versions/
 type Verifier interface {
 	// GetVerifyingCredentialConsumerIdentity resolves the credential consumer identity of
 	// the signature that should be verified with the given configuration.

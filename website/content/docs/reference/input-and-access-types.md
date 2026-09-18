@@ -3,6 +3,8 @@ title: "Input and Access Types"
 description: "Reference for input and access types used to add resources to a component version."
 weight: 4
 toc: true
+aliases:
+  - /docs/guides/input_and_access/
 ---
 
 ## Overview

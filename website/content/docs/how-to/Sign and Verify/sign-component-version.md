@@ -1,9 +1,12 @@
 ---
 title: "Sign Component Versions"
+slug: "sign-component-versions"
 description: "Cryptographically sign a component version using key-based or keyless signing algorithms."
 icon: "🔏"
 weight: 6
 toc: true
+aliases:
+  - /docs/getting-started/sign-component-versions/
 ---
 
 ## Goal
