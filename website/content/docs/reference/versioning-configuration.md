@@ -30,15 +30,13 @@ configurations:
   - type: versioning.config.ocm.software/v1alpha1
     schemes:
       # Use a built-in scheme (see the catalog below) …
-      - name: calver
-        builtin: calver-full
+      - builtin: calver-full
       # … or write a custom pattern for anything not covered:
       #   - name: release-train
       #     pattern: '^(?P<train>\d{4}Q[1-4])\.(?P<hotfix>\d+)$'
       #     comparisonGroups: [train, hotfix]
       # Keep recognizing semver versions too (optional; omit for calver-only).
-      - name: semver
-        builtin: loose-semver
+      - builtin: loose-semver
 ```
 
 To confirm which schemes are active for an invocation, print the effective merged configuration:
@@ -58,7 +56,7 @@ ocm get config
 
 | Field              | Type   | Required          | Description                                                                                             |
 |--------------------|--------|-------------------|---------------------------------------------------------------------------------------------------------|
-| `name`             | string | Yes               | Stable identifier for the scheme (e.g. `calver`, `build-number`, `semver`).                             |
+| `name`             | string | No                | Optional label for a pattern scheme, used in diagnostics. Omit for a builtin (it has its own name).     |
 | `builtin`          | string | No                | Named built-in scheme (see catalog); mutually exclusive with `pattern`/`comparisonGroups`.              |
 | `pattern`          | string | Unless `builtin`  | Go (RE2) regular expression a version must match for the scheme to claim it. Use named capture groups.  |
 | `comparisonGroups` | array  | No                | Named capture groups from `pattern` used to order versions, most significant first. Empty = lexical.    |
@@ -79,8 +77,7 @@ for anything not covered.
 {{< tab "CalVer YYYY.MM.DD" >}}
 
 ```yaml
-- name: calver
-  builtin: calver-full
+- builtin: calver-full
 ```
 
 Matches `2024.03.15`. Orders by year, then month, then day.
@@ -97,8 +94,7 @@ Equivalent regex:
 {{< tab "CalVer YYYY.MM" >}}
 
 ```yaml
-- name: calver-month
-  builtin: calver-month
+- builtin: calver-month
 ```
 
 Matches `2024.03`. Orders by year, then month.
@@ -115,8 +111,7 @@ Equivalent regex:
 {{< tab "Ubuntu YY.MM" >}}
 
 ```yaml
-- name: ubuntu
-  builtin: calver-ubuntu
+- builtin: calver-ubuntu
 ```
 
 Matches `22.04`, `23.10`. Month compares numerically, so `22.10` sorts after `22.04`.
@@ -133,8 +128,7 @@ Equivalent regex:
 {{< tab "CalVer YYYY.MM.PATCH" >}}
 
 ```yaml
-- name: calver-micro
-  builtin: calver-micro
+- builtin: calver-micro
 ```
 
 Matches `2024.4.1`. The month accepts one or two digits.
@@ -151,8 +145,7 @@ Equivalent regex:
 {{< tab "AWS date YYYY-MM-DD" >}}
 
 ```yaml
-- name: aws-date
-  builtin: aws-date
+- builtin: aws-date
 ```
 
 Matches `2024-03-15`. Orders by year, then month, then day.
@@ -169,8 +162,7 @@ Equivalent regex:
 {{< tab "Build number" >}}
 
 ```yaml
-- name: build
-  builtin: build-number
+- builtin: build-number
 ```
 
 Matches `1837`, `1838`. Compared as integers, so `1900` sorts after `1838`.
@@ -187,8 +179,7 @@ Equivalent regex:
 {{< tab "Loose semver" >}}
 
 ```yaml
-- name: semver
-  builtin: loose-semver
+- builtin: loose-semver
 ```
 
 The historical default (via `github.com/Masterminds/semver/v3`). Matches `1.2.3`, `v2.0.0`, `1.0.0-rc.1`. Unlike the
@@ -198,8 +189,9 @@ alongside custom schemes.
 {{< /tab >}}
 {{< /tabs >}}
 
-The `name` field is a free-form label used in `ocm get config` output; it is independent of the `builtin` value you
-select.
+A `builtin` entry takes no `name`, `pattern`, or `comparisonGroups`: the built-in supplies its own name and behavior.
+Setting any of them alongside `builtin` is rejected. The optional `name` field applies only to custom `pattern` schemes,
+where it labels the scheme in diagnostics.
 
 ## Authoring Your Own Scheme
 

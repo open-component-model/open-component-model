@@ -67,8 +67,11 @@ type Config struct {
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type VersionScheme struct {
-	// Name is a stable identifier for the scheme (e.g. "calver", "build-number").
-	Name string `json:"name"`
+	// Name is an optional human-facing label for a regex (pattern) scheme, used
+	// only in diagnostics (e.g. "calver", "build-number"); when omitted the
+	// pattern is used instead. It must not be set on a Builtin entry, which
+	// carries its own canonical name.
+	Name string `json:"name,omitempty"`
 
 	// Builtin selects a named built-in scheme instead of a regular expression.
 	// Supported values: "loose-semver" (the historical default), "calver-full"
@@ -161,15 +164,18 @@ func (c *Config) Registry() (*versioning.Registry, error) {
 			return nil, fmt.Errorf("versioning scheme at index %d is null", i)
 		}
 		if s.Builtin == "" && s.Pattern == "" {
-			return nil, fmt.Errorf("versioning scheme %q (index %d): must set exactly one of pattern or builtin", s.Name, i)
+			return nil, fmt.Errorf("versioning scheme at index %d: must set exactly one of pattern or builtin", i)
 		}
 		if s.Builtin != "" {
-			if s.Pattern != "" || len(s.ComparisonGroups) > 0 {
-				return nil, fmt.Errorf("versioning scheme %q (index %d): builtin is mutually exclusive with pattern and comparisonGroups", s.Name, i)
+			// A builtin entry carries its own canonical name and behavior; name,
+			// pattern, and comparisonGroups are superfluous and rejected so configs
+			// stay unambiguous.
+			if s.Name != "" || s.Pattern != "" || len(s.ComparisonGroups) > 0 {
+				return nil, fmt.Errorf("versioning scheme at index %d: builtin %q is mutually exclusive with name, pattern, and comparisonGroups", i, s.Builtin)
 			}
 			scheme, ok := versioning.BuiltinScheme(s.Builtin)
 			if !ok {
-				return nil, fmt.Errorf("versioning scheme %q (index %d): unknown builtin %q, valid builtins are %v", s.Name, i, s.Builtin, versioning.BuiltinNames())
+				return nil, fmt.Errorf("versioning scheme at index %d: unknown builtin %q, valid builtins are %v", i, s.Builtin, versioning.BuiltinNames())
 			}
 			schemes = append(schemes, scheme)
 			continue
@@ -189,7 +195,11 @@ func (c *Config) Registry() (*versioning.Registry, error) {
 				return nil, fmt.Errorf("versioning scheme %q: comparison group %q is not a named capture group in the pattern", s.Name, group)
 			}
 		}
-		schemes = append(schemes, versioning.NewRegexScheme(s.Name, pattern, s.ComparisonGroups))
+		name := s.Name
+		if name == "" {
+			name = s.Pattern
+		}
+		schemes = append(schemes, versioning.NewRegexScheme(name, pattern, s.ComparisonGroups))
 	}
 
 	return versioning.NewRegistry(schemes...), nil
