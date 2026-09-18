@@ -121,3 +121,21 @@ func TestMapEvent_NameFormattedAsIDAndType(t *testing.T) {
 	result := mapEvent(input)
 	assert.Equal(t, "myTransform [AddComponentVersion]", result.Name)
 }
+
+func TestMapEvent_NamePrefersLabel(t *testing.T) {
+	input := graphRuntime.ProgressEvent{
+		Transformation: &graphPkg.Transformation{
+			GenericTransformation: v1alpha1.GenericTransformation{
+				TransformationMeta: meta.TransformationMeta{
+					Type:  runtime.Type{Name: "AddComponentVersion"},
+					ID:    "t414aa5faac27ff3eUpload",
+					Label: "my-app@1.0.0 [Upload]",
+				},
+			},
+		},
+		State: graphRuntime.Running,
+	}
+
+	result := mapEvent(input)
+	assert.Equal(t, "my-app@1.0.0 [Upload]", result.Name)
+}

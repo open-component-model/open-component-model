@@ -16,7 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -49,9 +49,12 @@ func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginMana
 	var data blob.ReadOnlyBlob
 	var err error
 
-	if IsLocal(access) {
+	if v2.IsLocalBlob(access) {
 		data, _, err = repo.GetLocalResource(ctx, component, version, identity)
 	} else {
+		if access == nil {
+			return nil, fmt.Errorf("access was empty for resource %s", res.Name)
+		}
 		var plugin resource.Repository
 		plugin, err = pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, access)
 		if err != nil {
@@ -83,16 +86,4 @@ func SaveBlobToFile(data blob.ReadOnlyBlob, outputPath string) error {
 		return fmt.Errorf("writing resource to %q failed: %w", outputPath, err)
 	}
 	return nil
-}
-
-// IsLocal checks if access method is local
-func IsLocal(access runtime.Typed) bool {
-	if access == nil {
-		return false
-	}
-	var local v2.LocalBlob
-	if err := v2.Scheme.Convert(access, &local); err != nil {
-		return false
-	}
-	return true
 }

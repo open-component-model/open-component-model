@@ -82,7 +82,7 @@ Larger decisions that affect project direction are escalated to the TSC. The pro
 2. If consensus is not reached, bring it to the TSC agenda
 3. The TSC decides by majority vote (quorum: 50% of voting members)
 
-For full governance details, see the [Governance]({{< relref "governance/_index.md" >}}) page and the
+For full governance details, see the [Governance](/governance/) page and the
 [Project Charter](https://github.com/open-component-model/open-component-model/blob/main/docs/steering/CHARTER.md).
 
 ## Communication Channels
