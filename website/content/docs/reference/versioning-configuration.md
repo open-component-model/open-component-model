@@ -59,7 +59,7 @@ ocm get config
 | Field              | Type   | Required          | Description                                                                                             |
 |--------------------|--------|-------------------|---------------------------------------------------------------------------------------------------------|
 | `name`             | string | Yes               | Stable identifier for the scheme (e.g. `calver`, `build-number`, `semver`).                             |
-| `builtin`          | string | No                | Named built-in scheme instead of a `pattern` (see [catalog](#built-in-scheme-catalog)): `loose-semver`, `calver-full`, `calver-month`, `calver-ubuntu`, `calver-micro`, `aws-date`, `build-number`. Mutually exclusive with `pattern` and `comparisonGroups`. |
+| `builtin`          | string | No                | Named built-in scheme (see catalog); mutually exclusive with `pattern`/`comparisonGroups`.              |
 | `pattern`          | string | Unless `builtin`  | Go (RE2) regular expression a version must match for the scheme to claim it. Use named capture groups.  |
 | `comparisonGroups` | array  | No                | Named capture groups from `pattern` used to order versions, most significant first. Empty = lexical.    |
 
