@@ -62,6 +62,7 @@ blobhandler
 blobtransformer
 bool
 boolean
+bootable
 braun
 brautigam
 bruns
@@ -107,6 +108,7 @@ codebase
 codeowners
 codeql
 colocated
+colocates
 commontransportarchive
 commontransportformat
 componentaccess
@@ -256,6 +258,7 @@ extensibility
 extraidentity
 fabianburth
 fallbacks
+facto
 fapi
 filepath
 filesystem
@@ -357,6 +360,7 @@ https
 hxr
 iaas
 iam
+iana
 ical
 ics
 ikhandamirov
@@ -367,6 +371,7 @@ imagereference
 imagetagtransformer
 implementors
 infomation
+init
 inlined
 inspectable
 installable
@@ -558,6 +563,7 @@ onboarded
 onboarding
 oncefunc
 oo
+oom
 openapi
 openbao
 opencontrolplane
@@ -581,6 +587,7 @@ outputspecification
 overexplain
 overriden
 overwritable
+ovf
 ownershipPolicy
 packageidentifier
 packagename
@@ -588,6 +595,7 @@ packagespec
 packageversion
 parallelize
 parameterization
+pascalcase
 patchstrategicmerge
 patchstrategicmergesource
 patchstrategicmergetarget
@@ -783,6 +791,7 @@ subsitution
 subst
 substsitution
 subtree
+subtype
 supermajority
 superset
 suppresstitle
@@ -868,6 +877,9 @@ verifiers
 versionability
 versionable
 versionedtypedobjects
+vhd
+vhdx
+vm
 walkthrough
 warroom
 wasm
