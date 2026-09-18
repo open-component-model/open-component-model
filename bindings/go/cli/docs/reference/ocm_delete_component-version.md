@@ -1,27 +1,51 @@
 ---
-title: ocm
-description: The official Open Component Model (OCM) CLI.
+title: ocm delete component-version
+description: Delete a component version from an OCM repository.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm
+## ocm delete component-version
 
-The official Open Component Model (OCM) CLI
+Delete a component version from an OCM repository
 
 ### Synopsis
 
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+Delete a component version from an OCM repository.
+
+The format of a component reference is:
+	[type::]{repository}/[valid-prefix]/{component}:version
+
+For valid prefixes {component-descriptors|none} are available. If <none> is used, it defaults to "component-descriptors". This is because by default,
+OCM components are stored within a specific sub-repository.
+
+For known types, currently only {OCIRepository|CommonTransportFormat} are supported, which can be shortened to {OCI|oci|CTF|ctf} respectively for convenience.
+
+If no type is given, the repository path is interpreted based on introspection and heuristics.
+
 
 ```
-ocm [sub-command] [flags]
+ocm delete component-version {reference} [flags]
+```
+
+### Examples
+
+```
+Deleting a component version:
+
+delete component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
+delete cv ./path/to/ctf//ocm.software/ocmcli:0.23.0
 ```
 
 ### Options
+
+```
+  -h, --help   help for component-version
+```
+
+### Options inherited from parent commands
 
 ```
       --config stringArray                 supply configuration by a given configuration file.
@@ -43,7 +67,6 @@ ocm [sub-command] [flags]
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
-  -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -66,16 +89,5 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
-* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
 * [ocm delete]({{< relref "ocm_delete.md" >}})	 - Delete objects from OCM
-* [ocm describe]({{< relref "ocm_describe.md" >}})	 - Describe OCM entities or metadata
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
-* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
-* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
-* [ocm plugin]({{< relref "ocm_plugin.md" >}})	 - Manage OCM plugins
-* [ocm sign]({{< relref "ocm_sign.md" >}})	 - create signatures for component versions in OCM
-* [ocm transfer]({{< relref "ocm_transfer.md" >}})	 - Transfer anything in OCM
-* [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify digests and signatures of component versions in OCM
-* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
 
