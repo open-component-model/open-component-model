@@ -10,10 +10,10 @@ import (
 
 	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/opencontainers/go-digest"
 	"golang.org/x/crypto/ssh"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
@@ -116,42 +116,41 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 // file under the configured TempFolder, which outlives this call and is owned by
 // the caller.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
-	b, _, err := r.download(ctx, res, creds, r.tempFolder())
+	result, err := r.download(ctx, res, creds, r.tempFolder())
 	if err != nil {
 		return nil, err
 	}
 
-	return b, nil
+	return result.Blob, nil
 }
 
-func (r *ResourceRepository) download(ctx context.Context, res *descriptor.Resource, creds runtime.Typed, tempDir string) (*filesystem.Blob, string, error) {
+func (r *ResourceRepository) download(ctx context.Context, res *descriptor.Resource, creds runtime.Typed, tempDir string) (*download.Result, error) {
 	if res == nil {
-		return nil, "", fmt.Errorf("resource is required")
+		return nil, fmt.Errorf("resource is required")
 	}
 
 	spec, err := accessFrom(res.Access)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	var typed *credsv1.GitCredentials
 	if creds != nil {
 		if typed, err = credsv1.ConvertToGitCredentials(creds); err != nil {
-			return nil, "", err
+			return nil, err
 		}
 	}
 
-	b, commit, err := download.Download(ctx, spec, typed, r.downloadOptions(tempDir))
+	result, err := download.Download(ctx, spec, typed, r.downloadOptions(tempDir))
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	raw, _ := b.Digest()
-	if err := verifyDigest(res.Digest, strings.TrimPrefix(raw, "sha256:")); err != nil {
-		return nil, "", err
+	if err := verifyDigest(res.Digest, result.Digest); err != nil {
+		return nil, err
 	}
 
-	return b, commit, nil
+	return result, nil
 }
 
 func (r *ResourceRepository) UploadResource(context.Context, *descriptor.Resource, blob.ReadOnlyBlob, runtime.Typed) (*descriptor.Resource, error) {
@@ -176,7 +175,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 		}
 	}()
 
-	b, commit, err := r.download(ctx, res, creds, tempDir)
+	downloaded, err := r.download(ctx, res, creds, tempDir)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +188,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 
 	// A set commit is authoritative, only a ref-only access gets pinned.
 	if spec.Commit == "" {
-		spec.Commit = commit
+		spec.Commit = downloaded.Commit
 	}
 	pinned := &runtime.Raw{}
 	if err := access.Scheme.Convert(spec, pinned); err != nil {
@@ -198,11 +197,10 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 
 	result.Access = pinned
 	// r.download already rejected a set digest that does not match this archive.
-	raw, _ := b.Digest()
 	result.Digest = &descriptor.Digest{
 		HashAlgorithm:          hashAlgorithmSHA256,
 		NormalisationAlgorithm: genericBlobDigestV1,
-		Value:                  strings.TrimPrefix(raw, "sha256:"),
+		Value:                  downloaded.Digest.Encoded(),
 	}
 
 	return result, nil
@@ -229,7 +227,11 @@ func accessFrom(spec runtime.Typed) (*accessv1.Git, error) {
 	return &result, nil
 }
 
-func verifyDigest(expected *descriptor.Digest, value string) error {
+func verifyDigest(expected *descriptor.Digest, actual digest.Digest) error {
+	if err := actual.Validate(); err != nil {
+		return fmt.Errorf("git archive has an invalid digest %q: %w", actual, err)
+	}
+
 	if expected == nil {
 		return nil
 	}
@@ -242,8 +244,8 @@ func verifyDigest(expected *descriptor.Digest, value string) error {
 		return fmt.Errorf("unsupported git normalisation algorithm %q", expected.NormalisationAlgorithm)
 	}
 
-	if !strings.EqualFold(expected.Value, value) {
-		return fmt.Errorf("git archive digest mismatch: expected %s, got %s", expected.Value, value)
+	if !strings.EqualFold(expected.Value, actual.Encoded()) {
+		return fmt.Errorf("git archive digest mismatch: expected %s, got %s", expected.Value, actual.Encoded())
 	}
 
 	return nil

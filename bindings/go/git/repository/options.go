@@ -8,9 +8,9 @@ import (
 
 // Options holds configuration for the Git resource repository.
 type Options struct {
-	// MaxDownloadSize caps the archive bytes a single download may produce. Nil
-	// uses the default; zero or negative allows an unlimited archive, which is
-	// then bounded by free disk space.
+	// MaxDownloadSize caps the bytes of the tar archive a single download produces,
+	// not of the clone it is taken from. Nil uses the default; zero or negative
+	// allows an unlimited archive, which is then bounded by free disk space.
 	MaxDownloadSize *int64
 	// CABundle holds PEM certificates added to the system TLS trust roots for
 	// HTTPS repositories. Nil uses the system roots alone.
@@ -26,9 +26,11 @@ type Options struct {
 // Option configures Options.
 type Option func(*Options)
 
-// WithMaxDownloadSize limits the archive bytes a single download may produce.
-// Pass 0 to allow an unlimited archive. Archives are streamed to disk rather than
-// buffered, so an unlimited download is bounded by free disk space.
+// WithMaxDownloadSize limits the bytes of the tar archive a single download
+// produces. Pass 0 to allow an unlimited archive. Archives are streamed to disk
+// rather than buffered, so an unlimited download is bounded by free disk space.
+// Git transfers the repository before the archive exists, so the limit rejects an
+// oversized archive rather than stopping the clone that produced it.
 func WithMaxDownloadSize(size int64) Option {
 	return func(o *Options) {
 		o.MaxDownloadSize = &size

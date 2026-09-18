@@ -46,11 +46,12 @@ func TestDownloadRevisions(t *testing.T) {
 
 			dir := t.TempDir()
 			spec := &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}
-			b, commit, err := Download(t.Context(), spec, nil, Options{TempDir: dir})
+			result, err := Download(t.Context(), spec, nil, Options{TempDir: dir})
 			r.NoError(err)
-			r.Equal(tc.want.String(), commit)
+			r.Equal(tc.want.String(), result.Commit)
 			r.Equal(tc.commit, spec.Commit)
 
+			b := result.Blob
 			mt, ok := b.MediaType()
 			r.True(ok)
 			r.Equal("application/x-tar", mt)
@@ -61,6 +62,7 @@ func TestDownloadRevisions(t *testing.T) {
 			raw, ok := b.Digest()
 			r.True(ok)
 			r.Equal(digest.FromBytes(data).String(), raw)
+			r.Equal(raw, result.Digest.String())
 
 			// The archive file outlives the download and belongs to the caller.
 			files, err := os.ReadDir(dir)
@@ -110,10 +112,10 @@ func TestDownloadDeterministic(t *testing.T) {
 	fixture := newRepository(t)
 	var previous []byte
 	for range 3 {
-		b, _, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String()}, nil, Options{TempDir: t.TempDir()})
+		result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String()}, nil, Options{TempDir: t.TempDir()})
 		r.NoError(err)
 
-		data := readBlob(t, b)
+		data := readBlob(t, result.Blob)
 		if previous != nil {
 			r.Equal(previous, data)
 		}
@@ -144,9 +146,9 @@ func TestDownloadFailureCleanup(t *testing.T) {
 				cancel()
 			}
 
-			b, _, err := Download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{TempDir: dir, MaxDownloadSize: tc.limit})
+			result, err := Download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{TempDir: dir, MaxDownloadSize: tc.limit})
 			r.Error(err)
-			r.Nil(b)
+			r.Nil(result)
 			files, err := os.ReadDir(dir)
 			r.NoError(err)
 			r.Empty(files)
@@ -176,10 +178,10 @@ func TestSubmoduleArchive(t *testing.T) {
 	r.NoError(err)
 	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/submodule", commitHash)))
 
-	b, _, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: commitHash.String()}, nil, Options{TempDir: t.TempDir()})
+	result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: commitHash.String()}, nil, Options{TempDir: t.TempDir()})
 	r.NoError(err)
 
-	tr := tar.NewReader(bytes.NewReader(readBlob(t, b)))
+	tr := tar.NewReader(bytes.NewReader(readBlob(t, result.Blob)))
 	_, err = tr.Next()
 	r.ErrorIs(err, io.EOF, "submodule content is not part of the archive")
 }
@@ -190,10 +192,10 @@ func TestPinnedCommitWithoutRemoteHEAD(t *testing.T) {
 	fixture := newRepository(t)
 	r.NoError(fixture.Git.Storer.RemoveReference("refs/heads/main"))
 
-	b, commit, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String(), Ref: "refs/heads/main"}, nil, Options{TempDir: t.TempDir()})
+	result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String(), Ref: "refs/heads/main"}, nil, Options{TempDir: t.TempDir()})
 	r.NoError(err)
-	r.Equal(fixture.First.String(), commit)
-	r.NotNil(b)
+	r.Equal(fixture.First.String(), result.Commit)
+	r.NotNil(result.Blob)
 }
 
 func TestArchiveSizeBoundary(t *testing.T) {
@@ -201,19 +203,19 @@ func TestArchiveSizeBoundary(t *testing.T) {
 
 	fixture := newRepository(t)
 	spec := &v1.Git{Repository: fixture.Path, Commit: fixture.First.String()}
-	b, _, err := Download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+	result, err := Download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
 	r.NoError(err)
 
-	size := b.Size()
+	size := result.Blob.Size()
 
-	b, _, err = Download(t.Context(), spec, nil, Options{TempDir: t.TempDir(), MaxDownloadSize: size})
+	result, err = Download(t.Context(), spec, nil, Options{TempDir: t.TempDir(), MaxDownloadSize: size})
 	r.NoError(err)
-	r.NotNil(b)
+	r.NotNil(result.Blob)
 
 	dir := t.TempDir()
-	b, _, err = Download(t.Context(), spec, nil, Options{TempDir: dir, MaxDownloadSize: size - 1})
+	result, err = Download(t.Context(), spec, nil, Options{TempDir: dir, MaxDownloadSize: size - 1})
 	r.Error(err)
-	r.Nil(b)
+	r.Nil(result)
 	entries, err := os.ReadDir(dir)
 	r.NoError(err)
 	r.Empty(entries)
@@ -229,12 +231,13 @@ func TestPinnedArchiveContainsSelectedCommit(t *testing.T) {
 	file, err := os.CreateTemp(t.TempDir(), "archive-*.tar")
 	r.NoError(err)
 
-	expected, err := archive(t.Context(), first, file, Options{})
+	expected, expectedDigest, err := archive(t.Context(), first, file, Options{})
 	r.NoError(err)
 
-	actual, _, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String(), Ref: "main"}, nil, Options{TempDir: t.TempDir()})
+	actual, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String(), Ref: "main"}, nil, Options{TempDir: t.TempDir()})
 	r.NoError(err)
-	r.Equal(readBlob(t, expected), readBlob(t, actual))
+	r.Equal(readBlob(t, expected), readBlob(t, actual.Blob))
+	r.Equal(expectedDigest, actual.Digest)
 }
 
 func TestTransportErrorMessages(t *testing.T) {
@@ -245,9 +248,17 @@ func TestTransportErrorMessages(t *testing.T) {
 		{git.ErrRepositoryNotExists, "fetch: repository not found"},
 		{fmt.Errorf("dial: %w", transport.ErrAuthenticationRequired), "fetch: authentication required"},
 		{transport.ErrAuthorizationFailed, "fetch: authorization failed"},
-		{errors.New("https://user:token@example.invalid rejected"), "fetch: transport failed; check repository access and server trust"},
+		{
+			errors.New(`remote: https://user:token@example.invalid/repo.git rejected`),
+			"fetch: transport failed; check repository access and server trust: remote: https://xxxxx@example.invalid/repo.git rejected",
+		},
 	} {
-		require.EqualError(t, transportError(t.Context(), "fetch", tc.err), tc.want)
+		err := transportError(t.Context(), "fetch", tc.err)
+		require.EqualError(t, err, tc.want)
+		require.NotContains(t, err.Error(), "token")
+
+		// The message is ours, the cause stays reachable.
+		require.ErrorIs(t, err, tc.err)
 	}
 }
 

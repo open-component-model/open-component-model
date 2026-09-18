@@ -66,8 +66,13 @@ func TestArchiveUsesGitTree(t *testing.T) {
 	file, err := os.CreateTemp(t.TempDir(), "archive-*.tar")
 	r.NoError(err)
 
-	b, err := archive(t.Context(), c, file, Options{})
+	b, archiveDigest, err := archive(t.Context(), c, file, Options{})
 	r.NoError(err)
+
+	// The streamed digest has to agree with one taken from the finished file.
+	fromFile, ok := b.Digest()
+	r.True(ok)
+	r.Equal(fromFile, archiveDigest.String())
 
 	type entry struct {
 		typeflag byte
