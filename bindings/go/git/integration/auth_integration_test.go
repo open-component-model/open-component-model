@@ -273,7 +273,7 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 					return
 				}
 				go func() {
-					defer conn.Close()
+					defer func() { _ = conn.Close() }()
 					_ = agent.ServeAgent(keyring, conn)
 				}()
 			}
