@@ -326,14 +326,21 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	// Reuse the configurations already loaded above to look up transfer settings; a nil cfg is valid.
+	// Reuse the configurations already loaded above to look up transfer and uploader settings; a nil cfg is valid.
 	var transferCfg *transferspec.Config
+	var uploaderCfgs []*transferspec.UploaderConfig
 	if cfg != nil {
 		transferCfg, err = transferspec.LookupConfig(cfg.Config)
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 			return ctrl.Result{}, fmt.Errorf("failed to load transfer config: %w", err)
+		}
+		uploaderCfgs, err = transferspec.LookupUploaderConfigs(cfg.Config)
+		if err != nil {
+			status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+			return ctrl.Result{}, fmt.Errorf("failed to load uploader configs: %w", err)
 		}
 	}
 
@@ -344,7 +351,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	// The process takes turns to complete: resolved descriptors are cache hits, each
 	// pass enqueues the next component version of the graph until all component versions are in the cache and
 	// accounted for.
-	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg, nil, transfer.Mapping{
+	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg, uploaderCfgs, transfer.Mapping{
 		Components: []transfer.ComponentID{{
 			Component: component.Status.Component.Component,
 			Version:   component.Status.Component.Version,
