@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"runtime"
 
@@ -21,16 +22,55 @@ import (
 type Blob struct {
 	*filesystem.Blob
 	path string
+	// headers are the response headers of the download that produced this blob.
+	headers http.Header
+	// digests holds hex digests computed during the download, keyed by the
+	// caller-supplied [DigestAlgorithm.Name].
+	digests map[string]string
+	// precalculated, when non-empty, is returned by [Blob.Digest] verbatim,
+	// avoiding a re-read of the file to recompute the digest.
+	precalculated string
 }
 
 var (
 	_ blob.ReadOnlyBlob          = (*Blob)(nil)
 	_ blob.SizeAware             = (*Blob)(nil)
 	_ blob.DigestAware           = (*Blob)(nil)
+	_ blob.DigestPrecalculatable = (*Blob)(nil)
 	_ blob.MediaTypeAware        = (*Blob)(nil)
 	_ blob.MediaTypeOverrideable = (*Blob)(nil)
 	_ io.Closer                  = (*Blob)(nil)
 )
+
+// Headers returns the response headers of the download that produced this blob.
+func (b *Blob) Headers() http.Header {
+	return b.headers
+}
+
+// Digests returns the hex digests computed during the download, keyed by the
+// [DigestAlgorithm.Name] the caller requested via [WithDigestAlgorithms].
+func (b *Blob) Digests() map[string]string {
+	return b.digests
+}
+
+// Digest returns the precalculated digest when one was set, otherwise it falls
+// back to the embedded blob's lazily computed digest.
+func (b *Blob) Digest() (string, bool) {
+	if b.precalculated != "" {
+		return b.precalculated, true
+	}
+	return b.Blob.Digest()
+}
+
+// HasPrecalculatedDigest reports whether a precalculated digest was set.
+func (b *Blob) HasPrecalculatedDigest() bool {
+	return b.precalculated != ""
+}
+
+// SetPrecalculatedDigest sets the digest returned by [Blob.Digest] verbatim.
+func (b *Blob) SetPrecalculatedDigest(digest string) {
+	b.precalculated = digest
+}
 
 // removeTempFile deletes the file at path. A file that is already gone is not an
 // error, which makes repeated calls (Close plus the cleanup) idempotent without
