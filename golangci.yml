@@ -43,6 +43,7 @@ linters:
     - err113
     - errcheck
     - exhaustive
+    - exhaustruct
     - exhaustruct_v5
     - forcetypeassert
     - funcorder
