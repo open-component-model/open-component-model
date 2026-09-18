@@ -360,6 +360,185 @@ signatures:
 **Fix:** Move the contents of the old spec file under the `signer` field of a `signing.config.ocm.software/v1alpha1` entry and drop the flag.
 
 {{< /tab >}}
+{{< tab "Notation" >}}
+
+Sign with a Notary Project **Notation** signature. Notation is key-based like RSA — you bring a private key and its X.509 certificate chain — but instead of a raw signature byte string it produces a standardized Notary Project signature envelope (JWS by default, or COSE). OCM runs it fully in-process via the `notation-go` library: there is no external `notation` binary to install and no `~/.config/notation` to manage.
+
+Unlike Sigstore (other tabs), you skip the browser login and instead bring a key pair plus a certificate that your verifiers will trust.
+
+<!-- markdownlint-disable-next-line MD024 -->
+## You'll end up with
+
+- A component version with a Notation signature (Notary Project JWS envelope by default) attached
+
+**Estimated time:** ~3 minutes
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Prerequisites
+
+- [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
+- [Signing credentials configured]({{< relref "configure-signing-credentials.md" >}})
+- A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
+
+{{< callout context="note" >}}
+<!-- TODO(#3625): restore the link to https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0030_notation_signing.md once this PR lands on main. -->
+For the end-to-end learning walkthrough including key generation and identity pinning, see [Tutorial: Notation (Notary Project)]({{< relref "docs/tutorials/signing/notation.md" >}}). Design background lives in ADR 0030: Notation Signing.
+{{< /callout >}}
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Steps
+
+{{< steps >}}
+
+{{< step >}}
+
+### Configure the Notation signer
+
+Add a signing entry to your `.ocmconfig` that selects the Notation signing handler. RSA is the default when no signer is configured, so this entry is what tells `ocm sign` to use Notation. Append it to the `configurations` list that already holds your Notation credentials:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: NotationSigningConfiguration/v1alpha1
+```
+
+With the credentials from the prerequisites, the complete `.ocmconfig` is:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: Notation/v1
+      signature: default
+    credentials:
+    - type: NotationCredentials/v1
+      privateKeyPEMFile: /path/to/notation-key.pem
+      certificateChainPEMFile: /path/to/notation-cert.pem
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: NotationSigningConfiguration/v1alpha1
+```
+
+The certificate chain is required for signing — `notation-go` embeds it into the signature envelope, so a private key alone is not enough. The certificate must carry the **Code Signing** extended key usage and the **digitalSignature** key usage; the tutorial above shows the `openssl` recipe.
+
+By default the envelope is JWS (`application/jose+json`). To emit a COSE envelope instead, add one extra line:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: NotationSigningConfiguration/v1alpha1
+    envelopeMediaType: application/cose                               # added
+```
+
+{{< callout context="note" >}}
+Verification reads its handler from the same entry, under `verifier` instead of `signer`. Add it now so the [verify how-to → Notation tab]({{< relref "verify-component-version.md" >}}) works against this config.
+{{< /callout >}}
+
+{{< /step >}}
+
+{{< step >}}
+
+### Sign the component version
+
+Run the sign command. The Notation handler comes from the config entry you just added.
+
+**Local CTF archive:**
+
+```bash
+ocm sign cv --config ./.ocmconfig \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+**Remote OCI registry:**
+
+```bash
+ocm sign cv --config ./.ocmconfig \
+  ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
+```
+
+{{< details "Expected output from signing" >}}
+
+```text
+digest:
+  hashAlgorithm: SHA-256
+  normalisationAlgorithm: jsonNormalisation/v4alpha1
+  value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
+name: default
+signature:
+  algorithm: Notation/v1alpha1
+  mediaType: application/jose+json
+  value: eyJwYXlsb2FkIjoiZXlKMFlYSm5aWFJCY25ScFptRmpkQ0k2...
+
+time=2026-05-20T15:32:55.725+02:00 level=INFO msg="signed successfully" name=default digest=4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha1
+```
+
+With `envelopeMediaType: application/cose`, `mediaType` is `application/cose` instead.
+
+{{< /details >}}
+
+The `value` field is the base64-encoded Notation signature envelope. It embeds the signature bytes and your certificate chain; nothing needs to be fetched at verify time.
+
+{{< /step >}}
+
+{{< step >}}
+
+### Verify the signature was added
+
+Check that the signature is present in the component descriptor:
+
+```bash
+ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -o yaml
+```
+
+Look for the `signatures` section in the output:
+
+```yaml
+signatures:
+  - name: default
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v4alpha1
+      value: 4e37618...
+    signature:
+      algorithm: Notation/v1alpha1
+      mediaType: application/jose+json
+      value: <base64-notation-envelope>
+```
+
+{{< /step >}}
+{{< /steps >}}
+
+<!-- markdownlint-disable-next-line MD024 -->
+## Troubleshooting
+
+### Symptom: `Error: signing failed: private key not found`
+
+**Cause:** No matching `Notation/v1` consumer entry in `.ocmconfig` — either the consumer block is missing, the `signature:` name doesn't match `--signature`, or `privateKeyPEMFile` (or `privateKeyPEM`) isn't set.
+
+**Fix:** Confirm the consumer block exists and the `signature:` value matches. Without `--signature`, OCM looks for `signature: default`. See [How-To: Configure Signing Credentials → Notation]({{< relref "configure-signing-credentials.md" >}}).
+
+### Symptom: `Error: signing failed: certificate chain not found`
+
+**Cause:** The `NotationCredentials` entry has no `certificateChainPEMFile` (or `certificateChainPEM`). Unlike plain RSA signing, a private key alone is not enough — the chain is embedded into the signature envelope.
+
+**Fix:** Point `certificateChainPEMFile` at a PEM file containing the signer leaf plus any intermediate certificates.
+
+### Symptom: `Error: signature "default" already exists`
+
+**Cause:** The component version already carries a signature with that name.
+
+**Fix:** Pass `--force` to overwrite, or pick a different `--signature <name>` to add a second signature alongside the first.
+
+### Symptom: Permission denied on registry
+
+**Cause:** Missing write access to the OCI registry.
+
+**Fix:** Ensure your `.ocmconfig` file is configured with credentials for the registry.
+See [How-To: Configure Credentials for Multiple Registries]({{< relref "configure-multiple-credentials.md" >}}) for details.
+
+{{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}
 
 Sign with [Sigstore](https://www.sigstore.dev/) by logging in via your browser — no key pair to generate, no public key to distribute. (For CI/CD pipelines without a browser, see the next tab.)

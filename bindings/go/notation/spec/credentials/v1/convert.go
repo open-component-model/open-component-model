@@ -1,0 +1,66 @@
+package v1
+
+import (
+	"fmt"
+
+	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+const (
+	credentialKeyPrivateKeyPEM                = "privateKeyPEM"
+	credentialKeyPrivateKeyPEMFile            = "privateKeyPEMFile"
+	credentialKeyCertificateChainPEM          = "certificateChainPEM"
+	credentialKeyCertificateChainPEMFile      = "certificateChainPEMFile"
+	credentialKeyTrustedCACertificatesPEM     = "trustedCACertificatesPEM"
+	credentialKeyTrustedCACertificatesPEMFile = "trustedCACertificatesPEMFile"
+)
+
+var convertScheme = runtime.NewScheme()
+
+func init() {
+	convertScheme.MustRegisterWithAlias(&NotationCredentials{},
+		VersionedType,
+		runtime.NewUnversionedType(NotationCredentialsType),
+	)
+	v1.MustRegister(convertScheme)
+}
+
+// ConvertToNotationCredentials converts [runtime.Typed] into [NotationCredentials].
+// Direct conversion as well as converting from [v1.DirectCredentials] is supported.
+// Other supported [runtime.Typed] implementations are [runtime.Raw].
+// For unsupported [runtime.Typed] implementations, an error will be returned.
+func ConvertToNotationCredentials(creds runtime.Typed) (*NotationCredentials, error) {
+	typed, err := convertScheme.NewObject(creds.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("error converting credential type: %w", err)
+	}
+
+	if err = convertScheme.Convert(creds, typed); err != nil {
+		return nil, fmt.Errorf("error converting credential type: %w", err)
+	}
+
+	switch t := typed.(type) {
+	case *v1.DirectCredentials:
+		return fromDirectCredentials(t.Properties), nil
+	case *NotationCredentials:
+		return t, nil
+	}
+
+	return nil, fmt.Errorf("unsupported credential type %v", typed.GetType())
+}
+
+// fromDirectCredentials converts a DirectCredentials properties map into typed
+// NotationCredentials. A nil map is safe and returns a NotationCredentials with
+// only the type set.
+func fromDirectCredentials(properties map[string]string) *NotationCredentials {
+	return &NotationCredentials{
+		Type:                         VersionedType,
+		PrivateKeyPEM:                properties[credentialKeyPrivateKeyPEM],
+		PrivateKeyPEMFile:            properties[credentialKeyPrivateKeyPEMFile],
+		CertificateChainPEM:          properties[credentialKeyCertificateChainPEM],
+		CertificateChainPEMFile:      properties[credentialKeyCertificateChainPEMFile],
+		TrustedCACertificatesPEM:     properties[credentialKeyTrustedCACertificatesPEM],
+		TrustedCACertificatesPEMFile: properties[credentialKeyTrustedCACertificatesPEMFile],
+	}
+}

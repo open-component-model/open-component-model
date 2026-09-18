@@ -970,3 +970,7 @@ RGW
 Cloudflare
 unversioned
 BuildKit
+JWS
+COSE
+CRL
+OCSP

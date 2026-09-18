@@ -34,6 +34,7 @@ OCM ships with the following built-in credential types:
 | [`GitHubCredentials/v1`](#githubcredentialsv1)             | `GitHubRepository` consumers             | GitHub and GitHub Enterprise REST API token auth                |
 | [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
 | [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
+| [`NotationCredentials/v1`](#notationcredentialsv1)         | `Notation/v1` consumers                  | Notary Project (Notation) signing key, chain, and trust anchors |
 | [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers      | OIDC token for Sigstore keyless signing via Fulcio              |
 | [`TrustedRoot/v1alpha1`](#trustedrootv1alpha1)             | `SigstoreVerifier/v1alpha1` consumers    | Sigstore trust material for private infrastructure verification |
 | [`DirectCredentials/v1`](#directcredentialsv1)             | Any consumer                             | Legacy untyped key-value fallback (also `Credentials/v1`)       |
@@ -388,6 +389,61 @@ consumers:
 ### Used With
 
 `GPG/v1alpha1` consumer identities (signing and verification with OpenPGP keys).
+
+---
+
+## NotationCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/notation/v1/NotationCredentials.schema.json" >}}
+
+Signing requires `privateKeyPEM`/`privateKeyPEMFile` and `certificateChainPEM`/`certificateChainPEMFile` (the signer
+leaf plus any intermediates, embedded into the signature envelope). Verification requires
+`trustedCACertificatesPEM`/`trustedCACertificatesPEMFile` (the CA certificate the signer chain must terminate at); there
+is no system-root fallback. For every field, the inline PEM form takes precedence over the file form when both are set.
+
+### Example
+
+File-based (recommended):
+
+```yaml
+consumers:
+  - identity:
+      type: Notation/v1
+      signature: default
+    credentials:
+      - type: NotationCredentials/v1
+        privateKeyPEMFile: /path/to/private-key.pem
+        certificateChainPEMFile: /path/to/certificate-chain.pem
+        trustedCACertificatesPEMFile: /path/to/trusted-ca.pem
+```
+
+Inline PEM:
+
+```yaml
+consumers:
+  - identity:
+      type: Notation/v1
+    credentials:
+      - type: NotationCredentials/v1
+        privateKeyPEM: |
+          -----BEGIN PRIVATE KEY-----
+          MIIEvQIBADANBgkqhkiG9w0...
+          -----END PRIVATE KEY-----
+        certificateChainPEM: |
+          -----BEGIN CERTIFICATE-----
+          MIIEbDCCAtSgAwIBAgIBUzAN...
+          -----END CERTIFICATE-----
+        trustedCACertificatesPEM: |
+          -----BEGIN CERTIFICATE-----
+          MIIEbDCCAtSgAwIBAgIBUzAN...
+          -----END CERTIFICATE-----
+```
+
+### Used With
+
+[`Notation/v1`]({{< relref "credential-consumer-identities.md#notationv1" >}}) consumer identities (Notary Project
+signing and verification). The signing certificate must carry the Code Signing extended key usage; see
+[Tutorial: Notation (Notary Project)]({{< relref "docs/tutorials/signing/notation.md" >}}) for generating it.
 
 ---
 

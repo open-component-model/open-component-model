@@ -45,6 +45,7 @@ The following types are defined by the core OCM modules:
 | [`S3`](#s3)                                   | Authenticating against S3 and S3-compatible buckets |
 | [`GitHubRepository`](#githubrepository)       | Authenticating against the GitHub REST API          |
 | [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys             |
+| [`Notation/v1`](#notationv1)                  | Providing signing and verification keys             |
 
 ---
 
@@ -621,6 +622,75 @@ ocm sign cv --signature prod <component-version>
     - type: RSACredentials/v1
       privateKeyPEMFile: /path/to/private-key.pem
 ```
+
+---
+
+## Notation/v1
+
+Used when OCM signs or verifies component versions with a Notary Project (Notation) signature envelope.
+
+The identity is **symmetric**: OCM uses the same `Notation/v1` identity type for both signing and verification.
+This differs from Sigstore, which uses separate `SigstoreSigner/v1alpha1` and `SigstoreVerifier/v1alpha1` identities.
+
+### Identity Attributes
+
+| Attribute   | Required | Description                                                                                                                |
+|-------------|----------|----------------------------------------------------------------------------------------------------------------------------|
+| `type`      | Yes      | Must be `Notation/v1`                                                                                                      |
+| `signature` | No       | Logical signature name (e.g. `default`). Must match the `--signature` flag used with `ocm sign cv`. Defaults to `default`. |
+
+### Credential Properties
+
+| Property                       | Used For     | Description                                                                                            |
+|--------------------------------|--------------|--------------------------------------------------------------------------------------------------------|
+| `privateKeyPEM`                | Signing      | Inline PEM-encoded private key (PKCS#1 or PKCS#8)                                                      |
+| `privateKeyPEMFile`            | Signing      | Path to PEM-encoded private key file (PKCS#1 or PKCS#8)                                                |
+| `certificateChainPEM`          | Signing      | Inline PEM-encoded signer certificate chain (leaf + intermediates), embedded in the signature envelope |
+| `certificateChainPEMFile`      | Signing      | Path to PEM file containing the signer's certificate chain                                             |
+| `trustedCACertificatesPEM`     | Verification | Inline PEM bundle of the trusted CA certificate(s) the signer chain must terminate at                  |
+| `trustedCACertificatesPEMFile` | Verification | Path to PEM bundle of trusted CA certificates                                                          |
+
+Signing requires a private key and a certificate chain in the same entry. Verification requires the trusted CA
+certificates. You can specify all of them in a single entry to use it for both signing and verification. Inline PEM
+content takes precedence over the file form of the same field.
+
+Use [`NotationCredentials/v1`]({{< relref "credential-types.md#notationcredentialsv1" >}}) for the full typed field
+reference.
+
+### Matching Behavior
+
+Like other signing identities, Notation signing identities use **equality matching**: the attributes of the lookup
+identity must all be present in the configured consumer identity with the same value. `signature` is optional in a
+consumer entry — an entry that omits it matches any signature name.
+
+### Examples
+
+**Signing and verification with default settings:**
+
+```yaml
+- identity:
+    type: Notation/v1
+  credentials:
+    - type: NotationCredentials/v1
+      privateKeyPEMFile: /path/to/private-key.pem
+      certificateChainPEMFile: /path/to/certificate-chain.pem
+      trustedCACertificatesPEMFile: /path/to/trusted-ca.pem
+```
+
+**Scope to a single signature name** (matches only `ocm sign cv --signature dev ...`):
+
+```yaml
+- identity:
+    type: Notation/v1
+    signature: dev
+  credentials:
+    - type: NotationCredentials/v1
+      privateKeyPEMFile: /path/to/dev/private-key.pem
+      certificateChainPEMFile: /path/to/dev/certificate-chain.pem
+```
+
+For a full walkthrough, including generating the signer key pair and certificate, see
+[Tutorial: Sign Component Versions with Notation]({{< relref "docs/tutorials/signing/notation.md" >}}).
 
 ---
 
