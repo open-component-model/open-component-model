@@ -209,39 +209,25 @@ func removeIgnoringMissing(path string) error {
 	return nil
 }
 
-// transportError names the common transport failures and keeps a redacted cause
-// for the ones it cannot name.
+// transportError names the common transport failures and keeps a redacted cause.
 func transportError(ctx context.Context, operation string, err error) error {
 	if ctx.Err() != nil {
 		return fmt.Errorf("%s: %w", operation, ctx.Err())
 	}
 
+	// The cause is added with %s and not %w: %w prints the error itself, and a
+	// transport error quotes the remote URL with its credentials.
 	switch {
 	case errors.Is(err, git.ErrRepositoryNotExists):
-		return mask(err, "%s: repository not found", operation)
+		return fmt.Errorf("%s: repository not found: %s", operation, redact(err))
 	case errors.Is(err, transport.ErrAuthenticationRequired):
-		return mask(err, "%s: authentication required", operation)
+		return fmt.Errorf("%s: authentication required: %s", operation, redact(err))
 	case errors.Is(err, transport.ErrAuthorizationFailed):
-		return mask(err, "%s: authorization failed", operation)
+		return fmt.Errorf("%s: authorization failed: %s", operation, redact(err))
 	default:
-		return mask(err, "%s: transport failed; check repository access and server trust: %s", operation, redact(err))
+		return fmt.Errorf("%s: transport failed; check repository access and server trust: %s", operation, redact(err))
 	}
 }
-
-// mask reports err under a message of our own, because a transport error quotes
-// the remote URL with its credentials. errors.Is and errors.As still reach err.
-func mask(err error, format string, args ...any) error {
-	return &maskedError{err: err, message: fmt.Sprintf(format, args...)}
-}
-
-type maskedError struct {
-	err     error
-	message string
-}
-
-func (e *maskedError) Error() string { return e.message }
-
-func (e *maskedError) Unwrap() error { return e.err }
 
 // userinfo matches the credentials a quoted remote URL carries into an error.
 var userinfo = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/@\s]+@`)

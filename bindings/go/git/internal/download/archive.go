@@ -33,7 +33,7 @@ func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Opt
 	}
 
 	digester := digest.Canonical.Digester()
-	limited := &limitedWriter{Writer: file, limit: opts.MaxDownloadSize}
+	limited := &limitedWriter{Writer: file, limit: opts.MaxArchiveSize}
 	tw := tar.NewWriter(io.MultiWriter(limited, digester.Hash()))
 	err = tree.Files().ForEach(func(f *object.File) error {
 		if err := ctx.Err(); err != nil {
@@ -95,7 +95,7 @@ type limitedWriter struct {
 
 func (w *limitedWriter) Write(p []byte) (int, error) {
 	if w.limit > 0 && int64(len(p)) > w.limit-w.written {
-		return 0, fmt.Errorf("git archive exceeds maximum download size of %d bytes", w.limit)
+		return 0, fmt.Errorf("git archive exceeds the maximum size of %d bytes", w.limit)
 	}
 
 	n, err := w.Writer.Write(p)

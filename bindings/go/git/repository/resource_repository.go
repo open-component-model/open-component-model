@@ -32,7 +32,7 @@ const (
 )
 
 type ResourceRepository struct {
-	maxDownloadSize  *int64
+	maxArchiveSize   *int64
 	caBundle         []byte
 	hostKeyCallback  ssh.HostKeyCallback
 	filesystemConfig *filesystemv1alpha1.Config
@@ -62,7 +62,7 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 	}
 
 	return &ResourceRepository{
-		maxDownloadSize:  options.MaxDownloadSize,
+		maxArchiveSize:   options.MaxArchiveSize,
 		caBundle:         options.CABundle,
 		hostKeyCallback:  options.HostKeyCallback,
 		filesystemConfig: filesystemConfig,
@@ -82,14 +82,14 @@ func (r *ResourceRepository) tempFolder() string {
 // downloadOptions resolves the per-download configuration, applying the defaults
 // for anything the caller left unset.
 func (r *ResourceRepository) downloadOptions(tempDir string) download.Options {
-	maxDownloadSize := download.DefaultMaxDownloadSize
-	if r.maxDownloadSize != nil {
-		maxDownloadSize = *r.maxDownloadSize
+	maxArchiveSize := download.DefaultMaxArchiveSize
+	if r.maxArchiveSize != nil {
+		maxArchiveSize = *r.maxArchiveSize
 	}
 
 	return download.Options{
 		TempDir:         tempDir,
-		MaxDownloadSize: maxDownloadSize,
+		MaxArchiveSize:  maxArchiveSize,
 		CABundle:        r.caBundle,
 		HostKeyCallback: r.hostKeyCallback,
 	}

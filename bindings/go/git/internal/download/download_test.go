@@ -146,7 +146,7 @@ func TestDownloadFailureCleanup(t *testing.T) {
 				cancel()
 			}
 
-			result, err := Download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{TempDir: dir, MaxDownloadSize: tc.limit})
+			result, err := Download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{TempDir: dir, MaxArchiveSize: tc.limit})
 			r.Error(err)
 			r.Nil(result)
 			files, err := os.ReadDir(dir)
@@ -208,12 +208,12 @@ func TestArchiveSizeBoundary(t *testing.T) {
 
 	size := result.Blob.Size()
 
-	result, err = Download(t.Context(), spec, nil, Options{TempDir: t.TempDir(), MaxDownloadSize: size})
+	result, err = Download(t.Context(), spec, nil, Options{TempDir: t.TempDir(), MaxArchiveSize: size})
 	r.NoError(err)
 	r.NotNil(result.Blob)
 
 	dir := t.TempDir()
-	result, err = Download(t.Context(), spec, nil, Options{TempDir: dir, MaxDownloadSize: size - 1})
+	result, err = Download(t.Context(), spec, nil, Options{TempDir: dir, MaxArchiveSize: size - 1})
 	r.Error(err)
 	r.Nil(result)
 	entries, err := os.ReadDir(dir)
@@ -245,9 +245,13 @@ func TestTransportErrorMessages(t *testing.T) {
 		err  error
 		want string
 	}{
-		{git.ErrRepositoryNotExists, "fetch: repository not found"},
-		{fmt.Errorf("dial: %w", transport.ErrAuthenticationRequired), "fetch: authentication required"},
-		{transport.ErrAuthorizationFailed, "fetch: authorization failed"},
+		{git.ErrRepositoryNotExists, "fetch: repository not found: repository does not exist"},
+		{
+			// What a server says about a rejected login is the actionable part.
+			fmt.Errorf("%w: remote: Invalid username or password", transport.ErrAuthenticationRequired),
+			"fetch: authentication required: authentication required: remote: Invalid username or password",
+		},
+		{transport.ErrAuthorizationFailed, "fetch: authorization failed: authorization failed"},
 		{
 			errors.New(`remote: https://user:token@example.invalid/repo.git rejected`),
 			"fetch: transport failed; check repository access and server trust: remote: https://xxxxx@example.invalid/repo.git rejected",
@@ -256,9 +260,6 @@ func TestTransportErrorMessages(t *testing.T) {
 		err := transportError(t.Context(), "fetch", tc.err)
 		require.EqualError(t, err, tc.want)
 		require.NotContains(t, err.Error(), "token")
-
-		// The message is ours, the cause stays reachable.
-		require.ErrorIs(t, err, tc.err)
 	}
 }
 
