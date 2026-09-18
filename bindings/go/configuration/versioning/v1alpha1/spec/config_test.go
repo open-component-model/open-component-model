@@ -127,6 +127,36 @@ func TestRegistry_SelectorlessSchemeFails(t *testing.T) {
 	r.Contains(err.Error(), "must set exactly one of pattern or builtin")
 }
 
+func TestRegistry_BuiltinCatalogSchemes(t *testing.T) {
+	r := require.New(t)
+
+	// Every catalog built-in is selectable by name from configuration and
+	// behaves like the equivalent regex scheme.
+	cfg := &versioningspec.Config{
+		Schemes: []*versioningspec.VersionScheme{
+			{Name: "cal", Builtin: "calver-full"},
+			{Name: "ubuntu", Builtin: "calver-ubuntu"},
+			{Name: "build", Builtin: "build-number"},
+			{Name: "semver", Builtin: "loose-semver"},
+		},
+	}
+	reg, err := cfg.Registry()
+	r.NoError(err)
+	r.Len(reg.Schemes(), 4)
+	r.True(reg.Valid("2024.03.15"))
+	r.True(reg.Valid("22.04"))
+	r.True(reg.Valid("1837"))
+	r.True(reg.Valid("1.2.3"))
+
+	// Unknown builtin lists the valid names.
+	_, err = (&versioningspec.Config{
+		Schemes: []*versioningspec.VersionScheme{{Name: "bad", Builtin: "calver"}},
+	}).Registry()
+	r.Error(err)
+	r.Contains(err.Error(), "unknown builtin")
+	r.Contains(err.Error(), "calver-full")
+}
+
 func TestRegistry_NilOrEmptyConfigIsDefault(t *testing.T) {
 	r := require.New(t)
 

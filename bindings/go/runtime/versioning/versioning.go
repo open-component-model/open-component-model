@@ -90,6 +90,75 @@ func NewLooseSemverScheme() Scheme {
 	return newLooseSemverScheme()
 }
 
+// Built-in scheme names selectable from configuration via a scheme entry's
+// builtin field. Each is a fixed regular expression plus comparison groups,
+// documented in the versioning configuration reference. loose-semver is special:
+// it wraps github.com/Masterminds/semver/v3 rather than a regex.
+const (
+	// BuiltinLooseSemver is loose semantic versioning (the historical default).
+	BuiltinLooseSemver = "loose-semver"
+	// BuiltinCalVerFull is calendar versioning YYYY.MM.DD (e.g. "2024.03.15").
+	BuiltinCalVerFull = "calver-full"
+	// BuiltinCalVerMonth is calendar versioning YYYY.MM (e.g. "2024.03").
+	BuiltinCalVerMonth = "calver-month"
+	// BuiltinCalVerUbuntu is Ubuntu-style calendar versioning YY.MM (e.g. "22.04").
+	BuiltinCalVerUbuntu = "calver-ubuntu"
+	// BuiltinCalVerMicro is calendar versioning YYYY.M(M).PATCH (e.g. "2024.4.1").
+	BuiltinCalVerMicro = "calver-micro"
+	// BuiltinAWSDate is AWS-style date versioning YYYY-MM-DD (e.g. "2024-03-15").
+	BuiltinAWSDate = "aws-date"
+	// BuiltinBuildNumber is a monotonic integer build number (e.g. "1837").
+	BuiltinBuildNumber = "build-number"
+)
+
+// builtinRegexSchemes defines the regex-backed built-in schemes by name. Each
+// entry is exactly the pattern and comparison groups a user would otherwise
+// paste into a scheme entry, so a built-in behaves identically to the equivalent
+// custom regex scheme.
+var builtinRegexSchemes = map[string]Scheme{
+	BuiltinCalVerFull: NewRegexScheme(BuiltinCalVerFull,
+		regexp.MustCompile(`^(?P<year>\d{4})\.(?P<month>\d{2})\.(?P<day>\d{2})$`),
+		[]string{"year", "month", "day"}),
+	BuiltinCalVerMonth: NewRegexScheme(BuiltinCalVerMonth,
+		regexp.MustCompile(`^(?P<year>\d{4})\.(?P<month>\d{2})$`),
+		[]string{"year", "month"}),
+	BuiltinCalVerUbuntu: NewRegexScheme(BuiltinCalVerUbuntu,
+		regexp.MustCompile(`^(?P<year>\d{2})\.(?P<month>\d{2})$`),
+		[]string{"year", "month"}),
+	BuiltinCalVerMicro: NewRegexScheme(BuiltinCalVerMicro,
+		regexp.MustCompile(`^(?P<year>\d{4})\.(?P<month>\d{1,2})\.(?P<patch>\d+)$`),
+		[]string{"year", "month", "patch"}),
+	BuiltinAWSDate: NewRegexScheme(BuiltinAWSDate,
+		regexp.MustCompile(`^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})$`),
+		[]string{"year", "month", "day"}),
+	BuiltinBuildNumber: NewRegexScheme(BuiltinBuildNumber,
+		regexp.MustCompile(`^(?P<build>\d+)$`),
+		[]string{"build"}),
+}
+
+// BuiltinScheme returns the built-in [Scheme] with the given name and whether it
+// exists. The loose-semver built-in and every regex-backed catalog scheme are
+// resolvable; comparisonGroups must not be set alongside a builtin.
+func BuiltinScheme(name string) (Scheme, bool) {
+	if name == BuiltinLooseSemver {
+		return NewLooseSemverScheme(), true
+	}
+	s, ok := builtinRegexSchemes[name]
+	return s, ok
+}
+
+// BuiltinNames returns the sorted list of built-in scheme names, for
+// diagnostics and documentation.
+func BuiltinNames() []string {
+	names := make([]string, 0, len(builtinRegexSchemes)+1)
+	names = append(names, BuiltinLooseSemver)
+	for name := range builtinRegexSchemes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // Schemes returns the registry's schemes in priority order.
 func (r *Registry) Schemes() []Scheme {
 	return r.schemes
