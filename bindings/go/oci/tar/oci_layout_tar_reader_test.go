@@ -216,7 +216,7 @@ func TestCloseableReadOnlyStore_MainArtifacts(t *testing.T) {
 			main := pack(t, w, "main", "", nil)
 			referrer = pack(t, w, "sbom-referrer", "application/spdx+json", &main)
 			marked := referrer
-			marked.Annotations = map[string]string{AnnotationLayoutRoot: "true"}
+			marked.Annotations = map[string]string{annotations.OCMLayoutRoot: "true"}
 			require.NoError(t, w.Tag(t.Context(), marked, referrer.Digest.String()))
 		})
 
@@ -233,7 +233,7 @@ func TestCloseableReadOnlyStore_MainArtifacts(t *testing.T) {
 			main = pack(t, w, "main", "", nil)
 			pack(t, w, "other", "", nil)
 			marked := main
-			marked.Annotations = map[string]string{AnnotationLayoutRoot: "true"}
+			marked.Annotations = map[string]string{annotations.OCMLayoutRoot: "true"}
 			for _, ref := range []string{main.Digest.String(), "v1.0.0", "latest"} {
 				require.NoError(t, w.Tag(t.Context(), marked, ref))
 			}

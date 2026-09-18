@@ -15,6 +15,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 )
 
@@ -78,7 +79,7 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyGraph
 	if root.Annotations == nil {
 		root.Annotations = make(map[string]string, 1)
 	}
-	root.Annotations[AnnotationLayoutRoot] = "true"
+	root.Annotations[annotations.OCMLayoutRoot] = "true"
 
 	for _, ref := range append([]string{base.Digest.String()}, opts.Tags...) {
 		if err = errors.Join(err, target.Tag(ctx, root, ref)); err != nil {
@@ -161,7 +162,7 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 
 // pickTopLevelDescriptor works out which manifest in the layout was the one
 // requested, trying three things in order: if there is only one, it wins; else
-// the entry marked with [AnnotationLayoutRoot]; else the entry named by
+// the entry marked with [annotations.OCMLayoutRoot]; else the entry named by
 // `org.opencontainers.image.ref.name`, which is only ever set for tag-based
 // references. Returns an error when none of the three settles it, because a
 // wrong guess here silently packs the wrong artifact.

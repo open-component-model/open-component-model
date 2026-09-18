@@ -7,11 +7,9 @@ import (
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
-)
 
-// AnnotationLayoutRoot names the artifact a layout was built for, on that
-// artifact's index.json entry, with the value "true".
-const AnnotationLayoutRoot = "software.ocm.layout.root"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
+)
 
 // TopLevelArtifacts picks the artifacts a layout is actually about, out of
 // everything its index lists.
@@ -55,7 +53,7 @@ func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates 
 	return topLevel
 }
 
-// markedRoot returns the artifact carrying [AnnotationLayoutRoot]. It counts
+// markedRoot returns the artifact carrying [annotations.OCMLayoutRoot]. It counts
 // digests rather than entries, because index.json lists a descriptor once per
 // reference name it was tagged with: a root that is both tagged and addressed
 // by digest appears several times and is still one root.
@@ -63,7 +61,7 @@ func markedRoot(candidates []ociImageSpecV1.Descriptor) (ociImageSpecV1.Descript
 	var root ociImageSpecV1.Descriptor
 	marked := make(map[digest.Digest]struct{}, 1)
 	for _, candidate := range candidates {
-		if candidate.Annotations[AnnotationLayoutRoot] == "true" {
+		if candidate.Annotations[annotations.OCMLayoutRoot] == "true" {
 			root = candidate
 			marked[candidate.Digest] = struct{}{}
 		}
