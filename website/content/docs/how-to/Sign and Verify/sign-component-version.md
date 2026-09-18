@@ -755,6 +755,36 @@ OCM checks `SIGSTORE_ID_TOKEN` first, then `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, the
 {{< /tab >}}
 {{< /tabs >}}
 
+## Optional: Add an RFC 3161 timestamp
+
+{{< callout context="note" title="Early access" >}}
+RFC 3161 timestamping is currently being rolled out and we are awaiting feedback. The interface may evolve.
+{{< /callout >}}
+
+A timestamp from a trusted Timestamping Authority (TSA) proves *when* a signature was created, so it keeps verifying
+after the signing certificate expires. It works with any signing algorithm above and is entirely optional.
+
+Add `--tsa` (uses the default public TSA, `https://timestamp.digicert.com`) or `--tsa-url <url>` (a specific TSA) to
+the sign command:
+
+```bash
+ocm sign cv --tsa-url https://timestamp.digicert.com \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+OCM records the TSA URL as a signed label, requests a timestamp token for the signed digest, and stores it in the
+signature's `timestamp` field. Verifiers then need the TSA's root certificates in their credential graph — see
+[How-To: Verify a Component Version]({{< relref "verify-component-version.md" >}}) and, for the trust model and
+the transport-vs-token certificate distinction,
+[Concept: RFC 3161 Timestamping]({{< relref "signing-and-verification-concept.md#rfc-3161-timestamping" >}}).
+
+{{< callout context="note" title="Reaching a private TSA over HTTPS" >}}
+If your TSA presents a certificate issued by an internal CA, add that CA to the
+[HTTP client configuration]({{< relref "docs/reference/http-client-configuration.md#tls-trust-custom-root-cas" >}})
+(`rootCAsPEM` / `rootCAsPEMFile`) so the signing-time request can establish TLS. This is separate from the TSA
+*token* roots that verifiers configure.
+{{< /callout >}}
+
 ## Next Steps
 
 - [How-to: Verify a Component Version]({{< relref "verify-component-version.md" >}}) — Verify signatures (RSA or Sigstore)

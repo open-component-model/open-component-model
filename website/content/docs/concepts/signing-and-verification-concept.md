@@ -360,6 +360,107 @@ The signer authenticates to an OIDC identity provider; Fulcio binds that identit
 
 For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/tutorials/signing/pem.md" >}}).
 
+## RFC 3161 Timestamping
+
+{{< callout context="note" title="TSA timestamping is in early access" icon="outline/info-circle" >}}
+RFC 3161 timestamping is currently being rolled out and we are awaiting feedback. The interface may evolve based on that feedback.
+{{< /callout >}}
+
+A signature verifies only while the signing certificate is valid. With certificate-chain trust (PEM encoding) or the
+short-lived certificates common to Sigstore, a signature can become unverifiable once the certificate expires — even
+though it was valid when created. RFC 3161 timestamping solves this: at signing time a trusted **Timestamping Authority
+(TSA)** counter-signs the digest, proving *when* the signature was made. At verification time the certificate chain is
+then validated against the TSA-attested time instead of the current time, so a signature created while the certificate
+was valid keeps verifying after it expires.
+
+Timestamping is **optional** and **encoding-agnostic** — it works with Plain and PEM signatures alike. Signatures
+without a timestamp continue to verify unchanged.
+
+### How It Works
+
+```mermaid
+flowchart TB
+    subgraph sign ["Sign"]
+        A[Compute digest] --> B[Sign digest]
+        A --> C[Request timestamp from TSA]
+        C --> D["Attach timestamp token to signature"]
+    end
+    sign --> V
+    subgraph V ["Verify"]
+        E[Resolve TSA roots from credential graph] --> F[Verify timestamp token chain]
+        F --> G["Validate signing cert at TSA-attested time"]
+    end
+```
+
+1. The signer selects a TSA with the `--tsa` (default public TSA) or `--tsa-url` flag on `ocm sign cv`.
+2. Before the digest is computed, the TSA URL is recorded as a **signed label**
+   (`url.tsa.ocm.software/{signatureName}`) on the component, so it is covered by the signature and tamper-evident.
+3. After signing, OCM sends the digest to the TSA, which returns a PKCS#7 timestamp token. The token is attached to the
+   signature's `timestamp` field in the descriptor.
+4. At verification, OCM reads the TSA URL from the signed label and resolves the TSA's root CA certificates from the
+   credential graph via a [`TSA/v1alpha1`]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
+   consumer identity.
+5. The token's PKCS#7 chain is verified against those roots, its message imprint is checked against the descriptor
+   digest, and the attested time is used to validate the signing certificate chain.
+
+### Trust Model
+
+Timestamping keeps three trust domains separate: the **signer** proves *who* signed, the **TSA** proves *when*, and the
+**verifier** independently decides what to trust. Critically, the TSA root certificates come **exclusively** from the
+verifier's credential graph — never from the signature — so a signer cannot embed a self-signed TSA root and have it
+trusted. Because the TSA URL is a signed label, an attacker cannot silently redirect verification to a TSA they control
+without breaking the descriptor digest.
+
+Verification degrades gracefully across three levels:
+
+| Level | TSA roots configured? | Timestamp present? | What is verified |
+| ----- | --------------------- | ------------------ | ---------------- |
+| **No timestamp** | N/A | No | Standard signature verification only |
+| **Structural** | No | Yes | PKCS#7 parsing + imprint match; no chain verification; a warning is logged |
+| **Full** | Yes | Yes | PKCS#7 chain verification + imprint match + TSA time used for certificate validity |
+
+### Configuring TSA Trust
+
+TSA root certificates are configured on the **verifier** side through the credential graph, using the typed
+[`TSACredentials/v1alpha1`]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}) credential:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: TSA/v1alpha1
+          hostname: timestamp.digicert.com
+          scheme: https
+        credentials:
+          - type: TSACredentials/v1alpha1
+            rootCertsPEMFile: /path/to/digicert-tsa-root.pem
+```
+
+The signing side needs no TSA credentials; the TSA is chosen with the CLI flags. For the full attribute and field
+reference, see [Consumer Identities → TSA/v1alpha1]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
+and [Credential Types → TSACredentials/v1alpha1]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}).
+
+#### Two certificates, two mechanisms
+
+Two distinct certificates are easy to conflate — especially with a **self-hosted TSA**, where both are often issued
+by the same internal CA:
+
+| Certificate | Validated when | Trusted via |
+| ----------- | -------------- | ----------- |
+| The TSA's **token-signing** cert (PKCS#7 chain over the timestamp token) | Verifying | [`TSACredentials/v1alpha1`]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}) `rootCertsPEM` |
+| The TSA server's **HTTPS serving** cert (the TLS connection when requesting a timestamp) | Signing | [HTTP client config]({{< relref "docs/reference/http-client-configuration.md" >}}) `rootCAsPEM` (or `insecureSkipVerify` for dev) |
+
+`TSACredentials` roots verify the *token*, not the *connection*. To make the signer trust a private TSA's HTTPS
+serving certificate, add its CA to the HTTP client configuration
+(`http.config.ocm.software`, field `rootCAsPEM` / `rootCAsPEMFile`, per-host capable), which the signing-time TSA
+request now honours. For a throwaway self-signed dev TSA, `insecureSkipVerify: true` scoped to that host disables
+connection verification without affecting token trust.
+
+For the complete trust analysis and design rationale, see ADR 0030 (RFC 3161 Timestamping) in the repository's
+`docs/adr/` directory.
+
 ## Next Steps
 
 - [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.

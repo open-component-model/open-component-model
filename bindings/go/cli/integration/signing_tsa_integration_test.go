@@ -90,7 +90,8 @@ func Test_Integration_Signing_TSA(t *testing.T) {
         public_key_pem: %[1]q
         private_key_pem: %[2]q`, pubPEM, privPEM)
 
-	// URL-specific TSA credential entry (hostname/port/scheme set).
+	// URL-specific TSA credential entry (hostname/port/scheme set), using the
+	// typed TSACredentials/v1alpha1 credential with camelCase fields.
 	tsaCredsURL := func(rootPath string) string {
 		return fmt.Sprintf(`  - identity:
       type: TSA/v1alpha1
@@ -98,13 +99,12 @@ func Test_Integration_Signing_TSA(t *testing.T) {
       port: %[2]q
       scheme: %[3]q
     credentials:
-    - type: Credentials/v1
-      properties:
-        root_certs_pem_file: %[4]q`, tsaServerURL.Hostname(), tsaServerURL.Port(), tsaServerURL.Scheme, rootPath)
+    - type: TSACredentials/v1alpha1
+      rootCertsPEMFile: %[4]q`, tsaServerURL.Hostname(), tsaServerURL.Port(), tsaServerURL.Scheme, rootPath)
 	}
 
-	// Generic TSA credential entry (no URL attributes) — exercises the
-	// generic credential-graph fallback rather than URL-specific matching.
+	// Generic TSA credential entry (no URL attributes) — exercises the generic
+	// credential-graph fallback and the deprecated Credentials/v1 snake_case keys.
 	tsaCredsGeneric := fmt.Sprintf(`  - identity:
       type: TSA/v1alpha1
     credentials:
