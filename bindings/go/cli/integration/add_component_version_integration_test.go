@@ -20,7 +20,7 @@ import (
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/minio"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/cli/cmd"
@@ -1287,7 +1287,7 @@ components:
 	r.Equal(content, readAllFromBlob(t, blobData), "local blob should hold the object from the bucket")
 }
 
-// startS3WithObject starts MinIO holding content at bucket/key and writes an ocmconfig
+// startS3WithObject starts RustFS holding content at bucket/key and writes an ocmconfig
 // with typed S3Credentials/v1 for it next to the registry credentials. It returns the
 // S3 endpoint and the config path.
 func startS3WithObject(t *testing.T, registry *internal.OCIRegistry, bucket, key string, content []byte) (endpoint, cfgPath string) {
@@ -1295,10 +1295,15 @@ func startS3WithObject(t *testing.T, registry *internal.OCIRegistry, bucket, key
 	r := require.New(t)
 	ctx := t.Context()
 
-	container, err := minio.Run(ctx, "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
+	const s3AccessKey, s3SecretKey = "ocm-test", "ocm-test-secret"
+	container, err := testcontainers.Run(ctx, "rustfs/rustfs:1.0.0-rc.6",
+		testcontainers.WithExposedPorts("9000/tcp"),
+		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": s3AccessKey, "RUSTFS_SECRET_KEY": s3SecretKey}),
+		testcontainers.WithWaitStrategy(wait.ForHTTP("/health/ready").WithPort("9000/tcp")),
+	)
 	r.NoError(err)
 	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
-	hostPort, err := container.ConnectionString(ctx)
+	hostPort, err := container.PortEndpoint(ctx, "9000/tcp", "")
 	r.NoError(err)
 	host, port, err := net.SplitHostPort(hostPort)
 	r.NoError(err)
@@ -1306,7 +1311,7 @@ func startS3WithObject(t *testing.T, registry *internal.OCIRegistry, bucket, key
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithRegion("us-east-1"),
-		awsconfig.WithCredentialsProvider(awscreds.NewStaticCredentialsProvider(container.Username, container.Password, "")),
+		awsconfig.WithCredentialsProvider(awscreds.NewStaticCredentialsProvider(s3AccessKey, s3SecretKey, "")),
 	)
 	r.NoError(err)
 	client := awss3.NewFromConfig(awsCfg, func(o *awss3.Options) {
@@ -1342,7 +1347,7 @@ configurations:
     - type: S3Credentials/v1
       accessKeyId: %[7]q
       secretAccessKey: %[8]q
-`, registry.Host, registry.Port, registry.User, registry.Password, host, port, container.Username, container.Password)
+`, registry.Host, registry.Port, registry.User, registry.Password, host, port, s3AccessKey, s3SecretKey)
 	cfgPath = filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 	return endpoint, cfgPath
