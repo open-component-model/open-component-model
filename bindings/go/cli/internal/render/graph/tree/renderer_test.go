@@ -58,12 +58,12 @@ func TestRunRenderLoop(t *testing.T) {
 			if !ok {
 				return Row{}, fmt.Errorf("vertex %v has a value attribute of unexpected type %T, expected type %T", vertex.ID, untypedComponent, &descriptor.Descriptor{})
 			}
-			return Row{
-				Component: fmt.Sprintf("%s (%s)", component.Component.Name, state),
-				Version:   component.Component.Version,
-				Provider:  component.Component.Provider.Name,
-				Identity:  component.Component.ToIdentity().String(),
-			}, nil
+			return Row{Cells: []string{
+				fmt.Sprintf("%s (%s)", component.Component.Name, state),
+				component.Component.Version,
+				component.Component.Provider.Name,
+				component.Component.ToIdentity().String(),
+			}}, nil
 		}
 
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -343,4 +343,93 @@ func (w testLogWriter) Write(p []byte) (int, error) {
 	// fmt.Print(string(p))
 	w.t.Log("\n" + string(p))
 	return len(p), nil
+}
+
+func TestRenderOnceWithNestedRows(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	d := dag.NewDirectedAcyclicGraph[string]()
+	graph := syncdag.ToSyncedGraph(d)
+
+	buf := &bytes.Buffer{}
+	writer := io.MultiWriter(buf, testLogWriter{t})
+
+	// vertexSerializer returns one nested row per resource of the component and,
+	// below each resource, one nested row per label. The second nesting level
+	// verifies that arbitrary nesting depths render correctly.
+	vertexSerializer := func(vertex *dag.Vertex[string]) (Row, error) {
+		untyped, ok := vertex.Attributes[syncdag.AttributeValue]
+		if !ok {
+			return Row{}, fmt.Errorf("vertex %v has no %s attribute", vertex.ID, syncdag.AttributeValue)
+		}
+		component, ok := untyped.(*descriptor.Descriptor)
+		if !ok {
+			return Row{}, fmt.Errorf("vertex %v has unexpected type %T", vertex.ID, untyped)
+		}
+		resources := make([]Row, 0, len(component.Component.Resources))
+		for i := range component.Component.Resources {
+			res := &component.Component.Resources[i]
+			labels := make([]Row, 0, len(res.Labels))
+			for _, label := range res.Labels {
+				labels = append(labels, Row{Cells: []string{"", label.Name, "", "", string(label.Value)}})
+			}
+			resources = append(resources, Row{
+				Cells:    []string{"", res.Name, res.Version, res.Type, res.ToIdentity().String()},
+				Children: labels,
+			})
+		}
+		return Row{
+			Cells: []string{
+				component.Component.Name,
+				"",
+				component.Component.Version,
+				"",
+				component.Component.ToIdentity().String(),
+			},
+			Children: resources,
+		}, nil
+	}
+
+	renderer := New(ctx, graph,
+		WithHeader[string]("COMPONENT", "NAME", "VERSION", "TYPE", "IDENTITY"),
+		WithVertexSerializerFunc(vertexSerializer),
+	)
+
+	attrs := withTestAttributes(syncdag.DiscoveryStateCompleted, "comp-a", "v1.0.0", "acme")
+	desc := attrs[syncdag.AttributeValue].(*descriptor.Descriptor)
+	desc.Component.Resources = []descriptor.Resource{
+		{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "res-a", Version: "v1.0.0"}},
+			Type:        "blueprint",
+			Relation:    descriptor.LocalRelation,
+		},
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "res-b",
+					Version: "v2.0.0",
+					Labels:  []descriptor.Label{{Name: "label-a", Value: []byte(`"value-a"`)}},
+				},
+			},
+			Type:     "ociImage",
+			Relation: descriptor.ExternalRelation,
+		},
+	}
+	r.NoError(d.AddVertex("A", attrs))
+
+	// A component child without resources to verify correct sibling nesting
+	// between resource rows and referenced component vertices.
+	r.NoError(d.AddVertex("B", withTestAttributes(syncdag.DiscoveryStateCompleted, "comp-b", "v2.0.0", "acme")))
+	r.NoError(d.AddEdge("A", "B"))
+
+	expected := ` NESTING   COMPONENT  NAME     VERSION  TYPE       IDENTITY                   
+ └─ ●      comp-a              v1.0.0              name=comp-a,version=v1.0.0 
+    ├─                res-a    v1.0.0   blueprint  name=res-a,version=v1.0.0  
+    ├─ ●              res-b    v2.0.0   ociImage   name=res-b,version=v2.0.0  
+    │  └─             label-a                      "value-a"                  
+    └─     comp-b              v2.0.0              name=comp-b,version=v2.0.0 
+`
+	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
+	r.Equal(expected, buf.String())
 }
