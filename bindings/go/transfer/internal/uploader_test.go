@@ -53,7 +53,7 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, `"https://target.example" + resource.access.path`)}
+	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, `${"https://target.example" + resource.access.path}`)}
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
 	r.NoError(err)
 
@@ -135,6 +135,53 @@ func TestBuildGraphDefinition_NoUploader_KeepsDownloadWgetPath(t *testing.T) {
 	assert.False(t, sawStreaming, "no HTTPStreaming node should be emitted without an uploader")
 }
 
+func TestBuildGraphDefinition_UploaderPreservesResourceInStringLiteral(t *testing.T) {
+	r := require.New(t)
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/artifacts/blob.tar")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	// The literal path segment "resource" must survive; only the bare identifier is rewritten.
+	uploaders := []*transferv1alpha1.UploaderConfig{
+		wgetUploader(t, `${"https://uploads.example/resource/" + resource.name}`),
+	}
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	r.NoError(err)
+
+	var targetURL string
+	for i := range tgd.Transformations {
+		if tgd.Transformations[i].Type == wgetv1alpha1.HTTPStreamingV1alpha1 {
+			tgt := tgd.Transformations[i].Spec.Data["targetResource"].(map[string]any)
+			targetURL = tgt["access"].(map[string]any)["url"].(string)
+		}
+	}
+	r.NotEmpty(targetURL)
+	// The string literal keeps the word "resource"; the identifier before ".name" is rewritten.
+	assert.Contains(t, targetURL, `"https://uploads.example/resource/"`,
+		"the literal path segment must not be rewritten")
+	assert.Contains(t, targetURL, "environment.uploads.", "the bare resource identifier must be rewritten")
+	assert.Contains(t, targetURL, ".name", "the rewritten node path must retain the field access")
+}
+
+func TestBuildGraphDefinition_UploaderRejectsUnwrappedTargetURL(t *testing.T) {
+	r := require.New(t)
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/artifacts/blob.tar")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	// A bare CEL expression without the ${...} delimiters must be rejected.
+	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, `"https://target.example" + resource.access.path`)}
+	_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	r.Error(err)
+	assert.Contains(t, err.Error(), "must be a single CEL expression wrapped in ${...}")
+}
+
 func TestBuildGraphDefinition_DeterministicOrder(t *testing.T) {
 	r := require.New(t)
 	targetRepo := testOCIRepo("ghcr.io/target")
@@ -160,7 +207,7 @@ func TestBuildGraphDefinition_DeterministicOrder(t *testing.T) {
 		roots[key] = TransferRoot{RootComponentKey: key, Targets: []runtime.Typed{targetRepo}, SourceResolver: res}
 	}
 
-	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, "https://target.example{{.path}}")}
+	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, `${"https://target.example" + resource.access.path}`)}
 
 	first, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, uploaders)
 	r.NoError(err)

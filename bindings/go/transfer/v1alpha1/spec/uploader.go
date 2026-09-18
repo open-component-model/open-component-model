@@ -26,12 +26,11 @@ func init() {
 //	configurations:
 //	  - type: uploader.transfer.config.ocm.software/v1alpha1
 //	    match:
-//	      accessType: Wget/v1alpha1
+//	      accessType: Wget/v1
 //	    stream:
 //	      type: HTTPStreaming/v1alpha1
-//	      targetURL: 'https://mytarget.registry.com/{{.path}}'
+//	      targetURL: '${"https://mytarget.registry.com/uploads" + resource.access.path}'
 //	      method: PUT
-//	      queryParams: {}
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true

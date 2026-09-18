@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 
 	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
@@ -17,19 +16,19 @@ import (
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
-// streamConfig is the decoded uploader stream block. targetURL is a CEL expression
-// (referencing the source resource via the `resource` alias) that resolves to the
-// upload URL; method/header/body/noRedirect/mediaType map field-for-field onto the
-// resulting Wget access, and queryParams are appended to the resolved URL.
+// streamConfig is the decoded uploader stream block. targetURL is a standalone CEL
+// expression wrapped in ${...} (referencing the source resource via the `resource`
+// alias) that resolves to the upload URL; method/header/body/noRedirect/mediaType
+// map field-for-field onto the resulting Wget access. Append any static query
+// string directly inside the targetURL expression.
 type streamConfig struct {
-	Type        runtime.Type        `json:"type"`
-	TargetURL   string              `json:"targetURL"`
-	QueryParams map[string][]string `json:"queryParams,omitempty"`
-	Method      string              `json:"method,omitempty"`
-	Header      map[string][]string `json:"header,omitempty"`
-	Body        []byte              `json:"body,omitempty"`
-	NoRedirect  bool                `json:"noRedirect,omitempty"`
-	MediaType   string              `json:"mediaType,omitempty"`
+	Type       runtime.Type        `json:"type"`
+	TargetURL  string              `json:"targetURL"`
+	Method     string              `json:"method,omitempty"`
+	Header     map[string][]string `json:"header,omitempty"`
+	Body       []byte              `json:"body,omitempty"`
+	NoRedirect bool                `json:"noRedirect,omitempty"`
+	MediaType  string              `json:"mediaType,omitempty"`
 }
 
 // matchUploader returns the first uploader whose match applies to resource: the
@@ -128,49 +127,82 @@ func buildResourceNode(resource descriptorv2.Resource, srcAccess *wgetaccessv1.W
 	}, nil
 }
 
-// aliasPattern matches the bare `resource` identifier when it is not a member
-// access (i.e. not preceded by a dot), so `resource.name` is rewritten but a
-// field named `...resource` is not.
-var aliasPattern = regexp.MustCompile(`(^|[^.\w])` + resourceAlias + `\b`)
-
-// celTargetURLField turns a user targetURL CEL expression into a standalone
-// ${...} field value that the graph runtime evaluates. It rewrites the `resource`
-// alias to the concrete environment node path, appends any static query params as
-// a literal suffix, and validates the result is a single CEL expression.
-func celTargetURLField(rawTargetURL, nodePath string, queryParams map[string][]string) (string, error) {
+// celTargetURLField validates that the user-supplied targetURL is a single
+// standalone CEL expression wrapped in ${...} and rewrites the `resource` alias
+// to the concrete environment node path. The result is a standalone ${...} field
+// value the graph runtime evaluates.
+func celTargetURLField(rawTargetURL, nodePath string) (string, error) {
 	trimmed := strings.TrimSpace(rawTargetURL)
 	if trimmed == "" {
 		return "", fmt.Errorf("stream.targetURL is required")
 	}
-	rewritten := aliasPattern.ReplaceAllString(trimmed, "${1}"+nodePath)
-	if suffix := encodeQuerySuffix(queryParams); suffix != "" {
-		rewritten = "(" + rewritten + ") + " + strconvQuote(suffix)
-	}
-	field := "${" + rewritten + "}"
-	if ok, err := celparser.IsStandaloneExpression(field); err != nil || !ok {
+	standalone, err := celparser.IsStandaloneExpression(trimmed)
+	if err != nil {
 		return "", fmt.Errorf("invalid targetURL CEL expression %q: %w", rawTargetURL, err)
 	}
-	return field, nil
+	if !standalone {
+		return "", fmt.Errorf("stream.targetURL must be a single CEL expression wrapped in ${...}, got %q", rawTargetURL)
+	}
+	return "${" + rewriteAlias(trimmed[len("${"):len(trimmed)-len("}")], resourceAlias, nodePath) + "}", nil
 }
 
-// encodeQuerySuffix renders query params as a deterministic "?k=v&..." suffix, or
-// an empty string when there are none.
-func encodeQuerySuffix(queryParams map[string][]string) string {
-	if len(queryParams) == 0 {
-		return ""
-	}
-	values := url.Values{}
-	for k, vals := range queryParams {
-		for _, v := range vals {
-			values.Add(k, v)
+// rewriteAlias replaces the bare identifier alias with replacement everywhere it
+// appears as an identifier token in the CEL source expr, leaving occurrences
+// inside string literals untouched. An identifier match requires that the
+// preceding character is not part of an identifier or a member-access dot (so
+// `resource` is rewritten but `myresource` and `x.resource` are not) and that
+// the following character does not continue the identifier.
+func rewriteAlias(expr, alias, replacement string) string {
+	var b strings.Builder
+	b.Grow(len(expr))
+	var inString byte // 0 when outside a string literal, else the opening quote
+	escaped := false
+	for i := 0; i < len(expr); i++ {
+		c := expr[i]
+		if inString != 0 {
+			b.WriteByte(c)
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == inString:
+				inString = 0
+			}
+			continue
 		}
+		if c == '"' || c == '\'' {
+			inString = c
+			b.WriteByte(c)
+			continue
+		}
+		if isIdentifierStart(c) && strings.HasPrefix(expr[i:], alias) {
+			end := i + len(alias)
+			prev := byte(0)
+			if i > 0 {
+				prev = expr[i-1]
+			}
+			next := byte(0)
+			if end < len(expr) {
+				next = expr[end]
+			}
+			if !isIdentifierPart(prev) && prev != '.' && !isIdentifierPart(next) {
+				b.WriteString(replacement)
+				i = end - 1
+				continue
+			}
+		}
+		b.WriteByte(c)
 	}
-	return "?" + values.Encode()
+	return b.String()
 }
 
-// strconvQuote returns a CEL/Go double-quoted string literal for s.
-func strconvQuote(s string) string {
-	return fmt.Sprintf("%q", s)
+func isIdentifierStart(c byte) bool {
+	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+func isIdentifierPart(c byte) bool {
+	return isIdentifierStart(c) || (c >= '0' && c <= '9')
 }
 
 // targetHostFromExpression best-effort extracts a display host from a raw targetURL
@@ -178,6 +210,9 @@ func strconvQuote(s string) string {
 // any); otherwise returns "target".
 func targetHostFromExpression(rawTargetURL string) string {
 	trimmed := strings.TrimSpace(rawTargetURL)
+	// Look past the leading ${ delimiter (and any inner whitespace) to the first
+	// token, which is a string literal for the common `"https://host" + ...` form.
+	trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "${"))
 	for _, quote := range []byte{'"', '\''} {
 		if len(trimmed) > 0 && trimmed[0] == quote {
 			if end := strings.IndexByte(trimmed[1:], quote); end >= 0 {
@@ -229,7 +264,7 @@ func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.Uploade
 	uploads[uploadID] = node
 
 	nodePath := fmt.Sprintf("environment.%s.%s", uploadsEnvKey, uploadID)
-	targetURLField, err := celTargetURLField(cfg.TargetURL, nodePath, cfg.QueryParams)
+	targetURLField, err := celTargetURLField(cfg.TargetURL, nodePath)
 	if err != nil {
 		return err
 	}
