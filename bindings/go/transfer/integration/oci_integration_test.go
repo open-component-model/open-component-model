@@ -465,8 +465,6 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	const dockerManifestMediaType = "application/vnd.docker.distribution.manifest.v2+json"
-
 	// 1. Start source and target registries.
 	sourceAddr, sourceUser, sourcePwd := startRegistry(t)
 	targetAddr, targetUser, targetPwd := startRegistry(t)
