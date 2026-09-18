@@ -29,6 +29,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 const (
@@ -434,7 +435,11 @@ func processRepositoryReference(cmd *cobra.Command,
 		return fmt.Errorf("no components found in repository %v", repository)
 	}
 
-	roots, err := getIDsForComponentsFromRepository(ctx, pluginManager, repository, componentNames, params, credentialGraph)
+	registry, err := ocm.RegistryFromConfig(config)
+	if err != nil {
+		return fmt.Errorf("could not build versioning registry: %w", err)
+	}
+	roots, err := getIDsForComponentsFromRepository(ctx, pluginManager, repository, componentNames, params, registry, credentialGraph)
 	if err != nil {
 		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repository, err)
 	}
@@ -495,6 +500,7 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 	repository runtime.Typed,
 	componentNames []string,
 	params Params,
+	registry *versioning.Registry,
 	_ credentials.Resolver,
 ) ([]string, error) {
 	constraint := params.constraint
@@ -511,6 +517,7 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 		ocm.WithSemverConstraint(constraint),
 		ocm.WithLatestOnly(latestOnly),
 		ocm.WithSort(),
+		ocm.WithRegistry(registry),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("listing component versions failed: %w", err)

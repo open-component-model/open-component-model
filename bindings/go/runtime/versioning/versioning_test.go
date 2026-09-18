@@ -31,7 +31,7 @@ func TestVersioning_DefaultSemverOrdering(t *testing.T) {
 	r := require.New(t)
 	reg := versioning.Default()
 	versions := []string{"1.0.0", "1.2.0", "1.10.0", "v2.0.0"}
-	reg.SortDescending(versions)
+	r.NoError(reg.SortDescending(versions))
 	r.Equal([]string{"v2.0.0", "1.10.0", "1.2.0", "1.0.0"}, versions)
 }
 
@@ -40,7 +40,7 @@ func TestVersioning_CalverOrdering(t *testing.T) {
 	// calver scheme first, semver default appended as fallback.
 	reg := versioning.NewRegistry(calverFull(), versioning.Default().Schemes()[0])
 	versions := []string{"2024.03.15", "2024.10.01", "2023.12.31"}
-	reg.SortDescending(versions)
+	r.NoError(reg.SortDescending(versions))
 	r.Equal([]string{"2024.10.01", "2024.03.15", "2023.12.31"}, versions)
 }
 
@@ -49,12 +49,12 @@ func TestVersioning_BuiltinCatalogOrdering(t *testing.T) {
 
 	ubuntu := versioning.NewRegistry(calverUbuntu())
 	uv := []string{"22.04", "22.10", "23.04"}
-	ubuntu.SortDescending(uv)
+	r.NoError(ubuntu.SortDescending(uv))
 	r.Equal([]string{"23.04", "22.10", "22.04"}, uv, "ubuntu YY.MM must compare month numerically")
 
 	builds := versioning.NewRegistry(buildNumber())
 	bv := []string{"1837", "1838", "1900"}
-	builds.SortDescending(bv)
+	r.NoError(builds.SortDescending(bv))
 	r.Equal([]string{"1900", "1838", "1837"}, bv, "build numbers must compare as integers, not lexically")
 }
 
@@ -145,4 +145,63 @@ func TestVersioning_UnknownSchemeFallsBackToLexical(t *testing.T) {
 	c, err := reg.Compare("zeta", "alpha")
 	r.NoError(err)
 	r.Positive(c)
+}
+
+func TestVersioning_MixedSchemeOrderingIsDeterministic(t *testing.T) {
+	r := require.New(t)
+	// semver scheme with an unknown-scheme value ("1z") mixed in. A pair-dependent
+	// fallback would be non-transitive and yield different first elements per
+	// permutation; the rank-based order must be stable.
+	reg := versioning.Default()
+	perms := [][]string{
+		{"2.0.0", "10.0.0", "1z"},
+		{"2.0.0", "1z", "10.0.0"},
+		{"10.0.0", "2.0.0", "1z"},
+		{"10.0.0", "1z", "2.0.0"},
+		{"1z", "2.0.0", "10.0.0"},
+		{"1z", "10.0.0", "2.0.0"},
+	}
+	var first string
+	for i, p := range perms {
+		versions := append([]string(nil), p...)
+		r.NoError(reg.SortDescending(versions))
+		if i == 0 {
+			first = versions[0]
+			// semver versions rank above the unknown-scheme value, newest first.
+			r.Equal([]string{"10.0.0", "2.0.0", "1z"}, versions)
+			continue
+		}
+		r.Equal(first, versions[0], "first element must not depend on input order")
+		r.Equal([]string{"10.0.0", "2.0.0", "1z"}, versions)
+	}
+}
+
+func TestVersioning_BuildNumberBeyondInt64(t *testing.T) {
+	r := require.New(t)
+	builds := versioning.NewRegistry(buildNumber())
+	// 21-digit vs 20-digit build numbers exceed int64; a strconv.Atoi fallback to
+	// lexical would sort the shorter (but numerically smaller) value first here.
+	small := "99999999999999999999" // 20 nines
+	big := "100000000000000000000"  // 21 digits, larger
+	c, err := builds.Compare(big, small)
+	r.NoError(err)
+	r.Positive(c, "arbitrary-precision numeric comparison must not overflow")
+
+	versions := []string{small, big}
+	r.NoError(builds.SortDescending(versions))
+	r.Equal([]string{big, small}, versions)
+}
+
+func TestVersioning_SatisfiesRejectsNonSemverScheme(t *testing.T) {
+	r := require.New(t)
+	// calver takes priority; "2024.03.15" also parses as semver but its
+	// authoritative scheme is calver, so it must not satisfy a semver constraint.
+	reg := versioning.NewRegistry(calverFull(), versioning.Default().Schemes()[0])
+	ok, err := reg.Satisfies("2024.03.15", ">=1.0.0")
+	r.NoError(err)
+	r.False(ok)
+	// a genuine semver still evaluates against the constraint.
+	ok, err = reg.Satisfies("2.0.0", ">=1.0.0")
+	r.NoError(err)
+	r.True(ok)
 }

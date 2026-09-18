@@ -119,7 +119,9 @@ func VersionsWithFiltering(ctx context.Context, component string, repo repositor
 	}
 
 	// Ensure correct order (newest first) using the configured versioning schemes.
-	reg.SortDescending(versions)
+	if err := reg.SortDescending(versions); err != nil {
+		return nil, fmt.Errorf("sorting component versions failed: %w", err)
+	}
 
 	if opts.LatestOnly && len(versions) > 1 {
 		return versions[:1], nil

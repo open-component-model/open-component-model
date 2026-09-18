@@ -145,7 +145,9 @@ The output includes your `versioning.config.ocm.software/v1alpha1` entry.
 
 ### Problem: The version is rejected as an invalid OCI tag
 
-**Cause:** OCI tags allow only `^[\w][\w.-]{0,127}$`. A version containing `+`, `:`, `/`, `~`, or spaces cannot be a tag.
+**Cause:** OCI tags allow only `^[\w][\w.-]{0,127}$`. A version containing `:`, `/`, `~`, or spaces cannot be a tag and
+is rejected at publish time. A `+` (semver build metadata) is the exception: it is rewritten to `.build-` for the tag,
+but that rewrite is not reversed on read, so the version you list differs from the one you added — avoid `+` too.
 
 **Fix:** Choose a scheme whose versions are valid OCI tags. See
 [OCI Tag Constraints]({{< relref "docs/reference/versioning-configuration.md" >}}).

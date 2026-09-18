@@ -114,7 +114,9 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 				}
 			}
 
-			reg.SortDescending(versions)
+			if err := reg.SortDescending(versions); err != nil {
+				return fmt.Errorf("sorting component versions failed: %w", err)
+			}
 
 			// If latestOnly, fetch only the newest version.
 			if options.latestOnly {

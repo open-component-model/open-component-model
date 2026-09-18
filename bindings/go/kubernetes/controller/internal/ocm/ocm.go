@@ -114,18 +114,31 @@ func GetLatestValidVersion(ctx context.Context, registry *versioning.Registry, v
 		}
 	}
 
-	matched, err := registry.Filter(candidates, semvers)
+	// Drop versions no configured scheme considers well-formed before applying
+	// the constraint and sorting. Otherwise an unparseable version (e.g. "zzz")
+	// survives an empty constraint and can sort above valid versions through the
+	// lexical fallback, causing ApplyDowngradePolicy to pick a bogus candidate.
+	valid := make([]string, 0, len(candidates))
+	for _, version := range candidates {
+		if registry.Valid(version) {
+			valid = append(valid, version)
+		}
+	}
+
+	matched, err := registry.Filter(valid, semvers)
 	if err != nil {
 		return "", err
 	}
 	if len(matched) == 0 {
 		return "", fmt.Errorf("no valid versions found for constraint %s", semvers)
 	}
-	if len(matched) < len(candidates) {
-		logger.Info(fmt.Sprintf("filtered %d version(s) not satisfying constraint %s", len(candidates)-len(matched), semvers))
+	if len(matched) < len(valid) {
+		logger.Info(fmt.Sprintf("filtered %d version(s) not satisfying constraint %s", len(valid)-len(matched), semvers))
 	}
 
-	registry.SortDescending(matched)
+	if err := registry.SortDescending(matched); err != nil {
+		return "", fmt.Errorf("sorting versions failed: %w", err)
+	}
 	return matched[0], nil
 }
 

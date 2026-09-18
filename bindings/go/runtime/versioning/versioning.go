@@ -17,9 +17,9 @@ package versioning
 import (
 	"cmp"
 	"fmt"
+	"math/big"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -67,23 +67,35 @@ func (r *Registry) Schemes() []Scheme {
 	return r.schemes
 }
 
-// Compare orders two versions. It selects the first scheme that claims both
-// versions and delegates to it. If no single scheme claims both, it falls back
-// to lexical comparison and never returns an error, guaranteeing a stable,
-// deterministic order even for unknown or mixed schemes.
+// Compare orders two versions with a total, transitive order that is stable
+// across input permutations.
+//
+// Each version is resolved to the rank of the first scheme that claims it (its
+// index in the registry), or an explicit "unknown" rank beyond all schemes when
+// no scheme claims it. Versions resolving to different ranks are ordered by rank
+// (higher-priority schemes first). Versions sharing a scheme rank are ordered by
+// that scheme's Compare; two unknown-rank versions compare lexically. This
+// avoids the non-transitive cycles a pair-dependent fallback would create when
+// mixing schemes.
 func (r *Registry) Compare(a, b string) (int, error) {
-	for _, s := range r.schemes {
-		if s.Matches(a) && s.Matches(b) {
-			return s.Compare(a, b)
-		}
+	ra, sa := r.rankFor(a)
+	rb, _ := r.rankFor(b)
+	if ra != rb {
+		// A lower rank index means a higher-priority scheme; treat those versions
+		// as "greater" so they sort ahead under descending order.
+		return cmp.Compare(rb, ra), nil
 	}
-	return strings.Compare(a, b), nil
+	if sa == nil {
+		// Both versions share the unknown rank; order lexically.
+		return strings.Compare(a, b), nil
+	}
+	return sa.Compare(a, b)
 }
 
-// Valid reports whether any registered scheme claims the version.
+// Valid reports whether any registered scheme considers the version well-formed.
 func (r *Registry) Valid(version string) bool {
 	for _, s := range r.schemes {
-		if s.Matches(version) {
+		if s.Matches(version) && s.Valid(version) {
 			return true
 		}
 	}
@@ -91,12 +103,23 @@ func (r *Registry) Valid(version string) bool {
 }
 
 // SortDescending sorts versions in place, newest first, using [Registry.Compare].
-// The sort is stable so equal versions retain their input order.
-func (r *Registry) SortDescending(versions []string) {
+// The sort is stable so equal versions retain their input order. It returns the
+// first error a scheme's Compare reports; on error the slice may be left
+// partially reordered.
+func (r *Registry) SortDescending(versions []string) error {
+	var cmpErr error
 	sort.SliceStable(versions, func(i, j int) bool {
-		c, _ := r.Compare(versions[i], versions[j])
+		if cmpErr != nil {
+			return false
+		}
+		c, err := r.Compare(versions[i], versions[j])
+		if err != nil {
+			cmpErr = err
+			return false
+		}
 		return c > 0
 	})
+	return cmpErr
 }
 
 // Filter returns the versions satisfying the given constraint.
@@ -159,6 +182,13 @@ func (r *Registry) Satisfies(version, constraint string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("parsing semantic version constraint failed: %w", err)
 	}
+	// A semver constraint is only meaningful for versions the loose-semver
+	// scheme claims. A version whose authoritative scheme is non-semver (e.g.
+	// calver "2024.03.15", which also happens to parse as semver) must not be
+	// evaluated against a semver constraint.
+	if _, ok := r.schemeFor(version).(*looseSemverScheme); !ok {
+		return false, nil
+	}
 	v, err := semver.NewVersion(version)
 	if err != nil {
 		return false, nil
@@ -174,6 +204,19 @@ func (r *Registry) schemeFor(version string) Scheme {
 		}
 	}
 	return nil
+}
+
+// rankFor resolves a version to the index of the first scheme that claims it
+// and that scheme. When no scheme claims the version it returns the
+// unknown-scheme rank (len(schemes)) and a nil scheme. The rank gives a stable,
+// transitive ordering across mixed schemes; see [Registry.Compare].
+func (r *Registry) rankFor(version string) (int, Scheme) {
+	for i, s := range r.schemes {
+		if s.Matches(version) {
+			return i, s
+		}
+	}
+	return len(r.schemes), nil
 }
 
 // looseSemverScheme is the default scheme, wrapping github.com/Masterminds/semver/v3.
@@ -258,13 +301,15 @@ func (s *regexScheme) groups(version string) map[string]string {
 	return out
 }
 
-// compareGroup compares two capture-group values, numerically when both parse
-// as integers and lexically otherwise.
+// compareGroup compares two capture-group values, numerically when both are
+// decimal integers and lexically otherwise. Numeric comparison uses arbitrary
+// precision so arbitrarily large groups (e.g. long build numbers) never overflow
+// a machine integer and fall back to lexical ordering.
 func compareGroup(a, b string) int {
-	na, ea := strconv.Atoi(a)
-	nb, eb := strconv.Atoi(b)
-	if ea == nil && eb == nil {
-		return cmp.Compare(na, nb)
+	na, aok := new(big.Int).SetString(a, 10)
+	nb, bok := new(big.Int).SetString(b, 10)
+	if aok && bok {
+		return na.Cmp(nb)
 	}
 	return strings.Compare(a, b)
 }

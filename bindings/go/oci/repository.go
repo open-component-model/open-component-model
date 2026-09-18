@@ -46,6 +46,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 var (
@@ -170,12 +171,15 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 		return nil, fmt.Errorf("failed to create lister: %w", err)
 	}
 
-	// SortPolicyLooseSemverDescending is a stable default; the OCI binding is
-	// versioning-config-agnostic. Scheme-aware ordering (e.g. calver) is applied
-	// by the CLI layer, which re-sorts the returned versions using the configured
-	// versioning registry.
+	// The OCI binding is versioning-config-agnostic. We use the loose-semver
+	// default comparator (via the lister's Comparator hook) rather than
+	// SortPolicyLooseSemverDescending: the comparator preserves versions that are
+	// not loose semver (e.g. calver or build numbers) instead of dropping them,
+	// so a configured, non-semver history survives listing. The CLI layer then
+	// re-sorts the returned versions with the configured versioning registry.
+	defaultRegistry := versioning.Default()
 	opts := lister.Options{
-		SortPolicy: lister.SortPolicyLooseSemverDescending,
+		Comparator: defaultRegistry.Compare,
 		TagListerOptions: lister.TagListerOptions{
 			VersionResolver: complister.ReferenceTagVersionResolver(component, store),
 		},
@@ -621,6 +625,13 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 }
 
 func (repo *Repository) getStore(ctx context.Context, component string, version string) (ref string, store spec.Store, err error) {
+	// Validate the version maps to a valid OCI tag before resolving. Both
+	// resolver implementations discard VersionToOCITag's error and would
+	// otherwise return a reference ending in ":", surfacing later as an opaque
+	// lookup failure instead of the specific version-validation error.
+	if _, err = VersionToOCITag(ctx, version); err != nil {
+		return "", nil, err
+	}
 	reference := repo.resolver.ComponentVersionReference(ctx, component, version)
 	if store, err = repo.resolver.StoreForReference(ctx, reference); err != nil {
 		return "", nil, fmt.Errorf("failed to get store for reference: %w", err)

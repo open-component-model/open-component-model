@@ -167,10 +167,21 @@ func (lister *Lister) listUnsorted(ctx context.Context, opts Options) ([]string,
 func (lister *Lister) sort(_ context.Context, opts Options, candidates []string) ([]string, error) {
 	if opts.Comparator != nil {
 		out := slices.Clone(candidates)
+		var compareErr error
 		slices.SortStableFunc(out, func(a, b string) int {
-			c, _ := opts.Comparator(b, a)
+			if compareErr != nil {
+				return 0
+			}
+			c, err := opts.Comparator(b, a)
+			if err != nil {
+				compareErr = err
+				return 0
+			}
 			return c
 		})
+		if compareErr != nil {
+			return nil, fmt.Errorf("comparing discovered versions: %w", compareErr)
+		}
 		return slices.CompactFunc(out, func(a, b string) bool { return a == b }), nil
 	}
 	switch opts.SortPolicy {

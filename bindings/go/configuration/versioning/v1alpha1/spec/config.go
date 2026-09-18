@@ -128,6 +128,9 @@ func (c *Config) Registry() (*versioning.Registry, error) {
 
 	schemes := make([]versioning.Scheme, 0, len(c.Schemes)+1)
 	for i, s := range c.Schemes {
+		if s == nil {
+			return nil, fmt.Errorf("versioning scheme at index %d is null", i)
+		}
 		pattern, err := regexp.Compile(s.Pattern)
 		if err != nil {
 			return nil, fmt.Errorf("versioning scheme %q (index %d): invalid pattern: %w", s.Name, i, err)
