@@ -20,7 +20,7 @@ configurations:
   - type: attributes.config.ocm.software
     attributes:
       cache: ~/.ocm/legacy-cache
-- type: generic.config.ocm.software/v2
+- type: generic.config.ocm.software/v1
   configurations:
   - type: attributes.config.ocm.software
     attributes:
