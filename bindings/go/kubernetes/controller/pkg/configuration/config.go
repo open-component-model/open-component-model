@@ -232,18 +232,14 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 
 		configs = append(configs, cfg)
 	}
+	merged := genericv1.MergeConfigs(log.FromContext(ctx).V(1).Info, configs...)
 
-	flattened := genericv1.FlatMap(configs...)
-	if flattened == nil {
-		return nil, nil
-	}
-
-	flattenedFiltered, err := filterAllowedConfigTypes(ctx, flattened)
+	filtered, err := filterAllowedConfigTypes(ctx, merged)
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply config type allowlist: %w", err)
 	}
 
-	content, err := json.Marshal(flattenedFiltered)
+	content, err := json.Marshal(filtered)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +249,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 	hash := hasher.Sum(nil)
 
 	result := Configuration{
-		Config: flattenedFiltered,
+		Config: filtered,
 		Hash:   hash,
 	}
 
