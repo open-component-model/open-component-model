@@ -100,8 +100,7 @@ type CopyOCILayoutWithIndexOptions struct {
 }
 
 // CopyOCILayoutWithIndex reads an OCI layout tarball from src, picks the
-// layout's single top-level manifest or index (or the one tagged via
-// `org.opencontainers.image.ref.name` when multiple are present), and copies
+// layout's top-level manifest or index via [pickTopLevelDescriptor], and copies
 // its full graph into dst via [oras.ExtendedCopyGraph], including referrers.
 //
 // Returns the descriptor of the root that was copied.
@@ -114,7 +113,7 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 		err = errors.Join(err, ociStore.Close())
 	}()
 
-	index, err := pickTopLevelDescriptor(ociStore)
+	index, err := pickTopLevelDescriptor(ctx, ociStore)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
@@ -160,13 +159,13 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 	return index, nil
 }
 
-// pickTopLevelDescriptor works out which manifest in the layout was the one
-// requested, trying three things in order: if there is only one, it wins; else
-// the entry marked with [annotations.OCMLayoutRoot]; else the entry named by
-// `org.opencontainers.image.ref.name`, which is only ever set for tag-based
-// references. Returns an error when none of the three settles it, because a
-// wrong guess here silently packs the wrong artifact.
-func pickTopLevelDescriptor(ociStore *CloseableReadOnlyStore) (ociImageSpecV1.Descriptor, error) {
+// pickTopLevelDescriptor works out which manifest in the layout was requested,
+// in order: the only one; the one marked with [annotations.OCMLayoutRoot]; the
+// one named by `org.opencontainers.image.ref.name`, only ever set for tag-based
+// references; else [TopLevelArtifacts] for a layout carrying neither. Errors
+// when nothing settles it, because a wrong guess silently packs the wrong
+// artifact.
+func pickTopLevelDescriptor(ctx context.Context, ociStore *CloseableReadOnlyStore) (ociImageSpecV1.Descriptor, error) {
 	if len(ociStore.Index.Manifests) == 1 {
 		return ociStore.Index.Manifests[0], nil
 	}
@@ -182,11 +181,18 @@ func pickTopLevelDescriptor(ociStore *CloseableReadOnlyStore) (ociImageSpecV1.De
 	if len(named) == 1 {
 		return ociStore.Index.Manifests[named[0]], nil
 	}
+	// Nothing was written down, so infer it: an index and the children it lists
+	// collapse to the index. Last, because this branch is the one that guesses.
+	if top := TopLevelArtifacts(ctx, ociStore, ociStore.Index.Manifests); len(top) == 1 {
+		return top[0], nil
+	}
 	return ociImageSpecV1.Descriptor{}, fmt.Errorf(
 		"multiple manifests found in oci store, "+
 			"but no manifest could be identified as the top level parent."+
-			"the store must either contain exactly one top level manifest in its index,"+
-			" or at most one manifest with the annotation %s", ociImageSpecV1.AnnotationRefName,
+			" the store must either contain exactly one top level manifest in its index,"+
+			" one marked with the annotation %s, at most one manifest with the annotation %s,"+
+			" or a single artifact containing all the others",
+		annotations.OCMLayoutRoot, ociImageSpecV1.AnnotationRefName,
 	)
 }
 
