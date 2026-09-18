@@ -19,6 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/pack"
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
@@ -270,4 +271,119 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 	rs, ok := store.(*remotestore.RemoteStore)
 	r.Truef(ok, "store %T must be *remotestore.RemoteStore", store)
 	assertBlobRoundTrips(t, ctx, rs, layer, whole)
+}
+
+// Test_Integration_OCIRepository_AddComponentVersion_Streaming adds a component
+// version whose single resource is backed by a lazily-loaded blob with unknown
+// size and digest, then reads it back. This exercises the full add-cv transfer
+// path (AddLocalResource -> pack.ArtifactBlob -> ResourceLocalBlobOCILayer ->
+// RemoteStore.PushStreaming), proving the resource blob is streamed (not
+// buffered) and the component version round-trips.
+//
+// Behavior of the transfer as a function of the input blob (remote registry
+// store with chunked push enabled via WithChunkedPush):
+//
+//	blob size | blob digest | transfer behavior
+//	----------+-------------+--------------------------------------------------
+//	known     | known       | monolithic POST/PUT if size < threshold, else
+//	          |             | chunked PATCH upload (RemoteStore.Push, threshold-
+//	          |             | gated). No buffering; digest already present.
+//	known     | unknown     | streamed: PushStreaming computes the digest during
+//	          |             | upload. No buffering.
+//	unknown   | known       | streamed: PushStreaming discovers the size during
+//	          |             | upload and verifies the declared digest. No
+//	          |             | buffering (previously this case buffered to learn
+//	          |             | the size).
+//	unknown   | unknown     | streamed: PushStreaming computes both size and
+//	          |             | digest during upload. No buffering.
+//
+//	Non-streaming stores (CTF, memory, or remote with chunking disabled) do not
+//	implement StreamingPusher, so an unknown size or digest falls back to
+//	buffering the whole blob in memory to build the descriptor before a
+//	monolithic push. Manifests are never chunked; they use the manifests
+//	endpoint. A chunked-protocol failure before the first byte is consumed falls
+//	back to the monolithic push so no registry regresses.
+func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping add-cv streaming integration test in short mode")
+	}
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	password := generateRandomPassword(t, passwordLength)
+	htpasswd := generateHtpasswd(t, testUsername, password)
+	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
+		registry.WithHtpasswd(htpasswd),
+		testcontainers.WithEnv(map[string]string{"REGISTRY_VALIDATION_DISABLED": "true"}),
+		testcontainers.WithLogger(log.TestLogger(t)),
+	)
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(registryContainer)) })
+
+	address, err := registryContainer.HostAddress(ctx)
+	r.NoError(err)
+
+	scheme := ocmruntime.NewScheme()
+	ocmoci.MustAddToScheme(scheme)
+	v2.MustAddToScheme(scheme)
+
+	resolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(address),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(createAuthClient(address, testUsername, password)),
+		urlresolver.WithChunkedPush(1024 /*1 KiB chunks*/, 1 /*threshold*/),
+	)
+	r.NoError(err)
+
+	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithScheme(scheme), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	const (
+		component = "ocm.software/test/streamed-cv"
+		version   = "v1.0.0"
+	)
+	cd := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			Provider:      descriptor.Provider{Name: "ocm.software/test"},
+			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version}},
+		},
+	}
+
+	// Resource payload spanning several chunks; wrapped in a lazy blob that
+	// exposes neither size nor digest, forcing the streaming transfer path.
+	payload := bytes.Repeat([]byte("component-version-layer-"), 300)
+	wantDigest := digest.FromBytes(payload)
+	resource := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "streamed", Version: version}},
+		Type:        "blob",
+		Relation:    descriptor.LocalRelation,
+		Access:      &v2.LocalBlob{MediaType: "application/octet-stream"},
+	}
+
+	newRes, err := repo.AddLocalResource(ctx, component, version, resource,
+		&streamOnlyBlob{reader: bytes.NewReader(payload), mediaType: "application/octet-stream"})
+	r.NoError(err)
+	r.NotNil(newRes)
+	cd.Component.Resources = []descriptor.Resource{*newRes}
+
+	r.NoError(repo.AddComponentVersion(ctx, cd))
+
+	// The component version round-trips and the resource blob is retrievable
+	// with the digest computed during the streaming upload.
+	fetched, err := repo.GetComponentVersion(ctx, component, version)
+	r.NoError(err)
+	r.Equal(component, fetched.Component.Name)
+
+	blobRC, gotRes, err := repo.GetLocalResource(ctx, component, version, resource.ElementMeta.ToIdentity())
+	r.NoError(err)
+	r.NotNil(gotRes)
+	rc, err := blobRC.ReadCloser()
+	r.NoError(err)
+	t.Cleanup(func() { _ = rc.Close() })
+	data, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.Equal(payload, data)
+	r.Equal(wantDigest, digest.FromBytes(data))
 }
