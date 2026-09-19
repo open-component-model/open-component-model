@@ -52,3 +52,24 @@ spec:
   resourceRef:
     name: helm-signing-resource-rgd
     namespace: default
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-signing-crossplane-resource-xrd
+spec:
+  componentRef:
+    name: helm-signing-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-signing-crossplane-deployer
+spec:
+  resourceRef:
+    name: helm-signing-crossplane-resource-xrd
+    namespace: default

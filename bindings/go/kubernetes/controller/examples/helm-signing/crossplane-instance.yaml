@@ -1,0 +1,6 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: HelmSigningCrossplane
+metadata:
+  name: helm-signing-crossplane
+spec:
+  prefix: helm-signing-crossplane

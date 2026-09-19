@@ -5,12 +5,13 @@ components:
       name: ocm.software
     resources:
       - name: kustomize-resource
-        type: kustomization
+        type: ociArtifact
         version: "1.0.0"
-        access:
-          type: gitHub
-          repoUrl: https://github.com/stefanprodan/podinfo
-          commit: cdd09cdd3daacc3082d5a78062ac493806f7abd0
+        input:
+          # ./oci-layout is built from ./kustomize by the test harness before ocm add cv.
+          type: dir/v1
+          path: ./oci-layout
+          mediaType: application/vnd.ocm.software.oci.layout.v1+tar
       - name: kro-rgd
         type: blob
         version: "1.0.0"
