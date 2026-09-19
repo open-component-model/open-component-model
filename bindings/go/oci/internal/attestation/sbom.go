@@ -56,8 +56,6 @@ var (
 // - ErrPlatformNotFound if there was no platform for the given value
 // - ErrNoAttestation if there was no SBOM.
 func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts ...repository.SBOMOption) ([]repository.SBOM, error) {
-	o := repository.NewSBOMOptions(opts...)
-
 	parsed, err := looseref.ParseReference(reference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing reference %q failed: %w", reference, err)
@@ -68,9 +66,19 @@ func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts
 		return nil, fmt.Errorf("resolving reference %q failed: %w", reference, err)
 	}
 
-	if !isIndex(root.MediaType) {
+	if !IsIndex(root.MediaType) {
 		return nil, fmt.Errorf("%w: %q has media type %q", ErrNotAnIndex, reference, root.MediaType)
 	}
+
+	return DiscoverSBOMsFromRoot(ctx, store, root, reference, opts...)
+}
+
+// DiscoverSBOMsFromRoot can be used once the index for the sbom is fetched.
+// This function is called by DiscoverSBOMs once root is obtained. It's also called
+// by LocalSBOM discoverer once it found the index that holds the sboms.
+func DiscoverSBOMsFromRoot(ctx context.Context, store spec.Store, root ociImageSpecV1.Descriptor, name string, opts ...repository.SBOMOption) ([]repository.SBOM, error) {
+	o := repository.NewSBOMOptions(opts...)
+	reference := name
 
 	var index ociImageSpecV1.Index
 	if err := fetchJSON(ctx, store, root, &index); err != nil {
@@ -254,7 +262,9 @@ func osFeaturesMatch(have, want []string) bool {
 	return slices.Equal(haveSorted, wantSorted)
 }
 
-func isIndex(mediaType string) bool {
+// IsIndex gives back true if the given mediaType is an index OR if it's
+// a DockerManifestList.
+func IsIndex(mediaType string) bool {
 	return mediaType == ociImageSpecV1.MediaTypeImageIndex ||
 		mediaType == introspection.MediaTypeDockerManifestList
 }

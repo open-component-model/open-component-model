@@ -3,7 +3,6 @@ package credentials
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"maps"
 
 	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
@@ -51,7 +50,7 @@ func processDirectCredentials(ctx context.Context, g *Graph, config *cfgRuntime.
 	for _, consumer := range config.Consumers {
 		resolved, remaining, err := extractResolvable(ctx, g, consumer.Credentials)
 		if err != nil {
-			return nil, fmt.Errorf("extracting consumer credentials failed: %w", err)
+			return nil, fmt.Errorf("extracting credentials for consumer identities %v failed: %w", consumer.Identities, err)
 		}
 		consumer.Credentials = remaining
 
@@ -191,21 +190,30 @@ func extractResolvable(ctx context.Context, g *Graph, creds []runtime.Typed) (ru
 		// as *runtime.Raw, making unregistered credentials look "resolved" and preventing
 		// plugin edge creation.
 		if credScheme := g.credentialTypeScheme(); credScheme != nil && credScheme.IsRegistered(cred.GetType()) {
-			if typed, err := credScheme.NewObject(cred.GetType()); err == nil {
-				if err := credScheme.Convert(cred, typed); err == nil {
-					if resolved == nil {
-						resolved = typed
-					} else {
-						// Already have a resolved typed credential — pass additional ones
-						// to plugin-based resolution to avoid silent loss.
-						remaining = append(remaining, cred)
-					}
-					continue
-				} else {
-					slog.WarnContext(ctx, "credential type scheme conversion failed",
-						"type", cred.GetType().String(), "error", err)
+			typed, err := credScheme.NewObject(cred.GetType())
+			if err != nil {
+				return nil, nil, fmt.Errorf("cannot create credential of registered type %q: %w", cred.GetType(), err)
+			}
+			// Decode user-authored credential configuration strictly:
+			// typos fail loudly instead of silently being dropped
+			if err := runtime.DecodeStrict(cred, typed); err != nil {
+				return nil, nil, fmt.Errorf("credential of type %q is invalid: %w", cred.GetType(), err)
+			}
+			// Credential types with structural rules are validated here so that a
+			// credential without usable authentication material fails at ingest time.
+			if v, ok := typed.(runtime.Validatable); ok {
+				if err := v.Validate(); err != nil {
+					return nil, nil, fmt.Errorf("credential of type %q is invalid: %w", cred.GetType(), err)
 				}
 			}
+			if resolved == nil {
+				resolved = typed
+			} else {
+				// Already have a resolved typed credential — pass additional ones
+				// to plugin-based resolution to avoid silent loss.
+				remaining = append(remaining, cred)
+			}
+			continue
 		}
 
 		// Try DirectCredentials (Credentials/v1 and its aliases).

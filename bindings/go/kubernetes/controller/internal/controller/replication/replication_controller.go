@@ -179,7 +179,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // SA1019: pending replacement, see https://github.com/open-component-model/open-component-model/issues/2120
 	}
 
 	return r.reconcile(ctx, replication)
@@ -467,7 +467,7 @@ func toFailedTransferEvent(e graphRuntime.ProgressEvent) v1alpha1.TransferEvent 
 
 	return v1alpha1.TransferEvent{
 		ID:    t.ID,
-		Name:  fmt.Sprintf("%s [%s]", t.ID, t.Type.Name),
+		Name:  t.DisplayName(),
 		Error: e.Err.Error(),
 	}
 }

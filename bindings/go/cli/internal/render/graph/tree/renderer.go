@@ -18,10 +18,12 @@ import (
 )
 
 // Renderer prints a tree from a DirectedAcyclicGraph as a table.
-// Columns: NESTING, COMPONENT, VERSION, PROVIDER, IDENTITY.
-// NESTING shows the tree structure using Unicode box-drawing characters from [TreeStyle].
+// The first column is always NESTING and shows the tree structure using Unicode
+// box-drawing characters from [TreeStyle]. The remaining columns are defined by
+// the header (see [WithHeader]) and are filled from the cells of the Row that
+// the VertexSerializer produces.
 //
-// Example output:
+// Example output with [DefaultHeader]:
 //
 //	NESTING   COMPONENT     VERSION  PROVIDER  IDENTITY
 //	├─ ●      app-frontend  v1.2.0   acme      A
@@ -35,9 +37,12 @@ type Renderer[T cmp.Ordered] struct {
 	// The tableWriter outputs a table and holds the visual NESTING column.
 	// It manages the formatting/style and the output destination.
 	tableWriter table.Writer
-	// The VertexSerializer serializes a vertex to a Row struct.
+	// The VertexSerializer serializes a vertex to a Row struct. The Row may
+	// carry nested Children rows, which are rendered below the vertex row.
 	// It MUST perform READ-ONLY access to the vertex and its attributes.
 	vertexSerializer VertexSerializer[T]
+	// header holds the column headings that follow the NESTING column.
+	header []string
 	// Tree drawing style used for the NESTING column.
 	style TreeStyle
 	// Table style used for the go-pretty table renderer.
@@ -64,6 +69,10 @@ func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcycli
 		options.VertexSerializer = VertexSerializerFunc[T](defaultVertexSerializer[T])
 	}
 
+	if len(options.Header) == 0 {
+		options.Header = DefaultHeader
+	}
+
 	if len(options.Roots) == 0 {
 		slog.DebugContext(ctx, "no roots provided, dynamically determining roots from graph")
 	}
@@ -71,6 +80,7 @@ func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcycli
 	return &Renderer[T]{
 		tableWriter:      table.NewWriter(),
 		vertexSerializer: options.VertexSerializer,
+		header:           options.Header,
 		style:            DefaultTreeStyle,
 		tableStyle:       defaultTableStyle(),
 		roots:            options.Roots,
@@ -84,7 +94,7 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	defer t.tableWriter.ResetHeaders()
 	defer t.tableWriter.ResetRows()
 	t.tableWriter.SetStyle(t.tableStyle)
-	t.tableWriter.AppendHeader(table.Row{"NESTING", "COMPONENT", "VERSION", "PROVIDER", "IDENTITY"})
+	t.tableWriter.AppendHeader(nestingRow(NestingColumn, t.header))
 
 	roots := t.roots
 	if len(roots) == 0 {
@@ -154,27 +164,69 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, lockedGraph *dag.Direct
 	if err != nil {
 		return fmt.Errorf("failed to get sorted children of vertex %v: %w", vertex.ID, err)
 	}
-	hasChildren := len(children) > 0
-	nesting := buildNesting(t.style, ancestorsHasMore, isLast, hasChildren)
-	t.tableWriter.AppendRow(table.Row{nesting, row.Component, row.Version, row.Provider, row.Identity})
 
-	// Recurse into children
-	for i, child := range children {
-		childIsLast := i == len(children)-1
-		// For descendants, include whether the current node has more siblings after it
-		// Create a new slice to track ancestor vertical line states for the child nodes
-		nextAncestors := make([]bool, 0, len(ancestorsHasMore)+1)
-		// Copy all existing ancestor states (whether each ancestor level needs vertical lines)
-		nextAncestors = append(nextAncestors, ancestorsHasMore...)
-		// Determine if current node needs a vertical connector (true if it has siblings below it)
-		connector := !isLast
-		// Add current node's connector state to the ancestor tracking for its children
-		nextAncestors = append(nextAncestors, connector)
+	// Optional rows for the elements contained in the vertex (for example the
+	// resources of a component version). They are rendered before the rows of
+	// the graph children.
+	subRows := row.Children
+
+	totalChildren := len(subRows) + len(children)
+	hasChildren := totalChildren > 0
+	nesting := buildNesting(t.style, ancestorsHasMore, isLast, hasChildren)
+	t.tableWriter.AppendRow(nestingRow(nesting, row.Cells))
+
+	// The connector state passed down to all children of the current node.
+	nextAncestors := make([]bool, 0, len(ancestorsHasMore)+1)
+	nextAncestors = append(nextAncestors, ancestorsHasMore...)
+	nextAncestors = append(nextAncestors, !isLast)
+
+	childIndex := 0
+	// Render the rows of the vertex elements first.
+	for _, subRow := range subRows {
+		childIsLast := childIndex == totalChildren-1
+		t.appendRowTree(subRow, nextAncestors, childIsLast)
+		childIndex++
+	}
+
+	// Recurse into component children.
+	for _, child := range children {
+		childIsLast := childIndex == totalChildren-1
 		if err := t.traverseGraph(ctx, lockedGraph, child, level+1, false, childIsLast, nextAncestors); err != nil {
 			return err
 		}
+		childIndex++
 	}
 	return nil
+}
+
+// nestingRow builds a table row whose first column is the NESTING column
+func nestingRow(nesting string, cells []string) table.Row {
+	row := make(table.Row, 0, len(cells)+1)
+	row = append(row, nesting)
+	for _, cell := range cells {
+		row = append(row, cell)
+	}
+	return row
+}
+
+// appendRowTree appends a row and, recursively, its nested Children rows.
+// Nested rows do not correspond to vertices of the graph, so no graph traversal
+// takes place here.
+func (t *Renderer[T]) appendRowTree(row Row, ancestorsHasMore []bool, isLast bool) {
+	nesting := buildNesting(t.style, ancestorsHasMore, isLast, len(row.Children) > 0)
+	t.tableWriter.AppendRow(nestingRow(nesting, row.Cells))
+
+	if len(row.Children) == 0 {
+		return
+	}
+
+	nextAncestors := make([]bool, 0, len(ancestorsHasMore)+1)
+	nextAncestors = append(nextAncestors, ancestorsHasMore...)
+	nextAncestors = append(nextAncestors, !isLast)
+
+	for i, child := range row.Children {
+		t.appendRowTree(child, nextAncestors, i == len(row.Children)-1)
+	}
 }
 
 // buildNesting constructs the visual tree structure prefix for each row in the NESTING column.

@@ -1,6 +1,10 @@
 package v1
 
-import "ocm.software/open-component-model/bindings/go/runtime"
+import (
+	"errors"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
 
 var WgetCredentialsVersionedType = runtime.NewVersionedType(WgetCredentialsType, Version)
 
@@ -46,4 +50,28 @@ type WgetCredentials struct {
 	// CertificateAuthority is an optional PEM-encoded CA certificate used to verify
 	// the server's TLS certificate. Only used when Certificate is set.
 	CertificateAuthority string `json:"certificateAuthority,omitempty"`
+}
+
+var _ runtime.Validatable = (*WgetCredentials)(nil)
+
+// Validate implements runtime.Validatable. It rejects credentials that carry no
+// usable authentication material or that violate the field-pairing rules of the
+// supported authentication methods.
+func (c *WgetCredentials) Validate() error {
+	if c.Password != "" && c.Username == "" {
+		return errors.New("password is set but username is empty: basic authentication requires both username and password")
+	}
+	if c.PrivateKey != "" && c.Certificate == "" {
+		return errors.New("privateKey is set but certificate is empty: mTLS requires both certificate and privateKey")
+	}
+	if c.Certificate != "" && c.PrivateKey == "" {
+		return errors.New("certificate is set but privateKey is empty: mTLS requires both certificate and privateKey")
+	}
+	if c.CertificateAuthority != "" && c.Certificate == "" {
+		return errors.New("certificateAuthority is set but certificate is empty: the certificate authority is only evaluated together with a client certificate")
+	}
+	if c.IdentityToken == "" && c.Username == "" && c.Certificate == "" {
+		return errors.New("no authentication material: set at least one of identityToken, username/password, or certificate/privateKey")
+	}
+	return nil
 }

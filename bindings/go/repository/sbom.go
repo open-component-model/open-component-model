@@ -31,6 +31,17 @@ type SBOMDiscoverer interface {
 	DiscoverSBOM(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, opts ...SBOMOption) ([]SBOM, error)
 }
 
+// LocalSBOMDiscoverer this is an ability to discover SBOMs for local blobs.
+// This follows the GetLocalResource pattern of Interface Composability.
+//
+// Credentials are not passed in because a LocalResourceRepository is already
+// authenticated. See https://github.com/open-component-model/ocm-project/issues/1168.
+type LocalSBOMDiscoverer interface {
+	// DiscoverLocalSBOM returns every SBOM describing the local resource identified by
+	// identity in the given component version.
+	DiscoverLocalSBOM(ctx context.Context, component, version string, identity runtime.Identity, opts ...SBOMOption) ([]SBOM, error)
+}
+
 // SBOM is one SBOM document discovered for a resource.
 type SBOM struct {
 	// Platform of the artifact this SBOM describes. Zero when the source carries none.

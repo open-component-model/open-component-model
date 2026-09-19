@@ -19,7 +19,7 @@ organizes content into tutorials, how-to guides, explanations, and reference mat
 ```bash
 # Install dependencies (includes Hugo)
 cd website
-npm install
+npm ci
 
 # Start the development server
 npm run dev
@@ -257,13 +257,13 @@ What are you documenting?
 CLI command/flag in the legacy CLI (open-component-model/ocm)?
   -> website/content_versioned/version-legacy/docs/reference/
 CLI command/flag in the current CLI?
-  -> cli/docs/reference/ (Hugo mounts this into the website automatically)
+  -> bindings/go/cli/docs/reference/ (Hugo mounts this into the website automatically)
 
 Go library function/type?
   -> Source repo documentation, available as Go package documentation
 
 Kubernetes controller / CRD / Helm Chart?
-  -> kubernetes/controller/ has CRD definitions and controller Helm Charts
+  -> bindings/go/kubernetes/controller/ has CRD definitions and controller Helm Charts
 
 A new way to start using OCM?
   -> website/content/docs/getting-started/
@@ -292,6 +292,28 @@ This feature requires the new OCM library from `open-component-model/open-compon
 ```
 
 You can find appropriate icons on this [website](https://tabler.io/icons).
+
+---
+
+## Page URLs and Renames
+
+A docs page URL is `/docs/<sections>/<slug>/`. The slug defaults to the page title, so a title change moves the page
+and breaks every existing link to it.
+
+- Pin the URL with an explicit `slug` in the front matter if the page is linked from outside this repository, above
+  all from Go code. A released binary prints the URL it was compiled with forever, and that link cannot be corrected
+  afterwards.
+- Keep the old URL alive with `aliases` if a page moves. Hugo writes a redirect page for each alias. GitHub Pages
+  serves the site and does not support server-side redirects, so `aliases` is the only mechanism available.
+
+```yaml
+---
+title: "Sign Component Versions"
+slug: "sign-component-versions"
+aliases:
+  - /docs/getting-started/sign-component-versions/
+---
+```
 
 ---
 
