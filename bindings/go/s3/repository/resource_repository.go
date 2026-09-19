@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	"ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
+	s3creds "ocm.software/open-component-model/bindings/go/s3/spec/credentials"
 	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 )
 
@@ -268,4 +269,8 @@ func pinningVersion(versionID string) string {
 		return ""
 	}
 	return versionID
+}
+
+func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
+	return s3creds.Scheme
 }
