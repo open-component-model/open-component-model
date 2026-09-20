@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/cmd/download"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/generate"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/get"
+	ocminit "ocm.software/open-component-model/bindings/go/cli/cmd/init"
 	ocmcmd "ocm.software/open-component-model/bindings/go/cli/cmd/internal/cmd"
 	pluginregistry "ocm.software/open-component-model/bindings/go/cli/cmd/plugins"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/setup/hooks"
@@ -80,5 +81,6 @@ func New() *cobra.Command {
 	cmd.AddCommand(pluginregistry.New())
 	cmd.AddCommand(transfer.New())
 	cmd.AddCommand(describe.New())
+	cmd.AddCommand(ocminit.New())
 	return cmd
 }

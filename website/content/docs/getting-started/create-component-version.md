@@ -38,6 +38,81 @@ with `ocm transfer`.
 - [Install the OCM CLI]({{< relref "ocm-cli-installation.md" >}})
 - Install [jq](https://jqlang.org/) (optional, for inspecting archives)
 
+## Autodiscover: scaffold with `ocm init`
+
+Writing `component-constructor.yaml` by hand (below) gives you full control, but
+if you already have a repository, `ocm init` inspects it and **writes the
+constructor for you** — deterministically, with zero configuration, offline, and
+no API key. It is the fastest way to a first component version.
+
+{{< callout context="note" title="What it discovers" icon="outline/info-circle" >}}
+`ocm init` reads only your local checkout: detected manifests (`go.mod`,
+`Chart.yaml`, `Dockerfile`, `package.json`, …), git signals (origin, tags,
+branch), a `LICENSE`, and the CI/release configuration (`.goreleaser.yaml`,
+GitHub Actions, `Makefile`/`Taskfile`, `ko`) so it can scaffold the images and
+binaries your pipeline actually publishes. See the
+[`ocm init` reference]({{< relref "docs/reference/ocm-init-classification.md" >}})
+for the full classification rules.
+{{< /callout >}}
+
+Point it at a repository and preview the result without writing a file:
+
+```shell
+ocm init ./my-service --dry-run
+```
+
+For a Helm-chart repository (a `deploy/Chart.yaml` plus a `values.yaml`
+referencing an image), it emits a ready-to-build constructor:
+
+```yaml
+components:
+  - name: github.com/acme/my-service
+    version: 0.33.0
+    labels:
+      - name: classification.ocm.software/maturity
+        value: active
+      - name: classification.ocm.software/versioning-scheme
+        value: semver
+    resources:
+      - name: chart
+        type: helmChart
+        relation: local
+        input:
+          type: Helm/v1
+          path: deploy
+    sources:
+      - name: source
+        type: git
+        access:
+          type: GitHub/v1
+          repoUrl: https://github.com/acme/my-service
+          commit: a5f62fb97f14d53bb060c7a6d27e2ac2a3470176
+```
+
+…and a summary of what it found and any fields to check:
+
+```text
+Discovered a single component using deterministic rules (no model):
+  • github.com/acme/my-service@0.33.0
+      kind: helmChart · version from git-tag · provider github.com/acme
+      – detected a Chart.yaml (appVersion 1.4.2)
+      – discovered image reference "ghcr.io/acme/my-service" from the repository
+
+Next step:
+  ocm init . -o component-constructor.yaml   # write the scaffold
+```
+
+Drop the `--dry-run` flag to write `component-constructor.yaml`, then build it
+with `ocm add cv` exactly as in the walkthrough below. `ocm init` only *writes*
+the scaffold — always review it first. Any value it could not discover (for
+example a published image tag that appears in no config) is emitted as a **TODO
+to verify**, never a silent guess.
+
+{{< callout context="tip" title="See its decisions" icon="outline/info-circle" >}}
+Run with `--loglevel debug` to see every classification decision — the manifests
+it detected, the kind and version it chose, and the CI artifacts it discovered.
+{{< /callout >}}
+
 ## Create Your First Component
 
 {{< steps >}}
@@ -474,6 +549,7 @@ ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0 --recursive -o 
 
 | Command                                                                              | Description                                    |
 |--------------------------------------------------------------------------------------|------------------------------------------------|
+| [`ocm init`]({{< relref "docs/reference/ocm-init-classification.md" >}})             | Scaffold a constructor file from a repository  |
 | [`ocm add cv`]({{< relref "docs/reference/ocm-cli/ocm_add_component-version.md" >}}) | Create component version from constructor file |
 | [`ocm get cv`]({{< relref "docs/reference/ocm-cli/ocm_get_component-version.md" >}}) | List and inspect component versions            |
 
@@ -484,3 +560,4 @@ ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0 --recursive -o 
 ## Related Documentation
 
 - [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - Explore all supported resource types and how to use them
+- [Reference: ocm init Repository Scaffolding]({{< relref "docs/reference/ocm-init-classification.md" >}}) - How the constructor is autodiscovered from a repository

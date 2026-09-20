@@ -970,3 +970,15 @@ RGW
 Cloudflare
 unversioned
 BuildKit
+Jev
+TypeSafe
+Gradle
+Monorepos
+submodule
+subdirectories
+Autodiscover
+autodiscovered
+init
+checkable
+Noul
+omp

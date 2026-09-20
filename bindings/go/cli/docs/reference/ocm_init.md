@@ -1,27 +1,55 @@
 ---
-title: ocm
-description: The official Open Component Model (OCM) CLI.
+title: ocm init
+description: Scaffold an OCM component-constructor file by inspecting a local repository.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm
+## ocm init
 
-The official Open Component Model (OCM) CLI
+Scaffold an OCM component-constructor file by inspecting a local repository
 
 ### Synopsis
 
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+Inspect a local repository and write a component-constructor.yaml scaffold you
+can build with "ocm add cv".
+
+By default classification is fully deterministic and needs no configuration: it
+reads detected manifests (go.mod, Chart.yaml, Dockerfile, package.json, ...) and
+git signals (origin, tags, branch) to decide the component kind, version, and
+source. It works offline and produces the same result every time.
+
+For a monorepo with several independent deliverables it emits one component per
+sub-deliverable plus a root aggregate that references them. A single component
+that merely keeps build scaffolding or tooling in subdirectories stays one
+component.
+
+Pass --ai-assist to route genuinely ambiguous repositories through the TypeSafe
+Jev decisions model (configured via init.cli.config.ocm.software/v1alpha1). If no
+API key is available it transparently falls back to the deterministic rules, so
+the command never blocks on a missing key.
+
+The command only WRITES the file; run "ocm add cv --constructor <file>" to build
+the component version.
 
 ```
-ocm [sub-command] [flags]
+ocm init [path] [flags]
 ```
 
 ### Options
+
+```
+      --ai-assist              use the Jev decisions model to refine ambiguous classifications (falls back to deterministic rules if no API key is configured)
+      --dry-run                print the constructor YAML to stdout instead of writing a file
+  -h, --help                   help for init
+      --min-confidence float   with --ai-assist, minimum model confidence to act on a decision; below this the deterministic result is kept (default 0.75)
+      --offline                skip the GitHub Releases network call; resolve versions from git tags only
+  -o, --output string          path to write the component-constructor file to (default "component-constructor.yaml")
+```
+
+### Options inherited from parent commands
 
 ```
       --config stringArray                 supply configuration by a given configuration file.
@@ -43,7 +71,6 @@ ocm [sub-command] [flags]
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
-  -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -66,16 +93,5 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
-* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
-* [ocm describe]({{< relref "ocm_describe.md" >}})	 - Describe OCM entities or metadata
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
-* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
-* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
-* [ocm init]({{< relref "ocm_init.md" >}})	 - Scaffold an OCM component-constructor file by inspecting a local repository
-* [ocm plugin]({{< relref "ocm_plugin.md" >}})	 - Manage OCM plugins
-* [ocm sign]({{< relref "ocm_sign.md" >}})	 - create signatures for component versions in OCM
-* [ocm transfer]({{< relref "ocm_transfer.md" >}})	 - Transfer anything in OCM
-* [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify digests and signatures of component versions in OCM
-* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
+* [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
 
