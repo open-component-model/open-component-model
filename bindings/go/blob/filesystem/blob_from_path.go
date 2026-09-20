@@ -216,7 +216,10 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 
 		// Process directory or file
 		if fi.IsDir() {
-			return processDirectory(path, fi, opt, tw)
+			// The walk root is the archive root and gets no entry of its own; its
+			// contents carry paths relative to it. PreserveDir makes the root a
+			// named directory within the archive, which is written like any other.
+			return processDirectory(path, fi, opt, tw, path == subPath && !opt.PreserveDir)
 		}
 		return processFile(path, fi, fileSystem, opt, tw)
 	})
@@ -224,7 +227,7 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 
 // processDirectory handles directory entries during DirWalk
 // Prune on exclude, optionally write header if included, always traverse
-func processDirectory(path string, fi fs.FileInfo, opt DirOptions, tw *tar.Writer) error {
+func processDirectory(path string, fi fs.FileInfo, opt DirOptions, tw *tar.Writer, isRoot bool) error {
 	// Exclude precedence: if directory matches any exclude pattern -> prune subtree by skipping dir
 	if len(opt.ExcludePatterns) > 0 {
 		inc, err := isPathIncluded(path, nil, opt.ExcludePatterns)
@@ -241,16 +244,12 @@ func processDirectory(path string, fi fs.FileInfo, opt DirOptions, tw *tar.Write
 	if err != nil {
 		return fmt.Errorf("error checking include/exclude pattern for directory %q: %w", path, err)
 	}
-	if inc {
+	if inc && !isRoot {
 		header, err := createTarHeader(fi, "", opt.Reproducible)
 		if err != nil {
 			return fmt.Errorf("error creating tar header for directory %q: %w", path, err)
 		}
-		name := filepath.ToSlash(path)
-		if !strings.HasSuffix(name, "/") {
-			name += "/"
-		}
-		header.Name = name
+		header.Name = filepath.ToSlash(path)
 		if err := tw.WriteHeader(header); err != nil {
 			return fmt.Errorf("error writing tar header for directory %q: %w", path, err)
 		}

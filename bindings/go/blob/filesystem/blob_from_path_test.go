@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -218,7 +219,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 	tr := tar.NewReader(reader)
 	foundPrefixed := false
 	var foundHeaders []string
-	expectedDirHeader := filepath.Base(targetDir) + "/"
+	expectedDirHeader := filepath.Base(targetDir)
 
 	for {
 		header, err := tr.Next()
@@ -229,7 +230,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 		foundHeaders = append(foundHeaders, header.Name)
 
-		// Expect exact directory header for preserved directory in canonical form (base + "/")
+		// Expect exact directory header for the preserved directory
 		if header.Typeflag == tar.TypeDir && header.Name == expectedDirHeader {
 			foundPrefixed = true
 		}
@@ -241,7 +242,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 	// Debug output to understand what we got
 	if !foundPrefixed {
-		t.Logf("Expected prefix: %s/", targetDirName)
+		t.Logf("Expected entry: %s", targetDirName)
 		t.Logf("Found headers: %v", foundHeaders)
 	}
 
@@ -481,7 +482,7 @@ func TestGetBlobFromPath_IncludeDirectoryOnly(t *testing.T) {
 		}
 		r.NoError(err)
 
-		if h.Typeflag == tar.TypeDir && h.Name == "sub/dir/" {
+		if h.Typeflag == tar.TypeDir && h.Name == "sub/dir" {
 			foundDir = true
 		}
 		_, err = io.ReadAll(tr)
@@ -566,4 +567,47 @@ func extractTarContents(t *testing.T, b blob.ReadOnlyBlob) []string {
 	}
 
 	return files
+}
+
+// The archive root is the directory being packed, so it gets no entry of its own
+// and directory names carry no trailing slash. That is the layout OCM v1 wrote,
+// and it is what makes a blob packed here byte-identical to one packed there.
+func TestGetBlobFromPath_ArchiveLayout(t *testing.T) {
+	r := require.New(t)
+
+	tmpDir := t.TempDir()
+	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "sub", "nested"), 0755))
+	createTestFile(t, tmpDir, "root.txt", "root")
+	createTestFile(t, filepath.Join(tmpDir, "sub"), "file.txt", "content")
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{Reproducible: true})
+	r.NoError(err)
+
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(reader.Close()) }()
+
+	names := map[string]byte{}
+	tr := tar.NewReader(reader)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+
+		names[header.Name] = header.Typeflag
+		r.NotContains([]string{".", "./"}, header.Name, "the archive root must not get an entry of its own")
+		r.False(strings.HasSuffix(header.Name, "/"), "directory names carry no trailing slash: %q", header.Name)
+
+		_, err = io.ReadAll(tr)
+		r.NoError(err)
+	}
+
+	r.Equal(map[string]byte{
+		"root.txt":     tar.TypeReg,
+		"sub":          tar.TypeDir,
+		"sub/file.txt": tar.TypeReg,
+		"sub/nested":   tar.TypeDir,
+	}, names)
 }
