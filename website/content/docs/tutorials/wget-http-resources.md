@@ -29,6 +29,7 @@ type is decided, how digest pinning protects you, and what changed since OCM v1.
 - How OCM resolves a resource's media type
 - How credentials are matched to a request, and how the three authentication methods interact
 - How to pin a resource by digest so a changed file is rejected instead of silently accepted
+- How to verify downloads against a source-side checksum, and how to pin an access-type resource's digest without downloading the body
 - How to send a non-GET request and tune timeouts, retries, and the download directory
 - What changed between OCM v1 and OCM v2, and how to migrate
 
@@ -229,6 +230,110 @@ configurations:
 See [HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) for the full schema,
 defaults, and how per-host settings are merged.
 
+## Verifying downloads against the source {#checksum-verification}
+
+Pinning a digest on the resource protects consumers against the file changing
+*after* the component version was built. It does **not** protect against
+trusting the wrong bytes at build time — the very first `ocm add cv` accepts
+whatever the server sends and records its SHA-256. If the mirror is
+compromised, that SHA-256 is the compromise.
+
+OCM closes that gap with a **source-side checksum** — an expected digest
+published by the artifact source (an RFC 9530 `Content-Digest` header, a
+Maven-style `<url>.sha256` sidecar, and so on). When the download completes,
+OCM compares what it just hashed against what the source claims. If they
+disagree, construction fails.
+
+Because the same policy makes sense across dozens of resources, it lives in
+the OCM configuration, not in the constructor:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: checksum.http.config.ocm.software/v1alpha1
+    defaultChecksumPolicy:
+      onMissing: compute
+      sources:
+        - type: httpHeader     # "Remote Included": Content-Digest / x-checksum-*
+        - type: externalUrl    # "Remote External": <url>.<ext> sibling file
+          algorithms: [sha256, sha1]
+    hosts:
+      "repo.example.com":
+        checksumPolicy:
+          onMissing: fail
+          sources: [{type: httpHeader}]
+```
+
+The wget spec itself carries no checksum policy: two operators pointing at two
+mirrors trust each mirror independently without editing anything the resource
+authored.
+
+### Input side: always downloads, always SHA-256 {#checksum-verification-input}
+
+The input embeds the bytes as a `LocalBlob/v1`, so the resource identity *is*
+those bytes. Verification is layered on top of the download — the file is
+always streamed to disk in a single pass and recorded as `SHA-256` with the
+`genericBlobDigest/v1` normalisation; the policy simultaneously verifies the
+bytes against whatever algorithm the source advertises.
+
+That decoupling matters: a Maven repository often ships SHA-1 or MD5 as the
+strongest checksum. Verifying against SHA-1 is fine on the wire, but the
+recorded digest is still SHA-256, so no weak algorithm leaks into the
+descriptor, OCI storage, or signing.
+
+### Access side: pin from source without downloading the body {#checksum-verification-access}
+
+A `Wget/v1` access references bytes on a remote server. Any downstream
+consumer will re-fetch and re-verify from that same server, so pinning "what
+the source claims" is a legitimate identity for the descriptor — and it means
+OCM can establish the digest without transferring the body.
+
+Opt in with `accessDigest`:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: checksum.http.config.ocm.software/v1alpha1
+    defaultChecksumPolicy:
+      onMissing: fail
+      sources:
+        - type: httpHeader
+        - type: externalUrl
+          algorithms: [sha256, sha1]
+      accessDigest:
+        algorithms: [sha256, sha1]
+```
+
+With this policy, `ocm add cv` (for an access-type resource) and every later
+descriptor refresh issue a single `HEAD` to the artifact URL — plus one small
+`GET` per `externalUrl` source to fetch the sidecar file. The artifact body
+is never downloaded. The recorded digest carries the algorithm the source
+actually offered (`SHA-256`, `SHA-1`, and so on), still with
+`genericBlobDigest/v1`.
+
+{{< callout context="caution" >}}
+`accessDigest` applies only to the digest processor. Transferring an access
+**by value** (`ocm transfer cv --copy-resources`) promotes it to a
+`LocalBlob/v1` and re-runs the input-side rules — the bytes are streamed and
+re-digested as SHA-256, regardless of `accessDigest`. Every local blob is
+self-describing.
+{{< /callout >}}
+
+### `onMissing`: what if no source yields a checksum? {#checksum-onmissing}
+
+| Value              | Behaviour                                                                                                              |
+|--------------------|------------------------------------------------------------------------------------------------------------------------|
+| `fail` (default)   | Abort construction or the digest processor. Use this when no source is trusted enough to skip verification.            |
+| `compute`          | Fall through to computing the digest from the stream, without external verification. Input records SHA-256 either way. |
+
+On the access-side fast path (`accessDigest`), `onMissing: fail` aborts
+**without downloading**; `onMissing: compute` falls through to the
+download-and-hash path.
+
+For the full schema, source strategies, precedence rules, and credential
+scoping, see
+[HTTP Checksum Configuration]({{< relref "docs/reference/checksum-http-configuration.md" >}}).
+
 ## Migrate from OCM v1 {#migrating-from-ocm-v1}
 
 Three things changed between OCM v1 and v2: credential matching, constructor syntax, and behavior. The credential changes are the most likely to break existing configurations.
@@ -320,3 +425,5 @@ isn't, the content changed.
   Identity attributes and matching rules for `Wget` consumers
 - [Reference: HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) - Timeouts,
   retries, and per-host settings
+- [Reference: HTTP Checksum Configuration]({{< relref "docs/reference/checksum-http-configuration.md" >}}) - Source-side
+  checksum verification and the access-side `accessDigest` fast path
