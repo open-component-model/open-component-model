@@ -80,8 +80,6 @@ type Input struct {
 //     false and err is nil, signalling "compute and store without verification".
 //   - When no source yields a checksum and OnMissing is Fail, an error is returned.
 func Resolve(ctx context.Context, policy Policy, in Input) (expected Expected, verified bool, err error) {
-	slog.DebugContext(ctx, "checksum: resolve policy against computed digests",
-		"url", in.URL, "sources", len(policy.Sources), "onMissing", policy.OnMissing)
 	for i, src := range policy.Sources {
 		switch src.Type {
 		case SourceStream:
@@ -92,8 +90,6 @@ func Resolve(ctx context.Context, policy Policy, in Input) (expected Expected, v
 		case SourceHTTPHeader:
 			candidates := FromHeaders(in.Headers, src.Headers)
 			if exp, ok := Select(candidates, src.Algorithms); ok {
-				slog.DebugContext(ctx, "checksum: header source yielded expected digest",
-					"url", in.URL, "index", i, "algorithm", exp.Algorithm.OCMName)
 				if verr := Verify(in.Computed, exp); verr != nil {
 					return Expected{}, false, verr
 				}
@@ -116,8 +112,6 @@ func Resolve(ctx context.Context, policy Policy, in Input) (expected Expected, v
 				return Expected{}, false, ferr
 			}
 			if ok {
-				slog.DebugContext(ctx, "checksum: external-url source yielded expected digest",
-					"url", in.URL, "index", i, "algorithm", exp.Algorithm.OCMName)
 				if verr := Verify(in.Computed, exp); verr != nil {
 					return Expected{}, false, verr
 				}
@@ -198,8 +192,6 @@ func ResolveAdvertised(ctx context.Context, policy Policy, in Input, prefer []Al
 	if len(prefer) == 0 {
 		prefer = All
 	}
-	slog.DebugContext(ctx, "checksum: resolve advertised digest",
-		"url", in.URL, "sources", len(policy.Sources), "prefer", algorithmNames(prefer))
 	for i, src := range policy.Sources {
 		switch src.Type {
 		case SourceStream:
@@ -211,8 +203,6 @@ func ResolveAdvertised(ctx context.Context, policy Policy, in Input, prefer []Al
 		case SourceHTTPHeader:
 			candidates := FromHeaders(in.Headers, src.Headers)
 			if exp, ok := Select(candidates, intersect(src.Algorithms, prefer)); ok {
-				slog.DebugContext(ctx, "checksum: advertised header source yielded digest",
-					"url", in.URL, "index", i, "algorithm", exp.Algorithm.OCMName)
 				return exp, true, nil
 			}
 			slog.DebugContext(ctx, "checksum: advertised header source yielded nothing",
@@ -234,8 +224,6 @@ func ResolveAdvertised(ctx context.Context, policy Policy, in Input, prefer []Al
 				return Expected{}, false, ferr
 			}
 			if ok {
-				slog.DebugContext(ctx, "checksum: advertised external-url source yielded digest",
-					"url", in.URL, "index", i, "algorithm", exp.Algorithm.OCMName)
 				return exp, true, nil
 			}
 			slog.DebugContext(ctx, "checksum: advertised external-url source yielded nothing",
@@ -247,15 +235,6 @@ func ResolveAdvertised(ctx context.Context, policy Policy, in Input, prefer []Al
 	slog.DebugContext(ctx, "checksum: no source advertised a digest",
 		"url", in.URL)
 	return Expected{}, false, nil
-}
-
-// algorithmNames returns the OCM names of an algorithm slice for debug logs.
-func algorithmNames(algs []Algorithm) []string {
-	out := make([]string, 0, len(algs))
-	for _, alg := range algs {
-		out = append(out, alg.OCMName)
-	}
-	return out
 }
 
 // intersect returns the algorithms present in both a and prefer, in prefer's

@@ -210,13 +210,6 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	if err != nil {
 		return nil, fmt.Errorf("invalid checksum policy for wget access digest: %w", err)
 	}
-	slog.DebugContext(ctx, "wget: process resource digest",
-		"url", url,
-		"hasPolicy", hasPolicy,
-		"onMissing", policy.OnMissing,
-		"sources", len(policy.Sources),
-		"pinned", resource != nil && resource.Digest != nil,
-	)
 
 	// Access-side fast path — pin from source-advertised checksum without a
 	// body download. Always taken when a policy applies; the operator's
@@ -238,8 +231,6 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 
 	// Download-and-hash path — no policy configured, or the policy allowed
 	// fallback and no source advertised a digest. Stream once, hash inline.
-	slog.DebugContext(ctx, "wget: downloading body for digest",
-		"url", url, "algorithms", algorithmNames(policy))
 	data, wget, err := r.download(ctx, resource, credentials,
 		download.WithDigestAlgorithms(digestAlgorithms(policy)...),
 	)
@@ -307,8 +298,12 @@ func (r *ResourceRepository) processDigestViaPeek(
 	if err != nil {
 		return nil, false, fmt.Errorf("invalid checksum policy preferredAlgorithms: %w", err)
 	}
-	slog.DebugContext(ctx, "wget: access fast path — peeking",
-		"url", url, "prefer", algorithmNamesList(prefer))
+	names := make([]string, 0, len(prefer))
+	for _, alg := range prefer {
+		names = append(names, alg.OCMName)
+	}
+	slog.DebugContext(ctx, "wget: peeking source-advertised checksum",
+		"url", url, "prefer", names)
 
 	exp, ok, err := httpverify.Peek(ctx, r.client, credentials, url, policy, prefer)
 	if err != nil {
@@ -320,7 +315,7 @@ func (r *ResourceRepository) processDigestViaPeek(
 		}
 		return nil, false, nil
 	}
-	slog.DebugContext(ctx, "wget: access fast path — source advertised digest",
+	slog.DebugContext(ctx, "wget: source advertised digest",
 		"url", url, "algorithm", exp.Algorithm.OCMName, "value", exp.Value)
 
 	out := resource.DeepCopy()
@@ -343,8 +338,6 @@ func (r *ResourceRepository) processDigestViaPeek(
 		if !strings.EqualFold(pinnedHex, exp.Value) {
 			return nil, false, fmt.Errorf("pinned digest %s does not match source-advertised %s digest %s", out.Digest.Value, exp.Algorithm.OCMName, exp.Value)
 		}
-		slog.DebugContext(ctx, "wget: pinned digest matches source-advertised digest",
-			"url", url, "algorithm", exp.Algorithm.OCMName)
 	}
 	out.Digest = &descriptor.Digest{
 		HashAlgorithm:          exp.Algorithm.OCMName,
@@ -415,26 +408,6 @@ func digestAlgorithms(policy checksum.Policy) []download.DigestAlgorithm {
 			Name: alg.OCMName,
 			New:  alg.New,
 		})
-	}
-	return out
-}
-
-// algorithmNames returns the OCM names of every algorithm the policy may need
-// computed during a full-body digest pass, in stable order — for debug logs.
-func algorithmNames(policy checksum.Policy) []string {
-	required := checksum.RequiredAlgorithms(policy)
-	out := make([]string, 0, len(required))
-	for _, alg := range required {
-		out = append(out, alg.OCMName)
-	}
-	return out
-}
-
-// algorithmNamesList returns the OCM names of a preference list — for debug logs.
-func algorithmNamesList(algs []checksum.Algorithm) []string {
-	out := make([]string, 0, len(algs))
-	for _, alg := range algs {
-		out = append(out, alg.OCMName)
 	}
 	return out
 }
