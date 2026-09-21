@@ -18,6 +18,11 @@
   'minimumReleaseAge': '28 days',
   'internalChecksFilter': 'strict',
   'prCreation': 'not-pending',
+  // CI runs only on pull_request, so renovate/* branches never get real check
+  // statuses. Count internal checks (e.g. renovate/stability-days) as success
+  // so prCreation='not-pending' does not defer PR creation indefinitely.
+  // See https://docs.renovatebot.com/configuration-options/#suppress-branchpr-creation-for-x-days
+  'internalChecksAsSuccess': true,
   // config:best-practices this is usually disabled by default.
   // https://github.com/google/docsy/blob/9f8acf7a4547cb1c5d1b88b3db588793bfd6eb25/renovate.json5#L7
   // Also, disabling this means that transitive dependencies that aren't 28 days old at least,
