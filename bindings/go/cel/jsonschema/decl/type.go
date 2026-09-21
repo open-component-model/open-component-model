@@ -3,8 +3,8 @@ package decl
 import (
 	"fmt"
 
-	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types/ref"
+	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/common/types/ref"
 
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
