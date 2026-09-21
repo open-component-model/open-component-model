@@ -23,6 +23,7 @@ package checksum
 import (
 	"crypto"
 	"fmt"
+	"hash"
 	"strings"
 
 	// Register the hash implementations behind crypto.Hash.New used by this package.
@@ -49,8 +50,11 @@ type Algorithm struct {
 	Hash crypto.Hash
 }
 
-// New returns a fresh hash.Hash for the algorithm.
-func (a Algorithm) New() interface{ Write([]byte) (int, error) } { //nolint:ireturn // returns hash.Hash intentionally.
+// New returns a fresh hash.Hash for the algorithm. Returning the standard
+// [hash.Hash] type (instead of a narrower ad-hoc interface) lines up with the
+// download package's [DigestAlgorithm.New] contract, so a caller can hand it
+// straight through without an intermediate wrapper.
+func (a Algorithm) New() hash.Hash {
 	return a.Hash.New()
 }
 

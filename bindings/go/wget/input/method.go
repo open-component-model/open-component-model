@@ -349,7 +349,7 @@ func digestAlgorithms(policy checksum.Policy) []download.DigestAlgorithm {
 	for _, alg := range required {
 		out = append(out, download.DigestAlgorithm{
 			Name: alg.OCMName,
-			New:  alg.Hash.New,
+			New:  alg.New,
 		})
 	}
 	return out
