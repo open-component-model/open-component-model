@@ -232,6 +232,27 @@ func TestResolve_ExternalDefaultURL(t *testing.T) {
 	r.Equal("https://example.com/artifact.tar.sha256", seen["SHA-256"])
 }
 
+// TestResolve_ExternalDefaultURL_PreservesQuery confirms the Maven-default
+// sidecar URL is built by appending the extension to the path — not to the
+// raw string — so query parameters remain intact.
+func TestResolve_ExternalDefaultURL_PreservesQuery(t *testing.T) {
+	r := require.New(t)
+	seen := map[string]string{}
+	fetch := func(_ context.Context, u string, alg Algorithm) (Expected, bool, error) {
+		seen[alg.OCMName] = u
+		if alg.OCMName == "SHA-256" {
+			return Expected{Algorithm: SHA256, Value: helloSHA256}, true, nil
+		}
+		return Expected{}, false, nil
+	}
+	_, verified, err := Resolve(context.Background(), Policy{
+		Sources: []Source{{Type: SourceExternalURL, Algorithms: []Algorithm{SHA256}}},
+	}, Input{URL: "https://example.com/artifact.tar?download=1", Computed: helloComputed(), FetchURL: fetch})
+	r.NoError(err)
+	r.True(verified)
+	r.Equal("https://example.com/artifact.tar.sha256?download=1", seen["SHA-256"])
+}
+
 // TestResolve_ExternalExplicitURL confirms that Source.URL, when set, is used
 // verbatim: no templating, no substitution. The same URL is presented to
 // FetchURL for every algorithm the source declares.

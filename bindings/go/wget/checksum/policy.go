@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 )
 
 // SourceType mirrors the wget input spec's checksum source types without importing
@@ -279,10 +280,21 @@ func fetchExternal(ctx context.Context, src Source, in Input, algs []Algorithm) 
 }
 
 // resolveExternalURL returns the checksum URL for src at alg: the explicit
-// [Source.URL] when set, otherwise the Maven default `<baseURL>.<alg.Extension>`.
+// [Source.URL] when set, otherwise the Maven default: alg.Extension appended
+// to baseURL's path, preserving query and fragment. Falls back to naive string
+// concatenation for unparseable URLs so callers never see an error here.
 func resolveExternalURL(src Source, baseURL string, alg Algorithm) string {
 	if src.URL != "" {
 		return src.URL
 	}
-	return baseURL + "." + alg.Extension
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Path == "" && u.Opaque == "" && u.Host == "" {
+		return baseURL + "." + alg.Extension
+	}
+	if u.Opaque != "" {
+		u.Opaque += "." + alg.Extension
+	} else {
+		u.Path += "." + alg.Extension
+	}
+	return u.String()
 }

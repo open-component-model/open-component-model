@@ -168,15 +168,15 @@ func (c *Config) PolicyForURL(rawURL string) *ChecksumPolicy {
 	}
 	u, err := url.Parse(rawURL)
 	if err == nil && u.Host != "" && len(c.Hosts) > 0 {
-		// Build a lowercased-key view once so a config keyed by
-		// "Repo.Example.Com" matches a URL host "REPO.EXAMPLE.COM" and vice
-		// versa. Hostnames are case-insensitive per RFC 3986 §3.2.2, but
-		// url.Parse preserves the case the user wrote and Go's map lookup
-		// is exact. Ports and IPv6 brackets are preserved by lowercasing the
-		// whole "host[:port]" segment.
+		// Normalise config keys once: lowercase (RFC 3986 §3.2.2 makes host
+		// case-insensitive but url.Parse preserves the user's case and Go
+		// map lookup is exact) and strip one terminal dot from a DNS
+		// hostname so a config keyed "repo.example.com" matches a URL that
+		// reaches the resolver as "repo.example.com." (RFC 3696 §2). Ports
+		// and IP literals are preserved.
 		lower := make(map[string]*HostConfig, len(c.Hosts))
 		for k, v := range c.Hosts {
-			lower[strings.ToLower(k)] = v
+			lower[normalizeHostKey(k)] = v
 		}
 		for _, key := range hostKeys(u.Host) {
 			if hc := lower[key]; hc != nil && hc.ChecksumPolicy != nil {
@@ -192,14 +192,54 @@ func (c *Config) PolicyForURL(rawURL string) *ChecksumPolicy {
 //
 // An entry keyed by the bare hostname applies to every port on that host, and
 // one keyed "host:port" applies to that port alone and wins where both are
-// present — the same rule http.config.ocm.software uses.
+// present — the same rule http.config.ocm.software uses. A terminal dot on a
+// DNS hostname (RFC 3696 §2) is stripped so the URL and config-key views
+// agree.
 func hostKeys(host string) []string {
 	if host == "" {
 		return nil
 	}
-	host = strings.ToLower(host)
+	host = normalizeHostKey(host)
 	if name := (&url.URL{Host: host}).Hostname(); name != host {
 		return []string{host, name}
 	}
 	return []string{host}
+}
+
+// normalizeHostKey lowercases the "host[:port]" and strips one trailing dot
+// from a DNS hostname component. IPv6 literals ("[::1]") and bare IPs are left
+// intact.
+func normalizeHostKey(host string) string {
+	host = strings.ToLower(host)
+	if host == "" || strings.HasPrefix(host, "[") {
+		return host
+	}
+	// Split off port, if any, without touching IPv6 literals (already handled).
+	name, port := host, ""
+	if i := strings.LastIndexByte(host, ':'); i >= 0 && !strings.ContainsRune(host[:i], ':') {
+		name, port = host[:i], host[i:]
+	}
+	// Only strip when it isn't an IPv4 literal ending in a dot ("127.0.0.").
+	// Simple heuristic: if the last label is non-numeric, it's a DNS name.
+	if strings.HasSuffix(name, ".") {
+		lastDot := strings.LastIndexByte(name[:len(name)-1], '.')
+		last := name[lastDot+1 : len(name)-1]
+		if !isAllDigits(last) {
+			name = name[:len(name)-1]
+		}
+	}
+	return name + port
+}
+
+// isAllDigits reports whether s consists entirely of ASCII digits.
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }

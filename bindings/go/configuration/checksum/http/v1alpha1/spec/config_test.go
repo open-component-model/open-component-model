@@ -194,3 +194,36 @@ configurations:
 	r.NotNil(got, "mixed-case config key must match a lowercased URL hostname")
 	r.Equal(v1alpha1.OnMissingFail, got.OnMissing)
 }
+
+func TestPolicyForURL_TerminalDotHostnameMatchesConfigKey(t *testing.T) {
+	r := require.New(t)
+	// RFC 3696 §2: a DNS name may carry a terminal dot. A URL that reaches
+	// the resolver as "repo.example.com." must still match a config keyed
+	// "repo.example.com", both directions.
+	cfg, err := v1alpha1.LookupConfig(decodeGeneric(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: checksum.http.config.ocm.software/v1alpha1
+    hosts:
+      "repo.example.com":
+        checksumPolicy: {onMissing: fail, sources: [{type: httpHeader}]}
+`))
+	r.NoError(err)
+	got := cfg.PolicyForURL("https://repo.example.com./artifact")
+	r.NotNil(got, "trailing-dot URL host must match an undotted config key")
+	r.Equal(v1alpha1.OnMissingFail, got.OnMissing)
+
+	// Symmetric: config keyed with trailing dot must match undotted URL.
+	cfg2, err := v1alpha1.LookupConfig(decodeGeneric(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: checksum.http.config.ocm.software/v1alpha1
+    hosts:
+      "repo.example.com.":
+        checksumPolicy: {onMissing: fail, sources: [{type: httpHeader}]}
+`))
+	r.NoError(err)
+	got = cfg2.PolicyForURL("https://repo.example.com/artifact")
+	r.NotNil(got, "undotted URL host must match a trailing-dot config key")
+	r.Equal(v1alpha1.OnMissingFail, got.OnMissing)
+}
