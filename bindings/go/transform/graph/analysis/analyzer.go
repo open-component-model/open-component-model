@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
