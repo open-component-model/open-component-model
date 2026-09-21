@@ -20,32 +20,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
-	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ctfRepo builds a read-write CTF repository at a fresh temp dir, adds the
 // given descriptors, and returns the raw read-only repository spec JSON.
 func ctfRepo(t *testing.T, descs ...*desc.Descriptor) []byte {
 	t.Helper()
-	r := require.New(t)
 
-	spec := &ctf.Repository{
-		Type:       ocmruntime.Type{Version: "v1", Name: "ctf"},
-		FilePath:   t.TempDir(),
-		AccessMode: ctf.AccessModeReadWrite,
-	}
-	repo, err := ocirepository.NewFromCTFRepoV1(t.Context(), spec)
-	r.NoError(err)
-	for _, d := range descs {
-		r.NoError(repo.AddComponentVersion(t.Context(), d))
-	}
-	spec.AccessMode = ctf.AccessModeReadOnly
-	raw, err := json.Marshal(spec)
-	r.NoError(err)
-	return raw
+	return ctfRepoAt(t, t.TempDir(), descs...)
 }
 
 // makeDescriptor builds a v2 descriptor with the given references.
@@ -162,15 +145,6 @@ func realPluginReconciler(t *testing.T, objs ...client.Object) (*Reconciler, cli
 	return rec, c
 }
 
-// reconcileUntilSettled is a single reconcile. The effective config is now
-// recorded in memory and published with the rest of the status, so there is no
-// longer an extra "effective ocm config changed" round to skip.
-func reconcileUntilSettled(t *testing.T, rec *Reconciler, key client.ObjectKey) (ctrl.Result, error) {
-	t.Helper()
-
-	return rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
-}
-
 func componentNamesFromStatus(t *testing.T, d *v1alpha1.Discovery) []string {
 	t.Helper()
 	names := make([]string, 0, len(d.Status.Components))
@@ -229,7 +203,7 @@ func TestReconcile_PathMatcherResolutionAcrossRepositories(t *testing.T) {
 
 	rec, c := realPluginReconciler(t, cm, component, discovery)
 
-	_, err := reconcileUntilSettled(t, rec, client.ObjectKeyFromObject(discovery))
+	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.NoError(err)
 
 	current := &v1alpha1.Discovery{}
@@ -280,7 +254,7 @@ func TestReconcile_FallbackResolutionAcrossRepositories(t *testing.T) {
 
 	rec, c := realPluginReconciler(t, cm, component, discovery)
 
-	_, err := reconcileUntilSettled(t, rec, client.ObjectKeyFromObject(discovery))
+	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.NoError(err)
 
 	current := &v1alpha1.Discovery{}
@@ -328,7 +302,7 @@ func TestReconcile_MatchedRepositoryMissingChildDoesNotFallThrough(t *testing.T)
 
 	rec, c := realPluginReconciler(t, cm, component, discovery)
 
-	_, err := reconcileUntilSettled(t, rec, client.ObjectKeyFromObject(discovery))
+	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.NoError(err)
 
 	settled := &v1alpha1.Discovery{}
@@ -347,7 +321,7 @@ func TestReconcile_MatchedRepositoryMissingChildDoesNotFallThrough(t *testing.T)
 	freshCM.Data[".ocmconfig"] = brokenConfig
 	r.NoError(c.Update(t.Context(), freshCM))
 
-	_, err = reconcileUntilSettled(t, rec, client.ObjectKeyFromObject(discovery))
+	_, err = rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.Error(err)
 
 	current := &v1alpha1.Discovery{}
@@ -387,7 +361,7 @@ func TestReconcile_MixedResolverTypesFailRetryablyAndRetainPayload(t *testing.T)
 
 	rec, c := realPluginReconciler(t, cm, component, discovery)
 
-	_, err := reconcileUntilSettled(t, rec, client.ObjectKeyFromObject(discovery))
+	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.NoError(err)
 
 	settled := &v1alpha1.Discovery{}
@@ -406,7 +380,7 @@ func TestReconcile_MixedResolverTypesFailRetryablyAndRetainPayload(t *testing.T)
 	freshCM.Data[".ocmconfig"] = mixed
 	r.NoError(c.Update(t.Context(), freshCM))
 
-	_, err = reconcileUntilSettled(t, rec, client.ObjectKeyFromObject(discovery))
+	_, err = rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.Error(err)
 
 	current := &v1alpha1.Discovery{}
@@ -453,7 +427,7 @@ func TestReconcile_InheritedEffectiveConfigResolution(t *testing.T) {
 
 	rec, c := realPluginReconciler(t, cm, component, discovery)
 
-	_, err := reconcileUntilSettled(t, rec, client.ObjectKeyFromObject(discovery))
+	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.NoError(err)
 
 	current := &v1alpha1.Discovery{}

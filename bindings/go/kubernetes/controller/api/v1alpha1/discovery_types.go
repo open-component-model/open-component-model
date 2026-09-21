@@ -11,26 +11,6 @@ import (
 
 const KindDiscovery = "Discovery"
 
-// Selector filters elements of the transitive component graph of a Discovery.
-// All specified clauses are ANDed. A nil or empty selector matches everything.
-type Selector struct {
-	// MatchIdentity matches elements whose identity contains all specified
-	// key-value pairs. Keys must be present even when compared against an
-	// empty value.
-	// +optional
-	MatchIdentity map[string]string `json:"matchIdentity,omitempty"`
-
-	// MatchLabels matches elements carrying labels with the specified string
-	// values. Non-string label values are matched via Expression only.
-	// +optional
-	MatchLabels map[string]string `json:"matchLabels,omitempty"`
-
-	// Expression is a CEL expression evaluated for each element. It must
-	// evaluate to a boolean. An empty expression is a no-op.
-	// +optional
-	Expression string `json:"expression,omitempty"`
-}
-
 // Extract projects the filtered Discovery result into free-form records.
 // Exactly one extraction mode must be specified.
 // +kubebuilder:validation:XValidation:rule="(has(self.byResources) ? 1 : 0) + (has(self.byComponents) ? 1 : 0) + (has(self.expression) ? 1 : 0) == 1",message="exactly one of byResources, byComponents, or expression must be specified"

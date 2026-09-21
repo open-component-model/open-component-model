@@ -31,8 +31,9 @@ A `Discovery` references a `Component` in the same namespace via
 `spec.componentRef.name`. When that `Component` is `Ready`, the controller:
 
 1. Reads the resolved repository from the `Component`'s
-   `status.component.repositorySpec`. Descriptor `repositoryContexts` and
-   configured repository redirects are ignored during traversal.
+   `status.component.repositorySpec` and uses it as the base repository for the
+   traversal. Resolvers configured in the effective OCM configuration apply as
+   well, so references may resolve to other repositories.
 2. Resolves the **entire** reachable component graph from that repository before
    filtering or publishing anything.
 3. Applies the reference, component, and resource selectors.
@@ -44,9 +45,9 @@ A `Discovery` references a `Component` in the same namespace via
 flowchart LR
     classDef crd fill:#e8f4fd,stroke:#2c7be5,color:#1a1a2e
 
-    Component["Component\n(Ready)"]
+    Component["Component<br/>(Ready)"]
     Discovery["Discovery"]
-    Graph[("Transitive\ncomponent graph")]
+    Graph[("Transitive<br/>component graph")]
 
     Component -->|referenced by| Discovery
     Component -->|resolved repository| Graph
@@ -181,7 +182,9 @@ together. A nil or empty selector matches everything.
 
 Selector CEL bindings:
 
-- `identity` — the element identity, a map of string to string.
+- `identity` — the element identity, a map of string to string. On the
+  reference stage it also carries `componentName`, the name of the referenced
+  component, alongside the reference's own name, version, and extra identity.
 - `labels` — a map from label name to the decoded JSON value of the label.
 
 The `referenceSelector` scans the references of **all** resolved descriptors and
@@ -287,8 +290,8 @@ Discovery uses the shared OCM configuration propagation of the controller chain:
   inheritance.
 
 The effective configuration is published in `status.effectiveOCMConfig` and used
-uniformly for the root and all transitive fetches. Traversal uses only the
-`Component`'s resolved `repositorySpec`.
+uniformly for the root and all transitive fetches, including any resolvers it
+configures.
 
 ## Status semantics
 
@@ -299,14 +302,11 @@ meaningful:
 - An **uncomputed** field is **absent**.
 - A **selected but empty** result is an empty list (`[]`), never omitted or null.
 
-On success, including when nothing matches, the controller sets `Ready=True`,
-removes `Stalled`/`Reconciling`, and advances `status.observedGeneration`. The
-`Ready` reason distinguishes the empty cases:
-
-- **`Succeeded`** — The graph was resolved and filtered; results were published.
-- **`NoReferencesMatched`** — The reference selector matched no references
-  (`components: []` / `extracted: []`).
-- **`NoComponentsMatched`** — The component selector matched no components.
+On success, including when nothing matches, the controller sets `Ready=True`
+with reason `Succeeded`, removes `Stalled`/`Reconciling`, and advances
+`status.observedGeneration`. An empty result is reported in the `Ready`
+message, which states whether it was the reference selector or the component
+selector that matched nothing (`components: []` / `extracted: []`).
 
 On failure, the controller **retains the last successful payload**, even if it
 belongs to the previous output mode, and updates only the failure conditions.
@@ -346,20 +346,22 @@ or version-pinned: references resolve by version, so the graph cannot change
 without the `Component`'s resolved version changing, which is watched.
 
 Configuration is the exception, and deliberately so: credentials decide whether
-the graph can be fetched, not what it contains. Combined with the absence of
-retries, that means a Discovery that failed on credentials stays failed until
-its spec changes or its `Component` moves. Fixing the `Secret` alone will not
-revive it.
+the graph can be fetched, not what it contains. A Discovery that failed on
+credentials is retried with exponential backoff (up to five minutes between
+attempts), so fixing the `Secret` revives it on the next attempt without a spec
+change, just not immediately.
 
 `status.observedComponentDigest` is used to check if another walk is necessary.
 If the digest is the same for the root component as observed last time, we don't
-need to re-walk the entire graph. This field is only set if ALL references have
-a digest field for the root component since a missing digest breaks the chain
-of trust. This is not considered if there is an observed generation update
-of the Discovery object itself. That will always result in a full graph walk.
+need to re-walk the entire graph. This field is only set if every reference of
+every descriptor in the resolved graph has a digest, since a single missing
+digest anywhere breaks the chain of trust. This is not considered if there is an
+observed generation update of the Discovery object itself. That will always
+result in a full graph walk.
 
-Suspended, deleting, and terminally failed (`Stalled=True`) objects do not
-schedule periodic work.
+Suspended and deleting objects exit reconciliation immediately and retain their
+existing conditions and payload. Terminally failed (`Stalled=True`) objects are
+not requeued.
 
 ## Deletion protection
 

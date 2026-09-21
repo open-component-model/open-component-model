@@ -11,15 +11,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
-
-func objectKey(obj client.Object) types.NamespacedName {
-	return types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}
-}
 
 var discoveryGVK = schema.GroupVersionKind{
 	Group:   v1alpha1.GroupVersion.Group,
@@ -145,14 +140,14 @@ var _ = Describe("Discovery API", func() {
 				spec["extract"] = map[string]any{"byResources": map[string]any{}}
 			})
 			Expect(k8sClient.Create(ctx, obj)).To(Succeed())
-			Expect(k8sClient.Get(ctx, objectKey(obj), obj)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj)).To(Succeed())
 			extract, found, err := unstructured.NestedMap(obj.Object, "spec", "extract")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(found).To(BeTrue())
 			Expect(extract).To(HaveKey("byResources"))
 
 			typed := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, objectKey(obj), typed)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), typed)).To(Succeed())
 			Expect(typed.Spec.Extract).NotTo(BeNil())
 			Expect(typed.Spec.Extract.ByResources).NotTo(BeNil())
 			Expect(typed.Spec.Extract.ByResources).To(BeEmpty())
@@ -172,29 +167,6 @@ var _ = Describe("Discovery API", func() {
 				spec["componentSelector"] = map[string]any{}
 			})
 			Expect(k8sClient.Create(ctx, obj)).To(Succeed())
-		})
-
-		It("accepts a Discovery kind in ocmConfig", func(ctx SpecContext) {
-			discovery := &v1alpha1.Discovery{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "discovery-",
-					Namespace:    namespace.Name,
-				},
-				Spec: v1alpha1.DiscoverySpec{
-					ComponentRef: corev1.LocalObjectReference{Name: "releasechannel"},
-					OCMConfig: []v1alpha1.OCMConfiguration{
-						{
-							NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
-								APIVersion: v1alpha1.GroupVersion.String(),
-								Kind:       v1alpha1.KindDiscovery,
-								Name:       "some-config-provider",
-							},
-							Policy: v1alpha1.ConfigurationPolicyPropagate,
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, discovery)).To(Succeed())
 		})
 	})
 
@@ -216,7 +188,7 @@ var _ = Describe("Discovery API", func() {
 
 		It("distinguishes absent from empty payload fields", func(ctx SpecContext) {
 			fetched := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, objectKey(discovery), fetched)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), fetched)).To(Succeed())
 			Expect(fetched.Status.Components).To(BeNil())
 			Expect(fetched.Status.Extracted).To(BeNil())
 
@@ -224,14 +196,14 @@ var _ = Describe("Discovery API", func() {
 			Expect(k8sClient.Status().Update(ctx, fetched)).To(Succeed())
 
 			after := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, objectKey(discovery), after)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), after)).To(Succeed())
 			Expect(after.Status.Components).NotTo(BeNil())
 			Expect(after.Status.Components).To(BeEmpty())
 			Expect(after.Status.Extracted).To(BeNil())
 
 			raw := &unstructured.Unstructured{}
 			raw.SetGroupVersionKind(discoveryGVK)
-			Expect(k8sClient.Get(ctx, objectKey(discovery), raw)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), raw)).To(Succeed())
 			components, found, err := unstructured.NestedSlice(raw.Object, "status", "components")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(found).To(BeTrue(), "components: [] must be present, not omitted")
@@ -243,12 +215,12 @@ var _ = Describe("Discovery API", func() {
 
 		It("preserves consumer-shaped arbitrary nested JSON", func(ctx SpecContext) {
 			fetched := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, objectKey(discovery), fetched)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), fetched)).To(Succeed())
 			fetched.Status.Components = toJSONs(descriptor)
 			Expect(k8sClient.Status().Update(ctx, fetched)).To(Succeed())
 
 			after := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, objectKey(discovery), after)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), after)).To(Succeed())
 			Expect(after.Status.Components).To(HaveLen(1))
 
 			raw, err := json.Marshal(descriptor)
@@ -266,7 +238,7 @@ var _ = Describe("Discovery API", func() {
 				"optional": nil,
 			}
 			fetched := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, objectKey(discovery), fetched)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), fetched)).To(Succeed())
 			fetched.Status.Extracted = []v1alpha1.ExtractedRecord{
 				extractedRecord(values),
 				{},
@@ -274,7 +246,7 @@ var _ = Describe("Discovery API", func() {
 			Expect(k8sClient.Status().Update(ctx, fetched)).To(Succeed())
 
 			after := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, objectKey(discovery), after)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), after)).To(Succeed())
 			Expect(after.Status.Extracted).To(HaveLen(2))
 			Expect(after.Status.Extracted[1]).To(BeEmpty())
 			raw, err := json.Marshal(after.Status.Extracted[0])
@@ -286,7 +258,7 @@ var _ = Describe("Discovery API", func() {
 
 		It("rejects mutually exclusive payload fields", func(ctx SpecContext) {
 			fetched := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, objectKey(discovery), fetched)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), fetched)).To(Succeed())
 			fetched.Status.Components = toJSONs(descriptor)
 			Expect(k8sClient.Status().Update(ctx, fetched)).To(Succeed())
 
@@ -298,18 +270,18 @@ var _ = Describe("Discovery API", func() {
 
 		It("retains old-mode status across spec extraction changes", func(ctx SpecContext) {
 			fetched := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, objectKey(discovery), fetched)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), fetched)).To(Succeed())
 			fetched.Status.Components = toJSONs(descriptor)
 			Expect(k8sClient.Status().Update(ctx, fetched)).To(Succeed())
 
 			// Switching from raw descriptors to extraction must not invalidate
 			// the retained status from the previous output mode.
-			Expect(k8sClient.Get(ctx, objectKey(discovery), fetched)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), fetched)).To(Succeed())
 			fetched.Spec.Extract = &v1alpha1.Extract{ByResources: map[string]string{"name": "resource.name"}}
 			Expect(k8sClient.Update(ctx, fetched)).To(Succeed())
 
 			after := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, objectKey(discovery), after)).To(Succeed())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), after)).To(Succeed())
 			Expect(after.Spec.Extract).NotTo(BeNil())
 			Expect(after.Status.Components).To(HaveLen(1))
 		})

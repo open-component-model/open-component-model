@@ -93,7 +93,7 @@ func TestReconcile_UnchangedRootDigestSkipsTraversal(t *testing.T) {
 	rec, c := realPluginReconciler(t, component, discovery)
 	key := client.ObjectKeyFromObject(discovery)
 
-	_, err := reconcileUntilSettled(t, rec, key)
+	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
 	r.NoError(err)
 
 	current := &v1alpha1.Discovery{}
@@ -140,7 +140,7 @@ func TestReconcile_MissingReferenceDigestForcesFullTraversal(t *testing.T) {
 	rec, c := realPluginReconciler(t, component, discovery)
 	key := client.ObjectKeyFromObject(discovery)
 
-	_, err := reconcileUntilSettled(t, rec, key)
+	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
 	r.NoError(err)
 
 	current := &v1alpha1.Discovery{}

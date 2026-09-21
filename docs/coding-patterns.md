@@ -906,27 +906,6 @@ All controllers use `GenerationChangedPredicate` to only reconcile on spec chang
 For(&v1alpha1.Component{}, builder.WithPredicates(predicate.GenerationChangedPredicate{}))
 ```
 
-### Field Indexing and Cross-Resource Watches
-
-Field indexes support efficient cross-resource lookups. Controller-private indexes are registered by the owning controller during setup. Indexes shared by multiple controllers are registered exactly once by manager bootstrap, before controller setup; standalone manager-backed test harnesses own the same prerequisite. For example, Component and Discovery share the Discovery component-reference index:
-
-```go
-if err := indexes.RegisterDiscoveryComponentRef(ctx, mgr.GetFieldIndexer()); err != nil {
-    return err
-}
-```
-
-Watch handlers use `handler.EnqueueRequestsFromMapFunc` with `client.MatchingFields{}` to find related objects:
-
-```go
-Watches(&v1alpha1.Repository{},
-    handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-        list := &v1alpha1.ComponentList{}
-        r.List(ctx, list, client.MatchingFields{fieldName: obj.GetName()})
-        // build and return requests...
-    }))
-```
-
 ### Finalizers
 
 Deletion is guarded by finalizers. `reconcileDelete` checks for dependent resources before removing the finalizer. Adding a finalizer triggers an immediate requeue. Multiple finalizers may be used in sequence to enforce cleanup ordering.

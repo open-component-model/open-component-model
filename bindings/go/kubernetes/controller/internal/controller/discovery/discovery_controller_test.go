@@ -67,24 +67,11 @@ func newReconciler(t *testing.T, objs ...client.Object) (*Reconciler, client.Cli
 	return r, fakeClient
 }
 
+// readyComponent is a ready Component pointing at a repository that does not
+// exist, for tests that must not reach traversal.
 func readyComponent(name, namespace string) *v1alpha1.Component {
-	return &v1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Status: v1alpha1.ComponentStatus{
-			Component: v1alpha1.ComponentInfo{
-				Component:      "ocm.software/test",
-				Version:        "1.0.0",
-				RepositorySpec: &apiextensionsv1.JSON{Raw: []byte(`{"type":"ctf/v1","filePath":"/tmp/nonexistent","accessMode":"readOnly"}`)},
-			},
-			Conditions: []metav1.Condition{{
-				Type:               v1alpha1.ReadyCondition,
-				Status:             metav1.ConditionTrue,
-				Reason:             v1alpha1.SucceededReason,
-				Message:            "ready",
-				LastTransitionTime: metav1.Now(),
-			}},
-		},
-	}
+	return readyComponentWithSpec(name, namespace, "ocm.software/test", "1.0.0",
+		[]byte(`{"type":"ctf/v1","filePath":"/tmp/nonexistent","accessMode":"readOnly"}`))
 }
 
 func TestReconcile_NotFound(t *testing.T) {

@@ -129,7 +129,6 @@ A few things about discovery:
 
 - Traversal is full and fail-fast: the whole reachable graph is resolved before filtering, and the first resolution failure retains the last successful payload and reports `Ready=False` with reason `ResolutionFailed`. There is no partial resolution or identity short-circuiting.
 - Results are gated on freshness: consumers must check `Ready=True` **and** `status.observedGeneration == metadata.generation`, because failures retain the last successful (possibly stale) payload.
-- A controller-wide safety interval (`--discovery-controller-safety-interval`, Helm `manager.discovery.safetyInterval`, default `30m`) re-queues successful Discoveries as insurance against missed watch events. It is not a per-object interval.
 - A referencing `Discovery` blocks deletion of its `Component`, like a referencing `Resource`. See [Discover Component Graphs]({{< relref "docs/how-to/discover-component-graphs.md" >}}) for a concrete example.
 
 [API reference]({{< relref "/docs/reference/kubernetes-api/discovery.md" >}})

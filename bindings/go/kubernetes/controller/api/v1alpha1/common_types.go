@@ -8,6 +8,26 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// Selector filters elements of the transitive component graph of a Discovery.
+// All specified clauses are ANDed. A nil or empty selector matches everything.
+type Selector struct {
+	// MatchIdentity matches elements whose identity contains all specified
+	// key-value pairs. Keys must be present even when compared against an
+	// empty value.
+	// +optional
+	MatchIdentity map[string]string `json:"matchIdentity,omitempty"`
+
+	// MatchLabels matches elements carrying labels with the specified string
+	// values. Non-string label values are matched via Expression only.
+	// +optional
+	MatchLabels map[string]string `json:"matchLabels,omitempty"`
+
+	// Expression is a CEL expression evaluated for each element. It must
+	// evaluate to a boolean. An empty expression is a no-op.
+	// +optional
+	Expression string `json:"expression,omitempty"`
+}
+
 // NamespacedObjectKindReference contains enough information to locate the typed referenced Kubernetes resource object
 // in any namespace.
 type NamespacedObjectKindReference struct {
