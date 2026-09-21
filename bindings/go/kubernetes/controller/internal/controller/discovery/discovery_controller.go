@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/time/rate"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -379,6 +380,10 @@ func upToDate(discovery *v1alpha1.Discovery, info v1alpha1.ComponentInfo) bool {
 		return false
 	}
 	if discovery.Status.Components == nil && discovery.Status.Extracted == nil {
+		return false
+	}
+	ready := status.FindCondition(discovery, v1alpha1.ReadyCondition)
+	if ready == nil || ready.Status != metav1.ConditionTrue {
 		return false
 	}
 

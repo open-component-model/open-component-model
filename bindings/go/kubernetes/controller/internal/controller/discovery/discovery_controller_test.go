@@ -289,6 +289,13 @@ func TestUpToDate(t *testing.T) {
 	}
 	discovery := func(mutate func(*v1alpha1.Discovery)) *v1alpha1.Discovery {
 		d := &v1alpha1.Discovery{ObjectMeta: metav1.ObjectMeta{Generation: 3}}
+		d.Status.Conditions = []metav1.Condition{{
+			Type:               v1alpha1.ReadyCondition,
+			Status:             metav1.ConditionTrue,
+			Reason:             v1alpha1.SucceededReason,
+			Message:            "ready",
+			LastTransitionTime: metav1.Now(),
+		}}
 		d.Status.ObservedGeneration = 3
 		d.Status.ObservedComponentDigest = key
 		d.Status.Components = []apiextensionsv1.JSON{}
@@ -308,6 +315,7 @@ func TestUpToDate(t *testing.T) {
 		{"unchanged with extracted payload", discovery(func(d *v1alpha1.Discovery) {
 			d.Status.Components = nil
 			d.Status.Extracted = []v1alpha1.ExtractedRecord{}
+
 		}), info("abc"), true},
 		{"no recorded digest", discovery(func(d *v1alpha1.Discovery) {
 			d.Status.ObservedComponentDigest = ""
