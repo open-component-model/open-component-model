@@ -154,6 +154,89 @@ func orFail(m OnMissing) OnMissing {
 	return m
 }
 
+// ResolveAdvertised walks the policy's sources in order and returns the first
+// [Expected] checksum a source advertises, without requiring a completed
+// download. It is meant for callers that pin from what the source claims rather
+// than compute from bytes — today, the Wget/v1 access-side digest processor.
+//
+// prefer restricts and orders the algorithms accepted from the sources: an
+// advertised digest is returned only when its algorithm appears in prefer, and
+// among competing offers the earliest match in prefer wins. Empty prefer means
+// "any supported algorithm, strongest first" (see [All]).
+//
+// Semantics differ from [Resolve]:
+//
+//   - No [Input.Computed] map is consulted; no [Verify] is called.
+//   - A [SourceStream] entry is treated as "no advertised digest here" — it
+//     signals "trust the stream", which for pin-from-source means the caller
+//     should fall back to downloading and computing.
+//   - When no source yields a digest, ok is false; the caller decides whether
+//     to fall back to download-and-hash or to fail (per OnMissing).
+//
+// probe is the transport into the completed response headers on the access
+// side. When nil, only sources that do not require a HEAD/GET are consulted —
+// today only externalUrl via [Input.FetchURL] and, if headers are already known,
+// [Input.Headers].
+func ResolveAdvertised(ctx context.Context, policy Policy, in Input, prefer []Algorithm) (Expected, bool, error) {
+	if len(prefer) == 0 {
+		prefer = All
+	}
+	for _, src := range policy.Sources {
+		switch src.Type {
+		case SourceStream:
+			// Explicit "trust the stream" — the caller must download to
+			// compute a digest.
+			return Expected{}, false, nil
+		case SourceHTTPHeader:
+			candidates := FromHeaders(in.Headers, src.Headers)
+			if exp, ok := Select(candidates, intersect(src.Algorithms, prefer)); ok {
+				return exp, true, nil
+			}
+		case SourceExternalURL:
+			if in.FetchURL == nil {
+				continue
+			}
+			algs := intersect(src.Algorithms, prefer)
+			if len(algs) == 0 {
+				continue
+			}
+			exp, ok, ferr := fetchExternal(ctx, src, in, algs)
+			if ferr != nil {
+				return Expected{}, false, ferr
+			}
+			if ok {
+				return exp, true, nil
+			}
+		default:
+			return Expected{}, false, fmt.Errorf("unsupported checksum source type %q", src.Type)
+		}
+	}
+	return Expected{}, false, nil
+}
+
+// intersect returns the algorithms present in both a and prefer, in prefer's
+// order. Empty a means "no restriction from the source", so prefer is returned
+// as-is; empty prefer means "no restriction from the caller", so a is returned.
+func intersect(a []Algorithm, prefer []Algorithm) []Algorithm {
+	if len(a) == 0 {
+		return prefer
+	}
+	if len(prefer) == 0 {
+		return a
+	}
+	allow := make(map[string]struct{}, len(a))
+	for _, x := range a {
+		allow[x.OCMName] = struct{}{}
+	}
+	out := make([]Algorithm, 0, len(prefer))
+	for _, p := range prefer {
+		if _, ok := allow[p.OCMName]; ok {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // fetchExternal walks algs in order and returns the first external checksum that
 // resolves for src. When src.URL is set the same URL is fetched for every
 // algorithm (typically each source binds a single algorithm via Source.Algorithms);

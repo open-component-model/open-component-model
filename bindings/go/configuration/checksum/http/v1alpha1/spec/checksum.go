@@ -31,10 +31,17 @@ const (
 )
 
 // ChecksumPolicy is an ordered list of checksum sources evaluated first-match
-// wins, plus the behaviour when none yields a checksum. The digest recorded on
-// the resource is always SHA-256; a source may verify the transferred bytes
-// against a different algorithm (e.g. SHA-1 from a Maven repository) without
-// changing the stored algorithm.
+// wins, plus the behaviour when none yields a checksum, plus an optional
+// AccessDigest section that changes how the access-side digest processor
+// records the resource digest.
+//
+// The digest recorded by the input method is always SHA-256; a source may
+// verify the transferred bytes against a different algorithm (e.g. SHA-1 from a
+// Maven repository) without changing the stored algorithm. The access-side
+// digest processor, in contrast, MAY record any algorithm the source advertises
+// when AccessDigest is set — see [AccessDigest] for why this is safe for an
+// access (which references remote bytes) but not for an input (which embeds
+// bytes as a local blob).
 //
 // This type lives here (not on the Wget/v1 input spec) because verification
 // posture is a *deployment* concern, not a *descriptor* concern: the same
@@ -48,12 +55,48 @@ const (
 // +ocm:jsonschema-gen=true
 type ChecksumPolicy struct {
 	// Sources are the checksum strategies to try, in order. The first that
-	// yields an expected checksum is used to verify the download.
+	// yields an expected checksum is used to verify the download (input side)
+	// or to pin the resource digest without downloading (access side, when
+	// AccessDigest is set).
 	Sources []ChecksumSource `json:"sources,omitempty"`
 	// OnMissing controls the behaviour when no source yields a checksum.
 	// Defaults to "fail".
 	// +ocm:jsonschema-gen:enum=fail,compute
 	OnMissing OnMissingChecksum `json:"onMissing,omitempty"`
+	// AccessDigest optionally opts the Wget/v1 access-side digest processor into
+	// pinning the resource digest from a source-advertised checksum instead of
+	// downloading the body and computing SHA-256. Nil preserves today's
+	// download-and-hash behaviour. Ignored on the input side, which always
+	// downloads and records SHA-256.
+	AccessDigest *AccessDigest `json:"accessDigest,omitempty"`
+}
+
+// AccessDigest configures how the Wget/v1 access-side digest processor
+// establishes the resource's digest. When set, the processor uses the
+// source-advertised checksum (RFC 9530 Content-Digest, x-checksum-*, an
+// externalUrl sidecar, …) as the pinned digest and does not download the body.
+//
+// This is safe for an access — but not for an input — for two reasons:
+//
+//   - An access references remote bytes that any consumer will re-fetch and
+//     re-verify against the same source. Pinning what the source itself
+//     advertises is a form of "I claim what you claim", which the downstream
+//     verifier reproduces byte-for-byte on the next fetch.
+//   - An input embeds the downloaded bytes as a local blob (LocalBlob/v1).
+//     The resource identity is those bytes, so the digest MUST be computed
+//     from them and MUST be SHA-256 with genericBlobDigest/v1 to match how
+//     OCM stores every other local blob. Any transfer that promotes an access
+//     to a local blob (see `--copy-resources`) therefore still streams the
+//     bytes and computes SHA-256 regardless of this setting.
+//
+// +k8s:deepcopy-gen=true
+// +ocm:jsonschema-gen=true
+type AccessDigest struct {
+	// Algorithms lists the digest algorithms the processor will accept from the
+	// source, strongest-preferred first. SHA-256 is preferred whenever the
+	// source offers it; weaker algorithms are used only as a fallback. When
+	// empty, the default set [sha256, sha512, sha1, md5] is used.
+	Algorithms []string `json:"algorithms,omitempty"`
 }
 
 // ChecksumSource configures a single checksum-retrieval strategy within a

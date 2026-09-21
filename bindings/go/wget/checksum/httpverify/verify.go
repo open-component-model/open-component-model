@@ -106,6 +106,103 @@ func Verify(
 	return err
 }
 
+// Peek resolves policy against the source WITHOUT downloading the body: it
+// issues a HEAD to the artifact URL (or reuses the caller-supplied headers) to
+// materialise response headers for httpHeader sources, and reuses the same
+// credential-scoped [checksum.ExternalFetcher] for externalUrl sources. The
+// first digest a source advertises is returned; ok is false when no source
+// yields one.
+//
+// prefer restricts and orders which algorithms Peek accepts from the sources
+// — the first entry in prefer that a source offers wins. Empty prefer means
+// "any supported algorithm, strongest first" (see [checksum.All]).
+//
+// Peek is meant for the Wget/v1 access-side digest processor when the operator
+// opts into pinning the resource digest from the source's advertised checksum;
+// see the checksum-http config's [AccessDigest] surface. It does not fetch or
+// hash the body.
+func Peek(
+	ctx context.Context,
+	baseClient *http.Client,
+	credentials runtime.Typed,
+	artifactURL string,
+	policy checksum.Policy,
+	prefer []checksum.Algorithm,
+) (checksum.Expected, bool, error) {
+	if baseClient == nil {
+		baseClient = http.DefaultClient
+	}
+	parsedArtifact, err := url.Parse(artifactURL)
+	if err != nil {
+		return checksum.Expected{}, false, fmt.Errorf("invalid artifact url %q: %w", artifactURL, err)
+	}
+
+	// Materialise the credentialed client once (same shape as Verify): only
+	// used against the artifact origin, redirects disabled to avoid leaking
+	// Authorization cross-origin.
+	credentialedClient := baseClient
+	if credentials != nil {
+		bootstrap, berr := http.NewRequestWithContext(ctx, http.MethodGet, artifactURL, nil)
+		if berr != nil {
+			return checksum.Expected{}, false, fmt.Errorf("cannot bootstrap credentials for checksum peek: %w", berr)
+		}
+		if err := download.ApplyCredentials(ctx, bootstrap, &credentialedClient, credentials); err != nil {
+			return checksum.Expected{}, false, fmt.Errorf("cannot apply credentials for checksum peek: %w", err)
+		}
+		noRedirect := *credentialedClient
+		noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+		credentialedClient = &noRedirect
+	}
+
+	// HEAD the artifact URL to harvest response headers without pulling the body.
+	// Servers that reject HEAD (405) simply yield no advertised digest here —
+	// the caller falls back to a downloading path.
+	headers := http.Header{}
+	{
+		req, rerr := http.NewRequestWithContext(ctx, http.MethodHead, artifactURL, nil)
+		if rerr != nil {
+			return checksum.Expected{}, false, fmt.Errorf("cannot build HEAD request for %q: %w", artifactURL, rerr)
+		}
+		client := baseClient
+		if credentials != nil {
+			throwaway := credentialedClient
+			if err := download.ApplyCredentials(ctx, req, &throwaway, credentials); err != nil {
+				return checksum.Expected{}, false, err
+			}
+			client = credentialedClient
+		}
+		resp, herr := client.Do(req)
+		if herr == nil {
+			headers = resp.Header
+			_ = resp.Body.Close()
+		}
+		// A HEAD failure is not fatal: fall through with empty headers; the
+		// externalUrl branch may still resolve a sidecar. The caller handles
+		// "no advertised digest" via its OnMissing branch.
+	}
+
+	fetcher := &checksum.ExternalFetcher{
+		Client: baseClient,
+		Do: func(req *http.Request) (*http.Response, error) {
+			if credentials == nil || !sameOriginHTTPS(parsedArtifact, req.URL) {
+				return baseClient.Do(req) //nolint:gosec // G704: URL is user-provided by design (checksumPolicy.sources[].url); credentials are stripped for non-same-origin.
+			}
+			throwaway := credentialedClient
+			if err := download.ApplyCredentials(ctx, req, &throwaway, credentials); err != nil {
+				return nil, err
+			}
+			return credentialedClient.Do(req) //nolint:gosec // G704: URL is user-provided by design (checksumPolicy.sources[].url); credentials are attached only for same-origin HTTPS.
+		},
+	}
+	return checksum.ResolveAdvertised(ctx, policy, checksum.Input{
+		URL:      artifactURL,
+		Headers:  headers,
+		FetchURL: fetcher.FetchURL,
+	}, prefer)
+}
+
 // sameOriginHTTPS reports whether checksumURL is an https URL with the exact
 // same host and port as artifactURL. Only https qualifies for credential reuse:
 // http traffic can be observed and credentials must not leak on non-TLS hops.

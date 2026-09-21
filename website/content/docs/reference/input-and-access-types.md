@@ -230,11 +230,11 @@ resources:
 
 #### Checksum verification (via OCM config) {#checksum-verification-via-ocm-config}
 
-The wget input can verify a downloaded blob against an expected checksum
-supplied out-of-band by the source. Verification is a *deployment* concern,
-not a *descriptor* concern: it is configured centrally, and the same
-configuration also drives the [`Wget/v1` access]({{< relref "input-and-access-types.md" >}}#wgetv1-access)
-digest processor, so both paths behave identically.
+HTTP downloads (the wget input method AND the `Wget/v1` access-type digest
+processor) can be tied to a source-side checksum through a central OCM
+configuration. Verification is a *deployment* concern, not a *descriptor*
+concern — the same descriptor behaves identically wherever it is constructed,
+and *how* a mirror is trusted is up to the operator.
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -275,8 +275,8 @@ Each entry in `sources` has a `type`:
   from that point on.
 
 `onMissing` controls what happens when no source yields a checksum: `fail`
-(default) aborts the build; `compute` falls back to computing the digest from
-the stream without external verification.
+(default) aborts the operation; `compute` falls back to computing the digest
+from the stream without external verification.
 
 Precedence for the effective policy on a given wget URL (tightest wins):
 
@@ -285,18 +285,80 @@ Precedence for the effective policy on a given wget URL (tightest wins):
 2. `defaultChecksumPolicy` at the top level.
 3. No policy — compute the storage digest without external verification.
 
-A pinned `digest` on the resource itself is verified independently against the
-downloaded bytes: pinned and policy are each checked against the actual bytes,
-never against each other.
+A pinned `digest` on the resource itself is checked against the same authority
+as the policy (the downloaded bytes on the input path, the source-advertised
+checksum on the access fast path); pinned and policy are each verified
+independently, never against each other.
+
+##### Input side — always downloads, always SHA-256
+
+The wget input embeds the download as a local blob, so the resource identity
+*is* those bytes. The input method therefore always streams the body, always
+records `SHA-256` with `genericBlobDigest/v1`, and (if a policy applies) also
+verifies the bytes against whatever algorithm the source advertises.
 
 {{< callout context="note" >}}
-Verification and storage are decoupled. A policy may verify the transferred bytes
-against any supported algorithm — Maven repositories commonly ship SHA-1 or MD5 —
-but the digest recorded on the resource is **always SHA-256** with the
-`genericBlobDigest/v1` normalisation. A non-SHA-256 transport checksum therefore
-never leaks a weak or non-canonical algorithm into the component descriptor or
-into OCI storage and signing. A mismatch fails construction before anything is
-stored.
+Verification and storage are decoupled on the input side. A policy may verify
+the transferred bytes against any supported algorithm — Maven repositories
+commonly ship SHA-1 or MD5 — but the digest recorded on the resource is
+**always SHA-256** with the `genericBlobDigest/v1` normalisation, so a
+non-SHA-256 transport checksum never leaks a weak algorithm into the component
+descriptor, OCI storage, or signing. A mismatch fails construction before
+anything is stored.
+{{< /callout >}}
+
+##### Access side — pin from source, no body download {#access-digest}
+
+A `Wget/v1` **access** references bytes on a remote server that any consumer
+will re-fetch on demand. When you opt in via `accessDigest`, the digest
+processor pins the resource digest from the source-advertised checksum and
+skips the body download entirely — a single HEAD (and, for `externalUrl`,
+a tiny sidecar GET) is enough to establish the digest.
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: checksum.http.config.ocm.software/v1alpha1
+    defaultChecksumPolicy:
+      onMissing: fail
+      sources:
+        - type: httpHeader
+        - type: externalUrl
+          algorithms: [sha256, sha1]
+      # Access-side fast path: pin from what the source advertises, do not
+      # download the body just to hash it. SHA-256 is preferred; SHA-1 is a
+      # legitimate fallback for legacy mirrors that don't offer it.
+      accessDigest:
+        algorithms: [sha256, sha1]
+```
+
+Semantics:
+
+- The digest processor issues **one HEAD** to the artifact URL to harvest
+  response headers, plus one GET per `externalUrl` source (fetching the small
+  sidecar file). It **never fetches the artifact body**.
+- The strongest algorithm from `accessDigest.algorithms` that any source
+  advertises wins. Weaker algorithms are used only as a fallback.
+- The recorded digest carries the algorithm the source actually offered
+  (`SHA-256`, `SHA-1`, `MD5`, `SHA-512`), still with
+  `normalisationAlgorithm: genericBlobDigest/v1`. It is a legitimate pin
+  because any downstream consumer re-fetches from the same source and
+  re-verifies against the same authority.
+- When `accessDigest.algorithms` is empty, the default preference list
+  `[sha256, sha512, sha1, md5]` is used.
+- If no source advertises an acceptable digest and `onMissing` is `fail`, the
+  processor aborts without downloading. `onMissing: compute` falls through to
+  the download-and-hash path (SHA-256).
+- When the resource already carries a pinned `digest`, its algorithm and value
+  MUST agree with the source-advertised digest for the same algorithm; a
+  mismatch is a hard error.
+
+{{< callout context="caution" >}}
+`accessDigest` applies to the digest processor only. Transferring a `Wget/v1`
+access resource **by value** (`--copy-resources`) promotes it to a
+`LocalBlob/v1` and re-runs the input-side rules — the bytes are streamed
+into the target and re-digested as SHA-256, regardless of `accessDigest`. This
+preserves the OCM invariant that every local blob is self-describing.
 {{< /callout >}}
 
 ### `S3/v2` {#s3v2-input}
@@ -580,9 +642,13 @@ Upload is not supported for this access type: a plain HTTP endpoint has no stand
 
 The same `checksum.http.config.ocm.software/v1alpha1` config that steers
 [input-side verification]({{< relref "input-and-access-types.md" >}}#checksum-verification-via-ocm-config)
-also drives the access-side digest processor, so a `Wget/v1` access resource
-is verified against its source-side checksum whenever OCM computes or refreshes
-its digest.
+also drives the access-side digest processor. By default the processor
+downloads the body, computes SHA-256, and — if a policy applies — verifies the
+bytes against the source-advertised checksum. When the policy sets
+`accessDigest` (see
+[Access side — pin from source]({{< relref "input-and-access-types.md" >}}#access-digest)),
+the digest is pinned from the source-advertised checksum via a HEAD, so the
+resource digest can be established without transferring the whole body.
 
 For guidance on choosing between the input and the access type, and for media type resolution, redirects, download
 tuning, and credential configuration, see
