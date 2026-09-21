@@ -23,33 +23,27 @@ import (
 )
 
 // genericBlobDigestV1 is the OCM normalisation algorithm recorded for a plain
-// downloaded blob, matching the wget resource repository.
+// downloaded blob.
 const genericBlobDigestV1 = "genericBlobDigest/v1"
 
 var _ constructor.ResourceInputMethod = (*InputMethod)(nil)
 
-// InputMethod implements the [constructor.ResourceInputMethod] interface for wget-based inputs.
-// It downloads a resource from an HTTP/S URL declared in the component constructor
-// and returns it as a local blob to be stored in the component version.
+// InputMethod implements [constructor.ResourceInputMethod] for wget-based
+// inputs: it downloads a resource from an HTTP/S URL declared in the component
+// constructor and returns it as a local blob.
 type InputMethod struct {
-	// HTTPConfig configures the HTTP client (timeouts, retries, TLS, routing) used for
-	// downloads. When nil, a default client is used.
+	// HTTPConfig configures the HTTP client. When nil, a default client is used.
 	HTTPConfig *httpv1alpha1.Config
-	// WgetConfig steers the wget behavioural knobs — today, the
-	// [checksumhttpv1alpha1.ChecksumPolicy] to apply to each downloaded resource
-	// (`defaultChecksumPolicy` plus per-host overrides). When nil (or when no
-	// entry matches the URL), the digest is computed from the stream without
-	// external verification. The wget access-side digest processor honours the
-	// same config so both paths behave identically.
+	// WgetConfig steers the [checksumhttpv1alpha1.ChecksumPolicy] applied to
+	// each downloaded resource. When nil (or when no entry matches the URL),
+	// the digest is computed from the stream without verification.
 	WgetConfig *checksumhttpv1alpha1.Config
-	// MaxDownloadSize limits the number of bytes read from a response body. When zero,
-	// the download package default [download.DefaultMaxDownloadSize] is used. A negative value disables the limit.
+	// MaxDownloadSize limits response body bytes; zero uses the download
+	// package default, negative disables the limit.
 	MaxDownloadSize int64
-	// TempFolder is the directory the downloaded body is streamed into. When empty,
-	// the OS temporary directory is used. The file backing the returned blob is
-	// created here and outlives ProcessResource, because it holds the content the
-	// constructor stores as a local blob. It is removed once the constructor releases
-	// the blob; see [download.Blob].
+	// TempFolder is the directory the downloaded body is streamed into. Empty
+	// uses the OS temp directory. The backing file outlives ProcessResource
+	// because it holds the local-blob content; see [download.Blob].
 	TempFolder string
 }
 
@@ -57,9 +51,9 @@ func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
 	return input.Scheme
 }
 
-// GetResourceCredentialConsumerIdentity resolves the credential consumer identity for a
-// wget input from its URL, using the same wget consumer type as the access type so that
-// credentials configured for a host resolve for both.
+// GetResourceCredentialConsumerIdentity resolves the credential consumer
+// identity from the wget URL, using the same consumer type as the access type
+// so credentials configured for a host resolve for both.
 func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
 	wget := v1.Wget{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &wget); err != nil {
@@ -86,8 +80,8 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	return identity, nil
 }
 
-// ProcessResource downloads the resource described by the wget input specification and
-// returns it as local blob data to be stored in the component version.
+// ProcessResource downloads the resource described by the wget input
+// specification and returns it as a local blob.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	wget := v1.Wget{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &wget); err != nil {
@@ -103,9 +97,9 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		client = httpclient.New(httpclient.WithConfig(i.HTTPConfig))
 	}
 
-	// Verification behaviour is entirely a deployment concern: the wget input
-	// spec no longer carries a checksumPolicy. Operators configure it centrally
-	// via checksum.http.config.ocm.software/v1alpha1; the descriptor stays clean.
+	// Verification behaviour is a deployment concern: the input spec carries
+	// no checksumPolicy. Operators configure it centrally via
+	// checksum.http.config.ocm.software/v1alpha1.
 	policy, hasPolicy, err := toChecksumPolicy(i.WgetConfig.PolicyForURL(wget.URL))
 	if err != nil {
 		return nil, fmt.Errorf("invalid checksum policy for wget input from %q: %w", wget.URL, err)
@@ -119,9 +113,8 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	if i.MaxDownloadSize != 0 {
 		opts = append(opts, download.WithMaxDownloadSize(i.MaxDownloadSize))
 	}
-	// Determine whether we must compute digests during the download: either a
-	// checksum policy needs them, or the resource carries a provided digest to
-	// verify. Both cases store the canonical SHA-256 on the resulting blob.
+	// Compute digests during the download iff a policy needs them or the
+	// resource carries a provided digest to verify against.
 	provided := resource.Digest
 	needsDigest := hasPolicy || provided != nil
 	if needsDigest {
@@ -140,10 +133,8 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		return nil, fmt.Errorf("error downloading wget input from %q: %w", wget.URL, err)
 	}
 
-	// A provided digest is verified against the downloaded content independently
-	// of any policy: both are checked against the actual bytes, never against each
-	// other. The documented resource.digest contract is only enforced here for the
-	// input path, which otherwise stores the blob without verifying it.
+	// A provided digest is verified against the downloaded bytes independently
+	// of any policy: both check the actual bytes, never each other.
 	if provided != nil {
 		if err := verifyProvidedDigest(provided, data); err != nil {
 			_ = data.Close()
@@ -158,9 +149,9 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		}
 	}
 
-	// Record the canonical SHA-256 as the blob's precalculated digest so the
-	// resource is stored with SHA-256/genericBlobDigest regardless of which
-	// algorithm a policy or provided digest verified against.
+	// Record SHA-256 as the blob's precalculated digest so the resource is
+	// stored with SHA-256/genericBlobDigest regardless of which algorithm
+	// verified it.
 	if needsDigest {
 		if sha, ok := data.Digests()[checksum.StorageAlgorithm.OCMName]; ok && sha != "" {
 			data.SetPrecalculatedDigest("sha256:" + sha)
@@ -176,9 +167,8 @@ func (i *InputMethod) GetCredentialTypeScheme() *runtime.Scheme {
 	return wgetcreds.Scheme
 }
 
-// verifyProvidedDigest checks the computed content digest against a digest pinned
-// on the resource. Only the canonical SHA-256/genericBlobDigest form is supported,
-// matching how wget resource digests are computed and stored.
+// verifyProvidedDigest checks the computed content digest against a digest
+// pinned on the resource. Only SHA-256/genericBlobDigest is supported.
 func verifyProvidedDigest(provided *constructorruntime.Digest, data *download.Blob) error {
 	if provided.HashAlgorithm != "" && !strings.EqualFold(provided.HashAlgorithm, checksum.StorageAlgorithm.OCMName) {
 		return fmt.Errorf("unsupported provided hash algorithm %q: only %s is supported", provided.HashAlgorithm, checksum.StorageAlgorithm.OCMName)
@@ -198,10 +188,9 @@ func verifyProvidedDigest(provided *constructorruntime.Digest, data *download.Bl
 	return nil
 }
 
-// toChecksumPolicy adapts a [checksumhttpv1alpha1.ChecksumPolicy] resolved from
-// the OCM config to the checksum package's Policy, defaulting OnMissing to fail.
-// Returns ok=false when spec is nil (no policy configured for this URL), in
-// which case the digest is computed from the stream without verification.
+// toChecksumPolicy adapts a [checksumhttpv1alpha1.ChecksumPolicy] to the
+// checksum package's Policy, defaulting OnMissing to fail. Returns ok=false
+// when spec is nil.
 func toChecksumPolicy(spec *checksumhttpv1alpha1.ChecksumPolicy) (checksum.Policy, bool, error) {
 	if spec == nil {
 		return checksum.Policy{}, false, nil
@@ -211,10 +200,9 @@ func toChecksumPolicy(spec *checksumhttpv1alpha1.ChecksumPolicy) (checksum.Polic
 		policy.OnMissing = checksum.Compute
 	}
 	for i, src := range spec.Sources {
-		// An unsupported algorithm extension is a hard error: silently dropping it
-		// lets Resolve fall back to the full algorithm set and silently verify
-		// against an algorithm the user never asked for. Fail fast with the source
-		// index so the offending entry in the policy is easy to locate.
+		// An unsupported algorithm extension is a hard error: silently
+		// dropping it would let Resolve fall back to the full algorithm set
+		// and verify against something the user never asked for.
 		algs, err := checksum.AlgorithmsFromExtensions(src.Algorithms)
 		if err != nil {
 			return checksum.Policy{}, false, fmt.Errorf("checksum policy source #%d: %w", i, err)
@@ -229,9 +217,8 @@ func toChecksumPolicy(spec *checksumhttpv1alpha1.ChecksumPolicy) (checksum.Polic
 	return policy, true, nil
 }
 
-// digestAlgorithms maps the algorithms a policy may verify against to download
-// digest options keyed by their OCM name, so the download computes each hash in a
-// single streaming pass.
+// digestAlgorithms maps a policy's required algorithms to download digest
+// options keyed by OCM name, so the download computes them all in one pass.
 func digestAlgorithms(policy checksum.Policy) []download.DigestAlgorithm {
 	required := checksum.RequiredAlgorithms(policy)
 	out := make([]download.DigestAlgorithm, 0, len(required))

@@ -7,47 +7,40 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 )
 
-const (
-	// DefaultMaxDownloadSize is the default maximum download size. Zero means
-	// unlimited; see [download.DefaultMaxDownloadSize].
-	DefaultMaxDownloadSize int64 = download.DefaultMaxDownloadSize
-)
+// DefaultMaxDownloadSize mirrors [download.DefaultMaxDownloadSize]: zero means
+// unlimited.
+const DefaultMaxDownloadSize int64 = download.DefaultMaxDownloadSize
 
 // Options holds configuration options for the wget resource repository.
 type Options struct {
 	Client          *http.Client
 	MaxDownloadSize *int64
-	// WgetConfig steers wget behavioural knobs — the defaultChecksumPolicy
-	// applied on every ProcessResourceDigest call, and per-host overrides
-	// thereof. When nil, the digest processor computes SHA-256 without
-	// external verification (the pre-config behaviour).
+	// WgetConfig steers the digest processor's checksum policy. Nil means
+	// "compute SHA-256 without external verification".
 	WgetConfig *checksumhttpv1alpha1.Config
 }
 
-// Option is a function that configures Options.
+// Option configures Options.
 type Option func(*Options)
 
-// WithHTTPClient sets the HTTP client to use for requests.
+// WithHTTPClient sets the HTTP client.
 func WithHTTPClient(client *http.Client) Option {
 	return func(o *Options) {
 		o.Client = client
 	}
 }
 
-// WithMaxDownloadSize caps the number of bytes read from a response body.
-// Zero or negative (the default) means unlimited: bodies are streamed to disk
-// rather than held in memory, so a download is bounded by free disk rather than
-// by RAM.
+// WithMaxDownloadSize caps response body bytes. Zero or negative disables the
+// limit; bodies are streamed to disk, bounded by free disk rather than RAM.
 func WithMaxDownloadSize(size int64) Option {
 	return func(o *Options) {
 		o.MaxDownloadSize = &size
 	}
 }
 
-// WithWgetConfig steers wget behavioural knobs on the digest processor, most
-// notably the defaultChecksumPolicy that is applied to every ProcessResourceDigest
-// call. Passing the same config object into the input method
-// [wget/input.InputMethod.WgetConfig] and this option keeps both paths in sync.
+// WithWgetConfig steers the digest processor's checksum policy. Passing the
+// same config to both the input method and this option keeps both paths in
+// sync.
 func WithWgetConfig(cfg *checksumhttpv1alpha1.Config) Option {
 	return func(o *Options) {
 		o.WgetConfig = cfg

@@ -13,16 +13,13 @@ const (
 )
 
 // Wget describes an input sourced by downloading a resource from an HTTP/S URL
-// during component construction. The downloaded content is stored as a local blob
-// in the component version.
+// during component construction. The downloaded content is stored as a local
+// blob in the component version.
 //
-// Verification of the downloaded bytes against a source-side checksum is not
-// described in this spec on purpose: it is a deployment concern, not a
-// descriptor concern. Configure it centrally with
-// `checksum.http.config.ocm.software/v1alpha1` (see
-// `bindings/go/configuration/checksum/http/v1alpha1/spec`), which the input
-// method reads at construction time; the same config also steers the wget
-// access-type digest processor, so both paths behave identically.
+// Verification against a source-side checksum is a deployment concern, not a
+// descriptor concern: configure it with `checksum.http.config.ocm.software/v1alpha1`
+// (see `bindings/go/configuration/checksum/http/v1alpha1/spec`), which steers
+// both this input method and the wget access-type digest processor.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -33,22 +30,22 @@ type Wget struct {
 	// +ocm:jsonschema-gen:enum:deprecated=wget,Wget
 	Type runtime.Type `json:"type"`
 
-	// URL is the HTTP endpoint to download the resource from.
+	// URL is the HTTP endpoint to download from.
 	URL string `json:"url"`
 
-	// MediaType is the media type of the resource with optional format qualifiers.
+	// MediaType overrides the resulting blob's media type.
 	MediaType string `json:"mediaType,omitempty"`
 
-	// Header contains HTTP headers to be sent with the request.
+	// Header carries additional HTTP request headers.
 	Header map[string][]string `json:"header,omitempty"`
 
-	// Verb is the HTTP method to use (GET, POST, etc.). Defaults to GET.
+	// Verb is the HTTP method; defaults to GET.
 	Verb string `json:"verb,omitempty"`
 
-	// Body is the HTTP body to send with the request.
+	// Body is the optional request body.
 	Body []byte `json:"body,omitempty"`
 
-	// NoRedirect disables following HTTP redirects when set to true.
+	// NoRedirect disables following redirects.
 	NoRedirect bool `json:"noRedirect,omitempty"`
 }
 
@@ -56,7 +53,7 @@ func (t *Wget) String() string {
 	return t.URL
 }
 
-// Validate verifies that the URL of the Wget input is set and uses a supported scheme.
+// Validate rejects an empty or non-http(s) URL.
 func (t *Wget) Validate() error {
 	if t.URL == "" {
 		return errors.New("url is required")

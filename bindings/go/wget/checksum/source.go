@@ -8,20 +8,16 @@ import (
 	"strings"
 )
 
-// Expected is a checksum obtained from a policy source: the algorithm it was
-// computed with and its lowercase hex value.
+// Expected is a checksum obtained from a policy source.
 type Expected struct {
 	Algorithm Algorithm
 	// Value is the lowercase hex-encoded checksum.
 	Value string
 }
 
-// FromHeaders extracts expected checksums from HTTP response headers, trying the
-// standardized RFC 9530 Content-Digest field first, then the non-standard
-// x-checksum-* family used by Maven Central, Google, and AWS S3 mirrors.
-//
-// Only algorithms in [All] are returned. When several are present the caller
-// selects which to verify against via [Select].
+// FromHeaders extracts expected checksums from response headers, trying RFC
+// 9530 Content-Digest first, then the non-standard x-checksum-* family used by
+// Maven Central and cloud object stores.
 func FromHeaders(header http.Header, extra []string) []Expected {
 	var out []Expected
 	seen := map[string]struct{}{}
@@ -43,12 +39,10 @@ func FromHeaders(header http.Header, extra []string) []Expected {
 	return out
 }
 
-// parseContentDigest parses RFC 9530 Content-Digest field values. Each value is a
-// structured-field Dictionary whose members are `key=:base64:`, where key is a
-// hash-algorithm key and the value is a Byte Sequence (base64) of the raw digest.
-// Repr-Digest is intentionally ignored: it is computed over the representation
-// (affected by content coding), whereas we persist the transferred content bytes,
-// for which Content-Digest is the correct field.
+// parseContentDigest parses RFC 9530 Content-Digest fields. Each is a
+// structured-field Dictionary of `key=:base64:`. Repr-Digest is intentionally
+// ignored: it is computed over the representation, whereas we persist the
+// transferred content bytes.
 func parseContentDigest(values []string) []Expected {
 	var out []Expected
 	for _, value := range values {
@@ -62,7 +56,6 @@ func parseContentDigest(values []string) []Expected {
 				continue
 			}
 			b64 := strings.TrimSpace(raw)
-			// Structured-field Byte Sequences are wrapped in colons: :base64:.
 			b64 = strings.TrimPrefix(b64, ":")
 			b64 = strings.TrimSuffix(b64, ":")
 			decoded, err := base64.StdEncoding.DecodeString(b64)
@@ -75,10 +68,9 @@ func parseContentDigest(values []string) []Expected {
 	return out
 }
 
-// splitDictionary splits a structured-field Dictionary into its member segments,
-// honoring the colon-delimited Byte Sequence syntax so a comma inside a base64
-// value's surrounding colons is not treated as a member separator. Base64 never
-// contains a colon, so toggling on ':' is sufficient.
+// splitDictionary splits a structured-field Dictionary into its members,
+// honoring `:base64:` Byte Sequences so a comma inside colons is not treated
+// as a member separator. Base64 never contains a colon.
 func splitDictionary(value string) []string {
 	var members []string
 	var current strings.Builder
@@ -102,21 +94,14 @@ func splitDictionary(value string) []string {
 	return members
 }
 
-// legacyChecksumHeader pairs a non-standard checksum response header with the
-// algorithm it advertises.
 type legacyChecksumHeader struct {
 	Name      string
 	Algorithm Algorithm
 }
 
-// legacyChecksumHeaders are the non-standard response headers that repositories
-// use to convey checksums, mapped to their algorithm. These are checked in
-// addition to any caller-supplied extra header names. The list is ordered so
-// FromHeaders returns candidates in a deterministic order: a server that
-// emits, say, both `x-checksum-sha256` and `x-goog-meta-checksum-sha256` with
-// divergent values otherwise verifies against different bytes across runs.
-// Strongest-first for each family, standard `x-checksum-*` before the cloud
-// vendor variants.
+// legacyChecksumHeaders lists the non-standard response headers repositories
+// use to convey checksums, ordered strongest-first per family so FromHeaders'
+// output is deterministic when several are present.
 var legacyChecksumHeaders = []legacyChecksumHeader{
 	{"x-checksum-sha512", SHA512},
 	{"x-checksum-sha256", SHA256},
@@ -130,10 +115,9 @@ var legacyChecksumHeaders = []legacyChecksumHeader{
 	{"x-amz-meta-checksum-md5", MD5},
 }
 
-// parseLegacyChecksumHeaders reads hex checksums from the well-known x-checksum-*
-// headers plus any caller-supplied extra header names. An extra header name may be
-// suffixed with the algorithm ("x-my-sha256"); otherwise the algorithm is inferred
-// from a known suffix.
+// parseLegacyChecksumHeaders reads hex checksums from x-checksum-* headers
+// plus caller-supplied extras. An extra header name is expected to carry a
+// trailing algorithm token ("x-my-sha256").
 func parseLegacyChecksumHeaders(header http.Header, extra []string) []Expected {
 	var out []Expected
 	take := func(name string, alg Algorithm) {
@@ -163,8 +147,8 @@ func parseLegacyChecksumHeaders(header http.Header, extra []string) []Expected {
 	return out
 }
 
-// algorithmFromHeaderName infers the algorithm from a header name's trailing
-// algorithm token (e.g. "x-artifact-sha256" -> SHA256).
+// algorithmFromHeaderName infers the algorithm from a trailing token
+// ("x-artifact-sha256" -> SHA256).
 func algorithmFromHeaderName(name string) (Algorithm, bool) {
 	lower := strings.ToLower(name)
 	for _, a := range All {
@@ -184,9 +168,8 @@ func isHex(s string, size int) bool {
 	return err == nil
 }
 
-// Select picks the strongest expected checksum whose algorithm is in prefer
-// (or, when prefer is empty, the strongest supported). ok is false when none of
-// the candidates match.
+// Select picks the strongest candidate whose algorithm appears in prefer.
+// Empty prefer means [All].
 func Select(candidates []Expected, prefer []Algorithm) (Expected, bool) {
 	order := prefer
 	if len(order) == 0 {
@@ -202,10 +185,9 @@ func Select(candidates []Expected, prefer []Algorithm) (Expected, bool) {
 	return Expected{}, false
 }
 
-// Verify compares a computed hex digest for the expected algorithm against the
-// expected value. The computed map is keyed by algorithm OCM name. A missing
-// computed entry for the expected algorithm is an error, since the caller is
-// responsible for computing every algorithm a policy may require.
+// Verify compares the computed digest against expected. A missing computed
+// entry is an error: the caller is responsible for computing every algorithm
+// a policy may require.
 func Verify(computed map[string]string, expected Expected) error {
 	got, ok := computed[expected.Algorithm.OCMName]
 	if !ok {

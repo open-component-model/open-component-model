@@ -14,23 +14,19 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
-// Blob is the file-backed blob returned by [Download]. The file behind it is a
-// temporary download artifact owned by the blob: [Blob.Close] removes it, and a
-// cleanup attached to the blob removes it once the blob becomes unreachable.
-// A caller that drops the blob without closing it therefore does not keep the
-// file around for the lifetime of the process, which matches the reclamation an
-// in-memory blob got for free.
+// Blob is a file-backed download blob. [Blob.Close] removes the file, and a
+// finalizer removes it when the blob becomes unreachable, so a dropped blob
+// does not leak the temp file for the process lifetime.
 type Blob struct {
 	*filesystem.Blob
 	path string
 	// headers are the response headers of the download that produced this blob.
 	headers http.Header
-	// digests holds hex digests computed during the download, keyed by the
-	// caller-supplied [DigestAlgorithm.Name].
+	// digests holds hex digests computed during the download, keyed by
+	// [DigestAlgorithm.Name].
 	digests map[string]string
 	// precalculated is returned by [Blob.Digest] verbatim when set, avoiding a
-	// re-read of the file to recompute the digest. Concurrent-safe like the
-	// other precalculatable blob implementations (see blob/inmemory.Blob).
+	// re-read to recompute the digest.
 	precalculated atomic.Pointer[string]
 }
 
@@ -44,19 +40,19 @@ var (
 	_ io.Closer                  = (*Blob)(nil)
 )
 
-// Headers returns the response headers of the download that produced this blob.
+// Headers returns the response headers of the producing download.
 func (b *Blob) Headers() http.Header {
 	return b.headers
 }
 
-// Digests returns the hex digests computed during the download, keyed by the
-// [DigestAlgorithm.Name] the caller requested via [WithDigestAlgorithms].
+// Digests returns hex digests computed during the download, keyed by the name
+// the caller passed to [WithDigestAlgorithms].
 func (b *Blob) Digests() map[string]string {
 	return b.digests
 }
 
-// Digest returns the precalculated digest when one was set, otherwise it falls
-// back to the embedded blob's lazily computed digest.
+// Digest returns the precalculated digest when set, otherwise the embedded
+// blob's lazily computed digest.
 func (b *Blob) Digest() (string, bool) {
 	if p := b.precalculated.Load(); p != nil {
 		return *p, true
@@ -69,15 +65,13 @@ func (b *Blob) HasPrecalculatedDigest() bool {
 	return b.precalculated.Load() != nil
 }
 
-// SetPrecalculatedDigest sets the digest returned by [Blob.Digest] verbatim.
-// Safe to call concurrently with reads.
+// SetPrecalculatedDigest sets the digest returned by [Blob.Digest]. Safe for
+// concurrent use.
 func (b *Blob) SetPrecalculatedDigest(digest string) {
 	b.precalculated.Store(&digest)
 }
 
-// removeTempFile deletes the file at path. A file that is already gone is not an
-// error, which makes repeated calls (Close plus the cleanup) idempotent without
-// tracking any removal state.
+// removeTempFile deletes path; an already-gone file is not an error.
 func removeTempFile(path string) error {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -85,15 +79,14 @@ func removeTempFile(path string) error {
 	return nil
 }
 
-// newBlob wraps the temporary file at path into a [Blob] owning that file.
 func newBlob(path string) (*Blob, error) {
 	inner, err := filesystem.GetBlobFromOSPath(path)
 	if err != nil {
 		return nil, err
 	}
 
-	// The cleanup takes the path rather than the blob: an argument that can reach
-	// the object the cleanup is attached to would keep it alive forever.
+	// The cleanup captures the path, not the blob: capturing the blob would
+	// keep it alive forever.
 	b := &Blob{Blob: inner, path: path}
 	runtime.AddCleanup(b, func(path string) {
 		if err := removeTempFile(path); err != nil {
@@ -104,8 +97,8 @@ func newBlob(path string) (*Blob, error) {
 	return b, nil
 }
 
-// Close removes the temporary file backing the blob. It is safe to call multiple
-// times and from multiple goroutines. Once closed, the blob can no longer be read.
+// Close removes the temp file. Safe to call multiple times, from multiple
+// goroutines.
 func (b *Blob) Close() error {
 	if err := removeTempFile(b.path); err != nil {
 		return fmt.Errorf("failed to remove temporary download file %q: %w", b.path, err)
@@ -113,8 +106,8 @@ func (b *Blob) Close() error {
 	return nil
 }
 
-// ReadCloser returns a reader over the temporary file. The reader keeps the blob
-// alive until it is closed, so the cleanup cannot remove the file mid-read.
+// ReadCloser opens a reader that keeps the blob alive until Close, so the
+// finalizer cannot remove the file mid-read.
 func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 	rc, err := b.Blob.ReadCloser()
 	if err != nil {
@@ -123,8 +116,6 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 	return &retainingReadCloser{ReadCloser: rc, blob: b}, nil
 }
 
-// retainingReadCloser keeps a reference to the blob it reads from so that the
-// blob stays reachable for as long as the reader is open.
 type retainingReadCloser struct {
 	io.ReadCloser
 	blob *Blob

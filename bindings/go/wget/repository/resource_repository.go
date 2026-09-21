@@ -23,29 +23,27 @@ import (
 )
 
 const (
-	// hashAlgorithmSHA256 is the hash algorithm used for wget resource digests.
 	hashAlgorithmSHA256 = "SHA-256"
-	// genericBlobDigestV1 is the normalisation algorithm for a plain downloaded blob.
+	// genericBlobDigestV1 is the normalisation algorithm for a plain
+	// downloaded blob.
 	genericBlobDigestV1 = "genericBlobDigest/v1"
 )
 
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
-// ResourceRepository implements the ResourceRepository interface for wget access types.
+// ResourceRepository implements repository.ResourceRepository for wget access
+// types.
 type ResourceRepository struct {
 	client           *http.Client
 	maxDownloadSize  int64
 	filesystemConfig *filesystemv1alpha1.Config
-	// wgetConfig steers the digest processor's behavioural knobs — today, the
-	// [checksumhttpv1alpha1.ChecksumPolicy] applied against the source when computing a
-	// resource's digest. When nil, the digest is computed from the stream
-	// without external verification (the pre-config default).
+	// wgetConfig steers the digest processor's [checksumhttpv1alpha1.ChecksumPolicy].
+	// Nil means "compute from stream without external verification".
 	wgetConfig *checksumhttpv1alpha1.Config
 }
 
-// NewResourceRepository creates a new wget resource repository. If filesystemConfig
-// is non-nil, its TempFolder is used for the files downloaded bodies are streamed
-// into; otherwise os.CreateTemp's default directory is used.
+// NewResourceRepository builds a wget resource repository. filesystemConfig's
+// TempFolder, when set, is used for downloaded body files.
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	if filesystemConfig == nil {
 		filesystemConfig = &filesystemv1alpha1.Config{}
@@ -72,12 +70,10 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 	}
 }
 
-// GetResourceRepositoryScheme returns the scheme used by the wget resource repository.
 func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 	return accessspec.Scheme
 }
 
-// GetResourceCredentialConsumerIdentity resolves the credential consumer identity for the given resource.
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
@@ -103,11 +99,8 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return identity, nil
 }
 
-// DownloadResource downloads a resource from the URL specified in the wget access spec.
-// The returned blob is backed by a file under the configured temp folder that outlives
-// this call. The blob owns that file: callers should close it (it implements
-// io.Closer) once they are done, and an unclosed blob has its file removed when it
-// becomes unreachable.
+// DownloadResource downloads the resource. The returned blob owns a temp file
+// callers should close; unclosed blobs have their file removed on GC.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	b, _, err := r.download(ctx, resource, credentials)
 	if err != nil {
@@ -116,11 +109,10 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return b, nil
 }
 
-// download streams the resource body into the configured temp folder and returns it
-// as a file-backed blob owning that file. Extra options are appended after the
-// repository's defaults, so callers (notably [ProcessResourceDigest]) can pass
-// [download.WithDigestAlgorithms] to have SHA-256 computed inline during the stream.
-// It also returns the resolved wget access spec, so callers avoid re-decoding it.
+// download streams the resource body into the temp folder and returns the
+// file-backed blob plus the decoded access spec. Extra options are appended
+// after the repository defaults so callers (notably [ProcessResourceDigest])
+// can hash the stream inline via [download.WithDigestAlgorithms].
 func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, extra ...download.Option) (*download.Blob, *v1.Wget, error) {
 	if resource == nil {
 		return nil, nil, fmt.Errorf("resource is required")
@@ -165,44 +157,28 @@ func (r *ResourceRepository) UploadResource(ctx context.Context, res *descriptor
 	return nil, fmt.Errorf("upload is not supported for wget access type")
 }
 
-// GetResourceDigestProcessorCredentialConsumerIdentity resolves the credential consumer
-// identity used when downloading the resource to compute its digest. It is the same identity
-// used for a regular download, so credentials configured for the host apply to both.
+// GetResourceDigestProcessorCredentialConsumerIdentity reuses the download
+// identity so credentials apply to both paths.
 func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	return r.GetResourceCredentialConsumerIdentity(ctx, resource)
 }
 
-// ProcessResourceDigest establishes the digest of a wget access resource.
+// ProcessResourceDigest establishes a wget access resource's digest.
 //
-// A `Wget/v1` access references remote bytes that any consumer will re-fetch
-// and re-verify against the same source. That decouples the resource's
-// descriptor from its bytes: OCM can pin the resource digest from what the
-// source itself advertises (an RFC 9530 Content-Digest, an x-checksum-*
-// header, an externalUrl sidecar) via a single HEAD (plus tiny sidecar GETs)
-// and never fetch the body. Downstream consumers re-fetch from the same
-// source and re-verify against the same authority, so "I claim what you
-// claim" is a legitimate identity.
+// A Wget/v1 access references remote bytes, so OCM can pin the digest from
+// what the source advertises (Content-Digest, x-checksum-*, externalUrl
+// sidecar) via HEAD + tiny sidecar GETs, without fetching the body.
 //
-// Modes, keyed on the checksum-http config:
+// Modes:
+//   - Policy applies — fast path via [httpverify.Peek]. On onMissing=fail
+//     this aborts without downloading; on onMissing=compute it falls back
+//     to download-and-hash.
+//   - No policy — download the body and hash inline (SHA-256).
 //
-//   - Policy applies — fast path: peek at the source-advertised checksum via
-//     a HEAD + optional sidecar fetch. Whichever algorithm the source offers
-//     (constrained and ordered by policy.PreferredAlgorithms) becomes the
-//     recorded digest. On `onMissing: fail` this aborts without downloading;
-//     on `onMissing: compute` this falls back to download-and-hash.
-//   - No policy — download the body, hash it inline (single streaming pass,
-//     no re-read), record SHA-256. This is the compatibility default when no
-//     checksum-http config is present.
-//
-// A pinned Digest on the resource is honoured in both modes: on the fast
-// path it MUST agree with the source-advertised digest for the same
-// algorithm; on the download path it MUST agree with the SHA-256 computed
-// from the bytes. Pinned and policy are each checked against the same
-// authority, never against each other.
-//
-// Any transfer that promotes the access to a local blob (`--copy-resources`)
-// re-runs the input-side rules: the bytes are streamed and re-digested as
-// SHA-256, regardless of what this policy records here.
+// A pinned Digest is honoured in both modes: it must agree with the
+// source-advertised digest (fast path) or the computed SHA-256 (download
+// path). Pinned and policy are each checked against the same authority,
+// never against each other.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	url := policyURL(resource)
 	policySpec := r.wgetConfig.PolicyForURL(url)
@@ -211,9 +187,6 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		return nil, fmt.Errorf("invalid checksum policy for wget access digest: %w", err)
 	}
 
-	// Access-side fast path — pin from source-advertised checksum without a
-	// body download. Always taken when a policy applies; the operator's
-	// preference list restricts which algorithms Peek accepts.
 	if hasPolicy {
 		result, done, err := r.processDigestViaPeek(ctx, resource, credentials, policy, policySpec.PreferredAlgorithms)
 		if err != nil {
@@ -224,13 +197,9 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		}
 		slog.DebugContext(ctx, "wget: access fast path yielded nothing; falling back to download-and-hash",
 			"url", url, "onMissing", policy.OnMissing)
-		// Fall through to the download-and-hash path when the source
-		// advertised nothing and OnMissing is Compute (Fail was surfaced as
-		// an error above).
 	}
 
-	// Download-and-hash path — no policy configured, or the policy allowed
-	// fallback and no source advertised a digest. Stream once, hash inline.
+	// Download-and-hash path.
 	data, wget, err := r.download(ctx, resource, credentials,
 		download.WithDigestAlgorithms(digestAlgorithms(policy)...),
 	)
@@ -280,12 +249,9 @@ func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
 	return wgetcreds.Scheme
 }
 
-// processDigestViaPeek runs the fast, no-download path: it asks httpverify.Peek
-// for a source-advertised digest, restricted to prefer (the policy's
-// PreferredAlgorithms, or the default set when empty). done==true means the
-// digest has been established; done==false signals "no advertised digest,
-// fall back to the download path" (allowed only when the policy's OnMissing
-// is Compute).
+// processDigestViaPeek runs the no-download fast path. done=true means the
+// digest is established; done=false signals "no advertised digest, fall back
+// to download" (permitted only under onMissing=compute).
 func (r *ResourceRepository) processDigestViaPeek(
 	ctx context.Context,
 	resource *descriptor.Resource,
@@ -302,8 +268,7 @@ func (r *ResourceRepository) processDigestViaPeek(
 	for _, alg := range prefer {
 		names = append(names, alg.OCMName)
 	}
-	slog.DebugContext(ctx, "wget: peeking source-advertised checksum",
-		"url", url, "prefer", names)
+	slog.DebugContext(ctx, "wget: peeking source-advertised checksum", "url", url, "prefer", names)
 
 	exp, ok, err := httpverify.Peek(ctx, r.client, credentials, url, policy, prefer)
 	if err != nil {
@@ -320,17 +285,15 @@ func (r *ResourceRepository) processDigestViaPeek(
 
 	out := resource.DeepCopy()
 	if out.Digest != nil {
-		// Pin cross-check: same algorithm and same value as what the source
-		// advertises. Different algorithm on the pin is a hard error because
-		// the operator has asked us not to hash the body ourselves.
+		// A pinned digest must match the same algorithm the source advertises:
+		// the operator has explicitly asked us not to hash the body.
 		if !strings.EqualFold(out.Digest.HashAlgorithm, exp.Algorithm.OCMName) {
 			return nil, false, fmt.Errorf("pinned digest algorithm %q does not match the source-advertised algorithm %q", out.Digest.HashAlgorithm, exp.Algorithm.OCMName)
 		}
 		if out.Digest.NormalisationAlgorithm != "" && out.Digest.NormalisationAlgorithm != genericBlobDigestV1 {
 			return nil, false, fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, out.Digest.NormalisationAlgorithm)
 		}
-		// The pinned Value may be bare hex or go-digest form ("sha256:<hex>",
-		// "sha1:<hex>", …). Strip any trailing "alg:" prefix before comparison.
+		// Pinned value may be bare hex or go-digest form ("sha256:<hex>").
 		pinnedHex := strings.ToLower(out.Digest.Value)
 		if idx := strings.IndexByte(pinnedHex, ':'); idx >= 0 {
 			pinnedHex = pinnedHex[idx+1:]
@@ -349,9 +312,8 @@ func (r *ResourceRepository) processDigestViaPeek(
 	return out, true, nil
 }
 
-// preferredAlgorithms adapts the policy's PreferredAlgorithms list to a
-// checksum.Algorithm list, defaulting to [sha256, sha512, sha1, md5] when
-// empty. Preference is order-sensitive: strongest-preferred first.
+// preferredAlgorithms adapts the policy's PreferredAlgorithms list, defaulting
+// to [checksum.All] when empty. Order is preserved: strongest-preferred first.
 func preferredAlgorithms(preferred []string) ([]checksum.Algorithm, error) {
 	if len(preferred) == 0 {
 		return checksum.All, nil
@@ -359,8 +321,8 @@ func preferredAlgorithms(preferred []string) ([]checksum.Algorithm, error) {
 	return checksum.AlgorithmsFromExtensions(preferred)
 }
 
-// policyURL extracts the URL used for wget-config host matching. A missing or
-// non-wget access yields the empty string, which never matches a host key.
+// policyURL returns the URL used for wget-config host matching, or "" for a
+// missing or non-wget access.
 func policyURL(resource *descriptor.Resource) string {
 	if resource == nil || resource.Access == nil {
 		return ""
@@ -372,9 +334,8 @@ func policyURL(resource *descriptor.Resource) string {
 	return wget.URL
 }
 
-// toChecksumPolicy adapts an [checksumhttpv1alpha1.ChecksumPolicy] to the checksum package's
-// Policy. Now that ChecksumSource.URL is a plain absolute URL (no templating),
-// externalUrl sources work identically on the input and access paths.
+// toChecksumPolicy adapts a [checksumhttpv1alpha1.ChecksumPolicy] to the
+// checksum package's Policy. Returns ok=false when spec is nil.
 func toChecksumPolicy(spec *checksumhttpv1alpha1.ChecksumPolicy) (checksum.Policy, bool, error) {
 	if spec == nil {
 		return checksum.Policy{}, false, nil
@@ -398,8 +359,8 @@ func toChecksumPolicy(spec *checksumhttpv1alpha1.ChecksumPolicy) (checksum.Polic
 	return policy, true, nil
 }
 
-// digestAlgorithms builds the download-package algorithm list from a resolved
-// policy, always including SHA-256 (the storage algorithm).
+// digestAlgorithms builds the download-package algorithm list from a policy,
+// always including SHA-256 (the storage algorithm).
 func digestAlgorithms(policy checksum.Policy) []download.DigestAlgorithm {
 	required := checksum.RequiredAlgorithms(policy)
 	out := make([]download.DigestAlgorithm, 0, len(required))
