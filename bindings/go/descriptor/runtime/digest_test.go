@@ -17,7 +17,9 @@ func TestDigest_Parse(t *testing.T) {
 		name     string
 		digest   *descruntime.Digest
 		expected digest.Digest
-		err      error
+		// noDigest means the resource declares nothing to verify against, which Parse
+		// reports as an empty digest and no error.
+		noDigest bool
 	}{
 		{
 			name:     "sha-256 as the spec spells it",
@@ -41,19 +43,19 @@ func TestDigest_Parse(t *testing.T) {
 			digest: &descruntime.Digest{HashAlgorithm: "SHA-512", Value: digest.SHA512.FromString("content").Encoded()},
 		},
 		{
-			name:   "nil digest",
-			digest: nil,
-			err:    descruntime.ErrNoDigest,
+			name:     "nil digest",
+			digest:   nil,
+			noDigest: true,
 		},
 		{
-			name:   "empty value",
-			digest: &descruntime.Digest{HashAlgorithm: "SHA-256"},
-			err:    descruntime.ErrNoDigest,
+			name:     "empty value",
+			digest:   &descruntime.Digest{HashAlgorithm: "SHA-256"},
+			noDigest: true,
 		},
 		{
-			name:   "excluded from signature",
-			digest: &descruntime.Digest{HashAlgorithm: descruntime.NoDigest, NormalisationAlgorithm: descruntime.ExcludeFromSignature, Value: descruntime.NoDigest},
-			err:    descruntime.ErrNoDigest,
+			name:     "excluded from signature",
+			digest:   &descruntime.Digest{HashAlgorithm: descruntime.NoDigest, NormalisationAlgorithm: descruntime.ExcludeFromSignature, Value: descruntime.NoDigest},
+			noDigest: true,
 		},
 		{
 			name:   "unsupported algorithm",
@@ -70,11 +72,11 @@ func TestDigest_Parse(t *testing.T) {
 			parsed, err := tt.digest.Parse()
 
 			switch {
-			case tt.err != nil:
-				require.ErrorIs(t, err, tt.err)
+			case tt.noDigest:
+				require.NoError(t, err, "nothing to verify against is not a failure")
+				require.Empty(t, parsed)
 			case tt.expected == "":
-				require.Error(t, err)
-				require.NotErrorIs(t, err, descruntime.ErrNoDigest, "a present but unusable digest must not read as an absent one")
+				require.Error(t, err, "a present but unusable digest must not read as an absent one")
 			default:
 				require.NoError(t, err)
 				require.Equal(t, tt.expected, parsed)

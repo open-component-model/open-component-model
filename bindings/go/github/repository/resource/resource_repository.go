@@ -100,8 +100,10 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 // The blob is buffered eagerly in memory and can be read any number of times;
 // it needs no cleanup and holds the whole archive until released.
 //
-// The archive is compared to the digest the resource declares, which is the generic
-// blob digest, so an archive that differs fails the read.
+// The returned blob is a [blob.VerifyingBlob]: the digest the resource declares is
+// the generic blob digest over exactly this archive, so the caller can hold it to
+// that by calling Verify. Downloading does not verify on its own, which is what
+// lets the digest processor use this while it is still establishing that digest.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	gitHub, err := githubinternal.AccessFrom(resource.Access)
 	if err != nil {
@@ -133,28 +135,17 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		}
 	}
 
-	archive, err := r.DownloadCommitArchive(ctx, gitHub, credentials)
+	archive, err := download.Download(ctx, gitHub, gitHubCredentials, r.httpClient)
 	if err != nil {
 		return nil, err
 	}
 
-	return repository.VerifyDownload(ctx, resource, archive)
-}
-
-// DownloadCommitArchive fetches the archive of the commit pinned in GitHub, which
-// [download.Download] rejects the access without.
-//
-// It takes an access rather than a resource because there is no resource here, and
-// so no digest to compare the archive to. The digest processor calls it while
-// establishing that digest, which cannot be verified before it exists. Callers
-// holding a resource want DownloadResource, which verifies.
-func (r *ResourceRepository) DownloadCommitArchive(ctx context.Context, gitHub *v1.GitHub, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	gitHubCredentials, err := credsv1.ConvertToGitHubCredentials(credentials)
+	verifying, err := repository.NewVerifyingBlob(resource, archive)
 	if err != nil {
-		return nil, fmt.Errorf("error resolving GitHub credentials: %w", err)
+		return nil, err
 	}
 
-	return download.Download(ctx, gitHub, gitHubCredentials, r.httpClient)
+	return verifying, nil
 }
 
 // UploadResource is not supported: the GitHub access type is a read-only

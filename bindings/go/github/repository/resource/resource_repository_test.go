@@ -234,15 +234,10 @@ func TestResourceRepository_DownloadResource_DigestVerification(t *testing.T) {
 		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
 		res.Digest = digestOf([]byte("an archive GitHub never served"))
 
-		// Verification is streaming, so the download itself still succeeds.
+		// Downloading does not verify; the caller decides by calling Verify.
 		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err)
-
-		rc, err := downloaded.ReadCloser()
-		require.NoError(t, err)
-		_, err = io.ReadAll(rc)
-		require.ErrorContains(t, err, "digest mismatch")
-		require.ErrorContains(t, rc.Close(), "digest mismatch")
+		require.ErrorContains(t, verifyBlob(t, downloaded), "digest mismatch")
 	})
 
 	t.Run("serves an archive unverified when the resource carries no digest", func(t *testing.T) {
@@ -255,27 +250,16 @@ func TestResourceRepository_DownloadResource_DigestVerification(t *testing.T) {
 		assert.Equal(t, payload, readBlob(t, downloaded))
 	})
 
-	t.Run("DownloadCommitArchive serves the archive for a pinned access", func(t *testing.T) {
+	t.Run("serves the archive without verifying when the caller does not ask", func(t *testing.T) {
 		baseURL, payload := mockGitHub(t)
+		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
+		res.Digest = digestOf([]byte("an archive GitHub never served"))
 
-		// The digest processor establishes the digest, so it downloads by access:
-		// there is no resource digest in play to hold the archive to.
-		downloaded, err := NewResourceRepository().DownloadCommitArchive(t.Context(), &v1.GitHub{
-			Type:    runtime.NewVersionedType(v1.LegacyType, v1.Version),
-			RepoURL: baseURL + "/octocat/Hello-World",
-			Commit:  testCommit,
-		}, nil)
+		// This is what the digest processor does: download, never call Verify, and
+		// hash what came back to establish the digest.
+		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err)
 		assert.Equal(t, payload, readBlob(t, downloaded))
-	})
-
-	t.Run("DownloadCommitArchive refuses an access with no pinned commit", func(t *testing.T) {
-		_, err := NewResourceRepository().DownloadCommitArchive(t.Context(), &v1.GitHub{
-			Type:    runtime.NewVersionedType(v1.LegacyType, v1.Version),
-			RepoURL: "https://github.com/octocat/Hello-World",
-			Ref:     "main",
-		}, nil)
-		assert.ErrorContains(t, err, "pinned commit")
 	})
 }
 
@@ -358,4 +342,14 @@ func TestResourceRepository_GetResourceRepositoryScheme(t *testing.T) {
 	scheme := NewResourceRepository().GetResourceRepositoryScheme()
 	require.NotNil(t, scheme)
 	assert.True(t, scheme.IsRegistered(runtime.NewVersionedType(v1.LegacyType, v1.Version)))
+}
+
+// verifyBlob asserts that a download produced something verifiable and verifies it,
+// which is what every real caller does at its own call site.
+func verifyBlob(t *testing.T, b blobpkg.ReadOnlyBlob) error {
+	t.Helper()
+	verifying, ok := b.(*blobpkg.VerifyingBlob)
+	require.True(t, ok, "a download must return a *blob.VerifyingBlob so callers can verify it")
+	_, err := verifying.Verify(t.Context())
+	return err
 }
