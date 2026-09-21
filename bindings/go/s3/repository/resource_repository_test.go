@@ -215,7 +215,6 @@ func Test_DownloadResource_DigestVerification(t *testing.T) {
 	t.Run("accepts an object matching the resource digest", func(t *testing.T) {
 		b, err := downloadWith(t, content, matching)
 		require.NoError(t, err)
-		require.NoError(t, verifyBlob(t, b))
 
 		rc, err := b.ReadCloser()
 		require.NoError(t, err)
@@ -226,10 +225,15 @@ func Test_DownloadResource_DigestVerification(t *testing.T) {
 	})
 
 	t.Run("rejects an object that does not match the resource digest", func(t *testing.T) {
-		// Downloading does not verify; the caller decides by calling Verify.
+		// Verification is streaming, so the download itself still succeeds.
 		b, err := downloadWith(t, []byte("not what was promised"), matching)
 		require.NoError(t, err)
-		require.ErrorContains(t, verifyBlob(t, b), "digest mismatch")
+
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		_, err = io.ReadAll(rc)
+		require.ErrorContains(t, err, "digest mismatch")
+		require.ErrorContains(t, rc.Close(), "digest mismatch")
 	})
 
 	t.Run("serves an object unverified when the resource carries no digest", func(t *testing.T) {
@@ -460,14 +464,4 @@ func Test_NewResourceRepository_NilFilesystemConfig(t *testing.T) {
 	got, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	require.Equal(t, content, got)
-}
-
-// verifyBlob asserts that a download produced something verifiable and verifies it,
-// which is what every real caller does at its own call site.
-func verifyBlob(t *testing.T, b blob.ReadOnlyBlob) error {
-	t.Helper()
-	verifying, ok := b.(*blob.VerifyingBlob)
-	require.True(t, ok, "a download must return a *blob.VerifyingBlob so callers can verify it")
-	_, err := verifying.Verify(t.Context())
-	return err
 }

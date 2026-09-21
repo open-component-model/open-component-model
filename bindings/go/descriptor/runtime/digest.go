@@ -10,7 +10,8 @@ import (
 // Parse returns d as a [digest.Digest] in canonical "algorithm:hex" form, so that
 // content can be verified against it.
 //
-// An empty digest with no error means d declares nothing to verify against. An
+// An empty digest with no error means d declares nothing to verify against, which
+// is what --skip-reference-digest-processing produces and is not a failure. An
 // error means the digest is present but unusable.
 //
 // Note: There are several places in the code today in which we are parsing digests in

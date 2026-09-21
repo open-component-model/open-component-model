@@ -195,10 +195,15 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 			Value:                  godigest.FromString(served).Encoded(),
 		}
 
-		// Downloading does not verify; the caller decides by calling Verify.
+		// Verification is streaming, so the download itself still succeeds.
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		require.NoError(t, err)
-		require.ErrorContains(t, verifyBlob(t, b), "digest mismatch")
+
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		_, err = io.ReadAll(rc)
+		require.ErrorContains(t, err, "digest mismatch")
+		require.ErrorContains(t, rc.Close(), "digest mismatch")
 	})
 
 	t.Run("serves content unverified when the resource carries no digest", func(t *testing.T) {
@@ -232,7 +237,8 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 		}
 
 		_, err := repo.DownloadResource(t.Context(), resource, nil)
-		assert.ErrorContains(t, err, "unsupported hash algorithm")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported hash algorithm")
 	})
 }
 
@@ -411,14 +417,4 @@ func TestProcessResourceDigest(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported normalisation algorithm")
 	})
-}
-
-// verifyBlob asserts that a download produced something verifiable and verifies it,
-// which is what every real caller does at its own call site.
-func verifyBlob(t *testing.T, b blob.ReadOnlyBlob) error {
-	t.Helper()
-	verifying, ok := b.(*blob.VerifyingBlob)
-	require.True(t, ok, "a download must return a *blob.VerifyingBlob so callers can verify it")
-	_, err := verifying.Verify(t.Context())
-	return err
 }

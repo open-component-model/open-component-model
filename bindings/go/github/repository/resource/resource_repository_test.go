@@ -234,10 +234,15 @@ func TestResourceRepository_DownloadResource_DigestVerification(t *testing.T) {
 		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
 		res.Digest = digestOf([]byte("an archive GitHub never served"))
 
-		// Downloading does not verify; the caller decides by calling Verify.
+		// Verification is streaming, so the download itself still succeeds.
 		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err)
-		require.ErrorContains(t, verifyBlob(t, downloaded), "digest mismatch")
+
+		rc, err := downloaded.ReadCloser()
+		require.NoError(t, err)
+		_, err = io.ReadAll(rc)
+		require.ErrorContains(t, err, "digest mismatch")
+		require.ErrorContains(t, rc.Close(), "digest mismatch")
 	})
 
 	t.Run("serves an archive unverified when the resource carries no digest", func(t *testing.T) {
@@ -250,16 +255,22 @@ func TestResourceRepository_DownloadResource_DigestVerification(t *testing.T) {
 		assert.Equal(t, payload, readBlob(t, downloaded))
 	})
 
-	t.Run("serves the archive without verifying when the caller does not ask", func(t *testing.T) {
+	t.Run("the digest processor reads the archive digest without tripping verification", func(t *testing.T) {
 		baseURL, payload := mockGitHub(t)
 		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
 		res.Digest = digestOf([]byte("an archive GitHub never served"))
 
-		// This is what the digest processor does: download, never call Verify, and
-		// hash what came back to establish the digest.
+		// The digest is taken from the blob, which reports what it holds rather than
+		// what the resource claims, so establishing a digest never reads through the
+		// verifying reader. This is what replaced a download-by-access method.
 		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err)
-		assert.Equal(t, payload, readBlob(t, downloaded))
+
+		aware, ok := downloaded.(blobpkg.DigestAware)
+		require.True(t, ok)
+		raw, known := aware.Digest()
+		require.True(t, known)
+		require.Equal(t, godigest.FromBytes(payload).String(), raw)
 	})
 }
 
@@ -342,14 +353,4 @@ func TestResourceRepository_GetResourceRepositoryScheme(t *testing.T) {
 	scheme := NewResourceRepository().GetResourceRepositoryScheme()
 	require.NotNil(t, scheme)
 	assert.True(t, scheme.IsRegistered(runtime.NewVersionedType(v1.LegacyType, v1.Version)))
-}
-
-// verifyBlob asserts that a download produced something verifiable and verifies it,
-// which is what every real caller does at its own call site.
-func verifyBlob(t *testing.T, b blobpkg.ReadOnlyBlob) error {
-	t.Helper()
-	verifying, ok := b.(*blobpkg.VerifyingBlob)
-	require.True(t, ok, "a download must return a *blob.VerifyingBlob so callers can verify it")
-	_, err := verifying.Verify(t.Context())
-	return err
 }

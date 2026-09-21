@@ -863,12 +863,26 @@ func TestRepository_DownloadResource_DigestVerification(t *testing.T) {
 		return repo, stored
 	}
 
+	// drain consumes the blob. DownloadResource hands back a lazy blob fed by a
+	// goroutine that writes a temp file into repo.tempDir, so a test that only
+	// checks it is non-nil leaves that goroutine racing t.TempDir cleanup.
+	drain := func(t *testing.T, b blob.ReadOnlyBlob) {
+		t.Helper()
+		require.NotNil(t, b)
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		n, err := io.Copy(io.Discard, rc)
+		require.NoError(t, err)
+		require.NotZero(t, n, "an OCI layout tar must not be empty")
+		require.NoError(t, rc.Close())
+	}
+
 	t.Run("accepts a manifest matching the resource digest", func(t *testing.T) {
 		repo, res := uploaded(t)
 
 		downloaded, err := repo.DownloadResource(t.Context(), res)
 		require.NoError(t, err)
-		require.NotNil(t, downloaded)
+		drain(t, downloaded)
 	})
 
 	t.Run("rejects a manifest that does not match the resource digest", func(t *testing.T) {
@@ -886,7 +900,7 @@ func TestRepository_DownloadResource_DigestVerification(t *testing.T) {
 
 		downloaded, err := repo.DownloadResource(t.Context(), res)
 		require.NoError(t, err)
-		require.NotNil(t, downloaded)
+		drain(t, downloaded)
 	})
 
 	t.Run("accepts the ociArtifactDigest spelling of the same digest", func(t *testing.T) {
@@ -898,7 +912,7 @@ func TestRepository_DownloadResource_DigestVerification(t *testing.T) {
 
 		downloaded, err := repo.DownloadResource(t.Context(), res)
 		require.NoError(t, err)
-		require.NotNil(t, downloaded)
+		drain(t, downloaded)
 	})
 }
 

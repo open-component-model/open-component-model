@@ -104,12 +104,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	if err != nil {
 		return nil, err
 	}
-	verifying, err := repository.NewVerifyingBlob(resource, b)
-	if err != nil {
-		return nil, err
-	}
-
-	return verifying, nil
+	return repository.VerifyDownload(ctx, resource, b)
 }
 
 // download streams the resource body into the configured temp folder and returns it

@@ -68,37 +68,8 @@ func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginMana
 		}
 		data, err = plugin.DownloadResource(ctx, res, creds)
 	}
-	if err != nil {
-		return nil, err
-	}
 
-	if err := verifyDownloaded(ctx, res, data); err != nil {
-		return nil, err
-	}
-
-	return data, nil
-}
-
-// verifyDownloaded verifies the digest against the given `res` digest.
-//
-// Content that is not a [blob.VerifyingBlob] came from a repository that verifies
-// its own way, such as OCI comparing the manifest digest it resolved.
-func verifyDownloaded(ctx context.Context, res *descriptor.Resource, data blob.ReadOnlyBlob) error {
-	verifying, ok := data.(*blob.VerifyingBlob)
-	if !ok {
-		return nil
-	}
-
-	verified, err := verifying.Verify(ctx)
-	if err != nil {
-		return fmt.Errorf("verifying resource %q failed: %w", res.Name, err)
-	}
-	if !verified {
-		slog.WarnContext(ctx, "resource has no digest, so what the repository has cannot be verified",
-			slog.Any("resource", res.ToIdentity()))
-	}
-
-	return nil
+	return data, err
 }
 
 // SaveBlobToFile writes blob data to file with directory creation

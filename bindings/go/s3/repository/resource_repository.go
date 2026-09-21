@@ -83,9 +83,8 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 // returned blob reads from that file, which outlives this call and is owned by the
 // caller.
 //
-// The returned blob is a [blob.VerifyingBlob]: the digest the resource declares is
-// the digest over exactly these bytes, so the caller can hold it to that by calling
-// Verify. Downloading does not verify on its own.
+// The content is held to the digest the resource declares, which is the digest over
+// exactly these bytes, so a store serving something else fails the read.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := r.convertAccess(resource)
 	if err != nil {
@@ -102,12 +101,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, err
 	}
 
-	verifying, err := repository.NewVerifyingBlob(resource, result.Blob)
-	if err != nil {
-		return nil, err
-	}
-
-	return verifying, nil
+	return repository.VerifyDownload(ctx, resource, result.Blob)
 }
 
 func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v2.S3, error) {

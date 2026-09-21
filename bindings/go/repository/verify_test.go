@@ -23,7 +23,7 @@ func resourceWithDigest(dig *descriptor.Digest) *descriptor.Resource {
 	return res
 }
 
-func TestNewVerifyingBlob(t *testing.T) {
+func TestVerifyDownload(t *testing.T) {
 	matching := &descriptor.Digest{
 		HashAlgorithm:          "SHA-256",
 		NormalisationAlgorithm: "genericBlobDigest/v1",
@@ -31,14 +31,11 @@ func TestNewVerifyingBlob(t *testing.T) {
 	}
 
 	t.Run("holds content to a matching digest", func(t *testing.T) {
-		verifying, err := repository.NewVerifyingBlob(resourceWithDigest(matching),
+		verified, err := repository.VerifyDownload(t.Context(), resourceWithDigest(matching),
 			inmemory.New(strings.NewReader(verifyContent)))
 		require.NoError(t, err)
-		verified, err := verifying.Verify(t.Context())
-		require.NoError(t, err)
-		require.True(t, verified)
 
-		rc, err := verifying.ReadCloser()
+		rc, err := verified.ReadCloser()
 		require.NoError(t, err)
 		read, err := io.ReadAll(rc)
 		require.NoError(t, err)
@@ -47,40 +44,36 @@ func TestNewVerifyingBlob(t *testing.T) {
 	})
 
 	t.Run("reports content that does not match", func(t *testing.T) {
-		verifying, err := repository.NewVerifyingBlob(resourceWithDigest(matching),
+		verified, err := repository.VerifyDownload(t.Context(), resourceWithDigest(matching),
 			inmemory.New(strings.NewReader("something else entirely")))
 		require.NoError(t, err)
-		_, err = verifying.Verify(t.Context())
+
+		rc, err := verified.ReadCloser()
+		require.NoError(t, err)
+		_, err = io.ReadAll(rc)
 		require.ErrorContains(t, err, "digest mismatch")
 	})
 
-	t.Run("has nothing to verify when the resource carries no digest", func(t *testing.T) {
+	t.Run("passes content through when there is no digest to verify against", func(t *testing.T) {
 		for _, dig := range []*descriptor.Digest{
 			nil,
 			{HashAlgorithm: "SHA-256"},
 			{HashAlgorithm: descriptor.NoDigest, NormalisationAlgorithm: descriptor.ExcludeFromSignature, Value: descriptor.NoDigest},
 		} {
-			// Still a VerifyingBlob, so a failed type assertion at a call site means
-			// "this did not come from a verifying repository" and nothing else.
-			verifying, err := repository.NewVerifyingBlob(resourceWithDigest(dig),
-				inmemory.New(strings.NewReader(verifyContent)))
+			content := inmemory.New(strings.NewReader(verifyContent))
+			verified, err := repository.VerifyDownload(t.Context(), resourceWithDigest(dig), content)
 			require.NoError(t, err)
-			verified, err := verifying.Verify(t.Context())
-			require.NoError(t, err)
-			require.False(t, verified, "nothing to verify must not report as verified")
+			require.Same(t, content, verified, "unverifiable content must be handed back untouched")
 		}
 	})
 
 	t.Run("refuses content whose digest is present but unusable", func(t *testing.T) {
 		for _, dig := range []*descriptor.Digest{
 			{HashAlgorithm: "MD5", Value: godigest.FromString(verifyContent).Encoded()},
-			{HashAlgorithm: "SHA-512", Value: godigest.SHA512.FromString(verifyContent).Encoded()},
 			{HashAlgorithm: "SHA-256", Value: "not-hex"},
 			{HashAlgorithm: "SHA-256", Value: "abcd"},
 		} {
-			// Unusable is not "nothing to verify": the download must refuse it rather
-			// than hand back content that only fails later.
-			_, err := repository.NewVerifyingBlob(resourceWithDigest(dig),
+			_, err := repository.VerifyDownload(t.Context(), resourceWithDigest(dig),
 				inmemory.New(strings.NewReader(verifyContent)))
 			require.Error(t, err, "digest %+v must not pass as verifiable", dig)
 		}
