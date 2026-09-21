@@ -12,6 +12,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/wget/input"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
@@ -288,44 +289,140 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 	})
 }
 
-// TestProcessResource_ChecksumPolicy_CredentialsForwarded confirms that OCM
-// credentials handed to the input method are attached to the sibling checksum
-// fetch as well, not just to the artifact download. Without this, authenticated
-// Maven repos and other credentialed mirrors silently 401 on the checksum leg.
+// TestProcessResource_ChecksumPolicy_CredentialsForwarded confirms three
+// invariants on how OCM credentials propagate to the sibling checksum fetch:
+//
+//   - Same-origin HTTPS: credentials are forwarded so authenticated Maven mirrors
+//     and registries behind a bearer token/basic auth verify checksums end-to-end.
+//   - Cross-origin (any scheme): credentials are stripped. The checksum URL comes
+//     from a user-controlled CEL expression; sending Authorization to arbitrary
+//     hosts would leak credentials to attacker-controlled infrastructure.
+//   - Plain HTTP (even same host): credentials are stripped. Non-TLS transport
+//     leaks the header on the wire.
+//
+// Guards CWE-200 (sensitive-data exposure) surfaced during PR review.
 func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
 	t.Parallel()
 
 	content := []byte("hello world")
 
-	var (
-		artifactAuth string
-		checksumAuth string
-	)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, ".sha256"):
-			checksumAuth = r.Header.Get("Authorization")
-			_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
-		default:
-			artifactAuth = r.Header.Get("Authorization")
-			_, _ = w.Write(content)
-		}
+	// Standalone mirror used for the cross-origin cases. TLS + separate host so
+	// the artifact server's origin never matches.
+	var mirrorAuth string
+	mirror := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mirrorAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
 	}))
-	defer server.Close()
+	defer mirror.Close()
+
+	// Also a plain-HTTP mirror on the same host as the artifact to prove the
+	// scheme downgrade drops credentials even when the host would otherwise
+	// match. Reuses the same handler shape.
+	var httpMirrorAuth string
+	httpMirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpMirrorAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
+	}))
+	defer httpMirror.Close()
 
 	creds := &credv1.WgetCredentials{
 		Type:          credv1.WgetCredentialsVersionedType,
 		IdentityToken: "my-token",
 	}
-	resource := wgetInputResource(t, map[string]any{
-		"url": server.URL + "/artifact",
-		"checksumPolicy": map[string]any{"sources": []any{
-			map[string]any{"type": "externalUrl", "algorithms": []any{"sha256"}},
-		}},
+	insecure := true
+	// InsecureSkipVerify lets the input method's HTTP client trust the httptest
+	// server's self-signed certificate. Without this the download itself would
+	// fail before verifyChecksum is reached.
+	httpConfig := &httpv1alpha1.Config{
+		TLSConfig: httpv1alpha1.TLSConfig{
+			InsecureSkipVerify: &insecure,
+		},
+	}
+
+	t.Run("same-origin HTTPS forwards credentials to checksum fetch", func(t *testing.T) {
+		var (
+			artifactAuth string
+			checksumAuth string
+		)
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case strings.HasSuffix(r.URL.Path, ".sha256"):
+				checksumAuth = r.Header.Get("Authorization")
+				_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
+			default:
+				artifactAuth = r.Header.Get("Authorization")
+				_, _ = w.Write(content)
+			}
+		}))
+		defer server.Close()
+
+		resource := wgetInputResource(t, map[string]any{
+			"url": server.URL + "/artifact",
+			"checksumPolicy": map[string]any{"sources": []any{
+				map[string]any{"type": "externalUrl", "algorithms": []any{"sha256"}},
+			}},
+		})
+		result, err := (&input.InputMethod{HTTPConfig: httpConfig}).ProcessResource(t.Context(), resource, creds)
+		require.NoError(t, err)
+		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
+		assert.Equal(t, "Bearer my-token", artifactAuth, "artifact fetch must carry credentials")
+		assert.Equal(t, "Bearer my-token", checksumAuth, "same-origin HTTPS checksum fetch must reuse credentials")
 	})
-	result, err := (&input.InputMethod{}).ProcessResource(t.Context(), resource, creds)
-	require.NoError(t, err)
-	assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
-	assert.Equal(t, "Bearer my-token", artifactAuth, "artifact fetch must carry credentials")
-	assert.Equal(t, "Bearer my-token", checksumAuth, "sibling checksum fetch must carry the same credentials")
+
+	t.Run("cross-origin HTTPS strips credentials from checksum fetch", func(t *testing.T) {
+		mirrorAuth = ""
+		var artifactAuth string
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			artifactAuth = r.Header.Get("Authorization")
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		// CEL expression points the checksum URL at the mirror on a different
+		// host, exercising the same-origin filter.
+		resource := wgetInputResource(t, map[string]any{
+			"url": server.URL + "/artifact",
+			"checksumPolicy": map[string]any{"sources": []any{
+				map[string]any{
+					"type":       "externalUrl",
+					"algorithms": []any{"sha256"},
+					"url":        fmt.Sprintf(`${"%s/artifact.sha256"}`, mirror.URL),
+				},
+			}},
+		})
+		result, err := (&input.InputMethod{HTTPConfig: httpConfig}).ProcessResource(t.Context(), resource, creds)
+		require.NoError(t, err)
+		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
+		assert.Equal(t, "Bearer my-token", artifactAuth, "artifact fetch still carries credentials")
+		assert.Empty(t, mirrorAuth, "cross-origin checksum fetch must NOT carry credentials")
+	})
+
+	t.Run("same-host plain-HTTP strips credentials from checksum fetch", func(t *testing.T) {
+		httpMirrorAuth = ""
+		var artifactAuth string
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			artifactAuth = r.Header.Get("Authorization")
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		// Point the checksum URL at the plain-HTTP mirror. Different scheme (and
+		// implicitly different port) so the same-origin filter rejects it even
+		// though hostname is 127.0.0.1 on both.
+		resource := wgetInputResource(t, map[string]any{
+			"url": server.URL + "/artifact",
+			"checksumPolicy": map[string]any{"sources": []any{
+				map[string]any{
+					"type":       "externalUrl",
+					"algorithms": []any{"sha256"},
+					"url":        fmt.Sprintf(`${"%s/artifact.sha256"}`, httpMirror.URL),
+				},
+			}},
+		})
+		result, err := (&input.InputMethod{HTTPConfig: httpConfig}).ProcessResource(t.Context(), resource, creds)
+		require.NoError(t, err)
+		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
+		assert.Equal(t, "Bearer my-token", artifactAuth, "artifact fetch still carries credentials")
+		assert.Empty(t, httpMirrorAuth, "plain-HTTP checksum fetch must NOT carry credentials even for the same host")
+	})
 }

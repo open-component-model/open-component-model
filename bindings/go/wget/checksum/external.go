@@ -17,27 +17,25 @@ const maxChecksumBodyBytes = 4 << 10
 // next to the artifact. The URL for each algorithm is resolved by the caller
 // (see [Source.ResolveURL]), keeping this fetcher independent of any templating.
 type ExternalFetcher struct {
-	// Client performs the checksum requests. When nil, http.DefaultClient is used.
-	// The caller is responsible for any transport-level credentials (mTLS): the
-	// client itself is used as-is, so the input method's cred-decorated client
-	// should be handed in here.
+	// Client performs the checksum requests when [Do] is nil. When both are nil,
+	// http.DefaultClient is used. The caller is responsible for any transport
+	// credentials attached to Client.
 	Client *http.Client
-	// PrepareRequest is invoked after building each checksum request and before
-	// dispatching it, so the caller can attach header-based credentials
-	// (Authorization: Bearer …, Basic auth). Nil skips the step. Kept as a
-	// closure so this package does not depend on the OCM credential runtime.
-	PrepareRequest func(*http.Request) error
+	// Do dispatches a prepared checksum request and returns the response. When
+	// non-nil it takes precedence over Client, allowing the caller to pick a
+	// per-URL client (for example: credentialed for same-origin HTTPS URLs,
+	// undecorated for cross-origin) and to attach or omit credentials based on
+	// the request destination. Keeping the hook at request level lets the caller
+	// scope credentials by destination without leaking runtime types into this
+	// package.
+	Do func(*http.Request) (*http.Response, error)
 }
 
 // FetchURL requests a single external checksum from checksumURL, expecting a body
 // hex-encoded for alg. A 404/410 yields ok=false so [Resolve] can fall back to
 // the next algorithm; other non-2xx statuses and malformed bodies are errors.
 func (f *ExternalFetcher) FetchURL(ctx context.Context, checksumURL string, alg Algorithm) (Expected, bool, error) {
-	client := f.Client
-	if client == nil {
-		client = http.DefaultClient
-	}
-	value, found, err := f.fetchOne(ctx, client, checksumURL, alg)
+	value, found, err := f.fetchOne(ctx, checksumURL, alg)
 	if err != nil {
 		return Expected{}, false, err
 	}
@@ -47,19 +45,27 @@ func (f *ExternalFetcher) FetchURL(ctx context.Context, checksumURL string, alg 
 	return Expected{Algorithm: alg, Value: value}, true, nil
 }
 
+// do dispatches req via [ExternalFetcher.Do] when set, falling back to
+// [ExternalFetcher.Client] and finally to http.DefaultClient.
+func (f *ExternalFetcher) do(req *http.Request) (*http.Response, error) {
+	if f.Do != nil {
+		return f.Do(req)
+	}
+	client := f.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	return client.Do(req)
+}
+
 // fetchOne GETs a single checksum URL. A 404/410 yields found=false (the checksum
 // simply does not exist for that algorithm); other non-2xx statuses are errors.
-func (f *ExternalFetcher) fetchOne(ctx context.Context, client *http.Client, checksumURL string, alg Algorithm) (string, bool, error) {
+func (f *ExternalFetcher) fetchOne(ctx context.Context, checksumURL string, alg Algorithm) (string, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumURL, nil)
 	if err != nil {
 		return "", false, fmt.Errorf("error creating checksum request: %w", err)
 	}
-	if f.PrepareRequest != nil {
-		if err := f.PrepareRequest(req); err != nil {
-			return "", false, fmt.Errorf("error preparing checksum request: %w", err)
-		}
-	}
-	resp, err := client.Do(req)
+	resp, err := f.do(req)
 	if err != nil {
 		return "", false, fmt.Errorf("error fetching checksum from %s: %w", checksumURL, err)
 	}
