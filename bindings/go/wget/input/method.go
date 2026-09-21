@@ -35,11 +35,12 @@ type InputMethod struct {
 	// HTTPConfig configures the HTTP client (timeouts, retries, TLS, routing) used for
 	// downloads. When nil, a default client is used.
 	HTTPConfig *httpv1alpha1.Config
-	// WgetConfig steers the wget behavioural knobs — today, the default
-	// [inputv1.ChecksumPolicy] that applies when a resource's spec does not
-	// carry its own checksumPolicy, and per-host overrides thereof. When nil,
-	// the input honours only spec-level policies; the access-side digest
-	// processor honours the same config.
+	// WgetConfig steers the wget behavioural knobs — today, the
+	// [wgetconfigv1alpha1.ChecksumPolicy] to apply to each downloaded resource
+	// (`defaultChecksumPolicy` plus per-host overrides). When nil (or when no
+	// entry matches the URL), the digest is computed from the stream without
+	// external verification. The wget access-side digest processor honours the
+	// same config so both paths behave identically.
 	WgetConfig *wgetconfigv1alpha1.Config
 	// MaxDownloadSize limits the number of bytes read from a response body. When zero,
 	// the download package default [download.DefaultMaxDownloadSize] is used. A negative value disables the limit.
@@ -102,11 +103,10 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		client = httpclient.New(httpclient.WithConfig(i.HTTPConfig))
 	}
 
-	// Spec-level ChecksumPolicy wins over the config's defaultChecksumPolicy /
-	// host override, so descriptor authors always control their resources'
-	// verification even when an operator's config sets a stricter default.
-	policySpec := effectiveChecksumPolicySpec(&wget, i.WgetConfig)
-	policy, hasPolicy, err := toChecksumPolicy(policySpec)
+	// Verification behaviour is entirely a deployment concern: the wget input
+	// spec no longer carries a checksumPolicy. Operators configure it centrally
+	// via wget.config.ocm.software/v1alpha1; the descriptor stays clean.
+	policy, hasPolicy, err := toChecksumPolicy(i.WgetConfig.PolicyForURL(wget.URL))
 	if err != nil {
 		return nil, fmt.Errorf("invalid checksum policy for wget input from %q: %w", wget.URL, err)
 	}
@@ -176,17 +176,6 @@ func (i *InputMethod) GetCredentialTypeScheme() *runtime.Scheme {
 	return wgetcreds.Scheme
 }
 
-// effectiveChecksumPolicySpec returns the ChecksumPolicy that should be applied
-// to this wget input, following the precedence documented on
-// [wgetconfigv1alpha1.Config]: a spec-level policy wins over config-supplied
-// values, and inside the config a host-scoped override wins over the default.
-func effectiveChecksumPolicySpec(wget *v1.Wget, cfg *wgetconfigv1alpha1.Config) *v1.ChecksumPolicy {
-	if wget.ChecksumPolicy != nil {
-		return wget.ChecksumPolicy
-	}
-	return cfg.PolicyForURL(wget.URL)
-}
-
 // verifyProvidedDigest checks the computed content digest against a digest pinned
 // on the resource. Only the canonical SHA-256/genericBlobDigest form is supported,
 // matching how wget resource digests are computed and stored.
@@ -209,15 +198,16 @@ func verifyProvidedDigest(provided *constructorruntime.Digest, data *download.Bl
 	return nil
 }
 
-// toChecksumPolicy adapts the input spec's ChecksumPolicy to the checksum
-// package's Policy, defaulting OnMissing to fail. It returns ok=false when no
-// policy is configured, in which case the digest is computed from the stream.
-func toChecksumPolicy(spec *v1.ChecksumPolicy) (checksum.Policy, bool, error) {
+// toChecksumPolicy adapts a [wgetconfigv1alpha1.ChecksumPolicy] resolved from
+// the OCM config to the checksum package's Policy, defaulting OnMissing to fail.
+// Returns ok=false when spec is nil (no policy configured for this URL), in
+// which case the digest is computed from the stream without verification.
+func toChecksumPolicy(spec *wgetconfigv1alpha1.ChecksumPolicy) (checksum.Policy, bool, error) {
 	if spec == nil {
 		return checksum.Policy{}, false, nil
 	}
 	policy := checksum.Policy{OnMissing: checksum.Fail}
-	if spec.OnMissing == v1.OnMissingCompute {
+	if spec.OnMissing == wgetconfigv1alpha1.OnMissingCompute {
 		policy.OnMissing = checksum.Compute
 	}
 	for i, src := range spec.Sources {

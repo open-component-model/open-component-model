@@ -8,9 +8,9 @@
 //
 // Destination scoping (CWE-200 mitigation)
 //
-// A checksum policy's externalUrl source may resolve to any URL (the input
-// spec's `url` field is a plain absolute URL, and the wget config lets operators
-// configure per-host defaults for descriptors they do not own). Sending the
+// A checksum policy's externalUrl source may resolve to any URL (the wget
+// config lets operators configure per-host defaults for the wget resources
+// they ingest). Sending the
 // artifact's OCM credentials to arbitrary URLs would leak them. This package
 // scopes credentials tightly: they are attached only when the resolved
 // checksum URL exactly matches the artifact URL's origin (same scheme, host,

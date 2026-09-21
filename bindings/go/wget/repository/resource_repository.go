@@ -20,7 +20,6 @@ import (
 	wgetconfigv1alpha1 "ocm.software/open-component-model/bindings/go/wget/spec/config/v1alpha1"
 	wgetcreds "ocm.software/open-component-model/bindings/go/wget/spec/credentials"
 	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
-	inputv1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
 )
 
 const (
@@ -38,7 +37,7 @@ type ResourceRepository struct {
 	maxDownloadSize  int64
 	filesystemConfig *filesystemv1alpha1.Config
 	// wgetConfig steers the digest processor's behavioural knobs — today, the
-	// [inputv1.ChecksumPolicy] applied against the source when computing a
+	// [wgetconfigv1alpha1.ChecksumPolicy] applied against the source when computing a
 	// resource's digest. When nil, the digest is computed from the stream
 	// without external verification (the pre-config default).
 	wgetConfig *wgetconfigv1alpha1.Config
@@ -175,7 +174,7 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 
 // ProcessResourceDigest computes the digest of a wget resource by downloading the
 // referenced content and hashing it inline (a single streaming pass — no re-read).
-// When [ResourceRepository.wgetConfig] resolves a [inputv1.ChecksumPolicy] for
+// When [ResourceRepository.wgetConfig] resolves a [wgetconfigv1alpha1.ChecksumPolicy] for
 // the resource's URL, the downloaded bytes are also verified against it: header
 // (RFC 9530 / x-checksum-*) and sibling-URL sources are honoured exactly as on
 // the input-method side, and any mismatch aborts before a digest is recorded.
@@ -264,15 +263,15 @@ func policyURL(resource *descriptor.Resource) string {
 	return wget.URL
 }
 
-// toChecksumPolicy adapts an [inputv1.ChecksumPolicy] to the checksum package's
+// toChecksumPolicy adapts an [wgetconfigv1alpha1.ChecksumPolicy] to the checksum package's
 // Policy. Now that ChecksumSource.URL is a plain absolute URL (no templating),
 // externalUrl sources work identically on the input and access paths.
-func toChecksumPolicy(spec *inputv1.ChecksumPolicy) (checksum.Policy, bool, error) {
+func toChecksumPolicy(spec *wgetconfigv1alpha1.ChecksumPolicy) (checksum.Policy, bool, error) {
 	if spec == nil {
 		return checksum.Policy{}, false, nil
 	}
 	policy := checksum.Policy{OnMissing: checksum.Fail}
-	if spec.OnMissing == inputv1.OnMissingCompute {
+	if spec.OnMissing == wgetconfigv1alpha1.OnMissingCompute {
 		policy.OnMissing = checksum.Compute
 	}
 	for i, src := range spec.Sources {

@@ -19,7 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
 	wgetconfigv1alpha1 "ocm.software/open-component-model/bindings/go/wget/spec/config/v1alpha1"
-	inputv1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
+	
 	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
@@ -359,9 +359,9 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 		defer server.Close()
 
 		cfg := &wgetconfigv1alpha1.Config{
-			DefaultChecksumPolicy: &inputv1.ChecksumPolicy{
-				OnMissing: inputv1.OnMissingFail,
-				Sources:   []inputv1.ChecksumSource{{Type: inputv1.ChecksumSourceHTTPHeader}},
+			DefaultChecksumPolicy: &wgetconfigv1alpha1.ChecksumPolicy{
+				OnMissing: wgetconfigv1alpha1.OnMissingFail,
+				Sources:   []wgetconfigv1alpha1.ChecksumSource{{Type: wgetconfigv1alpha1.ChecksumSourceHTTPHeader}},
 			},
 		}
 		repo := repository.NewResourceRepository(nil,
@@ -384,9 +384,9 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 		defer server.Close()
 
 		cfg := &wgetconfigv1alpha1.Config{
-			DefaultChecksumPolicy: &inputv1.ChecksumPolicy{
-				OnMissing: inputv1.OnMissingFail,
-				Sources:   []inputv1.ChecksumSource{{Type: inputv1.ChecksumSourceHTTPHeader}},
+			DefaultChecksumPolicy: &wgetconfigv1alpha1.ChecksumPolicy{
+				OnMissing: wgetconfigv1alpha1.OnMissingFail,
+				Sources:   []wgetconfigv1alpha1.ChecksumSource{{Type: wgetconfigv1alpha1.ChecksumSourceHTTPHeader}},
 			},
 		}
 		repo := repository.NewResourceRepository(nil,
@@ -409,9 +409,9 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 		defer server.Close()
 
 		cfg := &wgetconfigv1alpha1.Config{
-			DefaultChecksumPolicy: &inputv1.ChecksumPolicy{
-				OnMissing: inputv1.OnMissingFail,
-				Sources:   []inputv1.ChecksumSource{{Type: inputv1.ChecksumSourceExternalURL, URL: server.URL + "/resource.sha256", Algorithms: []string{"sha256"}}},
+			DefaultChecksumPolicy: &wgetconfigv1alpha1.ChecksumPolicy{
+				OnMissing: wgetconfigv1alpha1.OnMissingFail,
+				Sources:   []wgetconfigv1alpha1.ChecksumSource{{Type: wgetconfigv1alpha1.ChecksumSourceExternalURL, URL: server.URL + "/resource.sha256", Algorithms: []string{"sha256"}}},
 			},
 		}
 		repo := repository.NewResourceRepository(nil,
@@ -439,14 +439,14 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 		// succeeds only because the server actually advertises a matching
 		// header — proving the override took precedence.
 		cfg := &wgetconfigv1alpha1.Config{
-			DefaultChecksumPolicy: &inputv1.ChecksumPolicy{
-				OnMissing: inputv1.OnMissingCompute,
+			DefaultChecksumPolicy: &wgetconfigv1alpha1.ChecksumPolicy{
+				OnMissing: wgetconfigv1alpha1.OnMissingCompute,
 			},
 			Hosts: map[string]*wgetconfigv1alpha1.HostConfig{
 				host: {
-					ChecksumPolicy: &inputv1.ChecksumPolicy{
-						OnMissing: inputv1.OnMissingFail,
-						Sources:   []inputv1.ChecksumSource{{Type: inputv1.ChecksumSourceHTTPHeader}},
+					ChecksumPolicy: &wgetconfigv1alpha1.ChecksumPolicy{
+						OnMissing: wgetconfigv1alpha1.OnMissingFail,
+						Sources:   []wgetconfigv1alpha1.ChecksumSource{{Type: wgetconfigv1alpha1.ChecksumSourceHTTPHeader}},
 					},
 				},
 			},

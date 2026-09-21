@@ -7,7 +7,6 @@ import (
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	inputv1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
 )
 
 // ConfigType is the identifier of the wget behaviour configuration inside the
@@ -60,7 +59,7 @@ type Config struct {
 	// DefaultChecksumPolicy is applied to every wget resource whose spec does
 	// not carry its own checksumPolicy and whose host does not match a
 	// [Config.Hosts] entry.
-	DefaultChecksumPolicy *inputv1.ChecksumPolicy `json:"defaultChecksumPolicy,omitempty"`
+	DefaultChecksumPolicy *ChecksumPolicy `json:"defaultChecksumPolicy,omitempty"`
 
 	// Hosts maps hostname (or hostname:port) to per-host overrides. Entries
 	// keyed by "host:port" win over bare-hostname entries, matching the
@@ -77,10 +76,10 @@ type Config struct {
 type HostConfig struct {
 	// ChecksumPolicy overrides [Config.DefaultChecksumPolicy] for every wget
 	// URL whose host matches the map key this HostConfig is stored under.
-	ChecksumPolicy *inputv1.ChecksumPolicy `json:"checksumPolicy,omitempty"`
+	ChecksumPolicy *ChecksumPolicy `json:"checksumPolicy,omitempty"`
 }
 
-// Validate rejects an unknown [Config.Type]. The nested [inputv1.ChecksumPolicy]
+// Validate rejects an unknown [Config.Type]. The nested [ChecksumPolicy]
 // values are validated by the input package's own decode path when they are
 // consumed; here we accept them as-is to keep the config surface additive.
 func (c *Config) Validate() error {
@@ -154,7 +153,7 @@ func Merge(configs ...*Config) *Config {
 // (host matching cannot apply).
 //
 // Callers should treat the returned policy as read-only.
-func (c *Config) PolicyForURL(rawURL string) *inputv1.ChecksumPolicy {
+func (c *Config) PolicyForURL(rawURL string) *ChecksumPolicy {
 	if c == nil {
 		return nil
 	}

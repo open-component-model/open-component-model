@@ -13,7 +13,7 @@
 // Precedence for the effective ChecksumPolicy at a given wget URL is (tightest
 // wins):
 //
-//  1. A [inputv1.ChecksumPolicy] declared inline on the resource spec (input
+//  1. A [ChecksumPolicy] declared inline on the resource spec (input
 //     side today; access side may follow).
 //  2. A per-host [HostConfig.ChecksumPolicy] whose key matches the URL's host
 //     (`host` or `host:port`; port-qualified entries win over bare hostnames).

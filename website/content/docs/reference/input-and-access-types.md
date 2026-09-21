@@ -162,7 +162,6 @@ Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1
 | `verb`           | string                | no       | HTTP method to use. Defaults to `GET`.                                                                                                    |
 | `body`           | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
 | `noRedirect`     | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
-| `checksumPolicy` | object                | no       | How to obtain and verify an expected checksum for the downloaded content. See [Checksum policy](#wget-checksum-policy) below.             |
 
 {{< callout context="caution" >}}
 Do not put credentials in `url`, `header`, or `body`. That includes userinfo (`https://user:token@host/...`) and
@@ -229,31 +228,34 @@ resources:
     url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
 ```
 
-A pinned `digest` and a `checksumPolicy` can be combined: each is verified
-independently against the downloaded bytes.
+#### Checksum verification (via OCM config)
 
-#### Checksum policy {#wget-checksum-policy}
-
-A wget input embeds the downloaded bytes as a local blob and records their
-SHA-256 digest. When you also want an **expected** checksum verified against the
-download, configure a `checksumPolicy`. This is useful when the upstream ships a
-checksum out of band, following the strategies described by
-[Maven's expected checksums](https://maven.apache.org/resolver/expected-checksums.html).
+The wget input can verify a downloaded blob against an expected checksum
+supplied out-of-band by the source. Verification is a *deployment* concern,
+not a *descriptor* concern: it is configured centrally, and the same
+configuration also drives the [`Wget/v1` access]({{< relref "input-and-access-types.md" >}}#wgetv1-access)
+digest processor, so both paths behave identically.
 
 ```yaml
-resources:
-- name: release-archive
-  type: blob
-  version: 1.0.0
-  input:
-    type: Wget/v1
-    url: https://repo1.maven.org/maven2/xom/xom/1.3.9/xom-1.3.9.jar
-    checksumPolicy:
-      onMissing: fail          # fail | compute (default: fail when a policy is set)
-      sources:                 # tried in order; first that yields a checksum wins
-        - type: httpHeader     # "Remote Included": checksum in the response headers
-        - type: externalUrl    # "Remote External": checksum from <url>.<ext>
+type: generic.config.ocm.software/v1
+configurations:
+  # transport-level knobs — timeouts, TLS, retries
+  - type: http.config.ocm.software/v1alpha1
+    timeout: 30s
+
+  # wget behavioural knobs — how to verify the download
+  - type: wget.config.ocm.software/v1alpha1
+    defaultChecksumPolicy:
+      onMissing: compute      # fail | compute (default: fail when a policy is set)
+      sources:                # tried in order; first that yields a checksum wins
+        - type: httpHeader    # "Remote Included": checksum in the response headers
+        - type: externalUrl   # "Remote External": <url>.<ext> next to the artifact
           algorithms: [sha256, sha1]
+    hosts:
+      "repo.example.com":
+        checksumPolicy:
+          onMissing: fail
+          sources: [{type: httpHeader}]
 ```
 
 Each entry in `sources` has a `type`:
@@ -264,28 +266,28 @@ Each entry in `sources` has a `type`:
   family (plus the `x-goog-meta-*` and `x-amz-meta-*` variants) are understood. Add
   extra header names with `headers: [x-my-sha256]`.
 - `externalUrl` — a sibling resource fetched from a separate URL, by default
-  `<url>.<ext>` (e.g. `.sha256`, `.sha1`). Set `url` to an absolute URL to
-  point the checksum request at a mirror instead. One URL per source: to
-  cover multiple algorithms or hosts, add multiple `externalUrl` sources.
-
-  ```yaml
-  - type: externalUrl
-    algorithms: [sha256]
-    url: https://mirror.example/checksums/artifact-1.0.0.tar.gz.sha256
-  ```
-
-  The file may be a bare hex digest or GNU coreutils format (`<hex>  <name>`).
+  `<url>.<ext>` (e.g. `.sha256`, `.sha1`). Set `url` to an absolute URL to point
+  the checksum request at a mirror instead. One URL per source; use multiple
+  sources for multiple algorithms or hosts. The file may be a bare hex digest or
+  GNU coreutils format (`<hex>  <name>`).
 - `stream` — no expected checksum; the digest is computed from the downloaded
-  stream. Placing this in the list stops the search and disables verification from
-  that point on.
-
-Fields on a source: `headers` (extra header names for `httpHeader`), `url`
-(absolute checksum URL for `externalUrl`), and `algorithms` (file extensions
-`sha256`, `sha512`, `sha1`, `md5`, strongest first, for `externalUrl`).
+  stream. Placing this in the list stops the search and disables verification
+  from that point on.
 
 `onMissing` controls what happens when no source yields a checksum: `fail`
-(default when a policy is set) aborts the build; `compute` falls back to computing
-the digest from the stream without external verification.
+(default) aborts the build; `compute` falls back to computing the digest from
+the stream without external verification.
+
+Precedence for the effective policy on a given wget URL (tightest wins):
+
+1. A `hosts.<host>.checksumPolicy` whose key matches the URL's host (entries
+   keyed `host:port` win over bare-hostname entries).
+2. `defaultChecksumPolicy` at the top level.
+3. No policy — compute the storage digest without external verification.
+
+A pinned `digest` on the resource itself is verified independently against the
+downloaded bytes: pinned and policy are each checked against the actual bytes,
+never against each other.
 
 {{< callout context="note" >}}
 Verification and storage are decoupled. A policy may verify the transferred bytes
@@ -293,52 +295,9 @@ against any supported algorithm — Maven repositories commonly ship SHA-1 or MD
 but the digest recorded on the resource is **always SHA-256** with the
 `genericBlobDigest/v1` normalisation. A non-SHA-256 transport checksum therefore
 never leaks a weak or non-canonical algorithm into the component descriptor or
-into OCI storage and signing. If the download does not match the expected
-checksum, construction fails before anything is stored.
+into OCI storage and signing. A mismatch fails construction before anything is
+stored.
 {{< /callout >}}
-
-#### Configuring the policy centrally {#wget-checksum-policy-config}
-
-Descriptor-level `checksumPolicy` is the per-resource lever, but the same
-behaviour can be steered centrally through the `wget.config.ocm.software/v1alpha1`
-configuration carried inside the central `generic.config.ocm.software/v1`
-config. The same configuration applies both to the wget input path (this
-section) and the wget access digest processor
-([`Wget/v1` access]({{< relref "input-and-access-types.md" >}}#wgetv1-access)),
-so descriptor authors and operators steer both paths with one knob.
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  # transport-level knobs — timeouts, TLS, retries
-  - type: http.config.ocm.software/v1alpha1
-    timeout: 30s
-
-  # wget behavioural knobs
-  - type: wget.config.ocm.software/v1alpha1
-    defaultChecksumPolicy:
-      onMissing: compute
-      sources:
-        - type: httpHeader
-        - type: externalUrl
-          algorithms: [sha256, sha1]
-    hosts:
-      "repo.example.com":
-        checksumPolicy:
-          onMissing: fail
-          sources: [{type: httpHeader}]
-```
-
-Precedence for the effective policy on a given wget URL (tightest wins):
-
-1. A `checksumPolicy` declared inline on the resource.
-2. A `hosts.<host>.checksumPolicy` whose key matches the URL's host; entries
-   keyed `host:port` win over bare-hostname entries.
-3. `defaultChecksumPolicy` at the top level.
-4. No policy — compute the storage digest without external verification.
-
-Both the input method and the access-side digest processor honor the same
-policy; `externalUrl` sources with an explicit `url` are supported on both.
 
 ### `S3/v2` {#s3v2-input}
 

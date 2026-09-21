@@ -8,7 +8,7 @@ import (
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	v1alpha1 "ocm.software/open-component-model/bindings/go/wget/spec/config/v1alpha1"
-	inputv1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
+	
 )
 
 // helper: unpack a versioned Config from a YAML-encoded generic config so tests
@@ -34,9 +34,9 @@ configurations:
 	r.NoError(err)
 	r.NotNil(got)
 	r.NotNil(got.DefaultChecksumPolicy)
-	r.Equal(inputv1.OnMissingCompute, got.DefaultChecksumPolicy.OnMissing)
+	r.Equal(v1alpha1.OnMissingCompute, got.DefaultChecksumPolicy.OnMissing)
 	r.Len(got.DefaultChecksumPolicy.Sources, 1)
-	r.Equal(inputv1.ChecksumSourceHTTPHeader, got.DefaultChecksumPolicy.Sources[0].Type)
+	r.Equal(v1alpha1.ChecksumSourceHTTPHeader, got.DefaultChecksumPolicy.Sources[0].Type)
 }
 
 func TestLookupConfig_ReturnsNilWhenAbsent(t *testing.T) {
@@ -69,14 +69,14 @@ configurations:
 	// Host match: the "repo.example.com" override wins over the default.
 	got := cfg.PolicyForURL("https://repo.example.com/artifact.tar.gz")
 	r.NotNil(got)
-	r.Equal(inputv1.OnMissingFail, got.OnMissing)
-	r.Equal(inputv1.ChecksumSourceExternalURL, got.Sources[0].Type)
+	r.Equal(v1alpha1.OnMissingFail, got.OnMissing)
+	r.Equal(v1alpha1.ChecksumSourceExternalURL, got.Sources[0].Type)
 
 	// No host match: falls through to the default.
 	got = cfg.PolicyForURL("https://other.example.com/artifact.tar.gz")
 	r.NotNil(got)
-	r.Equal(inputv1.OnMissingCompute, got.OnMissing)
-	r.Equal(inputv1.ChecksumSourceHTTPHeader, got.Sources[0].Type)
+	r.Equal(v1alpha1.OnMissingCompute, got.OnMissing)
+	r.Equal(v1alpha1.ChecksumSourceHTTPHeader, got.Sources[0].Type)
 }
 
 func TestPolicyForURL_PortQualifiedKeyBeatsBareHost(t *testing.T) {
@@ -99,10 +99,10 @@ configurations:
 
 	// host:port entry wins for the specific port.
 	got := cfg.PolicyForURL("https://repo.example.com:8443/x")
-	r.Equal(inputv1.OnMissingFail, got.OnMissing)
+	r.Equal(v1alpha1.OnMissingFail, got.OnMissing)
 	// Bare-hostname entry applies to other ports (and to the implicit :443).
 	got = cfg.PolicyForURL("https://repo.example.com/x")
-	r.Equal(inputv1.OnMissingCompute, got.OnMissing)
+	r.Equal(v1alpha1.OnMissingCompute, got.OnMissing)
 }
 
 func TestPolicyForURL_NilConfigYieldsNil(t *testing.T) {
@@ -128,7 +128,7 @@ configurations:
 	// A URL Parse can accept most junk; use a control character to force an error.
 	got := cfg.PolicyForURL("http://\x7f/artifact")
 	r.NotNil(got)
-	r.Equal(inputv1.OnMissingCompute, got.OnMissing, "malformed URL falls back to the default policy, not to a host override")
+	r.Equal(v1alpha1.OnMissingCompute, got.OnMissing, "malformed URL falls back to the default policy, not to a host override")
 }
 
 func TestMerge_LaterWins(t *testing.T) {
@@ -154,7 +154,7 @@ configurations:
 	r.NoError(err)
 	r.NotNil(merged)
 	// Later default wins.
-	r.Equal(inputv1.OnMissingFail, merged.DefaultChecksumPolicy.OnMissing)
+	r.Equal(v1alpha1.OnMissingFail, merged.DefaultChecksumPolicy.OnMissing)
 	// Hosts maps are unioned.
 	r.Contains(merged.Hosts, "a.example")
 	r.Contains(merged.Hosts, "b.example")
@@ -178,7 +178,7 @@ configurations:
 	// Mixed case in URL — should still match the lowercased map key.
 	got := cfg.PolicyForURL("https://REPO.EXAMPLE.COM/artifact")
 	r.NotNil(got, "mixed-case URL hostname must match a lowercased config key")
-	r.Equal(inputv1.OnMissingFail, got.OnMissing)
+	r.Equal(v1alpha1.OnMissingFail, got.OnMissing)
 
 	// Mixed case in the config too — should still match a lowercased URL.
 	cfg2, err := v1alpha1.LookupConfig(decodeGeneric(t, `
@@ -192,5 +192,5 @@ configurations:
 	r.NoError(err)
 	got = cfg2.PolicyForURL("https://repo.example.com/artifact")
 	r.NotNil(got, "mixed-case config key must match a lowercased URL hostname")
-	r.Equal(inputv1.OnMissingFail, got.OnMissing)
+	r.Equal(v1alpha1.OnMissingFail, got.OnMissing)
 }
