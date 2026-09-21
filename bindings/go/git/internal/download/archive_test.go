@@ -104,13 +104,14 @@ func TestArchiveUsesGitTree(t *testing.T) {
 		got[h.Name] = entry{h.Typeflag, h.Mode, string(data)}
 	}
 
-	r.Equal([]string{"A", "a", "absolute", "colon:name", "dangling", "dir/file"}, names)
+	r.Equal([]string{"A", "a", "absolute", "colon:name", "dangling", "dir", "dir/file"}, names)
 	r.Equal(map[string]entry{
 		"A":          {tar.TypeReg, 0o644, "upper"},
 		"a":          {tar.TypeReg, 0o755, "lower"},
 		"absolute":   {tar.TypeSymlink, 0o777, "/etc/passwd"},
 		"colon:name": {tar.TypeReg, 0o644, "colon"},
 		"dangling":   {tar.TypeSymlink, 0o777, "../does-not-exist"},
+		"dir":        {tar.TypeDir, 0o755, ""},
 		"dir/file":   {tar.TypeReg, 0o644, "nested"},
 	}, got)
 }

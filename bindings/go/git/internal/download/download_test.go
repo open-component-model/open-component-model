@@ -86,7 +86,7 @@ func TestDownloadRevisions(t *testing.T) {
 					r.Equal("docs/guide.txt", h.Linkname)
 				}
 			}
-			r.Equal([]string{"README.md", "docs/guide.txt", "link", "run.sh"}, names)
+			r.Equal([]string{"README.md", "docs", "docs/guide.txt", "link", "run.sh"}, names)
 		})
 	}
 }

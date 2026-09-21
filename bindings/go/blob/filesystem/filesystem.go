@@ -28,6 +28,15 @@ type FileSystem interface {
 	ReadOnlyFS
 }
 
+// ReadlinkFS is a filesystem that can report the target of a symbolic link.
+// It is deliberately not part of [FileSystem]: reading links is optional, and an
+// implementation that cannot do it stays a valid FileSystem.
+type ReadlinkFS interface {
+	// Readlink returns the destination of the named symbolic link, as stored,
+	// without resolving it against the filesystem.
+	Readlink(name string) (string, error)
+}
+
 // OpenFileFS is a filesystem that supports opening files with a specific flag and permission bitmask
 type OpenFileFS interface {
 	// OpenFile is the generalized open call; most users will use Open
@@ -156,6 +165,13 @@ func (s *RootFileSystem) RemoveAll(path string) error {
 
 func (s *RootFileSystem) Stat(name string) (fs.FileInfo, error) {
 	return s.root.Stat(name)
+}
+
+// Readlink returns the destination of the named symbolic link. The link is read
+// rather than followed, so the result is the target as stored, which may not
+// exist and may point outside this filesystem.
+func (s *RootFileSystem) Readlink(name string) (string, error) {
+	return s.root.Readlink(name)
 }
 
 func (s *RootFileSystem) ReadOnly() bool {

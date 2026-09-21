@@ -19,11 +19,11 @@ import (
 // mediaTypeTar is the media type of the uncompressed archive [archive] writes.
 const mediaTypeTar = "application/x-tar"
 
-// archive writes the files of the commit tree as tar, so names, modes and symlinks
-// come from git and not from a checkout on the host file system. The archive stays
+// archive writes the commit tree as tar, so names, modes and symlinks come from
+// git and not from a checkout on the host file system. The archive stays
 // uncompressed because its digest is verified on other machines, and the output of
 // the standard library compressors is not stable across Go releases.
-// Directories are implied by the file paths, submodules are not part of the tree content.
+// Directories get an entry of their own, submodules are not part of the tree content.
 // It writes into file, which it closes but never removes; the caller owns it.
 // The digest is taken while writing, so no caller has to read the archive back.
 func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Options) (_ *filesystem.Blob, _ digest.Digest, err error) {
@@ -35,13 +35,7 @@ func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Opt
 	digester := digest.Canonical.Digester()
 	limited := &limitedWriter{Writer: file, limit: opts.MaxArchiveSize}
 	tw := tar.NewWriter(io.MultiWriter(limited, digester.Hash()))
-	err = tree.Files().ForEach(func(f *object.File) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		return writeFile(tw, f)
-	})
+	err = walkTree(ctx, tree, tw)
 	err = errors.Join(err, tw.Close(), file.Close())
 	if err != nil {
 		return nil, "", fmt.Errorf("cannot create git archive: %w", err)
@@ -57,10 +51,47 @@ func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Opt
 	return b, digester.Digest(), nil
 }
 
-func writeFile(tw *tar.Writer, f *object.File) error {
-	header := &tar.Header{Name: f.Name, ModTime: time.Unix(0, 0)}
-	switch f.Mode {
+// walkTree visits every entry of the tree, subtrees included, in the order git
+// stores them. Each name is the path from the root of the commit tree.
+func walkTree(ctx context.Context, tree *object.Tree, tw *tar.Writer) error {
+	walker := object.NewTreeWalker(tree, true, nil)
+	defer walker.Close()
+
+	for {
+		name, entry, err := walker.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		if err := writeEntry(tw, tree, name, entry); err != nil {
+			return err
+		}
+	}
+}
+
+// writeEntry writes one tree entry. A submodule names a commit in another
+// repository and has no content here, so it is left out entirely.
+func writeEntry(tw *tar.Writer, tree *object.Tree, name string, entry object.TreeEntry) error {
+	header := &tar.Header{Name: name, ModTime: time.Unix(0, 0)}
+	switch entry.Mode {
+	case filemode.Submodule:
+		return nil
+	case filemode.Dir:
+		header.Typeflag, header.Mode = tar.TypeDir, 0o755
+		return tw.WriteHeader(header)
 	case filemode.Symlink:
+		f, err := tree.TreeEntryFile(&entry)
+		if err != nil {
+			return err
+		}
+
 		target, err := f.Contents()
 		if err != nil {
 			return err
@@ -72,6 +103,11 @@ func writeFile(tw *tar.Writer, f *object.File) error {
 		header.Mode = 0o755
 	default:
 		header.Mode = 0o644
+	}
+
+	f, err := tree.TreeEntryFile(&entry)
+	if err != nil {
+		return err
 	}
 
 	header.Typeflag, header.Size = tar.TypeReg, f.Size

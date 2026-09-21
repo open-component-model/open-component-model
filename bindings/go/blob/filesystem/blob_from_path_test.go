@@ -611,3 +611,80 @@ func TestGetBlobFromPath_ArchiveLayout(t *testing.T) {
 		"sub/nested":   tar.TypeDir,
 	}, names)
 }
+
+// PreserveSymlinks stores a link as a link. The target is recorded as written,
+// so an absolute or dangling one is kept verbatim rather than resolved, and the
+// walk does not descend through a link to a directory.
+func TestGetBlobFromPath_PreserveSymlinks(t *testing.T) {
+	r := require.New(t)
+
+	tmpDir := t.TempDir()
+	createTestFile(t, tmpDir, "target.txt", "target content")
+	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "realdir"), 0755))
+	createTestFile(t, filepath.Join(tmpDir, "realdir"), "inner.txt", "inner")
+
+	links := map[string]string{
+		"relative.txt": "target.txt",
+		"absolute.txt": "/etc/hosts",
+		"dangling.txt": "nonexistent.txt",
+		"escaping.txt": "../../outside.txt",
+		"dirlink":      "realdir",
+	}
+	for name, target := range links {
+		if err := os.Symlink(target, filepath.Join(tmpDir, name)); err != nil {
+			t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
+			return
+		}
+	}
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{PreserveSymlinks: true})
+	r.NoError(err)
+
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(reader.Close()) }()
+
+	targets := map[string]string{}
+	var names []string
+	tr := tar.NewReader(reader)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+
+		names = append(names, header.Name)
+		if header.Typeflag == tar.TypeSymlink {
+			targets[header.Name] = header.Linkname
+		}
+		_, err = io.ReadAll(tr)
+		r.NoError(err)
+	}
+
+	r.Equal(links, targets, "every link is stored as a link, with its target as written")
+
+	// The link to a directory contributes the link alone; the directory itself is
+	// still walked under its own name.
+	r.NotContains(names, "dirlink/inner.txt")
+	r.Contains(names, "realdir/inner.txt")
+}
+
+// Without the option a symlink is an error, so a tree cannot be packed silently
+// missing the links it contains.
+func TestGetBlobFromPath_PreserveSymlinksDefaultsOff(t *testing.T) {
+	r := require.New(t)
+
+	tmpDir := t.TempDir()
+	createTestFile(t, tmpDir, "target.txt", "content")
+	if err := os.Symlink("target.txt", filepath.Join(tmpDir, "link.txt")); err != nil {
+		t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
+		return
+	}
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{})
+	r.NoError(err)
+
+	_, err = readAllFromBlob(b)
+	r.ErrorContains(err, "symlinks are not supported")
+}
