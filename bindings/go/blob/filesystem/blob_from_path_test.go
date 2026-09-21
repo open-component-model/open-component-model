@@ -219,7 +219,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 	tr := tar.NewReader(reader)
 	foundPrefixed := false
 	var foundHeaders []string
-	expectedDirHeader := filepath.Base(targetDir)
+	expectedDirHeader := filepath.Base(targetDir) + "/"
 
 	for {
 		header, err := tr.Next()
@@ -482,7 +482,7 @@ func TestGetBlobFromPath_IncludeDirectoryOnly(t *testing.T) {
 		}
 		r.NoError(err)
 
-		if h.Typeflag == tar.TypeDir && h.Name == "sub/dir" {
+		if h.Typeflag == tar.TypeDir && h.Name == "sub/dir/" {
 			foundDir = true
 		}
 		_, err = io.ReadAll(tr)
@@ -569,9 +569,7 @@ func extractTarContents(t *testing.T, b blob.ReadOnlyBlob) []string {
 	return files
 }
 
-// The archive root is the directory being packed, so it gets no entry of its own
-// and directory names carry no trailing slash. That is the layout OCM v1 wrote,
-// and it is what makes a blob packed here byte-identical to one packed there.
+// Git-style directory layout is explicitly opt-in.
 func TestGetBlobFromPath_ArchiveLayout(t *testing.T) {
 	r := require.New(t)
 
@@ -580,7 +578,9 @@ func TestGetBlobFromPath_ArchiveLayout(t *testing.T) {
 	createTestFile(t, tmpDir, "root.txt", "root")
 	createTestFile(t, filepath.Join(tmpDir, "sub"), "file.txt", "content")
 
-	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{Reproducible: true})
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{
+		Reproducible: true, OmitRoot: true, OmitDirTrailingSlash: true,
+	})
 	r.NoError(err)
 
 	reader, err := b.ReadCloser()

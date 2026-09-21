@@ -24,9 +24,12 @@ import (
 )
 
 func TestDownloadRevisions(t *testing.T) {
+	r := require.New(t)
+
 	fixture := newRepository(t)
-	require.NoError(t, fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/feature", fixture.First)))
-	require.NoError(t, fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/feature", fixture.Second)))
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/feature", fixture.First)))
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/feature", fixture.Second)))
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/releases/stable", fixture.First)))
 	for _, tc := range []struct {
 		ref, commit string
 		want        plumbing.Hash
@@ -36,9 +39,15 @@ func TestDownloadRevisions(t *testing.T) {
 		{"refs/heads/main", "", fixture.Second},
 		{"feature", "", fixture.First},
 		{"refs/heads/feature", "", fixture.First},
+		{"refs/remotes/origin/feature", "", fixture.First},
+		{"refs/tags/feature", "", fixture.Second},
+		{"refs/releases/stable", "", fixture.First},
 		{"v1", "", fixture.First},
+		{"annotated", "", fixture.First},
 		{"refs/tags/annotated", "", fixture.First},
 		{"", fixture.First.String(), fixture.First},
+		{"HEAD", fixture.First.String(), fixture.First},
+		{"main", fixture.First.String(), fixture.First},
 		{"refs/heads/deleted", fixture.First.String(), fixture.First},
 	} {
 		t.Run(tc.ref+tc.commit, func(t *testing.T) {
@@ -184,6 +193,75 @@ func TestSubmoduleArchive(t *testing.T) {
 	tr := tar.NewReader(bytes.NewReader(readBlob(t, result.Blob)))
 	_, err = tr.Next()
 	r.ErrorIs(err, io.EOF, "submodule content is not part of the archive")
+}
+
+func TestDownloadRefWithoutRemoteHEAD(t *testing.T) {
+	r := require.New(t)
+
+	fixture := newRepository(t)
+	r.NoError(fixture.Git.Storer.RemoveReference("refs/heads/main"))
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/feature", fixture.Second)))
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/feature", fixture.First)))
+	for _, tc := range []struct {
+		ref  string
+		want plumbing.Hash
+	}{
+		{"feature", fixture.Second},
+		{"refs/heads/feature", fixture.Second},
+		{"refs/tags/feature", fixture.First},
+		{"v1", fixture.First},
+		{"refs/tags/v1", fixture.First},
+		{"annotated", fixture.First},
+		{"refs/tags/annotated", fixture.First},
+	} {
+		t.Run(tc.ref, func(t *testing.T) {
+			r := require.New(t)
+
+			result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Ref: tc.ref}, nil, Options{TempDir: t.TempDir()})
+			r.NoError(err)
+			r.Equal(tc.want.String(), result.Commit)
+			r.NotEmpty(readBlob(t, result.Blob))
+		})
+	}
+}
+
+func TestDownloadNestedAnnotatedTag(t *testing.T) {
+	r := require.New(t)
+
+	fixture := newRepository(t)
+	inner, err := fixture.Git.Reference("refs/tags/annotated", true)
+	r.NoError(err)
+	tag := &object.Tag{
+		Name:       "nested",
+		Tagger:     object.Signature{Name: "OCM fixture", Email: "fixture@example.invalid", When: time.Unix(1700000000, 0).UTC()},
+		Message:    "nested release\n",
+		TargetType: plumbing.TagObject,
+		Target:     inner.Hash(),
+	}
+	encoded := fixture.Git.Storer.NewEncodedObject()
+	r.NoError(tag.Encode(encoded))
+	hash, err := fixture.Git.Storer.SetEncodedObject(encoded)
+	r.NoError(err)
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/nested", hash)))
+
+	for _, danglingHEAD := range []bool{false, true} {
+		t.Run(fmt.Sprintf("danglingHEAD=%t", danglingHEAD), func(t *testing.T) {
+			r := require.New(t)
+			if danglingHEAD {
+				r.NoError(fixture.Git.Storer.RemoveReference("refs/heads/main"))
+			}
+			for _, ref := range []string{"nested", "refs/tags/nested"} {
+				t.Run(ref, func(t *testing.T) {
+					r := require.New(t)
+
+					result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Ref: ref}, nil, Options{TempDir: t.TempDir()})
+					r.NoError(err)
+					r.Equal(fixture.First.String(), result.Commit)
+					r.NotEmpty(readBlob(t, result.Blob))
+				})
+			}
+		})
+	}
 }
 
 func TestPinnedCommitWithoutRemoteHEAD(t *testing.T) {

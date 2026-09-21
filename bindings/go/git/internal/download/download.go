@@ -75,7 +75,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 	}()
 
 	var repo *git.Repository
-	if access.Commit == "" {
+	if access.Commit == "" && access.Ref == "HEAD" {
 		repo, err = git.PlainCloneContext(ctx, dir, true, &git.CloneOptions{
 			URL:      access.Repository,
 			Auth:     auth,
@@ -86,7 +86,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 			err = transportError(ctx, "cannot fetch git repository", err)
 		}
 	} else {
-		repo, err = fetchCommit(ctx, dir, access, auth, opts)
+		repo, err = fetchRepository(ctx, dir, access, auth, opts)
 	}
 
 	if repo != nil {
@@ -99,25 +99,15 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		return nil, err
 	}
 
-	var hash *plumbing.Hash
-	if access.Commit != "" {
-		value := plumbing.NewHash(access.Commit)
-		hash = &value
-	} else {
-		if access.Ref != "HEAD" && (strings.HasPrefix(access.Ref, "refs/heads/") || !strings.HasPrefix(access.Ref, "refs/")) {
-			hash, err = repo.ResolveRevision(plumbing.Revision("refs/remotes/origin/" + strings.TrimPrefix(access.Ref, "refs/heads/")))
-		}
-
-		if hash == nil || err != nil {
-			hash, err = repo.ResolveRevision(plumbing.Revision(access.Ref))
-		}
-
+	hash := plumbing.NewHash(access.Commit)
+	if access.Commit == "" {
+		hash, err = resolveRef(repo, access.Ref)
 		if err != nil {
 			return nil, fmt.Errorf("cannot resolve git ref: %w", err)
 		}
 	}
 
-	selected, err := peelCommit(repo, *hash)
+	selected, err := peelCommit(repo, hash)
 	if err != nil {
 		return nil, err
 	}
@@ -140,9 +130,9 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 	return &Result{Blob: b, Commit: selected.Hash.String(), Digest: archiveDigest}, nil
 }
 
-// fetchCommit fetches a pinned commit without depending on a valid remote HEAD.
+// fetchRepository fetches explicit refs or a pinned commit without depending on a valid remote HEAD.
 // The repository is returned also with a fetch error, so the caller can close its storage.
-func fetchCommit(ctx context.Context, dir string, access *accessv1.Git, auth transport.AuthMethod, opts Options) (*git.Repository, error) {
+func fetchRepository(ctx context.Context, dir string, access *accessv1.Git, auth transport.AuthMethod, opts Options) (*git.Repository, error) {
 	repo, err := git.PlainInit(dir, true)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create git repository: %w", err)
@@ -156,18 +146,20 @@ func fetchCommit(ctx context.Context, dir string, access *accessv1.Git, auth tra
 	// history. Servers that do not advertise allow-tip-sha1-in-want or
 	// allow-reachable-sha1-in-want reject the request before any transfer; the
 	// fetch of all refs below is the fallback.
-	err = repo.FetchContext(ctx, &git.FetchOptions{
-		Auth:     auth,
-		CABundle: opts.CABundle,
-		Tags:     git.NoTags,
-		RefSpecs: []config.RefSpec{config.RefSpec("+" + access.Commit + ":refs/ocm/commit")},
-	})
-	if errors.Is(err, git.ErrExactSHA1NotSupported) {
+	if access.Commit != "" {
+		err = repo.FetchContext(ctx, &git.FetchOptions{
+			Auth:     auth,
+			CABundle: opts.CABundle,
+			Tags:     git.NoTags,
+			RefSpecs: []config.RefSpec{config.RefSpec("+" + access.Commit + ":refs/ocm/commit")},
+		})
+	}
+	if access.Commit == "" || errors.Is(err, git.ErrExactSHA1NotSupported) {
 		err = repo.FetchContext(ctx, &git.FetchOptions{
 			Auth:     auth,
 			CABundle: opts.CABundle,
 			Tags:     git.AllTags,
-			RefSpecs: []config.RefSpec{"+refs/*:refs/*"},
+			RefSpecs: []config.RefSpec{"+refs/*:refs/*", "+refs/heads/*:refs/remotes/origin/*"},
 		})
 	}
 
@@ -176,6 +168,29 @@ func fetchCommit(ctx context.Context, dir string, access *accessv1.Git, auth tra
 	}
 
 	return repo, nil
+}
+
+// resolveRef leaves annotated tags intact for peelCommit, including tag-to-tag targets.
+func resolveRef(repo *git.Repository, name string) (plumbing.Hash, error) {
+	if name != "HEAD" && (strings.HasPrefix(name, "refs/heads/") || !strings.HasPrefix(name, "refs/")) {
+		ref, err := repo.Reference(plumbing.ReferenceName("refs/remotes/origin/"+strings.TrimPrefix(name, "refs/heads/")), true)
+		if err == nil {
+			return ref.Hash(), nil
+		}
+	}
+
+	var firstErr error
+	for _, rule := range plumbing.RefRevParseRules {
+		ref, err := repo.Reference(plumbing.ReferenceName(fmt.Sprintf(rule, name)), true)
+		if err == nil {
+			return ref.Hash(), nil
+		}
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	return plumbing.ZeroHash, firstErr
 }
 
 // peelCommit follows an annotated tag to the commit it points at. A tag can

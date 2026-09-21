@@ -1,13 +1,11 @@
 package download
 
 import (
-	"archive/tar"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -34,7 +32,12 @@ func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Opt
 
 	digester := digest.Canonical.Digester()
 	limited := &limitedWriter{Writer: file, limit: opts.MaxArchiveSize}
-	tw := tar.NewWriter(io.MultiWriter(limited, digester.Hash()))
+	tw := filesystem.NewTarWriter(io.MultiWriter(limited, digester.Hash()), filesystem.DirOptions{
+		Reproducible:         true,
+		PreserveSymlinks:     true,
+		OmitRoot:             true,
+		OmitDirTrailingSlash: true,
+	})
 	err = walkTree(ctx, tree, tw)
 	err = errors.Join(err, tw.Close(), file.Close())
 	if err != nil {
@@ -53,7 +56,7 @@ func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Opt
 
 // walkTree visits every entry of the tree, subtrees included, in the order git
 // stores them. Each name is the path from the root of the commit tree.
-func walkTree(ctx context.Context, tree *object.Tree, tw *tar.Writer) error {
+func walkTree(ctx context.Context, tree *object.Tree, tw *filesystem.TarWriter) error {
 	walker := object.NewTreeWalker(tree, true, nil)
 	defer walker.Close()
 
@@ -70,58 +73,21 @@ func walkTree(ctx context.Context, tree *object.Tree, tw *tar.Writer) error {
 			return err
 		}
 
-		if err := writeEntry(tw, tree, name, entry); err != nil {
+		if entry.Mode == filemode.Submodule {
+			continue
+		}
+		var size int64
+		if entry.Mode != filemode.Dir {
+			file, err := tree.TreeEntryFile(&entry)
+			if err != nil {
+				return err
+			}
+			size = file.Size
+		}
+		if err := tw.WriteEntry(ctx, name, treeInfo(name, entry.Mode, size), treeFS{tree: tree}); err != nil {
 			return err
 		}
 	}
-}
-
-// writeEntry writes one tree entry. A submodule names a commit in another
-// repository and has no content here, so it is left out entirely.
-func writeEntry(tw *tar.Writer, tree *object.Tree, name string, entry object.TreeEntry) error {
-	header := &tar.Header{Name: name, ModTime: time.Unix(0, 0)}
-	switch entry.Mode {
-	case filemode.Submodule:
-		return nil
-	case filemode.Dir:
-		header.Typeflag, header.Mode = tar.TypeDir, 0o755
-		return tw.WriteHeader(header)
-	case filemode.Symlink:
-		f, err := tree.TreeEntryFile(&entry)
-		if err != nil {
-			return err
-		}
-
-		target, err := f.Contents()
-		if err != nil {
-			return err
-		}
-
-		header.Typeflag, header.Mode, header.Linkname = tar.TypeSymlink, 0o777, target
-		return tw.WriteHeader(header)
-	case filemode.Executable:
-		header.Mode = 0o755
-	default:
-		header.Mode = 0o644
-	}
-
-	f, err := tree.TreeEntryFile(&entry)
-	if err != nil {
-		return err
-	}
-
-	header.Typeflag, header.Size = tar.TypeReg, f.Size
-	if err := tw.WriteHeader(header); err != nil {
-		return err
-	}
-
-	rc, err := f.Reader()
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(tw, rc)
-	return errors.Join(err, rc.Close())
 }
 
 type limitedWriter struct {

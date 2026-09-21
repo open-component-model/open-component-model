@@ -55,8 +55,10 @@ func TestArchiveUsesGitTree(t *testing.T) {
 		{Name: "A", Mode: filemode.Regular, Hash: blob("upper")},
 		{Name: "a", Mode: filemode.Executable, Hash: blob("lower")},
 		{Name: "absolute", Mode: filemode.Symlink, Hash: blob("/etc/passwd")},
+		{Name: `back\slash`, Mode: filemode.Regular, Hash: blob("literal backslash")},
 		{Name: "colon:name", Mode: filemode.Regular, Hash: blob("colon")},
 		{Name: "dangling", Mode: filemode.Symlink, Hash: blob("../does-not-exist")},
+		{Name: "dir.c", Mode: filemode.Regular, Hash: blob("before directory in Git order")},
 		{Name: "dir", Mode: filemode.Dir, Hash: sub},
 		{Name: "vendor", Mode: filemode.Submodule, Hash: plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")},
 	}})})
@@ -104,13 +106,22 @@ func TestArchiveUsesGitTree(t *testing.T) {
 		got[h.Name] = entry{h.Typeflag, h.Mode, string(data)}
 	}
 
-	r.Equal([]string{"A", "a", "absolute", "colon:name", "dangling", "dir", "dir/file"}, names)
+	r.Equal([]string{"A", "a", "absolute", `back\slash`, "colon:name", "dangling", "dir.c", "dir", "dir/file"}, names)
+	second, err := os.CreateTemp(t.TempDir(), "archive-*.tar")
+	r.NoError(err)
+	secondBlob, secondDigest, err := archive(t.Context(), c, second, Options{})
+	r.NoError(err)
+	r.Equal(archiveDigest, secondDigest)
+	r.Equal(readBlob(t, b), readBlob(t, secondBlob))
+
 	r.Equal(map[string]entry{
 		"A":          {tar.TypeReg, 0o644, "upper"},
 		"a":          {tar.TypeReg, 0o755, "lower"},
 		"absolute":   {tar.TypeSymlink, 0o777, "/etc/passwd"},
+		`back\slash`: {tar.TypeReg, 0o644, "literal backslash"},
 		"colon:name": {tar.TypeReg, 0o644, "colon"},
 		"dangling":   {tar.TypeSymlink, 0o777, "../does-not-exist"},
+		"dir.c":      {tar.TypeReg, 0o644, "before directory in Git order"},
 		"dir":        {tar.TypeDir, 0o755, ""},
 		"dir/file":   {tar.TypeReg, 0o644, "nested"},
 	}, got)
