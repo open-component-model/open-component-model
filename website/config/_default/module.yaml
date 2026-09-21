@@ -187,6 +187,12 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/notation/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/notation/v1
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1/schemas
     target: static/main/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1
     sites:

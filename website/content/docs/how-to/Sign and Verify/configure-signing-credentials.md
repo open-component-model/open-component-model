@@ -184,6 +184,70 @@ For passphrase-protected private keys, add a top-level `passphrase: <secret>` fi
 If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer (set in the [sign how-to]({{< relref "sign-component-version.md" >}})), next to the handler type rather than in the credentials.
 
 {{< /tab >}}
+{{< tab "Notation" >}}
+
+Notation signing uses a different identity type (`Notation/v1`) and X.509 certificate chains. The signer certificate must carry the `codeSigning` extended key usage (EKU) — the Notary Project requires it — so generate the key pair and self-signed certificate with the `openssl` command from the [Notation (Notary Project) tutorial]({{< relref "docs/tutorials/signing/notation.md" >}}) first.
+
+Use the typed `NotationCredentials/v1` credential type:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: Notation/v1
+          signature: default
+        credentials:
+          - type: NotationCredentials/v1
+            privateKeyPEMFile: /tmp/keys/notation-private-key.pem
+            certificateChainPEMFile: /tmp/keys/notation-chain.pem
+            trustedCACertificatesPEMFile: /tmp/keys/notation-ca.pem
+```
+
+The `Notation/v1` identity has no `algorithm` attribute — Notation has a single algorithm, so it is resolved implicitly.
+
+`NotationCredentials/v1` uses flat `camelCase` fields validated at parse time. For all supported fields, see
+[Reference: Credential Types]({{< relref "docs/reference/credential-types.md" >}}).
+
+**Key and certificate paths:**
+
+- `privateKeyPEMFile` - Required for **signing** operations (PKCS#1 or PKCS#8 private key)
+- `certificateChainPEMFile` - Required for **signing** operations (signer leaf certificate + intermediates, embedded in the signature envelope)
+- `trustedCACertificatesPEMFile` - Required for **verification** operations (the CA the signer chain must terminate at)
+
+<br>
+It is also possible to configure the material inline using `privateKeyPEM` / `certificateChainPEM` / `trustedCACertificatesPEM`; inline values take precedence over the file forms.
+
+{{< details "Example .ocmconfig with inline material (NotationCredentials/v1)" >}}
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: Notation/v1
+          signature: default
+        credentials:
+          - type: NotationCredentials/v1
+            privateKeyPEM: |
+              -----BEGIN PRIVATE KEY-----
+              ...
+              -----END PRIVATE KEY-----
+            certificateChainPEM: |
+              -----BEGIN CERTIFICATE-----
+              ...
+              -----END CERTIFICATE-----
+            trustedCACertificatesPEM: |
+              -----BEGIN CERTIFICATE-----
+              ...
+              -----END CERTIFICATE-----
+```
+
+{{< /details >}}
+
+{{< /tab >}}
 {{< /tabs >}}
 {{< /step >}}
 
@@ -253,6 +317,33 @@ signature:
     DNcbgT3EjqN6YOIA1MENuzdqdwNv9SoC+Ixex0DeHVHyKsOFsuD+3uEWoNc=
     =JoWY
     -----END PGP SIGNATURE-----
+
+time=2026-06-16T19:31:54.138+02:00 level=INFO msg="dry run: signature not persisted"
+```
+
+{{< /details >}}
+{{< /tab >}}
+{{< tab "Notation" >}}
+**Notation** (requires a `NotationSigningConfiguration/v1alpha1` signer in `.ocmconfig`, see the [sign how-to → Notation tab]({{< relref "sign-component-version.md" >}}) for the entry):
+
+```bash
+ocm sign cv --dry-run /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+If configured correctly, the dry run completes without "no private key found" errors.
+
+{{< details "Expected output" >}}
+
+```text
+digest:
+  hashAlgorithm: SHA-256
+  normalisationAlgorithm: jsonNormalisation/v4alpha1
+  value: 91dd197868907487e62872695db1fa7b397fde300bcbae23e24abc188fb147ad
+name: default
+signature:
+  algorithm: Notation/v1alpha1
+  mediaType: application/jose+json
+  value: eyJhbGciOiJSUzI1NiIsImtpZCI6InNpZ25pbmctY2VydCJ9.eyJmb3JtYXQiOiJqd2U...
 
 time=2026-06-16T19:31:54.138+02:00 level=INFO msg="dry run: signature not persisted"
 ```
