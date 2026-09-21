@@ -23,6 +23,7 @@ package httpverify
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -88,12 +89,16 @@ func Verify(
 		Client: baseClient,
 		Do: func(req *http.Request) (*http.Response, error) {
 			if credentials == nil || !sameOriginHTTPS(parsedArtifact, req.URL) {
+				slog.DebugContext(ctx, "httpverify: external checksum fetched without credentials (cross-origin or non-HTTPS)",
+					"artifact", artifactURL, "checksum", req.URL.String())
 				return baseClient.Do(req) //nolint:gosec // G704: URL is user-provided by design (checksumPolicy.sources[].url); credentials are stripped for non-same-origin.
 			}
 			throwaway := credentialedClient
 			if err := download.ApplyCredentials(ctx, req, &throwaway, credentials); err != nil {
 				return nil, err
 			}
+			slog.DebugContext(ctx, "httpverify: external checksum fetched with credentials (same-origin HTTPS)",
+				"artifact", artifactURL, "checksum", req.URL.String())
 			return credentialedClient.Do(req) //nolint:gosec // G704: URL is user-provided by design (checksumPolicy.sources[].url); credentials are attached only for same-origin HTTPS.
 		},
 	}
@@ -177,6 +182,11 @@ func Peek(
 		if herr == nil {
 			headers = resp.Header
 			_ = resp.Body.Close()
+			slog.DebugContext(ctx, "httpverify: HEAD complete",
+				"url", artifactURL, "status", resp.StatusCode, "headers", len(headers))
+		} else {
+			slog.DebugContext(ctx, "httpverify: HEAD failed; falling through with empty headers",
+				"url", artifactURL, "err", herr)
 		}
 		// A HEAD failure is not fatal: fall through with empty headers; the
 		// externalUrl branch may still resolve a sidecar. The caller handles
@@ -187,12 +197,16 @@ func Peek(
 		Client: baseClient,
 		Do: func(req *http.Request) (*http.Response, error) {
 			if credentials == nil || !sameOriginHTTPS(parsedArtifact, req.URL) {
+				slog.DebugContext(ctx, "httpverify: peek external checksum fetched without credentials (cross-origin or non-HTTPS)",
+					"artifact", artifactURL, "checksum", req.URL.String())
 				return baseClient.Do(req) //nolint:gosec // G704: URL is user-provided by design (checksumPolicy.sources[].url); credentials are stripped for non-same-origin.
 			}
 			throwaway := credentialedClient
 			if err := download.ApplyCredentials(ctx, req, &throwaway, credentials); err != nil {
 				return nil, err
 			}
+			slog.DebugContext(ctx, "httpverify: peek external checksum fetched with credentials (same-origin HTTPS)",
+				"artifact", artifactURL, "checksum", req.URL.String())
 			return credentialedClient.Do(req) //nolint:gosec // G704: URL is user-provided by design (checksumPolicy.sources[].url); credentials are attached only for same-origin HTTPS.
 		},
 	}

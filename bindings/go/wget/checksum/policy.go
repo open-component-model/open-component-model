@@ -3,6 +3,7 @@ package checksum
 import (
 	"context"
 	"fmt"
+	"log/slog"
 )
 
 // SourceType mirrors the wget input spec's checksum source types without importing
@@ -79,21 +80,31 @@ type Input struct {
 //     false and err is nil, signalling "compute and store without verification".
 //   - When no source yields a checksum and OnMissing is Fail, an error is returned.
 func Resolve(ctx context.Context, policy Policy, in Input) (expected Expected, verified bool, err error) {
-	for _, src := range policy.Sources {
+	slog.DebugContext(ctx, "checksum: resolve policy against computed digests",
+		"url", in.URL, "sources", len(policy.Sources), "onMissing", policy.OnMissing)
+	for i, src := range policy.Sources {
 		switch src.Type {
 		case SourceStream:
 			// Explicit "trust the stream": stop here, no verification.
+			slog.DebugContext(ctx, "checksum: source is stream — no verification",
+				"url", in.URL, "index", i)
 			return Expected{}, false, nil
 		case SourceHTTPHeader:
 			candidates := FromHeaders(in.Headers, src.Headers)
 			if exp, ok := Select(candidates, src.Algorithms); ok {
+				slog.DebugContext(ctx, "checksum: header source yielded expected digest",
+					"url", in.URL, "index", i, "algorithm", exp.Algorithm.OCMName)
 				if verr := Verify(in.Computed, exp); verr != nil {
 					return Expected{}, false, verr
 				}
 				return exp, true, nil
 			}
+			slog.DebugContext(ctx, "checksum: header source yielded no candidate",
+				"url", in.URL, "index", i, "candidates", len(candidates))
 		case SourceExternalURL:
 			if in.FetchURL == nil {
+				slog.DebugContext(ctx, "checksum: external-url source skipped (no fetcher)",
+					"url", in.URL, "index", i)
 				continue
 			}
 			algs := src.Algorithms
@@ -105,11 +116,15 @@ func Resolve(ctx context.Context, policy Policy, in Input) (expected Expected, v
 				return Expected{}, false, ferr
 			}
 			if ok {
+				slog.DebugContext(ctx, "checksum: external-url source yielded expected digest",
+					"url", in.URL, "index", i, "algorithm", exp.Algorithm.OCMName)
 				if verr := Verify(in.Computed, exp); verr != nil {
 					return Expected{}, false, verr
 				}
 				return exp, true, nil
 			}
+			slog.DebugContext(ctx, "checksum: external-url source yielded no candidate",
+				"url", in.URL, "index", i)
 		default:
 			return Expected{}, false, fmt.Errorf("unsupported checksum source type %q", src.Type)
 		}
@@ -117,6 +132,8 @@ func Resolve(ctx context.Context, policy Policy, in Input) (expected Expected, v
 
 	// No source produced an expected checksum.
 	if policy.OnMissing == Compute {
+		slog.DebugContext(ctx, "checksum: no source yielded a digest; onMissing=compute — no verification",
+			"url", in.URL)
 		return Expected{}, false, nil
 	}
 	return Expected{}, false, fmt.Errorf("no checksum could be obtained from any configured source and onMissing is %q", orFail(policy.OnMissing))
@@ -181,23 +198,35 @@ func ResolveAdvertised(ctx context.Context, policy Policy, in Input, prefer []Al
 	if len(prefer) == 0 {
 		prefer = All
 	}
-	for _, src := range policy.Sources {
+	slog.DebugContext(ctx, "checksum: resolve advertised digest",
+		"url", in.URL, "sources", len(policy.Sources), "prefer", algorithmNames(prefer))
+	for i, src := range policy.Sources {
 		switch src.Type {
 		case SourceStream:
 			// Explicit "trust the stream" — the caller must download to
 			// compute a digest.
+			slog.DebugContext(ctx, "checksum: advertised source is stream — no advertised digest",
+				"url", in.URL, "index", i)
 			return Expected{}, false, nil
 		case SourceHTTPHeader:
 			candidates := FromHeaders(in.Headers, src.Headers)
 			if exp, ok := Select(candidates, intersect(src.Algorithms, prefer)); ok {
+				slog.DebugContext(ctx, "checksum: advertised header source yielded digest",
+					"url", in.URL, "index", i, "algorithm", exp.Algorithm.OCMName)
 				return exp, true, nil
 			}
+			slog.DebugContext(ctx, "checksum: advertised header source yielded nothing",
+				"url", in.URL, "index", i, "candidates", len(candidates))
 		case SourceExternalURL:
 			if in.FetchURL == nil {
+				slog.DebugContext(ctx, "checksum: advertised external-url source skipped (no fetcher)",
+					"url", in.URL, "index", i)
 				continue
 			}
 			algs := intersect(src.Algorithms, prefer)
 			if len(algs) == 0 {
+				slog.DebugContext(ctx, "checksum: advertised external-url source skipped (no accepted algorithms)",
+					"url", in.URL, "index", i)
 				continue
 			}
 			exp, ok, ferr := fetchExternal(ctx, src, in, algs)
@@ -205,13 +234,28 @@ func ResolveAdvertised(ctx context.Context, policy Policy, in Input, prefer []Al
 				return Expected{}, false, ferr
 			}
 			if ok {
+				slog.DebugContext(ctx, "checksum: advertised external-url source yielded digest",
+					"url", in.URL, "index", i, "algorithm", exp.Algorithm.OCMName)
 				return exp, true, nil
 			}
+			slog.DebugContext(ctx, "checksum: advertised external-url source yielded nothing",
+				"url", in.URL, "index", i)
 		default:
 			return Expected{}, false, fmt.Errorf("unsupported checksum source type %q", src.Type)
 		}
 	}
+	slog.DebugContext(ctx, "checksum: no source advertised a digest",
+		"url", in.URL)
 	return Expected{}, false, nil
+}
+
+// algorithmNames returns the OCM names of an algorithm slice for debug logs.
+func algorithmNames(algs []Algorithm) []string {
+	out := make([]string, 0, len(algs))
+	for _, alg := range algs {
+		out = append(out, alg.OCMName)
+	}
+	return out
 }
 
 // intersect returns the algorithms present in both a and prefer, in prefer's
