@@ -12,12 +12,12 @@ This section provides the theoretical foundation you need to make informed decis
 
 Concept articles are organised by **lifecycle phase** — the stage of the software delivery pipeline where the idea is most relevant:
 
-| Phase    | What you'll understand                                                |
-|----------|-----------------------------------------------------------------------|
+| Phase        | What you'll understand                                                             |
+|--------------|------------------------------------------------------------------------------------|
 | **Pack**     | Component identity, resources, canonical repositories, credentials, plugins, SBOMs |
-| **Sign**     | Cryptographic signing model, trust models, signature verification     |
-| **Transfer** | Transfer model, Common Transport Format, resolvers                    |
-| **Deploy**   | OCM controllers, Kubernetes Deployer, resource ownership              |
+| **Sign**     | Cryptographic signing model, trust models, signature verification                  |
+| **Transfer** | Transfer model, Common Transport Format, resolvers                                 |
+| **Deploy**   | OCM controllers, Kubernetes Deployer, resource ownership                           |
 
 ## What Are Concepts?
 
