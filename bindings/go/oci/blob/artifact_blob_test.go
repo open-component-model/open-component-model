@@ -360,6 +360,24 @@ func TestNewResourceBlobWithMediaType_DigestValidation(t *testing.T) {
 			blobDigest:    "",
 			expectedError: false,
 		},
+		{
+			name: "prefixed pinned digest matches blob",
+			resourceDigest: &descriptor.Digest{
+				HashAlgorithm: internaldigest.HashAlgorithmSHA256,
+				Value:         "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			},
+			blobDigest:    "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			expectedError: false,
+		},
+		{
+			name: "prefixed pinned digest with wrong algorithm prefix",
+			resourceDigest: &descriptor.Digest{
+				HashAlgorithm: internaldigest.HashAlgorithmSHA256,
+				Value:         "sha512:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			},
+			blobDigest:    "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			expectedError: true,
+		},
 	}
 
 	for _, tt := range tests {

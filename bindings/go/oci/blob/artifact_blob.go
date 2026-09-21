@@ -2,6 +2,7 @@ package blob
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -153,7 +154,18 @@ func digestSpecToDigest(dig *descriptor.Digest) (digest.Digest, error) {
 		return "", fmt.Errorf("invalid hash algorithm: %s", dig.HashAlgorithm)
 	}
 
-	return digest.NewDigestFromEncoded(algo, dig.Value), nil
+	// dig.Value may be either bare hex (e.g. "2cf24d…") or the go-digest form
+	// ("sha256:2cf24d…"). NewDigestFromEncoded prefixes unconditionally, so
+	// passing the prefixed form yields "sha256:sha256:…"; strip a matching
+	// prefix first and reject a mismatched one.
+	encoded := dig.Value
+	if prefix := string(algo) + ":"; strings.HasPrefix(encoded, prefix) {
+		encoded = encoded[len(prefix):]
+	} else if idx := strings.IndexByte(encoded, ':'); idx >= 0 {
+		return "", fmt.Errorf("digest value %q carries algorithm prefix %q that does not match %q", dig.Value, encoded[:idx], algo)
+	}
+
+	return digest.NewDigestFromEncoded(algo, encoded), nil
 }
 
 // Size returns the size of the blob in bytes. This is obtained directly from
