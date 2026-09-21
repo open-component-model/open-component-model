@@ -228,7 +228,7 @@ resources:
     url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
 ```
 
-#### Checksum verification (via OCM config)
+#### Checksum verification (via OCM config) {#checksum-verification-via-ocm-config}
 
 The wget input can verify a downloaded blob against an expected checksum
 supplied out-of-band by the source. Verification is a *deployment* concern,
@@ -243,7 +243,7 @@ configurations:
   - type: http.config.ocm.software/v1alpha1
     timeout: 30s
 
-  # wget behavioural knobs — how to verify the download
+  # checksum-verification knobs — how downloaded HTTP bytes are verified
   - type: checksum.http.config.ocm.software/v1alpha1
     defaultChecksumPolicy:
       onMissing: compute      # fail | compute (default: fail when a policy is set)
@@ -577,6 +577,12 @@ resources:
 {{< callout context="note" >}}
 Upload is not supported for this access type: a plain HTTP endpoint has no standardized write API. A `Wget/v1` access therefore has no by-reference form in a target repository. It is copied only when resource copying is requested using `--copy-resources`, and then always by value.  The content is downloaded and stored as a [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1).
 {{< /callout >}}
+
+The same `checksum.http.config.ocm.software/v1alpha1` config that steers
+[input-side verification]({{< relref "input-and-access-types.md" >}}#checksum-verification-via-ocm-config)
+also drives the access-side digest processor, so a `Wget/v1` access resource
+is verified against its source-side checksum whenever OCM computes or refreshes
+its digest.
 
 For guidance on choosing between the input and the access type, and for media type resolution, redirects, download
 tuning, and credential configuration, see
