@@ -187,12 +187,13 @@ Selector CEL bindings:
   component, alongside the reference's own name, version, and extra identity.
 - `labels` — a map from label name to the decoded JSON value of the label.
 
-The `referenceSelector` scans the references of **all** resolved descriptors and
-keeps each target with at least one matching incoming reference. A nonempty
-selector excludes the root component; an empty (or unset) selector preserves it.
-The `componentSelector` then filters the surviving components, and the
-`resourceSelector` filters each surviving component's resources. Components with
-zero surviving resources are kept.
+The `referenceSelector` scans the references of **all**
+resolved descriptors and keeps each target with at least one matching incoming
+reference. A nonempty selector excludes the root component, while an empty (or
+unset) selector preserves it. The `componentSelector` then filters the surviving
+components. The `resourceSelector` filters each surviving component's resources
+**and drops the component when none of them match**, so selecting by resource
+selects the components that carry such a resource.
 
 ### semverCheck
 
@@ -305,8 +306,8 @@ meaningful:
 On success, including when nothing matches, the controller sets `Ready=True`
 with reason `Succeeded`, removes `Stalled`/`Reconciling`, and advances
 `status.observedGeneration`. An empty result is reported in the `Ready`
-message, which states whether it was the reference selector or the component
-selector that matched nothing (`components: []` / `extracted: []`).
+message, which states which selector stage matched nothing, reference,
+component, or resource (`components: []` / `extracted: []`).
 
 On failure, the controller **retains the last successful payload**, even if it
 belongs to the previous output mode, and updates only the failure conditions.

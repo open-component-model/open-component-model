@@ -41,14 +41,14 @@ func projectForSpec(t *testing.T, spec *v1alpha1.DiscoverySpec, descriptors ...*
 func TestProjectRaw(t *testing.T) {
 	r := require.New(t)
 	d1 := newDescriptor("b", "1.0.0", withResources(newResource("keep"), newResource("drop")))
-	d2 := newDescriptor("a", "2.0.0")
+	d2 := newDescriptor("a", "2.0.0", withResources(newResource("keep")))
 
 	p := projectForSpec(t, &v1alpha1.DiscoverySpec{
 		ResourceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "keep"}},
 	}, d1, d2)
 
 	r.Empty(p.Extracted)
-	r.Equal(EmptyReasonNone, p.Reason)
+	r.Empty(p.EmptyStage)
 	r.Len(p.Components, 2)
 
 	var first map[string]any
@@ -191,7 +191,7 @@ func TestProjectEmptyStageDoesNotFabricate(t *testing.T) {
 	r.NotNil(p.Extracted)
 	r.Empty(p.Extracted)
 	r.Empty(p.Components)
-	r.Equal(EmptyReasonNoComponentsMatched, p.Reason)
+	r.Equal(StageComponent, p.EmptyStage)
 }
 
 func TestProjectExtractEvalErrorWrapsField(t *testing.T) {
@@ -238,7 +238,7 @@ func TestProjectDeterminism(t *testing.T) {
 	}
 }
 
-func TestProjectEmptySelectorStagesKeepEmptyReasonsDistinct(t *testing.T) {
+func TestProjectEmptySelectorStagesKeepStagesDistinct(t *testing.T) {
 	r := require.New(t)
 	root := newDescriptor("root", "1.0.0", withReferences(newReference("to-child", "child", "1.0.0")))
 	child := newDescriptor("child", "1.0.0")
@@ -254,7 +254,7 @@ func TestProjectEmptySelectorStagesKeepEmptyReasonsDistinct(t *testing.T) {
 	r.NoError(err)
 	p, err := q.Project(t.Context(), f)
 	r.NoError(err)
-	r.Equal(EmptyReasonNoReferencesMatched, p.Reason)
+	r.Equal(StageReference, p.EmptyStage)
 	r.NotNil(p.Components, "selected empty output is [], not omitted")
 	r.Empty(p.Components)
 
@@ -264,7 +264,7 @@ func TestProjectEmptySelectorStagesKeepEmptyReasonsDistinct(t *testing.T) {
 	r.NoError(err)
 	f, err = q.Filter(t.Context(), graph())
 	r.NoError(err)
-	r.Equal(EmptyReasonNoComponentsMatched, f.Reason)
+	r.Equal(StageComponent, f.EmptyStage)
 
 	q, err = Compile(t.Context(), &v1alpha1.DiscoverySpec{
 		ResourceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "absent"}},
@@ -272,8 +272,11 @@ func TestProjectEmptySelectorStagesKeepEmptyReasonsDistinct(t *testing.T) {
 	r.NoError(err)
 	f, err = q.Filter(t.Context(), graph())
 	r.NoError(err)
-	r.Equal(EmptyReasonNone, f.Reason, "resource-empty stages have no distinct reason")
-	r.Len(f.Descriptors, 2)
+	p, err = q.Project(t.Context(), f)
+	r.NoError(err)
+	r.Equal(StageResource, p.EmptyStage)
+	r.NotNil(p.Components, "selected empty output is [], not omitted")
+	r.Empty(p.Components)
 }
 
 // descriptorWithProvider builds a descriptor with an explicit provider so tests
@@ -380,44 +383,40 @@ func TestProjectRawWireFormatFidelity(t *testing.T) {
 	r.Contains(res, "access")
 }
 
-// TestProjectEmptyResourcesWireShape: resource null-versus-[] distinction reaches
-// both raw output and CEL bindings.
 func TestProjectEmptyResourcesWireShape(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		resources  []descriptor.Resource
-		selector   *v1alpha1.Selector
 		wantSuffix string
 	}{
-		{"nil resources, no selector", nil, nil, `"resources":null`},
-		{"empty resources, no selector", []descriptor.Resource{}, nil, `"resources":[]`},
-		{"nil resources, active selector", nil, &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "absent"}}, `"resources":[]`},
+		{"nil resources", nil, `"resources":null`},
+		{"empty resources", []descriptor.Resource{}, `"resources":[]`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			d := newDescriptor("d", "1.0.0")
 			d.Component.Resources = tc.resources
 
-			p := projectForSpec(t, &v1alpha1.DiscoverySpec{ResourceSelector: tc.selector}, d)
+			p := projectForSpec(t, &v1alpha1.DiscoverySpec{}, d)
 			r.Len(p.Components, 1)
 			r.Contains(string(p.Components[0]), tc.wantSuffix)
 
 			// by-component sees the resource list; by-resource emits no records.
 			pc := projectForSpec(t, specWithExtract(&v1alpha1.Extract{ByComponents: map[string]string{
 				"name": `component.name`,
-			}}), cloneForSelector(d, tc.resources))
+			}}), withResourceList(d, tc.resources))
 			r.Len(pc.Extracted, 1)
 			r.Equal("d", pc.Extracted[0]["name"])
 
 			pr := projectForSpec(t, specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{
 				"n": `resource.name`,
-			}}), cloneForSelector(d, tc.resources))
+			}}), withResourceList(d, tc.resources))
 			r.Empty(pr.Extracted)
 		})
 	}
 }
 
-func cloneForSelector(d *descriptor.Descriptor, resources []descriptor.Resource) *descriptor.Descriptor {
+func withResourceList(d *descriptor.Descriptor, resources []descriptor.Resource) *descriptor.Descriptor {
 	c := newDescriptor(d.Component.Name, d.Component.Version)
 	c.Component.Resources = resources
 	return c

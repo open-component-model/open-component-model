@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	"github.com/stretchr/testify/require"
 
 	ocmcel "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/cel"

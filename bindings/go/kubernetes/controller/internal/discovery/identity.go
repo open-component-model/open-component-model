@@ -18,16 +18,6 @@ func referenceIdentity(ref *descriptor.Reference) runtime.Identity {
 	return identity
 }
 
-// componentIdentity returns the selector identity of a component.
-func componentIdentity(component *descriptor.Component) runtime.Identity {
-	return component.ToIdentity()
-}
-
-// resourceIdentity returns the selector identity of a resource.
-func resourceIdentity(res *descriptor.Resource) runtime.Identity {
-	return res.ToIdentity()
-}
-
 // labelValues materializes OCM labels as a label-name to decoded-JSON-value map.
 // Decoding errors (for example, values that are not valid YAML) skip the label.
 // With duplicate label names the last label wins.

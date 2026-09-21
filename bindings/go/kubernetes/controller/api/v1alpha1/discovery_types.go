@@ -55,8 +55,9 @@ type DiscoverySpec struct {
 	ComponentSelector *Selector `json:"componentSelector,omitempty"`
 
 	// ResourceSelector filters the resources of each surviving component.
-	// Components with zero surviving resources are kept. If unset, all
-	// resources are kept.
+	// A component with no surviving resource is dropped, so selecting by
+	// resource selects the components carrying such a resource. If unset, all
+	// components and resources are kept.
 	// +optional
 	ResourceSelector *Selector `json:"resourceSelector,omitempty"`
 

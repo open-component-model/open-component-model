@@ -6,7 +6,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	ocmcel "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/cel"

@@ -37,8 +37,9 @@ type Filtered struct {
 	// Descriptors contains the surviving runtime descriptors in deterministic
 	// order. It is always non-nil, even when empty.
 	Descriptors []*descriptor.Descriptor
-	// Reason distinguishes an empty selector stage from an ordinary result.
-	Reason EmptyReason
+	// EmptyStage names the selector stage that emptied the result, or is
+	// empty for an ordinary result. Its values are the Stage constants.
+	EmptyStage string
 }
 
 // Filter applies the reference, component, and resource selector stages of q
@@ -47,9 +48,9 @@ type Filtered struct {
 // are mutated: Filter performs no v2 conversion or serialization, only label
 // decoding for selector evaluation.
 //
-// An empty reference or component stage is not an error: Filter returns a
-// Filtered with no descriptors and the corresponding EmptyReason. Selector
-// compilation or evaluation failures are returned as *SelectorError.
+// An empty stage is not an error: Filter returns a Filtered with no
+// descriptors and the stage that emptied it. Selector compilation or
+// evaluation failures are returned as *SelectorError.
 func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 	if err := checkContext(ctx); err != nil {
 		return nil, err
@@ -71,7 +72,7 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 		return nil, err
 	}
 	if len(survivors) == 0 && q.references != nil {
-		return &Filtered{Descriptors: []*descriptor.Descriptor{}, Reason: EmptyReasonNoReferencesMatched}, nil
+		return &Filtered{Descriptors: []*descriptor.Descriptor{}, EmptyStage: StageReference}, nil
 	}
 
 	survivors, err = q.filterComponents(ctx, survivors)
@@ -79,7 +80,7 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 		return nil, err
 	}
 	if len(survivors) == 0 {
-		return &Filtered{Descriptors: []*descriptor.Descriptor{}, Reason: EmptyReasonNoComponentsMatched}, nil
+		return &Filtered{Descriptors: []*descriptor.Descriptor{}, EmptyStage: StageComponent}, nil
 	}
 
 	filtered := make([]*descriptor.Descriptor, 0, len(survivors))
@@ -88,11 +89,19 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 		if err != nil {
 			return nil, err
 		}
+		if out == nil {
+			continue
+		}
 		filtered = append(filtered, out)
+	}
+	// Only reachable with an active resource selector: without one every
+	// survivor is returned as is.
+	if len(filtered) == 0 {
+		return &Filtered{Descriptors: []*descriptor.Descriptor{}, EmptyStage: StageResource}, nil
 	}
 
 	// Lexicographic order by (component.name, component.version).
-	return &Filtered{Descriptors: sortByComponentKey(filtered), Reason: EmptyReasonNone}, nil
+	return &Filtered{Descriptors: sortByComponentKey(filtered)}, nil
 }
 
 // filterReferences applies the reference selector stage. Without a selector all
@@ -144,7 +153,7 @@ func (q *Query) filterComponents(ctx context.Context, survivors []*descriptor.De
 		if err := checkContext(ctx); err != nil {
 			return nil, err
 		}
-		match, err := q.components.matches(ctx, componentIdentity(&d.Component), labelValues(d.Component.Labels))
+		match, err := q.components.matches(ctx, d.Component.ToIdentity(), labelValues(d.Component.Labels))
 		if err != nil {
 			return nil, err
 		}
@@ -157,9 +166,10 @@ func (q *Query) filterComponents(ctx context.Context, survivors []*descriptor.De
 
 // filterResources applies the resource selector stage to one descriptor. With
 // an active selector it returns a shallow copy owning its own resource slice,
-// so the input is never mutated; an empty result is then a non-nil slice,
-// preserving the v2 null-versus-[] distinction downstream. Components with zero
-// surviving resources are kept.
+// so the input is never mutated. A component with no surviving resource is
+// dropped and reported as a nil descriptor: selecting by resource selects the
+// components that carry such a resource, matching the reference and component
+// stages, which drop as well.
 //
 // Without a selector nothing is written, so the input descriptor is returned
 // as is. Filtered is documented as a read-only view sharing its nested data
@@ -176,13 +186,16 @@ func (q *Query) filterResources(ctx context.Context, d *descriptor.Descriptor) (
 			return nil, err
 		}
 		res := &d.Component.Resources[i]
-		match, err := q.resources.matches(ctx, resourceIdentity(res), labelValues(res.Labels))
+		match, err := q.resources.matches(ctx, res.ToIdentity(), labelValues(res.Labels))
 		if err != nil {
 			return nil, err
 		}
 		if match {
 			kept = append(kept, *res)
 		}
+	}
+	if len(kept) == 0 {
+		return nil, nil
 	}
 	out.Component.Resources = kept
 	return &out, nil

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/common/types/ref"
-
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/common/types/ref"
 )
 
-// Selector stages.
+// Selector stages. They name the stage of a SelectorError and the stage that
+// emptied a Filtered result, and are rendered verbatim into the Ready message
+// of the Discovery, so each must read as a singular noun.
 const (
 	StageReference = "reference"
 	StageComponent = "component"
@@ -62,19 +62,6 @@ func (e *ExtractError) Unwrap() error {
 func extractErrorf(field, format string, args ...any) *ExtractError {
 	return &ExtractError{Field: field, Cause: fmt.Errorf(format, args...)}
 }
-
-// EmptyReason distinguishes an empty selector-stage result from an error. Its
-// values are the corresponding condition reasons of the Discovery API.
-type EmptyReason string
-
-const (
-	// EmptyReasonNone indicates a nonempty or selector-free result.
-	EmptyReasonNone EmptyReason = ""
-	// EmptyReasonNoReferencesMatched indicates the reference selector stage matched no reference.
-	EmptyReasonNoReferencesMatched = EmptyReason(v1alpha1.NoReferencesMatchedReason)
-	// EmptyReasonNoComponentsMatched indicates the component selector stage matched no component.
-	EmptyReasonNoComponentsMatched = EmptyReason(v1alpha1.NoComponentsMatchedReason)
-)
 
 // missingAccessPrefixes are the messages cel-go's attribute resolution emits
 // for a failed lookup. All three come from the same unexported

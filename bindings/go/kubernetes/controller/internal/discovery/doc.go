@@ -16,6 +16,10 @@
 //	Query.Filter(ctx, graph) -> Filtered   (reference -> component -> resource stages)
 //	Query.Project(ctx, filtered) -> Payload (raw | byResources | byComponents | expression)
 //
+// The reference stage keeps only matching reference
+// targets, the component stage only matching components, and the resource stage
+// only components that have a matching resource.
+//
 // Filtering keeps runtime descriptors: it performs no v2 conversion or
 // serialization, only label decoding for selector evaluation. Filtered is a
 // read-only view over the graph, not an isolated snapshot: Filter owns the
@@ -50,7 +54,7 @@
 // component name/version. A resource removed by selection is not serialized, so
 // a bad access on a discarded resource will never fail.
 //
-// Empty reference or component selector stages are not failures: Filter reports
-// them with a distinct EmptyReason and Project deterministically emits an empty list.
-// Descriptor inputs are never mutated.
+// An empty selector stage is not a failure: Filter reports which stage emptied
+// the result and Project deterministically emits an empty list. Descriptor
+// inputs are never mutated.
 package discovery

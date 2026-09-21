@@ -31,7 +31,7 @@ func TestFilterEmptySelectorsKeepEverything(t *testing.T) {
 		Descriptors: []*descriptor.Descriptor{root, child},
 	})
 	r.NoError(err)
-	r.Equal(EmptyReasonNone, f.Reason)
+	r.Empty(f.EmptyStage)
 	r.ElementsMatch([]string{"root:1.0.0", "child:2.0.0"}, filteredKeys(f))
 }
 
@@ -112,7 +112,7 @@ func TestFilterReferenceIdentityAndExtras(t *testing.T) {
 	r.Equal([]string{"target:9.9.9"}, filteredKeys(f))
 }
 
-func TestFilterNoReferencesMatchedReason(t *testing.T) {
+func TestFilterEmptyReferenceStage(t *testing.T) {
 	r := require.New(t)
 	root := newDescriptor("root", "1.0.0", withReferences(newReference("to-child", "child", "1.0.0")))
 	child := newDescriptor("child", "1.0.0")
@@ -125,7 +125,7 @@ func TestFilterNoReferencesMatchedReason(t *testing.T) {
 	r.NoError(err)
 	r.Empty(f.Descriptors)
 	r.NotNil(f.Descriptors)
-	r.Equal(EmptyReasonNoReferencesMatched, f.Reason)
+	r.Equal(StageReference, f.EmptyStage)
 }
 
 func TestFilterComponentSelectorStructuredLabelsAndReason(t *testing.T) {
@@ -149,10 +149,10 @@ func TestFilterComponentSelectorStructuredLabelsAndReason(t *testing.T) {
 	f, err = q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{root, child}})
 	r.NoError(err)
 	r.Empty(f.Descriptors)
-	r.Equal(EmptyReasonNoComponentsMatched, f.Reason)
+	r.Equal(StageComponent, f.EmptyStage)
 }
 
-func TestFilterResourceSelectorKeepsZeroResourceComponents(t *testing.T) {
+func TestFilterResourceSelectorDropsZeroResourceComponents(t *testing.T) {
 	r := require.New(t)
 	empty := newDescriptor("empty", "1.0.0")
 	some := newDescriptor("some", "1.0.0", withResources(
@@ -166,16 +166,28 @@ func TestFilterResourceSelectorKeepsZeroResourceComponents(t *testing.T) {
 	r.NoError(err)
 	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{empty, some}})
 	r.NoError(err)
-	r.Equal(EmptyReasonNone, f.Reason, "resource-empty stages are ordinary success")
-	r.ElementsMatch([]string{"empty:1.0.0", "some:1.0.0"}, filteredKeys(f))
+	r.Empty(f.EmptyStage)
+	r.Equal([]string{"some:1.0.0"}, filteredKeys(f), "only components carrying a matching resource survive")
+	r.Len(f.Descriptors[0].Component.Resources, 1)
+	r.Equal("keep-me", f.Descriptors[0].Component.Resources[0].Name)
+}
 
-	byKey := map[string]*descriptor.Descriptor{}
-	for _, d := range f.Descriptors {
-		byKey[ComponentKey{Name: d.Component.Name, Version: d.Component.Version}.String()] = d
-	}
-	r.Empty(byKey["empty:1.0.0"].Component.Resources, "component with zero resources must be kept")
-	r.Len(byKey["some:1.0.0"].Component.Resources, 1)
-	r.Equal("keep-me", byKey["some:1.0.0"].Component.Resources[0].Name)
+// TestFilterResourceSelectorMatchingNothingReportsReason: dropping every
+// component on the resource stage is an ordinary empty result, not a failure.
+func TestFilterResourceSelectorMatchingNothingReportsReason(t *testing.T) {
+	r := require.New(t)
+	d := newDescriptor("d", "1.0.0", withResources(newResource("present")))
+
+	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{
+		ResourceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "absent"}},
+	})
+	r.NoError(err)
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
+	r.NoError(err)
+	r.Equal(StageResource, f.EmptyStage)
+	r.NotNil(f.Descriptors)
+	r.Empty(f.Descriptors)
+	r.Len(d.Component.Resources, 1, "input must not be mutated")
 }
 
 func TestFilterResourceDeclarationOrderPreserved(t *testing.T) {
@@ -274,7 +286,7 @@ func TestFilterIgnoresNilAndEmptyGraph(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(f.Descriptors)
 	r.Empty(f.Descriptors)
-	r.Equal(EmptyReasonNoComponentsMatched, f.Reason)
+	r.Equal(StageComponent, f.EmptyStage)
 }
 
 func TestFilterPreservesGraphOrder(t *testing.T) {
@@ -322,13 +334,14 @@ func TestFilterResourcesWithoutSelectorSharesDescriptor(t *testing.T) {
 	r.Same(d, f.Descriptors[0], "no selector means no write, so no copy")
 
 	// With a selector the copy is required and the input must stay untouched.
+	two := newDescriptor("c", "1.0.0", withResources(newResource("keep"), newResource("drop")))
 	q, err = Compile(t.Context(), &v1alpha1.DiscoverySpec{
-		ResourceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "absent"}},
+		ResourceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "keep"}},
 	})
 	r.NoError(err)
-	f, err = q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{d}})
+	f, err = q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{two}})
 	r.NoError(err)
-	r.NotSame(d, f.Descriptors[0])
-	r.Empty(f.Descriptors[0].Component.Resources)
-	r.Len(d.Component.Resources, 1, "input must not be mutated")
+	r.NotSame(two, f.Descriptors[0])
+	r.Len(f.Descriptors[0].Component.Resources, 1)
+	r.Len(two.Component.Resources, 2, "input must not be mutated")
 }

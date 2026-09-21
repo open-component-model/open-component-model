@@ -97,10 +97,4 @@ const (
 
 	// PayloadTooLargeReason is used when the Discovery status payload exceeds the API server size limit.
 	PayloadTooLargeReason = "PayloadTooLarge"
-
-	// NoReferencesMatchedReason is used when the Discovery reference selector matched no references.
-	NoReferencesMatchedReason = "NoReferencesMatched"
-
-	// NoComponentsMatchedReason is used when the Discovery component selector matched no components.
-	NoComponentsMatchedReason = "NoComponentsMatched"
 )

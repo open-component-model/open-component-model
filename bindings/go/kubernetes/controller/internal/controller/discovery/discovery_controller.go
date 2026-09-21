@@ -397,16 +397,14 @@ func digestKey(digest *v2.Digest) string {
 }
 
 // payloadMessage returns the Ready condition message for a successful
-// evaluation.
+// evaluation. Every stage noun pluralises with a bare "s".
 func payloadMessage(payload *internaldiscovery.Payload) string {
-	switch payload.Reason {
-	case internaldiscovery.EmptyReasonNoReferencesMatched:
-		return "discovery succeeded, but no references matched the reference selector"
-	case internaldiscovery.EmptyReasonNoComponentsMatched:
-		return "discovery succeeded, but no components matched the component selector"
-	default:
-		return fmt.Sprintf("discovery succeeded with %d results", resultCount(payload))
+	if payload.EmptyStage != "" {
+		return fmt.Sprintf("discovery succeeded, but no %ss matched the %s selector",
+			payload.EmptyStage, payload.EmptyStage)
 	}
+
+	return fmt.Sprintf("discovery succeeded with %d results", resultCount(payload))
 }
 
 func resultCount(payload *internaldiscovery.Payload) int {

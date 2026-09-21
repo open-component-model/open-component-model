@@ -21,8 +21,9 @@ type Payload struct {
 	// Extracted carries the projected records. Selected when the Discovery
 	// has an extract configuration.
 	Extracted []map[string]any
-	// Reason is the empty-stage reason carried over from Filter.
-	Reason EmptyReason
+	// EmptyStage is the stage that emptied the result, carried over from
+	// Filter. It is empty for an ordinary result.
+	EmptyStage string
 }
 
 // Project projects a filtered view into its payload. Serialization happens only
@@ -34,9 +35,9 @@ type Payload struct {
 // ordinary wrapped errors carrying the component name/version, not as
 // *ExtractError, so they are not reported as configuration failures.
 //
-// An empty filtered view with a stage reason deterministically produces an
-// empty selected list: whole-expression extraction must not fabricate records
-// in that state, so expressions are not evaluated at all.
+// An empty filtered view deterministically produces an empty selected list:
+// whole-expression extraction must not fabricate records in that state, so
+// expressions are not evaluated at all.
 //
 // byResources emits one record per surviving (component, resource) pair and
 // byComponents one record per surviving component, iterating fields in
@@ -53,7 +54,7 @@ func (q *Query) Project(ctx context.Context, filtered *Filtered) (*Payload, erro
 	}
 
 	if q.extract == nil {
-		payload := &Payload{Components: make([]json.RawMessage, 0, len(filtered.Descriptors)), Reason: filtered.Reason}
+		payload := &Payload{Components: make([]json.RawMessage, 0, len(filtered.Descriptors)), EmptyStage: filtered.EmptyStage}
 		if len(filtered.Descriptors) == 0 {
 			return payload, nil
 		}
@@ -71,12 +72,12 @@ func (q *Query) Project(ctx context.Context, filtered *Filtered) (*Payload, erro
 		return payload, nil
 	}
 
-	payload := &Payload{Extracted: make([]map[string]any, 0), Reason: filtered.Reason}
+	payload := &Payload{Extracted: make([]map[string]any, 0), EmptyStage: filtered.EmptyStage}
 	if len(filtered.Descriptors) == 0 {
 		return payload, nil
 	}
 
-	descriptors, err := descriptorMaps(ctx, filtered.Descriptors)
+	descriptors, err := unstructuredDescriptors(ctx, filtered.Descriptors)
 	if err != nil {
 		return nil, err
 	}
@@ -115,12 +116,12 @@ func marshalV2(scheme *runtime.Scheme, d *descriptor.Descriptor) (json.RawMessag
 	return raw, nil
 }
 
-// descriptorMaps converts each descriptor to v2, marshals it, and decodes it
-// into a generic map for CEL evaluation, once per Project invocation. A single
-// allow-unknown scheme is reused for all descriptors.
-func descriptorMaps(ctx context.Context, descriptors []*descriptor.Descriptor) ([]map[string]any, error) {
+// unstructuredDescriptors converts each descriptor to v2, marshals it, and
+// decodes it into a runtime.Unstructured for CEL evaluation, once per Project
+// invocation. A single allow-unknown scheme is reused for all descriptors.
+func unstructuredDescriptors(ctx context.Context, descriptors []*descriptor.Descriptor) ([]*runtime.Unstructured, error) {
 	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-	maps := make([]map[string]any, 0, len(descriptors))
+	out := make([]*runtime.Unstructured, 0, len(descriptors))
 	for _, d := range descriptors {
 		if err := checkContext(ctx); err != nil {
 			return nil, err
@@ -129,19 +130,19 @@ func descriptorMaps(ctx context.Context, descriptors []*descriptor.Descriptor) (
 		if err != nil {
 			return nil, err
 		}
-		var generic map[string]any
-		if err := json.Unmarshal(raw, &generic); err != nil {
+		generic := &runtime.Unstructured{}
+		if err := json.Unmarshal(raw, generic); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal descriptor %s into generic map: %w", d.Component.String(), err)
 		}
-		maps = append(maps, generic)
+		out = append(out, generic)
 	}
-	return maps, nil
+	return out, nil
 }
 
-// component returns the inner component map of a full v2 descriptor map.
+// component returns the inner component map of a full v2 descriptor.
 // Do not ignore the missing component field.
-func component(desc map[string]any) (map[string]any, error) {
-	c, ok := desc["component"].(map[string]any)
+func component(desc *runtime.Unstructured) (map[string]any, error) {
+	c, ok := runtime.Get[map[string]any](desc, "component")
 	if !ok {
 		return nil, fmt.Errorf("descriptor has no component object")
 	}
@@ -165,7 +166,7 @@ func resources(component map[string]any) []map[string]any {
 	return out
 }
 
-func (q *Query) projectPerResource(ctx context.Context, descriptors []map[string]any) ([]map[string]any, error) {
+func (q *Query) projectPerResource(ctx context.Context, descriptors []*runtime.Unstructured) ([]map[string]any, error) {
 	records := make([]map[string]any, 0, len(descriptors))
 	for i, desc := range descriptors {
 		if err := checkContext(ctx); err != nil {
@@ -189,7 +190,7 @@ func (q *Query) projectPerResource(ctx context.Context, descriptors []map[string
 	return records, nil
 }
 
-func (q *Query) projectPerComponent(ctx context.Context, descriptors []map[string]any) ([]map[string]any, error) {
+func (q *Query) projectPerComponent(ctx context.Context, descriptors []*runtime.Unstructured) ([]map[string]any, error) {
 	records := make([]map[string]any, 0, len(descriptors))
 	for i, desc := range descriptors {
 		if err := checkContext(ctx); err != nil {
@@ -208,10 +209,10 @@ func (q *Query) projectPerComponent(ctx context.Context, descriptors []map[strin
 	return records, nil
 }
 
-func (q *Query) projectExpression(ctx context.Context, descriptors []map[string]any) ([]map[string]any, error) {
+func (q *Query) projectExpression(ctx context.Context, descriptors []*runtime.Unstructured) ([]map[string]any, error) {
 	components := make([]any, 0, len(descriptors))
 	for _, desc := range descriptors {
-		components = append(components, desc)
+		components = append(components, desc.Data)
 	}
 	val, _, err := q.extract.expression.ContextEval(ctx, map[string]any{"components": components})
 	// Missing access is a strict error for whole-expression extraction, unlike
