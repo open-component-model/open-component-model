@@ -7,7 +7,7 @@ and an instance manifest (`instance.yaml`).
 
 ## Prerequisites
 
-A local Kind cluster with kro, FluxCD, and ArgoCD installed. Use the Taskfile to set it up:
+A local Kind cluster with kro, FluxCD, ArgoCD, and Crossplane installed. Use the Taskfile to set it up:
 
 ```bash
 task test/e2e/setup/local
@@ -16,6 +16,10 @@ task test/e2e/setup/local
 See the [installation notes in the root README](../README.md#installation) for details.
 
 ## Example overview
+
+### kro-based examples
+
+These examples use a kro `ResourceGraphDefinition` (`rgd.yaml`) to compose OCM resources into deployer-specific objects. Both FluxCD and ArgoCD deployer blocks live in the same `rgd.yaml`; remove the block for whichever is absent from your cluster.
 
 | Example | Deployer(s) | What it demonstrates |
 |---|---|---|
@@ -30,8 +34,25 @@ See the [installation notes in the root README](../README.md#installation) for d
 | [`k8s-manifest-simple`](#k8s-manifest-simple) | (raw kubectl) | Applying a plain Kubernetes manifest from an OCM resource |
 | [`applyset-pruning`](#applyset-pruning) | (raw kubectl) | Pruning orphaned resources with ApplySet |
 
-All examples that use FluxCD and ArgoCD include **both deployer blocks** in the same `rgd.yaml`. kro
-instantiates both; on a cluster where only one is installed, remove the block for the absent deployer.
+### Crossplane-based examples
+
+These examples replace kro with Crossplane Compositions. The XRD and Composition are stored as a `crossplane-xrd` blob resource inside the OCM component and applied to the cluster through an OCM `Deployer` — not from disk. The `bootstrap.yaml` contains the full OCM stack: `Repository` → `Component` → `Resource` (fetches the blob) → `Deployer` (applies XRD+Composition). Once the XRD is `Established`, creating the XR instance (`instance.yaml`) triggers the Composition pipeline.
+
+| Example | Deployer(s) | What it demonstrates |
+|---|---|---|
+| [`helm/fluxcd/crossplane/simple`](#crossplane-simple) | FluxCD | Minimal Helm chart via Crossplane Composition + FluxCD `HelmRelease` |
+| [`helm/argocd/crossplane/simple`](#crossplane-simple) | ArgoCD | Same scenario with ArgoCD `Application` |
+| [`helm/fluxcd/crossplane/nested`](#crossplane-nested) | FluxCD | `referencePath` navigation through a nested OCM component |
+| [`helm/argocd/crossplane/nested`](#crossplane-nested) | ArgoCD | Same with ArgoCD |
+| [`helm/fluxcd/crossplane/nested-signed`](#crossplane-nested-signed) | FluxCD | Nested component with signature verification |
+| [`helm/argocd/crossplane/nested-signed`](#crossplane-nested-signed) | ArgoCD | Same with ArgoCD |
+| [`helm/fluxcd/crossplane/signing`](#crossplane-signing) | FluxCD | Signed top-level component |
+| [`helm/argocd/crossplane/signing`](#crossplane-signing) | ArgoCD | Same with ArgoCD |
+| [`helm/fluxcd/crossplane/simple-nested-status`](#crossplane-simple-nested-status) | FluxCD | `additionalStatusFields` surfaced through Composition |
+| [`helm/argocd/crossplane/simple-nested-status`](#crossplane-simple-nested-status) | ArgoCD | Same with ArgoCD |
+| [`helm/fluxcd/crossplane/configuration-localization`](#crossplane-configuration-localization) | FluxCD | Image localization + Helm value injection via Composition |
+| [`helm/argocd/crossplane/configuration-localization`](#crossplane-configuration-localization) | ArgoCD | Same with ArgoCD |
+| [`helm/fluxcd/crossplane/simple-fnc-kro`](#crossplane-simple-fnc-kro) | FluxCD | Crossplane Composition using `function-kro` to compose a kro `ResourceGraph` |
 
 ---
 
@@ -166,17 +187,113 @@ excluded from the generic examples test loop.
 
 ---
 
+## Crossplane examples
+
+All Crossplane examples follow the same structure. The XRD and Composition are bundled as a `crossplane-xrd` blob resource in the OCM component. `bootstrap.yaml` contains the full OCM stack:
+
+```
+Repository → Component → Resource (crossplane-xrd) → Deployer
+```
+
+Applying `bootstrap.yaml` starts the OCM controller chain. The `Deployer` applies the XRD and Composition to the cluster. Once the XRD reaches `Established`, apply `instance.yaml` to create the XR. The Composition pipeline then creates the workload resources.
+
+The deployer-specific split (FluxCD vs. ArgoCD) is encoded in the Composition itself — each deployer has its own `crossplane-composition.yaml`.
+
+### crossplane-simple
+
+**FluxCD:** `helm/fluxcd/crossplane/simple` — Composition creates an OCM `Resource`, a FluxCD `OCIRepository`, and a `HelmRelease`.
+
+**ArgoCD:** `helm/argocd/crossplane/simple` — Composition creates an OCM `Resource` and an ArgoCD `Application`.
+
+Baseline Crossplane example. Equivalent in scope to `helm-simple` but uses a Crossplane Composition instead of a kro RGD.
+
+```bash
+task test/e2e -- -ginkgo.focus=helm/fluxcd/crossplane/simple
+```
+
+---
+
+### crossplane-nested
+
+**FluxCD:** `helm/fluxcd/crossplane/nested` | **ArgoCD:** `helm/argocd/crossplane/nested`
+
+The Helm chart lives inside a nested OCM component reference. The OCM `Resource` in the Composition uses `referencePath` to navigate the nesting:
+
+```yaml
+referencePath:
+  - name: nested-chart
+```
+
+---
+
+### crossplane-nested-signed
+
+**FluxCD:** `helm/fluxcd/crossplane/nested-signed` | **ArgoCD:** `helm/argocd/crossplane/nested-signed`
+
+Like `crossplane-nested`, but the component version is signed. The `Resource` controller verifies the signature before exposing OCI coordinates to the Composition pipeline.
+
+---
+
+### crossplane-signing
+
+**FluxCD:** `helm/fluxcd/crossplane/signing` | **ArgoCD:** `helm/argocd/crossplane/signing`
+
+Signature verification for a top-level (non-nested) component. The test signs the component version at setup time; the controller verifies it at runtime.
+
+---
+
+### crossplane-simple-nested-status
+
+**FluxCD:** `helm/fluxcd/crossplane/simple-nested-status` | **ArgoCD:** `helm/argocd/crossplane/simple-nested-status`
+
+Uses `additionalStatusFields` to surface OCI coordinates (registry, repository, digest, tag) from a nested component reference. The Composition reads these fields from the OCM `Resource` status and passes them to the deployer.
+
+---
+
+### crossplane-configuration-localization
+
+**FluxCD:** `helm/fluxcd/crossplane/configuration-localization` | **ArgoCD:** `helm/argocd/crossplane/configuration-localization`
+
+Combines image localization and Helm value injection inside a Composition:
+
+- **Localization** — `image.repository` and `image.tag` are rewritten to the transferred OCI image location.
+- **Configuration** — `ui.message` is injected as a Helm value.
+
+FluxCD delivers values via `HelmRelease.spec.values`. ArgoCD uses `Application.spec.source.helm.parameters`.
+
+---
+
+### crossplane-simple-fnc-kro
+
+**FluxCD only:** `helm/fluxcd/crossplane/simple-fnc-kro`
+
+Uses the `function-kro` Crossplane function to compose a kro `ResourceGraph` inside a Composition pipeline. The Composition calls `crossplane-contrib-function-kro`, which renders an OCM `Resource`, a FluxCD `OCIRepository`, and a `HelmRelease` from a `ResourceGraph` template. `function-auto-ready` marks the XR ready once all composed resources are healthy.
+
+This combines two composition engines: Crossplane manages the XR lifecycle; kro renders the resource graph inside the Composition step.
+
+```bash
+task test/e2e -- -ginkgo.focus=helm/fluxcd/crossplane/simple-fnc-kro
+```
+
+---
+
 ## Running all examples
 
 ```bash
 # Run every example in the generic loop (applyset-pruning is excluded — it has its own test)
 task test/e2e
 
-# Teardown the cluster, rebuild from scratch, and run all examples
+# Tear down, rebuild, and run all examples from scratch
 task test/e2e/fresh
 
-# Run a single example by name
+# Run a single kro-based example
 task test/e2e -- -ginkgo.focus=helm-configuration-localization
+
+# Run a single Crossplane example
+task test/e2e -- -ginkgo.focus=helm/fluxcd/crossplane/simple
+
+# Run all Crossplane examples
+task test/e2e -- -ginkgo.focus=crossplane
 ```
 
 See [Taskfile.yml](../Taskfile.yml) for the full list of e2e tasks and options.
