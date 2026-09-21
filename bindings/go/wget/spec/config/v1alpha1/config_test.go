@@ -159,3 +159,38 @@ configurations:
 	r.Contains(merged.Hosts, "a.example")
 	r.Contains(merged.Hosts, "b.example")
 }
+
+func TestPolicyForURL_MixedCaseHostnameMatchesLowercasedConfigKey(t *testing.T) {
+	r := require.New(t)
+	// RFC 3986 §3.2.2: hostnames are case-insensitive. A config keyed by a
+	// lowercased host must match a URL whose host segment has different
+	// casing (and vice versa).
+	cfg, err := v1alpha1.LookupConfig(decodeGeneric(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: wget.config.ocm.software/v1alpha1
+    hosts:
+      "repo.example.com":
+        checksumPolicy: {onMissing: fail, sources: [{type: httpHeader}]}
+`))
+	r.NoError(err)
+
+	// Mixed case in URL — should still match the lowercased map key.
+	got := cfg.PolicyForURL("https://REPO.EXAMPLE.COM/artifact")
+	r.NotNil(got, "mixed-case URL hostname must match a lowercased config key")
+	r.Equal(inputv1.OnMissingFail, got.OnMissing)
+
+	// Mixed case in the config too — should still match a lowercased URL.
+	cfg2, err := v1alpha1.LookupConfig(decodeGeneric(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: wget.config.ocm.software/v1alpha1
+    hosts:
+      "Repo.Example.COM":
+        checksumPolicy: {onMissing: fail, sources: [{type: httpHeader}]}
+`))
+	r.NoError(err)
+	got = cfg2.PolicyForURL("https://repo.example.com/artifact")
+	r.NotNil(got, "mixed-case config key must match a lowercased URL hostname")
+	r.Equal(inputv1.OnMissingFail, got.OnMissing)
+}

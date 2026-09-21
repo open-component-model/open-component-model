@@ -457,3 +457,28 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 		assert.Equal(t, sha256, processed.Digest.Value)
 	})
 }
+
+// TestProcessResourceDigest_AcceptsPrefixedPinnedDigest confirms the access-side
+// digest processor treats a pinned `sha256:<hex>` value as equal to the bare-hex
+// value the download produces. Matches verifyProvidedDigest's normalisation on
+// the input path — without it, godigest.Encoded() callers (which pass the
+// prefixed form) get spurious mismatches.
+func TestProcessResourceDigest_AcceptsPrefixedPinnedDigest(t *testing.T) {
+	t.Parallel()
+	content := []byte("prefixed pinned")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(content)
+	}))
+	defer server.Close()
+
+	repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
+	resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
+	resource.Digest = &descruntime.Digest{
+		HashAlgorithm:          "SHA-256",
+		NormalisationAlgorithm: "genericBlobDigest/v1",
+		Value:                  "sha256:" + godigest.FromBytes(content).Encoded(),
+	}
+
+	_, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
+	require.NoError(t, err, "sha256:-prefixed pinned digest must match bare-hex computed digest")
+}

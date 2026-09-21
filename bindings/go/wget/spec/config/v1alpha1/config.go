@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -159,8 +160,18 @@ func (c *Config) PolicyForURL(rawURL string) *inputv1.ChecksumPolicy {
 	}
 	u, err := url.Parse(rawURL)
 	if err == nil && u.Host != "" && len(c.Hosts) > 0 {
+		// Build a lowercased-key view once so a config keyed by
+		// "Repo.Example.Com" matches a URL host "REPO.EXAMPLE.COM" and vice
+		// versa. Hostnames are case-insensitive per RFC 3986 §3.2.2, but
+		// url.Parse preserves the case the user wrote and Go's map lookup
+		// is exact. Ports and IPv6 brackets are preserved by lowercasing the
+		// whole "host[:port]" segment.
+		lower := make(map[string]*HostConfig, len(c.Hosts))
+		for k, v := range c.Hosts {
+			lower[strings.ToLower(k)] = v
+		}
 		for _, key := range hostKeys(u.Host) {
-			if hc := c.Hosts[key]; hc != nil && hc.ChecksumPolicy != nil {
+			if hc := lower[key]; hc != nil && hc.ChecksumPolicy != nil {
 				return hc.ChecksumPolicy
 			}
 		}
@@ -168,7 +179,9 @@ func (c *Config) PolicyForURL(rawURL string) *inputv1.ChecksumPolicy {
 	return c.DefaultChecksumPolicy
 }
 
-// hostKeys returns the [Config.Hosts] keys to try for host, most specific first.
+// hostKeys returns the [Config.Hosts] keys to try for host, most specific first,
+// all lowercased for a case-insensitive host match (RFC 3986 §3.2.2).
+//
 // An entry keyed by the bare hostname applies to every port on that host, and
 // one keyed "host:port" applies to that port alone and wins where both are
 // present — the same rule http.config.ocm.software uses.
@@ -176,6 +189,7 @@ func hostKeys(host string) []string {
 	if host == "" {
 		return nil
 	}
+	host = strings.ToLower(host)
 	if name := (&url.URL{Host: host}).Hostname(); name != host {
 		return []string{host, name}
 	}

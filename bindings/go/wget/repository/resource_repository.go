@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -235,7 +236,11 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	if resource.Digest.NormalisationAlgorithm != genericBlobDigestV1 {
 		return nil, fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, resource.Digest.NormalisationAlgorithm)
 	}
-	if resource.Digest.Value != sha {
+	// The pinned Value may be bare hex or go-digest form ("sha256:<hex>");
+	// normalise both sides before comparison. Matches verifyProvidedDigest on
+	// the input path.
+	want := strings.TrimPrefix(resource.Digest.Value, "sha256:")
+	if !strings.EqualFold(want, sha) {
 		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", resource.Digest.Value, sha)
 	}
 
