@@ -6,6 +6,8 @@ import (
 	"io"
 
 	"github.com/opencontainers/go-digest"
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2/content"
 )
 
 // VerifyingBlob wraps a ReadOnlyBlob with the digest its content is expected to
@@ -15,13 +17,17 @@ import (
 // happens against itself that always passes. A VerifyingBlob verifies against
 // an independent source, which is the component descriptor.
 //
-// Every reader returned by ReadCloser verifies independently: it errors both when
-// the content hashes to something else and when it is only read in part.
+// The check itself is [content.VerifyReader], so content is held to the same
+// size and digest rules an OCI registry applies. Every reader returned by
+// ReadCloser verifies independently: it errors when the content hashes to
+// something else, when it is longer than the declared size, and when it is only
+// read in part.
+//
 // Verification is streaming meaning, the target will already been downloaded by the
 // time Verification throws an error. It has to be removed by the caller if that happens.
 type VerifyingBlob struct {
-	base     ReadOnlyBlob
-	expected digest.Digest
+	base ReadOnlyBlob
+	desc ociImageSpecV1.Descriptor
 }
 
 var (
@@ -34,7 +40,11 @@ var (
 )
 
 // NewVerifyingBlob returns base wrapped so that its content is held to `expected`.
-// It fails if expected is not a digest of an algorithm available at runtime.
+//
+// It fails if expected is not a digest of an algorithm available at runtime, and
+// if base does not know its size: [content.VerifyReader] bounds the content by the
+// declared size, and an unknown size would let it read nothing and report that as
+// a clean result. Resolving the size here can make base materialize its content.
 func NewVerifyingBlob(base ReadOnlyBlob, expected digest.Digest) (*VerifyingBlob, error) {
 	if err := expected.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid expected digest %q: %w", expected, err)
@@ -42,7 +52,20 @@ func NewVerifyingBlob(base ReadOnlyBlob, expected digest.Digest) (*VerifyingBlob
 	if !expected.Algorithm().Available() {
 		return nil, fmt.Errorf("digest algorithm %q of expected digest %q is not available", expected.Algorithm(), expected)
 	}
-	return &VerifyingBlob{base: base, expected: expected}, nil
+
+	sizeAware, ok := base.(SizeAware)
+	if !ok {
+		return nil, fmt.Errorf("cannot verify a blob of unknown size against digest %q", expected)
+	}
+	size := sizeAware.Size()
+	if size < 0 {
+		return nil, fmt.Errorf("cannot verify a blob of unknown size against digest %q", expected)
+	}
+
+	return &VerifyingBlob{
+		base: base,
+		desc: ociImageSpecV1.Descriptor{Digest: expected, Size: size},
+	}, nil
 }
 
 // ReadCloser returns a reader over the content that verifies it against the
@@ -56,23 +79,20 @@ func (b *VerifyingBlob) ReadCloser() (io.ReadCloser, error) {
 	}
 	return &verifyingReadCloser{
 		base:     rc,
-		digester: b.expected.Algorithm().Digester(),
-		expected: b.expected,
+		verifier: content.NewVerifyReader(rc, b.desc),
+		expected: b.desc.Digest,
 	}, nil
 }
 
 // Digest returns the expected digest. It is always known, as a VerifyingBlob
 // cannot be constructed without one.
 func (b *VerifyingBlob) Digest() (string, bool) {
-	return b.expected.String(), true
+	return b.desc.Digest.String(), true
 }
 
-// Size returns the size of the underlying blob, or SizeUnknown if it does not know it.
+// Size returns the size the content is held to, which is always known.
 func (b *VerifyingBlob) Size() int64 {
-	if sizeAware, ok := b.base.(SizeAware); ok {
-		return sizeAware.Size()
-	}
-	return SizeUnknown
+	return b.desc.Size
 }
 
 // MediaType returns the media type of the underlying blob if it has one.
@@ -101,25 +121,20 @@ func (b *VerifyingBlob) Close() error {
 	return nil
 }
 
-// verifyingReadCloser hashes everything read through it and compares the result
-// against the expected digest.
+// verifyingReadCloser drives a [content.VerifyReader] over the content and closes
+// what is underneath it.
 type verifyingReadCloser struct {
 	base     io.ReadCloser
-	digester digest.Digester
+	verifier *content.VerifyReader
 	expected digest.Digest
 }
 
-// Read is a tee reader implementation that will not only error on Close but
-// also during Read! Since this a sensitive operation, forgetting to check a Close
-// error like _ = x.Close() MUST not be left as a possible loophole for skipping
-// verification.
+// Read reports a mismatch from the read itself, not only from Close.
+// [content.VerifyReader] leaves the check to Verify, and since this is a sensitive
+// operation, forgetting to check a Close error like _ = x.Close() MUST not be left
+// as a possible loophole for skipping verification.
 func (v *verifyingReadCloser) Read(p []byte) (int, error) {
-	n, err := v.base.Read(p)
-	if n > 0 {
-		if _, writeErr := v.digester.Hash().Write(p[:n]); writeErr != nil {
-			return n, writeErr
-		}
-	}
+	n, err := v.verifier.Read(p)
 	if errors.Is(err, io.EOF) {
 		if mismatch := v.verify(); mismatch != nil {
 			return n, mismatch
@@ -129,14 +144,17 @@ func (v *verifyingReadCloser) Read(p []byte) (int, error) {
 }
 
 // Close closes the underlying reader and reports a mismatch, which includes the
-// content having been read only in part.
+// content having been read only in part. The reader is closed either way, so a
+// failed verification does not leak what it was reading from.
 func (v *verifyingReadCloser) Close() error {
-	return errors.Join(v.base.Close(), v.verify())
+	return errors.Join(v.verify(), v.base.Close())
 }
 
+// verify names the failure and keeps the verifier's own error as detail, which is
+// what distinguishes content that hashed wrong from content of the wrong length.
 func (v *verifyingReadCloser) verify() error {
-	if actual := v.digester.Digest(); actual != v.expected {
-		return fmt.Errorf("digest mismatch: expected %s, got %s", v.expected, actual)
+	if err := v.verifier.Verify(); err != nil {
+		return fmt.Errorf("digest mismatch: expected %s: %w", v.expected, err)
 	}
 	return nil
 }

@@ -57,8 +57,9 @@ func TestVerifyingBlob_TamperedContent(t *testing.T) {
 	rc, err := b.ReadCloser()
 	require.NoError(t, err)
 
-	// The mismatch is reported from the read itself, so a caller that never
-	// inspects the error from Close still cannot use the content unknowingly.
+	// VerifyReader itself only checks in Verify, so this asserts the reader drives
+	// it at EOF: a caller that never inspects the error from Close still cannot use
+	// the content unknowingly.
 	_, err = io.ReadAll(rc)
 	require.ErrorContains(t, err, "digest mismatch")
 	require.ErrorContains(t, rc.Close(), "digest mismatch")
@@ -123,7 +124,7 @@ func TestVerifyingBlob_CopyReportsMismatch(t *testing.T) {
 	// Copy picks the expected digest up through DigestAware, so the check holds
 	// even for callers that never touch the reader themselves.
 	err := blob.Copy(io.Discard, b)
-	require.ErrorContains(t, err, "digest mismatch")
+	require.ErrorContains(t, err, "verification failed")
 }
 
 func TestVerifyingBlob_CopyBlobToOSPathReportsMismatch(t *testing.T) {
@@ -133,15 +134,42 @@ func TestVerifyingBlob_CopyBlobToOSPathReportsMismatch(t *testing.T) {
 	require.ErrorContains(t, err, "digest mismatch")
 }
 
-func TestVerifyingBlob_SizeUnknownForPlainBlob(t *testing.T) {
-	b, err := blob.NewVerifyingBlob(plainBlob{content: verifyTestContent}, digest.FromString(verifyTestContent))
-	require.NoError(t, err)
-	require.Equal(t, blob.SizeUnknown, b.Size())
+func TestVerifyingBlob_RejectsUnknownSize(t *testing.T) {
+	// VerifyReader bounds the content by the declared size, so an unknown size would
+	// let it read nothing at all and call that verified.
+	_, err := blob.NewVerifyingBlob(plainBlob{content: verifyTestContent}, digest.FromString(verifyTestContent))
+	require.ErrorContains(t, err, "unknown size")
 
-	_, known := b.MediaType()
-	require.False(t, known)
-	require.NoError(t, b.Close())
+	_, err = blob.NewVerifyingBlob(sizedBlob{plainBlob{content: verifyTestContent}, blob.SizeUnknown}, digest.FromString(verifyTestContent))
+	require.ErrorContains(t, err, "unknown size")
 }
+
+func TestVerifyingBlob_RejectsTrailingContent(t *testing.T) {
+	// The size comes from the blob, the digest from the descriptor. Content longer
+	// than the size is cut off by VerifyReader before it is ever hashed.
+	b, err := blob.NewVerifyingBlob(
+		sizedBlob{plainBlob{content: verifyTestContent + " and more"}, int64(len(verifyTestContent))},
+		digest.FromString(verifyTestContent),
+	)
+	require.NoError(t, err)
+
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	// Caught at the size boundary, before the extra bytes are read. It surfaces as
+	// a mismatch like any other, with what the verifier actually found kept as detail.
+	_, err = io.ReadAll(rc)
+	require.ErrorContains(t, err, "digest mismatch")
+	require.ErrorContains(t, err, "trailing data")
+	require.ErrorContains(t, rc.Close(), "digest mismatch")
+}
+
+// sizedBlob gives a plainBlob a size without giving it anything else.
+type sizedBlob struct {
+	plainBlob
+	size int64
+}
+
+func (s sizedBlob) Size() int64 { return s.size }
 
 // plainBlob implements nothing beyond ReadOnlyBlob.
 type plainBlob struct {

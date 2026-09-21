@@ -1,6 +1,7 @@
 package blob
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -92,14 +93,20 @@ func (c *closeableVerifyReader) Read(p []byte) (n int, err error) {
 	return c.reader.Read(p)
 }
 
+// Close verifies and closes, in that order but unconditionally: returning early on
+// a failed verification would leak the reader on exactly the path that matters.
 func (c *closeableVerifyReader) Close() error {
+	var verifyErr error
 	if err := c.reader.Verify(); err != nil {
-		return fmt.Errorf("failed to verify digest verification reader in descriptor blob: %w", err)
+		verifyErr = fmt.Errorf("failed to verify digest verification reader in descriptor blob: %w", err)
 	}
+
+	var closeErr error
 	if c.close != nil {
 		if err := c.close(); err != nil {
-			return fmt.Errorf("failed to close digest verification reader in descriptor blob: %w", err)
+			closeErr = fmt.Errorf("failed to close digest verification reader in descriptor blob: %w", err)
 		}
 	}
-	return nil
+
+	return errors.Join(verifyErr, closeErr)
 }
