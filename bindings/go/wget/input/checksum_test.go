@@ -154,6 +154,67 @@ func TestProcessResource_ChecksumPolicy(t *testing.T) {
 	})
 }
 
+// TestProcessResource_ChecksumPolicy_CELURL exercises the CEL-driven URL field
+// on an externalUrl source: a custom expression pointing at a non-sibling
+// checksum location, and rejection of unwrapped / non-string expressions.
+func TestProcessResource_ChecksumPolicy_CELURL(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("hello world")
+
+	t.Run("custom CEL url expression is honored per algorithm", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Only the SHA-256 sibling exists, hosted at a non-default path.
+			if r.URL.Path == "/checksums/sha256/artifact" {
+				_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
+				return
+			}
+			if strings.HasSuffix(r.URL.Path, "/artifact") {
+				_, _ = w.Write(content)
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		result, err := (&input.InputMethod{}).ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
+			"url": server.URL + "/artifact",
+			"checksumPolicy": map[string]any{"sources": []any{
+				map[string]any{
+					"type":       "externalUrl",
+					"algorithms": []any{"sha256"},
+					// resource.url.scheme/host/path expose the parsed artifact URL.
+					"url": `${resource.url.scheme + "://" + resource.url.host + "/checksums/" + ext + resource.url.path}`,
+				},
+			}},
+		}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
+	})
+
+	t.Run("unwrapped url expression is rejected at policy build time", func(t *testing.T) {
+		_, err := (&input.InputMethod{}).ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
+			"url": "http://example.invalid/artifact",
+			"checksumPolicy": map[string]any{"sources": []any{
+				map[string]any{"type": "externalUrl", "url": `"https://example.invalid/foo"`},
+			}},
+		}), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "single CEL expression wrapped in ${...}")
+	})
+
+	t.Run("url expression that does not evaluate to a string is rejected", func(t *testing.T) {
+		_, err := (&input.InputMethod{}).ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
+			"url": "http://example.invalid/artifact",
+			"checksumPolicy": map[string]any{"sources": []any{
+				map[string]any{"type": "externalUrl", "url": `${42}`},
+			}},
+		}), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must evaluate to a string")
+	})
+}
+
 // wgetResourceWithDigest builds a wget input resource carrying a provided digest.
 func wgetResourceWithDigest(t *testing.T, url, value string) *constructorruntime.Resource {
 	t.Helper()

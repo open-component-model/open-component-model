@@ -148,7 +148,10 @@ func TestResolve_HeaderMismatchFails(t *testing.T) {
 func TestResolve_ExternalFallbackAfterHeaderMiss(t *testing.T) {
 	r := require.New(t)
 	// No usable header; external fetch supplies a SHA-256.
-	fetch := func(_ context.Context, _ string, algs []Algorithm) (Expected, bool, error) {
+	fetch := func(_ context.Context, _ string, alg Algorithm) (Expected, bool, error) {
+		if alg.OCMName != "SHA-256" {
+			return Expected{}, false, nil
+		}
 		return Expected{Algorithm: SHA256, Value: helloSHA256}, true, nil
 	}
 	exp, verified, err := Resolve(context.Background(), Policy{
@@ -157,7 +160,7 @@ func TestResolve_ExternalFallbackAfterHeaderMiss(t *testing.T) {
 			{Type: SourceExternalURL},
 		},
 		OnMissing: Fail,
-	}, Input{Headers: http.Header{}, Computed: helloComputed(), Fetch: fetch})
+	}, Input{Headers: http.Header{}, Computed: helloComputed(), FetchURL: fetch})
 	r.NoError(err)
 	r.True(verified)
 	r.Equal("SHA-256", exp.Algorithm.OCMName)
@@ -204,4 +207,75 @@ func TestRequiredAlgorithms_AlwaysIncludesStorage(t *testing.T) {
 	}
 	r.True(names["SHA-256"], "storage algorithm must always be computed")
 	r.True(names["SHA-1"], "policy algorithm must be computed")
+}
+
+// TestResolve_ExternalDefaultURL confirms that a nil Source.ResolveURL falls back
+// to the Maven default `<baseURL>.<alg.Extension>`, and that FetchURL sees that
+// exact URL for each algorithm.
+func TestResolve_ExternalDefaultURL(t *testing.T) {
+	r := require.New(t)
+	seen := map[string]string{}
+	fetch := func(_ context.Context, u string, alg Algorithm) (Expected, bool, error) {
+		seen[alg.OCMName] = u
+		if alg.OCMName == "SHA-256" {
+			return Expected{Algorithm: SHA256, Value: helloSHA256}, true, nil
+		}
+		return Expected{}, false, nil
+	}
+	_, verified, err := Resolve(context.Background(), Policy{
+		Sources: []Source{{Type: SourceExternalURL, Algorithms: []Algorithm{SHA1, SHA256}}},
+	}, Input{URL: "https://example.com/artifact.tar", Computed: helloComputed(), FetchURL: fetch})
+	r.NoError(err)
+	r.True(verified)
+	r.Equal("https://example.com/artifact.tar.sha1", seen["SHA-1"])
+	r.Equal("https://example.com/artifact.tar.sha256", seen["SHA-256"])
+}
+
+// TestResolve_ExternalCustomResolveURL confirms that a Source.ResolveURL closure
+// is honored per algorithm, so a policy can point at a non-sibling checksum URL
+// without any templating language leaking into the checksum package.
+func TestResolve_ExternalCustomResolveURL(t *testing.T) {
+	r := require.New(t)
+	var seen []string
+	fetch := func(_ context.Context, u string, alg Algorithm) (Expected, bool, error) {
+		seen = append(seen, u)
+		if alg.OCMName == "SHA-256" {
+			return Expected{Algorithm: SHA256, Value: helloSHA256}, true, nil
+		}
+		return Expected{}, false, nil
+	}
+	resolveURL := func(baseURL string, alg Algorithm) (string, error) {
+		return "https://mirror.example/checksums/" + alg.Extension + "?src=" + baseURL, nil
+	}
+	_, verified, err := Resolve(context.Background(), Policy{
+		Sources: []Source{{
+			Type:       SourceExternalURL,
+			Algorithms: []Algorithm{SHA1, SHA256},
+			ResolveURL: resolveURL,
+		}},
+	}, Input{URL: "https://example.com/artifact.tar", Computed: helloComputed(), FetchURL: fetch})
+	r.NoError(err)
+	r.True(verified)
+	r.Equal([]string{
+		"https://mirror.example/checksums/sha1?src=https://example.com/artifact.tar",
+		"https://mirror.example/checksums/sha256?src=https://example.com/artifact.tar",
+	}, seen)
+}
+
+// TestResolve_ExternalResolveURLError surfaces a resolver error as a hard failure
+// rather than falling through to onMissing behaviour.
+func TestResolve_ExternalResolveURLError(t *testing.T) {
+	r := require.New(t)
+	fetch := func(context.Context, string, Algorithm) (Expected, bool, error) {
+		t.Fatal("FetchURL must not be called when ResolveURL fails")
+		return Expected{}, false, nil
+	}
+	resolveURL := func(string, Algorithm) (string, error) {
+		return "", fmt.Errorf("boom")
+	}
+	_, _, err := Resolve(context.Background(), Policy{
+		Sources: []Source{{Type: SourceExternalURL, Algorithms: []Algorithm{SHA256}, ResolveURL: resolveURL}},
+	}, Input{URL: "https://example.com/artifact", Computed: helloComputed(), FetchURL: fetch})
+	r.Error(err)
+	r.Contains(err.Error(), "boom")
 }

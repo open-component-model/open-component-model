@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -15,59 +14,29 @@ import (
 const maxChecksumBodyBytes = 4 << 10
 
 // ExternalFetcher retrieves "Remote External" checksums: sibling resources stored
-// next to the artifact, addressed by appending an algorithm extension to the
-// artifact URL (Maven's convention, e.g. <url>.sha1).
+// next to the artifact. The URL for each algorithm is resolved by the caller
+// (see [Source.ResolveURL]), keeping this fetcher independent of any templating.
 type ExternalFetcher struct {
 	// Client performs the checksum requests. When nil, http.DefaultClient is used.
 	Client *http.Client
-	// URLTemplate builds the checksum URL from the artifact URL and an extension.
-	// The tokens {{.url}} and {{.ext}} are substituted. When empty it defaults to
-	// "{{.url}}.{{.ext}}".
-	URLTemplate string
 }
 
-// Fetch requests the external checksum for baseURL using the given algorithms in
-// order, returning the first that resolves. ok is false when none is available
-// (all requests 404 or are absent); an error is returned only for transport or
-// malformed-response failures.
-func (f *ExternalFetcher) Fetch(ctx context.Context, baseURL string, algs []Algorithm) (Expected, bool, error) {
+// FetchURL requests a single external checksum from checksumURL, expecting a body
+// hex-encoded for alg. A 404/410 yields ok=false so [Resolve] can fall back to
+// the next algorithm; other non-2xx statuses and malformed bodies are errors.
+func (f *ExternalFetcher) FetchURL(ctx context.Context, checksumURL string, alg Algorithm) (Expected, bool, error) {
 	client := f.Client
 	if client == nil {
 		client = http.DefaultClient
 	}
-	tmpl := f.URLTemplate
-	if tmpl == "" {
-		tmpl = "{{.url}}.{{.ext}}"
+	value, found, err := fetchOne(ctx, client, checksumURL, alg)
+	if err != nil {
+		return Expected{}, false, err
 	}
-	for _, alg := range algs {
-		checksumURL, err := renderChecksumURL(tmpl, baseURL, alg.Extension)
-		if err != nil {
-			return Expected{}, false, err
-		}
-		value, found, err := fetchOne(ctx, client, checksumURL, alg)
-		if err != nil {
-			return Expected{}, false, err
-		}
-		if found {
-			return Expected{Algorithm: alg, Value: value}, true, nil
-		}
+	if !found {
+		return Expected{}, false, nil
 	}
-	return Expected{}, false, nil
-}
-
-// renderChecksumURL substitutes the {{.url}} and {{.ext}} tokens. It avoids
-// text/template so the extension cannot inject template actions and to keep the
-// substitution obvious.
-func renderChecksumURL(tmpl, baseURL, ext string) (string, error) {
-	rendered := strings.ReplaceAll(tmpl, "{{.url}}", baseURL)
-	rendered = strings.ReplaceAll(rendered, "{{.ext}}", ext)
-	if strings.Contains(rendered, "{{") {
-		return "", fmt.Errorf("unsupported token in checksum urlTemplate %q (only {{.url}} and {{.ext}} are allowed)", tmpl)
-	}
-	if _, err := url.Parse(rendered); err != nil {
-		return "", fmt.Errorf("invalid checksum url %q: %w", rendered, err)
-	}
-	return rendered, nil
+	return Expected{Algorithm: alg, Value: value}, true, nil
 }
 
 // fetchOne GETs a single checksum URL. A 404/410 yields found=false (the checksum

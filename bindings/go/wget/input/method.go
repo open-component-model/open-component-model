@@ -94,7 +94,10 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		client = httpclient.New(httpclient.WithConfig(i.HTTPConfig))
 	}
 
-	policy, hasPolicy := toChecksumPolicy(wget.ChecksumPolicy)
+	policy, hasPolicy, err := toChecksumPolicy(wget.ChecksumPolicy, &wget)
+	if err != nil {
+		return nil, fmt.Errorf("invalid checksum policy for wget input from %q: %w", wget.URL, err)
+	}
 
 	opts := []download.Option{
 		download.WithClient(client),
@@ -137,7 +140,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}
 
 	if hasPolicy {
-		if err := i.verifyChecksum(ctx, client, wget.URL, policy, data); err != nil {
+		if err := i.verifyChecksum(ctx, client, &wget, policy, data); err != nil {
 			_ = data.Close()
 			return nil, fmt.Errorf("checksum verification failed for wget input from %q: %w", wget.URL, err)
 		}
@@ -164,17 +167,15 @@ func (i *InputMethod) GetCredentialTypeScheme() *runtime.Scheme {
 // verifyChecksum resolves the checksum policy against the completed download and
 // verifies the transferred bytes against the first source that yields an expected
 // checksum. Recording the resulting digest on the blob is handled by the caller.
-func (i *InputMethod) verifyChecksum(ctx context.Context, client *nethttp.Client, url string, policy checksum.Policy, data *download.Blob) error {
+func (i *InputMethod) verifyChecksum(ctx context.Context, client *nethttp.Client, wget *v1.Wget, policy checksum.Policy, data *download.Blob) error {
 	fetcher := &checksum.ExternalFetcher{Client: client}
-	if _, _, err := checksum.Resolve(ctx, policy, checksum.Input{
-		URL:      url,
+	_, _, err := checksum.Resolve(ctx, policy, checksum.Input{
+		URL:      wget.URL,
 		Headers:  data.Headers(),
 		Computed: data.Digests(),
-		Fetch:    fetcher.Fetch,
-	}); err != nil {
-		return err
-	}
-	return nil
+		FetchURL: fetcher.FetchURL,
+	})
+	return err
 }
 
 // verifyProvidedDigest checks the computed content digest against a digest pinned
@@ -200,11 +201,12 @@ func verifyProvidedDigest(provided *constructorruntime.Digest, data *download.Bl
 }
 
 // toChecksumPolicy adapts the input spec's ChecksumPolicy to the checksum
-// package's Policy, defaulting OnMissing to fail. It returns ok=false when no
-// policy is configured, in which case the digest is computed from the stream.
-func toChecksumPolicy(spec *v1.ChecksumPolicy) (checksum.Policy, bool) {
+// package's Policy, defaulting OnMissing to fail and compiling each externalUrl
+// source's URL CEL expression against the wget input. It returns ok=false when
+// no policy is configured, in which case the digest is computed from the stream.
+func toChecksumPolicy(spec *v1.ChecksumPolicy, wget *v1.Wget) (checksum.Policy, bool, error) {
 	if spec == nil {
-		return checksum.Policy{}, false
+		return checksum.Policy{}, false, nil
 	}
 	policy := checksum.Policy{OnMissing: checksum.Fail}
 	if spec.OnMissing == v1.OnMissingCompute {
@@ -212,9 +214,8 @@ func toChecksumPolicy(spec *v1.ChecksumPolicy) (checksum.Policy, bool) {
 	}
 	for _, src := range spec.Sources {
 		s := checksum.Source{
-			Type:        checksum.SourceType(src.Type),
-			Headers:     src.Headers,
-			URLTemplate: src.URLTemplate,
+			Type:    checksum.SourceType(src.Type),
+			Headers: src.Headers,
 		}
 		// Unknown extensions are dropped here; RequiredAlgorithms/Resolve then fall
 		// back to the full supported set, and an unresolvable checksum surfaces via
@@ -222,9 +223,16 @@ func toChecksumPolicy(spec *v1.ChecksumPolicy) (checksum.Policy, bool) {
 		if algs, err := checksum.AlgorithmsFromExtensions(src.Algorithms); err == nil {
 			s.Algorithms = algs
 		}
+		if src.Type == v1.ChecksumSourceExternalURL {
+			resolver, err := checksumURLResolver(src.URL, wget)
+			if err != nil {
+				return checksum.Policy{}, false, err
+			}
+			s.ResolveURL = resolver
+		}
 		policy.Sources = append(policy.Sources, s)
 	}
-	return policy, true
+	return policy, true, nil
 }
 
 // digestAlgorithms maps the algorithms a policy may verify against to download

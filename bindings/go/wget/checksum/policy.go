@@ -23,11 +23,15 @@ type Source struct {
 	Type SourceType
 	// Headers are extra response header names to inspect (httpHeader).
 	Headers []string
-	// URLTemplate builds the checksum URL (externalUrl); empty uses the default.
-	URLTemplate string
 	// Algorithms restricts which algorithms the source considers, strongest first.
 	// Empty means all supported algorithms.
 	Algorithms []Algorithm
+	// ResolveURL renders the external checksum URL for the given algorithm on
+	// externalUrl sources. When nil, the default `<baseURL>.<alg.Extension>` is
+	// used. The caller receives baseURL from Input.URL, so a policy can express
+	// arbitrary URL shapes (e.g. via a CEL template) without this package
+	// depending on the templating language.
+	ResolveURL func(baseURL string, alg Algorithm) (string, error)
 }
 
 // OnMissing controls behaviour when no source yields an expected checksum.
@@ -58,9 +62,10 @@ type Input struct {
 	// downloaded bytes. It MUST contain every algorithm any source may verify
 	// against; the caller pre-computes them during the download.
 	Computed map[string]string
-	// Fetch retrieves an external checksum. When nil, externalUrl sources are
-	// skipped. Typically backed by [ExternalFetcher.Fetch].
-	Fetch func(ctx context.Context, baseURL string, algs []Algorithm) (Expected, bool, error)
+	// FetchURL retrieves the external checksum for a specific pre-resolved URL and
+	// algorithm. When nil, externalUrl sources are skipped. Typically backed by
+	// [ExternalFetcher.FetchURL].
+	FetchURL func(ctx context.Context, checksumURL string, alg Algorithm) (Expected, bool, error)
 }
 
 // Resolve applies the policy against a completed download: it walks the sources
@@ -88,14 +93,14 @@ func Resolve(ctx context.Context, policy Policy, in Input) (expected Expected, v
 				return exp, true, nil
 			}
 		case SourceExternalURL:
-			if in.Fetch == nil {
+			if in.FetchURL == nil {
 				continue
 			}
 			algs := src.Algorithms
 			if len(algs) == 0 {
 				algs = All
 			}
-			exp, ok, ferr := in.Fetch(ctx, in.URL, algs)
+			exp, ok, ferr := fetchExternal(ctx, src, in, algs)
 			if ferr != nil {
 				return Expected{}, false, ferr
 			}
@@ -147,4 +152,33 @@ func orFail(m OnMissing) OnMissing {
 		return Fail
 	}
 	return m
+}
+
+// fetchExternal walks algs in order and returns the first external checksum that
+// resolves for src. It honors a per-source URL resolver when set, otherwise
+// defaults to `<baseURL>.<alg.Extension>` — Maven's convention.
+func fetchExternal(ctx context.Context, src Source, in Input, algs []Algorithm) (Expected, bool, error) {
+	for _, alg := range algs {
+		u, err := resolveExternalURL(src, in.URL, alg)
+		if err != nil {
+			return Expected{}, false, err
+		}
+		exp, ok, err := in.FetchURL(ctx, u, alg)
+		if err != nil {
+			return Expected{}, false, err
+		}
+		if ok {
+			return exp, true, nil
+		}
+	}
+	return Expected{}, false, nil
+}
+
+// resolveExternalURL returns the checksum URL src expects for alg. A nil
+// Source.ResolveURL means the default `<baseURL>.<alg.Extension>`.
+func resolveExternalURL(src Source, baseURL string, alg Algorithm) (string, error) {
+	if src.ResolveURL == nil {
+		return baseURL + "." + alg.Extension, nil
+	}
+	return src.ResolveURL(baseURL, alg)
 }
