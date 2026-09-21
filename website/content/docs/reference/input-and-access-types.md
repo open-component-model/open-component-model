@@ -305,6 +305,52 @@ into OCI storage and signing. If the download does not match the expected
 checksum, construction fails before anything is stored.
 {{< /callout >}}
 
+#### Configuring the policy centrally {#wget-checksum-policy-config}
+
+Descriptor-level `checksumPolicy` is the per-resource lever, but the same
+behaviour can be steered centrally through the `wget.config.ocm.software/v1alpha1`
+configuration carried inside the central `generic.config.ocm.software/v1`
+config. The same configuration applies both to the wget input path (this
+section) and the wget access digest processor
+([`Wget/v1` access]({{< relref "input-and-access-types.md" >}}#wgetv1-access)),
+so descriptor authors and operators steer both paths with one knob.
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  # transport-level knobs — timeouts, TLS, retries
+  - type: http.config.ocm.software/v1alpha1
+    timeout: 30s
+
+  # wget behavioural knobs
+  - type: wget.config.ocm.software/v1alpha1
+    defaultChecksumPolicy:
+      onMissing: compute
+      sources:
+        - type: httpHeader
+        - type: externalUrl
+          algorithms: [sha256, sha1]
+    hosts:
+      "repo.example.com":
+        checksumPolicy:
+          onMissing: fail
+          sources: [{type: httpHeader}]
+```
+
+Precedence for the effective policy on a given wget URL (tightest wins):
+
+1. A `checksumPolicy` declared inline on the resource.
+2. A `hosts.<host>.checksumPolicy` whose key matches the URL's host; entries
+   keyed `host:port` win over bare-hostname entries.
+3. `defaultChecksumPolicy` at the top level.
+4. No policy — compute the storage digest without external verification.
+
+`externalUrl` sources use a CEL expression that depends on the wget input's
+other fields (`resource.url.*`, `mediaType`, …). They are only supported on the
+input side; specifying `externalUrl` in a config that also applies to the
+access-side digest processor causes construction to fail with a clear error
+for that path.
+
 ### `S3/v2` {#s3v2-input}
 
 Downloads a single object from an S3 or S3-compatible bucket while OCM constructs the component version, and stores it

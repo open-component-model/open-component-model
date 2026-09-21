@@ -14,7 +14,9 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/wget/input"
+	wgetconfigv1alpha1 "ocm.software/open-component-model/bindings/go/wget/spec/config/v1alpha1"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
+	v1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
 )
 
 // Digests of the ASCII payload "hello world".
@@ -424,5 +426,108 @@ func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
 		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
 		assert.Equal(t, "Bearer my-token", artifactAuth, "artifact fetch still carries credentials")
 		assert.Empty(t, httpMirrorAuth, "plain-HTTP checksum fetch must NOT carry credentials even for the same host")
+	})
+}
+
+// TestProcessResource_ChecksumPolicy_ConfigDriven confirms that the shared
+// wget.config.ocm.software config is honored on the input side:
+//
+//   - a defaultChecksumPolicy applies to a resource whose spec omits its own,
+//   - a host-scoped override wins over the default,
+//   - a spec-level policy on the resource wins over both.
+func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
+	t.Parallel()
+	content := []byte("hello world")
+
+	// Handler that advertises the correct SHA-256 via the x-checksum-sha256
+	// header (Artifactory-style) and, on the ".sha256" sibling, serves that
+	// same digest so both httpHeader and externalUrl sources can match.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
+			return
+		}
+		w.Header().Set("x-checksum-sha256", hwSHA256)
+		_, _ = w.Write(content)
+	})
+
+	t.Run("default policy applies when the spec has none", func(t *testing.T) {
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		cfg := &wgetconfigv1alpha1.Config{
+			DefaultChecksumPolicy: &v1.ChecksumPolicy{
+				OnMissing: v1.OnMissingFail,
+				Sources:   []v1.ChecksumSource{{Type: v1.ChecksumSourceHTTPHeader}},
+			},
+		}
+		method := &input.InputMethod{WgetConfig: cfg}
+		result, err := method.ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
+			"url": server.URL + "/artifact",
+		}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
+	})
+
+	t.Run("host override wins over default", func(t *testing.T) {
+		// Two servers on different ports: default policy says "compute"
+		// (any bytes accepted), host override for the artifact's actual host
+		// says "fail". A tampered response should therefore fail against the
+		// host override but would silently succeed under the default.
+		badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			// Advertise a mismatching digest that would fail a fail-policy but
+			// go unnoticed by compute-on-missing.
+			w.Header().Set("x-checksum-sha256", strings.Repeat("f", 64))
+			_, _ = w.Write(content)
+		}))
+		defer badServer.Close()
+		host, _, _ := strings.Cut(strings.TrimPrefix(badServer.URL, "http://"), "/")
+
+		cfg := &wgetconfigv1alpha1.Config{
+			DefaultChecksumPolicy: &v1.ChecksumPolicy{
+				OnMissing: v1.OnMissingCompute,
+				Sources:   []v1.ChecksumSource{{Type: v1.ChecksumSourceHTTPHeader}},
+			},
+			Hosts: map[string]*wgetconfigv1alpha1.HostConfig{
+				host: {
+					ChecksumPolicy: &v1.ChecksumPolicy{
+						OnMissing: v1.OnMissingFail,
+						Sources:   []v1.ChecksumSource{{Type: v1.ChecksumSourceHTTPHeader}},
+					},
+				},
+			},
+		}
+		method := &input.InputMethod{WgetConfig: cfg}
+		_, err := method.ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
+			"url": badServer.URL + "/artifact",
+		}), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "checksum mismatch")
+	})
+
+	t.Run("spec policy wins over config", func(t *testing.T) {
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		// Config says fail-on-missing with an externalUrl source that would
+		// need a sibling. Spec says: use httpHeader instead. Spec wins, so
+		// the httpHeader source verifies the download and construction
+		// succeeds.
+		cfg := &wgetconfigv1alpha1.Config{
+			DefaultChecksumPolicy: &v1.ChecksumPolicy{
+				OnMissing: v1.OnMissingFail,
+				Sources:   []v1.ChecksumSource{{Type: v1.ChecksumSourceExternalURL, Algorithms: []string{"md5"}}},
+			},
+		}
+		method := &input.InputMethod{WgetConfig: cfg}
+		result, err := method.ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
+			"url": server.URL + "/artifact",
+			"checksumPolicy": map[string]any{
+				"onMissing": "fail",
+				"sources":   []any{map[string]any{"type": "httpHeader"}},
+			},
+		}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
 	})
 }

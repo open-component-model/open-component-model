@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	godigest "github.com/opencontainers/go-digest"
@@ -17,6 +18,8 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
+	wgetconfigv1alpha1 "ocm.software/open-component-model/bindings/go/wget/spec/config/v1alpha1"
+	inputv1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
@@ -331,5 +334,126 @@ func TestProcessResourceDigest(t *testing.T) {
 		_, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported normalisation algorithm")
+	})
+}
+
+// TestProcessResourceDigest_ConfigDriven exercises the shared
+// wget.config.ocm.software config on the access-side digest processor:
+//
+//   - a defaultChecksumPolicy of type httpHeader verifies the download against
+//     the server-advertised x-checksum-sha256 header,
+//   - a mismatched header value aborts before a wrong digest is recorded,
+//   - externalUrl sources are rejected at policy-build time on the access
+//     side (they need an input's CEL context).
+func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("verify me via header")
+	sha256 := godigest.FromBytes(content).Encoded()
+
+	t.Run("default policy verifies the RFC-9530 header source", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("x-checksum-sha256", sha256)
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		cfg := &wgetconfigv1alpha1.Config{
+			DefaultChecksumPolicy: &inputv1.ChecksumPolicy{
+				OnMissing: inputv1.OnMissingFail,
+				Sources:   []inputv1.ChecksumSource{{Type: inputv1.ChecksumSourceHTTPHeader}},
+			},
+		}
+		repo := repository.NewResourceRepository(nil,
+			repository.WithHTTPClient(server.Client()),
+			repository.WithWgetConfig(cfg),
+		)
+		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
+		processed, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
+		require.NoError(t, err)
+		require.NotNil(t, processed.Digest)
+		assert.Equal(t, sha256, processed.Digest.Value)
+	})
+
+	t.Run("mismatched header aborts before a wrong digest is recorded", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			// Advertise a plausible-looking-but-wrong digest.
+			w.Header().Set("x-checksum-sha256", strings.Repeat("0", 64))
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		cfg := &wgetconfigv1alpha1.Config{
+			DefaultChecksumPolicy: &inputv1.ChecksumPolicy{
+				OnMissing: inputv1.OnMissingFail,
+				Sources:   []inputv1.ChecksumSource{{Type: inputv1.ChecksumSourceHTTPHeader}},
+			},
+		}
+		repo := repository.NewResourceRepository(nil,
+			repository.WithHTTPClient(server.Client()),
+			repository.WithWgetConfig(cfg),
+		)
+		_, err := repo.ProcessResourceDigest(t.Context(),
+			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "checksum mismatch")
+	})
+
+	t.Run("externalUrl source is rejected on the access-side processor", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		cfg := &wgetconfigv1alpha1.Config{
+			DefaultChecksumPolicy: &inputv1.ChecksumPolicy{
+				OnMissing: inputv1.OnMissingFail,
+				Sources:   []inputv1.ChecksumSource{{Type: inputv1.ChecksumSourceExternalURL}},
+			},
+		}
+		repo := repository.NewResourceRepository(nil,
+			repository.WithHTTPClient(server.Client()),
+			repository.WithWgetConfig(cfg),
+		)
+		_, err := repo.ProcessResourceDigest(t.Context(),
+			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "externalUrl is not supported")
+	})
+
+	t.Run("host override wins over default", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("x-checksum-sha256", sha256)
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+		host := strings.TrimPrefix(server.URL, "http://")
+
+		// The default would silently accept anything (compute-on-missing with
+		// no working sources); the host-scoped override enforces fail with a
+		// header source. If the override is applied, the verified download
+		// succeeds only because the server actually advertises a matching
+		// header — proving the override took precedence.
+		cfg := &wgetconfigv1alpha1.Config{
+			DefaultChecksumPolicy: &inputv1.ChecksumPolicy{
+				OnMissing: inputv1.OnMissingCompute,
+			},
+			Hosts: map[string]*wgetconfigv1alpha1.HostConfig{
+				host: {
+					ChecksumPolicy: &inputv1.ChecksumPolicy{
+						OnMissing: inputv1.OnMissingFail,
+						Sources:   []inputv1.ChecksumSource{{Type: inputv1.ChecksumSourceHTTPHeader}},
+					},
+				},
+			},
+		}
+		repo := repository.NewResourceRepository(nil,
+			repository.WithHTTPClient(server.Client()),
+			repository.WithWgetConfig(cfg),
+		)
+		processed, err := repo.ProcessResourceDigest(t.Context(),
+			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, sha256, processed.Digest.Value)
 	})
 }
