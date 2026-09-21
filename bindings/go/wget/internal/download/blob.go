@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"sync/atomic"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -27,9 +28,10 @@ type Blob struct {
 	// digests holds hex digests computed during the download, keyed by the
 	// caller-supplied [DigestAlgorithm.Name].
 	digests map[string]string
-	// precalculated, when non-empty, is returned by [Blob.Digest] verbatim,
-	// avoiding a re-read of the file to recompute the digest.
-	precalculated string
+	// precalculated is returned by [Blob.Digest] verbatim when set, avoiding a
+	// re-read of the file to recompute the digest. Concurrent-safe like the
+	// other precalculatable blob implementations (see blob/inmemory.Blob).
+	precalculated atomic.Pointer[string]
 }
 
 var (
@@ -56,20 +58,21 @@ func (b *Blob) Digests() map[string]string {
 // Digest returns the precalculated digest when one was set, otherwise it falls
 // back to the embedded blob's lazily computed digest.
 func (b *Blob) Digest() (string, bool) {
-	if b.precalculated != "" {
-		return b.precalculated, true
+	if p := b.precalculated.Load(); p != nil {
+		return *p, true
 	}
 	return b.Blob.Digest()
 }
 
 // HasPrecalculatedDigest reports whether a precalculated digest was set.
 func (b *Blob) HasPrecalculatedDigest() bool {
-	return b.precalculated != ""
+	return b.precalculated.Load() != nil
 }
 
 // SetPrecalculatedDigest sets the digest returned by [Blob.Digest] verbatim.
+// Safe to call concurrently with reads.
 func (b *Blob) SetPrecalculatedDigest(digest string) {
-	b.precalculated = digest
+	b.precalculated.Store(&digest)
 }
 
 // removeTempFile deletes the file at path. A file that is already gone is not an
