@@ -29,7 +29,7 @@ type Options struct {
 
 	// TempDir is the directory the tarball is written to. Empty uses the OS
 	// temporary directory. The file backing the returned blob is created here and
-	// outlives [Download], so the caller owns its lifetime.
+	// outlives [Download] and is removed when the returned blob is closed or reclaimed.
 	TempDir string
 }
 

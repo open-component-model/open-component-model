@@ -12,7 +12,7 @@
     },
     "registry": {
       "type": "string",
-      "description": "Registry is the base URL of the npm registry."
+      "description": "Registry is the HTTP(S) base URL of the npm registry or a file:// path.\nFor file registries, the literal file:// prefix is stripped and the\nremaining absolute or relative path is used unchanged."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
@@ -36,7 +36,7 @@
     },
     "version": {
       "type": "string",
-      "description": "Version is the exact version of the npm package. Version ranges and\ndist-tags are not accepted."
+      "description": "Version identifies the npm package version. Any nonempty value is\naccepted for legacy compatibility, including dist-tags and version ranges."
     }
   },
   "required": [

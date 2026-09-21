@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -15,12 +16,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/npm/internal/download"
 	accessv1 "ocm.software/open-component-model/bindings/go/npm/spec/access/v1"
 	credv1 "ocm.software/open-component-model/bindings/go/npm/spec/credentials/v1"
@@ -189,7 +191,7 @@ func standard(t *testing.T, reg *registry, name string) []byte {
 	return tarball
 }
 
-func read(t *testing.T, b *filesystem.Blob) []byte {
+func read(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	t.Helper()
 
 	rc, err := b.ReadCloser()
@@ -255,12 +257,14 @@ func (tc downloadCase) run(t *testing.T) {
 	if tc.opts != nil {
 		opts = tc.opts(tarball)
 	}
+	opts.TempDir = t.TempDir()
 
 	b, err := download.Download(t.Context(), access, tc.creds, opts)
 	if tc.wantErr != "" {
 		r.ErrorContains(err, tc.wantErr)
 	} else {
 		r.NoError(err)
+		t.Cleanup(func() { r.NoError(b.Close()) })
 		r.Equal(tarball, read(t, b))
 	}
 
@@ -360,14 +364,12 @@ func TestDownload(t *testing.T) {
 		fallbackCase(http.StatusNotFound),
 		fallbackCase(http.StatusMethodNotAllowed),
 		{
-			// the version endpoint resolves dist-tags, so it can answer with another
-			// version whose checksums would verify its own tarball perfectly
+			// OCM v1 trusts the version endpoint, even for a different version.
 			name: "version endpoint resolving to another version",
 			setup: func(t *testing.T, reg *registry) []byte {
-				wanted, other := tgz(t, pkg, version), tgz(t, pkg, "99.0.0")
+				other := tgz(t, pkg, "99.0.0")
 				reg.serveJSON("/"+pkg+"/"+version, versionDoc(pkg, "99.0.0", reg.publish(pkg+"/other", other)))
-				reg.servePackument(pkg, version, reg.publish(pkg, wanted))
-				return wanted
+				return other
 			},
 		}, {
 			// a package old enough to publish only a shasum
@@ -536,12 +538,12 @@ func TestDownload(t *testing.T) {
 			},
 			wantErr: "not a 40-character SHA-1",
 		}, {
-			name: "tarball url with an unsupported scheme",
+			name: "HTTP metadata cannot read a local tarball",
 			setup: func(t *testing.T, reg *registry) []byte {
 				reg.serveVersionDoc(pkg, version, dist{Tarball: "file:///etc/passwd"})
 				return nil
 			},
-			wantErr: `unsupported tarball url scheme "file"`,
+			wantErr: "file tarballs require an explicitly file-backed registry",
 		}, {
 			name: "tarball not found",
 			setup: func(t *testing.T, reg *registry) []byte {
@@ -614,22 +616,178 @@ func TestDownload(t *testing.T) {
 			name:    "registry with an unsupported scheme",
 			setup:   noPackage,
 			access:  func(*registry) *accessv1.NPM { return npmAccess("ssh://registry.npmjs.org", pkg, version) },
-			wantErr: "registry must use the http or https scheme",
+			wantErr: "registry must use",
 		}, {
 			name:    "package missing",
 			setup:   noPackage,
 			access:  func(reg *registry) *accessv1.NPM { return npmAccess(reg.URL, "", version) },
 			wantErr: "package is required",
 		}, {
-			name:    "version is a dist-tag",
-			setup:   noPackage,
-			access:  func(reg *registry) *accessv1.NPM { return npmAccess(reg.URL, pkg, "latest") },
-			wantErr: "must be an exact semantic version",
+			name: "version is a dist-tag",
+			setup: func(t *testing.T, reg *registry) []byte {
+				tarball := tgz(t, pkg, version)
+				reg.serveJSON("/"+pkg+"/latest", versionDoc(pkg, version, reg.publish(pkg, tarball)))
+				return tarball
+			},
+			access: func(reg *registry) *accessv1.NPM { return npmAccess(reg.URL, pkg, "latest") },
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, tc.run)
+	}
+}
+
+func TestDownloadLegacySelectorsAndNames(t *testing.T) {
+	for _, name := range []string{pkg, "UpperCase_Name", "@Odd_Scope/UpperCase.Name"} {
+		for _, selector := range []string{"latest", "v1.2.3", "^1.2.3", "next"} {
+			for _, fallback := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/fallback=%t", name, selector, fallback), func(t *testing.T) {
+					reg := newRegistry(t)
+					tarball := tgz(t, name, "1.2.3")
+					d := reg.publish(name, tarball)
+					if fallback {
+						reg.servePackument(name, selector, d)
+					} else {
+						reg.serveJSON("/"+name+"/"+selector, versionDoc(name, "1.2.3", d))
+					}
+					b, err := download.Download(t.Context(), npmAccess(reg.URL, name, selector), nil, download.Options{TempDir: t.TempDir()})
+					require.NoError(t, err)
+					require.Equal(t, tarball, read(t, b))
+				})
+			}
+		}
+	}
+
+	t.Run("packument does not resolve tags or ranges locally", func(t *testing.T) {
+		reg := newRegistry(t)
+		d := reg.publish(pkg, tgz(t, pkg, version))
+		body, err := json.Marshal(map[string]any{
+			"dist-tags": map[string]string{"latest": version},
+			"versions":  map[string]any{version: map[string]any{"dist": d}},
+		})
+		require.NoError(t, err)
+		reg.serveJSON("/"+pkg, body)
+		for _, selector := range []string{"latest", "^17.0.0"} {
+			_, err := download.Download(t.Context(), npmAccess(reg.URL, pkg, selector), nil, download.Options{TempDir: t.TempDir()})
+			require.ErrorContains(t, err, "not found in registry")
+		}
+	})
+}
+
+func TestDownloadFileSecurity(t *testing.T) {
+	tarball := tgz(t, pkg, version)
+	localTarball := filepath.Join(t.TempDir(), "tarball.tgz")
+	require.NoError(t, os.WriteFile(localTarball, tarball, 0o600))
+
+	for _, source := range []string{"metadata", "tarball", "redirected tarball"} {
+		t.Run("HTTP cannot read local "+source, func(t *testing.T) {
+			reg := newRegistry(t)
+			d := dist{Tarball: "file://" + localTarball, Integrity: integrityOf(tarball)}
+			if source == "metadata" {
+				metadata := filepath.Join(t.TempDir(), "metadata")
+				require.NoError(t, os.WriteFile(metadata, versionDoc(pkg, version, d), 0o600))
+				reg.handle("/", func(w http.ResponseWriter, req *http.Request) {
+					http.Redirect(w, req, "file://"+metadata, http.StatusFound)
+				})
+			} else {
+				if source == "redirected tarball" {
+					d.Tarball = reg.URL + "/tarball"
+					reg.handle("/tarball", func(w http.ResponseWriter, req *http.Request) {
+						http.Redirect(w, req, "file://"+localTarball, http.StatusFound)
+					})
+				}
+				reg.serveVersionDoc(pkg, version, d)
+			}
+			tempDir := t.TempDir()
+			_, err := download.Download(t.Context(), npmAccess(reg.URL, pkg, version), nil, download.Options{TempDir: tempDir})
+			require.Error(t, err)
+			entries, err := os.ReadDir(tempDir)
+			require.NoError(t, err)
+			require.Empty(t, entries)
+		})
+	}
+
+	t.Run("file registry does not send credentials to HTTP tarball", func(t *testing.T) {
+		reg := newRegistry(t)
+		d := reg.publish(pkg, tarball)
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, pkg), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(root, pkg, version), versionDoc(pkg, version, d), 0o600))
+		b, err := download.Download(t.Context(), npmAccess("file://"+root, pkg, version),
+			&credv1.NPMCredentials{Token: "local-registry-token"}, download.Options{TempDir: t.TempDir()})
+		require.NoError(t, err)
+		require.Equal(t, tarball, read(t, b))
+		require.Empty(t, reg.headerFor("/"+pkg+"/-/tarball.tgz").Get("Authorization"))
+	})
+}
+
+func TestDownloadFiles(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		relative       bool
+		fallback       bool
+		badChecksum    bool
+		missingTarball bool
+		cancel         bool
+		opts           download.Options
+		wantErr        string
+	}{
+		{name: "absolute literal paths"},
+		{name: "relative literal paths", relative: true},
+		{name: "packument fallback", fallback: true},
+		{name: "checksum failure cleans up", badChecksum: true, wantErr: "mismatch"},
+		{name: "missing tarball", missingTarball: true, wantErr: "no such file"},
+		{name: "metadata limit", opts: download.Options{MaxMetadataSize: 1}, wantErr: "maximum allowed size"},
+		{name: "tarball limit", opts: download.Options{MaxDownloadSize: 1}, wantErr: "maximum allowed size"},
+		{name: "canceled context", cancel: true, wantErr: "context canceled"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if tc.relative {
+				t.Chdir(root)
+				root = "."
+			}
+			// Percent sequences, invalid URL escapes, spaces, query and fragment
+			// characters all belong to the filename, not URL syntax.
+			registryPath := filepath.Join(root, "registry %20 %zz #?")
+			require.NoError(t, os.MkdirAll(registryPath, 0o700))
+			tarballPath := filepath.Join(root, "tarball %20 %zz #?.tgz")
+			tarball := tgz(t, pkg, version)
+			if !tc.missingTarball {
+				require.NoError(t, os.WriteFile(tarballPath, tarball, 0o600))
+			}
+			d := dist{Tarball: "file://" + tarballPath, Integrity: integrityOf(tarball)}
+			if tc.badChecksum {
+				d.Integrity = integrityOf([]byte("different"))
+			}
+			if tc.fallback {
+				require.NoError(t, os.WriteFile(filepath.Join(registryPath, pkg), packument(pkg, "latest", d), 0o600))
+			} else {
+				require.NoError(t, os.MkdirAll(filepath.Join(registryPath, pkg), 0o700))
+				require.NoError(t, os.WriteFile(filepath.Join(registryPath, pkg, "latest"), versionDoc(pkg, version, d), 0o600))
+			}
+			opts := tc.opts
+			opts.TempDir = t.TempDir()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc.cancel {
+				cancel()
+			}
+			b, err := download.Download(ctx, npmAccess("file://"+registryPath, pkg, "latest"), nil, opts)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				entries, err := os.ReadDir(opts.TempDir)
+				require.NoError(t, err)
+				require.Empty(t, entries)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tarball, read(t, b))
+			mediaType, ok := b.MediaType()
+			require.True(t, ok)
+			require.Equal(t, download.MediaTypeTGZ, mediaType)
+		})
 	}
 }
 

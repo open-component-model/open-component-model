@@ -2,34 +2,44 @@
 // typed credentials, the NpmRegistry consumer identity, and the resource
 // repository that downloads a package tarball.
 //
-// The access spec addresses one exact package version in one registry. Version
-// ranges and dist-tags are rejected, so a component version always resolves to
-// the same tarball.
+// The access spec preserves the registry, package and version values produced by
+// OCM v1. Version selectors such as dist-tags are passed to the registry's version
+// endpoint; there is no client-side tag or range resolution. Exact versions are
+// recommended for reproducibility. Packument fallback looks up the selector as an
+// exact key in the versions map.
 //
 // [ocm.software/open-component-model/bindings/go/npm/repository.ResourceRepository]
 // is the entry point. It resolves the version metadata of a package, downloads
-// the tarball that dist.tarball points to, and verifies it before handing it out;
-// a mismatch fails the download. Uploading to a registry is not supported.
+// the tarball that dist.tarball points to, and verifies published checksums;
+// a mismatch fails the download. Missing checksums produce a warning rather than
+// a failure. Uploading to a registry is not supported.
 //
 // Verification follows npm: the strongest algorithm in dist.integrity is checked
 // against any of the digests published for it, and dist.shasum is used only when
-// dist.integrity carries nothing usable. A dist.integrity in an algorithm this
-// version cannot compute is an error rather than a skipped check.
+// dist.integrity is absent or empty. Malformed integrity or integrity containing
+// only unsupported algorithms is an error rather than a skipped check.
 //
 // The registry is asked for the version document at <registry>/<package>/<version>
 // first and for the full packument at <registry>/<package> as a fallback. The
 // packument is the only path npm itself uses and the only one Nexus serves, so
-// any client error on the version URL falls back to it. The abbreviated packument
+// client errors other than 401/403 on the version URL fall back to it. The abbreviated packument
 // is requested where the registry offers it.
 //
-// The HTTP client is supplied by the caller through [repository.WithHTTPClient],
-// so the global OCM http configuration (timeouts, retries, TLS) applies; without
-// one, http.DefaultClient is used, which imposes no timeout.
+// The repository uses the shared OCM HTTP client with its configured timeouts,
+// retries and TLS settings, or a client supplied through [repository.WithHTTPClient].
+//
+// Explicit file:// registries read metadata and tarballs from the local filesystem.
+// As in OCM v1, the prefix is stripped literally, without percent decoding; relative
+// paths are relative to the process working directory. Local registries need no
+// credential identity. For safety, HTTP(S) registries cannot point to file://
+// tarballs: only an explicitly file-backed registry permits local file reads.
 //
 // Tarballs are streamed into a file under the configured temp folder rather than
 // buffered, so memory use stays flat regardless of package size. That file
-// outlives the download and is owned by the caller. There is no size limit by
-// default; [repository.WithMaxDownloadSize] adds one.
+// outlives the download and is owned by the returned blob. Callers can close the
+// blob through io.Closer to remove the file promptly; abandoned blobs also reclaim
+// their files when they become unreachable. There is no size limit by default;
+// [repository.WithMaxDownloadSize] adds one.
 //
 // Credentials are optional and resolved through the NpmRegistry consumer
 // identity, which is derived from the registry URL joined with the package name.

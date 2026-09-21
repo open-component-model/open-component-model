@@ -14,7 +14,6 @@ import (
 	godigest "github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpclient "ocm.software/open-component-model/bindings/go/http"
@@ -86,6 +85,12 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 		return nil, err
 	}
 
+	// Local registries do not consume registry credentials; their paths need not
+	// be parseable as URLs (OCM v1 treats everything after file:// literally).
+	if strings.HasPrefix(access.Registry, "file://") {
+		return nil, nil
+	}
+
 	identity, err := identityv1.IdentityFromRegistryAndPackage(access.Registry, access.Package)
 	if err != nil {
 		return nil, fmt.Errorf("error deriving npm identity: %w", err)
@@ -138,7 +143,7 @@ func (r *ResourceRepository) tempFolder() string {
 
 // download streams the package tarball into tempDir and returns it as a
 // file-backed blob. The file outlives this call and is owned by the caller.
-func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, tempDir string) (*filesystem.Blob, error) {
+func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, tempDir string) (*download.Blob, error) {
 	access, err := r.access(resource)
 	if err != nil {
 		return nil, err
@@ -189,6 +194,12 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource for digest processing: %w", err)
 	}
+
+	defer func() {
+		if closeErr := data.Close(); closeErr != nil {
+			slog.WarnContext(ctx, "failed to close temporary blob after digest processing", "err", closeErr)
+		}
+	}()
 
 	rc, err := data.ReadCloser()
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -151,6 +152,57 @@ func TestDownloadResource(t *testing.T) {
 	r.Equal("application/x-tgz", mediaType)
 }
 
+func TestLegacyFileResource(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "registry%literal")
+	name := "@scope/_legacy+package"
+	selector := "latest"
+	require.NoError(t, os.MkdirAll(filepath.Join(root, name), 0o700))
+	tarball := tgz(t)
+	tarballPath := filepath.Join(root, "package.tgz")
+	require.NoError(t, os.WriteFile(tarballPath, tarball, 0o600))
+	sum := sha512.Sum512(tarball)
+	metadata, err := json.Marshal(map[string]any{
+		"version": version,
+		"dist": map[string]string{
+			"tarball":   "file://" + tarballPath,
+			"integrity": "sha512-" + base64.StdEncoding.EncodeToString(sum[:]),
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(root, name, selector), metadata, 0o600))
+
+	for _, typ := range []string{"npm", "npm/v1", "NPM", "NPM/v1"} {
+		t.Run(typ, func(t *testing.T) {
+			access := npmAccess("file://"+root, name, selector)
+			access.Type = runtime.NewUnversionedType(typ)
+			res := resource(t, access)
+			repo := newRepository(t)
+			identity, err := repo.GetResourceCredentialConsumerIdentity(t.Context(), res)
+			require.NoError(t, err)
+			require.Nil(t, identity)
+			identity, err = repo.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), res)
+			require.NoError(t, err)
+			require.Nil(t, identity)
+
+			b, err := repo.DownloadResource(t.Context(), res, nil)
+			require.NoError(t, err)
+			rc, err := b.ReadCloser()
+			require.NoError(t, err)
+			data, err := io.ReadAll(rc)
+			require.NoError(t, err)
+			require.NoError(t, rc.Close())
+			require.Equal(t, tarball, data)
+
+			digested, err := repo.ProcessResourceDigest(t.Context(), res, nil)
+			require.NoError(t, err)
+			digest := sha256.Sum256(tarball)
+			require.Equal(t, hex.EncodeToString(digest[:]), digested.Digest.Value)
+			_, err = repo.ProcessResourceDigest(t.Context(), digested, nil)
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	r := require.New(t)
 
@@ -191,7 +243,7 @@ func TestInvalidResources(t *testing.T) {
 	t.Run("invalid access spec", func(t *testing.T) {
 		r := require.New(t)
 
-		_, err := repo.DownloadResource(t.Context(), resource(t, npmAccess("https://registry.npmjs.org", pkg, "latest")), nil)
+		_, err := repo.DownloadResource(t.Context(), resource(t, npmAccess("https://registry.npmjs.org", pkg, "")), nil)
 		r.ErrorContains(err, "invalid npm access spec")
 	})
 

@@ -17,6 +17,14 @@ import (
 // types are the access type names registered by the OCM v1 npm access type.
 var types = []string{"NPM/v1", "NPM", "npm", "npm/v1"}
 
+var legacyValues = []struct{ registry, pkg, version string }{
+	{"https://registry.npmjs.org", "@types/node", "20.11.5"},
+	{"https://registry.npmjs.org", ".unusual package", "latest"},
+	{"file:///abs/registry", "_package", "v1.2.3"},
+	{"file://relative/path", "scope/name", ">=1.0.0 <2.0.0"},
+	{"file://relative/a b%?#/registry", strings.Repeat("a", 215), "arbitrary version"},
+}
+
 func TestLegacyDocuments(t *testing.T) {
 	for _, typ := range types {
 		t.Run(typ, func(t *testing.T) {
@@ -28,19 +36,21 @@ func TestLegacyDocuments(t *testing.T) {
 			obj, err := access.Scheme.NewObject(parsed)
 			r.NoError(err)
 
-			// the documents OCM v1 serialised, in both encodings it used
-			for _, document := range []string{
-				fmt.Sprintf(`{"type":%q,"registry":"https://registry.npmjs.org","package":"@types/node","version":"20.11.5"}`, typ),
-				fmt.Sprintf("type: %s\nregistry: https://registry.npmjs.org\npackage: \"@types/node\"\nversion: 20.11.5\n", typ),
-			} {
-				r.NoError(access.Scheme.Decode(strings.NewReader(document), obj))
+			for _, values := range legacyValues {
+				// The documents OCM v1 serialised, in both encodings it used.
+				for _, document := range []string{
+					fmt.Sprintf(`{"type":%q,"registry":%q,"package":%q,"version":%q}`, typ, values.registry, values.pkg, values.version),
+					fmt.Sprintf("type: %s\nregistry: %q\npackage: %q\nversion: %q\n", typ, values.registry, values.pkg, values.version),
+				} {
+					r.NoError(access.Scheme.Decode(strings.NewReader(document), obj))
 
-				spec := obj.(*v1.NPM)
-				r.NoError(spec.Validate())
-				r.Equal(typ, spec.Type.String())
-				r.Equal("https://registry.npmjs.org", spec.Registry)
-				r.Equal("@types/node", spec.Package)
-				r.Equal("20.11.5", spec.Version)
+					spec := obj.(*v1.NPM)
+					r.NoError(spec.Validate())
+					r.Equal(typ, spec.Type.String())
+					r.Equal(values.registry, spec.Registry)
+					r.Equal(values.pkg, spec.Package)
+					r.Equal(values.version, spec.Version)
+				}
 			}
 		})
 	}
@@ -64,12 +74,14 @@ func TestGeneratedSchemaAliases(t *testing.T) {
 	r.NoError(err)
 
 	for _, typ := range types {
-		r.NoError(schema.Validate(map[string]any{
-			"type":     typ,
-			"registry": "https://registry.npmjs.org",
-			"package":  "lodash",
-			"version":  "4.17.21",
-		}))
+		for _, values := range legacyValues {
+			r.NoError(schema.Validate(map[string]any{
+				"type":     typ,
+				"registry": values.registry,
+				"package":  values.pkg,
+				"version":  values.version,
+			}))
+		}
 	}
 	r.Error(schema.Validate(map[string]any{
 		"type":     "NPM/v2",

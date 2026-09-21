@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -40,26 +41,40 @@ func TestValidate(t *testing.T) {
 		{name: "no registry", pkg: "lodash", version: "4.17.21", wantErr: "registry is required"},
 		{name: "no package", registry: "https://registry.npmjs.org", version: "4.17.21", wantErr: "package is required"},
 		{name: "no version", registry: "https://registry.npmjs.org", pkg: "lodash", wantErr: "version is required"},
-		{name: "ssh registry", registry: "ssh://registry.npmjs.org", pkg: "lodash", version: "4.17.21", wantErr: "must use the http or https scheme"},
-		{name: "schemeless registry", registry: "registry.npmjs.org", pkg: "lodash", version: "4.17.21", wantErr: "must use the http or https scheme"},
+		{name: "ssh registry", registry: "ssh://registry.npmjs.org", pkg: "lodash", version: "4.17.21", wantErr: "must use the http, https or file:// scheme"},
+		{name: "schemeless registry", registry: "registry.npmjs.org", pkg: "lodash", version: "4.17.21", wantErr: "must use the http, https or file:// scheme"},
 		{name: "registry without host", registry: "https://", pkg: "lodash", version: "4.17.21", wantErr: "has no host"},
-		{name: "leading dot package", registry: "https://registry.npmjs.org", pkg: ".lodash", version: "4.17.21", wantErr: "must not start with a period or an underscore"},
-		{name: "leading underscore package", registry: "https://registry.npmjs.org", pkg: "_lodash", version: "4.17.21", wantErr: "must not start with a period or an underscore"},
-		{name: "url unsafe package", registry: "https://registry.npmjs.org", pkg: "lo%64ash", version: "4.17.21", wantErr: "invalid package name"},
-		{name: "scope without name", registry: "https://registry.npmjs.org", pkg: "@scope/", version: "4.17.21", wantErr: "invalid package name"},
-		{name: "unscoped slash package", registry: "https://registry.npmjs.org", pkg: "scope/name", version: "4.17.21", wantErr: "invalid package name"},
-		{name: "space in package", registry: "https://registry.npmjs.org", pkg: "lo dash", version: "4.17.21", wantErr: "invalid package name"},
-		{name: "caret range", registry: "https://registry.npmjs.org", pkg: "lodash", version: "^4.17.21", wantErr: "exact semantic version"},
-		{name: "tilde range", registry: "https://registry.npmjs.org", pkg: "lodash", version: "~4.17.21", wantErr: "exact semantic version"},
-		{name: "comparison range", registry: "https://registry.npmjs.org", pkg: "lodash", version: ">=4.0.0 <5.0.0", wantErr: "exact semantic version"},
-		{name: "wildcard range", registry: "https://registry.npmjs.org", pkg: "lodash", version: "4.17.x", wantErr: "exact semantic version"},
-		{name: "partial version", registry: "https://registry.npmjs.org", pkg: "lodash", version: "4.17", wantErr: "exact semantic version"},
-		{name: "dist-tag", registry: "https://registry.npmjs.org", pkg: "lodash", version: "latest", wantErr: "exact semantic version"},
+		{name: "leading dot package", registry: "https://registry.npmjs.org", pkg: ".lodash", version: "4.17.21"},
+		{name: "leading underscore package", registry: "https://registry.npmjs.org", pkg: "_lodash", version: "4.17.21"},
+		{name: "url unsafe package", registry: "https://registry.npmjs.org", pkg: "lo%64ash", version: "4.17.21"},
+		{name: "scope without name", registry: "https://registry.npmjs.org", pkg: "@scope/", version: "4.17.21"},
+		{name: "unscoped slash package", registry: "https://registry.npmjs.org", pkg: "scope/name", version: "4.17.21"},
+		{name: "space in package", registry: "https://registry.npmjs.org", pkg: "lo dash", version: "4.17.21"},
+		{name: "caret range", registry: "https://registry.npmjs.org", pkg: "lodash", version: "^4.17.21"},
+		{name: "tilde range", registry: "https://registry.npmjs.org", pkg: "lodash", version: "~4.17.21"},
+		{name: "comparison range", registry: "https://registry.npmjs.org", pkg: "lodash", version: ">=4.0.0 <5.0.0"},
+		{name: "wildcard range", registry: "https://registry.npmjs.org", pkg: "lodash", version: "4.17.x"},
+		{name: "partial version", registry: "https://registry.npmjs.org", pkg: "lodash", version: "4.17"},
+		{name: "dist-tag", registry: "https://registry.npmjs.org", pkg: "lodash", version: "latest"},
+		{name: "prefixed version", registry: "https://registry.npmjs.org", pkg: "lodash", version: "v1.2.3"},
+		{name: "arbitrary version", registry: "https://registry.npmjs.org", pkg: "lodash", version: "not a semantic version"},
+		{name: "whitespace values", registry: "https://registry.npmjs.org", pkg: " ", version: " "},
+		{name: "unicode package", registry: "https://registry.npmjs.org", pkg: "包", version: "latest"},
+		{name: "absolute file registry", registry: "file:///abs/registry", pkg: "lodash", version: "latest"},
+		{name: "relative file registry", registry: "file://relative/path", pkg: "lodash", version: "v1.2.3"},
+		{name: "literal file path", registry: "file://relative/a b%?#/registry", pkg: "lodash", version: "latest"},
+		{name: "empty file path", registry: "file://", pkg: "lodash", version: "latest", wantErr: "file registry path is required"},
+		{name: "file without literal prefix", registry: "file:/abs/registry", pkg: "lodash", version: "latest", wantErr: "must use the http, https or file:// scheme"},
+		{name: "http without host", registry: "http:///path", pkg: "lodash", version: "latest", wantErr: "has no host"},
+		{name: "malformed registry", registry: "https://registry.npmjs.org/%zz", pkg: "lodash", version: "latest", wantErr: "invalid registry"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 
-			err := access(tc.registry, tc.pkg, tc.version).Validate()
+			spec := access(tc.registry, tc.pkg, tc.version)
+			before := *spec
+			err := spec.Validate()
+			r.Equal(before, *spec, "validation must preserve all fields")
 			if tc.wantErr == "" {
 				r.NoError(err)
 				return
@@ -71,11 +86,7 @@ func TestValidate(t *testing.T) {
 	t.Run("long package name", func(t *testing.T) {
 		r := require.New(t)
 
-		long := make([]byte, 215)
-		for i := range long {
-			long[i] = 'a'
-		}
-		r.ErrorContains(access("https://registry.npmjs.org", string(long), "1.0.0").Validate(), "214 characters")
+		r.NoError(access("https://registry.npmjs.org", strings.Repeat("a", 215), "1.0.0").Validate())
 	})
 
 	t.Run("nil access", func(t *testing.T) {

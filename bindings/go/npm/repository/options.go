@@ -41,9 +41,10 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 
 // WithHTTPClient sets the HTTP client used for registry requests.
 //
-// It is used exactly as given, so the settings of [WithHTTPConfig] do not apply
-// to it. Build one with ocmhttp.New to get the shared ocm client with custom
-// settings.
+// The settings of [WithHTTPConfig] do not apply to it. Its redirect policy is
+// preserved, with additional checks preventing cross-origin credential forwarding
+// and credentialed HTTPS downgrades. The original client is not modified.
+// Build one with ocmhttp.New to get the shared OCM client with custom settings.
 func WithHTTPClient(client *http.Client) Option {
 	return func(o *Options) {
 		o.Client = client

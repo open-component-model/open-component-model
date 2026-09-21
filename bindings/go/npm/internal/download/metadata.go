@@ -46,13 +46,13 @@ type document struct {
 // version returns the requested version out of the document, whether the
 // registry answered with a version document or with a full packument.
 //
-// The version endpoint resolves dist-tags, so "<registry>/<pkg>/latest" answers
-// with whatever latest points at. The checksums come out of that same document,
-// so a tarball for the wrong version would verify perfectly; the answer is only
-// accepted when it describes the version that was asked for.
+// As in OCM v1, the version endpoint resolves selectors (including dist-tags),
+// and a document carrying a tarball is accepted regardless of its version field.
+// Packuments use only the exact selector key; no local range or tag resolution
+// is performed.
 func (d *document) version(want string) (Version, bool) {
 	if d.Dist.Tarball != "" {
-		return d.Version, d.Version.Version == want
+		return d.Version, true
 	}
 	v, ok := d.Versions[want]
 	return v, ok && v.Dist.Tarball != ""
@@ -89,15 +89,15 @@ func resolveVersion(ctx context.Context, access *accessv1.NPM, creds *credv1.NPM
 	case err != nil:
 		// An undecodable body is not fatal: a registry behind an auth proxy answers
 		// 200 with an HTML login page, and the packument is still worth a try.
-		slog.DebugContext(ctx, "version metadata unusable, falling back to the packument", "url", versionURL, "err", err)
+		slog.DebugContext(ctx, "version metadata unusable, falling back to the packument", "url", safeURLString(versionURL), "err", redact(err))
 	case status == http.StatusOK:
 		if v, ok := doc.version(access.Version); ok {
 			return v, nil
 		}
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		return Version{}, fmt.Errorf("version metadata request to %s returned status %d", versionURL, status)
+		return Version{}, fmt.Errorf("version metadata request to %s returned status %d", safeURLString(versionURL), status)
 	case status < 400 || status >= 500:
-		return Version{}, fmt.Errorf("version metadata request to %s returned status %d", versionURL, status)
+		return Version{}, fmt.Errorf("version metadata request to %s returned status %d", safeURLString(versionURL), status)
 	}
 
 	packumentURL := packageURL(access.Registry, access.Package)
@@ -107,12 +107,12 @@ func resolveVersion(ctx context.Context, access *accessv1.NPM, creds *credv1.NPM
 		return Version{}, err
 	}
 	if status != http.StatusOK {
-		return Version{}, fmt.Errorf("package metadata request to %s returned status %d", packumentURL, status)
+		return Version{}, fmt.Errorf("package metadata request to %s returned status %d", safeURLString(packumentURL), status)
 	}
 
 	v, ok := doc.version(access.Version)
 	if !ok {
-		return Version{}, fmt.Errorf("version %q of package %q not found in registry %s", access.Version, access.Package, access.Registry)
+		return Version{}, fmt.Errorf("version %q of package %q not found in registry %s", access.Version, access.Package, safeURLString(access.Registry))
 	}
 
 	return v, nil
@@ -125,7 +125,7 @@ func resolveVersion(ctx context.Context, access *accessv1.NPM, creds *credv1.NPM
 func getDocument(ctx context.Context, url string, creds *credv1.NPMCredentials, opts Options) (document, int, error) {
 	resp, err := get(ctx, url, creds, opts)
 	if err != nil {
-		return document{}, 0, err
+		return document{}, 0, redact(err)
 	}
 	defer closeBody(ctx, resp)
 
@@ -136,14 +136,14 @@ func getDocument(ctx context.Context, url string, creds *credv1.NPMCredentials, 
 	body := io.Reader(resp.Body)
 	if limit := opts.MaxMetadataSize; limit > 0 {
 		if resp.ContentLength > limit {
-			return document{}, resp.StatusCode, fmt.Errorf("%w: %s is %d bytes, limit is %d", errMetadataTooLarge, url, resp.ContentLength, limit)
+			return document{}, resp.StatusCode, fmt.Errorf("%w: %s is %d bytes, limit is %d", errMetadataTooLarge, safeURLString(url), resp.ContentLength, limit)
 		}
-		body = &limitedReader{r: io.LimitReader(resp.Body, limit+1), limit: limit, url: url}
+		body = &limitedReader{r: io.LimitReader(resp.Body, limit+1), limit: limit, url: safeURLString(url)}
 	}
 
 	var doc document
 	if err := json.NewDecoder(body).Decode(&doc); err != nil {
-		return document{}, resp.StatusCode, fmt.Errorf("cannot decode metadata document at %s: %w", url, err)
+		return document{}, resp.StatusCode, fmt.Errorf("cannot decode metadata document at %s: %w", safeURLString(url), redact(err))
 	}
 
 	return doc, resp.StatusCode, nil
@@ -167,7 +167,7 @@ func (l *limitedReader) Read(p []byte) (int, error) {
 	n, err := l.r.Read(p)
 	l.read += int64(n)
 	if l.read > l.limit {
-		return n, fmt.Errorf("%w: %s, limit is %d bytes", errMetadataTooLarge, l.url, l.limit)
+		return n, fmt.Errorf("%w: %s, limit is %d bytes", errMetadataTooLarge, safeURLString(l.url), l.limit)
 	}
 	return n, err
 }

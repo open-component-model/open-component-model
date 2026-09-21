@@ -22,7 +22,6 @@ import (
 	"slices"
 	"strings"
 
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	accessv1 "ocm.software/open-component-model/bindings/go/npm/spec/access/v1"
 	credv1 "ocm.software/open-component-model/bindings/go/npm/spec/credentials/v1"
 )
@@ -38,14 +37,18 @@ const (
 // its tarball and returns it as a blob backed by a file on disk. The tarball is
 // streamed rather than buffered, so memory use stays flat regardless of package
 // size; the file is created under [Options.TempDir], outlives this call and is
-// owned by the caller.
+// owned by the returned blob. Close the blob to remove the file promptly; an
+// abandoned blob also reclaims its file once it becomes unreachable.
 //
-// The tarball is verified against dist.integrity and dist.shasum before the blob
-// is returned, so a blob that reaches the caller has the content the registry
-// published. A checksum mismatch fails the download and removes the file.
-func Download(ctx context.Context, access *accessv1.NPM, creds *credv1.NPMCredentials, opts Options) (*filesystem.Blob, error) {
+// Published checksums are verified before the blob is returned. A mismatch fails
+// the download and removes the file; missing checksums produce a warning.
+//
+// An explicitly file://-backed registry may read local metadata and file://
+// tarballs. Paths are literal strings after the file:// prefix (including relative
+// paths), not percent-decoded URLs. HTTP metadata cannot authorize local reads.
+func Download(ctx context.Context, access *accessv1.NPM, creds *credv1.NPMCredentials, opts Options) (*Blob, error) {
 	if err := access.Validate(); err != nil {
-		return nil, err
+		return nil, redact(err)
 	}
 
 	if opts.MaxMetadataSize == 0 {
@@ -62,7 +65,7 @@ func Download(ctx context.Context, access *accessv1.NPM, creds *credv1.NPMCreden
 
 // downloadTarball streams dist.tarball into a temporary file, hashing it on the
 // way, and fails if a published checksum does not match what was written.
-func downloadTarball(ctx context.Context, access *accessv1.NPM, meta Version, creds *credv1.NPMCredentials, opts Options) (_ *filesystem.Blob, err error) {
+func downloadTarball(ctx context.Context, access *accessv1.NPM, meta Version, creds *credv1.NPMCredentials, opts Options) (_ *Blob, err error) {
 	registry, err := registryURL(access.Registry)
 	if err != nil {
 		return nil, err
@@ -70,11 +73,21 @@ func downloadTarball(ctx context.Context, access *accessv1.NPM, meta Version, cr
 
 	// Resolving against the registry leaves an absolute URL untouched and turns a
 	// relative one, which some registries publish, into the intended absolute URL.
-	tarball, err := registry.Parse(meta.Dist.Tarball)
-	if err != nil {
-		return nil, fmt.Errorf("invalid tarball url %q: %w", meta.Dist.Tarball, err)
+	rawTarball := meta.Dist.Tarball
+	var tarball *url.URL
+	if strings.HasPrefix(rawTarball, "file://") {
+		if !strings.HasPrefix(access.Registry, "file://") {
+			return nil, fmt.Errorf("file tarballs require an explicitly file-backed registry")
+		}
+		tarball = &url.URL{Scheme: "file", Path: strings.TrimPrefix(rawTarball, "file://")}
+	} else {
+		tarball, err = registry.Parse(rawTarball)
+		if err != nil {
+			return nil, fmt.Errorf("invalid tarball url %q: %w", safeURLString(rawTarball), redact(err))
+		}
+		rawTarball = tarball.String()
 	}
-	if tarball.Scheme != "http" && tarball.Scheme != "https" {
+	if tarball.Scheme != "http" && tarball.Scheme != "https" && !strings.HasPrefix(meta.Dist.Tarball, "file://") {
 		return nil, fmt.Errorf("unsupported tarball url scheme %q: only http and https are allowed", tarball.Scheme)
 	}
 
@@ -88,7 +101,7 @@ func downloadTarball(ctx context.Context, access *accessv1.NPM, meta Version, cr
 		return nil, err
 	}
 
-	resp, err := getTarball(ctx, tarball.String(), access.Registry, creds, opts)
+	resp, err := getTarball(ctx, rawTarball, access.Registry, creds, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +148,7 @@ func downloadTarball(ctx context.Context, access *accessv1.NPM, meta Version, cr
 		err = closeErr
 	}
 	if err != nil {
-		return nil, fmt.Errorf("error writing tarball from %s to %s: %w", safeURL(tarball), path, err)
+		return nil, fmt.Errorf("error writing tarball from %s to %s: %w", safeURL(tarball), path, redact(err))
 	}
 
 	if maxDownloadSize > 0 && written > maxDownloadSize {
@@ -149,10 +162,10 @@ func downloadTarball(ctx context.Context, access *accessv1.NPM, meta Version, cr
 		}
 	} else {
 		slog.WarnContext(ctx, "npm registry published no checksum for package, tarball content is unverified",
-			"package", access.Package, "version", access.Version, "registry", access.Registry)
+			"package", access.Package, "version", access.Version, "registry", safeURLString(access.Registry))
 	}
 
-	b, err := filesystem.GetBlobFromOSPath(path)
+	b, err := newBlob(path)
 	if err != nil {
 		return nil, fmt.Errorf("error creating blob for %s from %s: %w", safeURL(tarball), path, err)
 	}
@@ -189,8 +202,7 @@ var integrityAlgorithms = []struct {
 // several algorithms. npm verifies the strongest algorithm present and accepts
 // any digest given for it, so a stale weak digest published beside a strong one
 // does not fail an install; this does the same. dist.shasum, the hex SHA-1 of
-// older packages, is only used when dist.integrity carries nothing usable, which
-// is also how npm picks between the two.
+// older packages, is only used when dist.integrity is absent or empty.
 //
 // A dist.integrity that is present but unusable is an error rather than a skip:
 // silently downloading unverified content is worse than failing.
@@ -251,15 +263,18 @@ func verifierFor(ctx context.Context, dist Dist) (*verifier, error) {
 
 // registryURL parses and validates the registry base URL.
 func registryURL(registry string) (*url.URL, error) {
+	if strings.HasPrefix(registry, "file://") {
+		return &url.URL{Scheme: "file", Path: strings.TrimPrefix(registry, "file://")}, nil
+	}
 	parsed, err := url.Parse(registry)
 	if err != nil {
-		return nil, fmt.Errorf("invalid registry url %q: %w", registry, err)
+		return nil, fmt.Errorf("invalid registry url %q: %w", safeURLString(registry), redact(err))
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return nil, fmt.Errorf("unsupported registry url scheme %q: only http and https are allowed", parsed.Scheme)
 	}
 	if parsed.Host == "" {
-		return nil, fmt.Errorf("registry url %q has no host", registry)
+		return nil, fmt.Errorf("registry url %q has no host", safeURLString(registry))
 	}
 	return parsed, nil
 }
@@ -276,6 +291,6 @@ func safeURL(u *url.URL) string {
 
 func closeBody(ctx context.Context, resp *http.Response) {
 	if err := resp.Body.Close(); err != nil {
-		slog.WarnContext(ctx, "failed to close HTTP response body", "error", err)
+		slog.WarnContext(ctx, "failed to close HTTP response body", "error", redact(err))
 	}
 }
