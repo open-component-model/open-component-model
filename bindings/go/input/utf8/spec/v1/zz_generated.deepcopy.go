@@ -6,7 +6,7 @@
 package v1
 
 import (
-	jsontext "encoding/json/jsontext"
+	json "encoding/json"
 
 	runtime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -17,17 +17,17 @@ func (in *UTF8) DeepCopyInto(out *UTF8) {
 	out.Type = in.Type
 	if in.JSON != nil {
 		in, out := &in.JSON, &out.JSON
-		*out = make(jsontext.Value, len(*in))
+		*out = make(json.RawMessage, len(*in))
 		copy(*out, *in)
 	}
 	if in.FormattedJSON != nil {
 		in, out := &in.FormattedJSON, &out.FormattedJSON
-		*out = make(jsontext.Value, len(*in))
+		*out = make(json.RawMessage, len(*in))
 		copy(*out, *in)
 	}
 	if in.YAML != nil {
 		in, out := &in.YAML, &out.YAML
-		*out = make(jsontext.Value, len(*in))
+		*out = make(json.RawMessage, len(*in))
 		copy(*out, *in)
 	}
 	return
