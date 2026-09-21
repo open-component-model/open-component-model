@@ -19,16 +19,11 @@ import (
 
 // DirOptions contains options for creating a blob from a path.
 type DirOptions struct {
-	MediaType    string // Media type of the resulting blob. If empty, defaults are used.
-	Compress     bool   // Compress resulting blob using gzip.
-	PreserveDir  bool   // Add parent directory to the tar archive.
-	Reproducible bool   // Create a reproducible tar archive (fixed timestamps, uid/gid etc).
-	// PreserveSymlinks stores symbolic links as links, recording the target as
-	// written rather than the bytes it resolves to, and never descends through
-	// one. A target is stored verbatim and is not required to exist or to stay
-	// inside the archive, so it is for callers that intend to reproduce a tree
-	// exactly. Without it a symbolic link is an error, which is the default.
-	PreserveSymlinks bool
+	MediaType        string   // Media type of the resulting blob. If empty, defaults are used.
+	Compress         bool     // Compress resulting blob using gzip.
+	PreserveDir      bool     // Add parent directory to the tar archive.
+	Reproducible     bool     // Create a reproducible tar archive (fixed timestamps, uid/gid etc).
+	PreserveSymlinks bool     // PreserveSymlinks stores symbolic links as links
 	ExcludePatterns  []string // Patterns to exclude (glob patterns). Applies to files and directories.
 	IncludePatterns  []string // Patterns to include (glob patterns). Applies to files and directories.
 	WorkingDir       string   // Working directory to ensure the path is within and avoid path traversal.
@@ -267,8 +262,9 @@ func processDirectory(path string, fi fs.FileInfo, opt DirOptions, tw *tar.Write
 	return nil
 }
 
-// processSymlink writes a symbolic link as a link entry. The walk does not
-// descend through it, so a link to a directory contributes the link alone.
+// processSymlink writes a symbolic link as a link entry rather than as the
+// content it points at. Links are not followed: a link to a directory adds the
+// link and nothing else, never the files below it.
 func processSymlink(path string, fi fs.FileInfo, fileSystem FileSystem, opt DirOptions, tw *tar.Writer) error {
 	inc, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns)
 	if err != nil {
