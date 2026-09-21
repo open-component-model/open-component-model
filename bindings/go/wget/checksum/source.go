@@ -102,20 +102,32 @@ func splitDictionary(value string) []string {
 	return members
 }
 
+// legacyChecksumHeader pairs a non-standard checksum response header with the
+// algorithm it advertises.
+type legacyChecksumHeader struct {
+	Name      string
+	Algorithm Algorithm
+}
+
 // legacyChecksumHeaders are the non-standard response headers that repositories
 // use to convey checksums, mapped to their algorithm. These are checked in
-// addition to any caller-supplied extra header names.
-var legacyChecksumHeaders = map[string]Algorithm{
-	"x-checksum-sha256":           SHA256,
-	"x-checksum-sha512":           SHA512,
-	"x-checksum-sha1":             SHA1,
-	"x-checksum-md5":              MD5,
-	"x-goog-meta-checksum-sha256": SHA256,
-	"x-goog-meta-checksum-sha1":   SHA1,
-	"x-goog-meta-checksum-md5":    MD5,
-	"x-amz-meta-checksum-sha256":  SHA256,
-	"x-amz-meta-checksum-sha1":    SHA1,
-	"x-amz-meta-checksum-md5":     MD5,
+// addition to any caller-supplied extra header names. The list is ordered so
+// FromHeaders returns candidates in a deterministic order: a server that
+// emits, say, both `x-checksum-sha256` and `x-goog-meta-checksum-sha256` with
+// divergent values otherwise verifies against different bytes across runs.
+// Strongest-first for each family, standard `x-checksum-*` before the cloud
+// vendor variants.
+var legacyChecksumHeaders = []legacyChecksumHeader{
+	{"x-checksum-sha512", SHA512},
+	{"x-checksum-sha256", SHA256},
+	{"x-checksum-sha1", SHA1},
+	{"x-checksum-md5", MD5},
+	{"x-goog-meta-checksum-sha256", SHA256},
+	{"x-goog-meta-checksum-sha1", SHA1},
+	{"x-goog-meta-checksum-md5", MD5},
+	{"x-amz-meta-checksum-sha256", SHA256},
+	{"x-amz-meta-checksum-sha1", SHA1},
+	{"x-amz-meta-checksum-md5", MD5},
 }
 
 // parseLegacyChecksumHeaders reads hex checksums from the well-known x-checksum-*
@@ -140,8 +152,8 @@ func parseLegacyChecksumHeaders(header http.Header, extra []string) []Expected {
 		}
 		out = append(out, Expected{Algorithm: alg, Value: v})
 	}
-	for name, alg := range legacyChecksumHeaders {
-		take(name, alg)
+	for _, h := range legacyChecksumHeaders {
+		take(h.Name, h.Algorithm)
 	}
 	for _, name := range extra {
 		if alg, ok := algorithmFromHeaderName(name); ok {

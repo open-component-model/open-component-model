@@ -100,6 +100,17 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 			httpReq.Header.Add(k, v)
 		}
 	}
+	// When we compute digests over the response body, disable transparent
+	// content-decoding: Go's default transport auto-adds Accept-Encoding: gzip
+	// and decompresses transparently, but RFC 9530 Content-Digest is computed
+	// over the representation-data (i.e. the transferred, content-coded bytes).
+	// Digesting decoded bytes while checking against a server-provided digest
+	// over encoded bytes causes a spurious mismatch. Setting the header
+	// explicitly (even to "identity") suppresses the transparent-decompression
+	// path in net/http.
+	if len(o.DigestAlgorithms) > 0 && httpReq.Header.Get("Accept-Encoding") == "" {
+		httpReq.Header.Set("Accept-Encoding", "identity")
+	}
 
 	if req.NoRedirect {
 		client = CloneClientWithNoRedirect(client)
