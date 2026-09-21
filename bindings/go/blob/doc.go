@@ -14,8 +14,6 @@
 // Additionally, the package provides convenience implementations of typical blob scenarios:
 //   - Copy: A function that copies data from a blob to any given io.Writer, while respecting SizeAware and
 //     DigestAware for open-container type digests.
-//   - VerifyingBlob: A blob that holds content to a digest it is expected to have, rather than to one
-//     derived from that same content.
 //
 // Note that filesystem-backed blobs, direct and buffer-backed blobs are located in a separated sub-package.
 package blob

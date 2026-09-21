@@ -25,6 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/verify"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
@@ -518,7 +519,7 @@ func verifyLocalReference(ctx context.Context, res *descriptor.Resource) error {
 		return nil
 	}
 
-	return repository.VerifyDigest(ctx, res, served)
+	return verify.Digest(ctx, res, served)
 }
 
 func (repo *Repository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
@@ -1073,7 +1074,7 @@ func (repo *Repository) DownloadResourceStream(ctx context.Context, res *descrip
 		return nil, err
 	}
 
-	if err := repository.VerifyDigest(ctx, res, stream.Root().Digest); err != nil {
+	if err := verify.Digest(ctx, res, stream.Root().Digest); err != nil {
 		return nil, err
 	}
 

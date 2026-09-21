@@ -11,6 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/verify"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
@@ -104,7 +105,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	if err != nil {
 		return nil, err
 	}
-	return repository.VerifyDownload(ctx, resource, b)
+	return verify.Download(ctx, resource, b)
 }
 
 // download streams the resource body into the configured temp folder and returns it

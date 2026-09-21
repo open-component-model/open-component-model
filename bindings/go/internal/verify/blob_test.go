@@ -1,4 +1,4 @@
-package blob_test
+package verify_test
 
 import (
 	"io"
@@ -12,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/internal/verify"
 )
 
 const verifyTestContent = "the content a digest was taken over"
@@ -28,9 +29,9 @@ func (c *closableBlob) Close() error {
 	return nil
 }
 
-func newVerifying(t *testing.T, content string, expected digest.Digest) *blob.VerifyingBlob {
+func newVerifying(t *testing.T, content string, expected digest.Digest) *verify.Blob {
 	t.Helper()
-	b, err := blob.NewVerifyingBlob(inmemory.New(strings.NewReader(content)), expected)
+	b, err := verify.NewBlob(inmemory.New(strings.NewReader(content)), expected)
 	require.NoError(t, err)
 	return b
 }
@@ -107,7 +108,7 @@ func TestVerifyingBlob_ForwardsToUnderlyingBlob(t *testing.T) {
 	inner := inmemory.New(strings.NewReader(verifyTestContent), inmemory.WithMediaType("application/x-tar"))
 	closable := &closableBlob{Blob: inner}
 
-	b, err := blob.NewVerifyingBlob(closable, digest.FromString(verifyTestContent))
+	b, err := verify.NewBlob(closable, digest.FromString(verifyTestContent))
 	require.NoError(t, err)
 
 	require.Equal(t, int64(len(verifyTestContent)), b.Size())
@@ -126,7 +127,7 @@ func TestVerifyingBlob_ForwardsToUnderlyingBlob(t *testing.T) {
 
 func TestVerifyingBlob_RejectsUnusableExpectedDigest(t *testing.T) {
 	for _, expected := range []digest.Digest{"", "not-a-digest", "sha256:tooshort"} {
-		_, err := blob.NewVerifyingBlob(inmemory.New(strings.NewReader(verifyTestContent)), expected)
+		_, err := verify.NewBlob(inmemory.New(strings.NewReader(verifyTestContent)), expected)
 		require.Error(t, err, "expected digest %q must be rejected", expected)
 	}
 }
@@ -150,17 +151,17 @@ func TestVerifyingBlob_CopyBlobToOSPathReportsMismatch(t *testing.T) {
 func TestVerifyingBlob_RejectsUnknownSize(t *testing.T) {
 	// VerifyReader bounds the content by the declared size, so an unknown size would
 	// let it read nothing at all and call that verified.
-	_, err := blob.NewVerifyingBlob(plainBlob{content: verifyTestContent}, digest.FromString(verifyTestContent))
+	_, err := verify.NewBlob(plainBlob{content: verifyTestContent}, digest.FromString(verifyTestContent))
 	require.ErrorContains(t, err, "unknown size")
 
-	_, err = blob.NewVerifyingBlob(sizedBlob{plainBlob{content: verifyTestContent}, blob.SizeUnknown}, digest.FromString(verifyTestContent))
+	_, err = verify.NewBlob(sizedBlob{plainBlob{content: verifyTestContent}, blob.SizeUnknown}, digest.FromString(verifyTestContent))
 	require.ErrorContains(t, err, "unknown size")
 }
 
 func TestVerifyingBlob_RejectsTrailingContent(t *testing.T) {
 	// The size comes from the blob, the digest from the descriptor. Content longer
 	// than the size is cut off by VerifyReader before it is ever hashed.
-	b, err := blob.NewVerifyingBlob(
+	b, err := verify.NewBlob(
 		sizedBlob{plainBlob{content: verifyTestContent + " and more"}, int64(len(verifyTestContent))},
 		digest.FromString(verifyTestContent),
 	)

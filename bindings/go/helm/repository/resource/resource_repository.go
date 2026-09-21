@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/verify"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -196,7 +197,7 @@ func verifyChartArchive(ctx context.Context, resource *descriptor.Resource, char
 		return fmt.Errorf("downloaded chart archive has an unparsable digest %q: %w", raw, err)
 	}
 
-	return repository.VerifyDigest(ctx, resource, actual)
+	return verify.Digest(ctx, resource, actual)
 }
 
 // UploadResource is not supported for Helm repositories and always returns an error.

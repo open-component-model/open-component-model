@@ -1,4 +1,4 @@
-package runtime_test
+package verify
 
 import (
 	"strings"
@@ -69,7 +69,7 @@ func TestDigest_Parse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			parsed, err := tt.digest.Parse()
+			parsed, err := parseDigest(tt.digest)
 
 			switch {
 			case tt.noDigest:

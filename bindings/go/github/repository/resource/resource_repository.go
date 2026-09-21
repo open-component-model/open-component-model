@@ -15,6 +15,7 @@ import (
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/verify"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -138,7 +139,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, err
 	}
 
-	return repository.VerifyDownload(ctx, resource, archive)
+	return verify.Download(ctx, resource, archive)
 }
 
 // UploadResource is not supported: the GitHub access type is a read-only

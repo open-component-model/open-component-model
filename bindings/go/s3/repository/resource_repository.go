@@ -15,6 +15,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/verify"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
@@ -101,7 +102,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, err
 	}
 
-	return repository.VerifyDownload(ctx, resource, result.Blob)
+	return verify.Download(ctx, resource, result.Blob)
 }
 
 func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v2.S3, error) {

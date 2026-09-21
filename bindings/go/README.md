@@ -27,6 +27,7 @@ Go bindings for the Open Component Model.
 | **input/dir** | Provides functionality for handling directory-based inputs in the Open Component Model (OCM) constructor |
 | **input/file** | Provides functionality for handling file-based inputs in the Open Component Model (OCM) constructor |
 | **input/utf8** | Provides functionality for handling UTF8 string-based inputs in the Open Component Model (OCM) constructor |
+| **internal/verify** | Holds downloaded content to the digest a component descriptor declares for it |
 | **kubernetes/controller** | Provides the Kubernetes controllers that deploy OCM component versions into clusters |
 | **oci** | Provides functionality for storing and retrieving Open Component Model (OCM) components using the Open Container Initiative (OCI) registry format |
 | **plugin** | Provides the OCM plugin system for extending functionality through external plugin processes |

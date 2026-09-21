@@ -1,28 +1,26 @@
-package runtime
+package verify
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
+
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
-// Parse returns d as a [digest.Digest] in canonical "algorithm:hex" form, so that
+// parseDigest returns d as a [digest.Digest] in canonical "algorithm:hex" form, so that
 // content can be verified against it.
-//
-// An empty digest with no error means d declares nothing to verify against, which
-// is what --skip-reference-digest-processing produces and is not a failure. An
-// error means the digest is present but unusable.
 //
 // Note: There are several places in the code today in which we are parsing digests in
 // one way or another. It will be a separate issue to pull them all together. Not in this one.
 // And we aren't using those to avoid having to import OCI package or some other package
 // and dilute the dependency graph.
-func (d *Digest) Parse() (digest.Digest, error) {
+func parseDigest(d *descriptor.Digest) (digest.Digest, error) {
 	if d == nil || d.Value == "" || d.HashAlgorithm == "" {
 		return "", nil
 	}
-	if strings.EqualFold(d.HashAlgorithm, NoDigest) || strings.EqualFold(d.NormalisationAlgorithm, ExcludeFromSignature) {
+	if strings.EqualFold(d.HashAlgorithm, descriptor.NoDigest) || strings.EqualFold(d.NormalisationAlgorithm, descriptor.ExcludeFromSignature) {
 		return "", nil
 	}
 

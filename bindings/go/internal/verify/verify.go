@@ -1,4 +1,4 @@
-package repository
+package verify
 
 import (
 	"context"
@@ -13,12 +13,11 @@ import (
 
 // expectedDigest resolves the digest res is to be held to.
 //
-// A resource carrying no digest reports ok false with no error, because resources
-// added with --skip-reference-digest-processing legitimately have none. A digest
-// that is present but unusable is an error: content that cannot be checked against
+// A resource that has no digest reports ok false with no error. A digest
+// that is present but unusable is an error. Content that cannot be checked against
 // the digest it claims must not pass as verified.
 func expectedDigest(ctx context.Context, res *descriptor.Resource) (_ digest.Digest, ok bool, err error) {
-	expected, err := res.Digest.Parse()
+	expected, err := parseDigest(res.Digest)
 	switch {
 	case err != nil:
 		return "", false, fmt.Errorf("cannot verify resource %q against its digest: %w", res.ToIdentity(), err)
@@ -31,12 +30,12 @@ func expectedDigest(ctx context.Context, res *descriptor.Resource) (_ digest.Dig
 	return expected, true, nil
 }
 
-// VerifyDownload holds content to the digest res declares, as it is read.
+// Download verifies content with digest `res` declares, as it is read.
 //
 // It is only correct for a repository whose download returns exactly the bytes the
-// digest was taken over. Where the digest covers something else, such as an OCI
-// image resource whose digest is that of its manifest, use [VerifyDigest] instead.
-func VerifyDownload(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
+// digest was taken for. Where the digest covers something else, such as an OCI
+// image resource whose digest is that of its manifest, use [Digest] instead.
+func Download(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
 	expected, ok, err := expectedDigest(ctx, res)
 	switch {
 	case err != nil:
@@ -45,7 +44,7 @@ func VerifyDownload(ctx context.Context, res *descriptor.Resource, content blob.
 		return content, nil
 	}
 
-	verifying, err := blob.NewVerifyingBlob(content, expected)
+	verifying, err := NewBlob(content, expected)
 	if err != nil {
 		return nil, fmt.Errorf("cannot verify resource %q against its digest: %w", res.ToIdentity(), err)
 	}
@@ -53,11 +52,10 @@ func VerifyDownload(ctx context.Context, res *descriptor.Resource, content blob.
 	return verifying, nil
 }
 
-// VerifyDigest holds a digest the repository has already determined to the one res
+// Digest compares a digest the repository has already determined to the one `res`
 // declares, for content that is verified by identity rather than by hashing what
-// was returned: an OCI manifest resolved for an access, or the archive a helm chart
-// was packed from.
-func VerifyDigest(ctx context.Context, res *descriptor.Resource, actual digest.Digest) error {
+// was returned.
+func Digest(ctx context.Context, res *descriptor.Resource, actual digest.Digest) error {
 	expected, ok, err := expectedDigest(ctx, res)
 	if err != nil || !ok {
 		return err
