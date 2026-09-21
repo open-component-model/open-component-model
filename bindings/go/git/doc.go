@@ -32,8 +32,9 @@
 // modes and symlink targets are read from the tree objects rather than from a
 // checkout, so nothing about the host reaches the archive: entries carry uid and gid
 // 0, no user or group name, a zero modification time and one of three modes, 0644,
-// 0755, or 0777 on a symlink. Directories are implied by the paths and get no entries of their
-// own, and submodules contribute no content. The archive stays uncompressed because
+// 0755, or 0777 on a symlink. Directories have explicit entries with mode 0755.
+// Entries follow Git tree order. Submodules are unsupported and omitted entirely.
+// The archive stays uncompressed because
 // its digest is verified on other machines and the output of the standard library
 // compressors is not stable across Go releases. Two callers archiving the same commit
 // therefore produce the same bytes.
