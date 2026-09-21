@@ -209,9 +209,10 @@ func TestRequiredAlgorithms_AlwaysIncludesStorage(t *testing.T) {
 	r.True(names["SHA-1"], "policy algorithm must be computed")
 }
 
-// TestResolve_ExternalDefaultURL confirms that a nil Source.ResolveURL falls back
-// to the Maven default `<baseURL>.<alg.Extension>`, and that FetchURL sees that
-// exact URL for each algorithm.
+
+// TestResolve_ExternalDefaultURL confirms that a Source with no explicit URL
+// falls back to `<baseURL>.<alg.Extension>` (Maven's convention) for every
+// algorithm, and that FetchURL sees exactly that URL.
 func TestResolve_ExternalDefaultURL(t *testing.T) {
 	r := require.New(t)
 	seen := map[string]string{}
@@ -231,10 +232,10 @@ func TestResolve_ExternalDefaultURL(t *testing.T) {
 	r.Equal("https://example.com/artifact.tar.sha256", seen["SHA-256"])
 }
 
-// TestResolve_ExternalCustomResolveURL confirms that a Source.ResolveURL closure
-// is honored per algorithm, so a policy can point at a non-sibling checksum URL
-// without any templating language leaking into the checksum package.
-func TestResolve_ExternalCustomResolveURL(t *testing.T) {
+// TestResolve_ExternalExplicitURL confirms that Source.URL, when set, is used
+// verbatim: no templating, no substitution. The same URL is presented to
+// FetchURL for every algorithm the source declares.
+func TestResolve_ExternalExplicitURL(t *testing.T) {
 	r := require.New(t)
 	var seen []string
 	fetch := func(_ context.Context, u string, alg Algorithm) (Expected, bool, error) {
@@ -244,38 +245,14 @@ func TestResolve_ExternalCustomResolveURL(t *testing.T) {
 		}
 		return Expected{}, false, nil
 	}
-	resolveURL := func(baseURL string, alg Algorithm) (string, error) {
-		return "https://mirror.example/checksums/" + alg.Extension + "?src=" + baseURL, nil
-	}
 	_, verified, err := Resolve(context.Background(), Policy{
 		Sources: []Source{{
 			Type:       SourceExternalURL,
-			Algorithms: []Algorithm{SHA1, SHA256},
-			ResolveURL: resolveURL,
+			Algorithms: []Algorithm{SHA256},
+			URL:        "https://mirror.example/checksums/artifact.sha256",
 		}},
 	}, Input{URL: "https://example.com/artifact.tar", Computed: helloComputed(), FetchURL: fetch})
 	r.NoError(err)
 	r.True(verified)
-	r.Equal([]string{
-		"https://mirror.example/checksums/sha1?src=https://example.com/artifact.tar",
-		"https://mirror.example/checksums/sha256?src=https://example.com/artifact.tar",
-	}, seen)
-}
-
-// TestResolve_ExternalResolveURLError surfaces a resolver error as a hard failure
-// rather than falling through to onMissing behaviour.
-func TestResolve_ExternalResolveURLError(t *testing.T) {
-	r := require.New(t)
-	fetch := func(context.Context, string, Algorithm) (Expected, bool, error) {
-		t.Fatal("FetchURL must not be called when ResolveURL fails")
-		return Expected{}, false, nil
-	}
-	resolveURL := func(string, Algorithm) (string, error) {
-		return "", fmt.Errorf("boom")
-	}
-	_, _, err := Resolve(context.Background(), Policy{
-		Sources: []Source{{Type: SourceExternalURL, Algorithms: []Algorithm{SHA256}, ResolveURL: resolveURL}},
-	}, Input{URL: "https://example.com/artifact", Computed: helloComputed(), FetchURL: fetch})
-	r.Error(err)
-	r.Contains(err.Error(), "boom")
+	r.Equal([]string{"https://mirror.example/checksums/artifact.sha256"}, seen)
 }

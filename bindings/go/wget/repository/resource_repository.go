@@ -265,10 +265,8 @@ func policyURL(resource *descriptor.Resource) string {
 }
 
 // toChecksumPolicy adapts an [inputv1.ChecksumPolicy] to the checksum package's
-// Policy. externalUrl sources are not currently supported from the access-side
-// digest processor because they need a template context (a CEL environment
-// built from the input's other fields); a policy that names them is rejected.
-// header-based verification always works.
+// Policy. Now that ChecksumSource.URL is a plain absolute URL (no templating),
+// externalUrl sources work identically on the input and access paths.
 func toChecksumPolicy(spec *inputv1.ChecksumPolicy) (checksum.Policy, bool, error) {
 	if spec == nil {
 		return checksum.Policy{}, false, nil
@@ -278,19 +276,16 @@ func toChecksumPolicy(spec *inputv1.ChecksumPolicy) (checksum.Policy, bool, erro
 		policy.OnMissing = checksum.Compute
 	}
 	for i, src := range spec.Sources {
-		if src.Type == inputv1.ChecksumSourceExternalURL {
-			return checksum.Policy{}, false, fmt.Errorf("checksum policy source #%d: externalUrl is not supported on the access-side digest processor", i)
-		}
-		s := checksum.Source{
-			Type:    checksum.SourceType(src.Type),
-			Headers: src.Headers,
-		}
 		algs, err := checksum.AlgorithmsFromExtensions(src.Algorithms)
 		if err != nil {
 			return checksum.Policy{}, false, fmt.Errorf("checksum policy source #%d: %w", i, err)
 		}
-		s.Algorithms = algs
-		policy.Sources = append(policy.Sources, s)
+		policy.Sources = append(policy.Sources, checksum.Source{
+			Type:       checksum.SourceType(src.Type),
+			Headers:    src.Headers,
+			Algorithms: algs,
+			URL:        src.URL,
+		})
 	}
 	return policy, true, nil
 }

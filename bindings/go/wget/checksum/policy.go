@@ -26,12 +26,12 @@ type Source struct {
 	// Algorithms restricts which algorithms the source considers, strongest first.
 	// Empty means all supported algorithms.
 	Algorithms []Algorithm
-	// ResolveURL renders the external checksum URL for the given algorithm on
-	// externalUrl sources. When nil, the default `<baseURL>.<alg.Extension>` is
-	// used. The caller receives baseURL from Input.URL, so a policy can express
-	// arbitrary URL shapes (e.g. via a CEL template) without this package
-	// depending on the templating language.
-	ResolveURL func(baseURL string, alg Algorithm) (string, error)
+	// URL is the absolute URL of the checksum resource for externalUrl sources.
+	// Empty falls back to `<baseURL>.<alg.Extension>` (Maven's convention).
+	// One URL per source: to cover multiple algorithms or hosts, add multiple
+	// externalUrl sources. Kept as a plain string so this package does not
+	// depend on any templating language.
+	URL string
 }
 
 // OnMissing controls behaviour when no source yields an expected checksum.
@@ -155,14 +155,12 @@ func orFail(m OnMissing) OnMissing {
 }
 
 // fetchExternal walks algs in order and returns the first external checksum that
-// resolves for src. It honors a per-source URL resolver when set, otherwise
-// defaults to `<baseURL>.<alg.Extension>` — Maven's convention.
+// resolves for src. When src.URL is set the same URL is fetched for every
+// algorithm (typically each source binds a single algorithm via Source.Algorithms);
+// otherwise the Maven default `<baseURL>.<alg.Extension>` is used per algorithm.
 func fetchExternal(ctx context.Context, src Source, in Input, algs []Algorithm) (Expected, bool, error) {
 	for _, alg := range algs {
-		u, err := resolveExternalURL(src, in.URL, alg)
-		if err != nil {
-			return Expected{}, false, err
-		}
+		u := resolveExternalURL(src, in.URL, alg)
 		exp, ok, err := in.FetchURL(ctx, u, alg)
 		if err != nil {
 			return Expected{}, false, err
@@ -174,11 +172,11 @@ func fetchExternal(ctx context.Context, src Source, in Input, algs []Algorithm) 
 	return Expected{}, false, nil
 }
 
-// resolveExternalURL returns the checksum URL src expects for alg. A nil
-// Source.ResolveURL means the default `<baseURL>.<alg.Extension>`.
-func resolveExternalURL(src Source, baseURL string, alg Algorithm) (string, error) {
-	if src.ResolveURL == nil {
-		return baseURL + "." + alg.Extension, nil
+// resolveExternalURL returns the checksum URL for src at alg: the explicit
+// [Source.URL] when set, otherwise the Maven default `<baseURL>.<alg.Extension>`.
+func resolveExternalURL(src Source, baseURL string, alg Algorithm) string {
+	if src.URL != "" {
+		return src.URL
 	}
-	return src.ResolveURL(baseURL, alg)
+	return baseURL + "." + alg.Extension
 }

@@ -158,65 +158,38 @@ func TestProcessResource_ChecksumPolicy(t *testing.T) {
 	})
 }
 
-// TestProcessResource_ChecksumPolicy_CELURL exercises the CEL-driven URL field
-// on an externalUrl source: a custom expression pointing at a non-sibling
-// checksum location, and rejection of unwrapped / non-string expressions.
-func TestProcessResource_ChecksumPolicy_CELURL(t *testing.T) {
+// TestProcessResource_ChecksumPolicy_ExplicitURL exercises the externalUrl
+// source's URL field: an absolute URL is used verbatim (no templating), so a
+// mirror hosting the checksum at a non-default path is honored as-is.
+func TestProcessResource_ChecksumPolicy_ExplicitURL(t *testing.T) {
 	t.Parallel()
-
 	content := []byte("hello world")
 
-	t.Run("custom CEL url expression is honored per algorithm", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Only the SHA-256 sibling exists, hosted at a non-default path.
-			if r.URL.Path == "/checksums/sha256/artifact" {
-				_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
-				return
-			}
-			if strings.HasSuffix(r.URL.Path, "/artifact") {
-				_, _ = w.Write(content)
-				return
-			}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/checksums/sha256/artifact":
+			// Non-default mirror path (would 404 under the Maven default).
+			_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
+		case "/artifact":
+			_, _ = w.Write(content)
+		default:
 			http.NotFound(w, r)
-		}))
-		defer server.Close()
+		}
+	}))
+	defer server.Close()
 
-		result, err := (&input.InputMethod{}).ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
-			"url": server.URL + "/artifact",
-			"checksumPolicy": map[string]any{"sources": []any{
-				map[string]any{
-					"type":       "externalUrl",
-					"algorithms": []any{"sha256"},
-					// resource.url.scheme/host/path expose the parsed artifact URL.
-					"url": `${resource.url.scheme + "://" + resource.url.host + "/checksums/" + ext + resource.url.path}`,
-				},
-			}},
-		}), nil)
-		require.NoError(t, err)
-		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
-	})
-
-	t.Run("unwrapped url expression is rejected at policy build time", func(t *testing.T) {
-		_, err := (&input.InputMethod{}).ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
-			"url": "http://example.invalid/artifact",
-			"checksumPolicy": map[string]any{"sources": []any{
-				map[string]any{"type": "externalUrl", "url": `"https://example.invalid/foo"`},
-			}},
-		}), nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "single CEL expression wrapped in ${...}")
-	})
-
-	t.Run("url expression that does not evaluate to a string is rejected", func(t *testing.T) {
-		_, err := (&input.InputMethod{}).ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
-			"url": "http://example.invalid/artifact",
-			"checksumPolicy": map[string]any{"sources": []any{
-				map[string]any{"type": "externalUrl", "url": `${42}`},
-			}},
-		}), nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must evaluate to a string")
-	})
+	result, err := (&input.InputMethod{}).ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
+		"url": server.URL + "/artifact",
+		"checksumPolicy": map[string]any{"sources": []any{
+			map[string]any{
+				"type":       "externalUrl",
+				"algorithms": []any{"sha256"},
+				"url":        server.URL + "/checksums/sha256/artifact",
+			},
+		}},
+	}), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
 }
 
 // wgetResourceWithDigest builds a wget input resource carrying a provided digest.
@@ -297,7 +270,7 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 //   - Same-origin HTTPS: credentials are forwarded so authenticated Maven mirrors
 //     and registries behind a bearer token/basic auth verify checksums end-to-end.
 //   - Cross-origin (any scheme): credentials are stripped. The checksum URL comes
-//     from a user-controlled CEL expression; sending Authorization to arbitrary
+//     from a user-controlled URL; sending Authorization to arbitrary
 //     hosts would leak credentials to attacker-controlled infrastructure.
 //   - Plain HTTP (even same host): credentials are stripped. Non-TLS transport
 //     leaks the header on the wire.
@@ -380,7 +353,7 @@ func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
 		}))
 		defer server.Close()
 
-		// CEL expression points the checksum URL at the mirror on a different
+		// Point the checksum URL at the mirror on a different
 		// host, exercising the same-origin filter.
 		resource := wgetInputResource(t, map[string]any{
 			"url": server.URL + "/artifact",
@@ -388,7 +361,7 @@ func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
 				map[string]any{
 					"type":       "externalUrl",
 					"algorithms": []any{"sha256"},
-					"url":        fmt.Sprintf(`${"%s/artifact.sha256"}`, mirror.URL),
+					"url":        mirror.URL + "/artifact.sha256",
 				},
 			}},
 		})
@@ -417,7 +390,7 @@ func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
 				map[string]any{
 					"type":       "externalUrl",
 					"algorithms": []any{"sha256"},
-					"url":        fmt.Sprintf(`${"%s/artifact.sha256"}`, httpMirror.URL),
+					"url":        httpMirror.URL + "/artifact.sha256",
 				},
 			}},
 		})

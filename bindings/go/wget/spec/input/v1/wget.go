@@ -111,16 +111,9 @@ type ChecksumSource struct {
 	// sources, beyond the standard RFC 9530 and x-checksum-* headers. The
 	// algorithm is inferred from a trailing token (e.g. "x-my-sha256").
 	Headers []string `json:"headers,omitempty"`
-	// URL is a CEL expression that resolves the sibling checksum URL for
-	// externalUrl sources. It MUST be a single standalone expression wrapped in
-	// ${…} and returns a string. Available variables:
-	//   - resource.url.raw / .scheme / .host / .path — the parsed artifact URL
-	//   - resource.mediaType / verb / header / noRedirect — other wget input fields
-	//   - ext: the algorithm's file extension (e.g. "sha256", "sha1")
-	//   - alg: the algorithm's OCM name (e.g. "SHA-256")
-	// Empty defaults to `<resource.url.raw>.<ext>` (Maven's convention).
-	//
-	// Example: '${"https://mirror.example/checksums/" + ext + resource.url.path}'.
+	// URL is the absolute URL of the checksum resource for externalUrl sources.
+	// Empty falls back to `<artifact URL>.<ext>` (Maven's convention). One URL
+	// per source: to cover multiple algorithms or hosts, add multiple sources.
 	URL string `json:"url,omitempty"`
 	// Algorithms restricts which checksum algorithms this source considers, given
 	// as file extensions (sha256, sha512, sha1, md5), strongest-preferred first.

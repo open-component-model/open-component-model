@@ -264,21 +264,14 @@ Each entry in `sources` has a `type`:
   family (plus the `x-goog-meta-*` and `x-amz-meta-*` variants) are understood. Add
   extra header names with `headers: [x-my-sha256]`.
 - `externalUrl` — a sibling resource fetched from a separate URL, by default
-  `<url>.<ext>` (e.g. `.sha256`, `.sha1`). Override the URL shape with a
-  [CEL](https://cel.dev/) expression on `url`, wrapped in `${…}` and returning a
-  string. Available variables:
-  - `resource.url.scheme`/`resource.url.host`/`resource.url.path`/`resource.url.raw`
-    (parsed artifact URL);
-  - `resource.mediaType`/`resource.verb`/`resource.header`/`resource.noRedirect`;
-  - `ext` — the algorithm's file extension (`sha256`, `sha1`, …);
-  - `alg` — the algorithm's OCM name (`SHA-256`, `SHA-1`, …).
-
-  For example, to fetch checksums from a mirror keyed by algorithm:
+  `<url>.<ext>` (e.g. `.sha256`, `.sha1`). Set `url` to an absolute URL to
+  point the checksum request at a mirror instead. One URL per source: to
+  cover multiple algorithms or hosts, add multiple `externalUrl` sources.
 
   ```yaml
   - type: externalUrl
     algorithms: [sha256]
-    url: '${resource.url.scheme + "://" + resource.url.host + "/checksums/" + ext + resource.url.path}'
+    url: https://mirror.example/checksums/artifact-1.0.0.tar.gz.sha256
   ```
 
   The file may be a bare hex digest or GNU coreutils format (`<hex>  <name>`).
@@ -287,9 +280,8 @@ Each entry in `sources` has a `type`:
   that point on.
 
 Fields on a source: `headers` (extra header names for `httpHeader`), `url`
-(CEL expression for the checksum URL on `externalUrl`), and `algorithms`
-(file extensions `sha256`, `sha512`, `sha1`, `md5`, strongest first, for
-`externalUrl`).
+(absolute checksum URL for `externalUrl`), and `algorithms` (file extensions
+`sha256`, `sha512`, `sha1`, `md5`, strongest first, for `externalUrl`).
 
 `onMissing` controls what happens when no source yields a checksum: `fail`
 (default when a policy is set) aborts the build; `compute` falls back to computing
@@ -345,11 +337,8 @@ Precedence for the effective policy on a given wget URL (tightest wins):
 3. `defaultChecksumPolicy` at the top level.
 4. No policy — compute the storage digest without external verification.
 
-`externalUrl` sources use a CEL expression that depends on the wget input's
-other fields (`resource.url.*`, `mediaType`, …). They are only supported on the
-input side; specifying `externalUrl` in a config that also applies to the
-access-side digest processor causes construction to fail with a clear error
-for that path.
+Both the input method and the access-side digest processor honor the same
+policy; `externalUrl` sources with an explicit `url` are supported on both.
 
 ### `S3/v2` {#s3v2-input}
 

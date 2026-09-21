@@ -343,8 +343,8 @@ func TestProcessResourceDigest(t *testing.T) {
 //   - a defaultChecksumPolicy of type httpHeader verifies the download against
 //     the server-advertised x-checksum-sha256 header,
 //   - a mismatched header value aborts before a wrong digest is recorded,
-//   - externalUrl sources are rejected at policy-build time on the access
-//     side (they need an input's CEL context).
+//   - externalUrl sources with an explicit URL fetch that URL verbatim (now
+//     supported on the access-side too since URL is a plain string, not CEL).
 func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 	t.Parallel()
 
@@ -399,27 +399,31 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 		assert.Contains(t, err.Error(), "checksum mismatch")
 	})
 
-	t.Run("externalUrl source is rejected on the access-side processor", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write(content)
-		}))
+	t.Run("externalUrl source with an explicit URL verifies against the sidecar", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/resource", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(content) })
+		mux.HandleFunc("/resource.sha256", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(sha256 + "  artifact\n"))
+		})
+		server := httptest.NewServer(mux)
 		defer server.Close()
 
 		cfg := &wgetconfigv1alpha1.Config{
 			DefaultChecksumPolicy: &inputv1.ChecksumPolicy{
 				OnMissing: inputv1.OnMissingFail,
-				Sources:   []inputv1.ChecksumSource{{Type: inputv1.ChecksumSourceExternalURL}},
+				Sources:   []inputv1.ChecksumSource{{Type: inputv1.ChecksumSourceExternalURL, URL: server.URL + "/resource.sha256", Algorithms: []string{"sha256"}}},
 			},
 		}
 		repo := repository.NewResourceRepository(nil,
 			repository.WithHTTPClient(server.Client()),
 			repository.WithWgetConfig(cfg),
 		)
-		_, err := repo.ProcessResourceDigest(t.Context(),
+		processed, err := repo.ProcessResourceDigest(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "externalUrl is not supported")
+		require.NoError(t, err)
+		assert.Equal(t, sha256, processed.Digest.Value)
 	})
+
 
 	t.Run("host override wins over default", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

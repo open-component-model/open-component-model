@@ -106,7 +106,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	// host override, so descriptor authors always control their resources'
 	// verification even when an operator's config sets a stricter default.
 	policySpec := effectiveChecksumPolicySpec(&wget, i.WgetConfig)
-	policy, hasPolicy, err := toChecksumPolicy(policySpec, &wget)
+	policy, hasPolicy, err := toChecksumPolicy(policySpec)
 	if err != nil {
 		return nil, fmt.Errorf("invalid checksum policy for wget input from %q: %w", wget.URL, err)
 	}
@@ -210,10 +210,9 @@ func verifyProvidedDigest(provided *constructorruntime.Digest, data *download.Bl
 }
 
 // toChecksumPolicy adapts the input spec's ChecksumPolicy to the checksum
-// package's Policy, defaulting OnMissing to fail and compiling each externalUrl
-// source's URL CEL expression against the wget input. It returns ok=false when
-// no policy is configured, in which case the digest is computed from the stream.
-func toChecksumPolicy(spec *v1.ChecksumPolicy, wget *v1.Wget) (checksum.Policy, bool, error) {
+// package's Policy, defaulting OnMissing to fail. It returns ok=false when no
+// policy is configured, in which case the digest is computed from the stream.
+func toChecksumPolicy(spec *v1.ChecksumPolicy) (checksum.Policy, bool, error) {
 	if spec == nil {
 		return checksum.Policy{}, false, nil
 	}
@@ -222,10 +221,6 @@ func toChecksumPolicy(spec *v1.ChecksumPolicy, wget *v1.Wget) (checksum.Policy, 
 		policy.OnMissing = checksum.Compute
 	}
 	for i, src := range spec.Sources {
-		s := checksum.Source{
-			Type:    checksum.SourceType(src.Type),
-			Headers: src.Headers,
-		}
 		// An unsupported algorithm extension is a hard error: silently dropping it
 		// lets Resolve fall back to the full algorithm set and silently verify
 		// against an algorithm the user never asked for. Fail fast with the source
@@ -234,15 +229,12 @@ func toChecksumPolicy(spec *v1.ChecksumPolicy, wget *v1.Wget) (checksum.Policy, 
 		if err != nil {
 			return checksum.Policy{}, false, fmt.Errorf("checksum policy source #%d: %w", i, err)
 		}
-		s.Algorithms = algs
-		if src.Type == v1.ChecksumSourceExternalURL {
-			resolver, err := checksumURLResolver(src.URL, wget)
-			if err != nil {
-				return checksum.Policy{}, false, fmt.Errorf("checksum policy source #%d: %w", i, err)
-			}
-			s.ResolveURL = resolver
-		}
-		policy.Sources = append(policy.Sources, s)
+		policy.Sources = append(policy.Sources, checksum.Source{
+			Type:       checksum.SourceType(src.Type),
+			Headers:    src.Headers,
+			Algorithms: algs,
+			URL:        src.URL,
+		})
 	}
 	return policy, true, nil
 }
