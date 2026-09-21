@@ -343,11 +343,12 @@ func TestProcessResourceDigest(t *testing.T) {
 // TestProcessResourceDigest_ConfigDriven exercises the shared
 // checksum.http.config.ocm.software config on the access-side digest processor:
 //
-//   - a defaultChecksumPolicy of type httpHeader verifies the download against
-//     the server-advertised x-checksum-sha256 header,
-//   - a mismatched header value aborts before a wrong digest is recorded,
-//   - externalUrl sources with an explicit URL fetch that URL verbatim (now
-//     supported on the access-side too since URL is a plain string, not CEL).
+//   - a defaultChecksumPolicy of type httpHeader pins the digest from the
+//     server-advertised x-checksum-sha256 header without a body download,
+//   - externalUrl sources with an explicit URL fetch that URL verbatim to
+//     pin the digest,
+//   - a per-host override replaces the default policy for URLs matching that
+//     host key.
 func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 	t.Parallel()
 
@@ -376,30 +377,6 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, processed.Digest)
 		assert.Equal(t, sha256, processed.Digest.Value)
-	})
-
-	t.Run("mismatched header aborts before a wrong digest is recorded", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			// Advertise a plausible-looking-but-wrong digest.
-			w.Header().Set("x-checksum-sha256", strings.Repeat("0", 64))
-			_, _ = w.Write(content)
-		}))
-		defer server.Close()
-
-		cfg := &checksumhttpv1alpha1.Config{
-			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
-				OnMissing: checksumhttpv1alpha1.OnMissingFail,
-				Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
-			},
-		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
-			repository.WithWgetConfig(cfg),
-		)
-		_, err := repo.ProcessResourceDigest(t.Context(),
-			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "checksum mismatch")
 	})
 
 	t.Run("externalUrl source with an explicit URL verifies against the sidecar", func(t *testing.T) {
@@ -490,13 +467,13 @@ func TestProcessResourceDigest_AcceptsPrefixedPinnedDigest(t *testing.T) {
 	require.NoError(t, err, "sha256:-prefixed pinned digest must match bare-hex computed digest")
 }
 
-// TestProcessResourceDigest_AccessDigest exercises the no-download fast path:
-// when the checksum-http config sets accessDigest, ProcessResourceDigest MUST
-// pin the resource digest from what the source advertises without hashing the
-// body itself. The server backing every subtest here refuses GET on the
+// TestProcessResourceDigest_AccessFastPath exercises the no-download fast
+// path: whenever a checksum-http policy applies, ProcessResourceDigest MUST
+// pin the resource digest from what the source advertises without hashing
+// the body itself. The server backing every subtest here refuses GET on the
 // artifact path so a body download would fail the test — proving the
 // processor really skips it.
-func TestProcessResourceDigest_AccessDigest(t *testing.T) {
+func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 	t.Parallel()
 	content := []byte("access-side pin from source")
 	sha256 := godigest.FromBytes(content).Encoded()
@@ -525,7 +502,7 @@ func TestProcessResourceDigest_AccessDigest(t *testing.T) {
 			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
 				OnMissing:    checksumhttpv1alpha1.OnMissingFail,
 				Sources:      []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
-				AccessDigest: &checksumhttpv1alpha1.AccessDigest{Algorithms: []string{"sha256"}},
+				PreferredAlgorithms: []string{"sha256"},
 			},
 		}
 		repo := repository.NewResourceRepository(nil,
@@ -549,7 +526,7 @@ func TestProcessResourceDigest_AccessDigest(t *testing.T) {
 			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
 				OnMissing:    checksumhttpv1alpha1.OnMissingFail,
 				Sources:      []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
-				AccessDigest: &checksumhttpv1alpha1.AccessDigest{Algorithms: []string{"sha256", "sha1"}},
+				PreferredAlgorithms: []string{"sha256", "sha1"},
 			},
 		}
 		repo := repository.NewResourceRepository(nil,
@@ -575,7 +552,7 @@ func TestProcessResourceDigest_AccessDigest(t *testing.T) {
 			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
 				OnMissing:    checksumhttpv1alpha1.OnMissingFail,
 				Sources:      []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
-				AccessDigest: &checksumhttpv1alpha1.AccessDigest{}, // default preference list
+				PreferredAlgorithms: nil,
 			},
 		}
 		repo := repository.NewResourceRepository(nil,
@@ -608,7 +585,7 @@ func TestProcessResourceDigest_AccessDigest(t *testing.T) {
 			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
 				OnMissing:    checksumhttpv1alpha1.OnMissingFail,
 				Sources:      []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceExternalURL, Algorithms: []string{"sha256"}}},
-				AccessDigest: &checksumhttpv1alpha1.AccessDigest{Algorithms: []string{"sha256"}},
+				PreferredAlgorithms: []string{"sha256"},
 			},
 		}
 		repo := repository.NewResourceRepository(nil,
@@ -629,7 +606,7 @@ func TestProcessResourceDigest_AccessDigest(t *testing.T) {
 			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
 				OnMissing:    checksumhttpv1alpha1.OnMissingFail,
 				Sources:      []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
-				AccessDigest: &checksumhttpv1alpha1.AccessDigest{Algorithms: []string{"sha256"}},
+				PreferredAlgorithms: []string{"sha256"},
 			},
 		}
 		repo := repository.NewResourceRepository(nil,
@@ -650,7 +627,7 @@ func TestProcessResourceDigest_AccessDigest(t *testing.T) {
 			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
 				OnMissing:    checksumhttpv1alpha1.OnMissingFail,
 				Sources:      []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
-				AccessDigest: &checksumhttpv1alpha1.AccessDigest{Algorithms: []string{"sha256"}},
+				PreferredAlgorithms: []string{"sha256"},
 			},
 		}
 		repo := repository.NewResourceRepository(nil,

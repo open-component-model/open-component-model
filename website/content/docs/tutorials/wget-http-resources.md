@@ -288,7 +288,8 @@ consumer will re-fetch and re-verify from that same server, so pinning "what
 the source claims" is a legitimate identity for the descriptor — and it means
 OCM can establish the digest without transferring the body.
 
-Opt in with `accessDigest`:
+Whenever a policy applies, the access-side digest processor pins from the
+source-advertised checksum. Just configure the policy:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -300,8 +301,12 @@ configurations:
         - type: httpHeader
         - type: externalUrl
           algorithms: [sha256, sha1]
-      accessDigest:
-        algorithms: [sha256, sha1]
+      # Optional: override which algorithms the pin will accept from the
+      # source, strongest-preferred first. Default is [sha256, sha512, sha1,
+      # md5]. Configure this when you want to reject anything weaker than a
+      # given algorithm on the pin, or the opposite — allow a weaker algorithm
+      # your source ships for legacy reasons.
+      preferredAlgorithms: [sha256, sha1]
 ```
 
 With this policy, `ocm add cv` (for an access-type resource) and every later
@@ -312,10 +317,10 @@ actually offered (`SHA-256`, `SHA-1`, and so on), still with
 `genericBlobDigest/v1`.
 
 {{< callout context="caution" >}}
-`accessDigest` applies only to the digest processor. Transferring an access
-**by value** (`ocm transfer cv --copy-resources`) promotes it to a
+The fast path applies to the access-side digest processor only. Transferring
+an access **by value** (`ocm transfer cv --copy-resources`) promotes it to a
 `LocalBlob/v1` and re-runs the input-side rules — the bytes are streamed and
-re-digested as SHA-256, regardless of `accessDigest`. Every local blob is
+re-digested as SHA-256, regardless of this policy. Every local blob is
 self-describing.
 {{< /callout >}}
 
@@ -326,9 +331,9 @@ self-describing.
 | `fail` (default)   | Abort construction or the digest processor. Use this when no source is trusted enough to skip verification.            |
 | `compute`          | Fall through to computing the digest from the stream, without external verification. Input records SHA-256 either way. |
 
-On the access-side fast path (`accessDigest`), `onMissing: fail` aborts
-**without downloading**; `onMissing: compute` falls through to the
-download-and-hash path.
+On the access-side fast path, `onMissing: fail` aborts **without
+downloading**; `onMissing: compute` falls through to the download-and-hash
+path.
 
 For the full schema, source strategies, precedence rules, and credential
 scoping, see
@@ -426,4 +431,4 @@ isn't, the content changed.
 - [Reference: HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) - Timeouts,
   retries, and per-host settings
 - [Reference: HTTP Checksum Configuration]({{< relref "docs/reference/checksum-http-configuration.md" >}}) - Source-side
-  checksum verification and the access-side `accessDigest` fast path
+  checksum verification and the access-side pin-from-source fast path

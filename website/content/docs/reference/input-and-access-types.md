@@ -253,10 +253,11 @@ configurations:
   whatever algorithm the source advertises. Verification and storage are
   decoupled: a SHA-1/MD5 policy still records SHA-256, so weak algorithms
   never leak into the descriptor.
-- **Access side** — by default downloads and verifies. When the policy sets
-  [`accessDigest`]({{< relref "checksum-http-configuration.md" >}}#access-digest),
-  the digest is pinned from the source-advertised checksum via a HEAD (plus a
-  small sidecar GET for `externalUrl` sources) — no body download.
+- **Access side** — pins the resource digest from the source-advertised
+  checksum via a HEAD (plus a small sidecar GET for `externalUrl` sources),
+  never downloading the body. See
+  [Access side — pin from source]({{< relref "checksum-http-configuration.md" >}}#access-digest)
+  for the algorithm-preference override.
 - **By-value transfer** (`--copy-resources`) promotes an access to a local
   blob and re-runs the input-side rules, so every local blob is
   self-describing.
@@ -548,14 +549,11 @@ Upload is not supported for this access type: a plain HTTP endpoint has no stand
 
 The same `checksum.http.config.ocm.software/v1alpha1` config that steers the
 wget input's checksum verification also drives the access-side digest
-processor. By default the processor downloads the body, computes SHA-256, and
-— if a policy applies — verifies the bytes against the source-advertised
-checksum. When the policy sets
-[`accessDigest`]({{< relref "checksum-http-configuration.md" >}}#access-digest),
-the digest is pinned from the source-advertised checksum via a HEAD, so the
-resource digest can be established without transferring the whole body. See
+processor. Whenever a policy applies, the processor pins the resource digest
+from the source-advertised checksum via a HEAD (plus a small sidecar GET per
+`externalUrl` source) — no body download. See
 [HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}})
-for the full schema.
+for the full schema and the algorithm-preference override.
 
 For guidance on choosing between the input and the access type, and for media type resolution, redirects, download
 tuning, and credential configuration, see

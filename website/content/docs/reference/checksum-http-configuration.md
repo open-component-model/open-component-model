@@ -166,10 +166,10 @@ anything is stored.
 ## Access Side — Pin From Source, No Body Download {#access-digest}
 
 A `Wget/v1` **access** references bytes on a remote server that any consumer
-will re-fetch on demand. When you opt in via `accessDigest`, the digest
-processor pins the resource digest from the source-advertised checksum and
-skips the body download entirely — a single HEAD (and, for `externalUrl`,
-a tiny sidecar GET) is enough to establish the digest.
+will re-fetch on demand. Whenever a policy applies, the access-side digest
+processor pins the resource digest from what the source advertises via a
+single HEAD (plus a small sidecar GET per `externalUrl` source) — **the
+artifact body is never fetched**.
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -181,11 +181,9 @@ configurations:
         - type: httpHeader
         - type: externalUrl
           algorithms: [sha256, sha1]
-      # Access-side fast path: pin from what the source advertises, do not
-      # download the body just to hash it. SHA-256 is preferred; SHA-1 is a
-      # legitimate fallback for legacy mirrors that don't offer it.
-      accessDigest:
-        algorithms: [sha256, sha1]
+      # Optional: restrict which algorithms the pin uses, strongest-preferred
+      # first. Empty (default) means [sha256, sha512, sha1, md5].
+      preferredAlgorithms: [sha256, sha1]
 ```
 
 Semantics:
@@ -193,27 +191,27 @@ Semantics:
 - The digest processor issues **one HEAD** to the artifact URL to harvest
   response headers, plus one GET per `externalUrl` source (fetching the small
   sidecar file). It **never fetches the artifact body**.
-- The strongest algorithm from `accessDigest.algorithms` that any source
-  advertises wins. Weaker algorithms are used only as a fallback.
+- Among competing offers, the earliest algorithm in `preferredAlgorithms`
+  wins. Weaker algorithms are only used as a fallback.
 - The recorded digest carries the algorithm the source actually offered
   (`SHA-256`, `SHA-1`, `MD5`, `SHA-512`), still with
   `normalisationAlgorithm: genericBlobDigest/v1`. It is a legitimate pin
   because any downstream consumer re-fetches from the same source and
   re-verifies against the same authority.
-- When `accessDigest.algorithms` is empty, the default preference list
+- When `preferredAlgorithms` is empty, the default preference list
   `[sha256, sha512, sha1, md5]` is used.
 - If no source advertises an acceptable digest and `onMissing` is `fail`, the
   processor aborts without downloading. `onMissing: compute` falls through to
-  the download-and-hash path (SHA-256).
+  a download-and-hash path (SHA-256).
 - When the resource already carries a pinned `digest`, its algorithm and value
   MUST agree with the source-advertised digest for the same algorithm; a
   mismatch is a hard error.
 
 {{< callout context="caution" >}}
-`accessDigest` applies to the digest processor only. Transferring a `Wget/v1`
-access resource **by value** (`--copy-resources`) promotes it to a
-`LocalBlob/v1` and re-runs the input-side rules — the bytes are streamed
-into the target and re-digested as SHA-256, regardless of `accessDigest`. This
+The fast path applies to the access-side digest processor only. Transferring
+a `Wget/v1` access resource **by value** (`--copy-resources`) promotes it to
+a `LocalBlob/v1` and re-runs the input-side rules — the bytes are streamed
+into the target and re-digested as SHA-256, regardless of this policy. This
 preserves the OCM invariant that every local blob is self-describing.
 {{< /callout >}}
 

@@ -122,10 +122,11 @@ func Verify(
 // — the first entry in prefer that a source offers wins. Empty prefer means
 // "any supported algorithm, strongest first" (see [checksum.All]).
 //
-// Peek is meant for the Wget/v1 access-side digest processor when the operator
-// opts into pinning the resource digest from the source's advertised checksum;
-// see the checksum-http config's [AccessDigest] surface. It does not fetch or
-// hash the body.
+// Peek is the Wget/v1 access-side digest processor's fast path: an access
+// references remote bytes any consumer re-fetches from the same source, so
+// pinning the resource digest from what the source itself advertises is a
+// legitimate identity for the descriptor. Peek does not fetch or hash the
+// body.
 func Peek(
 	ctx context.Context,
 	baseClient *http.Client,

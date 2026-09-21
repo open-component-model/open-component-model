@@ -9,9 +9,6 @@ import (
 	_ "embed"
 )
 
-//go:embed schemas/AccessDigest.schema.json
-var schemaAccessDigest []byte
-
 //go:embed schemas/ChecksumPolicy.schema.json
 var schemaChecksumPolicy []byte
 
@@ -23,11 +20,6 @@ var schemaConfig []byte
 
 //go:embed schemas/HostConfig.schema.json
 var schemaHostConfig []byte
-
-// JSONSchema returns the JSON Schema for AccessDigest.
-func (AccessDigest) JSONSchema() []byte {
-	return schemaAccessDigest
-}
 
 // JSONSchema returns the JSON Schema for ChecksumPolicy.
 func (ChecksumPolicy) JSONSchema() []byte {
