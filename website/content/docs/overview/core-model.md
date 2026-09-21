@@ -25,7 +25,7 @@ In OCM, a **component** groups everything needed for a delivery into one logical
 Each component has:
 
 - A **name** based on DNS naming (e.g., `github.com/acme/webshop`) — globally unique and controlled by the domain owner.
-- A **version** following relaxed [SemVer](https://semver.org/) (e.g., `1.0.0` or `v2.1`) — each version is an immutable snapshot. See [Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) for the exact version format rules.
+- A **version** following relaxed [SemVer](https://semver.org/) (e.g., `1.0.0` or `v2.1`) — each version is an immutable snapshot. See [Component Identity]({{< relref "docs/concepts/pack/component-identity.md" >}}) for the exact version format rules.
 
 Together, `github.com/acme/webshop:1.0.0` uniquely identifies a specific delivery of the webshop.
 
@@ -49,7 +49,7 @@ OCM uses a coordinate system to uniquely identify every piece of software:
 - **Artifact identity** = name (+ optional extra identity attributes) → unique within a component version.
 - **Coordinate notation** combines both: `github.com/acme/webshop:1.0.0:resource/backend-image`.
 
-For a deep dive into how identity works, see [Component Identity]({{< relref "docs/concepts/component-identity.md" >}}).
+For a deep dive into how identity works, see [Component Identity]({{< relref "docs/concepts/pack/component-identity.md" >}}).
 
 ## Location Independence
 
@@ -68,12 +68,12 @@ A component descriptor lists resources, but the actual artifacts (container imag
 
 OCM delegates the actual download and upload of resources to **resource repositories**, backend-specific implementations that know how to interact with a particular storage technology. For example, an `OCIImage/v1` access is handled by the OCI resource repository, while a `Helm/v1` access is handled by the Helm resource repository.
 
-This design keeps the component descriptor storage-agnostic while allowing each backend to handle its own protocols, authentication, and artifact formats. Resource repositories are extensible through the [plugin system]({{< relref "docs/concepts/plugin-system.md" >}}), so new storage backends can be added without modifying OCM itself.
+This design keeps the component descriptor storage-agnostic while allowing each backend to handle its own protocols, authentication, and artifact formats. Resource repositories are extensible through the [plugin system]({{< relref "docs/concepts/pack/plugin-system.md" >}}), so new storage backends can be added without modifying OCM itself.
 
-For more details, see [Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}).
+For more details, see [Resource Repositories]({{< relref "docs/concepts/pack/resource-repositories.md" >}}).
 
 ## Related Documentation
 
-- [Component Identity]({{< relref "docs/concepts/component-identity.md" >}}): deep dive into how OCM identifies components, versions, and artifacts.
-- [Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}): how OCM downloads and uploads resource artifacts from storage backends.
+- [Component Identity]({{< relref "docs/concepts/pack/component-identity.md" >}}): deep dive into how OCM identifies components, versions, and artifacts.
+- [Resource Repositories]({{< relref "docs/concepts/pack/resource-repositories.md" >}}): how OCM downloads and uploads resource artifacts from storage backends.
 - [Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}): build your first component version with the OCM CLI.

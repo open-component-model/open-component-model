@@ -6,7 +6,7 @@ weight: 3
 toc: true
 ---
 
-This page is the technical reference for credential consumer identities — the key-value maps OCM uses to look up credentials for a given operation. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).
+This page is the technical reference for credential consumer identities — the key-value maps OCM uses to look up credentials for a given operation. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/pack/credential-system.md" >}}).
 
 For the credential types that go in the `credentials:` field of each consumer entry,
 see [Reference: Credential Types]({{< relref "credential-types.md" >}}).
@@ -83,7 +83,7 @@ Matching runs three chained checks — all must pass:
    `https` → `443`, `http` → `80`).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
-For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}).
+For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/transfer/credential-resolution.md" >}}).
 
 ### Examples
 
@@ -295,7 +295,7 @@ so the symptom is a `401` from the server rather than a configuration error.
 
 For migrating a Wget consumer entry from OCM v1, covering the renamed identity type, the `pathprefix` to `path`
 conversion, and the inverted authentication precedence, see
-[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#credential-changes" >}}).
+[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/pack/wget-http-resources.md#credential-changes" >}}).
 
 ---
 
@@ -666,11 +666,11 @@ added by installed plugins — and `ocm describe types credentials <type>` to in
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — How the credential system works
+- [Concept: Credential System]({{< relref "docs/concepts/pack/credential-system.md" >}}) — How the credential system works
 - [Reference: Credential Types]({{< relref "credential-types.md" >}}) — All built-in typed credential types and their
   fields
-- [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}) — Step-by-step
+- [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/transfer/credential-resolution.md" >}}) — Step-by-step
   matching examples for OCI registries
-- [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) — Task-oriented registry credential setup
-- [How-To: Configure Credentials for Signing]({{< relref "configure-signing-credentials.md" >}}) — Task-oriented signing
+- [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/how-to/transfer/configure-multiple-credentials.md" >}}) — Task-oriented registry credential setup
+- [How-To: Configure Credentials for Signing]({{< relref "docs/how-to/sign/configure-signing-credentials.md" >}}) — Task-oriented signing
   credential setup

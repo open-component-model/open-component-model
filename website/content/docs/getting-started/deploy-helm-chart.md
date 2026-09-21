@@ -81,7 +81,7 @@ EOF
 This component references the `podinfo` Helm chart, a simple web application that displays pod information.
 
 {{< callout title="Note" icon="outline/info-circle" >}}
-A self-contained component would also list the OCI image that the Helm chart pulls at runtime as a separate resource — that way the component carries everything needed to deploy it, and the image can be transferred and signed alongside the chart. We omit that here to keep the focus on referencing a Helm chart. The [Multi-Component Product tutorial]({{< relref "/docs/tutorials/advanced-component-constructor.md" >}}) shows how to combine charts and images in one component.
+A self-contained component would also list the OCI image that the Helm chart pulls at runtime as a separate resource — that way the component carries everything needed to deploy it, and the image can be transferred and signed alongside the chart. We omit that here to keep the focus on referencing a Helm chart. The [Multi-Component Product tutorial]({{< relref "/docs/tutorials/pack/advanced-component-constructor.md" >}}) shows how to combine charts and images in one component.
 {{< /callout >}}
 {{< /step >}}
 
@@ -117,7 +117,7 @@ ocm.software/ocm-k8s-toolkit/simple │ 1.0.0   │ ocm.software
 Use `ocm transfer cv` and specify the correct reference (`<path-to-your-ctf>//<component>:<version>`) and target repository:
 
 {{< callout title="Note" icon="outline/info-circle" >}}
-If your registry requires authentication, configure [Credentials for OCM CLI]({{< relref "/docs/how-to/configure-multiple-credentials.md" >}}) first.
+If your registry requires authentication, configure [Credentials for OCM CLI]({{< relref "/docs/how-to/transfer/configure-multiple-credentials.md" >}}) first.
 {{< /callout >}}
 
 ```shell
@@ -171,7 +171,7 @@ Keep this secret in mind — you will reference it later when you define the `Re
                 name: ghcr-secret
   ```
 
-For more details, see [Credentials for OCM Controllers]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}).
+For more details, see [Credentials for OCM Controllers]({{< relref "/docs/how-to/deploy/configure-credentials-ocm-controllers.md" >}}).
 {{< /details >}}
 
 {{< /step >}}
@@ -584,7 +584,7 @@ failed to list versions: response status code 401: unauthorized
 Your registry package is private. Either:
 
 - Make the package public in your registry settings, or
-- [Configure credentials]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}) as
+- [Configure credentials]({{< relref "/docs/how-to/deploy/configure-credentials-ocm-controllers.md" >}}) as
   described in the collapsible section after "Transfer to your registry"
 
 ### Resource Not Found
@@ -615,8 +615,8 @@ rm -rf /tmp/helm-deploy
 
 ## Next Steps
 
-- [Tutorial: Create a Multi-Component Product]({{< relref "docs/tutorials/advanced-component-constructor.md" >}}) - Learn how to structure complex applications with multiple components and resources
-- [Tutorial: Deploy a Helm Chart (with Bootstrap)]({{< relref "docs/tutorials/deploy-helm-chart-bootstrap.md" >}}) - Use the OCM Controllers to deploy a Helm chart without manual bootstrapping, using GitOps
+- [Tutorial: Create a Multi-Component Product]({{< relref "docs/tutorials/pack/advanced-component-constructor.md" >}}) - Learn how to structure complex applications with multiple components and resources
+- [Tutorial: Deploy a Helm Chart (with Bootstrap)]({{< relref "docs/tutorials/deploy/deploy-helm-chart-bootstrap.md" >}}) - Use the OCM Controllers to deploy a Helm chart without manual bootstrapping, using GitOps
 
 ## Related Documentation
 

@@ -8,7 +8,7 @@ toc: true
 
 This page is the technical reference for OCM HTTP client configuration. For a
 task-oriented walkthrough, see the
-[Configure HTTP Client Behaviour]({{< relref "docs/how-to/configure-http/_index.md" >}}) how-to guides.
+[Configure HTTP Client Behaviour]({{< relref "docs/how-to/transfer/configure-http/_index.md" >}}) how-to guides.
 
 ## Configuration Type
 
@@ -106,7 +106,7 @@ non-standard ports. Keys must be lowercase — Go normalises URL hostnames.
 Proxy configuration is not a field in this type. OCM inherits Go's standard
 `http.ProxyFromEnvironment` — set `HTTPS_PROXY`, `HTTP_PROXY`, and `NO_PROXY`
 environment variables. See
-[Route Traffic Through a Proxy]({{< relref "docs/how-to/configure-http/proxy.md" >}}).
+[Route Traffic Through a Proxy]({{< relref "docs/how-to/transfer/configure-http/proxy.md" >}}).
 
 ### TLS Trust: SSL_CERT_FILE and SSL_CERT_DIR
 
@@ -114,10 +114,10 @@ environment variables. See
 private CA without disabling verification, use the `SSL_CERT_FILE` /
 `SSL_CERT_DIR` environment variables — they are **replacements** for the
 built-in system CA path lists in Go's `crypto/x509` loader, not additions.
-See [TLS and Custom CA]({{< relref "docs/how-to/configure-http/tls.md" >}}).
+See [TLS and Custom CA]({{< relref "docs/how-to/transfer/configure-http/tls.md" >}}).
 
 ## Related Documentation
 
-- [Configure HTTP Client Behaviour]({{< relref "docs/how-to/configure-http/_index.md" >}}) — task-oriented how-to guides
-- [Configure Credentials for Multiple Registries]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) — pairing HTTP config with credential setup
+- [Configure HTTP Client Behaviour]({{< relref "docs/how-to/transfer/configure-http/_index.md" >}}) — task-oriented how-to guides
+- [Configure Credentials for Multiple Registries]({{< relref "docs/how-to/transfer/configure-multiple-credentials.md" >}}) — pairing HTTP config with credential setup
 - [Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) — reference for resolver config in the same file

@@ -6,7 +6,7 @@ toc: true
 ---
 
 This page is the technical reference for built-in resource repositories. For an introduction to what resource
-repositories are and why they exist, see [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}).
+repositories are and why they exist, see [Concept: Resource Repositories]({{< relref "docs/concepts/pack/resource-repositories.md" >}}).
 
 ---
 
@@ -190,7 +190,7 @@ changes will not verify against a previously recorded digest.
 A resource can carry a digest before it has ever been fetched: setting the optional `digest` field on the resource in
 `component-constructor.yaml` turns the recorded value into an assertion, so `ocm add cv` fails rather than recording
 whatever the server returned. See
-[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#pin-a-digest" >}}).
+[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/pack/wget-http-resources.md#pin-a-digest" >}}).
 
 ---
 
@@ -341,16 +341,16 @@ External plugins declare supported access types in their capability specificatio
 operations (resolve credential identity, download, upload) over the plugin protocol. Once installed, OCM routes requests
 for matching access types to the plugin automatically.
 
-See [Concept: Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}) for details on building and installing
+See [Concept: Plugin System]({{< relref "docs/concepts/pack/plugin-system.md" >}}) for details on building and installing
 plugins.
 
 ## Related Documentation
 
-- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}): why resource repositories
+- [Concept: Resource Repositories]({{< relref "docs/concepts/pack/resource-repositories.md" >}}): why resource repositories
   exist and how they fit into OCM
 - [Reference: Input and Access Types]({{< relref "input-and-access-types.md" >}}): access type specifications handled by
   resource repositories
 - [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}): identity types and
   matching rules for credential resolution
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}): how resource repositories
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer/transfer-concept.md" >}}): how resource repositories
   enable artifact transfer

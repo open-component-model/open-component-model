@@ -9,7 +9,7 @@ toc: true
 Component versions bundle your software artifacts with metadata, making them portable and verifiable. This guide walks you through creating your first component version.
 
 {{< callout context="tip" title="New to OCM?" icon="outline/info-circle" >}}
-For a conceptual overview of components, identities, and descriptors, see [Component Identity]({{< relref "docs/concepts/component-identity.md" >}}).
+For a conceptual overview of components, identities, and descriptors, see [Component Identity]({{< relref "docs/concepts/pack/component-identity.md" >}}).
 {{< /callout >}}
 
 ## What You'll Learn
@@ -479,7 +479,7 @@ ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0 --recursive -o 
 
 ## Next Steps
 
-- [How-to: Download Resources from OCM Components]({{< relref "../how-to/download-resources-from-component-versions.md" >}})  - How to extract resources from component versions
+- [How-to: Download Resources from OCM Components]({{< relref "docs/how-to/pack/download-resources-from-component-versions.md" >}})  - How to extract resources from component versions
 
 ## Related Documentation
 

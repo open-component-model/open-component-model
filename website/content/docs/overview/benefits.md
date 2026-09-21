@@ -30,15 +30,15 @@ It is a complete, verifiable record of **all deliverables and how to access them
 Security is built into OCM. You can **cryptographically sign and verify** every component in your supply chain
 to ensure its integrity or confirm its provenance.
 
-Beyond signatures, OCM uses [**immutable, globally unique component identities**]({{< relref "docs/concepts/component-identity.md" >}}).
+Beyond signatures, OCM uses [**immutable, globally unique component identities**]({{< relref "docs/concepts/pack/component-identity.md" >}}).
 These act like tracking IDs, linking all lifecycle phases. They make compliance checks, audits,
 and vulnerability scans easier and more reliable. With OCM, your software is fully traceable from build to deployment.
 
 **Software Bills of Materials with your components.** An SBOM can be added as a resource linked to the artifact
 it describes, so it is signed and transferred along with everything else. Where an SBOM is already attached to an OCI
 image, OCM discovers it instead.
-See [Software Bills of Materials]({{< relref "docs/concepts/sboms.md" >}}) for the why, and
-[Working with SBOMs]({{< relref "docs/tutorials/working-with-sboms.md" >}}) for the how.
+See [Software Bills of Materials]({{< relref "docs/concepts/pack/sboms.md" >}}) for the why, and
+[Working with SBOMs]({{< relref "docs/tutorials/pack/working-with-sboms.md" >}}) for the how.
 
 ### Deploy Anywhere, Even Air-Gapped
 

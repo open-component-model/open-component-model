@@ -10,6 +10,15 @@ sidebar:
 Understand how OCM works through clear explanations of its core concepts, architecture, and design principles.
 This section provides the theoretical foundation you need to make informed decisions when working with OCM.
 
+Concept articles are organised by **lifecycle phase** — the stage of the software delivery pipeline where the idea is most relevant:
+
+| Phase    | What you'll understand                                                |
+|----------|-----------------------------------------------------------------------|
+| **Pack**     | Component identity, resources, canonical repositories, credentials, plugins, SBOMs |
+| **Sign**     | Cryptographic signing model, trust models, signature verification     |
+| **Transfer** | Transfer model, Common Transport Format, resolvers                    |
+| **Deploy**   | OCM controllers, Kubernetes Deployer, resource ownership              |
+
 ## What Are Concepts?
 
 Concepts are **explanation-oriented** articles that help you understand *why* OCM works the way it does.

@@ -10,6 +10,15 @@ sidebar:
 Master OCM through practical, task-oriented guides that solve real problems.
 These how-to guides help you accomplish specific goals when working with OCM in production environments.
 
+Guides are organised by **lifecycle phase**:
+
+| Phase        | What you can accomplish                                                      |
+|--------------|------------------------------------------------------------------------------|
+| **Pack**     | Add resources from GitHub or HTTP, model software products, verify ownership |
+| **Sign**     | Generate keys, configure credentials, sign and verify component versions     |
+| **Transfer** | Air-gap transfers, replication, multi-registry credentials, HTTP config      |
+| **Deploy**   | Apply manifests, configure RBAC, set up controller credentials               |
+
 ## What Are How-to Guides?
 
 How-to guides are **task-oriented** recipes that show you how to solve specific problems.

@@ -82,7 +82,7 @@ resources:
     mediaType: application/vnd.ocm.software.oci.layout.v1+tar
 ```
 
-See the [Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) tutorial for a complete walkthrough.
+See the [Working with OCI]({{< relref "docs/tutorials/pack/working-with-oci" >}}) tutorial for a complete walkthrough.
 
 ### `Helm/v1`
 
@@ -204,7 +204,7 @@ resources:
     body: eyJmb3JtYXQiOiJqc29uIn0=
 ```
 
-See [Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}) for media type
+See [Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/pack/wget-http-resources.md" >}}) for media type
 resolution, redirects, download tuning, and credential configuration.
 
 ### `S3/v2` {#s3v2-input}
@@ -297,7 +297,7 @@ resources:
 References content stored alongside the component descriptor in the same repository. Legacy alias: `localBlob`.
 Typically created automatically when using input types or when transferring with `--copy-resources`.
 
-When stored in an OCI registry, local blobs with OCI-native media types (e.g. `application/vnd.oci.image.manifest.v1+json`, `application/vnd.oci.image.index.v1+json`) are mapped to native OCI manifests and can be accessed directly by digest using standard OCI tools. The `globalAccess` field provides the native image reference for direct access. See the [Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) tutorial for details.
+When stored in an OCI registry, local blobs with OCI-native media types (e.g. `application/vnd.oci.image.manifest.v1+json`, `application/vnd.oci.image.index.v1+json`) are mapped to native OCI manifests and can be accessed directly by digest using standard OCI tools. The `globalAccess` field provides the native image reference for direct access. See the [Working with OCI]({{< relref "docs/tutorials/pack/working-with-oci" >}}) tutorial for details.
 
 | Field            | Type   | Required | Description                                                      |
 |------------------|--------|----------|------------------------------------------------------------------|
@@ -442,7 +442,7 @@ is downloaded, when its digest is computed, and when the component version is tr
 
 Because the content is not under your control, the expected digest can be pinned on the resource itself, using the
 `digest` field alongside `access` rather than inside it. It is then verified on every fetch. See
-[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#pin-a-digest" >}}).
+[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/pack/wget-http-resources.md#pin-a-digest" >}}).
 
 Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical. The fields are identical
 to those of the [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input), so the same request can
@@ -485,7 +485,7 @@ Upload is not supported for this access type: a plain HTTP endpoint has no stand
 
 For guidance on choosing between the input and the access type, and for media type resolution, redirects, download
 tuning, and credential configuration, see
-[How-To: Add Resources from HTTP URLs]({{< relref "docs/how-to/add-resources-from-http-urls.md" >}}).
+[How-To: Add Resources from HTTP URLs]({{< relref "docs/how-to/pack/add-resources-from-http-urls.md" >}}).
 
 ### `S3/v2` {#s3v2-access}
 

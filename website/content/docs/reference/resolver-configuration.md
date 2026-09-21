@@ -7,7 +7,7 @@ toc: true
 ---
 
 This page is the technical reference for OCM resolver configuration. For a high-level introduction, see
-[OCM Resolvers]({{< relref "docs/concepts/resolvers.md" >}}).
+[OCM Resolvers]({{< relref "docs/concepts/transfer/resolvers.md" >}}).
 
 ## Configuration File
 
@@ -177,11 +177,11 @@ resolvers:
 
 ## Related Documentation
 
-- [OCM Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) — High-level introduction to resolvers
-- [Working with Resolvers Tutorial]({{< relref "docs/tutorials/configure-resolvers.md" >}}) — Hands-on walkthrough for
+- [OCM Resolvers]({{< relref "docs/concepts/transfer/resolvers.md" >}}) — High-level introduction to resolvers
+- [Working with Resolvers Tutorial]({{< relref "docs/tutorials/transfer/configure-resolvers.md" >}}) — Hands-on walkthrough for
   setting up resolvers
 - [How to Resolve Components Across Multiple Registries]
-- ({{< relref "docs/how-to/resolve-components-from-multiple-repositories.md" >}}) — Recipe for multi-registry resolution
-- [Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migrate-from-deprecated-resolvers.md" >}}) — Replace
+- ({{< relref "docs/how-to/transfer/resolve-components-from-multiple-repositories.md" >}}) — Recipe for multi-registry resolution
+- [Migrate from Deprecated Resolvers]({{< relref "docs/how-to/transfer/migrate-from-deprecated-resolvers.md" >}}) — Replace
   deprecated fallback
   resolvers with glob-based resolvers
