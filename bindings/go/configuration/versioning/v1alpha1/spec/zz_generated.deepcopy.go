@@ -15,13 +15,9 @@ func (in *Config) DeepCopyInto(out *Config) {
 	out.Type = in.Type
 	if in.Schemes != nil {
 		in, out := &in.Schemes, &out.Schemes
-		*out = make([]*VersionScheme, len(*in))
+		*out = make([]VersionScheme, len(*in))
 		for i := range *in {
-			if (*in)[i] != nil {
-				in, out := &(*in)[i], &(*out)[i]
-				*out = new(VersionScheme)
-				(*in).DeepCopyInto(*out)
-			}
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 	return

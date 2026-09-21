@@ -16,13 +16,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
-// compiledResolver holds a resolver together with its pre-compiled glob pattern
-// and optional version constraint, so they are validated once at construction
-// time instead of on every call.
+// compiledResolver holds a resolver together with its pre-compiled glob pattern,
+// so the pattern is validated once at construction time instead of on every call.
 type compiledResolver struct {
 	resolver             *resolverspec.Resolver
 	componentNamePattern glob.Glob
-	hasConstraint        bool // true when a non-empty version constraint is set
 }
 
 // SpecProvider implements a ComponentVersionRepositorySpecProvider with
@@ -73,7 +71,8 @@ func NewSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver, opts
 		if r.VersionConstraint != "" {
 			// Validate the constraint once at construction against the configured
 			// schemes so an unusable constraint fails load rather than silently
-			// matching nothing later.
+			// matching nothing later. ValidateConstraint is a no-op for an empty
+			// constraint, so this guard only avoids the wrapped error context.
 			if err := provider.registry.ValidateConstraint(r.VersionConstraint); err != nil {
 				return nil, fmt.Errorf("invalid version constraint %q in resolver index %d: %w", r.VersionConstraint, i, err)
 			}
@@ -82,7 +81,6 @@ func NewSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver, opts
 		compiled = append(compiled, compiledResolver{
 			resolver:             r,
 			componentNamePattern: g,
-			hasConstraint:        r.VersionConstraint != "",
 		})
 	}
 	provider.resolvers = compiled
@@ -122,7 +120,7 @@ func (r *SpecProvider) GetRepositorySpec(ctx context.Context, componentIdentity 
 			continue
 		}
 
-		if cr.hasConstraint {
+		if cr.resolver.VersionConstraint != "" {
 			if version == "" {
 				logger.Log(ctx, slog.LevelDebug, "skipping resolver with version constraint because no version was provided",
 					slog.Int("index", index),

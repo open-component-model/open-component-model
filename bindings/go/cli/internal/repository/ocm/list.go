@@ -70,8 +70,8 @@ func WithSort() ComponentVersionsFilterOption {
 	}
 }
 
-// WithRegistry sets the versioning schemes used to filter and sort versions.
-func WithRegistry(registry *versioning.Registry) ComponentVersionsFilterOption {
+// WithVersioningRegistry sets the versioning schemes used to filter and sort versions.
+func WithVersioningRegistry(registry *versioning.Registry) ComponentVersionsFilterOption {
 	return func(o *ComponentVersionsFilterOptions) {
 		o.registry = registry
 	}
@@ -150,10 +150,21 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 	// Ensure deterministic global ordering across components and versions.
 	if options.sort {
 		reg := options.reg()
+		var cmpErr error
 		slices.SortFunc(result, func(a, b *descriptor.Descriptor) int {
-			c, _ := reg.Compare(b.Component.Version, a.Component.Version)
+			if cmpErr != nil {
+				return 0
+			}
+			c, err := reg.Compare(b.Component.Version, a.Component.Version)
+			if err != nil {
+				cmpErr = err
+				return 0
+			}
 			return c
 		})
+		if cmpErr != nil {
+			return nil, fmt.Errorf("sorting component versions failed: %w", cmpErr)
+		}
 	}
 
 	return result, nil

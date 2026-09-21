@@ -18,7 +18,7 @@ a target repository using an internally generated transformation graph.
 
 When a version is included in the source reference, exactly that version is transferred.
 When the version is omitted, all versions of the component are discovered and transferred.
-Use --semver-constraint to restrict which versions are selected, and --latest to transfer
+Use --constraint to restrict which versions are selected, and --latest to transfer
 only the newest matching version.
 
 OCI, CTF, and Helm repositories are supported as transfer sources.
@@ -69,8 +69,8 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 # Transfer all versions of a component (omit version from reference)
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm
 
-# Transfer all versions matching a semver constraint
-transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --semver-constraint ">= 1.0.0, < 2.0.0"
+# Transfer all versions matching a version constraint
+transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --constraint ">= 1.0.0, < 2.0.0"
 
 # Transfer only the latest version
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
@@ -110,17 +110,17 @@ transfer component-version --transfer-spec spec.yaml
 ### Options
 
 ```
-      --copy-resources             copy all resources in the component version
-      --dry-run                    build and validate the graph but do not execute
-  -h, --help                       help for component-version
-      --latest                     if set, only the latest version of the component is transferred; only used when no version is specified in the reference
-  -o, --output enum                output format of the component descriptors
-                                   (must be one of [json ndjson yaml]) (default yaml)
-  -r, --recursive                  recursively discover and transfer component versions
-      --semver-constraint string   semantic version constraint restricting which versions to transfer (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
-      --transfer-spec string       path to a transfer specification file (use "-" for stdin)
-  -u, --upload-as enum             Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
-                                   (must be one of [localBlob ociArtifact]) (default localBlob)
+      --constraint string      version constraint restricting which versions to transfer (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
+      --copy-resources         copy all resources in the component version
+      --dry-run                build and validate the graph but do not execute
+  -h, --help                   help for component-version
+      --latest                 if set, only the latest version of the component is transferred; only used when no version is specified in the reference
+  -o, --output enum            output format of the component descriptors
+                               (must be one of [json ndjson yaml]) (default yaml)
+  -r, --recursive              recursively discover and transfer component versions
+      --transfer-spec string   path to a transfer specification file (use "-" for stdin)
+  -u, --upload-as enum         Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
+                               (must be one of [localBlob ociArtifact]) (default localBlob)
 ```
 
 ### Options inherited from parent commands

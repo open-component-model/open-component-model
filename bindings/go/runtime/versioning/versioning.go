@@ -87,7 +87,7 @@ func Default() *Registry {
 // the built-in semver behavior back in explicitly (e.g. as a trailing fallback)
 // once custom schemes are configured.
 func NewLooseSemverScheme() Scheme {
-	return newLooseSemverScheme()
+	return looseSemverScheme{}
 }
 
 // Built-in scheme names selectable from configuration via a scheme entry's
@@ -189,11 +189,14 @@ func (r *Registry) Compare(a, b string) (int, error) {
 	return sa.Compare(a, b)
 }
 
-// Valid reports whether any registered scheme considers the version well-formed.
+// Valid reports whether the version is well-formed for its authoritative scheme
+// — the first scheme that claims it via Matches. This mirrors the first-match
+// resolution of [Registry.schemeFor] and [Registry.rankFor]: a later scheme
+// cannot vouch for a version an earlier scheme already claims but rejects.
 func (r *Registry) Valid(version string) bool {
 	for _, s := range r.schemes {
-		if s.Matches(version) && s.Valid(version) {
-			return true
+		if s.Matches(version) {
+			return s.Valid(version)
 		}
 	}
 	return false
@@ -341,8 +344,6 @@ func (r *Registry) rankFor(version string) (int, Scheme) {
 
 // looseSemverScheme is the default scheme, wrapping github.com/Masterminds/semver/v3.
 type looseSemverScheme struct{}
-
-func newLooseSemverScheme() *looseSemverScheme { return &looseSemverScheme{} }
 
 func (looseSemverScheme) Name() string { return "loose-semver" }
 

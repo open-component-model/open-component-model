@@ -18,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/tree"
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	versioningspec "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -33,7 +34,7 @@ import (
 )
 
 const (
-	FlagSemverConstraint = "semver-constraint"
+	FlagConstraint       = "constraint"
 	FlagOutput           = "output"
 	FlagDisplayMode      = "display-mode"
 	FlagConcurrencyLimit = "concurrency-limit"
@@ -95,7 +96,7 @@ get cvs oci::http://localhost:8080//ocm.software/cli
 	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `display mode can be used in combination with --recursive
   static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
-	cmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
+	cmd.Flags().String(FlagConstraint, "> 0.0.0-0", "version constraint restricting which versions to output")
 	// TODO(fabianburth): add concurrency limit to the dag discovery (https://github.com/open-component-model/ocm-project/issues/705)
 	// cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
@@ -138,9 +139,9 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting display-mode flag failed: %w", err)
 	}
-	constraint, err := cmd.Flags().GetString(FlagSemverConstraint)
+	constraint, err := cmd.Flags().GetString(FlagConstraint)
 	if err != nil {
-		return fmt.Errorf("getting semver-constraint flag failed: %w", err)
+		return fmt.Errorf("getting constraint flag failed: %w", err)
 	}
 	// TODO(fabianburth): add concurrency limit to the dag discovery (https://github.com/open-component-model/ocm-project/issues/705)
 	// concurrencyLimit, err := cmd.Flags().GetInt(FlagConcurrencyLimit)
@@ -212,7 +213,7 @@ func processComponentReference(cmd *cobra.Command,
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	registry, err := ocm.RegistryFromConfig(config)
+	registry, err := versioningspec.RegistryFromConfig(config)
 	if err != nil {
 		return fmt.Errorf("could not build versioning registry: %w", err)
 	}
@@ -503,7 +504,7 @@ func processRepositoryReference(cmd *cobra.Command,
 		return fmt.Errorf("no components found in repository %v", repository)
 	}
 
-	registry, err := ocm.RegistryFromConfig(config)
+	registry, err := versioningspec.RegistryFromConfig(config)
 	if err != nil {
 		return fmt.Errorf("could not build versioning registry: %w", err)
 	}
@@ -585,7 +586,7 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 		ocm.WithSemverConstraint(constraint),
 		ocm.WithLatestOnly(latestOnly),
 		ocm.WithSort(),
-		ocm.WithRegistry(registry),
+		ocm.WithVersioningRegistry(registry),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("listing component versions failed: %w", err)

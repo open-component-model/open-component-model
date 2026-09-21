@@ -8,23 +8,10 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	versioningspec "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
-
-// RegistryFromConfig builds a versioning registry from the central OCM
-// configuration. When the config carries no versioning entry, the loose-semver
-// default is returned.
-func RegistryFromConfig(config *genericv1.Config) (*versioning.Registry, error) {
-	cfg, err := versioningspec.Lookup(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to look up versioning config: %w", err)
-	}
-	return cfg.Registry()
-}
 
 // GetComponentVersionsOptions configures how component versions are retrieved.
 type GetComponentVersionsOptions struct {
@@ -77,10 +64,21 @@ func GetComponentVersions(ctx context.Context, opts GetComponentVersionsOptions,
 
 	// Sort descending (newest version first) using the configured versioning schemes.
 	reg := opts.registry()
+	var cmpErr error
 	slices.SortFunc(descs, func(a, b *descriptor.Descriptor) int {
-		c, _ := reg.Compare(b.Component.Version, a.Component.Version)
+		if cmpErr != nil {
+			return 0
+		}
+		c, err := reg.Compare(b.Component.Version, a.Component.Version)
+		if err != nil {
+			cmpErr = err
+			return 0
+		}
 		return c
 	})
+	if cmpErr != nil {
+		return nil, fmt.Errorf("sorting component versions failed: %w", cmpErr)
+	}
 
 	return descs, nil
 }

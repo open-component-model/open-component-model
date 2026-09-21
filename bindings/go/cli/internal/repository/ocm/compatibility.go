@@ -4,6 +4,7 @@ import (
 	"context"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	versioningspec "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
@@ -46,7 +47,7 @@ func NewComponentRepositoryResolver(
 		return nil, err
 	}
 
-	registry, err := RegistryFromConfig(options.config)
+	registry, err := versioningspec.RegistryFromConfig(options.config)
 	if err != nil {
 		return nil, err
 	}

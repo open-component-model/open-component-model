@@ -57,7 +57,7 @@ type Config struct {
 	// entry with builtin: loose-semver (typically last, as a fallback). List
 	// more specific schemes before broader ones. When no config is present at
 	// all, OCM still uses loose semver (see [versioning.Default]).
-	Schemes []*VersionScheme `json:"schemes,omitempty"`
+	Schemes []VersionScheme `json:"schemes,omitempty"`
 }
 
 // VersionScheme describes a single version scheme, either as a regular
@@ -82,6 +82,7 @@ type VersionScheme struct {
 	// reference. When set, Pattern and ComparisonGroups must be empty. Add an
 	// entry with builtin: loose-semver (typically last) to keep recognizing semver
 	// versions alongside custom schemes.
+	// +ocm:jsonschema-gen:enum=loose-semver,calver-full,calver-month,calver-ubuntu,calver-micro,aws-date,build-number
 	Builtin string `json:"builtin,omitempty"`
 
 	// Pattern is a Go (RE2) regular expression that a version must match for
@@ -98,7 +99,7 @@ type VersionScheme struct {
 	ComparisonGroups []string `json:"comparisonGroups,omitempty"`
 }
 
-// Lookup creates a new Config from a central V1 config.
+// Lookup creates a new Config from a central generic config.
 func Lookup(cfg *genericv1.Config) (*Config, error) {
 	if cfg == nil {
 		return nil, nil
@@ -123,6 +124,17 @@ func Lookup(cfg *genericv1.Config) (*Config, error) {
 	return Merge(cfgs...), nil
 }
 
+// RegistryFromConfig builds a versioning registry from the central OCM
+// configuration. When the config carries no versioning entry, the loose-semver
+// default is returned.
+func RegistryFromConfig(config *genericv1.Config) (*versioning.Registry, error) {
+	cfg, err := Lookup(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up versioning config: %w", err)
+	}
+	return cfg.Registry()
+}
+
 // Merge merges the provided configs into a single config, concatenating their
 // schemes in order.
 func Merge(configs ...*Config) *Config {
@@ -132,7 +144,7 @@ func Merge(configs ...*Config) *Config {
 
 	merged := new(Config)
 	merged.Type = configs[0].Type
-	merged.Schemes = make([]*VersionScheme, 0)
+	merged.Schemes = make([]VersionScheme, 0)
 
 	for _, cfg := range configs {
 		merged.Schemes = append(merged.Schemes, cfg.Schemes...)
@@ -146,8 +158,8 @@ func Merge(configs ...*Config) *Config {
 //
 // A regex scheme's pattern is compiled with [regexp.Compile]; every name in its
 // comparisonGroups must be a named capture group in that pattern. A scheme with
-// Builtin set selects a built-in scheme (currently only "loose-semver") and must
-// not set Pattern or ComparisonGroups.
+// Builtin set selects a built-in scheme (see [versioning.BuiltinNames]) and must
+// not set Name, Pattern, or ComparisonGroups.
 //
 // The built-in loose-semver scheme is NOT appended automatically: once schemes
 // are configured, only the listed schemes apply. Add an explicit entry with
@@ -160,9 +172,6 @@ func (c *Config) Registry() (*versioning.Registry, error) {
 
 	schemes := make([]versioning.Scheme, 0, len(c.Schemes))
 	for i, s := range c.Schemes {
-		if s == nil {
-			return nil, fmt.Errorf("versioning scheme at index %d is null", i)
-		}
 		if s.Builtin == "" && s.Pattern == "" {
 			return nil, fmt.Errorf("versioning scheme at index %d: must set exactly one of pattern or builtin", i)
 		}

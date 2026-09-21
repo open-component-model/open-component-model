@@ -188,7 +188,7 @@
               ]
             },
             "version": {
-              "$ref": "#/$defs/relaxedSemver",
+              "$ref": "#/$defs/version",
               "description": "Version of the component"
             }
           },
@@ -311,7 +311,7 @@
               "description": "Local name of the reference"
             },
             "version": {
-              "$ref": "#/$defs/relaxedSemver",
+              "$ref": "#/$defs/version",
               "description": "Version of the referenced component"
             }
           },
@@ -444,7 +444,7 @@
               ]
             },
             "version": {
-              "$ref": "#/$defs/relaxedSemver",
+              "$ref": "#/$defs/version",
               "description": "Version of the component"
             }
           },
@@ -492,17 +492,6 @@
             "ociArtifact/v1",
             "OCIRegistry",
             "my.custom.type/v1alpha1"
-          ]
-        },
-        "relaxedSemver": {
-          "type": "string",
-          "description": "Component version string. Structural validation only requires a non-empty string; the concrete versioning scheme (semver by default, or a configured scheme such as calver) is validated separately at runtime.",
-          "pattern": "^.+$",
-          "examples": [
-            "v1.0.0",
-            "1.0.0",
-            "2024.03.15",
-            "22.04"
           ]
         },
         "repositoryContext": {
@@ -588,7 +577,7 @@
               "description": "Type of the resource"
             },
             "version": {
-              "$ref": "#/$defs/relaxedSemver",
+              "$ref": "#/$defs/version",
               "description": "Version of the resource"
             }
           },
@@ -691,7 +680,7 @@
               "description": "Type of the source"
             },
             "version": {
-              "$ref": "#/$defs/relaxedSemver",
+              "$ref": "#/$defs/version",
               "description": "Version of the source"
             }
           },
@@ -741,6 +730,17 @@
               "description": "String representation of the timestamp"
             }
           }
+        },
+        "version": {
+          "type": "string",
+          "description": "Component version string. Structural validation only requires a non-empty string; the concrete versioning scheme (semver by default, or a configured scheme such as calver) is validated separately at runtime.",
+          "pattern": "^.+$",
+          "examples": [
+            "v1.0.0",
+            "1.0.0",
+            "2024.03.15",
+            "22.04"
+          ]
         }
       }
     },

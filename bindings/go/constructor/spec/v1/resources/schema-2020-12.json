@@ -72,7 +72,7 @@
       "minLength": 2,
       "pattern": "^[a-z0-9]([-_+a-z0-9]*[a-z0-9])?$"
     },
-    "relaxedSemver": {
+    "version": {
       "description": "Component version string. Structural validation only requires a non-empty string; the concrete versioning scheme (semver by default, or a configured scheme such as calver) is validated separately at runtime.",
       "pattern": "^.+$",
       "type": "string",
@@ -138,7 +138,7 @@
         },
         "version": {
           "description": "Version of the source",
-          "$ref": "#/$defs/relaxedSemver"
+          "$ref": "#/$defs/version"
         },
         "type": {
           "description": "Type of the source",
@@ -303,7 +303,7 @@
         },
         "version": {
           "description": "Version of the referenced component",
-          "$ref": "#/$defs/relaxedSemver"
+          "$ref": "#/$defs/version"
         },
         "labels": {
           "description": "Labels associated with the reference",
@@ -341,7 +341,7 @@
             },
             "version": {
               "description": "Version of the resource",
-              "$ref": "#/$defs/relaxedSemver"
+              "$ref": "#/$defs/version"
             },
             "relation": {
               "description": "Relation of the resource to the component (local or external)",
@@ -381,7 +381,7 @@
             },
             "version": {
               "description": "Version of the resource",
-              "$ref": "#/$defs/relaxedSemver"
+              "$ref": "#/$defs/version"
             }
           }
         }
@@ -403,7 +403,7 @@
         },
         "version": {
           "description": "Version of the component",
-          "$ref": "#/$defs/relaxedSemver"
+          "$ref": "#/$defs/version"
         },
         "creationTime": {
           "description": "Creation time of the component version",
