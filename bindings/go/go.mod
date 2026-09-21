@@ -6,7 +6,7 @@ toolchain go1.26.5
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
-replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20260807152313-538f27dd2513
+replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20260914153615-3650f26df2a1
 
 require (
 	cel.dev/cel-go v0.32.0
