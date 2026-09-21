@@ -114,11 +114,11 @@ type ChecksumSource struct {
 	// URL is a CEL expression that resolves the sibling checksum URL for
 	// externalUrl sources. It MUST be a single standalone expression wrapped in
 	// ${…} and returns a string. Available variables:
-	//   - resource: the wget input under construction, with fields
-	//     url/mediaType/verb/header/noRedirect and parsed url.path/host/scheme
+	//   - resource.url.raw / .scheme / .host / .path — the parsed artifact URL
+	//   - resource.mediaType / verb / header / noRedirect — other wget input fields
 	//   - ext: the algorithm's file extension (e.g. "sha256", "sha1")
 	//   - alg: the algorithm's OCM name (e.g. "SHA-256")
-	// Empty defaults to `${resource.url + "." + ext}` (Maven's convention).
+	// Empty defaults to `<resource.url.raw>.<ext>` (Maven's convention).
 	//
 	// Example: '${"https://mirror.example/checksums/" + ext + resource.url.path}'.
 	URL string `json:"url,omitempty"`

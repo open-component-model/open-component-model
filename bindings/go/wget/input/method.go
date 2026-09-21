@@ -140,7 +140,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}
 
 	if hasPolicy {
-		if err := i.verifyChecksum(ctx, client, &wget, policy, data); err != nil {
+		if err := i.verifyChecksum(ctx, client, credentials, &wget, policy, data); err != nil {
 			_ = data.Close()
 			return nil, fmt.Errorf("checksum verification failed for wget input from %q: %w", wget.URL, err)
 		}
@@ -166,9 +166,42 @@ func (i *InputMethod) GetCredentialTypeScheme() *runtime.Scheme {
 
 // verifyChecksum resolves the checksum policy against the completed download and
 // verifies the transferred bytes against the first source that yields an expected
-// checksum. Recording the resulting digest on the blob is handled by the caller.
-func (i *InputMethod) verifyChecksum(ctx context.Context, client *nethttp.Client, wget *v1.Wget, policy checksum.Policy, data *download.Blob) error {
-	fetcher := &checksum.ExternalFetcher{Client: client}
+// checksum. Sibling-URL checksum fetches reuse the same OCM credentials as the
+// artifact download so authenticated mirrors (Maven repositories with basic auth,
+// registries behind a bearer token, mTLS endpoints) are honoured on both hops.
+// Recording the resulting digest on the blob is handled by the caller.
+func (i *InputMethod) verifyChecksum(ctx context.Context, client *nethttp.Client, credentials runtime.Typed, wget *v1.Wget, policy checksum.Policy, data *download.Blob) error {
+	// Reuse the download's credential machinery for the sibling checksum fetch:
+	// transport-level (mTLS) creds require cloning the client once, header-level
+	// creds (Bearer/Basic) are attached per request. The bootstrap call below
+	// materialises the mTLS-decorated client (against a throw-away request whose
+	// header we discard); the PrepareRequest closure re-runs ApplyCredentials so
+	// the Authorization header lands on each checksum request. When there is no
+	// mTLS the closure just sets the header — the transport clone is a no-op.
+	fetchClient := client
+	if fetchClient == nil {
+		fetchClient = nethttp.DefaultClient
+	}
+	if credentials != nil {
+		bootstrap, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, wget.URL, nil)
+		if err != nil {
+			return fmt.Errorf("cannot bootstrap credentials for checksum fetch: %w", err)
+		}
+		if err := download.ApplyCredentials(ctx, bootstrap, &fetchClient, credentials); err != nil {
+			return fmt.Errorf("cannot apply credentials for checksum fetch: %w", err)
+		}
+	}
+
+	fetcher := &checksum.ExternalFetcher{
+		Client: fetchClient,
+		PrepareRequest: func(req *nethttp.Request) error {
+			// fetchClient is captured by pointer-of-value; reassignment inside
+			// ApplyCredentials would clone again on every request, so we discard the
+			// output. Only the header side-effect on req matters here.
+			throwaway := fetchClient
+			return download.ApplyCredentials(ctx, req, &throwaway, credentials)
+		},
+	}
 	_, _, err := checksum.Resolve(ctx, policy, checksum.Input{
 		URL:      wget.URL,
 		Headers:  data.Headers(),
@@ -212,21 +245,24 @@ func toChecksumPolicy(spec *v1.ChecksumPolicy, wget *v1.Wget) (checksum.Policy, 
 	if spec.OnMissing == v1.OnMissingCompute {
 		policy.OnMissing = checksum.Compute
 	}
-	for _, src := range spec.Sources {
+	for i, src := range spec.Sources {
 		s := checksum.Source{
 			Type:    checksum.SourceType(src.Type),
 			Headers: src.Headers,
 		}
-		// Unknown extensions are dropped here; RequiredAlgorithms/Resolve then fall
-		// back to the full supported set, and an unresolvable checksum surfaces via
-		// the onMissing behaviour.
-		if algs, err := checksum.AlgorithmsFromExtensions(src.Algorithms); err == nil {
-			s.Algorithms = algs
+		// An unsupported algorithm extension is a hard error: silently dropping it
+		// lets Resolve fall back to the full algorithm set and silently verify
+		// against an algorithm the user never asked for. Fail fast with the source
+		// index so the offending entry in the policy is easy to locate.
+		algs, err := checksum.AlgorithmsFromExtensions(src.Algorithms)
+		if err != nil {
+			return checksum.Policy{}, false, fmt.Errorf("checksum policy source #%d: %w", i, err)
 		}
+		s.Algorithms = algs
 		if src.Type == v1.ChecksumSourceExternalURL {
 			resolver, err := checksumURLResolver(src.URL, wget)
 			if err != nil {
-				return checksum.Policy{}, false, err
+				return checksum.Policy{}, false, fmt.Errorf("checksum policy source #%d: %w", i, err)
 			}
 			s.ResolveURL = resolver
 		}

@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/input"
+	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
 // Digests of the ASCII payload "hello world".
@@ -285,4 +286,46 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
 	})
+}
+
+// TestProcessResource_ChecksumPolicy_CredentialsForwarded confirms that OCM
+// credentials handed to the input method are attached to the sibling checksum
+// fetch as well, not just to the artifact download. Without this, authenticated
+// Maven repos and other credentialed mirrors silently 401 on the checksum leg.
+func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("hello world")
+
+	var (
+		artifactAuth string
+		checksumAuth string
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, ".sha256"):
+			checksumAuth = r.Header.Get("Authorization")
+			_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
+		default:
+			artifactAuth = r.Header.Get("Authorization")
+			_, _ = w.Write(content)
+		}
+	}))
+	defer server.Close()
+
+	creds := &credv1.WgetCredentials{
+		Type:          credv1.WgetCredentialsVersionedType,
+		IdentityToken: "my-token",
+	}
+	resource := wgetInputResource(t, map[string]any{
+		"url": server.URL + "/artifact",
+		"checksumPolicy": map[string]any{"sources": []any{
+			map[string]any{"type": "externalUrl", "algorithms": []any{"sha256"}},
+		}},
+	})
+	result, err := (&input.InputMethod{}).ProcessResource(t.Context(), resource, creds)
+	require.NoError(t, err)
+	assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
+	assert.Equal(t, "Bearer my-token", artifactAuth, "artifact fetch must carry credentials")
+	assert.Equal(t, "Bearer my-token", checksumAuth, "sibling checksum fetch must carry the same credentials")
 }

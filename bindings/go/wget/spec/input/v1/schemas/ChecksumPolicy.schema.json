@@ -66,7 +66,7 @@
         },
         "url": {
           "type": "string",
-          "description": "URL is a CEL expression that resolves the sibling checksum URL for\nexternalUrl sources. It MUST be a single standalone expression wrapped in\n${…} and returns a string. Available variables:\n- resource: the wget input under construction, with fields\nurl/mediaType/verb/header/noRedirect and parsed url.path/host/scheme\n- ext: the algorithm's file extension (e.g. \"sha256\", \"sha1\")\n- alg: the algorithm's OCM name (e.g. \"SHA-256\")\nEmpty defaults to `${resource.url + \".\" + ext}` (Maven's convention).\n\nExample: '${\"https://mirror.example/checksums/\" + ext + resource.url.path}'."
+          "description": "URL is a CEL expression that resolves the sibling checksum URL for\nexternalUrl sources. It MUST be a single standalone expression wrapped in\n${…} and returns a string. Available variables:\n- resource.url.raw / .scheme / .host / .path — the parsed artifact URL\n- resource.mediaType / verb / header / noRedirect — other wget input fields\n- ext: the algorithm's file extension (e.g. \"sha256\", \"sha1\")\n- alg: the algorithm's OCM name (e.g. \"SHA-256\")\nEmpty defaults to `\u003cresource.url.raw\u003e.\u003cext\u003e` (Maven's convention).\n\nExample: '${\"https://mirror.example/checksums/\" + ext + resource.url.path}'."
         }
       },
       "required": [
