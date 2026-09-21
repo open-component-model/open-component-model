@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	httpclient "ocm.software/open-component-model/bindings/go/http"
@@ -15,7 +16,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/checksum"
 	"ocm.software/open-component-model/bindings/go/wget/checksum/httpverify"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
-	wgetconfigv1alpha1 "ocm.software/open-component-model/bindings/go/wget/spec/config/v1alpha1"
 	wgetcreds "ocm.software/open-component-model/bindings/go/wget/spec/credentials"
 	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/wget/spec/input"
@@ -36,12 +36,12 @@ type InputMethod struct {
 	// downloads. When nil, a default client is used.
 	HTTPConfig *httpv1alpha1.Config
 	// WgetConfig steers the wget behavioural knobs — today, the
-	// [wgetconfigv1alpha1.ChecksumPolicy] to apply to each downloaded resource
+	// [checksumhttpv1alpha1.ChecksumPolicy] to apply to each downloaded resource
 	// (`defaultChecksumPolicy` plus per-host overrides). When nil (or when no
 	// entry matches the URL), the digest is computed from the stream without
 	// external verification. The wget access-side digest processor honours the
 	// same config so both paths behave identically.
-	WgetConfig *wgetconfigv1alpha1.Config
+	WgetConfig *checksumhttpv1alpha1.Config
 	// MaxDownloadSize limits the number of bytes read from a response body. When zero,
 	// the download package default [download.DefaultMaxDownloadSize] is used. A negative value disables the limit.
 	MaxDownloadSize int64
@@ -105,7 +105,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 
 	// Verification behaviour is entirely a deployment concern: the wget input
 	// spec no longer carries a checksumPolicy. Operators configure it centrally
-	// via wget.config.ocm.software/v1alpha1; the descriptor stays clean.
+	// via checksum.http.config.ocm.software/v1alpha1; the descriptor stays clean.
 	policy, hasPolicy, err := toChecksumPolicy(i.WgetConfig.PolicyForURL(wget.URL))
 	if err != nil {
 		return nil, fmt.Errorf("invalid checksum policy for wget input from %q: %w", wget.URL, err)
@@ -198,16 +198,16 @@ func verifyProvidedDigest(provided *constructorruntime.Digest, data *download.Bl
 	return nil
 }
 
-// toChecksumPolicy adapts a [wgetconfigv1alpha1.ChecksumPolicy] resolved from
+// toChecksumPolicy adapts a [checksumhttpv1alpha1.ChecksumPolicy] resolved from
 // the OCM config to the checksum package's Policy, defaulting OnMissing to fail.
 // Returns ok=false when spec is nil (no policy configured for this URL), in
 // which case the digest is computed from the stream without verification.
-func toChecksumPolicy(spec *wgetconfigv1alpha1.ChecksumPolicy) (checksum.Policy, bool, error) {
+func toChecksumPolicy(spec *checksumhttpv1alpha1.ChecksumPolicy) (checksum.Policy, bool, error) {
 	if spec == nil {
 		return checksum.Policy{}, false, nil
 	}
 	policy := checksum.Policy{OnMissing: checksum.Fail}
-	if spec.OnMissing == wgetconfigv1alpha1.OnMissingCompute {
+	if spec.OnMissing == checksumhttpv1alpha1.OnMissingCompute {
 		policy.OnMissing = checksum.Compute
 	}
 	for i, src := range spec.Sources {

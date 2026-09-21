@@ -1,4 +1,4 @@
-package v1alpha1_test
+package spec_test
 
 import (
 	"strings"
@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	v1alpha1 "ocm.software/open-component-model/bindings/go/wget/spec/config/v1alpha1"
+	v1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	
 )
 
@@ -25,7 +25,7 @@ func TestLookupConfig_Default(t *testing.T) {
 	got, err := v1alpha1.LookupConfig(decodeGeneric(t, `
 type: generic.config.ocm.software/v1
 configurations:
-  - type: wget.config.ocm.software/v1alpha1
+  - type: checksum.http.config.ocm.software/v1alpha1
     defaultChecksumPolicy:
       onMissing: compute
       sources:
@@ -54,7 +54,7 @@ func TestPolicyForURL_HostOverrideWinsOverDefault(t *testing.T) {
 	cfg, err := v1alpha1.LookupConfig(decodeGeneric(t, `
 type: generic.config.ocm.software/v1
 configurations:
-  - type: wget.config.ocm.software/v1alpha1
+  - type: checksum.http.config.ocm.software/v1alpha1
     defaultChecksumPolicy:
       onMissing: compute
       sources: [{type: httpHeader}]
@@ -84,7 +84,7 @@ func TestPolicyForURL_PortQualifiedKeyBeatsBareHost(t *testing.T) {
 	cfg, err := v1alpha1.LookupConfig(decodeGeneric(t, `
 type: generic.config.ocm.software/v1
 configurations:
-  - type: wget.config.ocm.software/v1alpha1
+  - type: checksum.http.config.ocm.software/v1alpha1
     hosts:
       "repo.example.com":
         checksumPolicy:
@@ -115,7 +115,7 @@ func TestPolicyForURL_MalformedURLFallsBackToDefault(t *testing.T) {
 	cfg, err := v1alpha1.LookupConfig(decodeGeneric(t, `
 type: generic.config.ocm.software/v1
 configurations:
-  - type: wget.config.ocm.software/v1alpha1
+  - type: checksum.http.config.ocm.software/v1alpha1
     defaultChecksumPolicy:
       onMissing: compute
       sources: [{type: httpHeader}]
@@ -136,14 +136,14 @@ func TestMerge_LaterWins(t *testing.T) {
 	merged, err := v1alpha1.LookupConfig(decodeGeneric(t, `
 type: generic.config.ocm.software/v1
 configurations:
-  - type: wget.config.ocm.software/v1alpha1
+  - type: checksum.http.config.ocm.software/v1alpha1
     defaultChecksumPolicy:
       onMissing: compute
       sources: [{type: httpHeader}]
     hosts:
       "a.example":
         checksumPolicy: {onMissing: compute, sources: [{type: httpHeader}]}
-  - type: wget.config.ocm.software/v1alpha1
+  - type: checksum.http.config.ocm.software/v1alpha1
     defaultChecksumPolicy:
       onMissing: fail
       sources: [{type: externalUrl}]
@@ -168,7 +168,7 @@ func TestPolicyForURL_MixedCaseHostnameMatchesLowercasedConfigKey(t *testing.T) 
 	cfg, err := v1alpha1.LookupConfig(decodeGeneric(t, `
 type: generic.config.ocm.software/v1
 configurations:
-  - type: wget.config.ocm.software/v1alpha1
+  - type: checksum.http.config.ocm.software/v1alpha1
     hosts:
       "repo.example.com":
         checksumPolicy: {onMissing: fail, sources: [{type: httpHeader}]}
@@ -184,7 +184,7 @@ configurations:
 	cfg2, err := v1alpha1.LookupConfig(decodeGeneric(t, `
 type: generic.config.ocm.software/v1
 configurations:
-  - type: wget.config.ocm.software/v1alpha1
+  - type: checksum.http.config.ocm.software/v1alpha1
     hosts:
       "Repo.Example.COM":
         checksumPolicy: {onMissing: fail, sources: [{type: httpHeader}]}

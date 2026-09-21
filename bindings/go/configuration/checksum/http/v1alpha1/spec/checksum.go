@@ -1,4 +1,4 @@
-package v1alpha1
+package spec
 
 // OnMissingChecksum controls what happens when a [ChecksumPolicy] is configured
 // but none of its sources yields an expected checksum.

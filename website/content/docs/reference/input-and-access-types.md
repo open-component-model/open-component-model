@@ -244,7 +244,7 @@ configurations:
     timeout: 30s
 
   # wget behavioural knobs — how to verify the download
-  - type: wget.config.ocm.software/v1alpha1
+  - type: checksum.http.config.ocm.software/v1alpha1
     defaultChecksumPolicy:
       onMissing: compute      # fail | compute (default: fail when a policy is set)
       sources:                # tried in order; first that yields a checksum wins

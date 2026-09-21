@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -17,7 +18,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
-	wgetconfigv1alpha1 "ocm.software/open-component-model/bindings/go/wget/spec/config/v1alpha1"
 	wgetcreds "ocm.software/open-component-model/bindings/go/wget/spec/credentials"
 	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
@@ -37,10 +37,10 @@ type ResourceRepository struct {
 	maxDownloadSize  int64
 	filesystemConfig *filesystemv1alpha1.Config
 	// wgetConfig steers the digest processor's behavioural knobs — today, the
-	// [wgetconfigv1alpha1.ChecksumPolicy] applied against the source when computing a
+	// [checksumhttpv1alpha1.ChecksumPolicy] applied against the source when computing a
 	// resource's digest. When nil, the digest is computed from the stream
 	// without external verification (the pre-config default).
-	wgetConfig *wgetconfigv1alpha1.Config
+	wgetConfig *checksumhttpv1alpha1.Config
 }
 
 // NewResourceRepository creates a new wget resource repository. If filesystemConfig
@@ -174,7 +174,7 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 
 // ProcessResourceDigest computes the digest of a wget resource by downloading the
 // referenced content and hashing it inline (a single streaming pass — no re-read).
-// When [ResourceRepository.wgetConfig] resolves a [wgetconfigv1alpha1.ChecksumPolicy] for
+// When [ResourceRepository.wgetConfig] resolves a [checksumhttpv1alpha1.ChecksumPolicy] for
 // the resource's URL, the downloaded bytes are also verified against it: header
 // (RFC 9530 / x-checksum-*) and sibling-URL sources are honoured exactly as on
 // the input-method side, and any mismatch aborts before a digest is recorded.
@@ -263,15 +263,15 @@ func policyURL(resource *descriptor.Resource) string {
 	return wget.URL
 }
 
-// toChecksumPolicy adapts an [wgetconfigv1alpha1.ChecksumPolicy] to the checksum package's
+// toChecksumPolicy adapts an [checksumhttpv1alpha1.ChecksumPolicy] to the checksum package's
 // Policy. Now that ChecksumSource.URL is a plain absolute URL (no templating),
 // externalUrl sources work identically on the input and access paths.
-func toChecksumPolicy(spec *wgetconfigv1alpha1.ChecksumPolicy) (checksum.Policy, bool, error) {
+func toChecksumPolicy(spec *checksumhttpv1alpha1.ChecksumPolicy) (checksum.Policy, bool, error) {
 	if spec == nil {
 		return checksum.Policy{}, false, nil
 	}
 	policy := checksum.Policy{OnMissing: checksum.Fail}
-	if spec.OnMissing == wgetconfigv1alpha1.OnMissingCompute {
+	if spec.OnMissing == checksumhttpv1alpha1.OnMissingCompute {
 		policy.OnMissing = checksum.Compute
 	}
 	for i, src := range spec.Sources {

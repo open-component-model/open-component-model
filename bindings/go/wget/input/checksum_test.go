@@ -13,7 +13,7 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/wget/input"
-	wgetconfigv1alpha1 "ocm.software/open-component-model/bindings/go/wget/spec/config/v1alpha1"
+	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
@@ -109,7 +109,7 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 
 // TestProcessResource_ChecksumPolicy_CredentialsForwarded confirms three
 // invariants on how OCM credentials propagate to the sibling checksum fetch
-// when a wget.config.ocm.software policy is configured:
+// when a checksum.http.config.ocm.software policy is configured:
 //
 //   - Same-origin HTTPS: credentials are forwarded so authenticated Maven mirrors
 //     and registries behind a bearer token/basic auth verify checksums end-to-end.
@@ -151,10 +151,10 @@ func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
 	}
 	// externalUrl policy with the default sibling URL — credentials only reach
 	// the sibling fetch when it lands on the artifact's same origin.
-	externalPolicy := &wgetconfigv1alpha1.Config{
-		DefaultChecksumPolicy: &wgetconfigv1alpha1.ChecksumPolicy{
-			OnMissing: wgetconfigv1alpha1.OnMissingFail,
-			Sources:   []wgetconfigv1alpha1.ChecksumSource{{Type: wgetconfigv1alpha1.ChecksumSourceExternalURL, Algorithms: []string{"sha256"}}},
+	externalPolicy := &checksumhttpv1alpha1.Config{
+		DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
+			OnMissing: checksumhttpv1alpha1.OnMissingFail,
+			Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceExternalURL, Algorithms: []string{"sha256"}}},
 		},
 	}
 
@@ -195,10 +195,10 @@ func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
 
 		// Point the checksum URL at the mirror on a different host via a
 		// per-host config override.
-		crossOriginPolicy := &wgetconfigv1alpha1.Config{
-			DefaultChecksumPolicy: &wgetconfigv1alpha1.ChecksumPolicy{
-				OnMissing: wgetconfigv1alpha1.OnMissingFail,
-				Sources:   []wgetconfigv1alpha1.ChecksumSource{{Type: wgetconfigv1alpha1.ChecksumSourceExternalURL, URL: mirror.URL + "/artifact.sha256", Algorithms: []string{"sha256"}}},
+		crossOriginPolicy := &checksumhttpv1alpha1.Config{
+			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
+				OnMissing: checksumhttpv1alpha1.OnMissingFail,
+				Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceExternalURL, URL: mirror.URL + "/artifact.sha256", Algorithms: []string{"sha256"}}},
 			},
 		}
 		method := &input.InputMethod{HTTPConfig: httpConfig, WgetConfig: crossOriginPolicy}
@@ -219,10 +219,10 @@ func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
 		}))
 		defer server.Close()
 
-		httpMirrorPolicy := &wgetconfigv1alpha1.Config{
-			DefaultChecksumPolicy: &wgetconfigv1alpha1.ChecksumPolicy{
-				OnMissing: wgetconfigv1alpha1.OnMissingFail,
-				Sources:   []wgetconfigv1alpha1.ChecksumSource{{Type: wgetconfigv1alpha1.ChecksumSourceExternalURL, URL: httpMirror.URL + "/artifact.sha256", Algorithms: []string{"sha256"}}},
+		httpMirrorPolicy := &checksumhttpv1alpha1.Config{
+			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
+				OnMissing: checksumhttpv1alpha1.OnMissingFail,
+				Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceExternalURL, URL: httpMirror.URL + "/artifact.sha256", Algorithms: []string{"sha256"}}},
 			},
 		}
 		method := &input.InputMethod{HTTPConfig: httpConfig, WgetConfig: httpMirrorPolicy}
@@ -236,7 +236,7 @@ func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
 }
 
 // TestProcessResource_ChecksumPolicy_ConfigDriven confirms that the shared
-// wget.config.ocm.software config is honored on the input side:
+// checksum.http.config.ocm.software config is honored on the input side:
 //
 //   - a defaultChecksumPolicy is applied to every wget input,
 //   - a host-scoped override wins over the default.
@@ -260,10 +260,10 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
-		cfg := &wgetconfigv1alpha1.Config{
-			DefaultChecksumPolicy: &wgetconfigv1alpha1.ChecksumPolicy{
-				OnMissing: wgetconfigv1alpha1.OnMissingFail,
-				Sources:   []wgetconfigv1alpha1.ChecksumSource{{Type: wgetconfigv1alpha1.ChecksumSourceHTTPHeader}},
+		cfg := &checksumhttpv1alpha1.Config{
+			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
+				OnMissing: checksumhttpv1alpha1.OnMissingFail,
+				Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
 			},
 		}
 		method := &input.InputMethod{WgetConfig: cfg}
@@ -288,16 +288,16 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 		defer badServer.Close()
 		host, _, _ := strings.Cut(strings.TrimPrefix(badServer.URL, "http://"), "/")
 
-		cfg := &wgetconfigv1alpha1.Config{
-			DefaultChecksumPolicy: &wgetconfigv1alpha1.ChecksumPolicy{
-				OnMissing: wgetconfigv1alpha1.OnMissingCompute,
-				Sources:   []wgetconfigv1alpha1.ChecksumSource{{Type: wgetconfigv1alpha1.ChecksumSourceHTTPHeader}},
+		cfg := &checksumhttpv1alpha1.Config{
+			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
+				OnMissing: checksumhttpv1alpha1.OnMissingCompute,
+				Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
 			},
-			Hosts: map[string]*wgetconfigv1alpha1.HostConfig{
+			Hosts: map[string]*checksumhttpv1alpha1.HostConfig{
 				host: {
-					ChecksumPolicy: &wgetconfigv1alpha1.ChecksumPolicy{
-						OnMissing: wgetconfigv1alpha1.OnMissingFail,
-						Sources:   []wgetconfigv1alpha1.ChecksumSource{{Type: wgetconfigv1alpha1.ChecksumSourceHTTPHeader}},
+					ChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
+						OnMissing: checksumhttpv1alpha1.OnMissingFail,
+						Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
 					},
 				},
 			},

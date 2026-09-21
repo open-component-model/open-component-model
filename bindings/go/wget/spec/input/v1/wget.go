@@ -19,10 +19,10 @@ const (
 // Verification of the downloaded bytes against a source-side checksum is not
 // described in this spec on purpose: it is a deployment concern, not a
 // descriptor concern. Configure it centrally with
-// `wget.config.ocm.software/v1alpha1` (see
-// `bindings/go/wget/spec/config/v1alpha1`), which the input method reads at
-// construction time; the same config also steers the wget access-type digest
-// processor, so both paths behave identically.
+// `checksum.http.config.ocm.software/v1alpha1` (see
+// `bindings/go/configuration/checksum/http/v1alpha1/spec`), which the input
+// method reads at construction time; the same config also steers the wget
+// access-type digest processor, so both paths behave identically.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true

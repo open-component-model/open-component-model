@@ -1,4 +1,4 @@
-package v1alpha1
+package spec
 
 import (
 	"fmt"
@@ -9,10 +9,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ConfigType is the identifier of the wget behaviour configuration inside the
-// central generic OCM config. Its versioned form (ConfigType/vX) is used when
-// carrying an instance under `configurations` — see package doc.
-const ConfigType = "wget.config.ocm.software"
+// ConfigType is the identifier of the checksum-over-HTTP configuration inside
+// the central generic OCM config. It steers how downloaded HTTP resources are
+// verified against a source-side checksum (headers, sibling URLs) and is
+// deliberately named for the transport rather than for one input plugin, so a
+// future rename of the wget package leaves the on-the-wire config identifier
+// stable. Its versioned form (ConfigType/vX) is used when carrying an instance
+// under `configurations` — see package doc.
+const ConfigType = "checksum.http.config.ocm.software"
 
 // Scheme is the runtime scheme this config type registers under, mirroring the
 // pattern used by http.config.ocm.software and transfer.config.ocm.software.
@@ -25,16 +29,18 @@ func init() {
 	)
 }
 
-// Config is the wire format of the wget behavioural configuration. It steers
+// Config is the wire format of the checksum-over-HTTP configuration. It steers
 // both the wget input method (Wget/v1 in a component-constructor) and the wget
 // access resource repository (Wget/v1 access on an existing component version),
 // so descriptor authors and operators steer both paths through a single knob.
+// The name is transport-scoped, not plugin-scoped: any future HTTP-based input
+// or access type reuses the same config.
 //
 // Example:
 //
 //	type: generic.config.ocm.software/v1
 //	configurations:
-//	  - type: wget.config.ocm.software/v1alpha1
+//	  - type: checksum.http.config.ocm.software/v1alpha1
 //	    defaultChecksumPolicy:
 //	      onMissing: compute
 //	      sources:
@@ -52,8 +58,8 @@ func init() {
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Config struct {
-	// +ocm:jsonschema-gen:enum=wget.config.ocm.software/v1alpha1
-	// +ocm:jsonschema-gen:enum:deprecated=wget.config.ocm.software
+	// +ocm:jsonschema-gen:enum=checksum.http.config.ocm.software/v1alpha1
+	// +ocm:jsonschema-gen:enum:deprecated=checksum.http.config.ocm.software
 	Type runtime.Type `json:"type"`
 
 	// DefaultChecksumPolicy is applied to every wget resource whose spec does
@@ -103,7 +109,7 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to filter wget config: %w", err)
+		return nil, fmt.Errorf("failed to filter checksum-http config: %w", err)
 	}
 	if len(filtered.Configurations) == 0 {
 		return nil, nil
@@ -112,10 +118,10 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 	for _, entry := range filtered.Configurations {
 		var c Config
 		if err := Scheme.Convert(entry, &c); err != nil {
-			return nil, fmt.Errorf("failed to decode wget config: %w", err)
+			return nil, fmt.Errorf("failed to decode checksum-http config: %w", err)
 		}
 		if err := c.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid wget config: %w", err)
+			return nil, fmt.Errorf("invalid checksum-http config: %w", err)
 		}
 		cfgs = append(cfgs, &c)
 	}

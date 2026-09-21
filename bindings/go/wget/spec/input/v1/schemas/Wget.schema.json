@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/wget/spec/input/v1/schemas/Wget.schema.json",
   "title": "Wget",
   "type": "object",
-  "description": "Wget describes an input sourced by downloading a resource from an HTTP/S URL\nduring component construction. The downloaded content is stored as a local blob\nin the component version.\n\nVerification of the downloaded bytes against a source-side checksum is not\ndescribed in this spec on purpose: it is a deployment concern, not a\ndescriptor concern. Configure it centrally with\n`wget.config.ocm.software/v1alpha1` (see\n`bindings/go/wget/spec/config/v1alpha1`), which the input method reads at\nconstruction time; the same config also steers the wget access-type digest\nprocessor, so both paths behave identically.",
+  "description": "Wget describes an input sourced by downloading a resource from an HTTP/S URL\nduring component construction. The downloaded content is stored as a local blob\nin the component version.\n\nVerification of the downloaded bytes against a source-side checksum is not\ndescribed in this spec on purpose: it is a deployment concern, not a\ndescriptor concern. Configure it centrally with\n`checksum.http.config.ocm.software/v1alpha1` (see\n`bindings/go/configuration/checksum/http/v1alpha1/spec`), which the input\nmethod reads at construction time; the same config also steers the wget\naccess-type digest processor, so both paths behave identically.",
   "properties": {
     "body": {
       "type": "string",
