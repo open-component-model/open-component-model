@@ -48,8 +48,21 @@ func TestDigest_Parse(t *testing.T) {
 			noDigest: true,
 		},
 		{
-			name:     "empty value",
-			digest:   &descruntime.Digest{HashAlgorithm: "SHA-256"},
+			name:     "no fields set at all",
+			digest:   &descruntime.Digest{},
+			noDigest: true,
+		},
+		{
+			name:   "value without hash algorithm",
+			digest: &descruntime.Digest{Value: value},
+		},
+		{
+			name:   "hash algorithm without value",
+			digest: &descruntime.Digest{HashAlgorithm: "SHA-256"},
+		},
+		{
+			name:     "no-digest without a value is still an opt-out",
+			digest:   &descruntime.Digest{HashAlgorithm: descruntime.NoDigest},
 			noDigest: true,
 		},
 		{

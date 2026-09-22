@@ -57,7 +57,7 @@ func TestVerifyDownload(t *testing.T) {
 	t.Run("passes content through when there is no digest to verify against", func(t *testing.T) {
 		for _, dig := range []*descriptor.Digest{
 			nil,
-			{HashAlgorithm: "SHA-256"},
+			{},
 			{HashAlgorithm: descriptor.NoDigest, NormalisationAlgorithm: descriptor.ExcludeFromSignature, Value: descriptor.NoDigest},
 		} {
 			content := inmemory.New(strings.NewReader(verifyContent))
@@ -72,6 +72,8 @@ func TestVerifyDownload(t *testing.T) {
 			{HashAlgorithm: "MD5", Value: godigest.FromString(verifyContent).Encoded()},
 			{HashAlgorithm: "SHA-256", Value: "not-hex"},
 			{HashAlgorithm: "SHA-256", Value: "abcd"},
+			{HashAlgorithm: "SHA-256"},
+			{Value: godigest.FromString(verifyContent).Encoded()},
 		} {
 			_, err := verify.Download(t.Context(), resourceWithDigest(dig),
 				inmemory.New(strings.NewReader(verifyContent)))

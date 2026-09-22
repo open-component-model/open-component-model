@@ -17,11 +17,17 @@ import (
 // And we aren't using those to avoid having to import OCI package or some other package
 // and dilute the dependency graph.
 func parseDigest(d *descriptor.Digest) (digest.Digest, error) {
-	if d == nil || d.Value == "" || d.HashAlgorithm == "" {
+	if d == nil {
 		return "", nil
 	}
 	if strings.EqualFold(d.HashAlgorithm, descriptor.NoDigest) || strings.EqualFold(d.NormalisationAlgorithm, descriptor.ExcludeFromSignature) {
 		return "", nil
+	}
+	if d.Value == "" && d.HashAlgorithm == "" {
+		return "", nil
+	}
+	if d.Value == "" || d.HashAlgorithm == "" {
+		return "", fmt.Errorf("incomplete digest: hashAlgorithm=%q, value=%q", d.HashAlgorithm, d.Value)
 	}
 
 	// normalize because SHA-256 and sha256 equally appear
