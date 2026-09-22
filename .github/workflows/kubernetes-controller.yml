@@ -71,6 +71,12 @@ jobs:
         with:
           version: v4.2.4
 
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: '${{ github.workspace }}/${{ env.GO_MODULE_ROOT }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ env.GO_MODULE_ROOT }}/go.sum'
+
       - name: Validate chart (generators + lint + template + drift check)
         working-directory: ${{ env.CONTROLLER_DIR }}
         run: task helm/validate
