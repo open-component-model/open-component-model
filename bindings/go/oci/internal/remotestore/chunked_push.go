@@ -398,42 +398,47 @@ func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
 // first response instead of following redirects, without mutating c. It shares
 // c's credential cache and configuration; only redirect handling changes.
 //
-// For an *auth.Client the redirect policy lives on its inner *http.Client,
-// which oras' send() copies and whose CheckRedirect it preserves, so a copy
-// carrying http.ErrUseLastResponse suppresses the follow while the auth
-// challenge/rewind flow is untouched. For a plain *http.Client the copy sets
-// CheckRedirect directly. For any other remote.Client the redirect policy is
-// out of reach, so GetBody is cleared as a last resort: the standard library
-// then declines to replay a 307/308 body (see net/http redirectBehavior).
+// The redirect policy lives on a concrete *http.Client, reached differently per
+// implementation: an *auth.Client carries it on its inner client (oras' send()
+// copies that client and preserves a caller-set CheckRedirect, so the auth
+// challenge/rewind flow is untouched), and a plain *http.Client carries it
+// directly. Any other remote.Client keeps its redirect policy out of reach, so
+// GetBody is cleared as a last resort (see redirectStrippingClient).
 func noFollowRedirects(c remote.Client) remote.Client {
-	stop := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	switch client := c.(type) {
 	case *auth.Client:
 		copyClient := *client
-		// A zero-value auth.Client resolves its inner client to
-		// http.DefaultClient (see auth.Client.client()); copy that so a
-		// customized default transport, proxy, TLS, timeout or cookie jar is
-		// preserved rather than replaced by a bare client.
-		base := client.Client
-		if base == nil {
-			base = http.DefaultClient
-		}
-		inner := *base
-		inner.CheckRedirect = stop
-		copyClient.Client = &inner
+		copyClient.Client = redirectSuppressed(client.Client)
 		return &copyClient
 	case *http.Client:
-		copyClient := *client
-		copyClient.CheckRedirect = stop
-		return &copyClient
+		return redirectSuppressed(client)
 	default:
 		return redirectStrippingClient{c}
 	}
 }
 
+// redirectSuppressed returns a copy of base whose CheckRedirect stops at the
+// first response. A nil base is treated as http.DefaultClient (the client an
+// auth.Client resolves to when its inner client is unset), so a customized
+// default transport, proxy, TLS, timeout or cookie jar is preserved rather than
+// replaced by a bare client.
+func redirectSuppressed(base *http.Client) *http.Client {
+	if base == nil {
+		base = http.DefaultClient
+	}
+	copyClient := *base
+	copyClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &copyClient
+}
+
 // redirectStrippingClient wraps a remote.Client whose redirect policy is out of
 // reach and clears Request.GetBody on body-carrying requests so the standard
-// library declines to replay a 307/308 body across a redirect.
+// library declines to replay a 307/308 body across a redirect (see net/http
+// redirectBehavior). This is a last resort for a custom remote.Client: unlike
+// the *auth.Client and *http.Client paths it also disables body rewind, so such
+// a client cannot re-send a chunk after a 401 challenge.
 type redirectStrippingClient struct{ remote.Client }
 
 func (c redirectStrippingClient) Do(req *http.Request) (*http.Response, error) {
