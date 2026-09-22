@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/wget/spec/access/v1/schemas/Wget.schema.json",
   "title": "Wget",
   "type": "object",
-  "description": "Wget describes the access for an HTTP-downloadable resource.",
+  "description": "Wget (aka \"HTTP\") describes the access for an HTTP-downloadable resource.",
   "properties": {
     "body": {
       "type": "string",
@@ -39,12 +39,26 @@
           "const": "wget/v1"
         },
         {
+          "const": "HTTP/v1"
+        },
+        {
+          "const": "http/v1"
+        },
+        {
           "deprecated": true,
           "const": "Wget"
         },
         {
           "deprecated": true,
           "const": "wget"
+        },
+        {
+          "deprecated": true,
+          "const": "HTTP"
+        },
+        {
+          "deprecated": true,
+          "const": "http"
         }
       ]
     },
