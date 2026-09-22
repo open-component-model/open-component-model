@@ -41,7 +41,7 @@ The following types are defined by the core OCM modules:
 |-----------------------------------------------|-----------------------------------------------------|
 | [`OCIRegistry`](#ociregistry)                 | Authenticating against OCI registries               |
 | [`HelmChartRepository`](#helmchartrepository) | Authenticating against Helm chart repositories      |
-| [`Wget`](#wget)                               | Authenticating against plain HTTP/HTTPS servers     |
+| [`Wget / HTTP`](#wget--http)                  | Authenticating against plain HTTP/HTTPS servers     |
 | [`S3`](#s3)                                   | Authenticating against S3 and S3-compatible buckets |
 | [`GitHubRepository`](#githubrepository)       | Authenticating against the GitHub REST API          |
 | [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys             |
