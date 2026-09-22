@@ -1,11 +1,15 @@
 package git
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
-	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -18,17 +22,24 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Both the current and the ocmv1 spelling of the access type must reach the built-in repository.
-func TestRegister_ResolvesGitAccess(t *testing.T) {
-	ctx := t.Context()
+func TestRegister(t *testing.T) {
+	r := require.New(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	previousHTTP, previousHTTPS := gitclient.Protocols["http"], gitclient.Protocols["https"]
+	t.Cleanup(func() {
+		gitclient.Protocols["http"], gitclient.Protocols["https"] = previousHTTP, previousHTTPS
+	})
 
 	resources := resource.NewResourceRegistry(ctx)
-	require.NoError(t, Register(
+	maxRetries := -1
+	r.NoError(Register(
 		resources,
 		digestprocessor.NewDigestProcessorRegistry(ctx),
 		credentialrepository.NewCredentialRepositoryRegistry(ctx),
 		&filesystemv1alpha1.Config{},
-		&httpv1alpha1.Config{},
+		&httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}},
 	))
 
 	for _, typ := range []runtime.Type{
@@ -36,26 +47,27 @@ func TestRegister_ResolvesGitAccess(t *testing.T) {
 		runtime.NewVersionedType(accessv1.LegacyType, "v1alpha1"),
 	} {
 		plugin, err := resources.GetResourcePlugin(ctx, &accessv1.Git{Type: typ, Repository: "https://example.com/repo.git", Ref: "main"})
-		require.NoError(t, err, typ.String())
-		require.IsType(t, &gitrepository.ResourceRepository{}, plugin, typ.String())
+		r.NoError(err, typ.String())
+		r.IsType(&gitrepository.ResourceRepository{}, plugin, typ.String())
 	}
-}
 
-// The configured HTTP client must replace go-git's default for http(s) remotes.
-func TestRegister_InstallsHTTPClient(t *testing.T) {
-	ctx := t.Context()
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
 
-	require.NoError(t, Register(
-		resource.NewResourceRegistry(ctx),
-		digestprocessor.NewDigestProcessorRegistry(ctx),
-		credentialrepository.NewCredentialRepositoryRegistry(ctx),
-		&filesystemv1alpha1.Config{},
-		&httpv1alpha1.Config{},
-	))
+	endpoint, err := transport.NewEndpoint(server.URL + "/repo.git")
+	r.NoError(err)
+	installed, err := gitclient.NewClient(endpoint)
+	r.NoError(err)
+	r.Same(installed, gitclient.Protocols["https"])
+	session, err := installed.NewUploadPackSession(endpoint, nil)
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(session.Close()) })
 
-	for _, protocol := range []string{"http", "https"} {
-		installed, err := gitclient.NewClient(&transport.Endpoint{Protocol: protocol, Host: "example.com", Path: "/repo.git"})
-		require.NoError(t, err, protocol)
-		require.NotSame(t, githttp.DefaultClient, installed, protocol)
-	}
+	_, err = session.AdvertisedReferencesContext(ctx)
+	r.ErrorContains(err, "503")
+	r.Equal(int32(1), requests.Load(), "configured client must not retry HTTP 503 responses")
 }

@@ -96,11 +96,7 @@ func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
 }
 
 func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Context, res *descriptor.Resource) (runtime.Identity, error) {
-	if res == nil {
-		return nil, fmt.Errorf("resource is required")
-	}
-
-	spec, err := accessFrom(res.Access)
+	spec, err := accessFrom(res)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +108,12 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 // file under the configured TempFolder, which outlives this call and is owned by
 // the caller.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
-	result, err := r.download(ctx, res, creds, r.tempFolder())
+	spec, err := accessFrom(res)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := r.download(ctx, spec, res.Digest, creds, r.tempFolder())
 	if err != nil {
 		return nil, err
 	}
@@ -120,18 +121,10 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 	return result.Blob, nil
 }
 
-func (r *ResourceRepository) download(ctx context.Context, res *descriptor.Resource, creds runtime.Typed, tempDir string) (*download.Result, error) {
-	if res == nil {
-		return nil, fmt.Errorf("resource is required")
-	}
-
-	spec, err := accessFrom(res.Access)
-	if err != nil {
-		return nil, err
-	}
-
+func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, expected *descriptor.Digest, creds runtime.Typed, tempDir string) (*download.Result, error) {
 	var typed *credsv1.GitCredentials
 	if creds != nil {
+		var err error
 		if typed, err = credsv1.ConvertToGitCredentials(creds); err != nil {
 			return nil, err
 		}
@@ -142,7 +135,7 @@ func (r *ResourceRepository) download(ctx context.Context, res *descriptor.Resou
 		return nil, err
 	}
 
-	if err := verifyDigest(res.Digest, result.Digest); err != nil {
+	if err := verifyDigest(expected, result.Digest); err != nil {
 		return nil, err
 	}
 
@@ -160,7 +153,7 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 // ProcessResourceDigest pins the access and hashes the same snapshot in one download.
 // The archive is only read here, so it is downloaded into a directory of its own
 // that this call removes again.
-func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (_ *descriptor.Resource, err error) {
+func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (*descriptor.Resource, error) {
 	tempDir, err := os.MkdirTemp(r.tempFolder(), "ocm-git-digest-*")
 	if err != nil {
 		return nil, fmt.Errorf("cannot create temporary directory for digest processing: %w", err)
@@ -171,13 +164,12 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 		}
 	}()
 
-	downloaded, err := r.download(ctx, res, creds, tempDir)
+	spec, err := accessFrom(res)
 	if err != nil {
 		return nil, err
 	}
 
-	result := res.DeepCopy()
-	spec, err := accessFrom(result.Access)
+	downloaded, err := r.download(ctx, spec, res.Digest, creds, tempDir)
 	if err != nil {
 		return nil, err
 	}
@@ -191,6 +183,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 		return nil, fmt.Errorf("cannot encode pinned git access: %w", err)
 	}
 
+	result := res.DeepCopy()
 	result.Access = pinned
 	// r.download already rejected a set digest that does not match this archive.
 	result.Digest = &descriptor.Digest{
@@ -202,7 +195,12 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 	return result, nil
 }
 
-func accessFrom(spec runtime.Typed) (*accessv1.Git, error) {
+func accessFrom(res *descriptor.Resource) (*accessv1.Git, error) {
+	if res == nil {
+		return nil, fmt.Errorf("resource is required")
+	}
+
+	spec := res.Access
 	if spec == nil || (reflect.ValueOf(spec).Kind() == reflect.Pointer && reflect.ValueOf(spec).IsNil()) {
 		return nil, fmt.Errorf("git access is required")
 	}

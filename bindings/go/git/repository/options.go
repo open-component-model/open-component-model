@@ -8,9 +8,8 @@ import (
 
 // Options holds configuration for the Git resource repository.
 type Options struct {
-	// MaxArchiveSize caps the bytes of the compressed archive, not of the clone it is taken
-	// from. Nil uses the default; zero or negative allows an unlimited archive,
-	// which is then bounded by free disk space.
+	// MaxArchiveSize caps compressed output, not the Git transfer.
+	// Nil uses 1 GiB; non-positive values disable the limit.
 	MaxArchiveSize *int64
 	// CABundle holds PEM certificates added to the system TLS trust roots for
 	// HTTPS repositories. Nil uses the system roots alone.
@@ -26,11 +25,8 @@ type Options struct {
 // Option configures Options.
 type Option func(*Options)
 
-// WithMaxArchiveSize limits the bytes of the compressed archive a single download
-// produces. Pass 0 to allow an unlimited archive. Archives are streamed to disk
-// rather than buffered, so an unlimited archive is bounded by free disk space.
-// Git transfers the repository before the archive exists, so the limit rejects an
-// oversized archive rather than stopping the clone that produced it.
+// WithMaxArchiveSize caps compressed output bytes, not the preceding Git transfer.
+// Non-positive values disable the limit; output is streamed to disk.
 func WithMaxArchiveSize(size int64) Option {
 	return func(o *Options) {
 		o.MaxArchiveSize = &size
@@ -51,19 +47,12 @@ func WithHostKeyCallback(callback ssh.HostKeyCallback) Option {
 	}
 }
 
-// WithHTTPConfig sets the HTTP client configuration used for http(s) repositories.
-// Accepts the serialisable config type so that external plugins can round-trip it
-// over the wire and reconstruct an equivalent client.
+// WithHTTPConfig installs a configured client in go-git's process-global HTTP(S)
+// registry: the last configured repository determines the client for all Git
+// downloads. Nil leaves the current registration unchanged.
 //
-// go-git takes no HTTP client per clone or fetch, so the client built from cfg is
-// installed into go-git's protocol registry, which is process global: the last
-// repository constructed with this option decides the client for every Git
-// download in the process. Transports other than http(s) are untouched, and a nil
-// cfg leaves the current protocol registration unchanged.
-//
-// The installed client's transport is a chain rather than a plain *http.Transport,
-// which go-git requires when a per-operation CA bundle is set, so a CA bundle for
-// an https repository belongs in cfg rather than in [WithCABundle].
+// Set CA bundles in cfg, not [WithCABundle]: go-git's per-operation CA option
+// requires a plain *http.Transport, whereas the configured client uses a chain.
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 	return func(o *Options) {
 		o.HTTPConfig = cfg

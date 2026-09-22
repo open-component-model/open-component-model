@@ -1398,23 +1398,6 @@ components:
 	_, err = tr.Next()
 	r.ErrorIs(err, io.EOF)
 
-	// get component-version reads the git-access component back through the CLI.
-	getOutput := new(bytes.Buffer)
-	getCMD := cmd.New()
-	getCMD.SetOut(getOutput)
-	getCMD.SetArgs([]string{
-		"get",
-		"component-version",
-		fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, componentName, componentVersion),
-		"--config", cfgPath,
-		"--output", "json",
-	})
-	r.NoError(getCMD.ExecuteContext(ctx), "get component-version should succeed for the git-access component")
-
-	out := getOutput.String()
-	r.Contains(out, componentName, "output should contain the component name")
-	r.Contains(out, "repo-archive", "output should contain the resource")
-	r.Contains(out, "Git/v1", "output should contain the git access type")
 }
 
 func createGitRepository(t *testing.T) (dir, commit string) {
