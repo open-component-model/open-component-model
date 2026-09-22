@@ -3,7 +3,7 @@ title: "Deploy"
 description: "Tutorials for deploying OCM component versions with controllers and GitOps tooling."
 weight: 40
 sidebar:
-  collapsed: true
+  collapsed: false
 ---
 
 In-depth tutorials for deploying component versions into Kubernetes — bootstrapped Helm chart

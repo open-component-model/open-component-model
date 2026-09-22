@@ -3,7 +3,7 @@ title: "Transfer"
 description: "Tutorials for configuring resolvers and credentials across transfer environments."
 weight: 30
 sidebar:
-  collapsed: true
+  collapsed: false
 ---
 
 In-depth tutorials covering resolver configuration, credential resolution, and multi-registry

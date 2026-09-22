@@ -3,7 +3,7 @@ title: "Sign"
 description: "Understand how OCM secures component integrity and authenticity through cryptographic signatures."
 weight: 20
 sidebar:
-  collapsed: true
+  collapsed: false
 ---
 
 These concept articles explain the cryptographic signing model — how signatures are created,

@@ -3,7 +3,7 @@ title: "Sign"
 description: "Tutorials for signing and verifying OCM component versions."
 weight: 20
 sidebar:
-  collapsed: true
+  collapsed: false
 ---
 
 End-to-end tutorials walking through every supported signing algorithm — plain RSA key pairs,

@@ -3,7 +3,7 @@ title: "Pack"
 description: "Tutorials for constructing OCM component versions with advanced patterns."
 weight: 10
 sidebar:
-  collapsed: true
+  collapsed: false
 ---
 
 In-depth tutorials covering advanced component construction — multi-component products,

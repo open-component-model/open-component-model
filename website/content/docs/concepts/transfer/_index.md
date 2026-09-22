@@ -3,7 +3,7 @@ title: "Transfer"
 description: "Understand how OCM moves component versions across registries, air gaps, and environments."
 weight: 30
 sidebar:
-  collapsed: true
+  collapsed: false
 ---
 
 These concept articles explain the transfer model — how component versions and their resources
