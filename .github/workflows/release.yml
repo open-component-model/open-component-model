@@ -79,7 +79,7 @@ jobs:
             await script.default({ core });
 
       - name: Generate changelog with git-cliff
-        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4
         with:
           version: 'v2.12.0'
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -249,7 +249,7 @@ jobs:
           path: ${{ runner.temp }}/chart-assets
 
       - name: Create RC pre-release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           name: OCM ${{ needs.prepare.outputs.new_version }}
           tag_name: ${{ needs.prepare.outputs.new_tag }}
@@ -605,7 +605,7 @@ jobs:
           push-to-registry: true
 
       - name: Generate changelog with git-cliff
-        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4
         with:
           version: 'v2.12.0'
           github_token: ${{ secrets.GITHUB_TOKEN }}
