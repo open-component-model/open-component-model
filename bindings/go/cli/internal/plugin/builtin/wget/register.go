@@ -10,9 +10,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	wgetinput "ocm.software/open-component-model/bindings/go/wget/input"
 	wgetrepository "ocm.software/open-component-model/bindings/go/wget/repository"
 	wgetcreds "ocm.software/open-component-model/bindings/go/wget/spec/credentials"
+	wgetidentityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
 // Register wires the wget input method and its credential scheme into the CLI plugin registries.
@@ -33,6 +35,10 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	}
 
 	credentialRepository.Register(wgetcreds.Scheme)
+
+	identityScheme := runtime.NewScheme()
+	wgetidentityv1.MustRegisterIdentityType(identityScheme)
+	credentialRepository.RegisterConsumerIdentityTypeScheme(identityScheme)
 
 	if err := inputRegistry.RegisterInternalResourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register wget resource input method: %w", err)

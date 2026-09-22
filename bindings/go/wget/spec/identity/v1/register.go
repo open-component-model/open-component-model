@@ -13,5 +13,9 @@ func MustRegisterIdentityType(scheme *runtime.Scheme) {
 	scheme.MustRegisterWithAlias(&WgetIdentity{},
 		VersionedType,
 		Type, // backward-compat alias
+		runtime.NewVersionedType(HTTPIdentityType, Version),
+		runtime.NewUnversionedType(HTTPIdentityType),
+		runtime.NewVersionedType("http", Version),
+		runtime.NewUnversionedType("http"),
 	)
 }

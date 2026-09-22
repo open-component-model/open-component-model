@@ -133,9 +133,9 @@ Handles resources served over plain HTTP or HTTPS.
 
 ### Supported Access Types
 
-| Access Type                                                           |
-|-----------------------------------------------------------------------|
-| [`Wget/v1`]({{< relref "input-and-access-types.md" >}}#wgetv1-access) |
+| Access Type                                                                                                                  |
+|------------------------------------------------------------------------------------------------------------------------------|
+| [`Wget/v1`]({{< relref "input-and-access-types.md" >}}#wgetv1-access), also accepted as `HTTP/v1`, `HTTP`, `http/v1`, `http` |
 
 ### Capabilities
 
@@ -153,7 +153,7 @@ and stores it as a [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#l
 ### Credential Resolution
 
 The credential consumer identity is derived from the `url` field in the access specification. The identity type is
-`Wget`.
+`Wget`, and stays `Wget` even when the access is declared under one of the `HTTP` aliases.
 
 **Example:** For a resource with `url: https://downloads.example.com/myapp/1.0.0/myapp.tar.gz`:
 
@@ -167,7 +167,7 @@ The credential consumer identity is derived from the `url` field in the access s
 The [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input) derives the identity the same way,
 so one consumer entry covers construction and later downloads.
 
-See [Credential Consumer Identities: Wget]({{< relref "credential-consumer-identities.md" >}}#wget) for matching rules.
+See [Credential Consumer Identities: Wget]({{< relref "credential-consumer-identities.md" >}}#wget) for matching rules and the accepted aliases for the consumer identity type.
 
 ### Download Behavior
 

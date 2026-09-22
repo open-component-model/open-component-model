@@ -27,17 +27,19 @@ func NewCredentialRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 		internalCredentialRepositoryPlugins: make(map[runtime.Type]credentials.RepositoryPlugin),
 		scheme:                              runtime.NewScheme(),
 		credentialTypeScheme:                runtime.NewScheme(),
+		consumerIdentityTypeScheme:          runtime.NewScheme(),
 	}
 }
 
 // RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
 type RepositoryRegistry struct {
-	ctx                  context.Context
-	mu                   sync.Mutex
-	capabilities         map[string]credentialsv1.CapabilitySpec
-	registry             map[runtime.Type]mtypes.Plugin
-	scheme               *runtime.Scheme
-	credentialTypeScheme *runtime.Scheme
+	ctx                        context.Context
+	mu                         sync.Mutex
+	capabilities               map[string]credentialsv1.CapabilitySpec
+	registry                   map[runtime.Type]mtypes.Plugin
+	scheme                     *runtime.Scheme
+	credentialTypeScheme       *runtime.Scheme
+	consumerIdentityTypeScheme *runtime.Scheme
 
 	constructedPlugins        map[string]*constructedPlugin // running plugins
 	consumerTypeRegistrations map[runtime.Type]runtime.Type
@@ -63,6 +65,22 @@ func (r *RepositoryRegistry) Register(scheme *runtime.Scheme) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.credentialTypeScheme.MustRegisterScheme(scheme)
+}
+
+// GetConsumerIdentityTypeScheme returns the runtime scheme containing all registered
+// consumer identity types resolved by built-in repository plugins
+// (currently only Wget/v1 with its HTTP aliases).
+func (r *RepositoryRegistry) GetConsumerIdentityTypeScheme() *runtime.Scheme {
+	return r.consumerIdentityTypeScheme
+}
+
+// RegisterConsumerIdentityTypeScheme merges a pre-built scheme of consumer identity
+// types into the registry. This should be called during startup so that consumer identities
+// written with alias types can be canonicalized when the credential graph is ingested.
+func (r *RepositoryRegistry) RegisterConsumerIdentityTypeScheme(scheme *runtime.Scheme) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.consumerIdentityTypeScheme.MustRegisterScheme(scheme)
 }
 
 // AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.

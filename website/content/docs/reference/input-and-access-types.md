@@ -444,9 +444,10 @@ Because the content is not under your control, the expected digest can be pinned
 `digest` field alongside `access` rather than inside it. It is then verified on every fetch. See
 [Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#pin-a-digest" >}}).
 
-Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; as are the aliases `HTTP/v1`, `HTTP`, `http/v1`,
-or `http`. The fields are identical to those of the [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input), 
-so the same request can be expressed either by value or by reference.
+`Wget/v1` is the canonical type name. OCM also accepts `wget/v1`, `Wget`, `wget`, and the additional aliases
+`HTTP/v1`, `HTTP`, `http/v1`, and `http`. The fields are identical to those of the
+[`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input), so the same request can be expressed
+either by value or by reference.
 
 | Field        | Type                  | Required | Description                                                                                                                               |
 |--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|

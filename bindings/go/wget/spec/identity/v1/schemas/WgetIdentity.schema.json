@@ -25,8 +25,22 @@
           "const": "Wget/v1"
         },
         {
+          "const": "HTTP/v1"
+        },
+        {
+          "const": "http/v1"
+        },
+        {
           "deprecated": true,
           "const": "Wget"
+        },
+        {
+          "deprecated": true,
+          "const": "HTTP"
+        },
+        {
+          "deprecated": true,
+          "const": "http"
         }
       ]
     }

@@ -180,18 +180,19 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 
 ---
 
-## Wget
+## Wget / HTTP
 
 Used when OCM fetches a resource over plain HTTP or HTTPS through the
 [`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
 [`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}). The identity is derived from the resource
 `url`; the access type and the input type derive it identically, so a single consumer entry covers both.
+Both identity type and access type names allow using the `HTTP` alias.
 
 ### Identity Attributes
 
 | Attribute  | Required | Description                                                                                                                            |
 |------------|----------|----------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `Wget`                                                                                                                         |
+| `type`     | Yes      | Must be `Wget` or `HTTP`                                                                                                               |
 | `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`)                                                                                         |
 | `path`     | No       | URL path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
 | `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                              |
@@ -235,11 +236,11 @@ The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob,
 default-port handling), then exact equality on the remaining attributes.
 
 {{< callout context="caution" >}}
-The identity type is matched by exact string and is **unversioned**, so it must be written as `type: Wget`. Neither
-`Wget/v1` (the name of the
-[access and input type]({{< relref "input-and-access-types.md#wgetv1-access" >}})) nor the lowercase `wget` used by OCM v1
-will match. A non-matching entry fails silently: no credentials are resolved and the request goes out unauthenticated,
-so the symptom is a `401` from the server rather than a configuration error.
+Consumer entries are canonicalized to the unversioned spelling before matching. Prefer `type: Wget`; the aliases
+`Wget/v1`, `HTTP`, `HTTP/v1`, `http`, and `http/v1` (the aliases of the
+[access type]({{< relref "input-and-access-types.md#wgetv1-access" >}})) are also accepted. The lowercase `wget`
+spelling used by OCM v1 never matches. A non-matching entry fails silently: no credentials are resolved and the
+request goes out unauthenticated, so the symptom is a `401` from the server rather than a configuration error.
 {{< /callout >}}
 
 ### Examples
