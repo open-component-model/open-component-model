@@ -74,14 +74,16 @@
 // authenticates an SSH repository, with Password read as the key passphrase; a Token
 // or a Username authenticates an HTTPS repository, the latter with Password as the
 // HTTP password. Tokens and passwords are refused over plain HTTP, as is a repository
-// URL carrying credentials in its userinfo, so neither is sent in clear text. Without
+// URL carrying credentials in its userinfo. HTTPS-to-HTTP redirects are rejected
+// before sending the redirected request. Without
 // credentials an SSH repository falls back to the SSH agent and anything else is
 // fetched anonymously.
 //
 // SSH host keys use the current user's known_hosts unless WithHostKeyCallback
 // overrides verification. WithCABundle extends system TLS trust. See
 // [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPConfig]
-// for custom HTTP configuration and its process-global transport behavior.
+// for custom HTTP configuration and its process-global transport behavior. The
+// downloader installs guarded default HTTP transports at package initialization.
 //
 // # Credential consumer identity
 //

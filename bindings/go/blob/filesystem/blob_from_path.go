@@ -194,7 +194,6 @@ func createSingleFileBlob(path string, opt DirOptions) (blob.ReadOnlyBlob, error
 // Uses fs.WalkDir to traverse the directory structure in a deterministic order.
 // This is required to ensure reproducible TAR archives.
 func createTarFromDir(ctx context.Context, fileSystem fs.FS, subPath string, opt DirOptions, tw *tar.Writer) error {
-	writer := &TarWriter{writer: tw, options: opt}
 	return fs.WalkDir(fileSystem, subPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return fmt.Errorf("error walking path %q: %w", path, err)
@@ -213,8 +212,28 @@ func createTarFromDir(ctx context.Context, fileSystem fs.FS, subPath string, opt
 			return fmt.Errorf("error getting file info for %q: %w", path, err)
 		}
 
-		return writer.WriteEntry(ctx, path, fi, fileSystem)
+		return WriteTarEntry(ctx, path, fi, fileSystem, opt, tw)
 	})
+}
+
+// WriteTarEntry writes one slash-separated path using the entry options in opt;
+// compression, media type and host-path options do not apply. The caller supplies
+// metadata without following symlinks, skips descendants on fs.SkipDir, and closes tw.
+// Symlinks require source to implement ReadlinkFS.
+func WriteTarEntry(ctx context.Context, name string, info fs.FileInfo, source fs.FS, opt DirOptions, tw *tar.Writer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		if !opt.PreserveSymlinks {
+			return fmt.Errorf("symlinks are not supported yet: found symlink %q", name)
+		}
+		return processSymlink(name, info, source, opt, tw)
+	}
+	if info.IsDir() {
+		return processDirectory(name, info, opt, tw, name == ".")
+	}
+	return processFile(name, info, source, opt, tw)
 }
 
 // processDirectory handles directory entries during DirWalk

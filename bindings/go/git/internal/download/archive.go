@@ -1,6 +1,7 @@
 package download
 
 import (
+	"archive/tar"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -35,12 +36,7 @@ func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Opt
 	digester := digest.Canonical.Digester()
 	limited := &limitedWriter{Writer: file, limit: opts.MaxArchiveSize}
 	gz := gzip.NewWriter(io.MultiWriter(limited, digester.Hash()))
-	tw := filesystem.NewTarWriter(gz, filesystem.DirOptions{
-		Reproducible:         true,
-		PreserveSymlinks:     true,
-		OmitRoot:             true,
-		OmitDirTrailingSlash: true,
-	})
+	tw := tar.NewWriter(gz)
 	err = walkTree(ctx, tree, "", treeFS{tree: tree}, tw)
 	err = errors.Join(err, tw.Close(), gz.Close(), file.Close())
 	if err != nil {
@@ -59,9 +55,15 @@ func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Opt
 
 // walkTree follows the lexical, depth-first filesystem order used by OCM v1,
 // not Git's tree order (which compares directories as if suffixed with a slash).
-func walkTree(ctx context.Context, tree *object.Tree, prefix string, source treeFS, tw *filesystem.TarWriter) error {
+func walkTree(ctx context.Context, tree *object.Tree, prefix string, source treeFS, tw *tar.Writer) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	opt := filesystem.DirOptions{
+		Reproducible:         true,
+		PreserveSymlinks:     true,
+		OmitRoot:             true,
+		OmitDirTrailingSlash: true,
 	}
 	entries := slices.Clone(tree.Entries)
 	slices.SortFunc(entries, func(a, b object.TreeEntry) int { return strings.Compare(a.Name, b.Name) })
@@ -79,7 +81,7 @@ func walkTree(ctx context.Context, tree *object.Tree, prefix string, source tree
 			}
 			size = file.Size
 		}
-		if err := tw.WriteEntry(ctx, name, treeInfo(name, entry.Mode, size), source); err != nil {
+		if err := filesystem.WriteTarEntry(ctx, name, treeInfo(name, entry.Mode, size), source, opt, tw); err != nil {
 			return err
 		}
 		// Gitlinks are placeholders only: their target objects need not be present.

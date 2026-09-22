@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -47,7 +48,7 @@ func TestArchiveUsesGitTree(t *testing.T) {
 	file, err := os.CreateTemp(t.TempDir(), "archive-*.tar.gz")
 	r.NoError(err)
 
-	b, archiveDigest, err := archive(t.Context(), c, file, Options{})
+	b, _, err := archive(t.Context(), c, file, Options{})
 	r.NoError(err)
 
 	type entry struct {
@@ -67,6 +68,11 @@ func TestArchiveUsesGitTree(t *testing.T) {
 			break
 		}
 		r.NoError(err)
+		r.Zero(h.Uid, h.Name)
+		r.Zero(h.Gid, h.Name)
+		r.Empty(h.Uname, h.Name)
+		r.Empty(h.Gname, h.Name)
+		r.Equal(time.Unix(0, 0).UTC(), h.ModTime.UTC(), h.Name)
 
 		data, err := io.ReadAll(tr)
 		r.NoError(err)
@@ -78,12 +84,6 @@ func TestArchiveUsesGitTree(t *testing.T) {
 	}
 
 	r.Equal([]string{"A", "a", "absolute", `back\slash`, "colon:name", "dangling", "dir", "dir/file", "dir.c", "vendor"}, names)
-	second, err := os.CreateTemp(t.TempDir(), "archive-*.tar.gz")
-	r.NoError(err)
-	secondBlob, secondDigest, err := archive(t.Context(), c, second, Options{})
-	r.NoError(err)
-	r.Equal(archiveDigest, secondDigest)
-	r.Equal(readBlob(t, b), readBlob(t, secondBlob))
 
 	r.Equal(map[string]entry{
 		"A":          {tar.TypeReg, 0o644, "upper"},

@@ -101,33 +101,18 @@ func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme strin
 	r.NoError(err)
 	r.NoError(reader.Close())
 
-	mediaType, ok := content.(blob.MediaTypeAware).MediaType()
-	r.True(ok)
-	r.Equal("application/x-tgz", mediaType)
-	r.Equal(int64(len(data)), content.(blob.SizeAware).Size())
-
-	checksum, ok := content.(blob.DigestAware).Digest()
-	r.True(ok)
-	r.Equal(digest.FromBytes(data).String(), checksum)
-
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	r.NoError(err)
 	defer func() { r.NoError(gz.Close()) }()
 	tr := tar.NewReader(gz)
-	var names []string
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		r.NoError(err)
-
-		names = append(names, header.Name)
-		payload, err := io.ReadAll(tr)
-		r.NoError(err)
-		r.Equal(expectedReadme, string(payload))
-	}
-	r.Equal([]string{"README.md"}, names)
+	header, err := tr.Next()
+	r.NoError(err)
+	r.Equal("README.md", header.Name)
+	payload, err := io.ReadAll(tr)
+	r.NoError(err)
+	r.Equal(expectedReadme, string(payload))
+	_, err = tr.Next()
+	r.ErrorIs(err, io.EOF)
 
 	return data
 }

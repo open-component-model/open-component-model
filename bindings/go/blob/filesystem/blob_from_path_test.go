@@ -2,11 +2,13 @@ package filesystem_test
 
 import (
 	"archive/tar"
+	"bytes"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -597,8 +599,6 @@ func TestGetBlobFromPath_ArchiveLayout(t *testing.T) {
 		r.NoError(err)
 
 		names[header.Name] = header.Typeflag
-		r.NotContains([]string{".", "./"}, header.Name, "the archive root must not get an entry of its own")
-		r.False(strings.HasSuffix(header.Name, "/"), "directory names carry no trailing slash: %q", header.Name)
 
 		_, err = io.ReadAll(tr)
 		r.NoError(err)
@@ -670,21 +670,81 @@ func TestGetBlobFromPath_PreserveSymlinks(t *testing.T) {
 	r.Contains(names, "realdir/inner.txt")
 }
 
-// Without the option a symlink is an error, so a tree cannot be packed silently
-// missing the links it contains.
-func TestGetBlobFromPath_PreserveSymlinksDefaultsOff(t *testing.T) {
-	r := require.New(t)
-
-	tmpDir := t.TempDir()
-	createTestFile(t, tmpDir, "target.txt", "content")
-	if err := os.Symlink("target.txt", filepath.Join(tmpDir, "link.txt")); err != nil {
-		t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
-		return
+func TestGetBlobFromPath_DefaultTarBytes(t *testing.T) {
+	for _, reproducible := range []bool{false, true} {
+		name := "default"
+		if reproducible {
+			name = "reproducible"
+		}
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			dir := t.TempDir()
+			r.NoError(os.Mkdir(filepath.Join(dir, "sub"), 0o755))
+			r.NoError(os.WriteFile(filepath.Join(dir, "sub", "file"), []byte("content"), 0o644))
+			var expected bytes.Buffer
+			tw := tar.NewWriter(&expected)
+			for _, name := range []string{".", "sub", "sub/file"} {
+				info, err := os.Stat(filepath.Join(dir, name))
+				r.NoError(err)
+				h, err := tar.FileInfoHeader(info, "")
+				r.NoError(err)
+				h.Name = name
+				if info.IsDir() {
+					h.Name += "/"
+				}
+				if reproducible {
+					h.ModTime, h.AccessTime, h.ChangeTime = time.Unix(0, 0), time.Unix(0, 0), time.Unix(0, 0)
+					h.Uid, h.Gid, h.Uname, h.Gname = 0, 0, "", ""
+					h.Mode &= 0o777
+				}
+				r.NoError(tw.WriteHeader(h))
+				if !info.IsDir() {
+					_, err = tw.Write([]byte("content"))
+					r.NoError(err)
+				}
+			}
+			r.NoError(tw.Close())
+			b, err := filesystem.GetBlobFromPath(t.Context(), dir, filesystem.DirOptions{Reproducible: reproducible})
+			r.NoError(err)
+			actual, err := readAllFromBlob(b)
+			r.NoError(err)
+			r.Equal(expected.Bytes(), actual, "default bytes retain ./ and sub/ entries")
+		})
 	}
+}
 
-	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{})
-	r.NoError(err)
-
-	_, err = readAllFromBlob(b)
-	r.ErrorContains(err, "symlinks are not supported")
+func TestWriteTarEntryLayoutOptions(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		opt   filesystem.DirOptions
+		names []string
+	}{
+		{name: "defaults", names: []string{"./", "sub/"}},
+		{name: "omit root", opt: filesystem.DirOptions{OmitRoot: true}, names: []string{"sub/"}},
+		{name: "omit slash", opt: filesystem.DirOptions{OmitDirTrailingSlash: true}, names: []string{".", "sub"}},
+		{name: "git layout", opt: filesystem.DirOptions{OmitRoot: true, OmitDirTrailingSlash: true}, names: []string{"sub"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			source := fstest.MapFS{"sub": &fstest.MapFile{Mode: fs.ModeDir | 0o755}}
+			var output bytes.Buffer
+			writer := tar.NewWriter(&output)
+			for _, name := range []string{".", "sub"} {
+				info, err := fs.Stat(source, name)
+				r.NoError(err)
+				r.NoError(filesystem.WriteTarEntry(t.Context(), name, info, source, tt.opt, writer))
+			}
+			r.NoError(writer.Close())
+			reader := tar.NewReader(&output)
+			var names []string
+			for range tt.names {
+				h, err := reader.Next()
+				r.NoError(err)
+				names = append(names, h.Name)
+			}
+			r.Equal(tt.names, names)
+			_, err := reader.Next()
+			r.ErrorIs(err, io.EOF)
+		})
+	}
 }

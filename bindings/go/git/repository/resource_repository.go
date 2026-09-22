@@ -8,8 +8,6 @@ import (
 	"reflect"
 	"strings"
 
-	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
-	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/opencontainers/go-digest"
 	"golang.org/x/crypto/ssh"
 
@@ -56,9 +54,7 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 	}
 
 	if options.HTTPConfig != nil {
-		transport := githttp.NewClient(ocmhttp.New(ocmhttp.WithConfig(options.HTTPConfig)))
-		gitclient.InstallProtocol("http", transport)
-		gitclient.InstallProtocol("https", transport)
+		download.InstallHTTPClient(ocmhttp.New(ocmhttp.WithConfig(options.HTTPConfig)))
 	}
 
 	return &ResourceRepository{

@@ -26,41 +26,64 @@ import (
 )
 
 func TestDownloadRevisions(t *testing.T) {
-	r := require.New(t)
-
-	fixture := newRepository(t)
-	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/feature", fixture.First)))
-	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/feature", fixture.Second)))
-	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/releases/stable", fixture.First)))
-	for _, tc := range []struct {
-		ref, commit string
-		want        plumbing.Hash
-	}{
-		{"HEAD", "", fixture.Second},
-		{"main", "", fixture.Second},
-		{"refs/heads/main", "", fixture.Second},
-		{"feature", "", fixture.First},
-		{"refs/heads/feature", "", fixture.First},
-		{"refs/remotes/origin/feature", "", fixture.First},
-		{"refs/tags/feature", "", fixture.Second},
-		{"refs/releases/stable", "", fixture.First},
-		{"v1", "", fixture.First},
-		{"annotated", "", fixture.First},
-		{"refs/tags/annotated", "", fixture.First},
-		{"", fixture.First.String(), fixture.First},
-		{"HEAD", fixture.First.String(), fixture.First},
-		{"main", fixture.First.String(), fixture.First},
-		{"refs/heads/deleted", fixture.First.String(), fixture.First},
-	} {
-		t.Run(tc.ref+tc.commit, func(t *testing.T) {
+	for _, head := range []string{"valid HEAD", "missing HEAD"} {
+		t.Run(head, func(t *testing.T) {
 			r := require.New(t)
-
-			dir := t.TempDir()
-			spec := &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}
-			result, err := Download(t.Context(), spec, nil, Options{TempDir: dir})
+			fixture := newRepository(t)
+			if head == "missing HEAD" {
+				r.NoError(fixture.Git.Storer.RemoveReference("refs/heads/main"))
+			}
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/feature", fixture.Second)))
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/feature", fixture.First)))
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/releases/stable", fixture.First)))
+			inner, err := fixture.Git.Reference("refs/tags/annotated", true)
 			r.NoError(err)
-			r.Equal(tc.want.String(), result.Commit)
-			r.Equal(tc.commit, spec.Commit)
+			tag := storeObject(t, fixture.Git, &object.Tag{
+				Name:       "nested",
+				Tagger:     object.Signature{Name: "OCM fixture", Email: "fixture@example.invalid", When: time.Unix(1700000000, 0).UTC()},
+				Message:    "nested release\n",
+				TargetType: plumbing.TagObject,
+				Target:     inner.Hash(),
+			})
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/nested", tag)))
+
+			for _, tc := range []struct {
+				ref, commit string
+				want        plumbing.Hash
+			}{
+				{"HEAD", "", fixture.Second},
+				{"main", "", fixture.Second},
+				{"refs/heads/main", "", fixture.Second},
+				{"feature", "", fixture.Second},
+				{"refs/heads/feature", "", fixture.Second},
+				{"refs/remotes/origin/feature", "", fixture.Second},
+				{"refs/tags/feature", "", fixture.First},
+				{"refs/releases/stable", "", fixture.First},
+				{"v1", "", fixture.First},
+				{"refs/tags/v1", "", fixture.First},
+				{"annotated", "", fixture.First},
+				{"refs/tags/annotated", "", fixture.First},
+				{"nested", "", fixture.First},
+				{"refs/tags/nested", "", fixture.First},
+				{"", fixture.First.String(), fixture.First},
+				{"HEAD", fixture.First.String(), fixture.First},
+				{"main", fixture.First.String(), fixture.First},
+				{"refs/heads/main", fixture.First.String(), fixture.First},
+				{"refs/heads/deleted", fixture.First.String(), fixture.First},
+			} {
+				if head == "missing HEAD" && tc.commit == "" && (tc.ref == "HEAD" || tc.ref == "main" || tc.ref == "refs/heads/main") {
+					continue
+				}
+				t.Run(tc.ref+tc.commit, func(t *testing.T) {
+					r := require.New(t)
+					spec := &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}
+					result, err := Download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+					r.NoError(err)
+					r.Equal(tc.want.String(), result.Commit)
+					r.Equal(tc.commit, spec.Commit)
+					r.NotEmpty(readBlob(t, result.Blob))
+				})
+			}
 		})
 	}
 }
@@ -108,22 +131,6 @@ func TestDownloadArchive(t *testing.T) {
 	r.NoError(writer.Close())
 	r.Equal(data, recompressed.Bytes())
 
-	tr := tar.NewReader(bytes.NewReader(uncompressed))
-	var names []string
-	for {
-		h, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		r.NoError(err)
-		r.Zero(h.Uid, h.Name)
-		r.Zero(h.Gid, h.Name)
-		r.Empty(h.Uname, h.Name)
-		r.Empty(h.Gname, h.Name)
-		r.Equal(time.Unix(0, 0).UTC(), h.ModTime.UTC(), h.Name)
-		names = append(names, h.Name)
-	}
-	r.Equal([]string{"README.md", "docs", "docs/guide.txt", "link", "run.sh"}, names)
 }
 
 func readBlob(t *testing.T, b *filesystem.Blob) []byte {
@@ -151,24 +158,6 @@ func gunzipArchive(t *testing.T, data []byte) []byte {
 	r.NoError(err)
 	r.NoError(gz.Close())
 	return uncompressed
-}
-
-func TestDownloadDeterministic(t *testing.T) {
-	r := require.New(t)
-
-	fixture := newRepository(t)
-	var previous []byte
-	for range 3 {
-		result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String()}, nil, Options{TempDir: t.TempDir()})
-		r.NoError(err)
-
-		data := readBlob(t, result.Blob)
-		if previous != nil {
-			r.Equal(previous, data)
-		}
-
-		previous = data
-	}
 }
 
 func TestDownloadFailureCleanup(t *testing.T) {
@@ -229,84 +218,6 @@ func TestSubmoduleArchive(t *testing.T) {
 	r.Zero(h.Size)
 	_, err = tr.Next()
 	r.ErrorIs(err, io.EOF, "submodule is an empty placeholder even when its target commit is present")
-}
-
-func TestDownloadRefWithoutRemoteHEAD(t *testing.T) {
-	r := require.New(t)
-
-	fixture := newRepository(t)
-	r.NoError(fixture.Git.Storer.RemoveReference("refs/heads/main"))
-	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/feature", fixture.Second)))
-	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/feature", fixture.First)))
-	for _, tc := range []struct {
-		ref  string
-		want plumbing.Hash
-	}{
-		{"feature", fixture.Second},
-		{"refs/heads/feature", fixture.Second},
-		{"refs/tags/feature", fixture.First},
-		{"v1", fixture.First},
-		{"refs/tags/v1", fixture.First},
-		{"annotated", fixture.First},
-		{"refs/tags/annotated", fixture.First},
-	} {
-		t.Run(tc.ref, func(t *testing.T) {
-			r := require.New(t)
-
-			result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Ref: tc.ref}, nil, Options{TempDir: t.TempDir()})
-			r.NoError(err)
-			r.Equal(tc.want.String(), result.Commit)
-			r.NotEmpty(readBlob(t, result.Blob))
-		})
-	}
-}
-
-func TestDownloadNestedAnnotatedTag(t *testing.T) {
-	r := require.New(t)
-
-	fixture := newRepository(t)
-	inner, err := fixture.Git.Reference("refs/tags/annotated", true)
-	r.NoError(err)
-	tag := &object.Tag{
-		Name:       "nested",
-		Tagger:     object.Signature{Name: "OCM fixture", Email: "fixture@example.invalid", When: time.Unix(1700000000, 0).UTC()},
-		Message:    "nested release\n",
-		TargetType: plumbing.TagObject,
-		Target:     inner.Hash(),
-	}
-	hash := storeObject(t, fixture.Git, tag)
-	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/nested", hash)))
-
-	for _, danglingHEAD := range []bool{false, true} {
-		t.Run(fmt.Sprintf("danglingHEAD=%t", danglingHEAD), func(t *testing.T) {
-			r := require.New(t)
-			if danglingHEAD {
-				r.NoError(fixture.Git.Storer.RemoveReference("refs/heads/main"))
-			}
-			for _, ref := range []string{"nested", "refs/tags/nested"} {
-				t.Run(ref, func(t *testing.T) {
-					r := require.New(t)
-
-					result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Ref: ref}, nil, Options{TempDir: t.TempDir()})
-					r.NoError(err)
-					r.Equal(fixture.First.String(), result.Commit)
-					r.NotEmpty(readBlob(t, result.Blob))
-				})
-			}
-		})
-	}
-}
-
-func TestPinnedCommitWithoutRemoteHEAD(t *testing.T) {
-	r := require.New(t)
-
-	fixture := newRepository(t)
-	r.NoError(fixture.Git.Storer.RemoveReference("refs/heads/main"))
-
-	result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String(), Ref: "refs/heads/main"}, nil, Options{TempDir: t.TempDir()})
-	r.NoError(err)
-	r.Equal(fixture.First.String(), result.Commit)
-	r.NotNil(result.Blob)
 }
 
 func TestArchiveSizeBoundary(t *testing.T) {

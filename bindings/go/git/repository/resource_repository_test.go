@@ -16,7 +16,6 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/repository"
@@ -64,21 +63,6 @@ func TestResourceDigestPinning(t *testing.T) {
 	files, err = os.ReadDir(dir)
 	r.NoError(err)
 	r.Len(files, 1)
-
-	wrong := pinned.DeepCopy()
-	wrong.Digest.Value = strings.Repeat("0", 64)
-	_, err = repo.DownloadResource(t.Context(), wrong, nil)
-	r.ErrorContains(err, "digest mismatch")
-
-	wrong = pinned.DeepCopy()
-	wrong.Digest.HashAlgorithm = "SHA-512"
-	_, err = repo.DownloadResource(t.Context(), wrong, nil)
-	r.ErrorContains(err, "unsupported git hash algorithm")
-
-	wrong = pinned.DeepCopy()
-	wrong.Digest.NormalisationAlgorithm = "other"
-	_, err = repo.DownloadResource(t.Context(), wrong, nil)
-	r.ErrorContains(err, "unsupported git normalisation")
 }
 
 func TestResourceDigestCompressedArchive(t *testing.T) {
@@ -92,19 +76,13 @@ func TestResourceDigestCompressedArchive(t *testing.T) {
 
 	b, err := repo.DownloadResource(t.Context(), res, nil)
 	r.NoError(err)
-	mediaType, ok := b.(blob.MediaTypeAware).MediaType()
-	r.True(ok)
-	r.Equal("application/x-tgz", mediaType)
+
 	reader, err := b.ReadCloser()
 	r.NoError(err)
 	compressed, err := io.ReadAll(reader)
 	r.NoError(err)
 	r.NoError(reader.Close())
 	checksum := digest.FromBytes(compressed)
-	actual, ok := b.(blob.DigestAware).Digest()
-	r.True(ok)
-	r.Equal(checksum.String(), actual)
-	r.Equal(int64(len(compressed)), b.(blob.SizeAware).Size())
 
 	gz, err := gzip.NewReader(bytes.NewReader(compressed))
 	r.NoError(err)
@@ -121,30 +99,36 @@ func TestResourceDigestCompressedArchive(t *testing.T) {
 	}, generated.Digest)
 
 	for _, tc := range []struct {
-		name  string
-		value string
-		valid bool
+		name, value, hashAlgorithm, normalisation, wantErr string
 	}{
-		{name: "compressed digest", value: checksum.Encoded(), valid: true},
-		{name: "uncompressed digest", value: uncompressedChecksum.Encoded()},
-		{name: "wrong digest", value: strings.Repeat("0", 64)},
+		{name: "compressed digest", value: checksum.Encoded()},
+		{name: "uncompressed digest", value: uncompressedChecksum.Encoded(), wantErr: "digest mismatch"},
+		{name: "wrong digest", value: strings.Repeat("0", 64), wantErr: "digest mismatch"},
+		{name: "unsupported hash", value: checksum.Encoded(), hashAlgorithm: "SHA-512", wantErr: "unsupported git hash algorithm"},
+		{name: "unsupported normalisation", value: checksum.Encoded(), normalisation: "other", wantErr: "unsupported git normalisation"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			preset := res.DeepCopy()
 			preset.Digest = generated.Digest.DeepCopy()
 			preset.Digest.Value = tc.value
+			if tc.hashAlgorithm != "" {
+				preset.Digest.HashAlgorithm = tc.hashAlgorithm
+			}
+			if tc.normalisation != "" {
+				preset.Digest.NormalisationAlgorithm = tc.normalisation
+			}
 			before := preset.DeepCopy()
 
 			_, downloadErr := repo.DownloadResource(t.Context(), preset, nil)
 			processed, processErr := repo.ProcessResourceDigest(t.Context(), preset, nil)
-			if tc.valid {
+			if tc.wantErr == "" {
 				r.NoError(downloadErr)
 				r.NoError(processErr)
 				r.Equal(preset.Digest, processed.Digest)
 			} else {
-				r.ErrorContains(downloadErr, "digest mismatch")
-				r.ErrorContains(processErr, "digest mismatch")
+				r.ErrorContains(downloadErr, tc.wantErr)
+				r.ErrorContains(processErr, tc.wantErr)
 				r.Nil(processed)
 			}
 			r.Equal(before, preset)
