@@ -46,6 +46,7 @@ autoconfigure
 autoscaler
 aws
 backend
+backend's
 backends
 backoff
 backport
@@ -85,6 +86,7 @@ cet
 cgo
 changelog
 changelogs
+checkable
 checksums
 chocolateyinstall
 cdn
@@ -836,10 +838,14 @@ unmarshal
 unmarshalled
 unmarshaller
 unmarshalling
+unmarshaling
 unmodifiable
 unregisters
 unrepresentable
+unreferenced
 untrusted
+untag
+untagging
 untyped
 unvalidated
 updatevendorhash

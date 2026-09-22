@@ -9,6 +9,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/cli/cmd/add"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
+	deletecmd "ocm.software/open-component-model/bindings/go/cli/cmd/delete"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/describe"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/download"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/generate"
@@ -73,6 +74,7 @@ func New() *cobra.Command {
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())
 	cmd.AddCommand(add.New())
+	cmd.AddCommand(deletecmd.New())
 	cmd.AddCommand(version.New())
 	cmd.AddCommand(download.New())
 	cmd.AddCommand(verify.New())
