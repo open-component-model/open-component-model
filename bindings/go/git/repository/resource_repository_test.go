@@ -1,6 +1,9 @@
 package repository_test
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,8 +13,10 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/repository"
@@ -74,6 +79,77 @@ func TestResourceDigestPinning(t *testing.T) {
 	wrong.Digest.NormalisationAlgorithm = "other"
 	_, err = repo.DownloadResource(t.Context(), wrong, nil)
 	r.ErrorContains(err, "unsupported git normalisation")
+}
+
+func TestResourceDigestCompressedArchive(t *testing.T) {
+	r := require.New(t)
+	fixture := newRepository(t)
+	dir := t.TempDir()
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
+	res := &descriptor.Resource{Access: &v1.Git{
+		Type: runtime.NewVersionedType("Git", "v1"), Repository: fixture.Path, Commit: fixture.First.String(),
+	}}
+
+	b, err := repo.DownloadResource(t.Context(), res, nil)
+	r.NoError(err)
+	mediaType, ok := b.(blob.MediaTypeAware).MediaType()
+	r.True(ok)
+	r.Equal("application/x-tgz", mediaType)
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	compressed, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.NoError(reader.Close())
+	checksum := digest.FromBytes(compressed)
+	actual, ok := b.(blob.DigestAware).Digest()
+	r.True(ok)
+	r.Equal(checksum.String(), actual)
+	r.Equal(int64(len(compressed)), b.(blob.SizeAware).Size())
+
+	gz, err := gzip.NewReader(bytes.NewReader(compressed))
+	r.NoError(err)
+	uncompressed, err := io.ReadAll(gz)
+	r.NoError(err)
+	r.NoError(gz.Close())
+	uncompressedChecksum := digest.FromBytes(uncompressed)
+	r.NotEqual(checksum, uncompressedChecksum)
+
+	generated, err := repo.ProcessResourceDigest(t.Context(), res, nil)
+	r.NoError(err)
+	r.Equal(&descriptor.Digest{
+		HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: checksum.Encoded(),
+	}, generated.Digest)
+
+	for _, tc := range []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{name: "compressed digest", value: checksum.Encoded(), valid: true},
+		{name: "uncompressed digest", value: uncompressedChecksum.Encoded()},
+		{name: "wrong digest", value: strings.Repeat("0", 64)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			preset := res.DeepCopy()
+			preset.Digest = generated.Digest.DeepCopy()
+			preset.Digest.Value = tc.value
+			before := preset.DeepCopy()
+
+			_, downloadErr := repo.DownloadResource(t.Context(), preset, nil)
+			processed, processErr := repo.ProcessResourceDigest(t.Context(), preset, nil)
+			if tc.valid {
+				r.NoError(downloadErr)
+				r.NoError(processErr)
+				r.Equal(preset.Digest, processed.Digest)
+			} else {
+				r.ErrorContains(downloadErr, "digest mismatch")
+				r.ErrorContains(processErr, "digest mismatch")
+				r.Nil(processed)
+			}
+			r.Equal(before, preset)
+		})
+	}
 }
 
 func TestResourceDigestKeepsPinnedCommit(t *testing.T) {

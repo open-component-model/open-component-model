@@ -8,7 +8,7 @@ import (
 
 // Options holds configuration for the Git resource repository.
 type Options struct {
-	// MaxArchiveSize caps the bytes of the tar archive, not of the clone it is taken
+	// MaxArchiveSize caps the bytes of the compressed archive, not of the clone it is taken
 	// from. Nil uses the default; zero or negative allows an unlimited archive,
 	// which is then bounded by free disk space.
 	MaxArchiveSize *int64
@@ -19,14 +19,14 @@ type Options struct {
 	// known_hosts files of the current user.
 	HostKeyCallback ssh.HostKeyCallback
 	// HTTPConfig configures the HTTP client used for http(s) repositories. Nil
-	// leaves go-git's default client in place.
+	// leaves the current protocol registration unchanged.
 	HTTPConfig *httpv1alpha1.Config
 }
 
 // Option configures Options.
 type Option func(*Options)
 
-// WithMaxArchiveSize limits the bytes of the tar archive a single download
+// WithMaxArchiveSize limits the bytes of the compressed archive a single download
 // produces. Pass 0 to allow an unlimited archive. Archives are streamed to disk
 // rather than buffered, so an unlimited archive is bounded by free disk space.
 // Git transfers the repository before the archive exists, so the limit rejects an
@@ -59,7 +59,7 @@ func WithHostKeyCallback(callback ssh.HostKeyCallback) Option {
 // installed into go-git's protocol registry, which is process global: the last
 // repository constructed with this option decides the client for every Git
 // download in the process. Transports other than http(s) are untouched, and a nil
-// cfg leaves go-git's default client in place.
+// cfg leaves the current protocol registration unchanged.
 //
 // The installed client's transport is a chain rather than a plain *http.Transport,
 // which go-git requires when a per-operation CA bundle is set, so a CA bundle for

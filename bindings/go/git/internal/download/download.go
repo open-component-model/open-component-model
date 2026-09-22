@@ -23,13 +23,13 @@ import (
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 )
 
-// Result is one downloaded snapshot of a Git repository, archived as tar.
+// Result is one downloaded snapshot of a Git repository, archived as tar.gz.
 type Result struct {
 	// Blob is backed by a file that outlives the call and is owned by the caller.
 	Blob *filesystem.Blob
 	// Commit is the full SHA the archive was taken from.
 	Commit string
-	// Digest is taken while the archive is written.
+	// Digest covers the final compressed archive bytes.
 	Digest digest.Digest
 }
 
@@ -116,7 +116,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		return nil, fmt.Errorf("cannot archive git repository: %w", err)
 	}
 
-	file, err := os.CreateTemp(opts.TempDir, "ocm-git-archive-*.tar")
+	file, err := os.CreateTemp(opts.TempDir, "ocm-git-archive-*.tar.gz")
 	if err != nil {
 		return nil, fmt.Errorf("cannot create git archive file: %w", err)
 	}

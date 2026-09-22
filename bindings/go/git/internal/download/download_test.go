@@ -3,11 +3,13 @@ package download
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,45 +61,69 @@ func TestDownloadRevisions(t *testing.T) {
 			r.NoError(err)
 			r.Equal(tc.want.String(), result.Commit)
 			r.Equal(tc.commit, spec.Commit)
-
-			b := result.Blob
-			mt, ok := b.MediaType()
-			r.True(ok)
-			r.Equal("application/x-tar", mt)
-
-			data := readBlob(t, b)
-			r.Equal(data, readBlob(t, b))
-
-			raw, ok := b.Digest()
-			r.True(ok)
-			r.Equal(digest.FromBytes(data).String(), raw)
-			r.Equal(raw, result.Digest.String())
-
-			// The archive file outlives the download and belongs to the caller.
-			files, err := os.ReadDir(dir)
-			r.NoError(err)
-			r.Len(files, 1)
-			tr := tar.NewReader(bytes.NewReader(data))
-			names := []string{}
-			for {
-				h, err := tr.Next()
-				if err == io.EOF {
-					break
-				}
-				r.NoError(err)
-
-				names = append(names, h.Name)
-				switch h.Name {
-				case "run.sh":
-					r.Equal(int64(0o755), h.Mode)
-				case "link":
-					r.Equal(byte(tar.TypeSymlink), h.Typeflag)
-					r.Equal("docs/guide.txt", h.Linkname)
-				}
-			}
-			r.Equal([]string{"README.md", "docs", "docs/guide.txt", "link", "run.sh"}, names)
 		})
 	}
+}
+
+func TestDownloadArchive(t *testing.T) {
+	r := require.New(t)
+	fixture := newRepository(t)
+	dir := t.TempDir()
+	result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
+	r.NoError(err)
+
+	b := result.Blob
+	mt, ok := b.MediaType()
+	r.True(ok)
+	r.Equal("application/x-tgz", mt)
+	data := readBlob(t, b)
+	r.Equal(data, readBlob(t, b))
+	raw, ok := b.Digest()
+	r.True(ok)
+	r.Equal(digest.FromBytes(data).String(), raw)
+	r.Equal(raw, result.Digest.String())
+
+	// The archive file outlives the download and belongs to the caller.
+	files, err := os.ReadDir(dir)
+	r.NoError(err)
+	r.Len(files, 1)
+	r.True(strings.HasSuffix(files[0].Name(), ".tar.gz"))
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	r.NoError(err)
+	r.True(gz.ModTime.IsZero())
+	r.Empty(gz.Name)
+	r.Empty(gz.Comment)
+	r.Empty(gz.Extra)
+	r.Equal(uint8(255), gz.OS)
+	uncompressed, err := io.ReadAll(gz)
+	r.NoError(err)
+	r.NoError(gz.Close())
+	r.NotEqual(digest.FromBytes(uncompressed), result.Digest)
+
+	// Use the same stdlib default compressor as v1, without custom gzip metadata.
+	var recompressed bytes.Buffer
+	writer := gzip.NewWriter(&recompressed)
+	_, err = writer.Write(uncompressed)
+	r.NoError(err)
+	r.NoError(writer.Close())
+	r.Equal(data, recompressed.Bytes())
+
+	tr := tar.NewReader(bytes.NewReader(uncompressed))
+	var names []string
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+		r.Zero(h.Uid, h.Name)
+		r.Zero(h.Gid, h.Name)
+		r.Empty(h.Uname, h.Name)
+		r.Empty(h.Gname, h.Name)
+		r.Equal(time.Unix(0, 0).UTC(), h.ModTime.UTC(), h.Name)
+		names = append(names, h.Name)
+	}
+	r.Equal([]string{"README.md", "docs", "docs/guide.txt", "link", "run.sh"}, names)
 }
 
 func readBlob(t *testing.T, b *filesystem.Blob) []byte {
@@ -113,6 +139,18 @@ func readBlob(t *testing.T, b *filesystem.Blob) []byte {
 	r.NoError(rc.Close())
 
 	return data
+}
+
+func gunzipArchive(t *testing.T, data []byte) []byte {
+	t.Helper()
+	r := require.New(t)
+
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	r.NoError(err)
+	uncompressed, err := io.ReadAll(gz)
+	r.NoError(err)
+	r.NoError(gz.Close())
+	return uncompressed
 }
 
 func TestDownloadDeterministic(t *testing.T) {
@@ -170,29 +208,27 @@ func TestSubmoduleArchive(t *testing.T) {
 
 	fixture := newRepository(t)
 	tree := &object.Tree{Entries: []object.TreeEntry{{Name: "vendor", Mode: filemode.Submodule, Hash: fixture.First}}}
-	encoded := fixture.Git.Storer.NewEncodedObject()
-	r.NoError(tree.Encode(encoded))
-
-	hash, err := fixture.Git.Storer.SetEncodedObject(encoded)
-	r.NoError(err)
+	hash := storeObject(t, fixture.Git, tree)
 
 	commit, err := fixture.Git.CommitObject(fixture.First)
 	r.NoError(err)
 
 	commit.TreeHash = hash
-	encoded = fixture.Git.Storer.NewEncodedObject()
-	r.NoError(commit.Encode(encoded))
-
-	commitHash, err := fixture.Git.Storer.SetEncodedObject(encoded)
-	r.NoError(err)
+	commitHash := storeObject(t, fixture.Git, commit)
 	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/submodule", commitHash)))
 
 	result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: commitHash.String()}, nil, Options{TempDir: t.TempDir()})
 	r.NoError(err)
 
-	tr := tar.NewReader(bytes.NewReader(readBlob(t, result.Blob)))
+	tr := tar.NewReader(bytes.NewReader(gunzipArchive(t, readBlob(t, result.Blob))))
+	h, err := tr.Next()
+	r.NoError(err)
+	r.Equal("vendor", h.Name)
+	r.Equal(byte(tar.TypeDir), h.Typeflag)
+	r.Equal(int64(0o755), h.Mode)
+	r.Zero(h.Size)
 	_, err = tr.Next()
-	r.ErrorIs(err, io.EOF, "submodule content is not part of the archive")
+	r.ErrorIs(err, io.EOF, "submodule is an empty placeholder even when its target commit is present")
 }
 
 func TestDownloadRefWithoutRemoteHEAD(t *testing.T) {
@@ -238,10 +274,7 @@ func TestDownloadNestedAnnotatedTag(t *testing.T) {
 		TargetType: plumbing.TagObject,
 		Target:     inner.Hash(),
 	}
-	encoded := fixture.Git.Storer.NewEncodedObject()
-	r.NoError(tag.Encode(encoded))
-	hash, err := fixture.Git.Storer.SetEncodedObject(encoded)
-	r.NoError(err)
+	hash := storeObject(t, fixture.Git, tag)
 	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/nested", hash)))
 
 	for _, danglingHEAD := range []bool{false, true} {
@@ -284,15 +317,19 @@ func TestArchiveSizeBoundary(t *testing.T) {
 	result, err := Download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
 	r.NoError(err)
 
+	data := readBlob(t, result.Blob)
 	size := result.Blob.Size()
+	r.Equal(int64(len(data)), size)
+	r.Greater(int64(len(gunzipArchive(t, data))), size, "the limit applies to compressed bytes only")
 
 	result, err = Download(t.Context(), spec, nil, Options{TempDir: t.TempDir(), MaxArchiveSize: size})
 	r.NoError(err)
 	r.NotNil(result.Blob)
+	r.Equal(data, readBlob(t, result.Blob))
 
 	dir := t.TempDir()
 	result, err = Download(t.Context(), spec, nil, Options{TempDir: dir, MaxArchiveSize: size - 1})
-	r.Error(err)
+	r.ErrorContains(err, "git archive exceeds the maximum size")
 	r.Nil(result)
 	entries, err := os.ReadDir(dir)
 	r.NoError(err)
@@ -306,7 +343,7 @@ func TestPinnedArchiveContainsSelectedCommit(t *testing.T) {
 	first, err := fixture.Git.CommitObject(fixture.First)
 	r.NoError(err)
 
-	file, err := os.CreateTemp(t.TempDir(), "archive-*.tar")
+	file, err := os.CreateTemp(t.TempDir(), "archive-*.tar.gz")
 	r.NoError(err)
 
 	expected, expectedDigest, err := archive(t.Context(), first, file, Options{})
@@ -341,6 +378,36 @@ func TestTransportErrorMessages(t *testing.T) {
 	}
 }
 
+type objectEncoder interface {
+	Encode(plumbing.EncodedObject) error
+}
+
+func storeObject(t *testing.T, repo *git.Repository, obj objectEncoder) plumbing.Hash {
+	t.Helper()
+	r := require.New(t)
+	encoded := repo.Storer.NewEncodedObject()
+	r.NoError(obj.Encode(encoded))
+	hash, err := repo.Storer.SetEncodedObject(encoded)
+	r.NoError(err)
+	return hash
+}
+
+func storeBlob(t *testing.T, repo *git.Repository, content string) plumbing.Hash {
+	t.Helper()
+	r := require.New(t)
+	encoded := repo.Storer.NewEncodedObject()
+	encoded.SetType(plumbing.BlobObject)
+	encoded.SetSize(int64(len(content)))
+	w, err := encoded.Writer()
+	r.NoError(err)
+	_, err = io.WriteString(w, content)
+	r.NoError(err)
+	r.NoError(w.Close())
+	hash, err := repo.Storer.SetEncodedObject(encoded)
+	r.NoError(err)
+	return hash
+}
+
 type repositoryFixture struct {
 	Path          string
 	Git           *git.Repository
@@ -356,36 +423,8 @@ func newRepository(t *testing.T) repositoryFixture {
 	repo, err := git.PlainInit(dir, true)
 	r.NoError(err)
 
-	store := func(obj interface {
-		Encode(plumbing.EncodedObject) error
-	},
-	) plumbing.Hash {
-		encoded := repo.Storer.NewEncodedObject()
-		r.NoError(obj.Encode(encoded))
-
-		hash, err := repo.Storer.SetEncodedObject(encoded)
-		r.NoError(err)
-
-		return hash
-	}
-
-	blob := func(content string) plumbing.Hash {
-		encoded := repo.Storer.NewEncodedObject()
-		encoded.SetType(plumbing.BlobObject)
-		encoded.SetSize(int64(len(content)))
-
-		w, err := encoded.Writer()
-		r.NoError(err)
-
-		_, err = io.WriteString(w, content)
-		r.NoError(err)
-		r.NoError(w.Close())
-
-		hash, err := repo.Storer.SetEncodedObject(encoded)
-		r.NoError(err)
-
-		return hash
-	}
+	store := func(obj objectEncoder) plumbing.Hash { return storeObject(t, repo, obj) }
+	blob := func(content string) plumbing.Hash { return storeBlob(t, repo, content) }
 
 	signature := object.Signature{
 		Name:  "OCM fixture",

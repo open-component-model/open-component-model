@@ -3,6 +3,7 @@ package integration_test
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"encoding/pem"
 	"io"
 	"net/http/cgi"
@@ -102,14 +103,17 @@ func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme strin
 
 	mediaType, ok := content.(blob.MediaTypeAware).MediaType()
 	r.True(ok)
-	r.Equal("application/x-tar", mediaType)
+	r.Equal("application/x-tgz", mediaType)
 	r.Equal(int64(len(data)), content.(blob.SizeAware).Size())
 
 	checksum, ok := content.(blob.DigestAware).Digest()
 	r.True(ok)
 	r.Equal(digest.FromBytes(data).String(), checksum)
 
-	tr := tar.NewReader(bytes.NewReader(data))
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	r.NoError(err)
+	defer func() { r.NoError(gz.Close()) }()
+	tr := tar.NewReader(gz)
 	var names []string
 	for {
 		header, err := tr.Next()

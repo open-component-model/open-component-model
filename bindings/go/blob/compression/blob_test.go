@@ -26,6 +26,36 @@ func (b *testBlob) ReadCloser() (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(b.data)), nil
 }
 
+func TestDecompressMediaTypes(t *testing.T) {
+	for _, tt := range []struct {
+		mediaType string
+		want      string
+	}{
+		{"application/gzip", "application/octet-stream"},
+		{"application/x-tar+gzip", "application/x-tar"},
+		{"application/x-tgz", "application/x-tar"},
+	} {
+		t.Run(tt.mediaType, func(t *testing.T) {
+			r := require.New(t)
+			data := []byte("archive contents")
+			compressed := compression.Compress(&testBlob{data: data})
+			compressed.SetMediaType(tt.mediaType)
+
+			decompressed, err := compression.Decompress(compressed)
+			r.NoError(err)
+			mediaType, known := decompressed.(blob.MediaTypeAware).MediaType()
+			r.True(known)
+			r.Equal(tt.want, mediaType)
+			reader, err := decompressed.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() { r.NoError(reader.Close()) })
+			got, err := io.ReadAll(reader)
+			r.NoError(err)
+			r.Equal(data, got)
+		})
+	}
+}
+
 func TestCompressedBlob(t *testing.T) {
 	t.Run("successful compression and decompression", func(t *testing.T) {
 		r := require.New(t)

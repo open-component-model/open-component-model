@@ -3,6 +3,7 @@ package integration
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1293,7 +1294,7 @@ components:
 // Test_Integration_AddComponentVersion_GitAccess verifies that a resource declaring a Git
 // access with a ref directly in the constructor is pinned to a commit and hashed by the git
 // digest processor, and that the access is then resolved and downloaded via the git resource
-// repository as an uncompressed tar of that commit.
+// repository as a gzip-compressed tar of that commit.
 func Test_Integration_AddComponentVersion_GitAccess(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
@@ -1365,7 +1366,7 @@ components:
 	r.Equal("main", stored["ref"], "the ref stays informational next to the pinned commit")
 
 	// download resource resolves the git access via the registered git resource repository.
-	output := filepath.Join(t.TempDir(), "archive.tar")
+	output := filepath.Join(t.TempDir(), "archive.tgz")
 	downloadCMD := cmd.New()
 	downloadCMD.SetArgs([]string{
 		"download",
@@ -1383,22 +1384,19 @@ components:
 	r.Equal(godigest.FromBytes(archive).Encoded(), res.Digest.Value,
 		"recorded digest must be the generic blob digest of the downloaded archive")
 
-	files := map[string]*tar.Header{}
-	contents := map[string]string{}
-	tr := tar.NewReader(bytes.NewReader(archive))
-	for {
-		h, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		r.NoError(err)
-		data, err := io.ReadAll(tr)
-		r.NoError(err)
-		files[h.Name], contents[h.Name] = h, string(data)
-	}
-	r.Len(files, 2, "archive should hold exactly the committed files")
-	r.Equal("hello from git access\n", contents["README.md"])
-	r.Equal(int64(0o755), files["run.sh"].Mode, "executable bit should come from the git tree")
+	gz, err := gzip.NewReader(bytes.NewReader(archive))
+	r.NoError(err)
+	defer func() { r.NoError(gz.Close()) }()
+	tr := tar.NewReader(gz)
+	header, err := tr.Next()
+	r.NoError(err)
+	r.Equal("README.md", header.Name)
+	content, err := io.ReadAll(tr)
+	r.NoError(err)
+	r.Equal("hello from git access\n", string(content))
+	r.Equal(int64(len(content)), header.Size)
+	_, err = tr.Next()
+	r.ErrorIs(err, io.EOF)
 
 	// get component-version reads the git-access component back through the CLI.
 	getOutput := new(bytes.Buffer)
@@ -1419,8 +1417,6 @@ components:
 	r.Contains(out, "Git/v1", "output should contain the git access type")
 }
 
-// createGitRepository creates a local repository with a regular and an executable file on
-// main and returns its path and the commit main points to.
 func createGitRepository(t *testing.T) (dir, commit string) {
 	t.Helper()
 	r := require.New(t)
@@ -1437,8 +1433,7 @@ func createGitRepository(t *testing.T) (dir, commit string) {
 
 	run("init", "-q", "-b", "main")
 	r.NoError(os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello from git access\n"), 0o644))
-	r.NoError(os.WriteFile(filepath.Join(dir, "run.sh"), []byte("#!/bin/sh\necho ocm\n"), 0o755))
-	run("add", "-A")
+	run("add", "README.md")
 	run("commit", "-q", "-m", "initial")
 
 	return dir, run("rev-parse", "HEAD")

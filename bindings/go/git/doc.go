@@ -28,19 +28,15 @@
 //
 // # Archive format
 //
-// The blob is an uncompressed tar (application/x-tar) written by the shared
-// filesystem archiver. Names, modes and symlink targets come from Git tree objects,
-// not a host checkout. Git opts into root omission, directory names without a
-// trailing slash, and symlink preservation. Entries carry uid and gid
-// 0, no user or group name, a zero modification time and one of three modes, 0644,
-// 0755, or 0777 on a symlink. Directories have explicit entries with mode 0755.
-// Entries follow Git tree order. Submodules are unsupported and omitted entirely.
-// The archive stays uncompressed because its digest is verified on other machines
-// and the output of the standard library
-// compressors is not stable across Go releases. Two callers archiving the same commit
-// therefore produce the same bytes.
+// The blob is a gzip-compressed tar (application/x-tgz) written by the shared
+// filesystem archiver from Git objects, without a host checkout. Layout follows
+// OCM v1: lexical, depth-first entries, no root entry or directory trailing slash,
+// preserved symlinks, and empty submodule directories without fetching their contents.
+// Metadata is normalized: uid/gid 0, empty owner names, epoch modification time,
+// files 0644, executables/directories 0755, and symlinks 0777. Gzip uses the standard
+// library defaults; byte stability across Go releases is not guaranteed.
 //
-// WithMaxArchiveSize caps those bytes, at 1 GiB by default. Git transfers the
+// WithMaxArchiveSize caps compressed bytes, at 1 GiB by default. Git transfers the
 // repository before the archive exists, so the limit rejects an oversized archive
 // rather than stopping the clone that produced it.
 //
@@ -58,18 +54,17 @@
 // # Digests
 //
 // ProcessResourceDigest pins a ref-only access to the commit its ref currently
-// resolves to and computes the genericBlobDigest/v1 SHA-256 over the archive, in the
+// resolves to and computes genericBlobDigest/v1 SHA-256 over the compressed archive in the
 // same download. A digest already on the resource is verified rather than replaced,
 // so re-digesting cannot quietly restate what a signature covers.
 //
 // # OCM v1 Git access compatibility
 //
-// Legacy Git access spellings are accepted, but OCM v1 resource digests are not
-// compatible: v1 hashed a tar.gz with host-dependent metadata, while this binding
-// hashes a normalized, uncompressed tar. Git access regenerates the archive from
-// the repository and cannot reliably reproduce the original bytes. Existing
-// digests are verified, never silently skipped or replaced. This limitation is
-// specific to Git access, not input handling.
+// Legacy Git access spellings are accepted. Both versions hash compressed archives,
+// but v1 archives with host-dependent metadata cannot be reproduced reliably here.
+// Planned v1 metadata normalization (ocm-project#1337) needs separate compatibility
+// validation. Existing digests are verified, never skipped or replaced. This concerns
+// Git access only, not input handling.
 //
 // # Credentials
 //
@@ -83,12 +78,10 @@
 // credentials an SSH repository falls back to the SSH agent and anything else is
 // fetched anonymously.
 //
-// SSH host keys are verified against the known_hosts files of the current user unless
-// WithHostKeyCallback replaces that. WithCABundle adds PEM certificates to the system
-// TLS trust roots; for an HTTPS repository configured through WithHTTPConfig the
-// bundle belongs in that config instead, since go-git requires the per-operation
-// bundle and a plain transport together. Note that WithHTTPConfig installs its client
-// into go-git's protocol registry, which is process global.
+// SSH host keys use the current user's known_hosts unless WithHostKeyCallback
+// overrides verification. WithCABundle extends system TLS trust. See
+// [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPConfig]
+// for custom HTTP configuration and its process-global transport behavior.
 //
 // # Credential consumer identity
 //
@@ -98,7 +91,7 @@
 //	type:     Git
 //	scheme:   https               // the URL protocol: https, http, ssh, git or file
 //	hostname: github.com          // localhost for a local repository
-//	port:     7999                // only when the URL sets one
+//	port:     7999                // explicit or protocol default; omitted for local paths
 //	path:     org/repo.git        // the repository path, without a leading slash
 //
 // Repository URLs may be http(s)://, ssh:// or git:// URLs, the scp-like form
