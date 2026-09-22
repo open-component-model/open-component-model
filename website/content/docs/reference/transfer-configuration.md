@@ -29,7 +29,7 @@ configurations:
       accessType: Wget/v1
     stream:
       type: HTTPStreaming/v1alpha1
-      targetURL: '${"https://mytarget.registry.com/uploads" + resource.access.path}'
+      targetURL: '${"https://mytarget.registry.com/uploads" + url(resource.access.url).path}'
       method: PUT
 ```
 
@@ -117,7 +117,7 @@ configurations:
       name: docs
     stream:
       type: HTTPStreaming/v1alpha1
-      targetURL: '${"https://docs.example.com" + resource.access.path}'
+      targetURL: '${"https://docs.example.com" + url(resource.access.url).path}'
   # Everything else Wget goes to the generic bucket.
   - type: uploader.transfer.config.ocm.software/v1alpha1
     match:
@@ -185,27 +185,30 @@ field names are exactly those of that access. For example:
 | `OCIImage/v1` | `imageReference`                  |
 | `S3/v1`       | `bucket`, `key`, `region`, …      |
 
-When the access carries a `url`, the parsed parts `resource.access.path`,
-`resource.access.host`, and `resource.access.scheme` are added as a convenience
-(CEL has no URL parser). Because the field set is derived from the matched
-resource's own access, an expression may only reference fields that exist on every
-resource the uploader matches — scope the rule with `match.accessType` so all
-matched resources share a shape.
+To decompose a URL-bearing access into its parts, use the inbuilt `url()` CEL
+function (CEL has no URL parser). `url(<string>)` (also callable as
+`<string>.url()`) parses a URL string and returns a map with the string keys
+`scheme`, `host`, `hostname`, `port`, `path`, `rawPath`, `rawQuery`, `fragment`,
+and `user`. For a `Wget/v1` source, `url(resource.access.url).path` yields the
+source URL's path. Because the field set is derived from the matched resource's
+own access, an expression may only reference fields that exist on every resource
+the uploader matches — scope the rule with `match.accessType` so all matched
+resources share a shape.
 
 Examples:
 
 ```yaml
 # Preserve the source path under a new host
-targetURL: '${"https://mytarget.example.com" + resource.access.path}'
+targetURL: '${"https://mytarget.example.com" + url(resource.access.url).path}'
 
 # Route by name and version
 targetURL: '${"https://cdn.example.com/" + resource.name + "/" + resource.version + "/blob"}'
 
 # Use extra identity / labels
-targetURL: '${"https://" + resource.labels.region + ".example.com/" + resource.extraIdentity.arch + resource.access.path}'
+targetURL: '${"https://" + resource.labels.region + ".example.com/" + resource.extraIdentity.arch + url(resource.access.url).path}'
 
 # Conditional target
-targetURL: '${resource.labels.tier == "public" ? "https://cdn.example.com" + resource.access.path : "https://internal.example.com" + resource.access.path}'
+targetURL: '${resource.labels.tier == "public" ? "https://cdn.example.com" + url(resource.access.url).path : "https://internal.example.com" + url(resource.access.url).path}'
 
 # Non-wget source: reference an access-specific field (OCI imageReference)
 targetURL: '${"https://mirror.example.com/" + resource.access.imageReference}'

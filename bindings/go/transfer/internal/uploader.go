@@ -100,8 +100,9 @@ const uploadsEnvKey = "uploads"
 // `resource`. It works with any access type: the access is decoded generically from
 // its raw JSON so every access field is addressable under resource.access.<field>
 // (e.g. resource.access.url for wget, resource.access.imageReference for OCI,
-// resource.access.bucket for S3). When the access carries a URL, the parsed parts
-// (path/host/scheme) are added as a convenience since CEL has no URL parser.
+// resource.access.bucket for S3). A targetURL expression that needs the individual
+// URL parts (scheme/host/path/...) parses them with the inbuilt url() CEL function,
+// e.g. url(resource.access.url).path.
 func buildResourceNode(resource descriptorv2.Resource) (map[string]any, error) {
 	labels := make(map[string]any, len(resource.Labels))
 	for _, l := range resource.Labels {
@@ -115,14 +116,6 @@ func buildResourceNode(resource descriptorv2.Resource) (map[string]any, error) {
 	access, err := decodeAccessFields(resource.Access)
 	if err != nil {
 		return nil, err
-	}
-	// Best-effort URL decomposition for URL-bearing accesses (wget, http, ...).
-	if rawURL, ok := access["url"].(string); ok && rawURL != "" {
-		if parsed, perr := url.Parse(rawURL); perr == nil {
-			access["path"] = parsed.Path
-			access["host"] = parsed.Host
-			access["scheme"] = parsed.Scheme
-		}
 	}
 
 	return map[string]any{

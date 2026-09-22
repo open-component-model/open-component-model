@@ -29,7 +29,7 @@ func init() {
 //	      accessType: Wget/v1
 //	    stream:
 //	      type: HTTPStreaming/v1alpha1
-//	      targetURL: '${"https://mytarget.registry.com/uploads" + resource.access.path}'
+//	      targetURL: '${"https://mytarget.registry.com/uploads" + url(resource.access.url).path}'
 //	      method: PUT
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed

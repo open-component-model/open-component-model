@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
@@ -72,7 +74,7 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, `${"https://target.example" + resource.access.path}`)}
+	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, `${"https://target.example" + url(resource.access.url).path}`)}
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
 	r.NoError(err)
 
@@ -114,14 +116,14 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	assert.True(t, strings.HasPrefix(targetURL, "${") && strings.HasSuffix(targetURL, "}"),
 		"target url must be a CEL expression field, got %q", targetURL)
 	assert.Contains(t, targetURL, "environment."+"uploads"+".", "target url must reference the injected upload node")
-	assert.Contains(t, targetURL, ".access.path", "resource alias must be rewritten to the node path")
+	assert.Contains(t, targetURL, ".access.url", "resource alias must be rewritten to the node path")
 	assert.NotContains(t, targetURL, "resource.access", "the bare resource alias must not survive the rewrite")
 
 	// The injected environment node exposes the source resource for the CEL expression.
 	uploads := tgd.Environment.Data["uploads"].(map[string]any)
 	node := uploads[streaming.id].(map[string]any)
 	nodeAccess := node["access"].(map[string]any)
-	assert.Equal(t, "/artifacts/blob.tar", nodeAccess["path"])
+	assert.Equal(t, "https://source.example/artifacts/blob.tar", nodeAccess["url"])
 	assert.Equal(t, "blob", node["name"])
 
 	// ADR 28: the node carries a human-readable label; the host is parsed from the
@@ -238,7 +240,7 @@ func TestBuildGraphDefinition_UploaderRejectsUnwrappedTargetURL(t *testing.T) {
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
 	// A bare CEL expression without the ${...} delimiters must be rejected.
-	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, `"https://target.example" + resource.access.path`)}
+	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, `"https://target.example" + url(resource.access.url).path`)}
 	_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
 	r.Error(err)
 	assert.Contains(t, err.Error(), "must be a single CEL expression wrapped in ${...}")
@@ -269,7 +271,7 @@ func TestBuildGraphDefinition_DeterministicOrder(t *testing.T) {
 		roots[key] = TransferRoot{RootComponentKey: key, Targets: []runtime.Typed{targetRepo}, SourceResolver: res}
 	}
 
-	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, `${"https://target.example" + resource.access.path}`)}
+	uploaders := []*transferv1alpha1.UploaderConfig{wgetUploader(t, `${"https://target.example" + url(resource.access.url).path}`)}
 
 	first, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, uploaders)
 	r.NoError(err)
@@ -281,5 +283,125 @@ func TestBuildGraphDefinition_DeterministicOrder(t *testing.T) {
 			assert.Equal(t, first.Transformations[j].ID, next.Transformations[j].ID,
 				"transformation order must be deterministic across runs (index %d, run %d)", j, i)
 		}
+	}
+}
+
+// resourceWithIdentity builds a v2 Wget resource carrying extra identity attributes
+// so the matcher's name/version/extraIdentity selection can be exercised.
+func resourceWithIdentity(name, version string, extra map[string]string) descriptorv2.Resource {
+	res := descriptorv2.Resource{
+		ElementMeta: descriptorv2.ElementMeta{
+			ObjectMeta: descriptorv2.ObjectMeta{Name: name, Version: version},
+		},
+		Type:     "blob",
+		Relation: descriptorv2.ExternalRelation,
+		Access: &runtime.Raw{
+			Type: runtime.NewVersionedType("Wget", "v1"),
+			Data: []byte(`{"type":"Wget/v1","url":"https://source.example/` + name + `"}`),
+		},
+	}
+	if len(extra) > 0 {
+		res.ExtraIdentity = runtime.Identity{}
+		for k, v := range extra {
+			res.ExtraIdentity[k] = v
+		}
+	}
+	return res
+}
+
+func TestMatchUploader(t *testing.T) {
+	wget := runtime.NewVersionedType("Wget", "v1")
+	// Rules are named so assertions can identify which one won.
+	rule := func(name string, m transferv1alpha1.UploaderMatch) *transferv1alpha1.UploaderConfig {
+		u := uploaderFor(t, m.AccessType, "${\""+name+"\"}")
+		u.Match = m
+		return u
+	}
+
+	byAccess := rule("byAccess", transferv1alpha1.UploaderMatch{AccessType: wget})
+	byName := rule("byName", transferv1alpha1.UploaderMatch{AccessType: wget, Name: "docs"})
+	byArch := rule("byArch", transferv1alpha1.UploaderMatch{AccessType: wget, ExtraIdentity: runtime.Identity{"architecture": "arm64"}})
+	byNameAndArch := rule("byNameAndArch", transferv1alpha1.UploaderMatch{AccessType: wget, Name: "docs", ExtraIdentity: runtime.Identity{"architecture": "arm64"}})
+	byVersionedAccess := rule("byVersionedAccess", transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v2")})
+	ociOnly := rule("ociOnly", transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("OCIImage", "v1")})
+
+	// helper to name the winning rule via its (single) targetURL literal.
+	won := func(t *testing.T, u *transferv1alpha1.UploaderConfig) string {
+		t.Helper()
+		if u == nil {
+			return ""
+		}
+		var cfg streamConfig
+		require.NoError(t, json.Unmarshal(u.Stream.Data, &cfg))
+		return strings.Trim(cfg.TargetURL, "${\"}")
+	}
+
+	tests := []struct {
+		name      string
+		uploaders []*transferv1alpha1.UploaderConfig
+		resource  descriptorv2.Resource
+		want      string // winning rule name, "" for no match
+	}{
+		{
+			name:      "access type only",
+			uploaders: []*transferv1alpha1.UploaderConfig{byAccess},
+			resource:  resourceWithIdentity("anything", "1.0.0", nil),
+			want:      "byAccess",
+		},
+		{
+			name:      "name constraint selects only the named resource",
+			uploaders: []*transferv1alpha1.UploaderConfig{byName},
+			resource:  resourceWithIdentity("other", "1.0.0", nil),
+			want:      "",
+		},
+		{
+			name:      "name constraint matches the named resource",
+			uploaders: []*transferv1alpha1.UploaderConfig{byName},
+			resource:  resourceWithIdentity("docs", "1.0.0", nil),
+			want:      "byName",
+		},
+		{
+			name:      "extraIdentity must be present and equal",
+			uploaders: []*transferv1alpha1.UploaderConfig{byArch},
+			resource:  resourceWithIdentity("docs", "1.0.0", map[string]string{"architecture": "amd64"}),
+			want:      "",
+		},
+		{
+			name:      "extraIdentity matches",
+			uploaders: []*transferv1alpha1.UploaderConfig{byArch},
+			resource:  resourceWithIdentity("docs", "1.0.0", map[string]string{"architecture": "arm64"}),
+			want:      "byArch",
+		},
+		{
+			name:      "first match wins: specific before broad",
+			uploaders: []*transferv1alpha1.UploaderConfig{byNameAndArch, byName, byAccess},
+			resource:  resourceWithIdentity("docs", "1.0.0", map[string]string{"architecture": "arm64"}),
+			want:      "byNameAndArch",
+		},
+		{
+			name:      "broad rule wins when specific rules do not apply",
+			uploaders: []*transferv1alpha1.UploaderConfig{byNameAndArch, byName, byAccess},
+			resource:  resourceWithIdentity("other", "1.0.0", nil),
+			want:      "byAccess",
+		},
+		{
+			name:      "access version must match when specified",
+			uploaders: []*transferv1alpha1.UploaderConfig{byVersionedAccess},
+			resource:  resourceWithIdentity("docs", "1.0.0", nil),
+			want:      "",
+		},
+		{
+			name:      "non-matching access type is skipped",
+			uploaders: []*transferv1alpha1.UploaderConfig{ociOnly, byAccess},
+			resource:  resourceWithIdentity("docs", "1.0.0", nil),
+			want:      "byAccess",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := matchUploader(tc.uploaders, tc.resource)
+			assert.Equal(t, tc.want, won(t, got))
+		})
 	}
 }

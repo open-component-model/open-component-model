@@ -78,20 +78,21 @@ configurations:
       accessType: Wget/v1
     stream:
       type: HTTPStreaming/v1alpha1
-      targetURL: '${"https://mytarget.example.com/uploads" + resource.access.path}'
+      targetURL: '${"https://mytarget.example.com/uploads" + url(resource.access.url).path}'
       method: PUT
 ```
 
 The `targetURL` is a [CEL](https://cel.dev/) expression wrapped in `${…}`,
 evaluated against the source resource, exposed as `resource`. Here
-`resource.access.path` is the path of the source resource's URL
-(`/artifacts/docs.tar`), so the expression resolves to
-`https://mytarget.example.com/uploads/artifacts/docs.tar`. You can also use
-`resource.name`, `resource.version`, `resource.access.host`,
-`resource.extraIdentity.<key>`, `resource.labels.<name>`, and CEL conditionals.
-The uploader is not limited to wget sources: every field of the source access is
-exposed under `resource.access.<field>` (e.g. `resource.access.imageReference` for
-an OCI source), so you can route any access type to an HTTP target — see the
+`url(resource.access.url).path` parses the source resource's URL with the inbuilt
+`url()` function and takes its path (`/artifacts/docs.tar`), so the expression
+resolves to `https://mytarget.example.com/uploads/artifacts/docs.tar`. You can
+also use `resource.name`, `resource.version`, other `url()` parts such as
+`url(resource.access.url).host`, `resource.extraIdentity.<key>`,
+`resource.labels.<name>`, and CEL conditionals. The uploader is not limited to
+wget sources: every field of the source access is exposed under
+`resource.access.<field>` (e.g. `resource.access.imageReference` for an OCI
+source), so you can route any access type to an HTTP target — see the
 [Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration.md" >}}#target-url-expressions).
 
 {{< callout context="note" title="Why copyMode: allResources" >}}
