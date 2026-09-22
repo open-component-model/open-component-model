@@ -167,7 +167,7 @@ The credential consumer identity is derived from the `url` field in the access s
 The [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input) derives the identity the same way,
 so one consumer entry covers construction and later downloads.
 
-See [Credential Consumer Identities: Wget]({{< relref "credential-consumer-identities.md" >}}#wget) for matching rules and the accepted aliases for the consumer identity type.
+See [Credential Consumer Identities: Wget / HTTP]({{< relref "credential-consumer-identities.md" >}}#wget--http) for matching rules and the accepted aliases for the consumer identity type.
 
 ### Download Behavior
 

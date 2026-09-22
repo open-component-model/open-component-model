@@ -192,7 +192,7 @@ Both identity type and access type names allow using the `HTTP` alias.
 
 | Attribute  | Required | Description                                                                                                                            |
 |------------|----------|----------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `Wget` or `HTTP`                                                                                                               |
+| `type`     | Yes      | `Wget` (recommended); also accepts `Wget/v1`, `HTTP`, `HTTP/v1`, `http`, and `http/v1`                                                 |
 | `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`)                                                                                         |
 | `path`     | No       | URL path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
 | `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                              |
