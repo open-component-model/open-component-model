@@ -45,6 +45,7 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 	// Target HTTP server: PUT stores, GET re-serves.
 	var mu sync.Mutex
 	stored := map[string][]byte{}
+	putHeaders := map[string]http.Header{}
 	targetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch req.Method {
 		case http.MethodPut:
@@ -55,6 +56,7 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 			}
 			mu.Lock()
 			stored[req.URL.Path] = body
+			putHeaders[req.URL.Path] = req.Header.Clone()
 			mu.Unlock()
 			w.WriteHeader(http.StatusCreated)
 		case http.MethodGet:
@@ -119,20 +121,19 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 	}
 
 	// The uploader routes the Wget resource through the HTTP streaming transformer to the target server.
-	stream, err := runtime.UnstructuredFromMixedData(map[string]any{
-		"type": "HTTPStreaming/v1alpha1",
-		// CEL expression: the graph runtime resolves url(resource.access.url).path
-		// against the injected source-resource node at execution time.
-		"targetURL": fmt.Sprintf("${%q + url(resource.access.url).path}", targetSrv.URL+"/uploads"),
-		"method":    http.MethodPut,
-	})
-	r.NoError(err)
-	streamRaw := &runtime.Raw{}
-	r.NoError(runtime.NewScheme(runtime.WithAllowUnknown()).Convert(stream, streamRaw))
-	uploaders := []*transferv1alpha1.UploaderConfig{{
-		Type:   runtime.NewVersionedType(transferv1alpha1.UploaderConfigType, transferv1alpha1.Version),
-		Match:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v1")},
-		Stream: streamRaw,
+	// The CEL expression resolves url(resource.access.url).path against the injected
+	// source-resource node at execution time.
+	uploaders := []*transferv1alpha1.HTTPUploaderConfig{{
+		Type:      runtime.NewVersionedType(transferv1alpha1.HTTPUploaderConfigType, transferv1alpha1.Version),
+		Match:     transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v1")},
+		TargetURL: fmt.Sprintf("${%q + url(resource.access.url).path}", targetSrv.URL+"/uploads"),
+		Method:    http.MethodPut,
+		Header: map[string][]string{
+			// A CEL-templated header resolved from the source resource at execution time.
+			"X-Resource-Name": {"${resource.name}"},
+			// A static literal header passes through unchanged.
+			"X-Static": {"literal-value"},
+		},
 	}}
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
@@ -160,9 +161,17 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 	expectedPath := "/uploads/artifacts/blob.tar"
 	mu.Lock()
 	got, ok := stored[expectedPath]
+	gotHeaders := putHeaders[expectedPath]
 	mu.Unlock()
 	r.True(ok, "target server should have received a PUT at %s", expectedPath)
 	r.Equal(resourceData, got, "streamed content must match the source content")
+
+	// The CEL-templated header was resolved from the source resource at execution time;
+	// the static header passed through unchanged.
+	r.Equal("wget-resource", gotHeaders.Get("X-Resource-Name"),
+		"the templated header must be resolved to the source resource name")
+	r.Equal("literal-value", gotHeaders.Get("X-Static"),
+		"the static header must pass through unchanged")
 
 	// The transferred descriptor's resource must reference the target URL via a Wget access
 	// and carry the digest computed during the stream.

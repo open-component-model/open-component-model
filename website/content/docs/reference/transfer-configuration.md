@@ -24,19 +24,17 @@ configurations:
   - type: transfer.config.ocm.software/v1alpha1
     copyMode: allResources
     uploadType: ociArtifact
-  - type: uploader.transfer.config.ocm.software/v1alpha1
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Wget/v1
-    stream:
-      type: HTTPStreaming/v1alpha1
-      targetURL: '${"https://mytarget.registry.com/uploads" + url(resource.access.url).path}'
-      method: PUT
+    targetURL: '${"https://mytarget.registry.com/uploads" + url(resource.access.url).path}'
+    method: PUT
 ```
 
 | Type                                             | Purpose                                                                    |
 |--------------------------------------------------|----------------------------------------------------------------------------|
 | `transfer.config.ocm.software/v1alpha1`          | Global transfer settings: recursion, which resources are copied and how.   |
-| `uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that routes a resource through a custom upload transformer. |
+| `http.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that streams a resource to a custom HTTP target.       |
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
 `--config <file>` to use a different file. The corresponding CLI flags
@@ -78,27 +76,47 @@ Only relevant when a resource is being copied.
 
 ## Uploader Configurations
 
-An **uploader configuration** routes resources that match a rule through a custom
-upload transformer instead of the default download-and-embed path. Each
-`uploader.transfer.config.ocm.software/v1alpha1` entry is an independent rule; you
-may declare several.
+An **uploader configuration** streams resources that match a rule to a custom
+target instead of the default download-and-embed path. The config type dedicates
+each uploader to a specific target: `http.uploader.transfer.config.ocm.software/v1alpha1`
+streams to an HTTP endpoint. Each entry is an independent rule; you may declare
+several.
 
 During transfer, the **first** uploader whose `match` applies to a resource wins,
 and it takes precedence over `copyMode`/`uploadType` for that resource. Because
 matching is first-match, declare more specific rules before broader ones.
 
-### Schema
+### `http.uploader.transfer.config.ocm.software/v1alpha1`
 
-{{< schema-renderer url="/schemas/bindings/go/transfer/UploaderConfig.schema.json" >}}
+Streams a matched resource's content directly to an HTTP endpoint (typically a
+`PUT` upload) and rewrites the resource to a `Wget/v1` access pointing at the
+uploaded location. The **source** may be any access type (wget, OCI, S3, GitHub,
+…) — its content is fetched through the access-type-specific downloader; only the
+**target** is always an HTTP endpoint. The source content is piped straight into
+the request body, so it is never buffered in memory or on disk. The digest is
+computed during the stream, or — when the source resource already carries one —
+verified as the bytes pass through.
 
-### Fields
+#### Schema
 
-| Field                 | Type                | Description                                                                     |
-|-----------------------|---------------------|---------------------------------------------------------------------------------|
-| `match.accessType`    | `runtime.Type`      | Access type this uploader applies to (matched by name; omitted version = any).  |
-| `match.name`          | string (optional)   | Restrict the match to resources with this exact name.                           |
-| `match.extraIdentity` | `map[string]string` | Restrict the match to resources whose identity contains these key/value pairs.  |
-| `stream`              | object              | Upload transformer spec, selected by its `type`. See Stream Types below.        |
+{{< schema-renderer url="/schemas/bindings/go/transfer/HTTPUploaderConfig.schema.json" >}}
+
+#### Fields
+
+The request fields map field-for-field onto the resulting
+[`Wget/v1`]({{< relref "docs/reference/input-and-access-types.md" >}}) access:
+
+| Field                 | Type                  | Maps to (`Wget/v1`) | Description                                                                     |
+|-----------------------|-----------------------|---------------------|---------------------------------------------------------------------------------|
+| `match.accessType`    | `runtime.Type`        | —                   | Access type this uploader applies to (matched by name; omitted version = any).  |
+| `match.name`          | string (optional)     | —                   | Restrict the match to resources with this exact name.                           |
+| `match.extraIdentity` | `map[string]string`   | —                   | Restrict the match to resources whose identity contains these key/value pairs.  |
+| `targetURL`           | CEL expression        | `url`               | The upload URL. See CEL Expressions below.                                      |
+| `method`              | string                | `verb`              | HTTP method for the upload request. Defaults to PUT.                            |
+| `header`              | `map[string][]string` | `header`            | HTTP headers to send with the upload request. Values may be CEL-templated; see Templating Headers. |
+| `body`                | bytes                 | `body`              | Optional request body carried on the resulting Wget/v1 access.                  |
+| `noRedirect`          | bool                  | `noRedirect`        | Disable following HTTP redirects.                                               |
+| `mediaType`           | string                | `mediaType`         | Media type recorded on the resource. Defaults to the source's.                  |
 
 ### Routing Resources to Different Targets
 
@@ -111,69 +129,41 @@ configurations:
   - type: transfer.config.ocm.software/v1alpha1
     copyMode: allResources
   # Docs go to the docs bucket.
-  - type: uploader.transfer.config.ocm.software/v1alpha1
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Wget/v1
       name: docs
-    stream:
-      type: HTTPStreaming/v1alpha1
-      targetURL: '${"https://docs.example.com" + url(resource.access.url).path}'
+    targetURL: '${"https://docs.example.com" + url(resource.access.url).path}'
   # Everything else Wget goes to the generic bucket.
-  - type: uploader.transfer.config.ocm.software/v1alpha1
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Wget/v1
-    stream:
-      type: HTTPStreaming/v1alpha1
-      targetURL: '${"https://blobs.example.com/" + resource.name + "/" + resource.version}'
+    targetURL: '${"https://blobs.example.com/" + resource.name + "/" + resource.version}'
 ```
 
-## Stream Types
+### CEL Expressions
 
-The `stream` block selects and configures the transformer that performs the
-upload. The transformer is chosen by `stream.type`.
-
-### `HTTPStreaming/v1alpha1`
-
-Streams a matched resource's content directly to an HTTP endpoint (typically a
-`PUT` upload) and rewrites the resource to a `Wget/v1` access pointing at the
-uploaded location. The **source** may be any access type (wget, OCI, S3, GitHub,
-…) — its content is fetched through the access-type-specific downloader; only the
-**target** is always an HTTP endpoint. The source content is piped straight into
-the request body, so it is never buffered in memory or on disk. The digest is
-computed during the stream, or — when the source resource already carries one —
-verified as the bytes pass through.
-
-Its fields map field-for-field onto the resulting
-[`Wget/v1`]({{< relref "docs/reference/input-and-access-types.md" >}}) access:
-
-| Field         | Type                  | Maps to (`Wget/v1`) | Description                                                         |
-|---------------|-----------------------|---------------------|---------------------------------------------------------------------|
-| `targetURL`   | CEL expression        | `url`               | The upload URL. See Target URL Expressions below.                   |
-| `method`      | string                | `verb`              | HTTP method for the upload request. Defaults to PUT.                |
-| `header`      | `map[string][]string` | `header`            | HTTP headers to send with the upload request.                       |
-| `body`        | bytes                 | `body`              | Optional request body carried on the resulting Wget/v1 access.      |
-| `noRedirect`  | bool                  | `noRedirect`        | Disable following HTTP redirects.                                   |
-| `mediaType`   | string                | `mediaType`         | Media type recorded on the resource. Defaults to the source's.      |
-
-#### Target URL Expressions
-
-`targetURL` is a [CEL](https://cel.dev/) expression — the same expression language
-the transfer graph uses to resolve every other field. It **must be wrapped in
-`${…}`**, matching how every other CEL field is written in the transfer graph. It
-is evaluated against the source resource, exposed under the `resource` alias, and
-resolved by the transfer runtime, so the produced plan is deterministic. CEL string
-concatenation (`+`), conditionals (`cond ? a : b`), and comparisons are all
-available. Append any static query string inside the expression.
+`targetURL` and every `header` value are [CEL](https://cel.dev/) expressions — the
+same expression language the transfer graph uses to resolve every other field. A
+CEL value **must be wrapped in `${…}`**, matching how every other CEL field is
+written in the transfer graph. It is evaluated against the source resource, exposed
+under the `resource` alias, and resolved by the transfer runtime, so the produced
+plan is deterministic. CEL string concatenation (`+`), conditionals (`cond ? a : b`),
+and comparisons are all available. Append any static query string inside the
+expression. (A `header` value with no `${…}` is a plain literal and is sent verbatim.)
 
 The `resource` alias always exposes:
 
-| Expression                        | Value                                                        |
-|-----------------------------------|--------------------------------------------------------------|
-| `resource.name`                   | Resource name.                                               |
-| `resource.version`                | Resource version.                                            |
-| `resource.type`                   | Resource type.                                               |
-| `resource.extraIdentity.<key>`    | A value from the resource's extra identity.                  |
-| `resource.labels.<name>`          | A resource label value (JSON string values are unquoted).    |
+| Expression                               | Value                                                        |
+|------------------------------------------|--------------------------------------------------------------|
+| `resource.name`                          | Resource name.                                               |
+| `resource.version`                       | Resource version.                                            |
+| `resource.type`                          | Resource type.                                               |
+| `resource.extraIdentity.<key>`           | A value from the resource's extra identity.                  |
+| `resource.labels`                        | The resource labels as a list of `{name, value}` objects.    |
+| `resource.digest.value`                  | The source digest value, when the resource carries a digest. |
+| `resource.digest.hashAlgorithm`          | The source digest hash algorithm (e.g. `SHA-256`).           |
+| `resource.digest.normalisationAlgorithm` | The source digest normalisation algorithm.                   |
 
 Every field of the **source access** is exposed dynamically under
 `resource.access.<field>`, so the expression works with any access type — the
@@ -195,6 +185,12 @@ own access, an expression may only reference fields that exist on every resource
 the uploader matches — scope the rule with `match.accessType` so all matched
 resources share a shape.
 
+Further inbuilt functions help build checksum headers:
+`contentDigestAlgorithm(<string>)` maps an OCM digest algorithm name to its RFC 9530
+`Content-Digest`/`Repr-Digest` key (`SHA-256` → `sha-256`); `hex.decode`/`hex.encode`
+and the CEL encoders extension's `base64.encode`/`base64.decode` convert a hex digest
+to the base64 value those fields expect. See [Templating Headers](#templating-headers).
+
 Examples:
 
 ```yaml
@@ -204,11 +200,11 @@ targetURL: '${"https://mytarget.example.com" + url(resource.access.url).path}'
 # Route by name and version
 targetURL: '${"https://cdn.example.com/" + resource.name + "/" + resource.version + "/blob"}'
 
-# Use extra identity / labels
-targetURL: '${"https://" + resource.labels.region + ".example.com/" + resource.extraIdentity.arch + url(resource.access.url).path}'
+# Use extra identity attributes
+targetURL: '${"https://" + resource.extraIdentity.region + ".example.com/" + resource.extraIdentity.arch + url(resource.access.url).path}'
 
-# Conditional target
-targetURL: '${resource.labels.tier == "public" ? "https://cdn.example.com" + url(resource.access.url).path : "https://internal.example.com" + url(resource.access.url).path}'
+# Conditional target driven by an extra-identity attribute
+targetURL: '${resource.extraIdentity.tier == "public" ? "https://cdn.example.com" + url(resource.access.url).path : "https://internal.example.com" + url(resource.access.url).path}'
 
 # Non-wget source: reference an access-specific field (OCI imageReference)
 targetURL: '${"https://mirror.example.com/" + resource.access.imageReference}'

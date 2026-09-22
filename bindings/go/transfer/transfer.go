@@ -26,7 +26,7 @@ import (
 func BuildGraphDefinition(
 	ctx context.Context,
 	cfg *transferv1alpha1.Config,
-	uploaders []*transferv1alpha1.UploaderConfig,
+	uploaders []*transferv1alpha1.HTTPUploaderConfig,
 	mappings ...Mapping,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	if err := cfg.Validate(); err != nil {

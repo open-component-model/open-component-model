@@ -12,7 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-func TestLookupUploaderConfigs(t *testing.T) {
+func TestLookupHTTPUploaderConfigs(t *testing.T) {
 	decode := func(t *testing.T, yaml string) *genericv1.Config {
 		t.Helper()
 		var generic genericv1.Config
@@ -28,23 +28,20 @@ configurations:
   - type: transfer.config.ocm.software/v1alpha1
     copyMode: allResources
     uploadType: ociArtifact
-  - type: uploader.transfer.config.ocm.software/v1alpha1
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Wget/v1alpha1
-    stream:
-      type: HTTPStreaming/v1alpha1
-      targetURL: '${"https://mytarget.registry.com/uploads" + url(resource.access.url).path}'
-      method: PUT
+    targetURL: '${"https://mytarget.registry.com/uploads" + url(resource.access.url).path}'
+    method: PUT
 `)
 
-		uploaders, err := spec.LookupUploaderConfigs(generic)
+		uploaders, err := spec.LookupHTTPUploaderConfigs(generic)
 		r.NoError(err)
 		r.Len(uploaders, 1)
 		assert.Equal(t, "Wget", uploaders[0].Match.AccessType.Name)
 		assert.Equal(t, "v1alpha1", uploaders[0].Match.AccessType.Version)
-		r.NotNil(uploaders[0].Stream)
-		assert.Equal(t, "HTTPStreaming", uploaders[0].Stream.GetType().Name)
-		assert.Equal(t, "v1alpha1", uploaders[0].Stream.GetType().Version)
+		assert.Equal(t, `${"https://mytarget.registry.com/uploads" + url(resource.access.url).path}`, uploaders[0].TargetURL)
+		assert.Equal(t, "PUT", uploaders[0].Method)
 
 		// The sibling transfer config is unaffected by the uploader entry.
 		cfg, err := spec.LookupConfig(generic)
@@ -61,7 +58,7 @@ configurations:
   - type: transfer.config.ocm.software/v1alpha1
     copyMode: allResources
 `)
-		uploaders, err := spec.LookupUploaderConfigs(generic)
+		uploaders, err := spec.LookupHTTPUploaderConfigs(generic)
 		require.NoError(t, err)
 		assert.Nil(t, uploaders)
 	})
@@ -71,20 +68,16 @@ configurations:
 		generic := decode(t, `
 type: generic.config.ocm.software/v1
 configurations:
-  - type: uploader.transfer.config.ocm.software/v1alpha1
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Wget/v1alpha1
-    stream:
-      type: HTTPStreaming/v1alpha1
-      targetURL: '${"https://first.example/uploads" + url(resource.access.url).path}'
-  - type: uploader.transfer.config.ocm.software/v1alpha1
+    targetURL: '${"https://first.example/uploads" + url(resource.access.url).path}'
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: S3/v2
-    stream:
-      type: HTTPStreaming/v1alpha1
-      targetURL: '${"https://second.example/uploads" + url(resource.access.url).path}'
+    targetURL: '${"https://second.example/uploads" + url(resource.access.url).path}'
 `)
-		uploaders, err := spec.LookupUploaderConfigs(generic)
+		uploaders, err := spec.LookupHTTPUploaderConfigs(generic)
 		r.NoError(err)
 		r.Len(uploaders, 2)
 		assert.Equal(t, "Wget", uploaders[0].Match.AccessType.Name)
@@ -95,38 +88,33 @@ configurations:
 		generic := decode(t, `
 type: generic.config.ocm.software/v1
 configurations:
-  - type: uploader.transfer.config.ocm.software/v1alpha1
-    stream:
-      type: HTTPStreaming/v1alpha1
-      targetURL: '${"https://example/uploads" + url(resource.access.url).path}'
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
+    targetURL: '${"https://example/uploads" + url(resource.access.url).path}'
 `)
-		_, err := spec.LookupUploaderConfigs(generic)
+		_, err := spec.LookupHTTPUploaderConfigs(generic)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "match.accessType is required")
 	})
 
-	t.Run("missing stream is rejected", func(t *testing.T) {
+	t.Run("missing targetURL is rejected", func(t *testing.T) {
 		generic := decode(t, `
 type: generic.config.ocm.software/v1
 configurations:
-  - type: uploader.transfer.config.ocm.software/v1alpha1
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Wget/v1alpha1
 `)
-		_, err := spec.LookupUploaderConfigs(generic)
+		_, err := spec.LookupHTTPUploaderConfigs(generic)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "stream is required")
+		assert.Contains(t, err.Error(), "targetURL is required")
 	})
 }
 
-func TestUploaderConfig_Validate(t *testing.T) {
-	valid := func() *spec.UploaderConfig {
-		return &spec.UploaderConfig{
-			Match: spec.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v1alpha1")},
-			Stream: &runtime.Raw{
-				Type: runtime.NewVersionedType("HTTPStreaming", "v1alpha1"),
-				Data: []byte(`{"type":"HTTPStreaming/v1alpha1"}`),
-			},
+func TestHTTPUploaderConfig_Validate(t *testing.T) {
+	valid := func() *spec.HTTPUploaderConfig {
+		return &spec.HTTPUploaderConfig{
+			Match:     spec.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v1alpha1")},
+			TargetURL: `${"https://example/uploads"}`,
 		}
 	}
 
@@ -140,9 +128,9 @@ func TestUploaderConfig_Validate(t *testing.T) {
 		require.Error(t, u.Validate())
 	})
 
-	t.Run("untyped stream", func(t *testing.T) {
+	t.Run("missing targetURL", func(t *testing.T) {
 		u := valid()
-		u.Stream = &runtime.Raw{Data: []byte(`{}`)}
+		u.TargetURL = ""
 		require.Error(t, u.Validate())
 	})
 }

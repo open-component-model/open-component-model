@@ -72,7 +72,7 @@ func BuildGraphDefinition(
 	ctx context.Context,
 	roots map[string]TransferRoot,
 	cfg transferv1alpha1.Config,
-	uploaders []*transferv1alpha1.UploaderConfig,
+	uploaders []*transferv1alpha1.HTTPUploaderConfig,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	// Seed the targetMap and resolverMap from explicit roots.
 	// These maps are shared with the discoverer and multiResolver:
@@ -168,7 +168,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	tgd *transformv1alpha1.TransformationGraphDefinition,
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
-	uploaders []*transferv1alpha1.UploaderConfig,
+	uploaders []*transferv1alpha1.HTTPUploaderConfig,
 ) error {
 	slog.DebugContext(ctx, "building transformations for discovered components",
 		"components", len(d.Vertices))
@@ -244,7 +244,7 @@ func processResources(
 	toSpec runtime.Typed,
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
-	uploaders []*transferv1alpha1.UploaderConfig,
+	uploaders []*transferv1alpha1.HTTPUploaderConfig,
 ) (map[int]string, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version

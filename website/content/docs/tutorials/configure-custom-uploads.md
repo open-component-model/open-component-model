@@ -73,13 +73,11 @@ type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
     copyMode: allResources
-  - type: uploader.transfer.config.ocm.software/v1alpha1
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Wget/v1
-    stream:
-      type: HTTPStreaming/v1alpha1
-      targetURL: '${"https://mytarget.example.com/uploads" + url(resource.access.url).path}'
-      method: PUT
+    targetURL: '${"https://mytarget.example.com/uploads" + url(resource.access.url).path}'
+    method: PUT
 ```
 
 The `targetURL` is a [CEL](https://cel.dev/) expression wrapped in `${…}`,
@@ -88,18 +86,52 @@ evaluated against the source resource, exposed as `resource`. Here
 `url()` function and takes its path (`/artifacts/docs.tar`), so the expression
 resolves to `https://mytarget.example.com/uploads/artifacts/docs.tar`. You can
 also use `resource.name`, `resource.version`, other `url()` parts such as
-`url(resource.access.url).host`, `resource.extraIdentity.<key>`,
-`resource.labels.<name>`, and CEL conditionals. The uploader is not limited to
+`url(resource.access.url).host`, `resource.extraIdentity.<key>`, and CEL
+conditionals. The uploader is not limited to
 wget sources: every field of the source access is exposed under
 `resource.access.<field>` (e.g. `resource.access.imageReference` for an OCI
 source), so you can route any access type to an HTTP target — see the
-[Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration.md" >}}#target-url-expressions).
+[Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration.md" >}}#cel-expressions).
 
 {{< callout context="note" title="Why copyMode: allResources" >}}
 An uploader only applies to a resource that transfer actually processes. A `Wget/v1`
 resource is external, so it is only picked up under `copyMode: allResources`. The
 uploader then takes precedence over the default local-blob path for that resource.
 {{< /callout >}}
+
+{{< /step >}}
+
+{{< step >}}
+
+### Forward a checksum header (optional)
+
+If the target should receive the resource's digest on the `PUT`, template a header
+from `resource.digest`. Header values use the same `${…}` CEL expressions as
+`targetURL`; a value without `${…}` is sent as a literal. `resource.digest` is only
+present when the source resource carries a digest (for example when it is pinned
+from the source via the checksum-http configuration), so keep the rule scoped so
+every matched resource has one.
+
+```yaml
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Wget/v1
+    targetURL: '${"https://mytarget.example.com/uploads" + url(resource.access.url).path}'
+    method: PUT
+    header:
+      # RFC 9530 Content-Digest: sha-256=:<base64>:
+      Content-Digest: ['${contentDigestAlgorithm(resource.digest.hashAlgorithm) + "=:" + base64.encode(hex.decode(resource.digest.value)) + ":"}']
+      # A simple non-standard checksum header carrying the raw hex value.
+      X-Checksum-Sha256: ['${resource.digest.value}']
+      # A static literal header is sent verbatim.
+      X-Uploaded-By: ['ocm-transfer']
+```
+
+`resource.digest.value` is the hex digest and `resource.digest.hashAlgorithm` is the
+OCM algorithm name (e.g. `SHA-256`). `contentDigestAlgorithm()` maps that name to the
+RFC 9530 field key (`sha-256`), and `base64.encode(hex.decode(...))` converts the hex
+digest to the base64 value RFC 9530 expects — see the
+[Templating Headers reference]({{< relref "docs/reference/transfer-configuration.md" >}}#templating-headers).
 
 {{< /step >}}
 
@@ -195,10 +227,10 @@ through and failed the transfer on any mismatch.
 
 ## What you've learned
 
-- An uploader configuration matches a resource by access type and routes it through a custom transformer during transfer.
-- The `HTTPStreaming/v1alpha1` transformer streams the resource straight to an HTTP `PUT` target without buffering it, and computes or verifies its digest inline.
-- The transferred resource is rewritten to a `Wget/v1` access at the upload target, with the `stream` fields mapping field-for-field onto the `Wget` access.
-- The target URL is templated from the source resource, and target credentials are resolved independently of the source.
+- An uploader configuration matches a resource by access type and streams it to a dedicated target during transfer.
+- The `http.uploader.transfer.config.ocm.software/v1alpha1` uploader streams the resource straight to an HTTP `PUT` target without buffering it, and computes or verifies its digest inline.
+- The transferred resource is rewritten to a `Wget/v1` access at the upload target, with the request fields mapping field-for-field onto the `Wget` access.
+- `targetURL` and `header` values are `${…}` CEL expressions over the source resource, so you can template the upload URL and forward headers such as a checksum from `resource.digest`.
 
 ## Troubleshooting
 
@@ -216,8 +248,9 @@ in place.
 resource, or is not valid CEL.
 
 **Fix:** Reference only documented fields — `resource.name`, `resource.version`,
-`resource.access.{url,path,host,scheme,mediaType}`, `resource.extraIdentity.<key>`,
-`resource.labels.<name>` — and quote string literals (`"https://..."`). A missing
+`resource.access.<field>` (e.g. `resource.access.url`, and `url(...)` parts such
+as `url(resource.access.url).path`), `resource.extraIdentity.<key>`,
+`resource.digest.value` — and quote string literals (`"https://..."`). A missing
 field fails the transfer deliberately rather than producing a partial URL.
 
 ### Problem: The upload returns 401/403
