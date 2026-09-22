@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmArgocdSimple
+metadata:
+  name: helm-argocd-simple
+spec:
+  prefix: helm-argocd-simple

@@ -1,0 +1,6 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: HelmFluxcdCrossplaneNested
+metadata:
+  name: helm-fluxcd-crossplane-nested
+spec:
+  prefix: helm-fluxcd-crossplane-nested

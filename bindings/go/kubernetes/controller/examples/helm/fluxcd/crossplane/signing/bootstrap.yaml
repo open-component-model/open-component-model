@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: helm-fluxcd-crossplane-signing-secret
+data:
+  # Base64 encoded value of the public key ocm.software.pub
+  ocm.software: "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJDZ0tDQVFFQXppY2FXRGRJSllLaldTcXF6WVdDRnlBODBkZVRDMElZNXNMZm5ETVFScnNCcjRnNWNtNEQKVWNBaExCdHdGM3doeVRlTmZBK1pxQ2piaXJiTWNVZnhLN2tqVENNZURYNXAzcEJsc1o1cDZjWkhCTmdRVlR1MgpwZ0lSWVQ0aUVnd1NiSjdYdWZ2RFZSWlBVWE05R2h6MDdNS05PeEljVGQxc2N6MWMvYWIvWVY1R2U2TUIrWWxjCmtGVTVyRlZFMElJLytqNmp1czRPdFhVVUttK0dQYkl3VU5GMENORWJqVzlSNWlETmx6QmJ5OFNreGZjWE1wck4KQzljckJaN0oxbXJ0cGtTaTJwQXJOSDVCbVlnT2k5T3k3QjZsa2V1RkFQUlBBbWFqaERXOS9qOHBOUTdVWDVhWAowdFNpV1Y1ZGpVRmg1MzgwNk5OUy9KdDNBeUpULzkySW5RSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"
+---
+
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: helm-fluxcd-crossplane-signing-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: helm-fluxcd-crossplane-signing-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/helm-fluxcd-crossplane-signing
+  verify:
+    - signature: ocm.software
+      secretRef:
+        name: helm-fluxcd-crossplane-signing-secret
+  repositoryRef:
+    name: helm-fluxcd-crossplane-signing-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-fluxcd-crossplane-signing-resource-xrd
+spec:
+  componentRef:
+    name: helm-fluxcd-crossplane-signing-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-fluxcd-crossplane-signing-deployer
+spec:
+  resourceRef:
+    name: helm-fluxcd-crossplane-signing-resource-xrd
+    namespace: default

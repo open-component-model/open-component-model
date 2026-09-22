@@ -1,0 +1,44 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: helm-argocd-crossplane-configuration-localization-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: helm-argocd-crossplane-configuration-localization-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/helm-argocd-crossplane-configuration-localization
+  repositoryRef:
+    name: helm-argocd-crossplane-configuration-localization-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-argocd-crossplane-configuration-localization-resource-xrd
+  namespace: default
+spec:
+  componentRef:
+    name: helm-argocd-crossplane-configuration-localization-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-argocd-crossplane-configuration-localization-deployer
+spec:
+  resourceRef:
+    name: helm-argocd-crossplane-configuration-localization-resource-xrd
+    namespace: default

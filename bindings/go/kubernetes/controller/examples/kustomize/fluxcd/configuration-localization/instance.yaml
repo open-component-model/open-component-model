@@ -1,0 +1,8 @@
+apiVersion: kro.run/v1alpha1
+kind: KustomizeFluxcdConfigurationLocalization
+metadata:
+  name: kustomize-fluxcd-configuration-localization
+spec:
+  prefix: kustomize-fluxcd-configuration-localization
+  podinfo:
+    message: "kustomize-fluxcd-configuration-localization"

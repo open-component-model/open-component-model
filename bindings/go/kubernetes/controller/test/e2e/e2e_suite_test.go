@@ -3,7 +3,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,21 +20,16 @@ import (
 const namespace = "ocm-k8s-toolkit-system"
 
 var (
-	// image registry that is used to push and pull images.
+	// imageRegistry is the OCI registry the suite pushes OCM components to.
 	imageRegistry string
-	// timeout for waiting for kuberentes resources
+	// timeout is the default kubectl wait timeout for all e2e assertions.
 	timeout string
-	// controllerPodName is required to access the logs after the e2e tests
+	// controllerPodName is captured in BeforeSuite for log collection.
 	controllerPodName string
-	// examplesDir defaults to the repository-tracked examples directory,
-	// resolved relative to this file so it is found regardless of the test
-	// working directory. EXAMPLES_DIR overrides it, followed by PROJECT_DIR.
+	// examplesDir is the root of the examples tree, resolved once at suite
+	// startup. EXAMPLES_DIR overrides it; PROJECT_DIR/<examples> is the
+	// second option; relative-to-this-file is the fallback.
 	examplesDir = defaultExamplesDir()
-	// examples are enumerated at spec-tree construction so every example gets
-	// its own spec. A missing directory is a hard failure: the examples are
-	// tracked in the repository, so an unreadable directory indicates a broken
-	// checkout or a bad override.
-	examples = loadExamples(examplesDir)
 )
 
 func defaultExamplesDir() string {
@@ -47,14 +41,6 @@ func defaultExamplesDir() string {
 	}
 	_, file, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(file), "..", "..", "examples")
-}
-
-func loadExamples(dir string) []os.DirEntry {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		log.Fatalf("could not read directory with examples %q: %v", dir, err)
-	}
-	return entries
 }
 
 // Run e2e tests using the Ginkgo runner.

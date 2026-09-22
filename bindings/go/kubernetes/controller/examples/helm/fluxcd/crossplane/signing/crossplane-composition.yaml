@@ -1,0 +1,151 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: helmfluxcdcrossplanesignings.examples.ocm.software
+spec:
+  group: examples.ocm.software
+  names:
+    kind: HelmFluxcdCrossplaneSigning
+    plural: helmfluxcdcrossplanesignings
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                prefix:
+                  type: string
+                  default: helm-fluxcd-crossplane-signing
+            status:
+              type: object
+              properties:
+                ociRegistry:
+                  type: string
+                ociRepository:
+                  type: string
+                ociDigest:
+                  type: string
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: helm-fluxcd-crossplane-signing
+spec:
+  compositeTypeRef:
+    apiVersion: examples.ocm.software/v1alpha1
+    kind: HelmFluxcdCrossplaneSigning
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: crossplane-contrib-function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: resourceChart
+            base:
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
+              metadata:
+                namespace: default
+              spec:
+                componentRef:
+                  name: helm-fluxcd-crossplane-signing-component
+                resource:
+                  byReference:
+                    resource:
+                      name: helm-resource
+                additionalStatusFields:
+                  registry: resource.access.toOCI().registry
+                  repository: resource.access.toOCI().repository
+                  digest: resource.access.toOCI().digest
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-resource-chart"
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.registry
+                toFieldPath: status.ociRegistry
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.repository
+                toFieldPath: status.ociRepository
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.digest
+                toFieldPath: status.ociDigest
+          - name: ocirepository
+            base:
+              apiVersion: source.toolkit.fluxcd.io/v1
+              kind: OCIRepository
+              metadata:
+                namespace: default
+              spec:
+                interval: 1m0s
+                insecure: true
+                layerSelector:
+                  mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+                  operation: copy
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-oci-repository"
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: status.ociRegistry
+                    - fromFieldPath: status.ociRepository
+                  strategy: string
+                  string:
+                    fmt: "oci://%s/%s"
+                toFieldPath: spec.url
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.ociDigest
+                toFieldPath: spec.ref.digest
+          - name: helmrelease
+            base:
+              apiVersion: helm.toolkit.fluxcd.io/v2
+              kind: HelmRelease
+              metadata:
+                namespace: default
+              spec:
+                releaseName: helm-fluxcd-crossplane-signing
+                interval: 1m
+                timeout: 5m
+                chartRef:
+                  kind: OCIRepository
+                  namespace: default
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-helm-release"
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: spec.chartRef.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-oci-repository"
+    - step: auto-ready
+      functionRef:
+        name: crossplane-contrib-function-auto-ready

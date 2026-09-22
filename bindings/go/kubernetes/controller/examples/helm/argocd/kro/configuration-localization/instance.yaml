@@ -1,0 +1,8 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmArgocdConfigurationLocalization
+metadata:
+  name: helm-argocd-configuration-localization
+spec:
+  podinfo:
+    message: "helm-argocd-configuration-localization"
+    releaseName: "helm-argocd-configuration-localization"

@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmArgocdSigning
+metadata:
+  name: helm-argocd-signing
+spec:
+  prefix: "helm-argocd-signing"

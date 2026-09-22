@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmArgocdSimpleNestedStatus
+metadata:
+  name: helm-argocd-simple-nested-status
+spec:
+  prefix: helm-argocd-simple-nested-status

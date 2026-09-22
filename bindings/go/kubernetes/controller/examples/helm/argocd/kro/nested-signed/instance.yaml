@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmArgocdNestedSigned
+metadata:
+  name: helm-argocd-nested-signed
+spec:
+  prefix: helm-argocd-nested-signed

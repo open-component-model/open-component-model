@@ -1,0 +1,42 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: helm-fluxcd-crossplane-fnc-kro-1-repository
+spec:
+  repositorySpec:
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: helm-fluxcd-crossplane-fnc-kro-1-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/helm-fluxcd-crossplane-fnc-kro-1
+  repositoryRef:
+    name: helm-fluxcd-crossplane-fnc-kro-1-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-fluxcd-crossplane-fnc-kro-1-resource-xrd
+spec:
+  componentRef:
+    name: helm-fluxcd-crossplane-fnc-kro-1-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-fluxcd-crossplane-fnc-kro-1-deployer
+spec:
+  resourceRef:
+    name: helm-fluxcd-crossplane-fnc-kro-1-resource-xrd
+    namespace: default

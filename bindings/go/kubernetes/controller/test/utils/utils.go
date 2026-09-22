@@ -25,7 +25,8 @@ import (
 const (
 	componentNamePrefix = "ocm.software/ocm-k8s-toolkit/examples/"
 	// signingVersion is the version stamped on every signed fixture today. Sign
-	// requires an exact name:version reference; transfer does not.
+	// requires an exact name:version reference; transfer also requires a
+	// version reference with ocm CLI 0.12.0+.
 	signingVersion = "1.0.0"
 )
 
@@ -82,7 +83,7 @@ func DeployResource(ctx context.Context, manifestFilePath string) error {
 		return err
 	}
 	DeferCleanup(func(ctx SpecContext) error {
-		cmd = exec.CommandContext(ctx, "kubectl", "delete", "-f", manifestFilePath)
+		cmd = exec.CommandContext(ctx, "kubectl", "delete", "--ignore-not-found", "--wait=true", "--timeout=60s", "-f", manifestFilePath)
 		_, err := Run(cmd)
 		if err != nil {
 			GinkgoLogr.V(3).Info("WARNING: failed to delete resource", "manifest", manifestFilePath)
@@ -154,8 +155,9 @@ func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, im
 		return fmt.Errorf("could not create ocm component: %w", err)
 	}
 
-	componentName := componentNamePrefix + filepath.Base(filepath.Dir(componentConstructorPath))
-	transferRef := fmt.Sprintf("ctf::%s//%s", ctfDir, componentName)
+	componentName := componentNameFromConstructor(componentConstructorPath)
+	componentVersion := componentVersionFromConstructor(componentConstructorPath)
+	transferRef := fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, componentVersion)
 
 	if signingKey != "" {
 		By("signing ocm component for " + name)
@@ -164,7 +166,7 @@ func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, im
 			return fmt.Errorf("could not write signing ocmconfig: %w", err)
 		}
 
-		signRef := fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, signingVersion)
+		signRef := fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, componentVersion)
 		cmd = exec.CommandContext(ctx, ocm,
 			"sign", "cv",
 			signRef,
@@ -378,4 +380,109 @@ func GetResourceField(ctx context.Context, resource, fieldSelector string) (stri
 
 	result := strings.Trim(strings.TrimSpace(string(output)), "'")
 	return result, nil
+}
+
+// componentNameFromConstructor reads the first component name from an OCM
+// componentNameFromConstructor reads the component name to use as the OCM
+// transfer target from a component-constructor.yaml file. For nested
+// constructors (multiple components in one file), it returns the ROOT PARENT
+// component — the one whose name does not appear as a componentName in any
+// other component's componentReferences. This handles both single-level
+// nested (one parent) and multi-level nested (e.g., nested-signed with an
+// intermediate 'extended' component).
+func componentNameFromConstructor(constructorPath string) string {
+	data, err := os.ReadFile(constructorPath)
+	if err != nil {
+		return componentNamePrefix + filepath.Base(filepath.Dir(constructorPath))
+	}
+	lines := strings.Split(string(data), "\n")
+
+	// Collect all component names and all names referenced by others.
+	var allNames []string
+	referencedNames := make(map[string]bool)
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Top-level component entries start with exactly two spaces + "- name: ".
+		if strings.HasPrefix(line, "  - name: "+componentNamePrefix) {
+			allNames = append(allNames, strings.TrimPrefix(trimmed, "- name: "))
+		}
+		// References inside componentReferences are indented deeper.
+		if strings.HasPrefix(trimmed, "componentName: "+componentNamePrefix) {
+			referencedNames[strings.TrimPrefix(trimmed, "componentName: ")] = true
+		}
+	}
+
+	// Among unreferenced components, pick the root: the one whose name is
+	// NOT a sub-path of another component name (fewest "/" segments after prefix).
+	var unreferenced []string
+	for _, name := range allNames {
+		if !referencedNames[name] {
+			unreferenced = append(unreferenced, name)
+		}
+	}
+	if len(unreferenced) == 1 {
+		return unreferenced[0]
+	}
+	if len(unreferenced) > 1 {
+		// Return the one with fewest path components after the prefix.
+		// e.g. "examples/helm-fluxcd-nested-signed" < "examples/helm-fluxcd-nested-signed/rgd"
+		best := unreferenced[0]
+		for _, name := range unreferenced[1:] {
+			if strings.Count(name, "/") < strings.Count(best, "/") {
+				best = name
+			}
+		}
+		return best
+	}
+
+	// Fallback: return first name with componentReferences.
+	var currentName2 string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- name: "+componentNamePrefix) {
+			currentName2 = strings.TrimPrefix(trimmed, "- name: ")
+		}
+		if trimmed == "componentReferences:" && currentName2 != "" {
+			return currentName2
+		}
+	}
+
+	// Final fallback: first name.
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "- name: "+componentNamePrefix) {
+			return strings.TrimPrefix(line, "- name: ")
+		}
+	}
+	return componentNamePrefix + filepath.Base(filepath.Dir(constructorPath))
+}
+
+// componentVersionFromConstructor reads the component version from an OCM
+// component-constructor.yaml. For nested constructors it reads the version of
+// the parent component (the one with componentReferences). Falls back to
+// signingVersion ("1.0.0") when the file cannot be parsed.
+func componentVersionFromConstructor(constructorPath string) string {
+	targetName := componentNameFromConstructor(constructorPath)
+	data, err := os.ReadFile(constructorPath)
+	if err != nil {
+		return signingVersion
+	}
+	inTarget := false
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- name: ") {
+			name := strings.TrimPrefix(trimmed, "- name: ")
+			inTarget = name == targetName
+			continue
+		}
+		if inTarget && strings.HasPrefix(trimmed, "version:") {
+			v := strings.TrimSpace(strings.TrimPrefix(trimmed, "version:"))
+			v = strings.Trim(v, `"'`)
+			if v != "" {
+				return v
+			}
+		}
+	}
+	return signingVersion
 }

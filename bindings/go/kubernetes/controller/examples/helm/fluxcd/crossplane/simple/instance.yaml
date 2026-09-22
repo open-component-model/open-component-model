@@ -1,0 +1,6 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: HelmFluxcdCrossplaneSimple
+metadata:
+  name: helm-fluxcd-crossplane-simple
+spec:
+  prefix: helm-fluxcd-crossplane-simple

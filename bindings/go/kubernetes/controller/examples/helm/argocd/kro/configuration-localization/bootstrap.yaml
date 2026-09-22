@@ -1,0 +1,43 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: helm-argocd-configuration-localization-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: helm-argocd-configuration-localization-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/helm-argocd-configuration-localization
+  repositoryRef:
+    name: helm-argocd-configuration-localization-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-argocd-configuration-localization-resource-rgd
+  namespace: default
+spec:
+  componentRef:
+    name: helm-argocd-configuration-localization-component
+  resource:
+    byReference:
+      resource:
+        name: kro-rgd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-argocd-configuration-localization-deployer
+spec:
+  resourceRef:
+    name: helm-argocd-configuration-localization-resource-rgd
+    namespace: default
