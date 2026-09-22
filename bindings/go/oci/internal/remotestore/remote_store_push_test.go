@@ -577,6 +577,30 @@ func TestRemoteStore_PushStreaming_RejectsOversizedChunkMinLength(t *testing.T) 
 	r.ErrorIs(err, ErrStreamingUnavailable)
 }
 
+// TestRemoteStore_PushStreaming_RejectsOversizedChunkSize verifies that a
+// user-configured ChunkSize above MaxChunkSize is rejected before any byte is
+// consumed, so the client never allocates an unbounded PATCH buffer via
+// make([]byte, up.chunk). Streaming has no monolithic fallback, so it reports
+// ErrStreamingUnavailable.
+func TestRemoteStore_PushStreaming_RejectsOversizedChunkSize(t *testing.T) {
+	r := require.New(t)
+
+	reg := newChunkedRegistry(t)
+	srv := httptest.NewServer(reg.handler())
+	t.Cleanup(srv.Close)
+
+	store := newTestStore(t, srv, MaxChunkSize+1 /*oversized configured chunk*/, 1)
+	_, err := store.PushStreaming(t.Context(),
+		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
+		bytes.NewReader(bytes.Repeat([]byte("a"), 40)))
+	r.ErrorIs(err, ErrStreamingUnavailable)
+
+	// The reader is untouched: the bound is checked before the session POST.
+	for _, m := range reg.methods() {
+		r.NotEqual(http.MethodPatch, m, "oversized configured chunk must abort before any PATCH")
+	}
+}
+
 // errAfterReader yields data once (n>0) and then fails with a non-EOF error on
 // the next read, mimicking a source that errors mid-stream after bytes have
 // already been handed out.

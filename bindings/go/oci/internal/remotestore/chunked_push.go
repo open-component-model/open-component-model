@@ -31,10 +31,12 @@ const DefaultChunkSize int64 = 16 << 20
 // no explicit threshold is configured (16 MiB): blobs below this go monolithic.
 const DefaultChunkThreshold int64 = 16 << 20
 
-// MaxChunkSize bounds the PATCH buffer the client will allocate. A registry can
-// force the buffer size up via its advertised OCI-Chunk-Min-Length; an
-// implausible value (up to math.MaxInt64) would otherwise panic make([]byte, n)
-// or exhaust memory. Advertised minimums above this are rejected (128 MiB).
+// MaxChunkSize bounds the PATCH buffer the client will allocate (128 MiB). The
+// buffer is sized to the effective chunk length, so both inputs to that length
+// are capped against it: a user-configured ChunkSize above this is rejected,
+// and so is a registry-advertised OCI-Chunk-Min-Length above it. Without this
+// bound an implausible value (up to math.MaxInt64) would panic make([]byte, n)
+// or exhaust memory.
 const MaxChunkSize int64 = 128 << 20
 
 // ErrStreamingUnavailable is returned by PushStreaming when chunked upload is
@@ -44,15 +46,22 @@ const MaxChunkSize int64 = 128 << 20
 // the regular Push path.
 var ErrStreamingUnavailable = errors.New("streaming chunked upload unavailable")
 
-// StreamingPusher is implemented by stores that can upload a blob without a
-// precomputed digest, streaming the content and computing the digest during
-// upload. Callers use this to avoid buffering blobs of unknown size/digest.
+// StreamingPusher is implemented by stores that can upload a blob whose digest
+// and/or size is not known before the upload starts, computing (or verifying)
+// both from the streamed bytes. The regular Push also streams its content to
+// the registry, but only for a blob whose digest and size are already known;
+// PushStreaming exists for the case where they are not, so the content need not
+// be buffered up front just to precompute the descriptor.
 type StreamingPusher interface {
-	// PushStreaming uploads content described only by partial (MediaType is
-	// used; Digest/Size are ignored and computed during upload) and returns the
-	// completed descriptor with the computed Digest and Size. If streaming is
-	// unavailable it returns an error wrapping ErrStreamingUnavailable and no
-	// content is consumed, so the caller may safely buffer and fall back.
+	// PushStreaming uploads content described only by partial. Its MediaType is
+	// carried onto the returned descriptor. A non-empty partial.Digest and a
+	// non-negative, non-zero partial.Size are treated as expected values and
+	// verified against the streamed bytes; when either is absent it is computed
+	// during upload. The returned descriptor carries the final Digest and Size.
+	//
+	// If streaming is unavailable it returns an error wrapping
+	// ErrStreamingUnavailable and no content is consumed, so the caller may
+	// safely buffer and fall back to Push.
 	PushStreaming(ctx context.Context, partial ociImageSpecV1.Descriptor, content io.Reader) (ociImageSpecV1.Descriptor, error)
 }
 
@@ -210,8 +219,13 @@ func resolveFinalDigest(computed, known digest.Digest) (digest.Digest, error) {
 // canonical algorithm when no digest is declared), and a non-sha256 knownDigest
 // additionally advertises that algorithm via the digest-algorithm query
 // parameter. The returned chunkedUpload has its chunk size raised to any
-// registry-advertised OCI-Chunk-Min-Length.
+// registry-advertised OCI-Chunk-Min-Length. Both the configured chunk size and
+// the advertised minimum are bounded by MaxChunkSize so the PATCH buffer stays
+// allocatable; an over-bound value fails here, before any content is consumed.
 func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.Digest) (*chunkedUpload, error) {
+	if r.ChunkSize > MaxChunkSize {
+		return nil, fmt.Errorf("chunked blob push: configured chunk size %d exceeds the maximum supported chunk size %d", r.ChunkSize, MaxChunkSize)
+	}
 	uploads := r.endpoint(path.Join("/v2", r.Reference.Repository, "blobs", "uploads") + "/")
 	// The running digest must use the declared algorithm; otherwise the
 	// computed digest could never match knownDigest for non-sha256 blobs.
