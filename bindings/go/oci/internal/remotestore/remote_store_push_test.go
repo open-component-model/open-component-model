@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -749,4 +750,42 @@ func TestRemoteStore_Push_ChunkedThroughAuthClientRewindsBody(t *testing.T) {
 
 	r.NoError(store.Push(t.Context(), desc, bytes.NewReader(data)))
 	r.Equal(data, reg.uploaded, "the registry must receive the whole blob after auth rewind")
+}
+
+// sentinelRoundTripper is a marker transport used to prove client copying.
+type sentinelRoundTripper struct{ http.RoundTripper }
+
+func (sentinelRoundTripper) RoundTrip(*http.Request) (*http.Response, error) { return nil, nil }
+
+// TestNoFollowRedirects_PreservesDefaultClientForNilAuthInner verifies that
+// wrapping an auth.Client whose inner Client is nil copies http.DefaultClient
+// (which auth.Client.client() resolves to) rather than a bare http.Client, so a
+// customized default transport, proxy, TLS, timeout, or cookie jar survives the
+// redirect-suppressing copy. It also confirms the copy suppresses redirects
+// without mutating the original client.
+func TestNoFollowRedirects_PreservesDefaultClientForNilAuthInner(t *testing.T) {
+	r := require.New(t)
+
+	// Customize the process-wide default client so the copy is observably
+	// distinct from a bare &http.Client{}; restore it afterwards.
+	prevTransport := http.DefaultClient.Transport
+	prevTimeout := http.DefaultClient.Timeout
+	sentinel := sentinelRoundTripper{}
+	http.DefaultClient.Transport = sentinel
+	http.DefaultClient.Timeout = 42 * time.Second
+	t.Cleanup(func() {
+		http.DefaultClient.Transport = prevTransport
+		http.DefaultClient.Timeout = prevTimeout
+	})
+
+	original := &auth.Client{} // inner Client nil -> resolves to http.DefaultClient
+	wrapped := noFollowRedirects(original)
+
+	ac, ok := wrapped.(*auth.Client)
+	r.True(ok, "wrapping an *auth.Client must yield an *auth.Client")
+	r.NotNil(ac.Client, "inner client must be populated, not left nil")
+	r.Equal(sentinel, ac.Client.Transport, "inner client must inherit http.DefaultClient's transport")
+	r.Equal(42*time.Second, ac.Client.Timeout, "inner client must inherit http.DefaultClient's timeout")
+	r.NotNil(ac.Client.CheckRedirect, "the copy must install a redirect-suppressing policy")
+	r.Nil(original.Client, "the original auth.Client must not be mutated")
 }

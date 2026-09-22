@@ -410,12 +410,17 @@ func noFollowRedirects(c remote.Client) remote.Client {
 	switch client := c.(type) {
 	case *auth.Client:
 		copyClient := *client
-		inner := &http.Client{}
-		if client.Client != nil {
-			*inner = *client.Client
+		// A zero-value auth.Client resolves its inner client to
+		// http.DefaultClient (see auth.Client.client()); copy that so a
+		// customized default transport, proxy, TLS, timeout or cookie jar is
+		// preserved rather than replaced by a bare client.
+		base := client.Client
+		if base == nil {
+			base = http.DefaultClient
 		}
+		inner := *base
 		inner.CheckRedirect = stop
-		copyClient.Client = inner
+		copyClient.Client = &inner
 		return &copyClient
 	case *http.Client:
 		copyClient := *client
