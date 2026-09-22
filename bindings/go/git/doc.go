@@ -1,4 +1,4 @@
-// Package git provides access to Git repositories as OCM resources.
+// Package git provides access to Git repositories as OCM resources and constructor inputs.
 //
 // It implements the "Git" access type, described by a
 // [ocm.software/open-component-model/bindings/go/git/spec/access/v1.Git]
@@ -18,6 +18,14 @@
 // Its file outlives the call and belongs to the caller; temporary Git storage is
 // removed. Upload is not supported. WithMaxArchiveSize caps the compressed output,
 // not the preceding clone or fetch; by default it is unlimited.
+//
+// # Constructor input
+//
+// [ocm.software/open-component-model/bindings/go/git/input.InputMethod] packages a
+// repository snapshot as a local blob using the same compressed archive as access.
+// The git/v1 input accepts repository, ref and commit; omitting both selectors uses
+// remote HEAD, matching OCM v1 input behavior. Commit takes precedence over Ref.
+// The constructor handles local-blob storage and digests over the compressed bytes.
 //
 // # Archive and digests
 //
@@ -65,4 +73,5 @@
 // # Wire types
 //
 // The access scheme registers Git/v1, Git, git, git/v1alpha1 and Git/v1alpha1.
+// The separate input scheme registers git/v1 and git.
 package git
