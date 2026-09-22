@@ -67,6 +67,17 @@ func newReconciler(t *testing.T, objs ...client.Object) (*Reconciler, client.Cli
 	return r, fakeClient
 }
 
+// realPluginReconciler builds a reconciler whose plugin manager is a real
+// setup.NewPluginManager (needed to build CTF repositories).
+func realPluginReconciler(t *testing.T, objs ...client.Object) (*Reconciler, client.Client) {
+	t.Helper()
+	rec, c := newReconciler(t, objs...)
+	rec.NewPluginManager = func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
+		return setup.NewPluginManager(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}
+	return rec, c
+}
+
 // readyComponent is a ready Component pointing at a repository that does not
 // exist, for tests that must not reach traversal.
 func readyComponent(name, namespace string) *v1alpha1.Component {
@@ -220,10 +231,7 @@ func TestReconcile_PublishesRawAndExtractedPayloads(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "discovery", Namespace: "default"},
 		Spec:       v1alpha1.DiscoverySpec{ComponentRef: corev1.LocalObjectReference{Name: component.Name}},
 	}
-	rec, c := newReconciler(t, component, discovery)
-	rec.NewPluginManager = func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
-		return setup.NewPluginManager(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	}
+	rec, c := realPluginReconciler(t, component, discovery)
 
 	result, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.NoError(err)
@@ -420,10 +428,7 @@ func TestReconcile_ResolutionFailureIsRetryable(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "discovery", Namespace: "default"},
 		Spec:       v1alpha1.DiscoverySpec{ComponentRef: corev1.LocalObjectReference{Name: component.Name}},
 	}
-	rec, c := newReconciler(t, component, discovery)
-	rec.NewPluginManager = func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
-		return setup.NewPluginManager(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	}
+	rec, c := realPluginReconciler(t, component, discovery)
 
 	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.Error(err)

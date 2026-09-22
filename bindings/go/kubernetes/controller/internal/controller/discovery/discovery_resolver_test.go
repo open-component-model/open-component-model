@@ -1,10 +1,7 @@
 package discovery
 
 import (
-	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,12 +12,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	desc "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
 // ctfRepo builds a read-write CTF repository at a fresh temp dir, adds the
@@ -132,17 +126,6 @@ func readyComponentWithSpec(name, namespace, component, version string, repoSpec
 		},
 	}
 	return c
-}
-
-// realPluginReconciler builds a reconciler whose plugin manager is a real
-// setup.NewPluginManager (needed to build CTF repositories).
-func realPluginReconciler(t *testing.T, objs ...client.Object) (*Reconciler, client.Client) {
-	t.Helper()
-	rec, c := newReconciler(t, objs...)
-	rec.NewPluginManager = func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
-		return setup.NewPluginManager(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	}
-	return rec, c
 }
 
 func componentNamesFromStatus(t *testing.T, d *v1alpha1.Discovery) []string {
