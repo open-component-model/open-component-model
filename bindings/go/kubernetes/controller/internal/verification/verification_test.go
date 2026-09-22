@@ -129,3 +129,36 @@ configurations:
 		assert.Equal(t, "SigstoreVerificationConfiguration/v1alpha1", verifications[0].Verifier.GetType().String())
 	})
 }
+
+func TestGetVerificationsInvalidEntry(t *testing.T) {
+	t.Run("a malformed entry is reported against its own signature", func(t *testing.T) {
+		_, err := GetVerifications(config(t, `
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signature: release
+  verifier:
+    type: RSASigningConfiguration/v1alpha1
+- type: signing.config.ocm.software/v1alpha1
+  signature: nightly
+  verifier:
+    notatype: x
+`))
+		require.ErrorContains(t, err, `signature "nightly"`)
+		assert.NotContains(t, err.Error(), `signature "release"`,
+			"the intact entry must not be blamed for a sibling's error")
+	})
+
+	t.Run("a malformed unscoped entry is reported by index", func(t *testing.T) {
+		_, err := GetVerifications(config(t, `
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signature: release
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    notatype: x
+`))
+		require.ErrorContains(t, err, "at index 1")
+	})
+}

@@ -89,7 +89,10 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 	}
 	var resolved *resolvedProvider
 	if cached, ok := r.repoCache.Get(cacheKey); ok {
-		resolved = cached.(*resolvedProvider)
+		resolved, ok = cached.(*resolvedProvider)
+		if !ok {
+			return nil, fmt.Errorf("cached repository does not implement resolved provider, but was %T", cached)
+		}
 	} else {
 		resolved, err = r.createResolver(ctx, opts.RepositorySpec, cfg, opts.PluginManager)
 		if err != nil {

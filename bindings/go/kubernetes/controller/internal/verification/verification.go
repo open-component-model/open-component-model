@@ -35,14 +35,16 @@ func GetVerifications(cfg *configuration.Configuration) ([]Verification, error) 
 		return nil, fmt.Errorf("failed to filter signing configuration: %w", err)
 	}
 
-	var verifications []Verification
-	seen := make(map[string]struct{}, len(filtered.Configurations))
-	for _, entry := range filtered.Configurations {
-		var signingCfg signingspec.Config
-		if err := signingspec.Scheme.Convert(entry, &signingCfg); err != nil {
-			return nil, fmt.Errorf("failed to decode signing configuration: %w", err)
-		}
+	// pre-validate all configs, because later, LookupConfigs runs the same validation which
+	// leads to weird, unrelated error messages if a configuration entry is incorrect.
+	configs, err := decodeSigningConfigs(filtered)
+	if err != nil {
+		return nil, err
+	}
 
+	var verifications []Verification
+	seen := make(map[string]struct{}, len(configs))
+	for _, signingCfg := range configs {
 		if signingCfg.Signature == "" {
 			continue
 		}
@@ -65,6 +67,29 @@ func GetVerifications(cfg *configuration.Configuration) ([]Verification, error) 
 	}
 
 	return verifications, nil
+}
+
+// decodeSigningConfigs decodes and validates every signing entry up front.
+func decodeSigningConfigs(filtered *genericv1.Config) ([]signingspec.Config, error) {
+	configs := make([]signingspec.Config, 0, len(filtered.Configurations))
+	for i, entry := range filtered.Configurations {
+		var signingCfg signingspec.Config
+		if err := signingspec.Scheme.Convert(entry, &signingCfg); err != nil {
+			return nil, fmt.Errorf("failed to decode signing configuration at index %d: %w", i, err)
+		}
+
+		if err := signingCfg.Validate(); err != nil {
+			if signingCfg.Signature != "" {
+				return nil, fmt.Errorf("invalid signing configuration for signature %q: %w", signingCfg.Signature, err)
+			}
+
+			return nil, fmt.Errorf("invalid signing configuration at index %d: %w", i, err)
+		}
+
+		configs = append(configs, signingCfg)
+	}
+
+	return configs, nil
 }
 
 // verifierForSignature resolves the verifier specification for an already-requested signature, falling back

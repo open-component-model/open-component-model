@@ -30,23 +30,8 @@ type RequesterInfo struct {
 	NamespacedName types.NamespacedName
 }
 
-// ErrNotSafelyDigestible is a sentinel error used to identify this error type.
+// ErrNotSafelyDigestible is a sentinel error reported when a component version cannot be safely digested.
 var ErrNotSafelyDigestible = errors.New("not safely digestible")
-
-// NotSafelyDigestibleError contains information about a component version that is not safely digestible.
-type NotSafelyDigestibleError struct {
-	Component string
-	Version   string
-	Err       error
-}
-
-func (e *NotSafelyDigestibleError) Error() string {
-	return fmt.Sprintf("component version %s:%s is not safely digestible: %v", e.Component, e.Version, e.Err)
-}
-
-func (e *NotSafelyDigestibleError) Unwrap() error {
-	return ErrNotSafelyDigestible
-}
 
 // ResolveOptions contains all the options the resolution service requires to perform a resolve operation.
 type ResolveOptions struct {
@@ -419,7 +404,7 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 	case len(opts.Verifications) > 0:
 		// If verifications are requested, we need to verify that the component version is safely digestible.
 		// Anything that comes after this will, in case of an error, always be skipped until cache TTL expires
-		// TODO: This contradicts a bit with our config now. Wondering if we should still leave this be.
+		// TODO(Skarlso): This contradicts a bit with our config now. Wondering if we should still leave this be.
 		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 			return desc, fmt.Errorf("%w: %w", ErrNotSafelyDigestible, err)
 		}
