@@ -18,6 +18,11 @@
   'minimumReleaseAge': '28 days',
   'internalChecksFilter': 'strict',
   'prCreation': 'not-pending',
+  // CI runs only on pull_request, so renovate/* branches never get real check
+  // statuses. Count internal checks (e.g. renovate/stability-days) as success
+  // so prCreation='not-pending' does not defer PR creation indefinitely.
+  // See https://docs.renovatebot.com/configuration-options/#suppress-branchpr-creation-for-x-days
+  'internalChecksAsSuccess': true,
   // config:best-practices this is usually disabled by default.
   // https://github.com/google/docsy/blob/9f8acf7a4547cb1c5d1b88b3db588793bfd6eb25/renovate.json5#L7
   // Also, disabling this means that transitive dependencies that aren't 28 days old at least,
@@ -36,6 +41,9 @@
   automergeType: "pr",
   separateMinorPatch: true,
   separateMultipleMajor: true,
+  // Grouped fast-moving deps inherit the youngest member's release age, so
+  // under global 'strict' + 28d the PR is never created. Below groups opt into
+  // internalChecksFilter='flexible' to unblock. See renovatebot/renovate#7603.
   packageRules: [
     {
       matchFileNames: ['bindings/go/kubernetes/controller/chart/**'],
@@ -94,6 +102,7 @@
       ],
       groupName: 'Kubernetes dependencies',
       groupSlug: 'kubernetes-deps',
+      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ],
@@ -104,6 +113,7 @@
       matchPackageNames: [
         'github.com/docker/{/,}**',
       ],
+      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
@@ -114,6 +124,7 @@
       matchPackageNames: [
         'golang.org/x/{/,}**'
       ],
+      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
@@ -124,9 +135,21 @@
       matchPackageNames: [
         'google.golang.org/{/,}**'
       ],
+      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
+    },
+    {
+      // Monorepos grouped by the extends presets (aws-sdk-go-v2, opentelemetry,
+      // moby, go-openapi). Same 'flexible' rationale as the local groups above.
+      matchPackageNames: [
+        'github.com/aws/aws-sdk-go-v2{/,}**',
+        'go.opentelemetry.io/{/,}**',
+        'github.com/moby/{/,}**',
+        'github.com/go-openapi/{/,}**',
+      ],
+      internalChecksFilter: 'flexible',
     },
     {
       groupName: 'spf13 repositories',
@@ -246,6 +269,11 @@
         'lockFileMaintenance',
         'replacement',
         'pin',
+        // 'digest'/'pinDigest' re-pin the same tag to a new SHA (weekly
+        // base-image rebuilds, action version re-pins), so the release-age
+        // gate does not apply.
+        'pinDigest',
+        'digest',
         'bump',
         'lockfileUpdate',
         'rollback',
