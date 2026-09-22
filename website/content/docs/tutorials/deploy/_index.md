@@ -6,5 +6,8 @@ sidebar:
   collapsed: false
 ---
 
-In-depth tutorials for deploying component versions into Kubernetes — bootstrapped Helm chart
-deployments with Flux and kro, and chained RGD-based application delivery.
+During the deploy phase you turn a component version into a running workload. These tutorials
+walk through complete end-to-end deployments using OCM controllers together with Flux and Kro.
+
+- [Deploy an Application from a Helm Chart with OCM and Kro]({{< relref "docs/tutorials/deploy/deploy-helm-chart-bootstrap.md" >}}) — bootstrap a Kubernetes cluster, push a Helm chart as a component version, and deploy it with Flux and Kro
+- [Deploy an Application from Chained RGDs with OCM and Kro]({{< relref "docs/tutorials/deploy/deploy-chained-rgds.md" >}}) — chain multiple Resource Group Definitions to compose and deploy a multi-component application
