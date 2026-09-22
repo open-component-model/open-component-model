@@ -5,7 +5,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 
 	ast "ocm.software/open-component-model/bindings/go/cel/expression/inspector"
 	"ocm.software/open-component-model/bindings/go/cel/expression/parser"
