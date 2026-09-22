@@ -1086,6 +1086,7 @@ components:
 			fmt.Sprintf("http://%s//%s:v1.0.0", registry.RegistryAddress, componentName),
 			"--identity", "name=repo-archive,version=v1.0.0",
 			"--output", output,
+			"--extraction-policy", "disable",
 			"--config", cfgPath,
 		})
 		r.NoError(downloadCMD.ExecuteContext(dlCtx), "download resource should resolve the github access")
