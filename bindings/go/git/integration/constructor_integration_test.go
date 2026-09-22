@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -30,14 +31,22 @@ func Test_Integration_GitInputConstruction(t *testing.T) {
 	path, _ := newRepository(t)
 	url, ca := newHTTPSServer(t, path, "")
 
-	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
-	r.NoError(err)
-	repo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))))
-	r.NoError(err)
+	inputs := constructor.New(inputspec.Scheme)
+	r.NoError(inputs.RegisterResourceInputMethod(&inputv1.Git{}, &gitinput.InputMethod{
+		TempFolder: t.TempDir(),
+		CABundle:   ca,
+	}))
+	construct := func(t *testing.T, typ string, expected *constructorv1.Digest) (*oci.Repository, error) {
+		t.Helper()
+		r := require.New(t)
+		fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+		r.NoError(err)
+		repo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))))
+		r.NoError(err)
 
-	// Omitting both selectors must archive remote HEAD, not the first commit.
-	var spec constructorv1.ComponentConstructor
-	r.NoError(yaml.Unmarshal([]byte(fmt.Sprintf(`
+		// Omitting both selectors must archive remote HEAD, not the first commit.
+		var spec constructorv1.ComponentConstructor
+		r.NoError(yaml.Unmarshal([]byte(fmt.Sprintf(`
 components:
   - name: ocm.software/git-app
     version: 1.0.0
@@ -49,22 +58,22 @@ components:
         relation: local
         type: blob
         input:
-          type: git/v1
+          type: %s
           repository: %s
-`, url)), &spec))
+`, typ, url)), &spec))
+		spec.Components[0].Resources[0].Digest = expected
+		err = constructor.NewDefaultConstructor(
+			constructorruntime.ConvertToRuntimeConstructor(&spec),
+			constructor.Options{
+				ResourceInputMethodProvider: inputs,
+				TargetRepositoryProvider:    gitTargetRepositoryProvider{repo: repo},
+			},
+		).Construct(t.Context())
+		return repo, err
+	}
 
-	inputs := constructor.New(inputspec.Scheme)
-	r.NoError(inputs.RegisterResourceInputMethod(&inputv1.Git{}, &gitinput.InputMethod{
-		TempFolder: t.TempDir(),
-		CABundle:   ca,
-	}))
-	r.NoError(constructor.NewDefaultConstructor(
-		constructorruntime.ConvertToRuntimeConstructor(&spec),
-		constructor.Options{
-			ResourceInputMethodProvider: inputs,
-			TargetRepositoryProvider:    gitTargetRepositoryProvider{repo: repo},
-		},
-	).Construct(ctx))
+	repo, err := construct(t, "git/v1", nil)
+	r.NoError(err)
 
 	desc, err := repo.GetComponentVersion(ctx, "ocm.software/git-app", "1.0.0")
 	r.NoError(err)
@@ -81,6 +90,34 @@ components:
 	r.Equal("SHA-256", resource.Digest.HashAlgorithm)
 	r.Equal("genericBlobDigest/v1", resource.Digest.NormalisationAlgorithm)
 	r.Equal(digest.FromBytes(data).Encoded(), resource.Digest.Value)
+
+	for _, tc := range []struct {
+		name, typ, hash, normalization, value, wantErr string
+	}{
+		{"canonical", "git/v1", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
+		{"unversioned", "git", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
+		{"legacy uppercase", "Git", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
+		{"legacy uppercase versioned", "Git/v1", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
+		{"wrong value", "git/v1", "SHA-256", "genericBlobDigest/v1", strings.Repeat("0", 64), "digest mismatch"},
+		{"missing value", "git/v1", "SHA-256", "genericBlobDigest/v1", "", "digest"},
+		{"short value", "git/v1", "SHA-256", "genericBlobDigest/v1", "abc", "digest"},
+		{"unknown hash", "git/v1", "bogus", "genericBlobDigest/v1", resource.Digest.Value, "hash algorithm"},
+		{"missing hash", "git/v1", "", "genericBlobDigest/v1", resource.Digest.Value, "hash algorithm"},
+		{"unknown normalization", "git/v1", "SHA-256", "bogus", resource.Digest.Value, "normalization algorithm"},
+		{"missing normalization", "git/v1", "SHA-256", "", resource.Digest.Value, "normalization algorithm"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			_, err := construct(t, tc.typ, &constructorv1.Digest{
+				HashAlgorithm: tc.hash, NormalisationAlgorithm: tc.normalization, Value: tc.value,
+			})
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+			} else {
+				r.NoError(err)
+			}
+		})
+	}
 }
 
 type gitTargetRepositoryProvider struct {

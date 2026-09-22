@@ -8,11 +8,11 @@
   "properties": {
     "commit": {
       "type": "string",
-      "description": "Commit pins a commit and takes precedence over Ref. If empty, the\nselected ref's HEAD is used."
+      "description": "Commit pins a commit by its full 40-character hexadecimal SHA and takes\nprecedence over Ref."
     },
     "ref": {
       "type": "string",
-      "description": "Ref selects a Git ref. If empty, the remote HEAD is used."
+      "description": "Ref selects a Git ref. If both Ref and Commit are empty, remote HEAD is used."
     },
     "repository": {
       "type": "string",
@@ -27,6 +27,14 @@
         {
           "deprecated": true,
           "const": "git"
+        },
+        {
+          "deprecated": true,
+          "const": "Git"
+        },
+        {
+          "deprecated": true,
+          "const": "Git/v1"
         }
       ]
     }

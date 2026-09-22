@@ -23,9 +23,10 @@
 //
 // [ocm.software/open-component-model/bindings/go/git/input.InputMethod] packages a
 // repository snapshot as a local blob using the same compressed archive as access.
-// The git/v1 input accepts repository, ref and commit; omitting both selectors uses
+// The [ocm.software/open-component-model/bindings/go/git/spec/input/v1.Git]
+// input spec accepts repository, ref and commit; omitting both selectors uses
 // remote HEAD, matching OCM v1 input behavior. Commit takes precedence over Ref.
-// The constructor handles local-blob storage and digests over the compressed bytes.
+// The constructor delegates local-blob storage and digest handling to the target storage.
 //
 // # Archive and digests
 //
@@ -73,5 +74,5 @@
 // # Wire types
 //
 // The access scheme registers Git/v1, Git, git, git/v1alpha1 and Git/v1alpha1.
-// The separate input scheme registers git/v1 and git.
+// The separate input scheme registers git/v1, git, Git and Git/v1.
 package git

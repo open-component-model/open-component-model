@@ -21,16 +21,18 @@ const (
 type Git struct {
 	// +ocm:jsonschema-gen:enum=git/v1
 	// +ocm:jsonschema-gen:enum:deprecated=git
+	// +ocm:jsonschema-gen:enum:deprecated=Git
+	// +ocm:jsonschema-gen:enum:deprecated=Git/v1
 	Type runtime.Type `json:"type"`
 
 	// Repository is the Git repository URL.
 	Repository string `json:"repository"`
 
-	// Ref selects a Git ref. If empty, the remote HEAD is used.
+	// Ref selects a Git ref. If both Ref and Commit are empty, remote HEAD is used.
 	Ref string `json:"ref,omitempty"`
 
-	// Commit pins a commit and takes precedence over Ref. If empty, the
-	// selected ref's HEAD is used.
+	// Commit pins a commit by its full 40-character hexadecimal SHA and takes
+	// precedence over Ref.
 	Commit string `json:"commit,omitempty"`
 }
 

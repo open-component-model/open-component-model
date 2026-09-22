@@ -115,6 +115,66 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 	}
 }
 
+func TestPrepareArtifactBlobForOCI_ExpectedDigest(t *testing.T) {
+	payload := []byte("test content")
+	valid := digest.FromBytes(payload)
+	for _, knownDigest := range []bool{false, true} {
+		name := "unknown blob digest"
+		if knownDigest {
+			name = "known blob digest"
+		}
+		t.Run(name, func(t *testing.T) {
+			for _, tt := range []struct {
+				name          string
+				normalization string
+				hash          string
+				value         string
+				errorContains string
+			}{
+				{name: "valid", normalization: "genericBlobDigest/v1", hash: "SHA-256", value: valid.Encoded()},
+				{name: "missing normalization", hash: "SHA-256", value: valid.Encoded(), errorContains: "normalization algorithm"},
+				{name: "wrong normalization", normalization: "ociArtifactDigest/v1", hash: "SHA-256", value: valid.Encoded(), errorContains: "normalization algorithm"},
+				{name: "wrong normalization version", normalization: "genericBlobDigest/v2", hash: "SHA-256", value: valid.Encoded(), errorContains: "normalization algorithm"},
+				{name: "invalid hash", normalization: "genericBlobDigest/v1", hash: "invalid", value: valid.Encoded(), errorContains: "invalid hash algorithm"},
+				{name: "missing hash", normalization: "genericBlobDigest/v1", value: valid.Encoded(), errorContains: "invalid hash algorithm"},
+				{name: "malformed value", normalization: "genericBlobDigest/v1", hash: "SHA-256", value: "not-a-digest", errorContains: "digest"},
+				{name: "missing value", normalization: "genericBlobDigest/v1", hash: "SHA-256", errorContains: "digest"},
+				{name: "mismatched value", normalization: "genericBlobDigest/v1", hash: "SHA-256", value: digest.FromString("other content").Encoded(), errorContains: "digest"},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					r := require.New(t)
+					expected := &descriptor.Digest{
+						HashAlgorithm: tt.hash, NormalisationAlgorithm: tt.normalization, Value: tt.value,
+					}
+					res := &descriptor.Resource{Digest: expected}
+					before := *expected
+					base := &testBlob{content: payload, mediaType: "application/octet-stream"}
+					if knownDigest {
+						base.digest = valid
+					}
+					store, err := file.New(t.TempDir())
+					r.NoError(err)
+					t.Cleanup(func() { r.NoError(store.Close()) })
+					b, err := resourceblob.NewArtifactBlob(res, base)
+					if err == nil {
+						var layer ociImageSpecV1.Descriptor
+						b, layer, err = PrepareArtifactBlobForOCI(b, ResourceBlobOCILayerOptions{})
+						if err == nil {
+							err = Blob(t.Context(), store, b, layer)
+						}
+					}
+					if tt.errorContains != "" {
+						r.ErrorContains(err, tt.errorContains)
+					} else {
+						r.NoError(err)
+					}
+					r.Equal(before, *res.Digest, "expected digest must not be rewritten")
+				})
+			}
+		})
+	}
+}
+
 func TestBufferArtifactBlob(t *testing.T) {
 	text := "test content"
 	var b blob.ReadOnlyBlob

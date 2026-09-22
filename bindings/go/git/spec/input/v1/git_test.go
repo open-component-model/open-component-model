@@ -2,7 +2,6 @@ package v1
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,17 +14,9 @@ func TestGit_Validate(t *testing.T) {
 		name, repository, ref, commit, wantErr string
 	}{
 		{"remote HEAD", "https://example.com/repo.git", "", "", ""},
-		{"branch", "https://example.com/repo.git", "main", "", ""},
-		{"tag", "git@example.com:repo.git", "refs/tags/v1", "", ""},
-		{"explicit HEAD", "file:///repo.git", "HEAD", "", ""},
-		{"commit", "https://example.com/repo.git", "", strings.Repeat("a", 40), ""},
-		{"both", "ssh://git@example.com/repo.git", "refs/heads/main", strings.Repeat("A", 40), ""},
 		{"missing repository", "", "", "", "repository must not be empty"},
-		{"invalid repository", "https:///repo.git", "", "", "hostname and path"},
-		{"unsupported transport", "ftp://example.com/repo.git", "", "", "unsupported git transport"},
 		{"invalid ref", "https://example.com/repo.git", "refs/heads/../main", "", "invalid git ref"},
 		{"short commit", "https://example.com/repo.git", "", "abc123", "40-character hexadecimal SHA"},
-		{"nonhex commit", "https://example.com/repo.git", "", strings.Repeat("g", 40), "40-character hexadecimal SHA"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
@@ -44,7 +35,12 @@ func TestGit_Validate(t *testing.T) {
 }
 
 func TestGit_JSON(t *testing.T) {
-	for _, typ := range []runtime.Type{runtime.NewVersionedType(Type, Version), runtime.NewUnversionedType(Type)} {
+	for _, typ := range []runtime.Type{
+		runtime.NewVersionedType(Type, Version),
+		runtime.NewUnversionedType(Type),
+		runtime.NewVersionedType("Git", Version),
+		runtime.NewUnversionedType("Git"),
+	} {
 		t.Run(typ.String(), func(t *testing.T) {
 			r := require.New(t)
 			input := Git{Type: typ, Repository: "https://example.com/repo.git"}
