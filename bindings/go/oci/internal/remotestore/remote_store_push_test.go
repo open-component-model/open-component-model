@@ -3,6 +3,7 @@ package remotestore
 import (
 	"bytes"
 	"crypto/sha512"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/registry/remote"
+	"oras.land/oras-go/v2/registry/remote/auth"
 )
 
 // recordedRequest captures the salient parts of one registry request.
@@ -688,4 +690,63 @@ func TestRemoteStore_Push_DoesNotFollowPATCHRedirectToOtherHost(t *testing.T) {
 	r.Error(err, "a redirected PATCH must not silently succeed")
 	r.Equal(0, attackerHits, "the redirect target must never be contacted")
 	r.Nil(attackerBody, "no blob bytes may reach the redirect target")
+}
+
+// TestRemoteStore_Push_ChunkedThroughAuthClientRewindsBody verifies that
+// chunked push works when the underlying client is an oras *auth.Client that
+// has to re-send a body-carrying PATCH after a 401 challenge. A real registry
+// challenges the PATCH independently of the POST that opened the session, so
+// auth.Client re-authenticates and rewinds the request body via
+// Request.GetBody (auth.Client.Do -> rewindRequestBody). If the chunked path
+// cleared GetBody to guard against redirects, that rewind fails with "request
+// body is not rewindable" and every PATCH errors after 0 bytes — exactly how
+// the real-registry integration test broke. The push must succeed and the
+// registry must receive the whole blob.
+func TestRemoteStore_Push_ChunkedThroughAuthClientRewindsBody(t *testing.T) {
+	r := require.New(t)
+
+	const user, pass = "user", "pass"
+	basic := "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+pass))
+
+	reg := newChunkedRegistry(t)
+	var mu sync.Mutex
+	patchChallenged := make(map[string]bool)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// The session POST is served anonymously, but each PATCH location is
+		// challenged once before it is accepted, forcing auth.Client to rewind
+		// and re-send the chunk body with credentials.
+		if req.Method == http.MethodPatch {
+			mu.Lock()
+			seen := patchChallenged[req.URL.Path]
+			patchChallenged[req.URL.Path] = true
+			mu.Unlock()
+			if !seen && req.Header.Get("Authorization") != basic {
+				w.Header().Set("WWW-Authenticate", `Basic realm="registry"`)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+		}
+		reg.handler().ServeHTTP(w, req)
+	}))
+	t.Cleanup(srv.Close)
+
+	data := []byte("hello") // 5 bytes -> chunks of 2: 2+2+1
+	dig := digest.FromBytes(data)
+	desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: dig, Size: int64(len(data))}
+
+	repo, err := remote.NewRepository(srv.Listener.Addr().String() + "/test-repo")
+	r.NoError(err)
+	repo.PlainHTTP = true
+	repo.Client = &auth.Client{
+		Client: &http.Client{},
+		Cache:  auth.NewCache(),
+		Credential: auth.StaticCredential(srv.Listener.Addr().String(), auth.Credential{
+			Username: user,
+			Password: pass,
+		}),
+	}
+	store := &RemoteStore{Repository: repo, ChunkSize: 2, ChunkThreshold: 1}
+
+	r.NoError(store.Push(t.Context(), desc, bytes.NewReader(data)))
+	r.Equal(data, reg.uploaded, "the registry must receive the whole blob after auth rewind")
 }

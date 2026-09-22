@@ -361,24 +361,24 @@ func (r *RemoteStore) closeUploadSession(ctx context.Context, up *chunkedUpload,
 // back to auth.DefaultClient) so retries, authentication, TLS, proxy and header
 // configuration are respected identically, and it applies r.HandleWarning to
 // response Warning headers just as oras' internal do() does.
-//
-// It also strips Request.GetBody so a request carrying a body is never
-// transparently re-sent to a redirect target. Without this a registry-
-// controlled 307/308 would make the HTTP client replay the blob body to an
-// unvalidated host or downgraded scheme (SSRF, CWE-918) before this package can
-// apply resolveUploadLocation. With GetBody nil the standard library returns
-// the 3xx response instead of following it (see net/http redirectBehavior), so
-// the upload's own status checks reject it and no body leaks; legitimate
-// upload-location handoffs still occur explicitly through the Location header.
+// It also refuses to auto-follow redirects for body-carrying requests: a
+// registry-controlled 307/308 must never replay the blob body to a host this
+// package has not validated (SSRF, CWE-918). Rather than clear Request.GetBody
+// (which oras' auth.Client requires to rewind the body for its own same-origin
+// 401 retry, see auth.Client.Do -> rewindRequestBody), it runs the request
+// through a client whose CheckRedirect stops at the first response. oras'
+// send() preserves a caller-set CheckRedirect, so the auth retry still works
+// while the standard library returns the 3xx instead of following it; the
+// upload's own status checks then reject it and no body leaks. Legitimate
+// upload-location handoffs still occur explicitly through the Location header,
+// which resolveUploadLocation validates for host and scheme.
 func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
-	// A body-carrying request must not be auto-replayed across a redirect to a
-	// host this package has not validated.
-	if req.Body != nil && req.Body != http.NoBody {
-		req.GetBody = nil
-	}
 	client := r.Client
 	if client == nil {
 		client = auth.DefaultClient
+	}
+	if req.Body != nil && req.Body != http.NoBody {
+		client = noFollowRedirects(client)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -392,6 +392,50 @@ func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
 		}
 	}
 	return resp, nil
+}
+
+// noFollowRedirects returns a client equivalent to c but that stops at the
+// first response instead of following redirects, without mutating c. It shares
+// c's credential cache and configuration; only redirect handling changes.
+//
+// For an *auth.Client the redirect policy lives on its inner *http.Client,
+// which oras' send() copies and whose CheckRedirect it preserves, so a copy
+// carrying http.ErrUseLastResponse suppresses the follow while the auth
+// challenge/rewind flow is untouched. For a plain *http.Client the copy sets
+// CheckRedirect directly. For any other remote.Client the redirect policy is
+// out of reach, so GetBody is cleared as a last resort: the standard library
+// then declines to replay a 307/308 body (see net/http redirectBehavior).
+func noFollowRedirects(c remote.Client) remote.Client {
+	stop := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	switch client := c.(type) {
+	case *auth.Client:
+		copyClient := *client
+		inner := &http.Client{}
+		if client.Client != nil {
+			*inner = *client.Client
+		}
+		inner.CheckRedirect = stop
+		copyClient.Client = inner
+		return &copyClient
+	case *http.Client:
+		copyClient := *client
+		copyClient.CheckRedirect = stop
+		return &copyClient
+	default:
+		return redirectStrippingClient{c}
+	}
+}
+
+// redirectStrippingClient wraps a remote.Client whose redirect policy is out of
+// reach and clears Request.GetBody on body-carrying requests so the standard
+// library declines to replay a 307/308 body across a redirect.
+type redirectStrippingClient struct{ remote.Client }
+
+func (c redirectStrippingClient) Do(req *http.Request) (*http.Response, error) {
+	if req.Body != nil && req.Body != http.NoBody {
+		req.GetBody = nil
+	}
+	return c.Client.Do(req)
 }
 
 // parseWarningHeader parses a distribution-spec Warning header value (a 299
