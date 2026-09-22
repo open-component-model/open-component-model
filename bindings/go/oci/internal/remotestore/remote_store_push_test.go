@@ -646,3 +646,46 @@ func TestRemoteStore_PushStreaming_MidStreamReadErrorIsPostConsumption(t *testin
 	r.NotErrorIs(err, ErrStreamingUnavailable,
 		"a mid-read error after bytes were consumed must not masquerade as unavailable")
 }
+
+// TestRemoteStore_Push_DoesNotFollowPATCHRedirectToOtherHost verifies that a
+// registry-controlled 307 redirect on a body-carrying PATCH is not transparently
+// followed by the HTTP client — which would replay the blob bytes to an
+// unvalidated host (SSRF, CWE-918). The push must fail without the attacker host
+// ever receiving the chunk body.
+func TestRemoteStore_Push_DoesNotFollowPATCHRedirectToOtherHost(t *testing.T) {
+	r := require.New(t)
+
+	var attackerBody []byte
+	var attackerHits int
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		attackerHits++
+		attackerBody, _ = io.ReadAll(req.Body)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(attacker.Close)
+
+	registry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
+			w.Header().Set("Location", "/v2/test-repo/blobs/uploads/1")
+			w.WriteHeader(http.StatusAccepted)
+		case http.MethodPatch:
+			// Redirect the chunk to the attacker host with a body-preserving 307.
+			http.Redirect(w, req, attacker.URL+"/leak", http.StatusTemporaryRedirect)
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	t.Cleanup(registry.Close)
+
+	data := bytes.Repeat([]byte("secret"), 8) // 48 bytes, above threshold
+	dig := digest.FromBytes(data)
+	desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: dig, Size: int64(len(data))}
+
+	store := newTestStore(t, registry, 8, 1)
+	err := store.Push(t.Context(), desc, bytes.NewReader(data))
+
+	r.Error(err, "a redirected PATCH must not silently succeed")
+	r.Equal(0, attackerHits, "the redirect target must never be contacted")
+	r.Nil(attackerBody, "no blob bytes may reach the redirect target")
+}

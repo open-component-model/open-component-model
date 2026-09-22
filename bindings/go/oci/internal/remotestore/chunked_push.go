@@ -361,7 +361,21 @@ func (r *RemoteStore) closeUploadSession(ctx context.Context, up *chunkedUpload,
 // back to auth.DefaultClient) so retries, authentication, TLS, proxy and header
 // configuration are respected identically, and it applies r.HandleWarning to
 // response Warning headers just as oras' internal do() does.
+//
+// It also strips Request.GetBody so a request carrying a body is never
+// transparently re-sent to a redirect target. Without this a registry-
+// controlled 307/308 would make the HTTP client replay the blob body to an
+// unvalidated host or downgraded scheme (SSRF, CWE-918) before this package can
+// apply resolveUploadLocation. With GetBody nil the standard library returns
+// the 3xx response instead of following it (see net/http redirectBehavior), so
+// the upload's own status checks reject it and no body leaks; legitimate
+// upload-location handoffs still occur explicitly through the Location header.
 func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
+	// A body-carrying request must not be auto-replayed across a redirect to a
+	// host this package has not validated.
+	if req.Body != nil && req.Body != http.NoBody {
+		req.GetBody = nil
+	}
 	client := r.Client
 	if client == nil {
 		client = auth.DefaultClient
