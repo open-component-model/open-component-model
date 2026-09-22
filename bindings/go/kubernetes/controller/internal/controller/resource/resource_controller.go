@@ -244,7 +244,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // SA1019: pending replacement, see https://github.com/open-component-model/open-component-model/issues/2120
 	}
 
 	component, err := util.GetReadyObject[v1alpha1.Component, *v1alpha1.Component](ctx, r.Client, client.ObjectKey{

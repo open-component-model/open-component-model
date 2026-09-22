@@ -15,9 +15,12 @@ Retrieve the build version of the OCM CLI
 
 The version command retrieves the build version of the OCM CLI.
 
-The build version can be formatted in different ways depending on the specified format flag.
-The default format is "legacyjson", which outputs the version in a format compatible with OCM v1 specifications,
-with slight modifications:
+The build version can be formatted in different ways depending on the specified output flag.
+The default format is "text", which prints a human-readable summary that clearly identifies
+this binary as the OCM v2 CLI, together with the version, commit and build date.
+
+When the format is set to "legacyjson", it outputs the version in a format compatible with OCM v1
+specifications, with slight modifications:
 
 - "gitTreeState" is removed in favor of "meta" field, which contains the git tree state.
 - "buildDate" and "gitCommit" are derived from the input version string, and are parsed according to the go module version specification.
@@ -38,14 +41,15 @@ ocm version [flags]
 ### Examples
 
 ```
-ocm version --format legacyjson
+ocm version --output text
 ```
 
 ### Options
 
 ```
-  -f, --format string   format of the generated documentation (default "legacyjson")
-  -h, --help            help for version
+  -h, --help          help for version
+  -o, --output enum   output format of the version information
+                      (must be one of [gobuildinfo gobuildinfojson legacyjson text]) (default text)
 ```
 
 ### Options inherited from parent commands

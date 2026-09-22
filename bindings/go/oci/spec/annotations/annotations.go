@@ -20,6 +20,11 @@ const (
 	// process or user agent. as such it CAN be correlated to a user agent header in http.
 	OCMCreator = "software.ocm.creator"
 
+	// OCMLayoutRoot names the artifact an OCI layout was built for, on that
+	// artifact's index.json entry, with the value "true". It records which of
+	// several manifests was requested, so readers need not guess.
+	OCMLayoutRoot = "software.ocm.layout.root"
+
 	OCMComponentVersionAnnotationSeparator = ":"
 )
 

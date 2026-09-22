@@ -171,5 +171,5 @@ docker run --rm \
 
 ## Getting help
 
-- [Community Support]({{< relref "community/_index.md" >}})
+- [Community Support](/community/)
 - [Open an Issue](https://github.com/open-component-model/open-component-model/issues)

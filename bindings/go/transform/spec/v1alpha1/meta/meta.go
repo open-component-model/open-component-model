@@ -9,4 +9,9 @@ import "ocm.software/open-component-model/bindings/go/runtime"
 type TransformationMeta struct {
 	Type runtime.Type `json:"type"`
 	ID   string       `json:"id"`
+	// Label is an optional human-readable display name used by progress renderers.
+	// It is purely cosmetic: ID remains the canonical identifier referenced by CEL
+	// expressions and DAG vertex keys. When empty, consumers fall back to ID-based
+	// formatting.
+	Label string `json:"label,omitempty"`
 }
