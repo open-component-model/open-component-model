@@ -18,7 +18,7 @@ actions:
   - icon: "truck"
     label: "Transport"
     description: "Works across boundaries — public cloud, on-prem, air-gapped. Tamper-proof."
-    link: "docs/tutorials/pack/advanced-component-constructor.md"
+    link: "docs/tutorials/transfer/_index.md"
   - icon: "rocket"
     label: "Deploy"
     description: "Automate deployments with OCM Controllers and Flux. Seamless GitOps."

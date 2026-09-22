@@ -7,4 +7,4 @@ sidebar:
 ---
 
 Task-oriented guides covering the complete signing workflow — generating keys, configuring
-credentials, signing component versions, and verifying signatures using both RSA and Sigstore.
+credentials, signing component versions, and verifying signatures using RSA, GPG, and Sigstore.
