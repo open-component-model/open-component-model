@@ -112,8 +112,7 @@ func (r *ArtifactBlob) HasPrecalculatedDigest() bool {
 
 // SetPrecalculatedDigest sets the pre-calculated digest value for the resource.
 // This method allows updating the digest value when it's known beforehand.
-// Note that this method only updates the digest value and assumes the normalisation algorithm
-// is already set correctly in the resource.
+// The digest describes the raw blob bytes and uses generic blob normalization.
 func (r *ArtifactBlob) SetPrecalculatedDigest(dig string) {
 	resource, ok := r.Artifact.(*descriptor.Resource)
 	if !ok {
@@ -142,8 +141,9 @@ func digestSpec(dig string) (*descriptor.Digest, error) {
 
 func digestSpecFromDigest(dig digest.Digest) *descriptor.Digest {
 	return &descriptor.Digest{
-		Value:         dig.Encoded(),
-		HashAlgorithm: internaldigest.ReverseSHAMapping[dig.Algorithm()],
+		Value:                  dig.Encoded(),
+		HashAlgorithm:          internaldigest.ReverseSHAMapping[dig.Algorithm()],
+		NormalisationAlgorithm: internaldigest.NormalisationGenericBlobDigestV1,
 	}
 }
 

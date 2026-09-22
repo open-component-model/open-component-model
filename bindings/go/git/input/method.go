@@ -33,7 +33,8 @@ type InputMethod struct {
 	MaxArchiveSize int64
 	// CABundle extends system TLS trust.
 	CABundle []byte
-	// HostKeyCallback overrides SSH verification using the user's known_hosts.
+	// HostKeyCallback overrides SSH host key verification. If nil, verification
+	// uses the user's known_hosts.
 	HostKeyCallback ssh.HostKeyCallback
 }
 

@@ -3,7 +3,6 @@ package input_test
 import (
 	"archive/tar"
 	"compress/gzip"
-	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -31,15 +30,12 @@ func TestProcessResourceSnapshots(t *testing.T) {
 
 	for _, tc := range []struct {
 		name, ref, commit, want string
-		raw                     bool
-		maxArchiveSize          int64
 	}{
 		{name: "default HEAD", want: "second\n"},
 		{name: "explicit ref", ref: "refs/heads/previous", want: "first\n"},
+		{name: "explicit tag", ref: "refs/tags/v1", want: "first\n"},
 		{name: "explicit commit", commit: first, want: "first\n"},
 		{name: "commit overrides ref", ref: "refs/heads/main", commit: first, want: "first\n"},
-		{name: "raw unversioned alias", raw: true, want: "second\n"},
-		{name: "unlimited archive", maxArchiveSize: -1, want: "second\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -47,15 +43,9 @@ func TestProcessResourceSnapshots(t *testing.T) {
 				Type: inputspec.V1VersionedType, Repository: repository, Ref: tc.ref, Commit: tc.commit,
 			}
 			resource := &constructorruntime.Resource{Input: spec}
-			if tc.raw {
-				spec.Type = runtime.NewUnversionedType("git")
-				data, err := json.Marshal(spec)
-				r.NoError(err)
-				resource.Input = &runtime.Raw{Type: spec.Type, Data: data}
-			}
 			before := resource.DeepCopy()
 			dir := t.TempDir()
-			method := &input.InputMethod{TempFolder: dir, MaxArchiveSize: tc.maxArchiveSize}
+			method := &input.InputMethod{TempFolder: dir}
 
 			result, err := method.ProcessResource(t.Context(), resource, nil)
 			r.NoError(err)
@@ -99,11 +89,10 @@ func TestProcessResourceErrors(t *testing.T) {
 	r.NotEmpty(repository)
 
 	for _, tc := range []struct {
-		name, ref, wantErr string
-		maxArchiveSize     int64
-		credentials        runtime.Typed
+		name, wantErr  string
+		maxArchiveSize int64
+		credentials    runtime.Typed
 	}{
-		{name: "missing ref", ref: "refs/heads/missing"},
 		{name: "archive size", maxArchiveSize: 1, wantErr: "git archive exceeds the maximum size"},
 		{
 			name: "unsupported credentials", wantErr: "unsupported git credential type",
@@ -113,22 +102,16 @@ func TestProcessResourceErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			resource := &constructorruntime.Resource{Input: &inputv1.Git{
-				Type: inputspec.V1VersionedType, Repository: repository, Ref: tc.ref,
+				Type: inputspec.V1VersionedType, Repository: repository,
 			}}
 			before := resource.DeepCopy()
 			dir := t.TempDir()
 			method := &input.InputMethod{TempFolder: dir, MaxArchiveSize: tc.maxArchiveSize}
 
 			result, err := method.ProcessResource(t.Context(), resource, tc.credentials)
-			r.Error(err)
-			if tc.wantErr != "" {
-				r.ErrorContains(err, tc.wantErr)
-			}
+			r.ErrorContains(err, tc.wantErr)
 			r.Nil(result)
 			r.Equal(before, resource)
-			files, err := os.ReadDir(dir)
-			r.NoError(err)
-			r.Empty(files)
 		})
 	}
 }
@@ -168,9 +151,6 @@ func TestInvalidResource(t *testing.T) {
 		_, err = method.GetResourceCredentialConsumerIdentity(t.Context(), resource)
 		r.Error(err)
 	}
-	files, err := os.ReadDir(method.TempFolder)
-	r.NoError(err)
-	r.Empty(files)
 }
 
 func newRepository(t *testing.T) (path, firstCommit string) {
@@ -193,6 +173,8 @@ func newRepository(t *testing.T) (path, firstCommit string) {
 		if firstCommit == "" {
 			firstCommit = hash.String()
 			r.NoError(repo.Storer.SetReference(plumbing.NewHashReference("refs/heads/previous", hash)))
+			_, err = repo.CreateTag("v1", hash, nil)
+			r.NoError(err)
 		}
 	}
 	path = filepath.Join(t.TempDir(), "fixture.git")

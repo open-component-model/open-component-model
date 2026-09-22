@@ -243,6 +243,13 @@ type OCILayerConvertableBlob interface {
 // which need these fields for API interactions. If the incoming ArtifactBlob does not have a size or a digest,
 // a new instance of ArtifactBlob having both fields set is created and returned. Otherwise, the initial ArtifactBlob is returned.
 func PrepareArtifactBlobForOCI(b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) (*ociblob.ArtifactBlob, ociImageSpecV1.Descriptor, error) {
+	// A layer digest hashes the blob bytes, unlike the root digest of an OCI layout.
+	if resource, ok := b.Artifact.(*descriptor.Resource); ok && resource.Digest != nil {
+		if resource.Digest.NormalisationAlgorithm != internaldigest.NormalisationGenericBlobDigestV1 {
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported resource digest normalization algorithm %q for OCI layer: expected %q", resource.Digest.NormalisationAlgorithm, internaldigest.NormalisationGenericBlobDigestV1)
+		}
+	}
+
 	size := b.Size()
 
 	var mediaType string

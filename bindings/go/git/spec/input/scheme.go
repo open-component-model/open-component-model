@@ -17,5 +17,7 @@ func MustAddToScheme(scheme *runtime.Scheme) {
 	scheme.MustRegisterWithAlias(&v1.Git{},
 		V1VersionedType,
 		runtime.NewUnversionedType(v1.Type),
+		runtime.NewUnversionedType("Git"),
+		runtime.NewVersionedType("Git", v1.Version),
 	)
 }
