@@ -41,7 +41,13 @@ configuration files and display the merged effective configuration as a single o
   ocm get config --output json
 
   # Display effective config from a specific config file
-  ocm get config --config ./my-ocm-config.yaml`,
+  ocm get config --config ./my-ocm-config.yaml
+
+  # Read the config from stdin instead of a file (skips the well known locations)
+  cat ./my-ocm-config.yaml | ocm get config --config -
+
+  # Credentials from stdin, other settings from a file; entries merge in command line order
+  ocm get config --config ./signing.yaml --config - < ./credentials.yaml`,
 		RunE:              GetConfig,
 		DisableAutoGenTag: true,
 	}

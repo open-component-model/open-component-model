@@ -242,6 +242,16 @@ func TestTransferComponentVersionWithTransferSpecStdinInvalid(t *testing.T) {
 	require.Contains(t, err.Error(), "parsing transfer spec")
 }
 
+func TestTransferComponentVersionWithTransferSpecStdinConflictsWithConfigStdin(t *testing.T) {
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-", "--config", "-"),
+		test.WithInput(bytes.NewBufferString("type: generic.config.ocm.software/v1\n")),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.ErrorContains(t, err, "cannot both read stdin")
+}
+
 func TestTransferComponentVersionWithTransferSpecFileNotFound(t *testing.T) {
 	_, err := test.OCM(t,
 		test.WithArgs("transfer", "component-version", "--transfer-spec", "/nonexistent/path/spec.yaml"),

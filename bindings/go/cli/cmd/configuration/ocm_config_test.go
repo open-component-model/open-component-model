@@ -3,6 +3,7 @@ package configuration
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,6 +32,23 @@ func TestGetOCMConfigPaths(t *testing.T) {
 			existing: map[string]bool{},
 			envVars:  map[string]string{"OCM_CONFIG": "/missing/config"},
 			wantErr:  true,
+		},
+		{
+			name:     "env var set to stdin marker is ignored",
+			existing: nil, // a file literally named "-" would otherwise be picked up
+			envVars:  map[string]string{"OCM_CONFIG": StdinConfigPath},
+			want: func(workingDirectory, executableDirectory string) []string {
+				return []string{
+					"/home/user/.config/ocm/config",
+					"/home/user/.config/.ocmconfig",
+					"/home/user/.ocm/config",
+					"/home/user/.ocmconfig",
+					filepath.Join(workingDirectory, ".ocm/config"),
+					filepath.Join(workingDirectory, ".ocmconfig"),
+					filepath.Join(executableDirectory, ".ocm/config"),
+					filepath.Join(executableDirectory, ".ocmconfig"),
+				}
+			},
 		},
 		{
 			name:     "all files found across all locations in documented order",
@@ -161,6 +179,83 @@ func TestGetFlattenedGetConfigFromPath(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestLoadAndMergeConfigsWithStdin(t *testing.T) {
+	const stdinConfig = `type: generic.config.ocm.software/v1
+configurations:
+- type: attributes.config.ocm.software
+  attributes:
+    source: stdin
+`
+	fileConfigData := []byte(`{"attributes":{"source":"file"},"type":"attributes.config.ocm.software"}`)
+	stdinConfigData := []byte(`{"attributes":{"source":"stdin"},"type":"attributes.config.ocm.software"}`)
+
+	tests := []struct {
+		name     string
+		paths    []string
+		stdin    string
+		wantData [][]byte
+		wantErr  string
+	}{
+		{
+			name:     "stdin only",
+			paths:    []string{StdinConfigPath},
+			stdin:    stdinConfig,
+			wantData: [][]byte{stdinConfigData},
+		},
+		{
+			name:     "stdin before file keeps command line order",
+			paths:    []string{StdinConfigPath, "testdata/.ocmconfig-attributes-file"},
+			stdin:    stdinConfig,
+			wantData: [][]byte{stdinConfigData, fileConfigData},
+		},
+		{
+			name:     "file before stdin keeps command line order",
+			paths:    []string{"testdata/.ocmconfig-attributes-file", StdinConfigPath},
+			stdin:    stdinConfig,
+			wantData: [][]byte{fileConfigData, stdinConfigData},
+		},
+		{
+			name:    "stdin given twice is rejected",
+			paths:   []string{StdinConfigPath, StdinConfigPath},
+			stdin:   stdinConfig,
+			wantErr: "stdin",
+		},
+		{
+			name:    "empty stdin is rejected",
+			paths:   []string{StdinConfigPath},
+			stdin:   "",
+			wantErr: "stdin",
+		},
+		{
+			name:    "invalid stdin is rejected",
+			paths:   []string{StdinConfigPath},
+			stdin:   "this is: [not valid",
+			wantErr: "stdin",
+		},
+		{
+			name:    "missing file is still rejected",
+			paths:   []string{"testdata/does-not-exist"},
+			wantErr: "does-not-exist",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			got, err := loadAndMergeConfigs(tt.paths, true, strings.NewReader(tt.stdin))
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			gotData := make([][]byte, 0, len(got.Configurations))
+			for _, cfg := range got.Configurations {
+				gotData = append(gotData, cfg.Data)
+			}
+			r.Equal(tt.wantData, gotData)
 		})
 	}
 }

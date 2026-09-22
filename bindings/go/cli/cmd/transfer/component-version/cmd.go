@@ -8,11 +8,13 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
@@ -170,6 +172,9 @@ func transferArgs(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return fmt.Errorf("positional arguments are not allowed when --%s is set", FlagTransferSpec)
 		}
+		if specPath == configuration.StdinConfigPath && configFromStdin(cmd) {
+			return fmt.Errorf("--%s - and --%s - cannot both read stdin; pass one of them as a file", FlagTransferSpec, configuration.OCMConfigCommandArgument)
+		}
 		ignoredFlags := []string{FlagRecursive, FlagCopyResources, FlagUploadAs}
 		for _, name := range ignoredFlags {
 			if cmd.Flags().Changed(name) {
@@ -179,6 +184,11 @@ func transferArgs(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	return cobra.ExactArgs(2)(cmd, args)
+}
+
+func configFromStdin(cmd *cobra.Command) bool {
+	paths, err := cmd.Flags().GetStringArray(configuration.OCMConfigCommandArgument)
+	return err == nil && slices.Contains(paths, configuration.StdinConfigPath)
 }
 
 func TransferComponentVersion(cmd *cobra.Command, args []string) error {

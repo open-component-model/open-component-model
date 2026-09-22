@@ -31,6 +31,12 @@ ocm get config [flags]
 
   # Display effective config from a specific config file
   ocm get config --config ./my-ocm-config.yaml
+
+  # Read the config from stdin instead of a file (skips the well known locations)
+  cat ./my-ocm-config.yaml | ocm get config --config -
+
+  # Credentials from stdin, other settings from a file; entries merge in command line order
+  ocm get config --config ./signing.yaml --config - < ./credentials.yaml
 ```
 
 ### Options
@@ -63,6 +69,9 @@ ocm get config [flags]
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
+                                           Use "-" to read one configuration from stdin, for example to pass credentials without writing them to disk.
+                                           Like every other --config value it replaces the lookup above. It can be combined with files that hold
+                                           other settings and is merged in command line order, for example: --config ./signing.yaml --config -
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output

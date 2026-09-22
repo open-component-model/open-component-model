@@ -176,6 +176,22 @@ configurations:
 3. `ghcr.io/other-org/repo` → uses `my-user` (hostname-only match)
 4. `docker.io/library/nginx` → uses Docker config (no consumer matched)
 
+## Pass the Configuration Through stdin
+
+In CI pipelines and other automation you may not want to write credentials to disk. Pass `-` to `--config` and the CLI reads one configuration from stdin. The well known file locations are not searched, the same as for any other `--config` value:
+
+```bash
+cat ./credentials.yaml | ocm get config --config -
+```
+
+Stdin can be combined with config files that hold other settings, for example signing or HTTP client configuration. Entries are merged in command line order, so later entries win:
+
+```bash
+ocm get config --config ./signing.yaml --config - < ./credentials.yaml
+```
+
+Stdin can be given only once per command, and empty input is an error.
+
 ## Troubleshooting
 
 {{< callout context="tip" >}}

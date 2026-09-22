@@ -1,8 +1,10 @@
 package configuration
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -22,6 +24,10 @@ const (
 	NestedOCMConfigFileName  = ".ocmconfig"
 	OCMConfigEnvironmentKey  = "OCM_CONFIG"
 	OCMConfigCommandArgument = "config"
+	// StdinConfigPath is the --config value that reads a configuration from stdin.
+	// Stdin can be read only once, and the config is loaded in the pre-run hook, so a
+	// command flag that also takes "-" (like --transfer-spec) must reject the combination.
+	StdinConfigPath = "-"
 )
 
 type OCMConfigOptions struct {
@@ -51,7 +57,10 @@ By default (without specifying custom locations with this flag), the file will b
 - $EXE_DIR/.ocmconfig
 If multiple configuration files are found, they will be merged in the order they are discovered.
 Later entries have higher priority.
-Using the option, the specified configuration file(s) will be used instead of the lookup above.`)
+Using the option, the specified configuration file(s) will be used instead of the lookup above.
+Use "-" to read one configuration from stdin, for example to pass credentials without writing them to disk.
+Like every other --config value it replaces the lookup above. It can be combined with files that hold
+other settings and is merged in command line order, for example: --config ./signing.yaml --config -`)
 }
 
 func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
@@ -62,11 +71,15 @@ func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, err
 	return genericv1.FlatMap(cfg), nil
 }
 
+// GetOCMConfigForCommand returns the configuration for a command. With --config set, only
+// the given values are loaded, in command line order. The value "-" reads one configuration
+// from stdin and may be given once. Without the flag the well known locations are searched
+// and stdin is never read.
 func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 	flag := cmd.Flag(OCMConfigCommandArgument)
 	if flag != nil && flag.Changed {
 		paths := flag.Value.(pflag.SliceValue).GetSlice()
-		return loadAndMergeConfigs(paths, true)
+		return loadAndMergeConfigs(paths, true, cmd.InOrStdin())
 	}
 	syscalls := ocmctx.FromContext(cmd.Context()).Syscalls()
 	options := OCMConfigOptions{
@@ -95,13 +108,26 @@ func GetOCMConfig(options OCMConfigOptions, additional ...string) (*genericv1.Co
 	if err != nil && len(additional) == 0 {
 		return nil, err
 	}
-	return loadAndMergeConfigs(paths, false)
+	return loadAndMergeConfigs(paths, false, nil)
 }
 
-func loadAndMergeConfigs(paths []string, strict bool) (*genericv1.Config, error) {
+func loadAndMergeConfigs(paths []string, strict bool, stdin io.Reader) (*genericv1.Config, error) {
 	cfgs := make([]*genericv1.Config, 0, len(paths))
+	stdinUsed := false
 	for _, path := range paths {
-		cfg, err := GetConfigFromPath(path)
+		var cfg *genericv1.Config
+		var err error
+		if path == StdinConfigPath {
+			if stdinUsed {
+				return nil, fmt.Errorf("configuration from stdin (%q) can only be given once", StdinConfigPath)
+			}
+			stdinUsed = true
+			if cfg, err = getConfigFromStdin(stdin); err != nil {
+				err = fmt.Errorf("could not load configuration from stdin: %w", err)
+			}
+		} else {
+			cfg, err = GetConfigFromPath(path)
+		}
 		if err != nil {
 			if strict {
 				return nil, err
@@ -116,6 +142,23 @@ func loadAndMergeConfigs(paths []string, strict bool) (*genericv1.Config, error)
 		cfgs = append(cfgs, cfg)
 	}
 	return genericv1.FlatMap(cfgs...), nil
+}
+
+// getConfigFromStdin decodes one configuration from stdin. Empty input is rejected
+// because a caller who passes "-" expects to supply a configuration, and a silent
+// empty config would hide a broken pipe.
+func getConfigFromStdin(stdin io.Reader) (*genericv1.Config, error) {
+	if stdin == nil {
+		return nil, errors.New("stdin is not available")
+	}
+	data, err := io.ReadAll(stdin)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return nil, errors.New("no data was read")
+	}
+	return decodeConfig(bytes.NewReader(data))
 }
 
 // GetConfigFromPath reads and decodes the YAML configuration file from the specified path.
@@ -134,9 +177,12 @@ func GetConfigFromPath(path string) (_ *genericv1.Config, err error) {
 	defer func() {
 		err = errors.Join(err, file.Close())
 	}()
+	return decodeConfig(file)
+}
 
+func decodeConfig(r io.Reader) (*genericv1.Config, error) {
 	var instance genericv1.Config
-	if err := genericv1.Scheme.Decode(file, &instance); err != nil {
+	if err := genericv1.Scheme.Decode(r, &instance); err != nil {
 		return nil, err
 	}
 	return &instance, nil
@@ -187,6 +233,11 @@ func GetOCMConfigPaths(options OCMConfigOptions) ([]string, error) {
 
 func getFromEnvironment(options OCMConfigOptions) string {
 	if env := options.Getenv(OCMConfigEnvironmentKey); env != "" {
+		if env == StdinConfigPath {
+			slog.Warn(fmt.Sprintf("%s=%q is ignored: stdin is only read with --%s %s",
+				OCMConfigEnvironmentKey, env, OCMConfigCommandArgument, StdinConfigPath))
+			return ""
+		}
 		if _, err := options.Stat(filepath.Clean(env)); err == nil {
 			return env
 		}
