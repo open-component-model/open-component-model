@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
@@ -14,6 +15,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 )
 
@@ -70,9 +72,17 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyGraph
 		return
 	}
 
-	// Apply any additional tags.
-	for _, tag := range opts.Tags {
-		if err = errors.Join(err, target.Tag(ctx, base, tag)); err != nil {
+	// base is the only thing that knows which manifest the caller wanted.
+	// Tag is what carries a descriptor's annotations into index.json.
+	root := base
+	root.Annotations = maps.Clone(base.Annotations)
+	if root.Annotations == nil {
+		root.Annotations = make(map[string]string, 1)
+	}
+	root.Annotations[annotations.OCMLayoutRoot] = "true"
+
+	for _, ref := range append([]string{base.Digest.String()}, opts.Tags...) {
+		if err = errors.Join(err, target.Tag(ctx, root, ref)); err != nil {
 			return
 		}
 	}
@@ -90,8 +100,7 @@ type CopyOCILayoutWithIndexOptions struct {
 }
 
 // CopyOCILayoutWithIndex reads an OCI layout tarball from src, picks the
-// layout's single top-level manifest or index (or the one tagged via
-// `org.opencontainers.image.ref.name` when multiple are present), and copies
+// layout's top-level manifest or index via [pickTopLevelDescriptor], and copies
 // its full graph into dst via [oras.ExtendedCopyGraph], including referrers.
 //
 // Returns the descriptor of the root that was copied.
@@ -104,7 +113,7 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 		err = errors.Join(err, ociStore.Close())
 	}()
 
-	index, err := pickTopLevelDescriptor(ociStore)
+	index, err := pickTopLevelDescriptor(ctx, ociStore)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
@@ -150,14 +159,18 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 	return index, nil
 }
 
-// pickTopLevelDescriptor selects the single top-level manifest from the
-// layout's index.json. With one manifest in the index it returns that
-// manifest; with many it returns the one tagged via
-// `org.opencontainers.image.ref.name`. Returns an error if neither rule
-// uniquely identifies a top-level descriptor.
-func pickTopLevelDescriptor(ociStore *CloseableReadOnlyStore) (ociImageSpecV1.Descriptor, error) {
+// pickTopLevelDescriptor works out which manifest in the layout was requested,
+// in order: the only one; the one marked with [annotations.OCMLayoutRoot]; the
+// one named by `org.opencontainers.image.ref.name`, only ever set for tag-based
+// references; else [TopLevelArtifacts] for a layout carrying neither. Errors
+// when nothing settles it, because a wrong guess silently packs the wrong
+// artifact.
+func pickTopLevelDescriptor(ctx context.Context, ociStore *CloseableReadOnlyStore) (ociImageSpecV1.Descriptor, error) {
 	if len(ociStore.Index.Manifests) == 1 {
 		return ociStore.Index.Manifests[0], nil
+	}
+	if root, ok := markedRoot(ociStore.Index.Manifests); ok {
+		return root, nil
 	}
 	var named []int
 	for idx, manifest := range ociStore.Index.Manifests {
@@ -168,11 +181,18 @@ func pickTopLevelDescriptor(ociStore *CloseableReadOnlyStore) (ociImageSpecV1.De
 	if len(named) == 1 {
 		return ociStore.Index.Manifests[named[0]], nil
 	}
+	// Nothing was written down, so infer it: an index and the children it lists
+	// collapse to the index. Last, because this branch is the one that guesses.
+	if top := TopLevelArtifacts(ctx, ociStore, ociStore.Index.Manifests); len(top) == 1 {
+		return top[0], nil
+	}
 	return ociImageSpecV1.Descriptor{}, fmt.Errorf(
 		"multiple manifests found in oci store, "+
 			"but no manifest could be identified as the top level parent."+
-			"the store must either contain exactly one top level manifest in its index,"+
-			" or at most one manifest with the annotation %s", ociImageSpecV1.AnnotationRefName,
+			" the store must either contain exactly one top level manifest in its index,"+
+			" one marked with the annotation %s, at most one manifest with the annotation %s,"+
+			" or a single artifact containing all the others",
+		annotations.OCMLayoutRoot, ociImageSpecV1.AnnotationRefName,
 	)
 }
 
