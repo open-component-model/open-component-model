@@ -1,6 +1,6 @@
 ---
 title: "Pack"
-description: "How-to guides for composing and constructing OCM component versions."
+description: "How-to guides for building and publishing OCM component versions."
 weight: 10
 sidebar:
   collapsed: false

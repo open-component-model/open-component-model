@@ -13,12 +13,12 @@ These tutorials guide you through complex workflows, helping you understand how 
 
 Tutorials are organised by **lifecycle phase**:
 
-| Phase        | What you'll explore                                                            |
-|--------------|--------------------------------------------------------------------------------|
-| **Pack**     | Multi-component products, OCI workflows, SBOMs, HTTP resources                 |
-| **Sign**     | End-to-end signing — plain RSA, PEM certificate chains, GPG, Sigstore keyless  |
-| **Transfer** | Resolver configuration, credential resolution                                  |
-| **Deploy**   | Helm chart bootstrap with kro and Flux/Argo CD, chained RGD deployments        |
+| Phase        | What you'll explore                                                                                 |
+|--------------|-----------------------------------------------------------------------------------------------------|
+| **Pack**     | How to build multi-component products and bundle SBOMs and HTTP resources into component versions   |
+| **Sign**     | How each trust model works end-to-end: plain RSA, PEM certificate chains, GPG, and Sigstore keyless |
+| **Transfer** | How OCM resolves components across registry hierarchies and selects credentials for each target     |
+| **Deploy**   | How to deploy component versions with OCM controllers, Flux, and Kro using Helm charts and RGDs     |
 
 ## What Are Tutorials?
 

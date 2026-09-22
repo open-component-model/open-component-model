@@ -1,6 +1,6 @@
 ---
 title: "Sign"
-description: "Understand how OCM secures component integrity and authenticity through cryptographic signatures."
+description: "Understand how OCM signs component versions and how consumers verify their integrity."
 weight: 20
 sidebar:
   collapsed: false

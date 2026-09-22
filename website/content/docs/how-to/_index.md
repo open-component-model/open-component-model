@@ -12,12 +12,12 @@ These how-to guides help you accomplish specific goals when working with OCM in 
 
 Guides are organised by **lifecycle phase**:
 
-| Phase        | What you can accomplish                                                      |
-|--------------|------------------------------------------------------------------------------|
-| **Pack**     | Add resources from GitHub or HTTP, model software products, verify ownership |
-| **Sign**     | Generate keys, configure credentials, sign and verify component versions     |
-| **Transfer** | Air-gap transfers, replication, multi-registry credentials, HTTP config      |
-| **Deploy**   | Apply manifests, configure RBAC, set up controller credentials               |
+| Phase        | What you can accomplish                                                                              |
+|--------------|------------------------------------------------------------------------------------------------------|
+| **Pack**     | Build and publish component versions from local files, OCI images, Helm charts, and HTTP sources     |
+| **Sign**     | Sign component versions with RSA, GPG, or Sigstore; verify signatures against a trusted key          |
+| **Transfer** | Copy components across registries, transfer across air gaps, and configure resolvers and credentials |
+| **Deploy**   | Apply component resources to a cluster, enforce signature verification, and configure access         |
 
 ## What Are How-to Guides?
 

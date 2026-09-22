@@ -1,6 +1,6 @@
 ---
 title: "Pack"
-description: "Tutorials for constructing OCM component versions with advanced patterns."
+description: "Tutorials for building OCM component versions with real-world artefact types."
 weight: 10
 sidebar:
   collapsed: false

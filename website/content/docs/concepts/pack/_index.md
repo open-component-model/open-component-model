@@ -1,6 +1,6 @@
 ---
 title: "Pack"
-description: "Understand how OCM components are composed, identified, and stored."
+description: "Understand how OCM component versions are defined, identified, and stored in any registry."
 weight: 10
 sidebar:
   collapsed: false

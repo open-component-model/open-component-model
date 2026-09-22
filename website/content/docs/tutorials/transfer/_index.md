@@ -1,6 +1,6 @@
 ---
 title: "Transfer"
-description: "Tutorials for configuring resolvers and credentials across transfer environments."
+description: "Tutorials for moving component versions across registries and environments."
 weight: 30
 sidebar:
   collapsed: false

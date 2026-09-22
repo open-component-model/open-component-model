@@ -80,23 +80,18 @@ Each type serves a distinct purpose. Mixing types within a single document confu
 
 ## OCM Section Mapping
 
-| Diataxis Type | OCM Website Section                    | Lifecycle sub-group | Purpose                                                    |
-|---------------|----------------------------------------|---------------------|------------------------------------------------------------|
-| Tutorials     | `content/docs/getting-started/`        | —                   | Guide newcomers through essential OCM workflows            |
-| Tutorials     | `content/docs/tutorials/pack/`         | Pack                | Advanced component construction tutorials                  |
-| Tutorials     | `content/docs/tutorials/sign/`         | Sign                | Signing and verification tutorials                         |
-| Tutorials     | `content/docs/tutorials/transfer/`     | Transfer            | Resolver and credential tutorials                          |
-| Tutorials     | `content/docs/tutorials/deploy/`       | Deploy              | Controller deployment tutorials                            |
-| Explanation   | `content/docs/overview/`               | —                   | Project-level overview                                     |
-| Explanation   | `content/docs/concepts/pack/`          | Pack                | Component identity, resources, credentials, plugins, SBOMs |
-| Explanation   | `content/docs/concepts/sign/`          | Sign                | Signing and verification model                             |
-| Explanation   | `content/docs/concepts/transfer/`      | Transfer            | Transfer model, resolvers                                  |
-| Explanation   | `content/docs/concepts/deploy/`        | Deploy              | Controllers, deployer, ownership                           |
-| How-to Guides | `content/docs/how-to/pack/`            | Pack                | Adding resources, modelling products, ownership            |
-| How-to Guides | `content/docs/how-to/sign/`            | Sign                | Keys, credentials, signing, verification                   |
-| How-to Guides | `content/docs/how-to/transfer/`        | Transfer            | Air-gap, replication, credentials, HTTP config             |
-| How-to Guides | `content/docs/how-to/deploy/`          | Deploy              | Manifests, RBAC, controller credentials, verification      |
-| Reference     | `content/docs/reference/`              | —                   | CLI, schemas, CRDs                                         |
+| Diataxis Type | OCM Website Section             | Purpose                                                    |
+|---------------|---------------------------------|------------------------------------------------------------|
+| Tutorials     | `content/docs/getting-started/` | Guide newcomers through essential OCM workflows            |
+| Tutorials     | `content/docs/tutorials/`       | In-depth tutorials for advanced OCM scenarios              |
+| Explanation   | `content/docs/overview/`        | Project-level overview                                     |
+| Explanation   | `content/docs/concepts/`        | Explain design decisions and rationale                     |
+| How-to Guides | `content/docs/how-to/`          | Task-oriented directions for specific goals                |
+| Reference     | `content/docs/reference/`       | CLI, schemas, and CRDs                                     |
+
+Within `tutorials/`, `concepts/`, and `how-to/`, content is organised into four lifecycle-phase
+sub-directories: `pack/`, `sign/`, `transfer/`, and `deploy/`. Place new content in the
+sub-directory that matches the phase where the task or concept is most relevant.
 
 ### Explanation (`content/docs/concepts/`)
 
