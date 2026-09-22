@@ -85,8 +85,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           config: cliff.toml
           args: |
-            --include-path "bindings/go/cli/**" \
-            --include-path "bindings/go/kubernetes/controller/**" \
+            --include-path "bindings/go/**" \
             --tag-pattern "^v\\d+\\.\\d+\\.\\d+(?:[-\\w\\.]+)?$" \
             --ignore-tags "^v\\d+\\.\\d+\\.\\d+-rc\\.\\d+$" \
             --tag "${{ steps.compute.outputs.new_tag }}" \
@@ -611,8 +610,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           config: cliff.toml
           args: |
-            --include-path "bindings/go/cli/**" \
-            --include-path "bindings/go/kubernetes/controller/**" \
+            --include-path "bindings/go/**" \
             --tag-pattern "^v\\d+\\.\\d+\\.\\d+(?:[-\\w\\.]+)?$" \
             --ignore-tags "^v\\d+\\.\\d+\\.\\d+-rc\\.\\d+$" \
             --tag "${{ needs.prepare.outputs.promotion_tag }}" \
