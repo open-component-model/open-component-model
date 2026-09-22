@@ -14,7 +14,7 @@ Attach **ownership** information to a resource so that, given the resource image
 back to the OCM component version that owns it — then verify that link with standard registry tools.
 
 For the background on *why* this works and *what* an ownership record is, see the
-[Ownership]({{< relref "docs/concepts/deploy/ownership.md" >}}) concept.
+[Ownership]({{< relref "docs/concepts/transfer/ownership.md" >}}) concept.
 
 ## You'll end up with
 
@@ -202,7 +202,7 @@ Read together, these three annotations are the full answer to "who owns this ima
 
 ## Related Documentation
 
-- [Concept: Ownership]({{< relref "docs/concepts/deploy/ownership.md" >}}) — what ownership records are and why OCM links artifacts this way
+- [Concept: Ownership]({{< relref "docs/concepts/transfer/ownership.md" >}}) — what ownership records are and why OCM links artifacts this way
 - [How-To: Use the OCM CLI Container Image]({{< relref "docs/how-to/pack/container-image-usage.md" >}}) — create and read component versions
 - [Tutorial: Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) — author and store component versions
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer/transfer-concept.md" >}}) — how resources and their ownership records move between repositories

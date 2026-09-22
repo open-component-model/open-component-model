@@ -7,5 +7,5 @@ sidebar:
 ---
 
 These concept articles explain the transfer model — how component versions and their resources
-move between repositories, how resolvers locate components, and how the Common Transport Format
-enables air-gapped delivery.
+move between repositories, how resolvers locate components, how the Common Transport Format
+enables air-gapped delivery, and how resource ownership records travel with transferred artifacts.

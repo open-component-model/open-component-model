@@ -16,8 +16,8 @@ Concept articles are organised by **lifecycle phase** — the stage of the softw
 |--------------|------------------------------------------------------------------------------------|
 | **Pack**     | Component identity, resources, canonical repositories, credentials, plugins, SBOMs |
 | **Sign**     | Cryptographic signing model, trust models, signature verification                  |
-| **Transfer** | Transfer model, Common Transport Format, resolvers                                 |
-| **Deploy**   | OCM controllers, Kubernetes Deployer, resource ownership                           |
+| **Transfer** | Transfer model, Common Transport Format, resolvers, resource ownership tracking   |
+| **Deploy**   | OCM controllers, Kubernetes Deployer                                               |
 
 ## What Are Concepts?
 

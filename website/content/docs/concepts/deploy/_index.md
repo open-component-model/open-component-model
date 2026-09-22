@@ -7,5 +7,4 @@ sidebar:
 ---
 
 These concept articles explain the deployment model — how OCM controllers reconcile component
-versions, how the Kubernetes Deployer applies manifests, and how resource ownership is tracked
-through the delivery lifecycle.
+versions and how the Kubernetes Deployer applies manifests.
