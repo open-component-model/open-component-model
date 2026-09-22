@@ -2,6 +2,7 @@ package remotestore
 
 import (
 	"bytes"
+	"crypto/sha512"
 	"fmt"
 	"io"
 	"net/http"
@@ -487,4 +488,42 @@ func TestRemoteStore_Push_InvokesHandleWarning(t *testing.T) {
 	require.NoError(t, store.Push(t.Context(), desc, bytes.NewReader(data)))
 
 	require.Equal(t, []string{"this repository is deprecated"}, warnings)
+}
+
+// TestRemoteStore_Push_ChunkedNonSHA256Digest verifies that a chunked push of a
+// blob declared with a non-sha256 digest computes the running digest with the
+// declared algorithm and closes the session under that same digest, rather than
+// hashing with sha256 and failing resolveFinalDigest with a mismatch.
+func TestRemoteStore_Push_ChunkedNonSHA256Digest(t *testing.T) {
+	r := require.New(t)
+
+	var algoParam, closedDigest string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
+			algoParam = req.URL.Query().Get("digest-algorithm")
+			w.Header().Set("Location", "/v2/test-repo/blobs/uploads/1")
+			w.WriteHeader(http.StatusAccepted)
+		case http.MethodPatch:
+			w.Header().Set("Location", req.URL.Path)
+			w.WriteHeader(http.StatusAccepted)
+		case http.MethodPut:
+			closedDigest = req.URL.Query().Get("digest")
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	store := newTestStore(t, srv, 4, 1)
+
+	data := bytes.Repeat([]byte("x"), 10)
+	sum := sha512.Sum512(data)
+	dig := digest.Digest(fmt.Sprintf("sha512:%x", sum))
+	desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: dig, Size: int64(len(data))}
+
+	r.NoError(store.Push(t.Context(), desc, bytes.NewReader(data)))
+	r.Equal("sha512", algoParam)
+	r.Equal(dig.String(), closedDigest, "session must be closed with the sha512 digest")
 }

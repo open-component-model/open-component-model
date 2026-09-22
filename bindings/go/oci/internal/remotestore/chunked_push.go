@@ -200,13 +200,22 @@ func resolveFinalDigest(computed, known digest.Digest) (digest.Digest, error) {
 }
 
 // openUploadSession performs the POST that starts a blob upload and returns the
-// initialised session state. A non-sha256 knownDigest advertises its algorithm
-// via the digest-algorithm query parameter. The returned chunkedUpload has its
-// chunk size raised to any registry-advertised OCI-Chunk-Min-Length.
+// initialised session state. Its digester matches knownDigest's algorithm (the
+// canonical algorithm when no digest is declared), and a non-sha256 knownDigest
+// additionally advertises that algorithm via the digest-algorithm query
+// parameter. The returned chunkedUpload has its chunk size raised to any
+// registry-advertised OCI-Chunk-Min-Length.
 func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.Digest) (*chunkedUpload, error) {
 	uploads := r.endpoint(path.Join("/v2", r.Reference.Repository, "blobs", "uploads") + "/")
+	// The running digest must use the declared algorithm; otherwise the
+	// computed digest could never match knownDigest for non-sha256 blobs.
+	algo := digest.Canonical
 	if knownDigest != "" {
-		if algo := knownDigest.Algorithm(); algo != digest.SHA256 {
+		algo = knownDigest.Algorithm()
+		if !algo.Available() {
+			return nil, fmt.Errorf("chunked blob push: digest algorithm %q is not available", algo)
+		}
+		if algo != digest.SHA256 {
 			q := uploads.Query()
 			q.Set("digest-algorithm", string(algo))
 			uploads.RawQuery = q.Encode()
@@ -233,7 +242,7 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 	if minLen := parseChunkMinLength(resp); minLen > chunk {
 		chunk = minLen
 	}
-	return &chunkedUpload{location: location, chunk: chunk, digester: digest.Canonical.Digester()}, nil
+	return &chunkedUpload{location: location, chunk: chunk, digester: algo.Digester()}, nil
 }
 
 // uploadChunks streams content in PATCH requests of up.chunk bytes, updating the
