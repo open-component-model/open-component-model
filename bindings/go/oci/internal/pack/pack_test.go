@@ -851,6 +851,7 @@ type streamingStore struct {
 	streamed64    bool
 	pushed        bool
 	partialDigest digest.Digest
+	partialSize   int64
 }
 
 func (s *streamingStore) Push(_ context.Context, _ ociImageSpecV1.Descriptor, r io.Reader) error {
@@ -875,6 +876,7 @@ func (s *streamingStore) PushStreaming(_ context.Context, partial ociImageSpecV1
 	}
 	s.streamed = data
 	s.partialDigest = partial.Digest
+	s.partialSize = partial.Size
 	dig := partial.Digest
 	if dig == "" {
 		dig = digest.FromBytes(data)
@@ -973,4 +975,52 @@ func TestResourceLocalBlobOCILayer_StreamsKnownDigestUnknownSize(t *testing.T) {
 	r.Equal(wantDigest, store.partialDigest, "known digest must be passed to the streaming pusher")
 	r.Equal(wantDigest, desc.Digest)
 	r.Equal(content, store.streamed)
+}
+
+// sizeKnownUnknownDigestBlob exposes a size (SizeAware) but no digest, so the
+// streaming path is taken (digest must be computed) while the size is known and
+// must be forwarded to PushStreaming for short-reader verification.
+type sizeKnownUnknownDigestBlob struct {
+	content   []byte
+	mediaType string
+}
+
+func (b *sizeKnownUnknownDigestBlob) ReadCloser() (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(b.content)), nil
+}
+func (b *sizeKnownUnknownDigestBlob) Size() int64               { return int64(len(b.content)) }
+func (b *sizeKnownUnknownDigestBlob) MediaType() (string, bool) { return b.mediaType, true }
+
+// TestResourceLocalBlobOCILayer_ForwardsKnownSize verifies that when the blob
+// size is known but the digest is not, streamResourceLayer forwards the known
+// size to PushStreaming (rather than SizeUnknown), so a short reader is caught
+// by the streaming size check instead of silently truncating the blob.
+func TestResourceLocalBlobOCILayer_ForwardsKnownSize(t *testing.T) {
+	r := require.New(t)
+
+	content := []byte("size is known here, digest is not")
+	src := &sizeKnownUnknownDigestBlob{content: content, mediaType: "application/octet-stream"}
+
+	resource := &descriptor.Resource{}
+	resourceBlob, err := resourceblob.NewArtifactBlob(resource, src)
+	r.NoError(err)
+
+	// Preconditions: size known, digest unknown — the exact case where the
+	// size must be forwarded to the streaming pusher.
+	r.NotEqual(blob.SizeUnknown, resourceBlob.Size(), "precondition: size must be known")
+	_, digestKnown := resourceBlob.Digest()
+	r.False(digestKnown, "precondition: digest must be unknown to exercise streaming")
+
+	access := &v2.LocalBlob{MediaType: "application/octet-stream"}
+	opts := Options{AccessScheme: runtime.NewScheme(), BaseReference: "test-ref"}
+	v2.MustAddToScheme(opts.AccessScheme)
+	oci.MustAddToScheme(opts.AccessScheme)
+
+	store := &streamingStore{}
+	_, err = ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, access, opts)
+	r.NoError(err)
+
+	r.True(store.streamed64, "expected PushStreaming to be used")
+	r.False(store.pushed, "monolithic Push must not be used")
+	r.Equal(int64(len(content)), store.partialSize, "known size must be forwarded to PushStreaming")
 }

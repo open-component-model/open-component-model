@@ -31,6 +31,12 @@ const DefaultChunkSize int64 = 16 << 20
 // no explicit threshold is configured (16 MiB): blobs below this go monolithic.
 const DefaultChunkThreshold int64 = 16 << 20
 
+// MaxChunkSize bounds the PATCH buffer the client will allocate. A registry can
+// force the buffer size up via its advertised OCI-Chunk-Min-Length; an
+// implausible value (up to math.MaxInt64) would otherwise panic make([]byte, n)
+// or exhaust memory. Advertised minimums above this are rejected (128 MiB).
+const MaxChunkSize int64 = 128 << 20
+
 // ErrStreamingUnavailable is returned by PushStreaming when chunked upload is
 // disabled (ChunkSize <= 0) or when the session cannot be established before
 // any content is consumed. In streaming mode there is no monolithic fallback
@@ -240,6 +246,9 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 	}
 	chunk := r.ChunkSize
 	if minLen := parseChunkMinLength(resp); minLen > chunk {
+		if minLen > MaxChunkSize {
+			return nil, fmt.Errorf("chunked blob push: advertised OCI-Chunk-Min-Length %d exceeds the maximum supported chunk size %d", minLen, MaxChunkSize)
+		}
 		chunk = minLen
 	}
 	return &chunkedUpload{location: location, chunk: chunk, digester: algo.Digester()}, nil
@@ -247,13 +256,21 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 
 // uploadChunks streams content in PATCH requests of up.chunk bytes, updating the
 // running digest, byte offset, and push location as it goes. It sets
-// up.consumed once the first PATCH is issued; after that point failures cancel
-// the session (the reader cannot be rewound for a monolithic fallback).
+// up.consumed as soon as a read yields bytes; after that point the stream
+// cannot be rewound, so failures cancel the session rather than falling back to
+// the monolithic push.
 func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, content io.Reader) error {
 	hasher := up.digester.Hash()
 	buf := make([]byte, up.chunk)
 	for {
 		n, readErr := io.ReadFull(content, buf)
+		if n > 0 {
+			// Bytes have left the reader: the stream can no longer be rewound,
+			// so no monolithic fallback is possible from here on. Mark consumed
+			// before any error path so a mid-read failure is treated as
+			// post-consumption rather than replayed.
+			up.consumed = true
+		}
 		if readErr == io.EOF {
 			return nil
 		}
@@ -270,15 +287,12 @@ func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, conte
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, up.location.String(), bytes.NewReader(buf[:n]))
 		if err != nil {
-			if up.consumed {
-				r.cancelUpload(ctx, up.location)
-			}
+			r.cancelUpload(ctx, up.location)
 			return fmt.Errorf("chunked blob push: failed to build PATCH request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/octet-stream")
 		req.Header.Set("Content-Range", fmt.Sprintf("%d-%d", up.offset, up.offset+int64(n)-1))
 		req.ContentLength = int64(n)
-		up.consumed = true
 
 		resp, err := r.do(req)
 		if err != nil {

@@ -527,3 +527,98 @@ func TestRemoteStore_Push_ChunkedNonSHA256Digest(t *testing.T) {
 	r.Equal("sha512", algoParam)
 	r.Equal(dig.String(), closedDigest, "session must be closed with the sha512 digest")
 }
+
+// TestRemoteStore_Push_RejectsOversizedChunkMinLength verifies that an
+// implausible registry-advertised OCI-Chunk-Min-Length does not make the client
+// allocate a matching buffer (which would panic or exhaust memory). The
+// rejection happens before any byte is consumed, so Push falls back to the
+// monolithic upload rather than failing.
+func TestRemoteStore_Push_RejectsOversizedChunkMinLength(t *testing.T) {
+	r := require.New(t)
+
+	reg := newChunkedRegistry(t)
+	reg.chunkMinLength = fmt.Sprintf("%d", MaxChunkSize+1)
+	srv := httptest.NewServer(reg.handler())
+	t.Cleanup(srv.Close)
+
+	data := bytes.Repeat([]byte("a"), 40)
+	dig := digest.FromBytes(data)
+	desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: dig, Size: int64(len(data))}
+
+	store := newTestStore(t, srv, 4, 1)
+	r.NoError(store.Push(t.Context(), desc, bytes.NewReader(data)))
+
+	// The chunked path aborted before consuming bytes and fell back to the
+	// embedded monolithic push, so no PATCH was ever issued but the blob still
+	// uploaded (the fallback's closing PUT carries the whole-blob bytes).
+	methods := reg.methods()
+	for _, m := range methods {
+		r.NotEqual(http.MethodPatch, m, "oversized min-length must abort chunking before any PATCH")
+	}
+	r.Contains(methods, http.MethodPost, "monolithic fallback still opens a session")
+	r.Equal(data, reg.uploaded, "fallback must upload the full blob")
+}
+
+// TestRemoteStore_PushStreaming_RejectsOversizedChunkMinLength verifies the same
+// bound for streaming, which has no monolithic fallback and therefore reports
+// ErrStreamingUnavailable without consuming content.
+func TestRemoteStore_PushStreaming_RejectsOversizedChunkMinLength(t *testing.T) {
+	r := require.New(t)
+
+	reg := newChunkedRegistry(t)
+	reg.chunkMinLength = fmt.Sprintf("%d", MaxChunkSize+1)
+	srv := httptest.NewServer(reg.handler())
+	t.Cleanup(srv.Close)
+
+	store := newTestStore(t, srv, 4, 1)
+	_, err := store.PushStreaming(t.Context(),
+		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
+		bytes.NewReader(bytes.Repeat([]byte("a"), 40)))
+	r.ErrorIs(err, ErrStreamingUnavailable)
+}
+
+// errAfterReader yields data once (n>0) and then fails with a non-EOF error on
+// the next read, mimicking a source that errors mid-stream after bytes have
+// already been handed out.
+type errAfterReader struct {
+	data []byte
+	err  error
+	done bool
+}
+
+func (e *errAfterReader) Read(p []byte) (int, error) {
+	if e.done {
+		return 0, e.err
+	}
+	e.done = true
+	n := copy(p, e.data)
+	// Return bytes and the error together so io.ReadFull surfaces n>0 with a
+	// non-EOF error, exercising the mid-read consumed-state path.
+	return n, e.err
+}
+
+// TestRemoteStore_PushStreaming_MidStreamReadErrorIsPostConsumption verifies
+// that a read error accompanying already-yielded bytes is treated as
+// post-consumption. PushStreaming must surface the read error, not
+// ErrStreamingUnavailable — the latter's contract promises no content was
+// consumed, which a caller relies on to safely buffer and retry. Reporting it
+// after bytes have left the reader would corrupt that retry.
+func TestRemoteStore_PushStreaming_MidStreamReadErrorIsPostConsumption(t *testing.T) {
+	r := require.New(t)
+
+	reg := newChunkedRegistry(t)
+	srv := httptest.NewServer(reg.handler())
+	t.Cleanup(srv.Close)
+
+	store := newTestStore(t, srv, 8, 1)
+	// Chunk size (8) exceeds the 4 bytes the reader yields, so io.ReadFull
+	// returns n=4 together with the reader's non-EOF error in a single call —
+	// the exact n>0-with-error path that must count as consumed.
+	rdr := &errAfterReader{data: bytes.Repeat([]byte("a"), 4), err: fmt.Errorf("boom")}
+	_, err := store.PushStreaming(t.Context(),
+		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, rdr)
+	r.Error(err)
+	r.Contains(err.Error(), "boom")
+	r.NotErrorIs(err, ErrStreamingUnavailable,
+		"a mid-read error after bytes were consumed must not masquerade as unavailable")
+}

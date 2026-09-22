@@ -167,7 +167,14 @@ func streamResourceLayer(ctx context.Context, storage content.Storage, b *ociblo
 		_ = reader.Close()
 	}()
 
-	partial := ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: knownDigest, Size: blob.SizeUnknown}
+	partialSize := blob.SizeUnknown
+	if sizeKnown {
+		// Forward the known size so PushStreaming verifies the streamed byte
+		// count against it; otherwise a short reader could truncate the blob
+		// undetected.
+		partialSize = b.Size()
+	}
+	partial := ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: knownDigest, Size: partialSize}
 	layer, err := pusher.PushStreaming(ctx, partial, reader)
 	if errors.Is(err, remotestore.ErrStreamingUnavailable) {
 		// No bytes were consumed; fall back to the buffering push path.
