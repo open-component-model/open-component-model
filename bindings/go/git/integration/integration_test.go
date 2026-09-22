@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"encoding/pem"
 	"io"
+	"net/http"
 	"net/http/cgi"
 	"net/http/httptest"
 	"os"
@@ -38,18 +39,7 @@ func Test_Integration_Git(t *testing.T) {
 	r := require.New(t)
 
 	path, first := newRepository(t)
-	executable, err := exec.LookPath("git")
-	r.NoError(err)
-
-	server := httptest.NewTLSServer(&cgi.Handler{
-		Path: executable,
-		Args: []string{"http-backend"},
-		Env:  []string{"GIT_PROJECT_ROOT=" + filepath.Dir(path), "GIT_HTTP_EXPORT_ALL=1"},
-	})
-	t.Cleanup(server.Close)
-
-	url := server.URL + "/" + filepath.Base(path)
-	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+	url, ca := newHTTPSServer(t, path, "")
 	tempDir := t.TempDir()
 	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, repository.WithCABundle(ca))
 	resourceFor := func(t *testing.T, ref, commit string) *descriptor.Resource {
@@ -87,6 +77,32 @@ func Test_Integration_Git(t *testing.T) {
 	entries, err := os.ReadDir(tempDir)
 	r.NoError(err)
 	r.Len(entries, 2)
+}
+
+func newHTTPSServer(t *testing.T, path, authorization string) (url string, ca []byte) {
+	t.Helper()
+
+	r := require.New(t)
+
+	executable, err := exec.LookPath("git")
+	r.NoError(err)
+
+	backend := &cgi.Handler{
+		Path: executable,
+		Args: []string{"http-backend"},
+		Env:  []string{"GIT_PROJECT_ROOT=" + filepath.Dir(path), "GIT_HTTP_EXPORT_ALL=1"},
+	}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if authorization != "" && req.Header.Get("Authorization") != authorization {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		backend.ServeHTTP(w, req)
+	}))
+	t.Cleanup(server.Close)
+
+	return server.URL + "/" + filepath.Base(path), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
 }
 
 func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme string) []byte {

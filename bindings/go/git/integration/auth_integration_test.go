@@ -10,11 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
-	"net/http/cgi"
-	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -34,11 +30,7 @@ import (
 )
 
 func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
-	r := require.New(t)
-
 	path, _ := newRepository(t)
-	executable, err := exec.LookPath("git")
-	r.NoError(err)
 
 	credsType := runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version)
 	authMethods := []struct {
@@ -79,27 +71,11 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 
 	for _, method := range authMethods {
 		t.Run(method.name, func(t *testing.T) {
-			backend := &cgi.Handler{
-				Path: executable,
-				Args: []string{"http-backend"},
-				Env:  []string{"GIT_PROJECT_ROOT=" + filepath.Dir(path), "GIT_HTTP_EXPORT_ALL=1"},
-			}
-
-			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				if req.Header.Get("Authorization") != method.authorization {
-					w.WriteHeader(http.StatusUnauthorized)
-					return
-				}
-
-				backend.ServeHTTP(w, req)
-			}))
-			t.Cleanup(server.Close)
-
-			ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+			url, ca := newHTTPSServer(t, path, method.authorization)
 			spec := &descriptor.Resource{
 				Access: &accessv1.Git{
 					Type:       runtime.NewVersionedType("Git", "v1"),
-					Repository: server.URL + "/" + filepath.Base(path),
+					Repository: url,
 					Ref:        "main",
 				},
 			}
@@ -205,6 +181,8 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 	r.NoError(err)
 
 	assertSSHAccess := func(t *testing.T, gitCreds runtime.Typed) {
+		t.Helper()
+
 		r := require.New(t)
 
 		spec := &descriptor.Resource{

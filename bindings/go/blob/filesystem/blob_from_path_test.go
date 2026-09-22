@@ -571,6 +571,27 @@ func extractTarContents(t *testing.T, b blob.ReadOnlyBlob) []string {
 	return files
 }
 
+func readTarHeaders(t *testing.T, b blob.ReadOnlyBlob) []*tar.Header {
+	t.Helper()
+	r := require.New(t)
+	data, err := readAllFromBlob(b)
+	r.NoError(err)
+
+	tr := tar.NewReader(bytes.NewReader(data))
+	var headers []*tar.Header
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+		headers = append(headers, header)
+		_, err = io.ReadAll(tr)
+		r.NoError(err)
+	}
+	return headers
+}
+
 // Git-style directory layout is explicitly opt-in.
 func TestGetBlobFromPath_ArchiveLayout(t *testing.T) {
 	r := require.New(t)
@@ -585,23 +606,9 @@ func TestGetBlobFromPath_ArchiveLayout(t *testing.T) {
 	})
 	r.NoError(err)
 
-	reader, err := b.ReadCloser()
-	r.NoError(err)
-	defer func() { r.NoError(reader.Close()) }()
-
 	names := map[string]byte{}
-	tr := tar.NewReader(reader)
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		r.NoError(err)
-
+	for _, header := range readTarHeaders(t, b) {
 		names[header.Name] = header.Typeflag
-
-		_, err = io.ReadAll(tr)
-		r.NoError(err)
 	}
 
 	r.Equal(map[string]byte{
@@ -640,26 +647,13 @@ func TestGetBlobFromPath_PreserveSymlinks(t *testing.T) {
 	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{PreserveSymlinks: true})
 	r.NoError(err)
 
-	reader, err := b.ReadCloser()
-	r.NoError(err)
-	defer func() { r.NoError(reader.Close()) }()
-
 	targets := map[string]string{}
 	var names []string
-	tr := tar.NewReader(reader)
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		r.NoError(err)
-
+	for _, header := range readTarHeaders(t, b) {
 		names = append(names, header.Name)
 		if header.Typeflag == tar.TypeSymlink {
 			targets[header.Name] = header.Linkname
 		}
-		_, err = io.ReadAll(tr)
-		r.NoError(err)
 	}
 
 	r.Equal(links, targets, "every link is stored as a link, with its target as written")
@@ -679,8 +673,7 @@ func TestGetBlobFromPath_DefaultTarBytes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := require.New(t)
 			dir := t.TempDir()
-			r.NoError(os.Mkdir(filepath.Join(dir, "sub"), 0o755))
-			r.NoError(os.WriteFile(filepath.Join(dir, "sub", "file"), []byte("content"), 0o644))
+			createTestFile(t, dir, "sub/file", "content")
 			var expected bytes.Buffer
 			tw := tar.NewWriter(&expected)
 			for _, name := range []string{".", "sub", "sub/file"} {
