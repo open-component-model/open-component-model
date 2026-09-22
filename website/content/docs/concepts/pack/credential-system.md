@@ -116,7 +116,7 @@ For the full list of built-in typed credential types and their fields, see [Refe
 
 - [Tutorial: Credential Resolution]({{< relref "/docs/tutorials/transfer/credential-resolution.md" >}}) — Learn how OCM picks the right credentials by experimenting with a config
 - [How-To: Configure Credentials for Multiple Registries]({{< relref "/docs/how-to/transfer/configure-multiple-credentials.md" >}}) — Quick task-oriented setup
-- [Tutorial: Credentials for OCM Controllers]({{< relref "/docs/how-to/deploy/configure-credentials-ocm-controllers.md" >}}) — How to provide credentials in Kubernetes environments
+- [How-To: Credentials for OCM Controllers]({{< relref "/docs/how-to/deploy/configure-credentials-ocm-controllers.md" >}}) — How to provide credentials in Kubernetes environments
 
 ## Related Documentation
 
