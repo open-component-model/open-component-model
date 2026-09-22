@@ -31,10 +31,10 @@ configurations:
     method: PUT
 ```
 
-| Type                                             | Purpose                                                                    |
-|--------------------------------------------------|----------------------------------------------------------------------------|
-| `transfer.config.ocm.software/v1alpha1`          | Global transfer settings: recursion, which resources are copied and how.   |
-| `http.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that streams a resource to a custom HTTP target.       |
+| Type                                                  | Purpose                                                                  |
+|-------------------------------------------------------|--------------------------------------------------------------------------|
+| `transfer.config.ocm.software/v1alpha1`               | Global transfer settings: recursion, which resources are copied and how. |
+| `http.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that streams a resource to a custom HTTP target.          |
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
 `--config <file>` to use a different file. The corresponding CLI flags
@@ -60,10 +60,10 @@ behaviour. All fields are optional; when omitted they resolve to their defaults.
 
 #### Copy Mode
 
-| Value          | Meaning                                                                                                                   |
-|----------------|---------------------------------------------------------------------------------------------------------------------------|
-| `localBlob`    | Copy only resources already stored as local blobs. External resources keep their original access and are not fetched.     |
-| `allResources` | Fetch every external resource and re-upload it to the target. Equivalent to the CLI `--copy-resources` flag.              |
+| Value          | Meaning                                                                                                               |
+|----------------|-----------------------------------------------------------------------------------------------------------------------|
+| `localBlob`    | Copy only resources already stored as local blobs. External resources keep their original access and are not fetched. |
+| `allResources` | Fetch every external resource and re-upload it to the target. Equivalent to the CLI `--copy-resources` flag.          |
 
 #### Upload Type
 
@@ -106,17 +106,17 @@ verified as the bytes pass through.
 The request fields map field-for-field onto the resulting
 [`Wget/v1`]({{< relref "docs/reference/input-and-access-types.md" >}}) access:
 
-| Field                 | Type                  | Maps to (`Wget/v1`) | Description                                                                     |
-|-----------------------|-----------------------|---------------------|---------------------------------------------------------------------------------|
-| `match.accessType`    | `runtime.Type`        | —                   | Access type this uploader applies to (matched by name; omitted version = any).  |
-| `match.name`          | string (optional)     | —                   | Restrict the match to resources with this exact name.                           |
-| `match.extraIdentity` | `map[string]string`   | —                   | Restrict the match to resources whose identity contains these key/value pairs.  |
-| `targetURL`           | CEL expression        | `url`               | The upload URL. See CEL Expressions below.                                      |
-| `method`              | string                | `verb`              | HTTP method for the upload request. Defaults to PUT.                            |
+| Field                 | Type                  | Maps to (`Wget/v1`) | Description                                                                                        |
+|-----------------------|-----------------------|---------------------|----------------------------------------------------------------------------------------------------|
+| `match.accessType`    | `runtime.Type`        | —                   | Access type this uploader applies to (matched by name; omitted version = any).                     |
+| `match.name`          | string (optional)     | —                   | Restrict the match to resources with this exact name.                                              |
+| `match.extraIdentity` | `map[string]string`   | —                   | Restrict the match to resources whose identity contains these key/value pairs.                     |
+| `targetURL`           | CEL expression        | `url`               | The upload URL. See CEL Expressions below.                                                         |
+| `method`              | string                | `verb`              | HTTP method for the upload request. Defaults to PUT.                                               |
 | `header`              | `map[string][]string` | `header`            | HTTP headers to send with the upload request. Values may be CEL-templated; see Templating Headers. |
-| `body`                | bytes                 | `body`              | Optional request body carried on the resulting Wget/v1 access.                  |
-| `noRedirect`          | bool                  | `noRedirect`        | Disable following HTTP redirects.                                               |
-| `mediaType`           | string                | `mediaType`         | Media type recorded on the resource. Defaults to the source's.                  |
+| `body`                | bytes                 | `body`              | Optional request body carried on the resulting Wget/v1 access.                                     |
+| `noRedirect`          | bool                  | `noRedirect`        | Disable following HTTP redirects.                                                                  |
+| `mediaType`           | string                | `mediaType`         | Media type recorded on the resource. Defaults to the source's.                                     |
 
 ### Routing Resources to Different Targets
 
@@ -290,6 +290,7 @@ it finds a matching artifact and `404` when the content must still be uploaded:
 ```
 
 Both require the source resource to carry a SHA-256 digest (`resource.digest.hashAlgorithm == "SHA-256"`).
+
 #### Credentials
 
 The uploader resolves credentials for the **target** URL independently from the
