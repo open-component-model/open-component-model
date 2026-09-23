@@ -39,7 +39,7 @@ func (in *Config) DeepCopyInto(out *Config) {
 			} else {
 				in, out := &val, &outVal
 				*out = new(ChecksumPolicy)
-				**out = **in
+				(*in).DeepCopyInto(*out)
 			}
 			(*out)[key] = outVal
 		}
