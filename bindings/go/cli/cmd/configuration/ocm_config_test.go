@@ -234,13 +234,13 @@ configurations:
 			name:    "empty stdin is rejected",
 			paths:   []string{StdinConfigPath},
 			stdin:   "",
-			wantErr: "stdin",
+			wantErr: "no data was read",
 		},
 		{
 			name:    "invalid stdin is rejected",
 			paths:   []string{StdinConfigPath},
 			stdin:   "this is: [not valid",
-			wantErr: "stdin",
+			wantErr: "error converting YAML to JSON",
 		},
 		{
 			name:    "missing file is still rejected",
