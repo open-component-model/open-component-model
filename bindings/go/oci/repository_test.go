@@ -2328,9 +2328,17 @@ func buildTestManifestStream(t *testing.T) (*memory.Store, ociImageSpecV1.Descri
 
 func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
 	for _, streaming := range []bool{false, true} {
-		for _, normalization := range []string{"ociArtifactDigest/v1", "genericBlobDigest/v1"} {
+		for _, tc := range []struct {
+			name          string
+			hashAlgorithm string
+			normalization string
+		}{
+			{name: "legacy", hashAlgorithm: "SHA-256", normalization: "ociArtifactDigest/v1"},
+			{name: "generic", hashAlgorithm: "SHA-256", normalization: "genericBlobDigest/v1"},
+			{name: "incomplete", hashAlgorithm: "sha256"},
+		} {
 			for _, mismatch := range []bool{false, true} {
-				t.Run(fmt.Sprintf("streaming=%t/%s/mismatch=%t", streaming, normalization, mismatch), func(t *testing.T) {
+				t.Run(fmt.Sprintf("streaming=%t/%s/mismatch=%t", streaming, tc.name, mismatch), func(t *testing.T) {
 					r := require.New(t)
 					ctx := t.Context()
 					fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
@@ -2345,8 +2353,8 @@ func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
 						Tags:                 []string{"test-repo:1.0.0"},
 					}
 					original := descriptor.Digest{
-						HashAlgorithm:          "SHA-256",
-						NormalisationAlgorithm: normalization,
+						HashAlgorithm:          tc.hashAlgorithm,
+						NormalisationAlgorithm: tc.normalization,
 						Value:                  manifest.Digest.Encoded(),
 					}
 					if mismatch {
@@ -2365,12 +2373,20 @@ func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
 						uploaded, err = repo.UploadResource(ctx, resource, b)
 					}
 					r.Equal(original, *resource.Digest, "input must not be mutated")
-					if mismatch {
+					if mismatch && tc.normalization != "" {
 						r.ErrorContains(err, "digest value mismatch")
 						return
 					}
 					r.NoError(err)
-					r.Equal(original, *uploaded.Digest)
+					expected := original
+					if tc.normalization == "" {
+						expected = descriptor.Digest{
+							HashAlgorithm:          "SHA-256",
+							NormalisationAlgorithm: "genericBlobDigest/v1",
+							Value:                  manifest.Digest.Encoded(),
+						}
+					}
+					r.Equal(expected, *uploaded.Digest)
 					targetStore, err := store.StoreForReference(ctx, "test-repo:1.0.0")
 					r.NoError(err)
 					copiedRoot, err := targetStore.Resolve(ctx, "1.0.0")

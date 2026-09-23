@@ -633,7 +633,7 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
 	}
 
-	if res.Digest == nil {
+	if res.Digest == nil || res.Digest.NormalisationAlgorithm == "" {
 		res.Digest = &descriptor.Digest{}
 		if err := internaldigest.Apply(res.Digest, desc.Digest); err != nil {
 			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
@@ -1143,7 +1143,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	}
 
 	res = res.DeepCopy()
-	if res.Digest == nil {
+	if res.Digest == nil || res.Digest.NormalisationAlgorithm == "" {
 		res.Digest = &descriptor.Digest{}
 		if err := internaldigest.Apply(res.Digest, rs.Root().Digest); err != nil {
 			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
