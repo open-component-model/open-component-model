@@ -275,7 +275,7 @@ func processResources(
 		if matched != nil {
 			switch cfg := matched.(type) {
 			case *transferv1alpha1.HTTPUploaderConfig:
-				if err := processUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
+				if err := processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			default:

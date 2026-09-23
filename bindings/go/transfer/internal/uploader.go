@@ -21,7 +21,7 @@ import (
 )
 
 // resourceAlias is the identifier an uploader's targetURL CEL expression uses to
-// reference the source resource. processUploader rewrites it to the concrete
+// reference the source resource. processHTTPUploader rewrites it to the concrete
 // environment node path before the graph runtime evaluates the expression.
 const resourceAlias = "resource"
 
@@ -215,13 +215,13 @@ func targetHostFromExpression(rawTargetURL string) string {
 	return "target"
 }
 
-// processUploader emits a single HTTPStreaming transformation for resource. It resolves
-// the target Wget access URL from a CEL expression derived from the uploader's
-// targetURL: the `resource` alias is rewritten to the resource's path inside the shared
-// descriptor environment node (see resourceNodePath), so no second copy of the resource
-// is injected. The remaining request fields map onto the target Wget access
-// field-for-field.
-func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTTPUploaderConfig, baseID, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
+// processHTTPUploader emits a single HTTPStreaming transformation for resource from an
+// [transferv1alpha1.HTTPUploaderConfig]. It resolves the target Wget access URL from a
+// CEL expression derived from the uploader's targetURL: the `resource` alias is
+// rewritten to the resource's path inside the shared descriptor environment node (see
+// resourceNodePath), so no second copy of the resource is injected. The remaining
+// request fields map onto the target Wget access field-for-field.
+func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTTPUploaderConfig, baseID, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
 	if strings.TrimSpace(u.TargetURL) == "" {
 		return fmt.Errorf("uploader targetURL is required")
 	}
