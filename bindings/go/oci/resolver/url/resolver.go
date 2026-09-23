@@ -44,6 +44,12 @@ type CachingResolver struct {
 
 	DisableCacheProxy bool
 
+	// chunkSize and chunkThreshold configure chunked blob upload on the
+	// RemoteStores this resolver hands out. See WithChunkedPush. Zero disables
+	// chunking (monolithic push).
+	chunkSize      int64
+	chunkThreshold int64
+
 	cacheMu sync.RWMutex
 	cache   map[string]*remotestore.RemoteStore
 
@@ -177,7 +183,11 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		repo.Client = resolver.baseClient
 	}
 
-	store := &remotestore.RemoteStore{Repository: repo}
+	store := &remotestore.RemoteStore{
+		Repository:     repo,
+		ChunkSize:      resolver.chunkSize,
+		ChunkThreshold: resolver.chunkThreshold,
+	}
 	resolver.addToCache(key, store)
 
 	blobCache := resolver.blobCache.Load()
