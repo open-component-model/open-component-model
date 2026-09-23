@@ -338,7 +338,7 @@ func TestBuildGraphDefinition_UploaderMatchesNonWgetSource(t *testing.T) {
 	assert.NotContains(t, targetURL, "resource.access", "the bare resource alias must not survive the rewrite")
 }
 
-func TestBuildGraphDefinition_UploaderRejectsUnwrappedTargetURL(t *testing.T) {
+func TestBuildGraphDefinition_UploaderLiteralTargetURL(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
@@ -347,11 +347,21 @@ func TestBuildGraphDefinition_UploaderRejectsUnwrappedTargetURL(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	// A bare CEL expression without the ${...} delimiters must be rejected.
-	uploaders := []transferv1alpha1.UploaderConfig{wgetUploader(t, `"https://target.example" + url(resource.access.url).path`)}
-	_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
-	r.Error(err)
-	assert.Contains(t, err.Error(), "must be a single CEL expression wrapped in ${...}")
+	// A targetURL without ${...} is a literal, templated like any other string: it
+	// passes through unchanged with no special-case handling.
+	uploaders := []transferv1alpha1.UploaderConfig{wgetUploader(t, `https://target.example/uploads/blob.tar`)}
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	r.NoError(err)
+
+	var targetURL string
+	for i := range tgd.Transformations {
+		if tgd.Transformations[i].Type == wgetv1alpha1.HTTPStreamingV1alpha1 {
+			tgt := tgd.Transformations[i].Spec.Data["targetResource"].(map[string]any)
+			targetURL = tgt["access"].(map[string]any)["url"].(string)
+		}
+	}
+	assert.Equal(t, `https://target.example/uploads/blob.tar`, targetURL,
+		"a literal targetURL must pass through unchanged")
 }
 
 func TestBuildGraphDefinition_DeterministicOrder(t *testing.T) {

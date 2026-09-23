@@ -72,53 +72,72 @@ func mediaTypeFromAccess(resource descriptorv2.Resource) string {
 	return access.MediaType
 }
 
-// celTargetURLField validates that the user-supplied targetURL is a single
-// standalone CEL expression wrapped in ${...} and rewrites the `resource` alias
-// to the concrete environment node path. The result is a standalone ${...} field
-// value the graph runtime evaluates.
-func celTargetURLField(rawTargetURL, nodePath string) (string, error) {
-	if strings.TrimSpace(rawTargetURL) == "" {
-		return "", fmt.Errorf("targetURL is required")
+// templateExpressions rewrites the `resource` alias in every ${...} string across the
+// entire JSON object held by raw, in place. It does not hardcode which fields may carry
+// expressions: any string value (a target URL, a header value, or any future field)
+// wrapped in ${...} is validated as a standalone CEL expression and rewritten to
+// reference nodePath; a plain string without ${...} is a literal and passes through
+// unchanged. This mirrors how the graph runtime discovers and evaluates expressions
+// across the whole transformation spec.
+func templateExpressions(raw *runtime.Raw, nodePath string) error {
+	var obj any
+	if err := json.Unmarshal(raw.Data, &obj); err != nil {
+		return fmt.Errorf("cannot decode target access: %w", err)
 	}
-	return celExpressionField("targetURL", rawTargetURL, nodePath)
+	rewritten, err := templateValue(obj, nodePath, "")
+	if err != nil {
+		return err
+	}
+	data, err := json.Marshal(rewritten)
+	if err != nil {
+		return fmt.Errorf("cannot re-encode target access: %w", err)
+	}
+	raw.Data = data
+	return nil
 }
 
-// templateHeader rewrites every value of an uploader's header map through celHeaderValue,
-// so ${...} values template the source resource and plain values pass through unchanged.
-// Returns nil for an empty header map, preserving the omitempty target access field.
-func templateHeader(header map[string][]string, nodePath string) (map[string][]string, error) {
-	if len(header) == 0 {
-		return nil, nil
-	}
-	out := make(map[string][]string, len(header))
-	for name, vals := range header {
-		rewritten := make([]string, len(vals))
-		for i, v := range vals {
-			field, err := celHeaderValue(name, v, nodePath)
+// templateValue recursively rewrites every ${...} string within v. path is the JSON
+// path to v, used only for error messages.
+func templateValue(v any, nodePath, path string) (any, error) {
+	switch t := v.(type) {
+	case string:
+		if !strings.Contains(t, "${") {
+			return t, nil
+		}
+		field := path
+		if field == "" {
+			field = "value"
+		}
+		return celExpressionField(field, t, nodePath)
+	case map[string]any:
+		for k, val := range t {
+			rewritten, err := templateValue(val, nodePath, joinPath(path, k))
 			if err != nil {
 				return nil, err
 			}
-			rewritten[i] = field
+			t[k] = rewritten
 		}
-		out[name] = rewritten
+		return t, nil
+	case []any:
+		for i, val := range t {
+			rewritten, err := templateValue(val, nodePath, fmt.Sprintf("%s[%d]", path, i))
+			if err != nil {
+				return nil, err
+			}
+			t[i] = rewritten
+		}
+		return t, nil
+	default:
+		return v, nil
 	}
-	return out, nil
 }
 
-// celHeaderValue rewrites a single upload header value. A value wrapped in ${...}
-// is treated as a CEL expression (same rewrite as targetURL), so header values can
-// template the source resource — e.g. RFC 9530 Repr-Digest or x-checksum-* headers
-// derived from resource.digest.value. A plain value without ${...} is a literal and
-// is passed through unchanged.
-func celHeaderValue(name, rawValue, nodePath string) (string, error) {
-	if !strings.Contains(rawValue, "${") {
-		return rawValue, nil
+// joinPath appends a field name to a JSON path for error messages.
+func joinPath(base, field string) string {
+	if base == "" {
+		return field
 	}
-	field, err := celExpressionField(fmt.Sprintf("header %q", name), rawValue, nodePath)
-	if err != nil {
-		return "", err
-	}
-	return field, nil
+	return base + "." + field
 }
 
 // celExpressionField validates that raw is a single standalone CEL expression wrapped
@@ -216,16 +235,15 @@ func targetHostFromExpression(rawTargetURL string) string {
 }
 
 // processHTTPUploader emits a single HTTPStreaming transformation for resource from an
-// [transferv1alpha1.HTTPUploaderConfig]. It resolves the target Wget access URL from a
-// CEL expression derived from the uploader's targetURL: the `resource` alias is
-// rewritten to the resource's path inside the shared descriptor environment node (see
-// resourceNodePath), so no second copy of the resource is injected. The remaining
-// request fields map onto the target Wget access field-for-field.
+// [transferv1alpha1.HTTPUploaderConfig]. It builds the target Wget access from the
+// config's request fields and templates the whole object (see templateExpressions):
+// every ${...} string has its `resource` alias rewritten to the resource's path inside
+// the shared descriptor environment node (see resourceNodePath), so no second copy of
+// the resource is injected; strings without ${...} are literals and pass through.
 func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTTPUploaderConfig, baseID, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
-	if strings.TrimSpace(u.TargetURL) == "" {
+	if u.TargetURL == "" {
 		return fmt.Errorf("uploader targetURL is required")
 	}
-
 	if resource.Access == nil {
 		return fmt.Errorf("resource access is required")
 	}
@@ -233,35 +251,19 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 	resourceID := identityToTransformationID(resource.ToIdentity())
 	uploadID := fmt.Sprintf("%sUpload%s", id, resourceID)
 
-	// Point the `resource` alias at the resource already present in the descriptor
-	// environment node, selected by identity, rather than injecting a duplicate. The
-	// node exposes every access field generically under resource.access.<field>, so an
-	// uploader works with any source access type, not only wget.
-	nodePath := resourceNodePath(baseID, resource)
-	targetURLField, err := celTargetURLField(u.TargetURL, nodePath)
-	if err != nil {
-		return err
-	}
-
-	// Header values may be CEL-templated against the source resource (e.g. RFC 9530
-	// Repr-Digest or x-checksum-* headers from resource.digest.value). A value wrapped
-	// in ${...} is rewritten and resolved by the graph runtime; a plain value is a literal.
-	header, err := templateHeader(u.Header, nodePath)
-	if err != nil {
-		return err
-	}
-
 	// The target media type defaults to the uploader's explicit value, then to the
 	// source access media type when it exposes one (wget, OCI, ...).
 	mediaType := u.MediaType
 	if mediaType == "" {
 		mediaType = mediaTypeFromAccess(resource)
 	}
+	// Build the target access from the raw user strings; expression templating is applied
+	// generically to the whole object below rather than to hand-picked fields.
 	targetAccess := &wgetaccessv1.Wget{
 		Type:       wgetaccess.V1VersionedType,
-		URL:        targetURLField,
+		URL:        u.TargetURL,
 		Verb:       u.Method,
-		Header:     header,
+		Header:     u.Header,
 		Body:       u.Body,
 		NoRedirect: u.NoRedirect,
 		MediaType:  mediaType,
@@ -269,6 +271,17 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 	targetAccessRaw := &runtime.Raw{}
 	if err := wgetaccess.Scheme.Convert(targetAccess, targetAccessRaw); err != nil {
 		return fmt.Errorf("cannot convert target wget access: %w", err)
+	}
+
+	// Rewrite the `resource` alias in every ${...} string across the entire target
+	// access object, rather than templating hand-picked fields. Point it at the resource
+	// already present in the descriptor environment node (selected by identity, see
+	// resourceNodePath) so no second copy of the resource is injected; every access field
+	// stays addressable generically under resource.access.<field>, so an uploader works
+	// with any source access type, not only wget.
+	nodePath := resourceNodePath(baseID, resource)
+	if err := templateExpressions(targetAccessRaw, nodePath); err != nil {
+		return fmt.Errorf("cannot template uploader target access: %w", err)
 	}
 
 	targetResource := *resource.DeepCopy()
