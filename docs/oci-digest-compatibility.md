@@ -50,6 +50,15 @@ that already covered it.
 An OCI-layout archive's known byte checksum is never compared directly with its
 resource manifest digest. Setting or caching a byte checksum does not rewrite a
 resource digest. Ordinary generic blobs still require matching byte checksums.
+Buffering verifies their expected resource checksum even if the backing file has
+changed or a separate byte checksum was supplied. A valid hint using another
+hash algorithm is checked separately from the resource checksum.
+
+Both resource upload paths validate complete digest metadata, or generate missing
+or incomplete metadata, before copying or tagging. A digest pin in the target
+access must also match the incoming OCI root, including for source uploads.
+Rejection of these checks leaves the existing destination tag and content intact.
+This is not a general transaction guarantee for failures during graph copying.
 
 ## Impact and limits
 
@@ -94,11 +103,19 @@ wrong values, and input immutability. Blob and packing tests cover known archive
 checksums, metadata preservation during buffering, rejection of corrupt layers,
 and ordinary generic-blob checksum mismatches.
 
+Filesystem-backed integration regressions cover file changes between blob
+construction and buffering, checksum lookups without repeated file reads,
+conflicting target access pins, and rejection of unsupported OCM root hash
+algorithms before writing to a CTF destination. Positive controls cover matching
+pins and SHA-512 source uploads, which do not require an OCM resource digest.
+These regressions require no Docker or external registry.
+
 Run the focused tests from `bindings/go/`:
 
 ```sh
 go test ./oci/... -short -skip Integration -count=1
 go test -race ./oci/blob ./oci/internal/digest ./oci/internal/pack
+go test ./oci/blob ./oci/integration -run '^Test_Integration_(ArtifactBlob_|OCIUpload_)' -count=1
 go test ./cli/integration -run '^Test_Integration_Transfer_OCIArtifact_PreservesV1DescriptorDigest$' -count=1 -timeout=5m
 ```
 
