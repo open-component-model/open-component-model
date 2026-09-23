@@ -217,7 +217,8 @@ alternative: it leaves the object in the bucket and reads it on every download.
 `S3/v2` is the canonical type name. OCM also accepts `s3/v2`, `S3` and `s3`. The fields are the
 same as the fields of the
 [`S3/v2` access type]({{< relref "input-and-access-types.md" >}}#s3v2-access). You can therefore give the
-same object by value or by reference.
+same object by value or by reference. Input types remain v2-only: even the unversioned aliases require
+`bucketName` and `objectKey`; `S3/v1` and `s3/v1` are access types only.
 
 | Field          | Type    | Required | Description                                                                                                                                                        |
 |----------------|---------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -262,7 +263,9 @@ The specification carries no credentials, and no field of it can carry them. Con
 [credential system]({{< relref "credential-consumer-identities.md" >}}#s3). It resolves an `S3` consumer
 entry from `.ocmconfig`. If no entry matches, the AWS default credential chain applies: environment variables, the
 shared AWS config, and IAM instance or task roles. An in-cluster build therefore needs no key material in the OCM
-configuration.
+configuration. For unsigned public-object downloads, set `anonymous: true` in
+[`S3Credentials/v1`]({{< relref "credential-types.md#s3credentialsv1" >}}), not in the input specification.
+This optional boolean defaults to `false`; missing credentials or authentication errors never enable it automatically.
 {{< /callout >}}
 
 OCM streams the object to a file under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration
@@ -493,9 +496,11 @@ References a single object in an S3 or S3-compatible bucket. The content stays i
 downloads the resource, and when it computes the digest of the resource. The type addresses one object, not a whole
 repository. It does not make S3 a component version repository.
 
-`S3/v2` is the canonical type name. OCM also accepts `s3/v2`, `S3` and `s3`. These are the names of the OCM v1 `s3`
-access type. Matching is exact, and `S3/v1` and `s3/v1` do not resolve. See
-[Migrating from OCM v1](#s3-migration-from-ocm-v1).
+`S3/v2` and `s3/v2` use `bucketName` and `objectKey`. Explicit `S3/v1` and `s3/v1` use `bucket` and `key`;
+both versions support `region`, `version`, `mediaType` and the `endpoint` and `usePathStyle` extensions.
+Unversioned `S3` and `s3` accept either field shape, but reject conflicting aliases (`bucket` versus `bucketName`,
+or `key` versus `objectKey`). Explicit versions require their own field names. See
+[Migrating from OCM v1](#s3-migration-from-ocm-v1). The table below describes the v2 fields.
 
 | Field          | Type    | Required | Description                                                                                                                                                        |
 |----------------|---------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -543,7 +548,9 @@ hide userinfo or a presigned query string; this type has none, so OCM writes no 
 Configure authentication in the
 [credential system]({{< relref "credential-consumer-identities.md" >}}#s3). It resolves an `S3` consumer
 entry from `.ocmconfig`. If no entry matches, the AWS default credential chain applies: environment variables, the
-shared AWS config, and IAM instance or task roles.
+shared AWS config, and IAM instance or task roles. For unsigned public-object downloads, set `anonymous: true` in
+[`S3Credentials/v1`]({{< relref "credential-types.md#s3credentialsv1" >}}), not in the access specification.
+This optional boolean defaults to `false`; missing credentials or authentication errors never enable it automatically.
 {{< /callout >}}
 
 #### Object versions and integrity
@@ -561,11 +568,14 @@ is only possible if the object has a version:
   change after an overwrite, so it pins nothing, and OCM never writes it into the specification. The resource digest
   still detects a replaced object, so verification fails. OCM does not accept the wrong content.
 
+When digest pinning changes a v1 or unversioned access specification, OCM writes it as explicit `S3/v2` with
+`bucketName` and `objectKey`. Unchanged specifications retain their original form.
+
 If you need reproducibility, enable bucket versioning, or set `version`.
 
 {{< callout context="note" >}}
-The S3 resource repository does not support upload. OCM never writes an object into a bucket, and never creates an
-`S3/v2` access.
+The S3 resource repository does not support upload. OCM never writes an object into a bucket; digest pinning only
+updates the access specification.
 {{< /callout >}}
 
 #### Migrating from OCM v1 {#s3-migration-from-ocm-v1}
@@ -573,9 +583,9 @@ The S3 resource repository does not support upload. OCM never writes an object i
 `S3/v2` is the `v2` format of the OCM v1 `s3` access type, plus the fields `endpoint` and `usePathStyle`. OCM v2 reads
 an access specification that OCM v1 wrote in the `v2` format without changes.
 
-OCM v2 does not read the OCM v1 `v1` format, which uses other field names. `s3/v1` and `S3/v1` do not resolve. OCM v2
-reads an unversioned `s3` or `S3` as `v2`, so a specification in the `v1` format fails with `bucketName is required`.
-OCM v1 writes an unversioned `s3` in the `v1` format by default. Rename the fields of these specifications:
+OCM v2 also reads the OCM v1 `v1` format, including explicit `s3/v1` and `S3/v1` and the unversioned `s3` that
+OCM v1 writes by default. No manual migration is required. To convert explicitly to `S3/v2`, rename the fields as
+shown below. The `endpoint` and `usePathStyle` extensions are available for both access formats in OCM v2.
 
 | OCM v1 (`s3/v1`) | OCM v1 (`s3/v2`) | OCM v2 (`S3/v2`)     |
 |------------------|------------------|----------------------|
@@ -598,7 +608,7 @@ access:
 ```
 
 ```yaml
-# OCM v2
+# Equivalent explicit v2 format
 access:
   type: S3/v2
   region: eu-central-1

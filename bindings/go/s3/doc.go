@@ -7,8 +7,8 @@
 // access spec. Besides the bucket and object key, the spec carries a region, a media
 // type, a pinned object version (versionId) and — for S3-compatible stores such as
 // MinIO, Ceph or R2 — a custom endpoint and path-style addressing. It addresses one
-// object rather than a component-version storage backend. On the wire it is the v2
-// format of the ocmv1 "s3" access type; see "Wire types" below.
+// object rather than a component-version storage backend. Both v1 and v2 wire
+// formats of the ocmv1 "s3" access type are supported; see "Wire types" below.
 //
 // [ocm.software/open-component-model/bindings/go/s3/repository.ResourceRepository]
 // is the entry point. It resolves the access spec of a resource, builds an
@@ -32,8 +32,13 @@
 // [ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1.S3Credentials]
 // (access key ID, secret access key and an optional session token) they are used as
 // static credentials; otherwise the AWS default credential chain applies
-// (environment, shared config, IAM instance/task roles). The legacy ocmv1 names
-// awsAccessKeyID, awsSecretAccessKey and token are accepted as well.
+// (environment, shared config, IAM instance/task roles). Missing credentials and
+// credential-provider or authorization errors never trigger anonymous access.
+// To read public objects without signing, supply S3Credentials with Anonymous: true,
+// even when AWS credentials are available. Anonymous is optional and defaults to
+// false; it cannot be combined with access keys or a session token. Authentication
+// belongs only in credentials, never in access or input specs. The legacy ocmv1
+// names awsAccessKeyID, awsSecretAccessKey and token are accepted as well.
 //
 // # Input method
 //
@@ -146,15 +151,19 @@
 //	s3/v2
 //	s3
 //
-// Matching is exact. The ocmv1 v1 format (bucket, key) is not supported: S3/v1 and
-// s3/v1 do not resolve, and an unversioned S3 or s3 is always read as v2, so a
-// v1-shaped spec fails validation for its missing bucketName. ocmv1 writes an
-// unversioned "s3" in the v1 format by default, so such descriptors need their fields
-// renamed. Field names within the spec are matched case-insensitively, as JSON
+// S3/v1 and s3/v1 use the legacy bucket and key fields, with the same optional
+// region, version and mediaType. They also support our endpoint and usePathStyle
+// extensions. Unversioned S3 and s3 accept either field pair for compatibility with
+// existing v2 descriptors and ocmv1's default v1 output. Conflicting mixed values
+// are rejected. Explicit versions accept only their own field names.
+//
+// Access specs are normalized to v2 for processing without modifying the original
+// descriptor. When digest processing pins a previously unpinned v1 or unversioned
+// access, the updated access is emitted explicitly as S3/v2 with v2 field names.
+// Type matching is exact; field names are matched case-insensitively, as JSON
 // decoding is. ocmv1 reads S3/v2 as well, but drops endpoint and usePathStyle and so
 // always targets AWS.
 //
-// The input type resolves under the same four names in its own scheme, so a
-// constructor spells an input exactly as a descriptor spells an access. ocmv1 has no
-// S3 input type.
+// The input type resolves under the four v2 names listed above in its own scheme.
+// It does not support the legacy v1 access format; ocmv1 has no S3 input type.
 package s3

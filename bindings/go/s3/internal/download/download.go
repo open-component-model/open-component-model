@@ -242,7 +242,7 @@ func sdkRetryAttempts(cfg *httpv1alpha1.Config, endpoint string) int {
 // to leave the AWS default credential chain in charge, which is how an in-cluster setup
 // reaches S3 without key material in the OCM configuration.
 //
-// Credentials that set any field at all are handed to the SDK as given, even a combination
+// Credentials that set any key or token are handed to the SDK as given, even a combination
 // it will refuse: validating them here would duplicate the SDK's rules, and dropping them
 // silently would send the request under whatever identity the default chain resolves.
 func staticCredentials(creds *credv1.S3Credentials) *credentials.StaticCredentialsProvider {
@@ -255,7 +255,8 @@ func staticCredentials(creds *credv1.S3Credentials) *credentials.StaticCredentia
 }
 
 // newClient builds an S3 client from the request and the download options. When no
-// credentials are supplied, the AWS default credential chain is used.
+// credentials are supplied, the AWS default chain is used. Anonymous access must
+// be explicitly selected in the credentials.
 func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) {
 	httpClient := o.HTTPClient
 	if httpClient == nil {
@@ -282,7 +283,9 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 		if err != nil {
 			return nil, fmt.Errorf("error converting s3 credentials: %w", err)
 		}
-		if provider := staticCredentials(s3creds); provider != nil {
+		if s3creds.Anonymous {
+			loadOpts = append(loadOpts, config.WithCredentialsProvider(aws.AnonymousCredentials{}))
+		} else if provider := staticCredentials(s3creds); provider != nil {
 			loadOpts = append(loadOpts, config.WithCredentialsProvider(*provider))
 		}
 	}
@@ -291,6 +294,7 @@ func newClient(ctx context.Context, req Request, o *option) (*s3.Client, error) 
 	if err != nil {
 		return nil, fmt.Errorf("error loading aws config: %w", err)
 	}
+
 	if awsCfg.Region == "" {
 		awsCfg.Region = defaultRegion
 	}
