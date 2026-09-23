@@ -1,9 +1,12 @@
 ---
 title: "Verify Component Versions"
+slug: "verify-component-versions"
 description: "Validate component version signatures using key-based or keyless verification methods."
 icon: "🔍"
 weight: 8
 toc: true
+aliases:
+  - /docs/reference/ocm-cli/verify/componentversions/
 ---
 
 ## Goal

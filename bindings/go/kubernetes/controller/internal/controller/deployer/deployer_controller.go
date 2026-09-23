@@ -324,7 +324,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		// Finalizers will be persisted by the defer block's Update() call.
 		// Return early to avoid doing work whose status update would be skipped
 		// by the defer's early-return path for finalizer changes.
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // SA1019: pending replacement, see https://github.com/open-component-model/open-component-model/issues/2120
 	}
 
 	return r.reconcileDeployment(ctx, deployer)
@@ -600,7 +600,7 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *d
 		// so an explicit requeue is needed.
 		if controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer) ||
 			controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
-			return ctrl.Result{Requeue: true}, nil, true
+			return ctrl.Result{Requeue: true}, nil, true //nolint:staticcheck // SA1019: pending replacement, see https://github.com/open-component-model/open-component-model/issues/2120
 		}
 
 		logger.Info("successfully cleaned up deployer before deletion")

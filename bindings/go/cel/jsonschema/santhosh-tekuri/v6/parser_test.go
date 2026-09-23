@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/google/cel-go/common/types"
+	"cel.dev/cel-go/common/types"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
