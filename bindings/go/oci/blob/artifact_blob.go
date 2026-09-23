@@ -89,12 +89,15 @@ func (r *ArtifactBlob) Digest() (string, bool) {
 	if dig != "" {
 		return dig, true
 	}
+	if expected, known := r.resourceByteDigest(); known {
+		return expected, true
+	}
 	if digAware, ok := r.ReadOnlyBlob.(blob.DigestAware); ok {
 		if dig, known := digAware.Digest(); known && dig != "" {
 			return dig, true
 		}
 	}
-	return r.resourceByteDigest()
+	return "", false
 }
 
 func (r *ArtifactBlob) resourceByteDigest() (string, bool) {
@@ -231,8 +234,20 @@ func (r *ArtifactBlob) Buffer() (result *ArtifactBlob, err error) {
 		return nil, fmt.Errorf("failed to create in-memory eagerly cached blob from ReadOnlyBlob: %w", err)
 	}
 
-	// Caching has already verified the byte checksum. Do not re-default or
-	// re-interpret the shared resource metadata from the buffered representation.
+	// A separately supplied byte checksum must not override the expected checksum
+	// of an ordinary resource. Normalized artifact digests are not byte checksums.
+	if expected, known := r.resourceByteDigest(); known {
+		actual, _ := inMemoryBlob.Digest()
+		algorithm := digest.Digest(expected).Algorithm()
+		if digest.Digest(actual).Algorithm() != algorithm {
+			actual = algorithm.FromBytes(inMemoryBlob.Data()).String()
+		}
+		if actual != expected {
+			return nil, fmt.Errorf("resource blob digest mismatch: expected %s, got %s", expected, actual)
+		}
+	}
+
+	// Do not re-default or re-interpret shared resource metadata from the cache.
 	return &ArtifactBlob{
 		ReadOnlyBlob: inMemoryBlob,
 		Artifact:     r.Artifact,
