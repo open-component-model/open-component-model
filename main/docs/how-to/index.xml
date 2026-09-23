@@ -37,7 +37,8 @@ The access stores the repository URL and a commit; the archive stays on GitHub u
 &lt;p&gt;Configure the OCM Kubernetes controller to automatically verify component version signatures before reconciling resources.&lt;/p&gt;
 &lt;h2 id="youll-end-up-with"&gt;You&amp;rsquo;ll end up with&lt;/h2&gt;
 &lt;ul&gt;
-&lt;li&gt;A &lt;code&gt;Component&lt;/code&gt; resource that ensures signature verification&lt;/li&gt;
+&lt;li&gt;A Secret holding an OCM configuration that requests signature verification&lt;/li&gt;
+&lt;li&gt;A &lt;code&gt;Component&lt;/code&gt; resource that reconciles only if the signature verifies&lt;/li&gt;
 &lt;/ul&gt;
 &lt;p&gt;&lt;strong&gt;Estimated time:&lt;/strong&gt; ~5 minutes&lt;/p&gt;</description></item><item><title>Replicate Component Versions with the Controller</title><link>https://ocm.software/main/docs/how-to/replicate-component-versions-with-the-controller/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/how-to/replicate-component-versions-with-the-controller/</guid><description>&lt;h2 id="goal"&gt;Goal&lt;/h2&gt;
 &lt;p&gt;Use the OCM Kubernetes controller to transfer a component version, together with
