@@ -67,7 +67,7 @@ flowchart TB
     App2 -->|"references"| Frontend2
 ```
 
-Both patterns (canonical and distributed) are fully supported. Canonical repositories are simpler to work with, while distributed layouts offer more flexibility at the cost of requiring [resolver]({{< relref "docs/concepts/transfer/resolvers.md" >}}) configuration.
+Both patterns (canonical and distributed) are fully supported. Canonical repositories are simpler to work with, while distributed layouts offer more flexibility at the cost of requiring [resolver]({{< relref "docs/concepts/pack/resolvers.md" >}}) configuration.
 
 ## How It Works
 
@@ -77,11 +77,11 @@ The CLI always needs an explicit repository for the **root** component. You prov
 
 ### Resolvers bridge the gap for referenced components
 
-Since component references don't specify where a component lives, something must provide that mapping at resolution time. That is the job of [resolvers]({{< relref "docs/concepts/transfer/resolvers.md" >}}). A resolver maps component name patterns to repositories so the CLI can locate referenced components during recursive operations.
+Since component references don't specify where a component lives, something must provide that mapping at resolution time. That is the job of [resolvers]({{< relref "docs/concepts/pack/resolvers.md" >}}). A resolver maps component name patterns to repositories so the CLI can locate referenced components during recursive operations.
 
 When components are distributed across registries, resolvers are the runtime complement to the static component descriptor: the descriptor says **what** is referenced, while the resolver says **where** to find it. This separation keeps the descriptor portable and the resolution strategy configurable per environment.
 
-For details on how resolvers work, how to configure them, and the pattern syntax, see the [Resolvers]({{< relref "docs/concepts/transfer/resolvers.md" >}}) concept page.
+For details on how resolvers work, how to configure them, and the pattern syntax, see the [Resolvers]({{< relref "docs/concepts/pack/resolvers.md" >}}) concept page.
 
 ### Resolver propagation in recursive discovery
 
@@ -117,7 +117,7 @@ For example, if `app-a` resolves `shared-lib` from Registry A, and `app-b` resol
 ## Relationship to Other Concepts
 
 - **[Component Identity]({{< relref "docs/concepts/pack/component-identity.md" >}})**: Component references use the identity model (name, version, digest) without including storage locations.
-- **[Resolvers]({{< relref "docs/concepts/transfer/resolvers.md" >}})**: Resolvers provide the runtime mapping from component names to repositories that canonical repositories make unnecessary.
+- **[Resolvers]({{< relref "docs/concepts/pack/resolvers.md" >}})**: Resolvers provide the runtime mapping from component names to repositories that canonical repositories make unnecessary.
 - **[Transfer and Transport]({{< relref "docs/concepts/transfer/transfer-concept.md" >}})**: Location-free references are what make transfer possible without rewriting descriptors or invalidating signatures.
 - **[Signing and Verification]({{< relref "docs/concepts/sign/signing-and-verification-concept.md" >}})**: Signatures remain valid across transfers because access locations are excluded from the signed digest.
 
@@ -125,7 +125,7 @@ For example, if `app-a` resolves `shared-lib` from Registry A, and `app-b` resol
 
 - **Use canonical repositories** when you control the full component graph and want the simplest possible operational model. A single repository with all components means no resolver configuration is needed.
 - **Canonical repositories become important** after a transfer: `ocm transfer cv --recursive --copy-resources` creates a canonical repository in the target, making the transferred graph self-contained.
-- **You can ignore canonical repositories** when your components are intentionally distributed across registries. In that case, configure [resolvers]({{< relref "docs/concepts/transfer/resolvers.md" >}}) to map component names to their respective repositories.
+- **You can ignore canonical repositories** when your components are intentionally distributed across registries. In that case, configure [resolvers]({{< relref "docs/concepts/pack/resolvers.md" >}}) to map component names to their respective repositories.
 
 ## Next Steps
 
@@ -134,5 +134,5 @@ For example, if `app-a` resolves `shared-lib` from Registry A, and `app-b` resol
 
 ## Related Documentation
 
-- [Resolvers]({{< relref "docs/concepts/transfer/resolvers.md" >}}): The resolver concept and configuration overview
+- [Resolvers]({{< relref "docs/concepts/pack/resolvers.md" >}}): The resolver concept and configuration overview
 - [Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}): Full schema, repository types, and pattern syntax

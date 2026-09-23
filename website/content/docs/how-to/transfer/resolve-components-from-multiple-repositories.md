@@ -135,7 +135,7 @@ see [Migrate from Deprecated Resolvers]({{< relref "migrate-from-deprecated-reso
   [Version Constraints]({{< relref "docs/reference/resolver-configuration.md#version-constraints" >}}) for details.
 - **If you need to transfer components to another registry**, use `ocm transfer cv --recursive --copy-resources` with
   the same config file. See
-  [OCM Transfer]({{< relref "docs/concepts/transfer/resolvers.md#ocm-transfer" >}}) for details.
+  [OCM Transfer]({{< relref "docs/concepts/pack/resolvers.md#ocm-transfer" >}}) for details.
 - **Resolvers are evaluated in order** — place more specific patterns before broader ones so the right repository is
   matched first.
 
@@ -151,6 +151,6 @@ see [Migrate from Deprecated Resolvers]({{< relref "migrate-from-deprecated-reso
 - [How-To: Migrate from Deprecated Resolvers]({{< relref "docs/how-to/transfer/migrate-from-deprecated-resolvers.md" >}}) —
   Replace deprecated fallback
   resolvers with glob-based resolvers
-- [Concept: Resolvers]({{< relref "docs/concepts/transfer/resolvers.md" >}}) — High-level introduction to resolvers
+- [Concept: Resolvers]({{< relref "docs/concepts/pack/resolvers.md" >}}) — High-level introduction to resolvers
 - [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) — Full configuration
   schema, repository types, and pattern syntax

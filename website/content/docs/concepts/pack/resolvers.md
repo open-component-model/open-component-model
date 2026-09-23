@@ -6,6 +6,7 @@ weight: 5
 toc: true
 aliases:
   - /docs/concepts/resolvers/
+  - /docs/concepts/transfer/resolvers/
 ---
 
 ## Why Resolvers?

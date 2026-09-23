@@ -273,4 +273,4 @@ For the full version constraint syntax, see
 
 - [Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}) — Full configuration
   schema and pattern syntax
-- [Resolvers]({{< relref "docs/concepts/transfer/resolvers.md" >}}) — High-level introduction to resolvers
+- [Resolvers]({{< relref "docs/concepts/pack/resolvers.md" >}}) — High-level introduction to resolvers

@@ -12,7 +12,7 @@ aliases:
 
 When a component has **references** to other components stored in different repositories, the CLI needs to know where to
 find them. **Resolvers** map component name patterns to repositories so the CLI can automatically locate referenced
-components during recursive operations. For a high-level introduction, see the [Resolvers concept page]({{< relref "docs/concepts/transfer/resolvers.md" >}}).
+components during recursive operations. For a high-level introduction, see the [Resolvers concept page]({{< relref "docs/concepts/pack/resolvers.md" >}}).
 For configuration details and pattern syntax, see the [Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}).
 
 To understand **why** component references don't include repository specifications and how resolvers fit into OCM's
@@ -350,7 +350,7 @@ Now that you know how to configure resolvers, you can:
 
 ## Related Documentation
 
-- [Resolvers]({{< relref "docs/concepts/transfer/resolvers.md" >}}) — High-level introduction to resolvers
+- [Resolvers]({{< relref "docs/concepts/pack/resolvers.md" >}}) — High-level introduction to resolvers
 - [Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}) — Full configuration
   schema, repository types, and pattern syntax
 - [Component Identity]({{< relref "docs/concepts/pack/component-identity.md" >}}) — Core concepts behind component versions, identities, and
