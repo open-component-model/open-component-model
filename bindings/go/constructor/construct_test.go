@@ -849,3 +849,97 @@ func collectDescriptors(t *testing.T, graph *syncdag.SyncedDirectedAcyclicGraph[
 	})
 	return descs
 }
+
+// TestConstruct_InvalidComponentVersionFailsBeforeUpload verifies that an
+// invalid component version is rejected before processDescriptor uploads any
+// resource content, so a bad version never leaves orphaned blobs in the target.
+func TestConstruct_InvalidComponentVersionFailsBeforeUpload(t *testing.T) {
+	t.Parallel()
+
+	resourceProvider := &mockInputMethodProvider{
+		methods: map[runtime.Type]ResourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): &mockInputMethod{
+				processedBlob: &mockBlob{mediaType: "application/json", data: []byte(`{"test":"resource"}`)},
+			},
+		},
+	}
+
+	yamlData := `
+components:
+  - name: ocm.software/invalid-version
+    version: not a valid version
+    provider:
+      name: test-provider
+    resources:
+      - name: test-resource
+        version: v1.0.0
+        relation: local
+        type: json
+        input:
+          type: mock/v1
+`
+
+	var comp constructorv1.ComponentConstructor
+	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &comp))
+	converted := constructorruntime.ConvertToRuntimeConstructor(&comp)
+
+	repo := newMockTargetRepository()
+	opts := Options{
+		ResourceInputMethodProvider: resourceProvider,
+		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: repo},
+	}
+
+	err := NewDefaultConstructor(converted, opts).Construct(t.Context())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `invalid version "not a valid version"`)
+
+	// The invalid version must be caught before any content is uploaded.
+	assert.Empty(t, repo.addedLocalResources, "no resource blob should be uploaded when the component version is invalid")
+	assert.Empty(t, repo.addedVersions, "no component version should be added when the version is invalid")
+}
+
+// TestConstruct_InvalidResourceVersionRejected verifies that an invalid element
+// version (defaulted or explicit) is still rejected after processing.
+func TestConstruct_InvalidResourceVersionRejected(t *testing.T) {
+	t.Parallel()
+
+	resourceProvider := &mockInputMethodProvider{
+		methods: map[runtime.Type]ResourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): &mockInputMethod{
+				processedBlob: &mockBlob{mediaType: "application/json", data: []byte(`{"test":"resource"}`)},
+			},
+		},
+	}
+
+	yamlData := `
+components:
+  - name: ocm.software/valid-component
+    version: v1.0.0
+    provider:
+      name: test-provider
+    resources:
+      - name: test-resource
+        version: not a valid version
+        relation: local
+        type: json
+        input:
+          type: mock/v1
+`
+
+	var comp constructorv1.ComponentConstructor
+	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &comp))
+	converted := constructorruntime.ConvertToRuntimeConstructor(&comp)
+
+	repo := newMockTargetRepository()
+	opts := Options{
+		ResourceInputMethodProvider: resourceProvider,
+		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: repo},
+	}
+
+	err := NewDefaultConstructor(converted, opts).Construct(t.Context())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `resource "test-resource" has an invalid version "not a valid version"`)
+
+	// The component version is added only after successful validation.
+	assert.Empty(t, repo.addedVersions, "no component version should be added when a resource version is invalid")
+}

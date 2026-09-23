@@ -443,8 +443,10 @@ func (s *regexScheme) Compare(a, b string) (int, error) {
 // claims. The constraint is a whitespace- or comma-separated conjunction of
 // terms; each term is a relational operator (">=", ">", "<=", "<", "=", "==",
 // "!=") followed by a version operand that must itself match the scheme's
-// pattern. A bare operand with no operator means equality. Ordering follows the
-// scheme's own [regexScheme.Compare], so it is identical to the sort order.
+// pattern. Whitespace between the operator and the operand is tolerated, so
+// ">= 2024.03.15" parses identically to ">=2024.03.15". A bare operand with no
+// operator means equality. Ordering follows the scheme's own
+// [regexScheme.Compare], so it is identical to the sort order.
 //
 // Unlike loose semver, range operators such as "^", "~", and x-ranges are not
 // supported: they have no scheme-independent meaning.
@@ -458,13 +460,12 @@ func (s *regexScheme) Satisfies(version, constraint string) (bool, error) {
 	if err := s.ValidateConstraint(constraint); err != nil {
 		return false, err
 	}
-	for _, term := range splitConstraintTerms(constraint) {
-		op, operand := parseConstraintTerm(term)
-		c, err := s.Compare(version, operand)
+	for _, t := range parseConstraintTerms(constraint) {
+		c, err := s.Compare(version, t.operand)
 		if err != nil {
 			return false, err
 		}
-		if !satisfiesOp(op, c) {
+		if !satisfiesOp(t.op, c) {
 			return false, nil
 		}
 	}
@@ -477,13 +478,12 @@ func (s *regexScheme) ValidateConstraint(constraint string) error {
 	if constraint == "" {
 		return nil
 	}
-	for _, term := range splitConstraintTerms(constraint) {
-		_, operand := parseConstraintTerm(term)
-		if !s.pattern.MatchString(operand) {
+	for _, t := range parseConstraintTerms(constraint) {
+		if !s.pattern.MatchString(t.operand) {
 			// A regex scheme has no notion of a syntactically malformed constraint:
 			// any operand that is not one of its versions simply means the
 			// constraint belongs to a different grammar.
-			return fmt.Errorf("scheme %q: constraint operand %q does not match the scheme pattern: %w", s.name, operand, ErrConstraintNotApplicable)
+			return fmt.Errorf("scheme %q: constraint operand %q does not match the scheme pattern: %w", s.name, t.operand, ErrConstraintNotApplicable)
 		}
 	}
 	return nil
@@ -494,24 +494,54 @@ func (s *regexScheme) ValidateConstraint(constraint string) error {
 // their single-character prefixes.
 var constraintOperators = []string{">=", "<=", "!=", "==", "=", ">", "<"}
 
-// splitConstraintTerms splits a constraint expression into conjunctive terms on
-// commas and runs of whitespace, dropping empty terms.
-func splitConstraintTerms(constraint string) []string {
-	return strings.FieldsFunc(constraint, func(r rune) bool {
-		return r == ',' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
-	})
+// constraintTerm is a single relational term: an operator and its version
+// operand.
+type constraintTerm struct {
+	op      string
+	operand string
 }
 
-// parseConstraintTerm strips a leading relational operator from a term and
-// returns the operator and the trimmed version operand. A term with no
-// recognized operator defaults to equality ("=").
-func parseConstraintTerm(term string) (op, operand string) {
-	for _, candidate := range constraintOperators {
-		if strings.HasPrefix(term, candidate) {
-			return candidate, strings.TrimSpace(strings.TrimPrefix(term, candidate))
+// parseConstraintTerms splits a constraint expression into its conjunctive
+// relational terms. Terms are separated by commas or whitespace, but whitespace
+// between an operator and its operand (for example ">= 2024.03.15") is tolerated
+// so that a spaced constraint parses identically to its unspaced form. A term
+// with no recognized operator defaults to equality ("="). Empty terms are
+// dropped.
+func parseConstraintTerms(constraint string) []constraintTerm {
+	// Commas are unambiguous conjunction separators; split on them first, then
+	// scan each chunk for operator/operand pairs so that whitespace can act both
+	// as a term separator (">=1.0.0 <2.0.0") and as padding after an operator
+	// (">= 1.0.0").
+	var terms []constraintTerm
+	for _, chunk := range strings.Split(constraint, ",") {
+		rest := strings.TrimSpace(chunk)
+		for rest != "" {
+			op := ""
+			for _, candidate := range constraintOperators {
+				if strings.HasPrefix(rest, candidate) {
+					op = candidate
+					break
+				}
+			}
+			// Skip the operator (if any) and the whitespace padding after it.
+			rest = strings.TrimLeft(rest[len(op):], " \t\n\r")
+			// The operand runs up to the next whitespace-separated token.
+			operand := rest
+			if i := strings.IndexAny(rest, " \t\n\r"); i >= 0 {
+				operand, rest = rest[:i], strings.TrimLeft(rest[i:], " \t\n\r")
+			} else {
+				rest = ""
+			}
+			if operand == "" {
+				continue
+			}
+			if op == "" {
+				op = "="
+			}
+			terms = append(terms, constraintTerm{op: op, operand: operand})
 		}
 	}
-	return "=", strings.TrimSpace(term)
+	return terms
 }
 
 // satisfiesOp reports whether a [regexScheme.Compare] result c (negative when

@@ -223,6 +223,15 @@ func (c *DefaultConstructor) constructComponent(ctx context.Context, component *
 		return nil, err
 	}
 
+	// Validate the component version before processing so an invalid version
+	// fails fast, before processDescriptor uploads any resource or source
+	// content to the target repository. Resource, source, and reference
+	// versions are defaulted during processing, so their validation must run
+	// afterwards in validateVersions.
+	if err := c.validateComponentVersion(component.Name, component.Version); err != nil {
+		return nil, fmt.Errorf("component %q failed version validation: %w", component.Name, err)
+	}
+
 	if err := c.processDescriptor(ctx, repo, component, desc, referencedComponents); err != nil {
 		return nil, err
 	}
@@ -242,14 +251,31 @@ func (c *DefaultConstructor) constructComponent(ctx context.Context, component *
 	return desc, nil
 }
 
-// validateVersions checks the component version and every resource, source, and
-// reference version against the configured versioning registry (loose semver by
-// default). It returns a joined error naming each offending element.
-func (c *DefaultConstructor) validateVersions(desc *descriptor.Descriptor) error {
-	registry := c.opts.VersioningRegistry
-	if registry == nil {
-		registry = versioning.Default()
+// versioningRegistry returns the configured versioning registry, falling back to
+// the loose-semver default when none is configured.
+func (c *DefaultConstructor) versioningRegistry() *versioning.Registry {
+	if c.opts.VersioningRegistry != nil {
+		return c.opts.VersioningRegistry
 	}
+	return versioning.Default()
+}
+
+// validateComponentVersion checks the component version against the configured
+// versioning registry (loose semver by default). It is called before
+// processDescriptor so an invalid version fails before any content is uploaded.
+func (c *DefaultConstructor) validateComponentVersion(name, version string) error {
+	if !c.versioningRegistry().Valid(version) {
+		return fmt.Errorf("component %q has an invalid version %q for the configured versioning schemes", name, version)
+	}
+	return nil
+}
+
+// validateVersions checks every resource, source, and reference version against
+// the configured versioning registry (loose semver by default). The component
+// version is validated earlier by validateComponentVersion. It returns a joined
+// error naming each offending element.
+func (c *DefaultConstructor) validateVersions(desc *descriptor.Descriptor) error {
+	registry := c.versioningRegistry()
 
 	var errs []error
 	check := func(kind, name, version string) {
@@ -258,7 +284,6 @@ func (c *DefaultConstructor) validateVersions(desc *descriptor.Descriptor) error
 		}
 	}
 
-	check("component", desc.Component.Name, desc.Component.Version)
 	for _, r := range desc.Component.Resources {
 		check("resource", r.Name, r.Version)
 	}

@@ -236,6 +236,11 @@ func TestVersioning_RegexSchemeSatisfiesRelational(t *testing.T) {
 		{"2024.03.15", true}, // bare operand means equality
 		{"!=2024.03.15", false},
 		{">=2024.06.01, <2025.01.01", false}, // comma-composed AND; first term fails
+		{">= 2024.03.15", true},              // whitespace between operator and operand
+		{">= 2024.06.01", false},
+		{">=  2024.03.15", true},                 // multiple spaces after operator
+		{">= 2024.03.15 < 2024.10.01", true},     // spaced operators in a whitespace conjunction
+		{">= 2024.06.01 , <= 2024.10.01", false}, // spaced operators around a comma
 		{"", true},
 	}
 	for _, tc := range cases {
