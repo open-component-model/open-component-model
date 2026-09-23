@@ -225,6 +225,12 @@ configurations:
 			wantErr: "can only be given once",
 		},
 		{
+			name:    "stdin given twice after a file is rejected before the file is read",
+			paths:   []string{"testdata/.ocmconfig-attributes-file", StdinConfigPath, StdinConfigPath},
+			stdin:   "",
+			wantErr: "can only be given once",
+		},
+		{
 			name:    "empty stdin is rejected",
 			paths:   []string{StdinConfigPath},
 			stdin:   "",
