@@ -40,10 +40,11 @@ func matchUploader(uploaders []transferv1alpha1.UploaderConfig, resource descrip
 // environment node path before the graph runtime evaluates the expression.
 const resourceAlias = "resource"
 
-// resourceFilterVar is the bound variable used inside the CEL filter macro that
-// selects the source resource within the descriptor environment node. It is chosen to
-// not collide with the `resource` alias a user writes in a targetURL/header expression.
-const resourceFilterVar = "__r"
+// resourceFilterVar is the bound variable used inside the CEL filter macro that selects
+// the source resource within the descriptor environment node. It is local to the filter
+// predicate, so it cannot collide with the user's `resource` alias (already rewritten to
+// the whole selector path before the predicate is built).
+const resourceFilterVar = "r"
 
 // resourceNodePath returns the CEL path the `resource` alias is rewritten to. Instead
 // of injecting a second copy of the resource into the environment, it points at the
