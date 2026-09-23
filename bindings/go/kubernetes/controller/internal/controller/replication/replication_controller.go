@@ -328,7 +328,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 
 	// Reuse the configurations already loaded above to look up transfer and uploader settings; a nil cfg is valid.
 	var transferCfg *transferspec.Config
-	var uploaderCfgs []*transferspec.HTTPUploaderConfig
+	var uploaderCfgs []transferspec.UploaderConfig
 	if cfg != nil {
 		transferCfg, err = transferspec.LookupConfig(cfg.Config)
 		if err != nil {
@@ -336,7 +336,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 
 			return ctrl.Result{}, fmt.Errorf("failed to load transfer config: %w", err)
 		}
-		uploaderCfgs, err = transferspec.LookupHTTPUploaderConfigs(cfg.Config)
+		uploaderCfgs, err = transferspec.LookupUploaderConfigs(cfg.Config)
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
 

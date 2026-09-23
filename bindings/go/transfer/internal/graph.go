@@ -72,7 +72,7 @@ func BuildGraphDefinition(
 	ctx context.Context,
 	roots map[string]TransferRoot,
 	cfg transferv1alpha1.Config,
-	uploaders []*transferv1alpha1.HTTPUploaderConfig,
+	uploaders []transferv1alpha1.UploaderConfig,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	// Seed the targetMap and resolverMap from explicit roots.
 	// These maps are shared with the discoverer and multiResolver:
@@ -168,7 +168,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	tgd *transformv1alpha1.TransformationGraphDefinition,
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
-	uploaders []*transferv1alpha1.HTTPUploaderConfig,
+	uploaders []transferv1alpha1.UploaderConfig,
 ) error {
 	slog.DebugContext(ctx, "building transformations for discovered components",
 		"components", len(d.Vertices))
@@ -244,7 +244,7 @@ func processResources(
 	toSpec runtime.Typed,
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
-	uploaders []*transferv1alpha1.HTTPUploaderConfig,
+	uploaders []transferv1alpha1.UploaderConfig,
 ) (map[int]string, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
@@ -263,8 +263,13 @@ func processResources(
 		// An uploader is an explicit instruction to move a matched resource, so it
 		// runs regardless of copy mode and takes precedence over the default handlers.
 		if u := matchUploader(uploaders, resource); u != nil {
-			if err := processUploader(resource, u, id, val, tgd, resourceTransformIDs, i); err != nil {
-				return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
+			switch cfg := u.(type) {
+			case *transferv1alpha1.HTTPUploaderConfig:
+				if err := processUploader(resource, cfg, id, val, tgd, resourceTransformIDs, i); err != nil {
+					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
+				}
+			default:
+				return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", u, resource.ToIdentity())
 			}
 			continue
 		}

@@ -372,7 +372,7 @@ func buildGraphDefinitionFromArgs(
 		transferCfg = &transferv1alpha1.Config{}
 	}
 
-	uploaderCfgs, err := transferv1alpha1.LookupHTTPUploaderConfigs(cfg)
+	uploaderCfgs, err := transferv1alpha1.LookupUploaderConfigs(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("looking up uploader configs failed: %w", err)
 	}

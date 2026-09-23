@@ -123,9 +123,9 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 	// The uploader routes the Wget resource through the HTTP streaming transformer to the target server.
 	// The CEL expression resolves url(resource.access.url).path against the injected
 	// source-resource node at execution time.
-	uploaders := []*transferv1alpha1.HTTPUploaderConfig{{
+	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.HTTPUploaderConfig{
 		Type:      runtime.NewVersionedType(transferv1alpha1.HTTPUploaderConfigType, transferv1alpha1.Version),
-		Match:     transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v1")},
+		MatchSpec: transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v1")},
 		TargetURL: fmt.Sprintf("${%q + url(resource.access.url).path}", targetSrv.URL+"/uploads"),
 		Method:    http.MethodPut,
 		Header: map[string][]string{

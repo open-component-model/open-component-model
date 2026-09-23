@@ -18,57 +18,19 @@ import (
 )
 
 // matchUploader returns the first uploader whose match applies to resource, or nil.
-// The access type must match: when the rule specifies a version (Wget/v1) it must
-// equal the resource access type exactly; an unversioned rule (Wget) matches any
-// version by name. The identity constraint (optional Name, Version plus
-// ExtraIdentity) is a subset match against the resource identity via
-// [runtime.IdentitySubset]: every specified key/value must be present and equal.
-// Declaration order is significant —
-// the first match wins, so more specific rules should precede broader ones.
-func matchUploader(uploaders []*transferv1alpha1.HTTPUploaderConfig, resource descriptorv2.Resource) *transferv1alpha1.HTTPUploaderConfig {
-	accessType := resource.Access.Type
-	identity := resource.ToIdentity()
+// Declaration order is significant — the first recognized match wins, so more specific
+// rules should precede broader ones. The per-uploader matching semantics are defined by
+// [transferv1alpha1.UploaderConfig.Match].
+func matchUploader(uploaders []transferv1alpha1.UploaderConfig, resource descriptorv2.Resource) transferv1alpha1.UploaderConfig {
 	for _, u := range uploaders {
 		if u == nil {
 			continue
 		}
-		if !accessTypeMatches(u.Match.AccessType, accessType) {
-			continue
+		if u.Match(resource) {
+			return u
 		}
-		if !runtime.IdentitySubset(matchIdentity(u.Match), identity) {
-			continue
-		}
-		return u
 	}
 	return nil
-}
-
-// accessTypeMatches reports whether a resource access type satisfies the uploader
-// match access type. A versioned match type must equal the access type exactly
-// ([runtime.Type.Equal]); an unversioned match type matches any version by name.
-func accessTypeMatches(match, access runtime.Type) bool {
-	if match.HasVersion() {
-		return match.Equal(access)
-	}
-	return match.GetName() == access.GetName()
-}
-
-// matchIdentity renders an uploader match's identity constraint (Name, Version
-// plus ExtraIdentity) as a [runtime.Identity] for subset matching against a
-// resource identity. Name and Version map to the reserved name and version
-// attributes; an empty Name or Version is omitted.
-func matchIdentity(m transferv1alpha1.UploaderMatch) runtime.Identity {
-	id := make(runtime.Identity, len(m.ExtraIdentity)+2)
-	for k, v := range m.ExtraIdentity {
-		id[k] = v
-	}
-	if m.Name != "" {
-		id[descriptorv2.IdentityAttributeName] = m.Name
-	}
-	if m.Version != "" {
-		id[descriptorv2.IdentityAttributeVersion] = m.Version
-	}
-	return id
 }
 
 // resourceAlias is the identifier an uploader's targetURL CEL expression uses to

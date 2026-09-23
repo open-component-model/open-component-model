@@ -12,7 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-func TestLookupHTTPUploaderConfigs(t *testing.T) {
+func TestLookupUploaderConfigs(t *testing.T) {
 	decode := func(t *testing.T, yaml string) *genericv1.Config {
 		t.Helper()
 		var generic genericv1.Config
@@ -35,13 +35,15 @@ configurations:
     method: PUT
 `)
 
-		uploaders, err := spec.LookupHTTPUploaderConfigs(generic)
+		uploaders, err := spec.LookupUploaderConfigs(generic)
 		r.NoError(err)
 		r.Len(uploaders, 1)
-		assert.Equal(t, "Wget", uploaders[0].Match.AccessType.Name)
-		assert.Equal(t, "v1alpha1", uploaders[0].Match.AccessType.Version)
-		assert.Equal(t, `${"https://mytarget.registry.com/uploads" + url(resource.access.url).path}`, uploaders[0].TargetURL)
-		assert.Equal(t, "PUT", uploaders[0].Method)
+		u, ok := uploaders[0].(*spec.HTTPUploaderConfig)
+		r.True(ok)
+		assert.Equal(t, "Wget", u.MatchSpec.AccessType.Name)
+		assert.Equal(t, "v1alpha1", u.MatchSpec.AccessType.Version)
+		assert.Equal(t, `${"https://mytarget.registry.com/uploads" + url(resource.access.url).path}`, u.TargetURL)
+		assert.Equal(t, "PUT", u.Method)
 
 		// The sibling transfer config is unaffected by the uploader entry.
 		cfg, err := spec.LookupConfig(generic)
@@ -58,7 +60,7 @@ configurations:
   - type: transfer.config.ocm.software/v1alpha1
     copyMode: allResources
 `)
-		uploaders, err := spec.LookupHTTPUploaderConfigs(generic)
+		uploaders, err := spec.LookupUploaderConfigs(generic)
 		require.NoError(t, err)
 		assert.Nil(t, uploaders)
 	})
@@ -77,11 +79,15 @@ configurations:
       accessType: S3/v2
     targetURL: '${"https://second.example/uploads" + url(resource.access.url).path}'
 `)
-		uploaders, err := spec.LookupHTTPUploaderConfigs(generic)
+		uploaders, err := spec.LookupUploaderConfigs(generic)
 		r.NoError(err)
 		r.Len(uploaders, 2)
-		assert.Equal(t, "Wget", uploaders[0].Match.AccessType.Name)
-		assert.Equal(t, "S3", uploaders[1].Match.AccessType.Name)
+		first, ok := uploaders[0].(*spec.HTTPUploaderConfig)
+		r.True(ok)
+		second, ok := uploaders[1].(*spec.HTTPUploaderConfig)
+		r.True(ok)
+		assert.Equal(t, "Wget", first.MatchSpec.AccessType.Name)
+		assert.Equal(t, "S3", second.MatchSpec.AccessType.Name)
 	})
 
 	t.Run("missing match access type is rejected", func(t *testing.T) {
@@ -91,7 +97,7 @@ configurations:
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
     targetURL: '${"https://example/uploads" + url(resource.access.url).path}'
 `)
-		_, err := spec.LookupHTTPUploaderConfigs(generic)
+		_, err := spec.LookupUploaderConfigs(generic)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "match.accessType is required")
 	})
@@ -104,7 +110,7 @@ configurations:
     match:
       accessType: Wget/v1alpha1
 `)
-		_, err := spec.LookupHTTPUploaderConfigs(generic)
+		_, err := spec.LookupUploaderConfigs(generic)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "targetURL is required")
 	})
@@ -113,7 +119,7 @@ configurations:
 func TestHTTPUploaderConfig_Validate(t *testing.T) {
 	valid := func() *spec.HTTPUploaderConfig {
 		return &spec.HTTPUploaderConfig{
-			Match:     spec.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v1alpha1")},
+			MatchSpec: spec.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v1alpha1")},
 			TargetURL: `${"https://example/uploads"}`,
 		}
 	}

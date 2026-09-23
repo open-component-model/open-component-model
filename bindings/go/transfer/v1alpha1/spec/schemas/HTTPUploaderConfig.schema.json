@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/HTTPUploaderConfig.schema.json",
   "title": "HTTPUploaderConfig",
   "type": "object",
-  "description": "HTTPUploaderConfig is a declarative rule that streams matching resources to a\ncustom HTTP target during transfer. It is carried as an entry inside the central\ngeneric configuration (generic.config.ocm.software/v1), as a sibling of [Config],\nand extracted with [LookupHTTPUploaderConfigs]. Each entry is an independent rule;\nentries are not merged. The config type dedicates it to the HTTP streaming target,\nso the upload request fields are declared inline rather than in a nested stream\nsub-type.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: http.uploader.transfer.config.ocm.software/v1alpha1\nmatch:\naccessType: Wget/v1\ntargetURL: '${\"https://mytarget.registry.com/uploads\" + url(resource.access.url).path}'\nmethod: PUT",
+  "description": "HTTPUploaderConfig is a declarative rule that streams matching resources to a\ncustom HTTP target during transfer. It is carried as an entry inside the central\ngeneric configuration (generic.config.ocm.software/v1), as a sibling of [Config],\nand extracted with [LookupUploaderConfigs]. Each entry is an independent rule;\nentries are not merged. The config type dedicates it to the HTTP streaming target,\nso the upload request fields are declared inline rather than in a nested stream\nsub-type.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: http.uploader.transfer.config.ocm.software/v1alpha1\nmatch:\naccessType: Wget/v1\ntargetURL: '${\"https://mytarget.registry.com/uploads\" + url(resource.access.url).path}'\nmethod: PUT",
   "properties": {
     "body": {
       "type": "string",
@@ -23,7 +23,7 @@
     },
     "match": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploaderMatch",
-      "description": "Match selects the resources this uploader applies to."
+      "description": "MatchSpec selects the resources this uploader applies to. It is exposed as the\n`match` field; the Go field is named MatchSpec so the type can offer a Match method."
     },
     "mediaType": {
       "type": "string",

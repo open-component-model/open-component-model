@@ -38,7 +38,7 @@ func (in *Config) DeepCopyTyped() runtime.Typed {
 func (in *HTTPUploaderConfig) DeepCopyInto(out *HTTPUploaderConfig) {
 	*out = *in
 	out.Type = in.Type
-	in.Match.DeepCopyInto(&out.Match)
+	in.MatchSpec.DeepCopyInto(&out.MatchSpec)
 	if in.Header != nil {
 		in, out := &in.Header, &out.Header
 		*out = make(map[string][]string, len(*in))
