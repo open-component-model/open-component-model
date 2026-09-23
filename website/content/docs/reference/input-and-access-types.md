@@ -498,8 +498,8 @@ repository. It does not make S3 a component version repository.
 
 `S3/v2` and `s3/v2` use `bucketName` and `objectKey`. Explicit `S3/v1` and `s3/v1` use `bucket` and `key`;
 both versions support `region`, `version`, `mediaType` and the `endpoint` and `usePathStyle` extensions.
-Unversioned `S3` and `s3` accept either field shape, but reject conflicting aliases (`bucket` versus `bucketName`,
-or `key` versus `objectKey`). Explicit versions require their own field names. See
+Unversioned `S3` and `s3` resolve to v2 and require `bucketName` and `objectKey`.
+Legacy `bucket` and `key` fields require an explicit `S3/v1` or `s3/v1` type. See
 [Migrating from OCM v1](#s3-migration-from-ocm-v1). The table below describes the v2 fields.
 
 | Field          | Type    | Required | Description                                                                                                                                                        |
@@ -568,8 +568,8 @@ is only possible if the object has a version:
   change after an overwrite, so it pins nothing, and OCM never writes it into the specification. The resource digest
   still detects a replaced object, so verification fails. OCM does not accept the wrong content.
 
-When digest pinning changes a v1 or unversioned access specification, OCM writes it as explicit `S3/v2` with
-`bucketName` and `objectKey`. Unchanged specifications retain their original form.
+When digest pinning changes a v1 access specification, OCM writes it as explicit `S3/v2` with
+`bucketName` and `objectKey`. Unversioned v2 aliases retain their type. Unchanged specifications retain their original form.
 
 If you need reproducibility, enable bucket versioning, or set `version`.
 
@@ -583,9 +583,10 @@ updates the access specification.
 `S3/v2` is the `v2` format of the OCM v1 `s3` access type, plus the fields `endpoint` and `usePathStyle`. OCM v2 reads
 an access specification that OCM v1 wrote in the `v2` format without changes.
 
-OCM v2 also reads the OCM v1 `v1` format, including explicit `s3/v1` and `S3/v1` and the unversioned `s3` that
-OCM v1 writes by default. No manual migration is required. To convert explicitly to `S3/v2`, rename the fields as
-shown below. The `endpoint` and `usePathStyle` extensions are available for both access formats in OCM v2.
+OCM v2 also reads the OCM v1 `v1` format when the type is explicitly `s3/v1` or `S3/v1`.
+For legacy descriptors using the unversioned `s3` that OCM v1 writes by default, change the type to `s3/v1` to
+keep `bucket` and `key`. Unversioned `S3` and `s3` resolve to v2, not v1. Alternatively, set the type to `S3/v2`
+and rename the fields as shown below. The `endpoint` and `usePathStyle` extensions are available for both access formats.
 
 | OCM v1 (`s3/v1`) | OCM v1 (`s3/v2`) | OCM v2 (`S3/v2`)     |
 |------------------|------------------|----------------------|
@@ -598,9 +599,9 @@ shown below. The `endpoint` and `usePathStyle` extensions are available for both
 | —                | —                | `usePathStyle` (new) |
 
 ```yaml
-# OCM v1
+# Explicit v1 format
 access:
-  type: s3
+  type: s3/v1
   region: eu-central-1
   bucket: acme-artifacts
   key: datasets/reference/1.0.0/reference.parquet

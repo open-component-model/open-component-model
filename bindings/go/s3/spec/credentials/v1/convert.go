@@ -2,6 +2,7 @@ package v1
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 
 	directcredsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
@@ -31,13 +32,14 @@ func init() {
 
 // fromDirectCredentials converts a DirectCredentials properties map into typed S3Credentials.
 // This supports legacy .ocmconfig files that use Credentials/v1 with S3 properties.
-func fromDirectCredentials(properties map[string]string) (*S3Credentials, error) {
+func fromDirectCredentials(properties map[string]string) *S3Credentials {
 	var anonymous bool
 	if value, ok := properties["anonymous"]; ok {
 		var err error
 		anonymous, err = strconv.ParseBool(value)
 		if err != nil {
-			return nil, fmt.Errorf("invalid anonymous credential property: %w", err)
+			slog.Warn("invalid anonymous S3 credential property; assuming false")
+			anonymous = false
 		}
 	}
 	accessKeyID := properties[credentialKeyAccessKeyID]
@@ -58,7 +60,7 @@ func fromDirectCredentials(properties map[string]string) (*S3Credentials, error)
 		AccessKeyID:     accessKeyID,
 		SecretAccessKey: secretAccessKey,
 		SessionToken:    sessionToken,
-	}, nil
+	}
 }
 
 // ConvertToS3Credentials converts runtime.Typed into S3Credentials.
@@ -79,10 +81,7 @@ func ConvertToS3Credentials(creds runtime.Typed) (*S3Credentials, error) {
 	var result *S3Credentials
 	switch t := typed.(type) {
 	case *directcredsv1.DirectCredentials:
-		result, err = fromDirectCredentials(t.Properties)
-		if err != nil {
-			return nil, err
-		}
+		result = fromDirectCredentials(t.Properties)
 	case *S3Credentials:
 		result = t
 	default:

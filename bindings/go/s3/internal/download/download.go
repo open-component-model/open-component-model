@@ -103,7 +103,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 		in.VersionId = new(req.Version)
 	}
 
-	out, err := getter.GetObject(ctx, in)
+	out, err := getObject(ctx, getter, req, in)
 	if err != nil {
 		return nil, fmt.Errorf("error getting s3 object %s/%s: %w", req.BucketName, req.ObjectKey, err)
 	}

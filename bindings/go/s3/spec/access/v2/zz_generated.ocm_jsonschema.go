@@ -9,7 +9,7 @@ import (
 	_ "embed"
 )
 
-//go:embed s3.schema.json
+//go:embed schemas/S3.schema.json
 var schemaS3 []byte
 
 // JSONSchema returns the JSON Schema for S3.

@@ -86,6 +86,13 @@
 //
 // # Retries
 //
+// On AWS (no custom endpoint), a 301 PermanentRedirect triggers one region
+// correction: the download uses x-amz-bucket-region, or HeadBucket if that header
+// is absent, and retries GetObject once using the SDK's regional endpoint. This
+// can correct an explicitly configured region too. Credentials, object version and
+// HTTP settings are preserved; invalid region hints fail rather than following
+// Location. Custom endpoints and other GetObject errors do not trigger discovery.
+//
 // Retrying is left to the aws-sdk-go-v2 client, which retries the whole operation,
 // re-signs every attempt and classifies S3's error codes; transport retry is switched
 // off for the client handed to the SDK, globally and per host. retry.maxRetries counts
@@ -153,13 +160,13 @@
 //
 // S3/v1 and s3/v1 use the legacy bucket and key fields, with the same optional
 // region, version and mediaType. They also support our endpoint and usePathStyle
-// extensions. Unversioned S3 and s3 accept either field pair for compatibility with
-// existing v2 descriptors and ocmv1's default v1 output. Conflicting mixed values
-// are rejected. Explicit versions accept only their own field names.
+// extensions. Legacy bucket and key fields require explicit S3/v1 or s3/v1.
+// Unversioned S3 and s3 resolve to v2 and require bucketName and objectKey.
 //
 // Access specs are normalized to v2 for processing without modifying the original
-// descriptor. When digest processing pins a previously unpinned v1 or unversioned
-// access, the updated access is emitted explicitly as S3/v2 with v2 field names.
+// descriptor. When digest processing pins a previously unpinned v1 access, the
+// updated access is emitted explicitly as S3/v2 with v2 field names. Unversioned
+// v2 aliases retain their type.
 // Type matching is exact; field names are matched case-insensitively, as JSON
 // decoding is. ocmv1 reads S3/v2 as well, but drops endpoint and usePathStyle and so
 // always targets AWS.

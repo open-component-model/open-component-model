@@ -18,18 +18,22 @@ func directCredentials(props map[string]string) *directcredsv1.DirectCredentials
 }
 
 func Test_ConvertToS3Credentials_Anonymous(t *testing.T) {
-	for _, data := range []string{
-		`{"type":"S3Credentials/v1"}`,
-		`{"type":"S3Credentials/v1","anonymous":false}`,
-		`{"type":"S3Credentials/v1","anonymous":true}`,
+	for _, tt := range []struct {
+		name      string
+		data      string
+		anonymous bool
+	}{
+		{"omitted", `{"type":"S3Credentials/v1"}`, false},
+		{"false", `{"type":"S3Credentials/v1","anonymous":false}`, false},
+		{"true", `{"type":"S3Credentials/v1","anonymous":true}`, true},
 	} {
-		t.Run(data, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 			raw := &runtime.Raw{}
-			r.NoError(json.Unmarshal([]byte(data), raw))
+			r.NoError(json.Unmarshal([]byte(tt.data), raw))
 			out, err := ConvertToS3Credentials(raw)
 			r.NoError(err)
-			r.Equal(data == `{"type":"S3Credentials/v1","anonymous":true}`, out.Anonymous)
+			r.Equal(tt.anonymous, out.Anonymous)
 			encoded, err := json.Marshal(out)
 			r.NoError(err)
 			if out.Anonymous {
@@ -68,17 +72,27 @@ func Test_ConvertToS3Credentials_AnonymousConflicts(t *testing.T) {
 }
 
 func Test_ConvertToS3Credentials_DirectAnonymous(t *testing.T) {
-	for _, value := range []string{"true", "false", "invalid", ""} {
-		t.Run(value, func(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     string
+		anonymous bool
+	}{
+		{name: "true", value: "true", anonymous: true},
+		{name: "false", value: "false"},
+		{name: "invalid defaults to false", value: "invalid"},
+		{name: "empty defaults to false", value: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			out, err := ConvertToS3Credentials(directCredentials(map[string]string{"anonymous": value}))
-			if value == "invalid" || value == "" {
-				r.ErrorContains(err, "invalid anonymous credential property")
-				r.Nil(out)
-			} else {
-				r.NoError(err)
-				r.Equal(value == "true", out.Anonymous)
+			props := map[string]string{"anonymous": tt.value}
+			if !tt.anonymous {
+				props["accessKeyId"] = "key"
 			}
+			out, err := ConvertToS3Credentials(directCredentials(props))
+			r.NoError(err)
+			r.Equal(tt.anonymous, out.Anonymous)
+			r.Equal(props["accessKeyId"], out.AccessKeyID)
 		})
 	}
 }

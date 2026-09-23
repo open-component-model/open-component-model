@@ -62,16 +62,3 @@ func TestScheme_ReadsOCMv1V2Format(t *testing.T) {
 		MediaType:  "m",
 	}, *spec)
 }
-
-// ocmv1 writes an unversioned "s3" in its v1 format (bucket, key) by default.
-func TestScheme_ReadsOCMv1V1Format(t *testing.T) {
-	raw := &runtime.Raw{}
-	require.NoError(t, json.Unmarshal([]byte(`{"type":"s3","bucket":"b","key":"k"}`), raw))
-
-	spec := &v2.S3{}
-	require.NoError(t, accessspec.Scheme.Convert(raw, spec))
-	require.NoError(t, spec.Validate())
-	require.Equal(t, "b", spec.BucketName)
-	require.Equal(t, "k", spec.ObjectKey)
-	require.Equal(t, runtime.NewUnversionedType("s3"), spec.Type)
-}

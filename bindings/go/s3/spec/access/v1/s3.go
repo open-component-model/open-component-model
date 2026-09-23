@@ -1,10 +1,7 @@
 package v1
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -39,26 +36,6 @@ type S3 struct {
 	Endpoint string `json:"endpoint,omitempty"`
 	// UsePathStyle enables bucket addressing in the path rather than the host.
 	UsePathStyle bool `json:"usePathStyle,omitempty"`
-}
-
-// UnmarshalJSON rejects v2 field names rather than silently ignoring an ambiguous object address.
-func (s *S3) UnmarshalJSON(data []byte) error {
-	type wire S3
-	decoded := wire{Type: s.Type}
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
-	for name := range fields {
-		if strings.EqualFold(name, "bucketName") || strings.EqualFold(name, "objectKey") {
-			return fmt.Errorf("%s is not supported by S3/v1; use bucket and key", name)
-		}
-	}
-	*s = S3(decoded)
-	return nil
 }
 
 // Validate verifies that the required fields of the S3 access are set.

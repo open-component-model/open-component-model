@@ -73,11 +73,6 @@ func ConvertToV2(spec runtime.Typed) (*v2.S3, error) {
 		if err := Scheme.Convert(s, out); err != nil {
 			return nil, err
 		}
-		// Unversioned aliases may have been decoded from either wire format.
-		// Normalize here, not in UnmarshalJSON, so Scheme.Decode retains its type check.
-		if out.Type.Version == "" {
-			out.Type = V2VersionedType
-		}
 		return out, nil
 	default:
 		return nil, fmt.Errorf("unsupported S3 access spec %T", spec)
