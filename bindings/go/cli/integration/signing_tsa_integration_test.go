@@ -241,15 +241,25 @@ func Test_Integration_Signing_TSA(t *testing.T) {
 // issueTSACert creates a self-signed certificate suitable for timestamping.
 func issueTSACert(t *testing.T, key *rsa.PrivateKey) *x509.Certificate {
 	t.Helper()
+	// Marshal a CRITICAL EKU extension containing only id-kp-timeStamping.
+	// Go's ExtKeyUsage field produces a non-critical extension; the new
+	// Verify requires critical, so we emit it via ExtraExtensions.
+	ekuVal, err := asn1.Marshal([]asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 8}})
+	require.NoError(t, err)
+
 	tmpl := &x509.Certificate{
 		SerialNumber:          mustRand128Bit(t),
 		Subject:               pkix.Name{CommonName: "Test TSA"},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().Add(7 * 24 * time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageTimeStamping},
 		BasicConstraintsValid: true,
 		IsCA:                  true, // self-signed root
+		ExtraExtensions: []pkix.Extension{{
+			Id:       asn1.ObjectIdentifier{2, 5, 29, 37}, // id-ce-extKeyUsage
+			Critical: true,
+			Value:    ekuVal,
+		}},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	require.NoError(t, err)

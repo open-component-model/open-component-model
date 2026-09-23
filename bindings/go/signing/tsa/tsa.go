@@ -68,10 +68,12 @@ func RequestTimestamp(ctx context.Context, client HTTPClient, url string, hash c
 		return nil, fmt.Errorf("tsa: marshaling timestamp request: %w", err)
 	}
 
-	redacted := redactURL(url)
+	redacted := RedactURL(url)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqDER))
 	if err != nil {
-		return nil, fmt.Errorf("tsa: creating HTTP request: %w", err)
+		// Do not wrap err: net/http URL errors embed the raw URL, which may
+		// carry userinfo or query credentials.
+		return nil, fmt.Errorf("tsa: creating HTTP request for %s failed", redacted)
 	}
 	httpReq.Header.Set("Content-Type", contentTypeTSQuery)
 
@@ -138,41 +140,108 @@ func RequestTimestamp(ctx context.Context, client HTTPClient, url string, hash c
 }
 
 // Verify parses a DER-encoded timestamp token and verifies that:
+//   - the PKCS#7 CMS signature is structurally valid
 //   - the embedded message imprint matches the provided hash and digest
-//   - the PKCS#7 signature is valid (if roots is non-nil, verified against roots)
+//   - the token has exactly one signer whose certificate carries a critical
+//     RFC 3161 id-kp-timeStamping extended key usage
 //
-// On success it returns the verified generation time from the TSTInfo.
-func Verify(raw []byte, hash crypto.Hash, digest []byte, roots *x509.CertPool) (time.Time, error) {
+// When roots is non-nil, the signer certificate chain is additionally validated
+// against roots as of the token's GenTime, requiring the timestamping EKU. In
+// that case the returned trusted flag is true and the returned GenTime is safe
+// to use for certificate-validation time.
+//
+// When roots is nil, only structural validity and the imprint/EKU checks are
+// performed; the returned trusted flag is false. Callers MUST NOT use a
+// non-trusted GenTime to relax X.509 certificate validity.
+func Verify(raw []byte, hash crypto.Hash, digest []byte, roots *x509.CertPool) (genTime time.Time, trusted bool, err error) {
 	mi, err := NewMessageImprint(hash, digest)
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, false, err
 	}
 
 	p7, err := pkcs7.Parse(raw)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("tsa: parsing PKCS#7 timestamp token: %w", err)
+		return time.Time{}, false, fmt.Errorf("tsa: parsing PKCS#7 timestamp token: %w", err)
 	}
 
-	if roots != nil {
-		if err := p7.VerifyWithChain(roots); err != nil {
-			return time.Time{}, fmt.Errorf("tsa: verifying PKCS#7 signature: %w", err)
-		}
-	} else {
-		if err := p7.Verify(); err != nil {
-			return time.Time{}, fmt.Errorf("tsa: verifying PKCS#7 signature: %w", err)
-		}
+	// Structurally verify the CMS signature over the token content. This does
+	// not establish trust in the TSA identity; chain validation below does.
+	if err := p7.Verify(); err != nil {
+		return time.Time{}, false, fmt.Errorf("tsa: verifying PKCS#7 signature: %w", err)
 	}
 
 	info, err := parseTSTInfo(p7.Content)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("tsa: parsing TSTInfo: %w", err)
+		return time.Time{}, false, fmt.Errorf("tsa: parsing TSTInfo: %w", err)
 	}
 
 	if !mi.Equal(info.MessageImprint) {
-		return time.Time{}, fmt.Errorf("tsa: timestamp message imprint does not match expected digest")
+		return time.Time{}, false, fmt.Errorf("tsa: timestamp message imprint does not match expected digest")
 	}
 
-	return info.GenTime, nil
+	// RFC 3161 §2.3: the token MUST have a single signer whose certificate has
+	// the critical id-kp-timeStamping EKU as its sole extended key usage. This
+	// prevents a non-timestamping certificate chaining to a configured root from
+	// fabricating a token.
+	signer := p7.GetOnlySigner()
+	if signer == nil {
+		return time.Time{}, false, fmt.Errorf("tsa: timestamp token must have exactly one signer")
+	}
+	if err := verifyTimestampingEKU(signer); err != nil {
+		return time.Time{}, false, err
+	}
+
+	if roots == nil {
+		return info.GenTime, false, nil
+	}
+
+	// Validate the signer chain against the trusted roots as of GenTime, again
+	// requiring the timestamping EKU across the chain. GenTime (not the optional
+	// CMS signing-time attribute or the current time) is the authoritative
+	// timestamp creation time per RFC 3161.
+	opts := x509.VerifyOptions{
+		Roots:       roots,
+		CurrentTime: info.GenTime,
+		KeyUsages:   []x509.ExtKeyUsage{x509.ExtKeyUsageTimeStamping},
+	}
+	if err := p7.VerifyWithOpts(opts); err != nil {
+		return time.Time{}, false, fmt.Errorf("tsa: verifying PKCS#7 signer certificate chain: %w", err)
+	}
+
+	return info.GenTime, true, nil
+}
+
+// verifyTimestampingEKU enforces the RFC 3161 §2.3 requirement that a TSA signer
+// certificate carries the id-kp-timeStamping extended key usage, that it is the
+// only extended key usage present, and that the EKU extension is marked critical.
+func verifyTimestampingEKU(cert *x509.Certificate) error {
+	hasTimeStamping := false
+	for _, eku := range cert.ExtKeyUsage {
+		if eku == x509.ExtKeyUsageTimeStamping {
+			hasTimeStamping = true
+			continue
+		}
+		return fmt.Errorf("tsa: signer certificate has a non-timestamping extended key usage")
+	}
+	if len(cert.UnknownExtKeyUsage) > 0 {
+		return fmt.Errorf("tsa: signer certificate has additional unrecognized extended key usages")
+	}
+	if !hasTimeStamping {
+		return fmt.Errorf("tsa: signer certificate lacks the id-kp-timeStamping extended key usage")
+	}
+
+	// RFC 3161 requires the EKU extension to be critical. Go removes handled
+	// critical extensions from UnhandledCriticalExtensions, so criticality is
+	// inspected from the raw extensions.
+	for _, ext := range cert.Extensions {
+		if ext.Id.Equal(oidExtKeyUsage) {
+			if !ext.Critical {
+				return fmt.Errorf("tsa: signer certificate extended key usage extension is not marked critical")
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("tsa: signer certificate is missing the extended key usage extension")
 }
 
 // ToPEM encodes a DER-encoded timestamp token into PEM format.
@@ -212,14 +281,14 @@ func parseTSTInfo(der []byte) (Info, error) {
 	return info, nil
 }
 
-// redactURL strips potentially sensitive components (userinfo, query, fragment)
+// RedactURL strips potentially sensitive components (userinfo, query, fragment)
 // from a URL so it can be safely included in error messages and logs. If the URL
-// cannot be parsed it is returned unchanged, since it contains no parsed secrets
-// this code could inadvertently expose.
-func redactURL(raw string) string {
+// cannot be parsed a fixed placeholder is returned, because a malformed URL may
+// still embed userinfo or query credentials that must never reach logs.
+func RedactURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return raw
+		return "<invalid TSA URL>"
 	}
 	u.User = nil
 	u.RawQuery = ""

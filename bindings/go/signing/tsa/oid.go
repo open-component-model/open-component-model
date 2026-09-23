@@ -12,6 +12,11 @@ var (
 	oidDigestAlgorithmSHA256 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 1}
 	oidDigestAlgorithmSHA384 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 2}
 	oidDigestAlgorithmSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 3}
+
+	// oidExtKeyUsage is the OID of the X.509 extended key usage extension
+	// (id-ce-extKeyUsage, 2.5.29.37). RFC 3161 requires this extension to be
+	// present and marked critical on a TSA signer certificate.
+	oidExtKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 37}
 )
 
 // digestAlgorithmToHash maps digest algorithm OID strings to crypto.Hash values.

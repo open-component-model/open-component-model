@@ -3,7 +3,6 @@ package componentversion
 import (
 	"context"
 	"crypto"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -415,8 +414,10 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("signing failed: %w", err)
 	}
 
-	// TSA timestamp (optional). Requested after signing so it can cover the same
-	// digest. Never performed on a dry run (useTSA already excludes dryRun).
+	// TSA timestamp (optional). Requested after signing so the token covers the
+	// signature value itself, proving the signature (not merely the descriptor
+	// digest) existed at the timestamped time. Never performed on a dry run
+	// (useTSA already excludes dryRun).
 	var tsSpec *descruntime.TimestampSpec
 	if useTSA {
 		httpConfig, err := httpv1alpha1.ResolveHTTPConfig(config)
@@ -424,7 +425,7 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("resolving HTTP configuration for TSA request failed: %w", err)
 		}
 		tsaClient := ocmhttp.New(ocmhttp.WithConfig(httpConfig))
-		tsSpec, err = requestTSATimestamp(ctx, logger, tsaClient, tsaURL, unsignedDigest)
+		tsSpec, err = requestTSATimestamp(ctx, logger, tsaClient, tsaURL, unsignedDigest.HashAlgorithm, []byte(sigBytes.Value))
 		if err != nil {
 			return err
 		}
@@ -531,40 +532,51 @@ func tsaURLFromFlags(cmd *cobra.Command) string {
 
 // addSignedTSALabel records the TSA URL as a signed (signing-relevant) label on
 // the component so it is covered by the digest and therefore tamper-evident.
-// Verifiers use it for URL-specific credential lookup of the TSA root certs.
+// Verifiers use it for URL-specific credential lookup of the TSA root certs. Any
+// pre-existing label for this signature (e.g. from a --force re-sign) is
+// replaced so verification always resolves credentials for the current URL.
 func addSignedTSALabel(desc *descruntime.Descriptor, signatureName, tsaURL string) error {
 	tsaURLJSON, err := json.Marshal(tsaURL)
 	if err != nil {
 		return fmt.Errorf("marshalling TSA URL label: %w", err)
 	}
-	desc.Component.Labels = append(desc.Component.Labels, descruntime.Label{
-		Name:    tsa.TSAURLLabelPrefix + signatureName,
+	labelName := tsa.TSAURLLabelPrefix + signatureName
+	label := descruntime.Label{
+		Name:    labelName,
 		Value:   tsaURLJSON,
 		Signing: true,
 		Version: "v1alpha1",
-	})
+	}
+	if idx := slices.IndexFunc(desc.Component.Labels, func(l descruntime.Label) bool {
+		return l.Name == labelName
+	}); idx >= 0 {
+		desc.Component.Labels[idx] = label
+	} else {
+		desc.Component.Labels = append(desc.Component.Labels, label)
+	}
 	return nil
 }
 
-// requestTSATimestamp obtains an RFC 3161 timestamp for the given digest from
-// the TSA at tsaURL and returns it as a TimestampSpec ready to attach to the
-// signature.
-func requestTSATimestamp(ctx context.Context, logger *slog.Logger, client tsa.HTTPClient, tsaURL string, digest *descruntime.Digest) (*descruntime.TimestampSpec, error) {
-	hash, err := signing.GetSupportedHash(digest.HashAlgorithm)
+// requestTSATimestamp obtains an RFC 3161 timestamp over the signature value
+// from the TSA at tsaURL and returns it as a TimestampSpec ready to attach to
+// the signature. The token proves that this signature (not merely the descriptor
+// digest) existed at the timestamped time. hashAlgorithm selects the imprint
+// hash and matches the signature's declared digest algorithm.
+func requestTSATimestamp(ctx context.Context, logger *slog.Logger, client tsa.HTTPClient, tsaURL, hashAlgorithm string, signatureValue []byte) (*descruntime.TimestampSpec, error) {
+	hash, err := signing.GetSupportedHash(hashAlgorithm)
 	if err != nil {
 		return nil, fmt.Errorf("preparing TSA request: %w", err)
 	}
-	digestBytes, err := hex.DecodeString(digest.Value)
-	if err != nil {
-		return nil, fmt.Errorf("decoding digest for TSA request: %w", err)
-	}
+	h := hash.New()
+	h.Write(signatureValue)
+	imprint := h.Sum(nil)
 
-	token, err := tsa.RequestTimestamp(ctx, client, tsaURL, hash, digestBytes)
+	token, err := tsa.RequestTimestamp(ctx, client, tsaURL, hash, imprint)
 	if err != nil {
 		return nil, fmt.Errorf("TSA timestamp request failed: %w", err)
 	}
 
-	logger.InfoContext(ctx, "obtained TSA timestamp", "time", token.Time, "server", tsaURL)
+	logger.InfoContext(ctx, "obtained TSA timestamp", "time", token.Time, "server", tsa.RedactURL(tsaURL))
 	return &descruntime.TimestampSpec{
 		Value: string(tsa.ToPEM(token.Raw)),
 		Time:  descruntime.CreationTime(token.Time),

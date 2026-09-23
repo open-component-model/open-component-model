@@ -12,7 +12,7 @@
 
 OCM component version signatures prove provenance and integrity. When PEM-encoded signatures embed an X.509 certificate chain, the verifier validates that chain against trust anchors. If the signing certificate expires between signing and verification, the signature is rejected even though it was valid when created.
 
-This is a well-known problem in code signing. The industry-standard solution is RFC 3161 timestamping: at signing time, a trusted Timestamping Authority (TSA) counter-signs the digest with a timestamp token, proving when the signature was created. At verification time, the timestamp token is checked, and the certificate chain is validated against the TSA-attested time rather than the current time.
+This is a well-known problem in code signing. The industry-standard solution is RFC 3161 timestamping: at signing time, a trusted Timestamping Authority (TSA) counter-signs the signature with a timestamp token, proving when the signature was created. At verification time, the timestamp token is checked, and (for RSA/PEM certificate-chain signatures) the certificate chain is validated against the TSA-attested time rather than the current time.
 
 Without timestamping:
 
@@ -114,7 +114,7 @@ The fundamental security property is **separation of trust**: the signer proves 
 
 An RFC 3161 timestamp token is a PKCS#7 SignedData structure that wraps a TSTInfo containing:
 
-1. **MessageImprint** — the hash algorithm and digest value that was timestamped (must match the component descriptor digest)
+1. **MessageImprint** — the hash algorithm and digest value that was timestamped. OCM timestamps the **signature value** (`Signature.Signature.Value`), not the descriptor digest, so the imprint must match a hash of the signature itself.
 2. **GenTime** — the TSA-attested generation time
 3. **Nonce** — a caller-generated random value to prevent replay
 4. **SerialNumber** — TSA-assigned serial for uniqueness
@@ -122,11 +122,11 @@ An RFC 3161 timestamp token is a PKCS#7 SignedData structure that wraps a TSTInf
 
 The PKCS#7 wrapper provides a cryptographic signature from the TSA's certificate over the TSTInfo. This proves:
 
-- **The digest existed at GenTime**: the TSA saw the exact digest value at the attested time
+- **The signature existed at GenTime**: the TSA saw the exact signature value at the attested time. Timestamping the signature (rather than the descriptor digest) prevents a key holder from timestamping a digest before certificate expiry and only later producing the signature.
 - **The token is fresh**: the nonce matches the client's random challenge (checked at request time)
-- **The token is authentic**: the PKCS#7 signature chains to a TSA root the verifier trusts (checked at verify time)
+- **The token is authentic**: the PKCS#7 signature chains to a TSA root the verifier trusts, and the signer certificate carries a critical `id-kp-timeStamping` extended key usage as its sole EKU per RFC 3161 §2.3 (checked at verify time)
 
-Crucially, the timestamp does **not** prove that the signing certificate was valid at GenTime — it only proves the digest existed. The certificate validity check is performed separately by the RSA handler using the TSA-attested time as the reference point.
+Crucially, the timestamp does **not** prove that the signing certificate was valid at GenTime — it only proves the signature existed. The certificate validity check is performed separately by the RSA handler using the TSA-attested time as the reference point, and only for RSA/PEM certificate-chain signatures.
 
 ### Trust Anchor Separation
 
@@ -149,13 +149,13 @@ This separation prevents the signer from asserting their own trust — the signe
 
 The implementation supports three verification levels based on trust material availability:
 
-| Level            | TSA root certs configured? | Timestamp present? | What is verified                                                                              |
-|------------------|----------------------------|--------------------|-----------------------------------------------------------------------------------------------|
-| **No timestamp** | N/A                        | No                 | Standard signature verification only                                                          |
-| **Structural**   | No                         | Yes                | PKCS#7 parsing + imprint match; no chain verification; warning emitted                        |
-| **Full**         | Yes                        | Yes                | PKCS#7 chain verification against root pool + imprint match + TSA time used for cert validity |
+| Level            | TSA root certs configured? | Timestamp present? | What is verified                                                                                                        |
+|------------------|----------------------------|--------------------|-------------------------------------------------------------------------------------------------------------------------|
+| **No timestamp** | N/A                        | No                 | Standard signature verification only                                                                                    |
+| **Structural**   | No                         | Yes                | PKCS#7 signature + imprint match + signer timestamping-EKU; no chain verification; **no** certificate-validation time derived; warning emitted |
+| **Full**         | Yes                        | Yes                | PKCS#7 chain verification against the root pool at GenTime + imprint match + timestamping-EKU; the attested time is used for RSA/PEM certificate validity |
 
-The structural level provides defense in depth: even without root certificates, the verifier confirms that the timestamp token is well-formed and references the correct digest. A tampered or fabricated token with a wrong imprint is rejected regardless of root certificate configuration.
+Only the **Full** level yields a certificate-validation time. The **Structural** level never propagates `GenTime` or sets `tsa_verified_time`: a token whose TSA identity is not trusted proves nothing about *when* the signature was made, so it must never relax X.509 certificate validity. Missing TSA roots therefore disable timestamp-based certificate validation entirely, while structural parsing and imprint matching still run as defense in depth. A tampered or fabricated token with a wrong imprint, no timestamping EKU, or a non-critical EKU is rejected regardless of root certificate configuration.
 
 ### TSA URL as Signed Content
 
@@ -174,13 +174,15 @@ However, the TSA URL is only a **hint** for credential resolution — it tells t
 | Threat                                                | Mitigation                                                                                                                                                                                                                                        |
 |-------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Signer fabricates a timestamp**                     | The timestamp is a PKCS#7 structure signed by the TSA's key, not the signer's. A fabricated token fails PKCS#7 chain verification against the verifier's TSA root pool.                                                                           |
+| **Non-timestamping cert chaining to a trusted root**  | The signer certificate of the token must carry a critical `id-kp-timeStamping` EKU as its sole extended key usage (RFC 3161 §2.3). A certificate authorized for another purpose (e.g. TLS server auth) is rejected even if it chains to a configured root. |
 | **Signer embeds a self-signed TSA root**              | TSA roots come exclusively from the verifier's credential graph. Embedded roots are not trusted.                                                                                                                                                  |
 | **Signer replaces the TSA URL**                       | The TSA URL is a signed label. Changing it invalidates the component descriptor digest and breaks the signature.                                                                                                                                  |
+| **Signer timestamps a digest, then signs after expiry** | The token covers the **signature value**, not the descriptor digest. A signature produced after the token cannot match the timestamped imprint, so the earlier time cannot be reused to validate an expired certificate.                        |
 | **TSA issues a backdated timestamp**                  | A compromised TSA is a fundamental trust violation — the same risk exists in all timestamping systems. Mitigated by choosing reputable TSAs and configuring per-TSA root certificates (if TSA-A is compromised, TSA-B's signatures remain valid). |
 | **TSA response replay**                               | Each request includes a 128-bit cryptographic nonce. The response nonce is validated at request time.                                                                                                                                             |
-| **Attacker tampers with the token in the descriptor** | The token is stored in the `Signature.Timestamp` field. A modified token fails PKCS#7 signature verification. The imprint in the token must match the descriptor digest.                                                                          |
-| **Expired signing certificate**                       | With a valid TSA timestamp, the X.509 chain is validated at the TSA-attested time instead of `time.Now()`, so an expired certificate is accepted if it was valid when the timestamp was created.                                                  |
-| **Missing TSA root certificates**                     | Verification falls back to structural-only mode with a warning. The signature itself is still verified normally; only the timestamp lacks full chain verification.                                                                                |
+| **Attacker tampers with the token in the descriptor** | The token is stored in the `Signature.Timestamp` field. A modified token fails PKCS#7 signature verification. The imprint in the token must match a hash of the signature value.                                                                 |
+| **Expired signing certificate**                       | Only when the token chain validates against a configured TSA root (trusted) is the RSA/PEM X.509 chain validated at the TSA-attested time instead of `time.Now()`, so an expired certificate is accepted if it was valid when the timestamp was created. A merely structural (untrusted) token never relaxes certificate validity. |
+| **Missing TSA root certificates**                     | Verification falls back to structural-only mode with a warning. The signature itself is still verified normally; the timestamp lacks full chain verification and does not provide a certificate-validation time.                                 |
 | **Unbounded TSA response**                            | Response bodies are limited to 10 MB to prevent memory exhaustion from malicious/misconfigured servers.                                                                                                                                           |
 
 ---

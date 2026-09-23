@@ -366,15 +366,18 @@ For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/tutorials/
 RFC 3161 timestamping is currently being rolled out and we are awaiting feedback. The interface may evolve based on that feedback.
 {{< /callout >}}
 
-A signature verifies only while the signing certificate is valid. With certificate-chain trust (PEM encoding) or the
-short-lived certificates common to Sigstore, a signature can become unverifiable once the certificate expires — even
-though it was valid when created. RFC 3161 timestamping solves this: at signing time a trusted **Timestamping Authority
-(TSA)** counter-signs the digest, proving *when* the signature was made. At verification time the certificate chain is
+A signature verifies only while the signing certificate is valid. With certificate-chain trust (PEM encoding), a
+signature can become unverifiable once the certificate expires — even though it was valid when created. RFC 3161
+timestamping solves this: at signing time a trusted **Timestamping Authority (TSA)** counter-signs the signature,
+proving *when* it was made. At verification time — for RSA/PEM certificate-chain signatures — the certificate chain is
 then validated against the TSA-attested time instead of the current time, so a signature created while the certificate
-was valid keeps verifying after it expires.
+was valid keeps verifying after it expires. This certificate-expiry extension applies only when the timestamp is
+**trusted** (its chain validates against TSA roots the verifier configured). Plain signatures carry no certificate, and
+the Sigstore verifier does not consume the TSA-attested time, so neither gains post-expiry verification from a timestamp.
 
-Timestamping is **optional** and **encoding-agnostic** — it works with Plain and PEM signatures alike. Signatures
-without a timestamp continue to verify unchanged.
+Timestamping is **optional**. A timestamp can be attached to Plain and PEM signatures alike, but only PEM
+certificate-chain (RSA) signatures benefit from the certificate-expiry extension. Signatures without a timestamp
+continue to verify unchanged.
 
 ### How It Works
 
@@ -382,26 +385,29 @@ without a timestamp continue to verify unchanged.
 flowchart TB
     subgraph sign ["Sign"]
         A[Compute digest] --> B[Sign digest]
-        A --> C[Request timestamp from TSA]
+        B --> C[Request timestamp of signature from TSA]
         C --> D["Attach timestamp token to signature"]
     end
     sign --> V
     subgraph V ["Verify"]
-        E[Resolve TSA roots from credential graph] --> F[Verify timestamp token chain]
-        F --> G["Validate signing cert at TSA-attested time"]
+        E[Resolve TSA roots from credential graph] --> F[Verify timestamp token chain at GenTime]
+        F --> G["If trusted, validate signing cert at TSA-attested time"]
     end
 ```
 
 1. The signer selects a TSA with the `--tsa` (default public TSA) or `--tsa-url` flag on `ocm sign cv`.
 2. Before the digest is computed, the TSA URL is recorded as a **signed label**
    (`url.tsa.ocm.software/{signatureName}`) on the component, so it is covered by the signature and tamper-evident.
-3. After signing, OCM sends the digest to the TSA, which returns a PKCS#7 timestamp token. The token is attached to the
-   signature's `timestamp` field in the descriptor.
+3. After signing, OCM sends a hash of the **signature value** to the TSA, which returns a PKCS#7 timestamp token whose
+   signer certificate must carry a critical `id-kp-timeStamping` EKU. The token is attached to the signature's
+   `timestamp` field in the descriptor.
 4. At verification, OCM reads the TSA URL from the signed label and resolves the TSA's root CA certificates from the
    credential graph via a [`TSA/v1alpha1`]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
    consumer identity.
-5. The token's PKCS#7 chain is verified against those roots, its message imprint is checked against the descriptor
-   digest, and the attested time is used to validate the signing certificate chain.
+5. The token's PKCS#7 chain is verified against those roots at its GenTime, its message imprint is checked against a
+   hash of the signature value, and — only when the chain is trusted — the attested time is used to validate an RSA/PEM
+   signing certificate chain. Without trusted roots the token is checked structurally only and does not relax
+   certificate validity.
 
 ### Trust Model
 

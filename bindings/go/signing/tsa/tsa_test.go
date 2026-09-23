@@ -447,7 +447,7 @@ func TestRequestTimestamp_TrailingData(t *testing.T) {
 
 func TestVerify_BadDER(t *testing.T) {
 	digest := sha256.Sum256([]byte("test"))
-	_, err := Verify([]byte("not DER"), crypto.SHA256, digest[:], nil)
+	_, _, err := Verify([]byte("not DER"), crypto.SHA256, digest[:], nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing PKCS#7")
 }
@@ -463,7 +463,7 @@ func TestVerify_BadHash(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to verify with MD5 (unsupported)
-	_, err = Verify(token.Raw, crypto.MD5, []byte("x"), nil)
+	_, _, err = Verify(token.Raw, crypto.MD5, []byte("x"), nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported hash")
 }
@@ -610,7 +610,7 @@ func TestVerify_NilRoots_InvalidSignature(t *testing.T) {
 	require.NoError(t, err)
 
 	digest := sha256.Sum256([]byte("test"))
-	_, err = Verify(p7DER, crypto.SHA256, digest[:], nil)
+	_, _, err = Verify(p7DER, crypto.SHA256, digest[:], nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "verifying PKCS#7 signature")
 }
@@ -628,7 +628,7 @@ func TestVerify_MismatchedImprint(t *testing.T) {
 	wrongDigest := sha256.Sum256([]byte("wrong"))
 	roots := x509.NewCertPool()
 	roots.AddCert(tsaCert)
-	_, err = Verify(token.Raw, crypto.SHA256, wrongDigest[:], roots)
+	_, _, err = Verify(token.Raw, crypto.SHA256, wrongDigest[:], roots)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "does not match")
 }
@@ -668,7 +668,7 @@ func TestVerify_InvalidTSTInfoContent(t *testing.T) {
 	require.NoError(t, err)
 
 	digest := sha256.Sum256([]byte("test"))
-	_, err = Verify(p7DER, crypto.SHA256, digest[:], nil)
+	_, _, err = Verify(p7DER, crypto.SHA256, digest[:], nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing TSTInfo")
 }
@@ -762,8 +762,9 @@ func TestRequestTimestamp_AndVerify_RoundTrip(t *testing.T) {
 	// Verify with correct root
 	roots := x509.NewCertPool()
 	roots.AddCert(tsaCert)
-	verifiedTime, err := Verify(token.Raw, crypto.SHA256, digest[:], roots)
+	verifiedTime, trusted, err := Verify(token.Raw, crypto.SHA256, digest[:], roots)
 	require.NoError(t, err)
+	require.True(t, trusted)
 	assert.Equal(t, token.Time, verifiedTime)
 }
 
@@ -780,7 +781,7 @@ func TestVerify_WrongDigest(t *testing.T) {
 	wrongDigest := sha256.Sum256([]byte("tampered"))
 	roots := x509.NewCertPool()
 	roots.AddCert(tsaCert)
-	_, err = Verify(token.Raw, crypto.SHA256, wrongDigest[:], roots)
+	_, _, err = Verify(token.Raw, crypto.SHA256, wrongDigest[:], roots)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "does not match")
 }
@@ -798,9 +799,9 @@ func TestVerify_WrongRootCert(t *testing.T) {
 	_, wrongCert := mustTSAKeyAndCert(t)
 	wrongRoots := x509.NewCertPool()
 	wrongRoots.AddCert(wrongCert)
-	_, err = Verify(token.Raw, crypto.SHA256, digest[:], wrongRoots)
+	_, _, err = Verify(token.Raw, crypto.SHA256, digest[:], wrongRoots)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "verifying PKCS#7 signature")
+	assert.Contains(t, err.Error(), "verifying PKCS#7 signer certificate chain")
 }
 
 func TestVerify_NilRoots_StructuralOnly(t *testing.T) {
@@ -813,9 +814,95 @@ func TestVerify_NilRoots_StructuralOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify with nil roots — structural check only
-	verifiedTime, err := Verify(token.Raw, crypto.SHA256, digest[:], nil)
+	verifiedTime, trusted, err := Verify(token.Raw, crypto.SHA256, digest[:], nil)
 	require.NoError(t, err)
+	require.False(t, trusted)
 	assert.Equal(t, token.Time, verifiedTime)
+}
+
+func TestVerify_RejectsNonTimestampingEKU(t *testing.T) {
+	// Build a cert with ServerAuth EKU (critical) instead of TimeStamping.
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	require.NoError(t, err)
+
+	// Marshal a critical EKU extension containing only id-kp-serverAuth (1.3.6.1.5.5.7.3.1).
+	ekuVal, err := asn1.Marshal([]asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 1}})
+	require.NoError(t, err)
+
+	tmpl := &x509.Certificate{
+		SerialNumber:          serial,
+		Subject:               pkix.Name{CommonName: "Test Non-TSA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(7 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		ExtraExtensions: []pkix.Extension{{
+			Id:       asn1.ObjectIdentifier{2, 5, 29, 37}, // id-ce-extKeyUsage
+			Critical: true,
+			Value:    ekuVal,
+		}},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	badCert, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+
+	// Build a mock TSA server using this non-timestamping cert.
+	server := httptest.NewServer(newMockTSAHandler(t, badCert, key))
+	t.Cleanup(server.Close)
+
+	digest := sha256.Sum256([]byte("eku rejection test"))
+	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
+	require.NoError(t, err)
+
+	roots := x509.NewCertPool()
+	roots.AddCert(badCert)
+	_, _, err = Verify(token.Raw, crypto.SHA256, digest[:], roots)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "non-timestamping")
+}
+
+func TestVerify_RejectsNonCriticalEKU(t *testing.T) {
+	// Build a cert with TimeStamping EKU that is NOT marked critical.
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	require.NoError(t, err)
+
+	tmpl := &x509.Certificate{
+		SerialNumber:          serial,
+		Subject:               pkix.Name{CommonName: "Test Non-Critical EKU"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(7 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageTimeStamping},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		// Go's standard x509.CreateCertificate emits a NON-critical EKU extension
+		// when using the ExtKeyUsage field. This is exactly what Verify must reject.
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	badCert, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+
+	server := httptest.NewServer(newMockTSAHandler(t, badCert, key))
+	t.Cleanup(server.Close)
+
+	digest := sha256.Sum256([]byte("non-critical eku test"))
+	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
+	require.NoError(t, err)
+
+	roots := x509.NewCertPool()
+	roots.AddCert(badCert)
+	_, _, err = Verify(token.Raw, crypto.SHA256, digest[:], roots)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not marked critical")
 }
 
 func TestRequestTimestamp_PEM_RoundTrip(t *testing.T) {
@@ -836,8 +923,9 @@ func TestRequestTimestamp_PEM_RoundTrip(t *testing.T) {
 	// Verify the decoded token still works
 	roots := x509.NewCertPool()
 	roots.AddCert(tsaCert)
-	verifiedTime, err := Verify(decoded, crypto.SHA256, digest[:], roots)
+	verifiedTime, trusted, err := Verify(decoded, crypto.SHA256, digest[:], roots)
 	require.NoError(t, err)
+	require.True(t, trusted)
 	assert.Equal(t, token.Time, verifiedTime)
 }
 
@@ -883,9 +971,17 @@ func mustTSAKeyAndCert(t *testing.T) (*rsa.PrivateKey, *x509.Certificate) {
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().Add(7 * 24 * time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageTimeStamping},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
+		ExtraExtensions: []pkix.Extension{{
+			Id:       asn1.ObjectIdentifier{2, 5, 29, 37}, // id-ce-extKeyUsage
+			Critical: true,
+			Value: func() []byte {
+				val, err := asn1.Marshal([]asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 8}})
+				require.NoError(t, err)
+				return val
+			}(),
+		}},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	require.NoError(t, err)

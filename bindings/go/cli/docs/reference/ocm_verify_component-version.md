@@ -41,6 +41,14 @@ Verify component version(s) inside an OCM repository based on signatures.
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
 - --verifier-spec is no longer supported and fails with an error
 
+## Timestamp Verification (RFC 3161 TSA)
+
+- If a signature carries an RFC 3161 timestamp, the verifier checks it automatically
+- Full certificate-chain verification of the timestamp token requires the TSA's root CA certificate, supplied via the credential graph under a TSA/v1alpha1 identity
+- Without TSA root certificates the token structure and digest are still checked, but the certificate chain is not verified and a warning is logged
+- Only a timestamp validated against trusted TSA roots is used to validate an (RSA/PEM) signing certificate as of the signing time; a merely structural token never relaxes certificate validity
+- The TSA URL stored as a signed label in the descriptor is used as a hint for URL-specific credential lookup
+
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.
 
 ```
@@ -209,14 +217,8 @@ verify component-version ./repo//ocm.software/cli:0.12.0 --config ./sigstore-ver
 verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
 
 ## Example Credential Config (TSA timestamp verification)
-#
-# If a signature includes an RFC 3161 timestamp, the verifier checks it automatically.
-# To enable full PKCS#7 chain verification of the timestamp token, supply the TSA's
-# root CA certificate via the credential graph with a TSA/v1alpha1 identity.
-# Without root certificates, only structural validity is checked.
-#
-# The TSA URL stored in the signed descriptor is used as a hint for credential
-# lookup, enabling URL-specific matching.
+# TSA/v1alpha1 identity supplying the TSA root CA for full timestamp chain verification
+# (see "Timestamp Verification (RFC 3161 TSA)" above):
 
     type: generic.config.ocm.software/v1
     configurations:

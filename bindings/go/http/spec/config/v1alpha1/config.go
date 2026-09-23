@@ -205,10 +205,12 @@ func MergeTLSConfig(dst, src *TLSConfig) TLSConfig {
 	if src.InsecureSkipVerify != nil {
 		out.InsecureSkipVerify = src.InsecureSkipVerify
 	}
-	if src.RootCAsPEM != "" {
+	// RootCAsPEM and RootCAsPEMFile are one trust source: rootCAPoolFromTLSConfig
+	// prefers RootCAsPEM, so they must be replaced together. When src sets either,
+	// adopt both of src's values (clearing the other) so a per-host file override
+	// is not shadowed by a global inline bundle.
+	if src.RootCAsPEM != "" || src.RootCAsPEMFile != "" {
 		out.RootCAsPEM = src.RootCAsPEM
-	}
-	if src.RootCAsPEMFile != "" {
 		out.RootCAsPEMFile = src.RootCAsPEMFile
 	}
 	return out

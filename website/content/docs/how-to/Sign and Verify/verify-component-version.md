@@ -631,10 +631,12 @@ configurations:
             rootCertsPEMFile: /path/to/digicert-tsa-root.pem
 ```
 
-With the root certificates present, the timestamp token's chain is verified and the signing certificate is validated
-as of the timestamped time — so a signature stays verifiable after its certificate expires. Without them, verification
-falls back to structural-only mode (the token is parsed and its digest checked, but the chain is not verified) and a
-warning is logged; the signature itself still verifies normally. See
+With the root certificates present, the timestamp token's chain is verified at its generation time and — for RSA/PEM
+certificate-chain signatures — the signing certificate is validated as of the timestamped time, so such a signature
+stays verifiable after its certificate expires. Without the root certificates, verification falls back to
+structural-only mode (the token is parsed and its imprint over the signature value checked, but the chain is not
+verified): the attested time is **not** used to relax certificate validity, a warning is logged, and the signature
+itself still verifies normally. See
 [Concept: RFC 3161 Timestamping]({{< relref "docs/concepts/signing-and-verification-concept.md#rfc-3161-timestamping" >}})
 for the trust model and the difference between these TSA *token* roots and the HTTP client's TLS trust.
 
