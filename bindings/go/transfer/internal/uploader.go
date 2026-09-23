@@ -20,22 +20,6 @@ import (
 	wgettransformv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
 
-// matchUploader returns the first uploader whose match applies to resource, or nil.
-// Declaration order is significant — the first recognized match wins, so more specific
-// rules should precede broader ones. The per-uploader matching semantics are defined by
-// [transferv1alpha1.UploaderConfig.Match].
-func matchUploader(uploaders []transferv1alpha1.UploaderConfig, resource descriptorv2.Resource) transferv1alpha1.UploaderConfig {
-	for _, u := range uploaders {
-		if u == nil {
-			continue
-		}
-		if u.Match(resource) {
-			return u
-		}
-	}
-	return nil
-}
-
 // resourceAlias is the identifier an uploader's targetURL CEL expression uses to
 // reference the source resource. processUploader rewrites it to the concrete
 // environment node path before the graph runtime evaluates the expression.

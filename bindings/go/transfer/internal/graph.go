@@ -263,14 +263,23 @@ func processResources(
 
 		// An uploader is an explicit instruction to move a matched resource, so it
 		// runs regardless of copy mode and takes precedence over the default handlers.
-		if u := matchUploader(uploaders, resource); u != nil {
-			switch cfg := u.(type) {
+		// Declaration order is significant: the first recognized match wins, so more
+		// specific rules should precede broader ones.
+		var matched transferv1alpha1.UploaderConfig
+		for _, u := range uploaders {
+			if u != nil && u.Match(resource) {
+				matched = u
+				break
+			}
+		}
+		if matched != nil {
+			switch cfg := matched.(type) {
 			case *transferv1alpha1.HTTPUploaderConfig:
 				if err := processUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			default:
-				return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", u, resource.ToIdentity())
+				return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", matched, resource.ToIdentity())
 			}
 			continue
 		}

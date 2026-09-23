@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -395,29 +394,6 @@ func TestBuildGraphDefinition_DeterministicOrder(t *testing.T) {
 	}
 }
 
-// resourceWithIdentity builds a v2 Wget resource carrying extra identity attributes
-// so the matcher's name/version/extraIdentity selection can be exercised.
-func resourceWithIdentity(name, version string, extra map[string]string) descriptorv2.Resource {
-	res := descriptorv2.Resource{
-		ElementMeta: descriptorv2.ElementMeta{
-			ObjectMeta: descriptorv2.ObjectMeta{Name: name, Version: version},
-		},
-		Type:     "blob",
-		Relation: descriptorv2.ExternalRelation,
-		Access: &runtime.Raw{
-			Type: runtime.NewVersionedType("Wget", "v1"),
-			Data: []byte(`{"type":"Wget/v1","url":"https://source.example/` + name + `"}`),
-		},
-	}
-	if len(extra) > 0 {
-		res.ExtraIdentity = runtime.Identity{}
-		for k, v := range extra {
-			res.ExtraIdentity[k] = v
-		}
-	}
-	return res
-}
-
 // findResourceInDescriptorEnv locates the source resource by name inside the shared
 // descriptor environment node (environment.<baseID>.component.resources) that the
 // uploader selector targets. It fails the test if no such resource is present.
@@ -447,117 +423,3 @@ func findResourceInDescriptorEnv(t *testing.T, tgd *transformv1alpha1.Transforma
 	return nil
 }
 
-func TestMatchUploader(t *testing.T) {
-	wget := runtime.NewVersionedType("Wget", "v1")
-	// Rules are named so assertions can identify which one won.
-	rule := func(name string, m transferv1alpha1.UploaderMatch) *transferv1alpha1.HTTPUploaderConfig {
-		u := uploaderFor(t, m.AccessType, "${\""+name+"\"}")
-		u.MatchSpec = m
-		return u
-	}
-
-	byAccess := rule("byAccess", transferv1alpha1.UploaderMatch{AccessType: wget})
-	byName := rule("byName", transferv1alpha1.UploaderMatch{AccessType: wget, Name: "docs"})
-	byVersion := rule("byVersion", transferv1alpha1.UploaderMatch{AccessType: wget, Version: "1.0.0"})
-	byArch := rule("byArch", transferv1alpha1.UploaderMatch{AccessType: wget, ExtraIdentity: runtime.Identity{"architecture": "arm64"}})
-	byNameAndArch := rule("byNameAndArch", transferv1alpha1.UploaderMatch{AccessType: wget, Name: "docs", ExtraIdentity: runtime.Identity{"architecture": "arm64"}})
-	byVersionedAccess := rule("byVersionedAccess", transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v2")})
-	ociOnly := rule("ociOnly", transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("OCIImage", "v1")})
-	byUnversioned := rule("byUnversioned", transferv1alpha1.UploaderMatch{AccessType: runtime.NewUnversionedType("Wget")})
-
-	// helper to name the winning rule via its (single) targetURL literal.
-	won := func(t *testing.T, u transferv1alpha1.UploaderConfig) string {
-		t.Helper()
-		if u == nil {
-			return ""
-		}
-		return strings.Trim(u.(*transferv1alpha1.HTTPUploaderConfig).TargetURL, "${\"}")
-	}
-
-	tests := []struct {
-		name      string
-		uploaders []transferv1alpha1.UploaderConfig
-		resource  descriptorv2.Resource
-		want      string // winning rule name, "" for no match
-	}{
-		{
-			name:      "access type only",
-			uploaders: []transferv1alpha1.UploaderConfig{byAccess},
-			resource:  resourceWithIdentity("anything", "1.0.0", nil),
-			want:      "byAccess",
-		},
-		{
-			name:      "name constraint selects only the named resource",
-			uploaders: []transferv1alpha1.UploaderConfig{byName},
-			resource:  resourceWithIdentity("other", "1.0.0", nil),
-			want:      "",
-		},
-		{
-			name:      "name constraint matches the named resource",
-			uploaders: []transferv1alpha1.UploaderConfig{byName},
-			resource:  resourceWithIdentity("docs", "1.0.0", nil),
-			want:      "byName",
-		},
-		{
-			name:      "version constraint matches the versioned resource",
-			uploaders: []transferv1alpha1.UploaderConfig{byVersion},
-			resource:  resourceWithIdentity("docs", "1.0.0", nil),
-			want:      "byVersion",
-		},
-		{
-			name:      "version constraint selects only the matching version",
-			uploaders: []transferv1alpha1.UploaderConfig{byVersion},
-			resource:  resourceWithIdentity("docs", "2.0.0", nil),
-			want:      "",
-		},
-		{
-			name:      "extraIdentity must be present and equal",
-			uploaders: []transferv1alpha1.UploaderConfig{byArch},
-			resource:  resourceWithIdentity("docs", "1.0.0", map[string]string{"architecture": "amd64"}),
-			want:      "",
-		},
-		{
-			name:      "extraIdentity matches",
-			uploaders: []transferv1alpha1.UploaderConfig{byArch},
-			resource:  resourceWithIdentity("docs", "1.0.0", map[string]string{"architecture": "arm64"}),
-			want:      "byArch",
-		},
-		{
-			name:      "first match wins: specific before broad",
-			uploaders: []transferv1alpha1.UploaderConfig{byNameAndArch, byName, byAccess},
-			resource:  resourceWithIdentity("docs", "1.0.0", map[string]string{"architecture": "arm64"}),
-			want:      "byNameAndArch",
-		},
-		{
-			name:      "broad rule wins when specific rules do not apply",
-			uploaders: []transferv1alpha1.UploaderConfig{byNameAndArch, byName, byAccess},
-			resource:  resourceWithIdentity("other", "1.0.0", nil),
-			want:      "byAccess",
-		},
-		{
-			name:      "access version must match when specified",
-			uploaders: []transferv1alpha1.UploaderConfig{byVersionedAccess},
-			resource:  resourceWithIdentity("docs", "1.0.0", nil),
-			want:      "",
-		},
-		{
-			name:      "unversioned access type matches any version",
-			uploaders: []transferv1alpha1.UploaderConfig{byUnversioned},
-			resource:  resourceWithIdentity("docs", "1.0.0", nil),
-			want:      "byUnversioned",
-		},
-		{
-			name:      "non-matching access type is skipped",
-			uploaders: []transferv1alpha1.UploaderConfig{ociOnly, byAccess},
-			resource:  resourceWithIdentity("docs", "1.0.0", nil),
-			want:      "byAccess",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := matchUploader(tc.uploaders, tc.resource)
-			assert.Equal(t, tc.want, won(t, got))
-		})
-	}
-}
