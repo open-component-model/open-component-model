@@ -162,6 +162,15 @@ func TestVerifyingBlob_RejectsTrailingContent(t *testing.T) {
 	require.ErrorContains(t, rc.Close(), "digest mismatch")
 }
 
+func TestVerifyingBlob_UnreadContentCannotMatchEmptyDigest(t *testing.T) {
+	b, err := newVerifyingBlob(inmemory.New(strings.NewReader(verifyTestContent)), digest.FromString(""))
+	require.NoError(t, err)
+
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	require.ErrorContains(t, rc.Close(), "incomplete read for digest")
+}
+
 // sizedBlob gives a plainBlob a size without giving it anything else.
 type sizedBlob struct {
 	plainBlob

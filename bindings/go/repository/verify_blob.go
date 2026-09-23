@@ -116,6 +116,7 @@ type verifyingReadCloser struct {
 	base     io.ReadCloser
 	digester digest.Digester
 	expected digest.Digest
+	eof      bool
 }
 
 // Read is a tee reader implementation that will not only error on Close but
@@ -130,6 +131,7 @@ func (v *verifyingReadCloser) Read(p []byte) (int, error) {
 		}
 	}
 	if errors.Is(err, io.EOF) {
+		v.eof = true
 		if mismatch := v.verify(); mismatch != nil {
 			return n, mismatch
 		}
@@ -144,7 +146,11 @@ func (v *verifyingReadCloser) Close() error {
 	return errors.Join(v.verify(), v.base.Close())
 }
 
+// verify refuses content that has not reached EOF before comparing digests.
 func (v *verifyingReadCloser) verify() error {
+	if !v.eof {
+		return fmt.Errorf("digest mismatch: incomplete read for digest %s", v.expected)
+	}
 	if actual := v.digester.Digest(); actual != v.expected {
 		return fmt.Errorf("digest mismatch: expected %s, got %s", v.expected, actual)
 	}
