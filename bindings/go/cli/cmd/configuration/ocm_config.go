@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -112,16 +113,14 @@ func GetOCMConfig(options OCMConfigOptions, additional ...string) (*genericv1.Co
 }
 
 func loadAndMergeConfigs(paths []string, strict bool, stdin io.Reader) (*genericv1.Config, error) {
+	if i := slices.Index(paths, StdinConfigPath); i >= 0 && slices.Contains(paths[i+1:], StdinConfigPath) {
+		return nil, fmt.Errorf("configuration from stdin (%q) can only be given once", StdinConfigPath)
+	}
 	cfgs := make([]*genericv1.Config, 0, len(paths))
-	stdinUsed := false
 	for _, path := range paths {
 		var cfg *genericv1.Config
 		var err error
 		if path == StdinConfigPath {
-			if stdinUsed {
-				return nil, fmt.Errorf("configuration from stdin (%q) can only be given once", StdinConfigPath)
-			}
-			stdinUsed = true
 			if cfg, err = getConfigFromStdin(stdin); err != nil {
 				err = fmt.Errorf("could not load configuration from stdin: %w", err)
 			}

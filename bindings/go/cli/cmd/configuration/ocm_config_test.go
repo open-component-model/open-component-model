@@ -221,8 +221,8 @@ configurations:
 		{
 			name:    "stdin given twice is rejected",
 			paths:   []string{StdinConfigPath, StdinConfigPath},
-			stdin:   stdinConfig,
-			wantErr: "stdin",
+			stdin:   "",
+			wantErr: "can only be given once",
 		},
 		{
 			name:    "empty stdin is rejected",

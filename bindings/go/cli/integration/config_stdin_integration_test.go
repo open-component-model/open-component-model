@@ -32,7 +32,7 @@ func Test_Integration_ConfigFromStdin(t *testing.T) {
 		constructor := writeMinimalConstructor(t, "ocm.software/config-stdin-test", "v1.0.0")
 
 		t.Run("wrong password on stdin fails", func(t *testing.T) {
-			err := runOCM(t, registryConfig(registry, "not-the-password"),
+			err := runOCM(t, registryConfig(registry, registry.Password+"-invalid"),
 				"add", "component-version", "--repository", repo, "--constructor", constructor, "--config", "-")
 			require.ErrorContains(t, err, "401")
 		})
