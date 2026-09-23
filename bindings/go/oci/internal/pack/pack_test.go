@@ -849,9 +849,13 @@ func TestPackingPreservesResourceDigest(t *testing.T) {
 						r.Same(&original, resource.Digest)
 						r.Equal(before, *resource.Digest)
 					} else {
+						normalization := "genericBlobDigest/v1"
+						if storageForm != "layer" {
+							normalization = "ociArtifactDigest/v1"
+						}
 						r.Equal(&descriptor.Digest{
 							HashAlgorithm:          "SHA-256",
-							NormalisationAlgorithm: "genericBlobDigest/v1",
+							NormalisationAlgorithm: normalization,
 							Value:                  root.Digest.Encoded(),
 						}, resource.Digest)
 					}

@@ -322,10 +322,10 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 	// if it did, we verify it against the received descriptor.
 	if res.Digest == nil {
 		res.Digest = &descriptor.Digest{}
-		if err := internaldigest.Apply(res.Digest, desc.Digest); err != nil {
+		if err := internaldigest.Apply(res.Digest, desc.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
 			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
 		}
-	} else if err := internaldigest.Verify(res.Digest, desc.Digest); err != nil {
+	} else if err := internaldigest.VerifyOCIArtifact(res.Digest, desc.Digest); err != nil {
 		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
 	}
 
@@ -645,7 +645,7 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 
 	if res.Digest == nil || res.Digest.NormalisationAlgorithm == "" {
 		res.Digest = &descriptor.Digest{}
-		if err := internaldigest.Apply(res.Digest, desc.Digest); err != nil {
+		if err := internaldigest.Apply(res.Digest, desc.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
 			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
 		}
 	}
@@ -700,7 +700,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	}
 	main := mainArtifacts[0]
 	if expectedDigest != nil && expectedDigest.NormalisationAlgorithm != "" {
-		if err := internaldigest.Verify(expectedDigest, main.Digest); err != nil {
+		if err := internaldigest.VerifyOCIArtifact(expectedDigest, main.Digest); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to verify resource digest: %w", err)
 		}
 	}
@@ -1151,10 +1151,10 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	res = res.DeepCopy()
 	if res.Digest == nil || res.Digest.NormalisationAlgorithm == "" {
 		res.Digest = &descriptor.Digest{}
-		if err := internaldigest.Apply(res.Digest, rs.Root().Digest); err != nil {
+		if err := internaldigest.Apply(res.Digest, rs.Root().Digest, internaldigest.OCIArtifactDigestV1); err != nil {
 			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
 		}
-	} else if err := internaldigest.Verify(res.Digest, rs.Root().Digest); err != nil {
+	} else if err := internaldigest.VerifyOCIArtifact(res.Digest, rs.Root().Digest); err != nil {
 		return nil, fmt.Errorf("failed to verify resource digest: %w", err)
 	}
 
