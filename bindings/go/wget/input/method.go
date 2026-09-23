@@ -186,17 +186,18 @@ func verifyProvidedDigest(provided *constructorruntime.Digest, data *download.Bl
 }
 
 // checksumPolicyForMode adapts a wire [checksumhttpv1alpha1.ChecksumMode] to
-// the checksum package's Policy for the input side. The peek modes verify the
-// downloaded bytes against the built-in source set; Compute and Disable skip
-// verification entirely (ok=false) — the input method still records SHA-256
+// the checksum package's Policy for the input side. Require and Prefer verify
+// the downloaded bytes against the built-in source set (Require fails when no
+// checksum is advertised, Prefer records SHA-256 unverified); Skip skips
+// verification entirely (ok=false). The input method always records SHA-256
 // because a local blob's identity is its bytes.
 func checksumPolicyForMode(mode checksumhttpv1alpha1.ChecksumMode) (checksum.Policy, bool) {
 	switch mode {
-	case checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail:
+	case checksumhttpv1alpha1.ChecksumModeRequire:
 		return checksum.Policy{Sources: checksum.BuiltinSources(), OnMissing: checksum.Fail}, true
-	case checksumhttpv1alpha1.ChecksumModePeekWithHEADOrCompute:
+	case checksumhttpv1alpha1.ChecksumModePrefer:
 		return checksum.Policy{Sources: checksum.BuiltinSources(), OnMissing: checksum.Compute}, true
-	default: // Compute, Disable
+	default: // Skip
 		return checksum.Policy{}, false
 	}
 }

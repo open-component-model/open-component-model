@@ -25,11 +25,11 @@ func TestLookupConfig_Mode(t *testing.T) {
 type: generic.config.ocm.software/v1
 configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
-    mode: Compute
+    mode: Skip
 `))
 	r.NoError(err)
 	r.NotNil(got)
-	r.Equal(v1alpha1.ChecksumModeCompute, got.Mode)
+	r.Equal(v1alpha1.ChecksumModeSkip, got.Mode)
 }
 
 func TestLookupConfig_ReturnsNilWhenAbsent(t *testing.T) {
@@ -43,7 +43,7 @@ configurations:
 	r.Nil(got)
 }
 
-func TestModeForURL_UnsetDefaultsToPeekWithHEADOrCompute(t *testing.T) {
+func TestModeForURL_UnsetDefaultsToPrefer(t *testing.T) {
 	r := require.New(t)
 	got, err := v1alpha1.LookupConfig(decodeGeneric(t, `
 type: generic.config.ocm.software/v1
@@ -51,11 +51,11 @@ configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
     hosts:
       "repo.example.com":
-        mode: PeekWithHEADOrFail
+        mode: Require
 `))
 	r.NoError(err)
 	// Top-level mode unset: a non-matching host resolves to the default.
-	r.Equal(v1alpha1.ChecksumModePeekWithHEADOrCompute, got.ModeForURL("https://other.example.com/artifact"))
+	r.Equal(v1alpha1.ChecksumModePrefer, got.ModeForURL("https://other.example.com/artifact"))
 }
 
 func TestModeForURL_HostOverrideWinsOverDefault(t *testing.T) {
@@ -64,17 +64,17 @@ func TestModeForURL_HostOverrideWinsOverDefault(t *testing.T) {
 type: generic.config.ocm.software/v1
 configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
-    mode: Compute
+    mode: Skip
     hosts:
       "repo.example.com":
-        mode: PeekWithHEADOrFail
+        mode: Require
 `))
 	r.NoError(err)
 
 	// Host match: the override wins.
-	r.Equal(v1alpha1.ChecksumModePeekWithHEADOrFail, cfg.ModeForURL("https://repo.example.com/artifact.tar.gz"))
+	r.Equal(v1alpha1.ChecksumModeRequire, cfg.ModeForURL("https://repo.example.com/artifact.tar.gz"))
 	// No host match: falls through to the default.
-	r.Equal(v1alpha1.ChecksumModeCompute, cfg.ModeForURL("https://other.example.com/artifact.tar.gz"))
+	r.Equal(v1alpha1.ChecksumModeSkip, cfg.ModeForURL("https://other.example.com/artifact.tar.gz"))
 }
 
 func TestModeForURL_PortQualifiedKeyBeatsBareHost(t *testing.T) {
@@ -85,20 +85,20 @@ configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
     hosts:
       "repo.example.com":
-        mode: Compute
+        mode: Skip
       "repo.example.com:8443":
-        mode: PeekWithHEADOrFail
+        mode: Require
 `))
 	r.NoError(err)
-	r.Equal(v1alpha1.ChecksumModePeekWithHEADOrFail, cfg.ModeForURL("https://repo.example.com:8443/x"))
+	r.Equal(v1alpha1.ChecksumModeRequire, cfg.ModeForURL("https://repo.example.com:8443/x"))
 	// Bare-hostname entry applies to other ports (and to the implicit :443).
-	r.Equal(v1alpha1.ChecksumModeCompute, cfg.ModeForURL("https://repo.example.com/x"))
+	r.Equal(v1alpha1.ChecksumModeSkip, cfg.ModeForURL("https://repo.example.com/x"))
 }
 
 func TestModeForURL_NilConfigYieldsDefault(t *testing.T) {
 	r := require.New(t)
 	var cfg *v1alpha1.Config
-	r.Equal(v1alpha1.ChecksumModePeekWithHEADOrCompute, cfg.ModeForURL("https://repo.example.com/x"))
+	r.Equal(v1alpha1.ChecksumModePrefer, cfg.ModeForURL("https://repo.example.com/x"))
 }
 
 func TestModeForURL_MalformedURLFallsBackToDefault(t *testing.T) {
@@ -107,14 +107,14 @@ func TestModeForURL_MalformedURLFallsBackToDefault(t *testing.T) {
 type: generic.config.ocm.software/v1
 configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
-    mode: Compute
+    mode: Skip
     hosts:
       "repo.example.com":
-        mode: PeekWithHEADOrFail
+        mode: Require
 `))
 	r.NoError(err)
 	// A URL that parses with no host must not match a host override.
-	r.Equal(v1alpha1.ChecksumModeCompute, cfg.ModeForURL("://missing-scheme"),
+	r.Equal(v1alpha1.ChecksumModeSkip, cfg.ModeForURL("://missing-scheme"),
 		"malformed URL falls back to the default mode, not to a host override")
 }
 
@@ -124,19 +124,19 @@ func TestMerge_LaterWins(t *testing.T) {
 type: generic.config.ocm.software/v1
 configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
-    mode: Compute
+    mode: Skip
     hosts:
       "a.example":
-        mode: PeekWithHEADOrCompute
+        mode: Prefer
   - type: checksum.http.config.ocm.software/v1alpha1
-    mode: PeekWithHEADOrFail
+    mode: Require
     hosts:
       "b.example":
-        mode: Disable
+        mode: Skip
 `))
 	r.NoError(err)
 	// Later default wins.
-	r.Equal(v1alpha1.ChecksumModePeekWithHEADOrFail, merged.Mode)
+	r.Equal(v1alpha1.ChecksumModeRequire, merged.Mode)
 	// Hosts maps are unioned.
 	r.Contains(merged.Hosts, "a.example")
 	r.Contains(merged.Hosts, "b.example")
@@ -150,10 +150,10 @@ configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
     hosts:
       "repo.example.com":
-        mode: PeekWithHEADOrFail
+        mode: Require
 `))
 	r.NoError(err)
-	r.Equal(v1alpha1.ChecksumModePeekWithHEADOrFail, cfg.ModeForURL("https://Repo.Example.COM/artifact"),
+	r.Equal(v1alpha1.ChecksumModeRequire, cfg.ModeForURL("https://Repo.Example.COM/artifact"),
 		"mixed-case URL hostname must match a lowercased config key")
 
 	// Mixed case in the config too — should still match a lowercased URL.
@@ -163,10 +163,10 @@ configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
     hosts:
       "Repo.Example.COM":
-        mode: PeekWithHEADOrFail
+        mode: Require
 `))
 	r.NoError(err)
-	r.Equal(v1alpha1.ChecksumModePeekWithHEADOrFail, cfg2.ModeForURL("https://repo.example.com/artifact"),
+	r.Equal(v1alpha1.ChecksumModeRequire, cfg2.ModeForURL("https://repo.example.com/artifact"),
 		"mixed-case config key must match a lowercased URL hostname")
 }
 
@@ -178,10 +178,10 @@ configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
     hosts:
       "repo.example.com":
-        mode: PeekWithHEADOrFail
+        mode: Require
 `))
 	r.NoError(err)
-	r.Equal(v1alpha1.ChecksumModePeekWithHEADOrFail, cfg.ModeForURL("https://repo.example.com./artifact"),
+	r.Equal(v1alpha1.ChecksumModeRequire, cfg.ModeForURL("https://repo.example.com./artifact"),
 		"trailing-dot URL host must match an undotted config key")
 
 	// Symmetric: config keyed with trailing dot must match undotted URL.
@@ -191,9 +191,9 @@ configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
     hosts:
       "repo.example.com.":
-        mode: PeekWithHEADOrFail
+        mode: Require
 `))
 	r.NoError(err)
-	r.Equal(v1alpha1.ChecksumModePeekWithHEADOrFail, cfg2.ModeForURL("https://repo.example.com/artifact"),
+	r.Equal(v1alpha1.ChecksumModeRequire, cfg2.ModeForURL("https://repo.example.com/artifact"),
 		"undotted URL host must match a trailing-dot config key")
 }

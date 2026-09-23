@@ -231,7 +231,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		defer server.Close()
 
 		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
-			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeCompute}))
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 
 		processed, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
@@ -253,7 +253,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		tempFolder := t.TempDir()
 		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder},
 			repository.WithHTTPClient(server.Client()),
-			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeCompute}))
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 
 		_, err := repo.ProcessResourceDigest(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)
 		require.NoError(t, err)
@@ -271,7 +271,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		defer server.Close()
 
 		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
-			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeCompute}))
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -290,7 +290,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		defer server.Close()
 
 		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
-			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeCompute}))
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -311,7 +311,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		defer server.Close()
 
 		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
-			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeCompute}))
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-512",
@@ -332,7 +332,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		defer server.Close()
 
 		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
-			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeCompute}))
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -349,7 +349,7 @@ func TestProcessResourceDigest(t *testing.T) {
 // TestProcessResourceDigest_ConfigDriven exercises the shared
 // checksum.http.config.ocm.software config on the access-side digest processor:
 //
-//   - PeekWithHEADOrFail mode HEAD-pins the digest from the server-advertised
+//   - Require mode HEAD-pins the digest from the server-advertised
 //     x-checksum-sha256 header without a body download,
 //   - a per-host override replaces the default mode for URLs matching that
 //     host key.
@@ -367,7 +367,7 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 		defer server.Close()
 
 		cfg := &checksumhttpv1alpha1.Config{
-			Mode: checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail,
+			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
 		repo := repository.NewResourceRepository(nil,
 			repository.WithHTTPClient(server.Client()),
@@ -388,15 +388,15 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 		defer server.Close()
 		host := strings.TrimPrefix(server.URL, "http://")
 
-		// The default would always download+hash (Compute mode); the
-		// host-scoped override enforces PeekWithHEADOrFail. If the override
+		// The default would always download+hash (Skip mode); the
+		// host-scoped override enforces Require. If the override
 		// is applied, the verified download succeeds only because the server
 		// actually advertises a matching header — proving the override took
 		// precedence.
 		cfg := &checksumhttpv1alpha1.Config{
-			Mode: checksumhttpv1alpha1.ChecksumModeCompute,
+			Mode: checksumhttpv1alpha1.ChecksumModeSkip,
 			Hosts: map[string]*checksumhttpv1alpha1.ChecksumPolicy{
-				host: {Mode: checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail},
+				host: {Mode: checksumhttpv1alpha1.ChecksumModeRequire},
 			},
 		}
 		repo := repository.NewResourceRepository(nil,
@@ -424,7 +424,7 @@ func TestProcessResourceDigest_AcceptsPrefixedPinnedDigest(t *testing.T) {
 	defer server.Close()
 
 	repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
-		repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeCompute}))
+		repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 	resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 	resource.Digest = &descruntime.Digest{
 		HashAlgorithm:          "SHA-256",
@@ -437,7 +437,7 @@ func TestProcessResourceDigest_AcceptsPrefixedPinnedDigest(t *testing.T) {
 }
 
 // TestProcessResourceDigest_AccessFastPath exercises the no-download fast
-// path: whenever checksum mode is PeekWithHEADOrFail, ProcessResourceDigest
+// path: whenever checksum mode is Require, ProcessResourceDigest
 // MUST pin the resource digest from what the source advertises without hashing
 // the body itself. The server backing every subtest here refuses GET on the
 // artifact path so a body download would fail the test — proving the
@@ -468,7 +468,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		defer server.Close()
 
 		cfg := &checksumhttpv1alpha1.Config{
-			Mode: checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail,
+			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
 		repo := repository.NewResourceRepository(nil,
 			repository.WithHTTPClient(server.Client()),
@@ -488,7 +488,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		defer server.Close()
 
 		cfg := &checksumhttpv1alpha1.Config{
-			Mode: checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail,
+			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
 		repo := repository.NewResourceRepository(nil,
 			repository.WithHTTPClient(server.Client()),
@@ -510,7 +510,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		defer server.Close()
 
 		cfg := &checksumhttpv1alpha1.Config{
-			Mode: checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail,
+			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
 		repo := repository.NewResourceRepository(nil,
 			repository.WithHTTPClient(server.Client()),
@@ -528,7 +528,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		defer server.Close()
 
 		cfg := &checksumhttpv1alpha1.Config{
-			Mode: checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail,
+			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
 		repo := repository.NewResourceRepository(nil,
 			repository.WithHTTPClient(server.Client()),
@@ -545,7 +545,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		defer server.Close()
 
 		cfg := &checksumhttpv1alpha1.Config{
-			Mode: checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail,
+			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
 		repo := repository.NewResourceRepository(nil,
 			repository.WithHTTPClient(server.Client()),

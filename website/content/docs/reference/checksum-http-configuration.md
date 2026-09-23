@@ -51,10 +51,10 @@ configurations:
 
   # checksum-verification knobs — how downloaded HTTP bytes are verified
   - type: checksum.http.config.ocm.software/v1alpha1
-    mode: PeekWithHEADOrCompute   # default when omitted
+    mode: Prefer   # default when omitted
     hosts:
       "repo.example.com":
-        mode: PeekWithHEADOrFail
+        mode: Require
 ```
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
@@ -83,7 +83,7 @@ Verification is header-only: OCM understands the IETF-standard
 the non-standard `x-checksum-sha256`/`x-checksum-sha1`/`x-checksum-md5` family
 (plus `x-goog-meta-*` and `x-amz-meta-*` variants).
 
-### `PeekWithHEADOrFail`
+### `Require`
 
 - **Access side:** issues a single HEAD to the artifact URL and pins the
   digest from the source-advertised response headers. Aborts if no checksum
@@ -93,7 +93,7 @@ the non-standard `x-checksum-sha256`/`x-checksum-sha1`/`x-checksum-md5` family
 
 Use this mode when every mirror is expected to advertise a checksum.
 
-### `PeekWithHEADOrCompute` (default) {#mode-default}
+### `Prefer` (default) {#mode-default}
 
 This is the default when `mode` is not set.
 
@@ -104,20 +104,14 @@ This is the default when `mode` is not set.
   when present. If no checksum header is advertised, records SHA-256
   unverified.
 
-### `Compute`
+### `Skip`
 
-- **Access side:** skips the HEAD fast path; always downloads the body and
-  hashes it as SHA-256. No verification against the source.
+- **Access side:** never consults source-advertised checksums; always
+  downloads the body and hashes it as SHA-256.
 - **Input side:** downloads and hashes as SHA-256 without verification.
 
 Use this mode when the source is trusted transport-wise but exposes no
 digest headers.
-
-### `Disable`
-
-- **Access side:** establishes no digest. The resource is returned unchanged
-  with no checksum processing.
-- **Input side:** records SHA-256 without verification.
 
 ## Precedence
 
@@ -127,7 +121,7 @@ For a given wget URL, the effective mode is resolved as (tightest wins):
    Entries keyed `host:port` win over bare-hostname entries (case-insensitive
    host matching).
 2. The top-level `mode`.
-3. No configuration — the default mode `PeekWithHEADOrCompute` applies.
+3. No configuration — the default mode `Prefer` applies.
 
 A pinned `digest` on the resource itself is checked against the same authority
 as the mode — the downloaded bytes on the input path, the source-advertised
@@ -160,16 +154,16 @@ A `Wget/v1` **access** references bytes on a remote server that any consumer
 will re-fetch on demand. Whenever the mode enables it, the access-side digest
 processor pins the resource digest from what the source advertises in response
 headers via a single HEAD — **the artifact body is never fetched** (unless the
-mode falls back to `Compute`).
+mode falls back to a download-and-hash).
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
-    mode: PeekWithHEADOrFail
+    mode: Require
     hosts:
       "legacy-mirror.example.com":
-        mode: Compute
+        mode: Skip
 ```
 
 Semantics:
@@ -184,11 +178,10 @@ Semantics:
   `normalisationAlgorithm: genericBlobDigest/v1`. It is a legitimate pin
   because any downstream consumer re-fetches from the same source and
   re-verifies against the same authority.
-- If no header advertises an acceptable digest and the mode is
-  `PeekWithHEADOrFail`, the processor aborts without downloading.
-  `PeekWithHEADOrCompute` falls through to a download-and-hash path (SHA-256)
-  and logs an info-level message noting verification was skipped for that
-  resource.
+- If no header advertises an acceptable digest and the mode is `Require`, the
+  processor aborts without downloading. `Prefer` falls through to a
+  download-and-hash path (SHA-256) and logs an info-level message noting
+  verification was skipped for that resource.
 - When the resource already carries a pinned `digest`, its algorithm and value
   MUST agree with the source-advertised digest for the same algorithm; a
   mismatch is a hard error.

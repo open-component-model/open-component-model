@@ -252,20 +252,19 @@ in the OCM configuration, not in the constructor. The configuration selects a
 type: generic.config.ocm.software/v1
 configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
-    mode: PeekWithHEADOrCompute   # default when omitted
+    mode: Prefer   # default when omitted
     hosts:
       "repo.example.com":
-        mode: PeekWithHEADOrFail
+        mode: Require
 ```
 
-The four modes are:
+The three modes are:
 
 | Mode | Behaviour |
 | ---- | --------- |
-| `PeekWithHEADOrFail` | HEAD-pins from advertised headers; aborts if none advertised. Input side verifies against the header, fails if none. |
-| `PeekWithHEADOrCompute` (default) | HEAD-pins; falls back to download+hash SHA-256 when nothing is advertised. Input side verifies when present, otherwise records SHA-256 unverified. |
-| `Compute` | Skip the HEAD fast path; always download and hash SHA-256, no verification. |
-| `Disable` | Access side establishes no digest; input side records SHA-256 without verification. |
+| `Require` | HEAD-pins from advertised headers; aborts if none advertised. Input side verifies against the header, fails if none. |
+| `Prefer` (default) | HEAD-pins; falls back to download+hash SHA-256 when nothing is advertised. Input side verifies when present, otherwise records SHA-256 unverified. |
+| `Skip` | Never consult source checksums; always download and hash SHA-256, no verification. |
 
 The wget spec itself carries no checksum field: two operators pointing at two
 mirrors trust each mirror independently without editing anything the resource

@@ -9,8 +9,7 @@
 // transport-scoped ("http"), not plugin-scoped.
 //
 // The reduced initial surface is a single [ChecksumMode] per policy:
-// PeekWithHEADOrFail, PeekWithHEADOrCompute (the default), Compute, or
-// Disable.
+// Require, Prefer (the default), or Skip.
 //
 // Precedence for the effective ChecksumPolicy at a given wget URL (tightest
 // wins):

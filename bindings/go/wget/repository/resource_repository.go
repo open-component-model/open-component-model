@@ -170,10 +170,9 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 // x-checksum-*) via a single HEAD, without fetching the body.
 //
 // Modes (resolved from the checksum-http config for the access URL):
-//   - PeekWithHEADOrFail — HEAD-pin; abort if nothing advertised.
-//   - PeekWithHEADOrCompute — HEAD-pin; else download the body and hash SHA-256.
-//   - Compute — skip the HEAD; always download the body and hash SHA-256.
-//   - Disable — establish no digest; return the resource unchanged.
+//   - Require — HEAD-pin from advertised headers; abort if nothing advertised.
+//   - Prefer — HEAD-pin; else download the body and hash SHA-256.
+//   - Skip — never consult source checksums; download the body and hash SHA-256.
 //
 // A pinned Digest is honoured: it must agree with the source-advertised digest
 // (fast path) or the computed SHA-256 (download path). Pinned and policy are
@@ -183,13 +182,9 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	mode := r.checksumConfig.ModeForURL(url)
 
 	switch mode {
-	case checksumhttpv1alpha1.ChecksumModeDisable:
-		// Verification off: leave the resource (and any pinned digest) untouched.
-		slog.DebugContext(ctx, "wget: checksum processing disabled", "url", url)
-		return resource, nil
-	case checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail, checksumhttpv1alpha1.ChecksumModePeekWithHEADOrCompute:
+	case checksumhttpv1alpha1.ChecksumModeRequire, checksumhttpv1alpha1.ChecksumModePrefer:
 		policy := checksum.Policy{Sources: checksum.BuiltinSources(), OnMissing: checksum.Compute}
-		if mode == checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail {
+		if mode == checksumhttpv1alpha1.ChecksumModeRequire {
 			policy.OnMissing = checksum.Fail
 		}
 		result, done, err := r.processDigestViaPeek(ctx, resource, credentials, policy)
@@ -199,14 +194,14 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		if done {
 			return result, nil
 		}
-		slog.InfoContext(ctx, "wget: no source-advertised checksum; PeekWithHEADOrCompute is downloading and hashing SHA-256",
+		slog.InfoContext(ctx, "wget: no source-advertised checksum; Prefer is downloading and hashing SHA-256",
 			"url", url)
-	case checksumhttpv1alpha1.ChecksumModeCompute:
-		// Skip the HEAD fast path entirely; always download and hash.
+	case checksumhttpv1alpha1.ChecksumModeSkip:
+		// Never consult source checksums; always download and hash.
 	}
 
-	// Download-and-hash path (Compute, or a peek mode that found nothing under
-	// onMissing=compute). SHA-256 is the only algorithm required here.
+	// Download-and-hash path (Skip, or Prefer that found nothing advertised).
+	// SHA-256 is the only algorithm required here.
 	data, wget, err := r.download(ctx, resource, credentials,
 		download.WithDigestAlgorithms(download.DigestAlgorithm{
 			Name: checksum.StorageAlgorithm.OCMName,

@@ -1,12 +1,11 @@
 package spec
 
-// ChecksumMode selects how the checksum-over-HTTP verification behaves for a
-// wget resource. It is the sole verification knob: the initial configuration
-// surface is deliberately reduced to a single mode, with room to grow (e.g.
-// early transfer abort on descriptor digest mismatch) without another wire
-// type.
+// ChecksumMode selects the checksum-verification posture for a wget resource.
+// It is the sole verification knob: the initial configuration surface is
+// deliberately reduced to a single mode, with room to grow (e.g. early
+// transfer abort on descriptor digest mismatch) without another wire type.
 //
-// The zero value means [ChecksumModePeekWithHEADOrCompute].
+// The zero value means [ChecksumModePrefer].
 //
 // Storage semantics differ per side. The input method always downloads and
 // records SHA-256, regardless of which algorithm verified the transfer. The
@@ -19,31 +18,27 @@ package spec
 type ChecksumMode string
 
 const (
-	// ChecksumModePeekWithHEADOrFail pins the digest from what the source
-	// advertises via a HEAD request (plus small externalUrl sidecar GETs) and
-	// aborts when no source advertises an acceptable checksum. On the input
-	// side the downloaded bytes are verified against the advertised checksum
-	// and construction fails when none is available.
-	ChecksumModePeekWithHEADOrFail ChecksumMode = "PeekWithHEADOrFail"
-	// ChecksumModePeekWithHEADOrCompute pins the digest from what the source
-	// advertises via a HEAD request and, when no source advertises a checksum,
-	// falls back to downloading and hashing the body as SHA-256. This is the
-	// default when the mode is unset.
-	ChecksumModePeekWithHEADOrCompute ChecksumMode = "PeekWithHEADOrCompute"
-	// ChecksumModeCompute skips the HEAD fast path entirely: the body is
-	// always downloaded and hashed as SHA-256, without external verification.
-	ChecksumModeCompute ChecksumMode = "Compute"
-	// ChecksumModeDisable turns checksum processing off: the access-side
-	// digest processor establishes no digest and the input side records the
-	// storage digest without external verification.
-	ChecksumModeDisable ChecksumMode = "Disable"
+	// ChecksumModeRequire requires verification against a source-advertised
+	// checksum (RFC 9530 Content-Digest or x-checksum-*) and fails when none
+	// is advertised. The access side pins the digest from the advertised
+	// checksum without downloading the body; the input side verifies the
+	// downloaded bytes against it.
+	ChecksumModeRequire ChecksumMode = "Require"
+	// ChecksumModePrefer verifies against a source-advertised checksum when one
+	// is available and otherwise falls back to computing SHA-256. This is the
+	// default when the mode is unset. On the access side the fallback downloads
+	// and hashes the body; on the input side the downloaded bytes are recorded
+	// as SHA-256 without verification.
+	ChecksumModePrefer ChecksumMode = "Prefer"
+	// ChecksumModeSkip never consults source-advertised checksums: the body is
+	// downloaded and hashed as SHA-256 without verification.
+	ChecksumModeSkip ChecksumMode = "Skip"
 )
 
-// Normalize resolves the zero value to the default
-// [ChecksumModePeekWithHEADOrCompute].
+// Normalize resolves the zero value to the default [ChecksumModePrefer].
 func (m ChecksumMode) Normalize() ChecksumMode {
 	if m == "" {
-		return ChecksumModePeekWithHEADOrCompute
+		return ChecksumModePrefer
 	}
 	return m
 }
@@ -55,8 +50,7 @@ func (m ChecksumMode) Normalize() ChecksumMode {
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type ChecksumPolicy struct {
-	// Mode selects the verification behaviour. Defaults to
-	// "PeekWithHEADOrCompute" when unset.
-	// +ocm:jsonschema-gen:enum=PeekWithHEADOrFail,PeekWithHEADOrCompute,Compute,Disable
+	// Mode selects the verification behaviour. Defaults to "Prefer" when unset.
+	// +ocm:jsonschema-gen:enum=Require,Prefer,Skip
 	Mode ChecksumMode `json:"mode,omitempty"`
 }

@@ -32,10 +32,10 @@ func init() {
 //	type: generic.config.ocm.software/v1
 //	configurations:
 //	  - type: checksum.http.config.ocm.software/v1alpha1
-//	    mode: PeekWithHEADOrCompute
+//	    mode: Prefer
 //	    hosts:
 //	      "repo.example.com":
-//	        mode: PeekWithHEADOrFail
+//	        mode: Require
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -47,9 +47,8 @@ type Config struct {
 	Type runtime.Type `json:"type"`
 
 	// Mode is the default verification behaviour for every wget resource whose
-	// host does not match [Config.Hosts]. Defaults to
-	// "PeekWithHEADOrCompute" when unset.
-	// +ocm:jsonschema-gen:enum=PeekWithHEADOrFail,PeekWithHEADOrCompute,Compute,Disable
+	// host does not match [Config.Hosts]. Defaults to "Prefer" when unset.
+	// +ocm:jsonschema-gen:enum=Require,Prefer,Skip
 	Mode ChecksumMode `json:"mode,omitempty"`
 
 	// Hosts maps "host" or "host:port" to per-host overrides; port-qualified
@@ -127,10 +126,10 @@ func Merge(configs ...*Config) *Config {
 
 // ModeForURL returns the effective [ChecksumMode] for rawURL: a host-scoped
 // override wins over [Config.Mode]; a malformed URL yields the default. The
-// zero value is resolved to [ChecksumModePeekWithHEADOrCompute].
+// zero value is resolved to [ChecksumModePrefer].
 func (c *Config) ModeForURL(rawURL string) ChecksumMode {
 	if c == nil {
-		return ChecksumModePeekWithHEADOrCompute
+		return ChecksumModePrefer
 	}
 	u, err := url.Parse(rawURL)
 	if err == nil && u.Host != "" && len(c.Hosts) > 0 {

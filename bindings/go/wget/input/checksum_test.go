@@ -46,10 +46,10 @@ func wgetResourceWithDigest(t *testing.T, url, value string) *constructorruntime
 	return r
 }
 
-// peekOrFail is the strictest reduced-config mode: verify against the
+// requireMode is the strictest reduced-config mode: verify against the
 // source-advertised checksum and fail when none is available.
-func peekOrFail() *checksumhttpv1alpha1.Config {
-	return &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail}
+func requireMode() *checksumhttpv1alpha1.Config {
+	return &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}
 }
 
 func TestProcessResource_ProvidedDigest(t *testing.T) {
@@ -67,8 +67,8 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 		server := serve(t)
 		defer server.Close()
 
-		// Disable central verification so only the provided digest is checked.
-		method := &input.InputMethod{ChecksumConfig: &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeDisable}}
+		// Skip central verification so only the provided digest is checked.
+		method := &input.InputMethod{ChecksumConfig: &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}}
 		result, err := method.ProcessResource(t.Context(),
 			wgetResourceWithDigest(t, server.URL+"/artifact", hwSHA256), nil)
 		require.NoError(t, err)
@@ -79,7 +79,7 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 		server := serve(t)
 		defer server.Close()
 
-		method := &input.InputMethod{ChecksumConfig: &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeDisable}}
+		method := &input.InputMethod{ChecksumConfig: &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}}
 		_, err := method.ProcessResource(t.Context(),
 			wgetResourceWithDigest(t, server.URL+"/artifact", strings.Repeat("0", 64)), nil)
 		require.Error(t, err)
@@ -92,7 +92,7 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 
 		r := wgetInputResource(t, map[string]any{"url": server.URL + "/artifact"})
 		r.Digest = &constructorruntime.Digest{HashAlgorithm: "SHA-1", Value: hwSHA1}
-		method := &input.InputMethod{ChecksumConfig: &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeDisable}}
+		method := &input.InputMethod{ChecksumConfig: &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}}
 		_, err := method.ProcessResource(t.Context(), r, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported provided hash algorithm")
@@ -105,10 +105,10 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		// PeekWithHEADOrFail verifies the bytes against the source-advertised
-		// SHA-1 header, while the provided SHA-256 digest is verified
-		// independently. Both must pass.
-		method := &input.InputMethod{ChecksumConfig: peekOrFail()}
+		// Require verifies the bytes against the source-advertised SHA-1 header,
+		// while the provided SHA-256 digest is verified independently. Both must
+		// pass.
+		method := &input.InputMethod{ChecksumConfig: requireMode()}
 		result, err := method.ProcessResource(t.Context(),
 			wgetResourceWithDigest(t, server.URL+"/artifact", hwSHA256), nil)
 		require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestProcessResource_ChecksumPolicy_HeaderVerification(t *testing.T) {
 		}))
 		defer server.Close()
 
-		method := &input.InputMethod{HTTPConfig: httpConfig, ChecksumConfig: peekOrFail()}
+		method := &input.InputMethod{HTTPConfig: httpConfig, ChecksumConfig: requireMode()}
 		result, err := method.ProcessResource(t.Context(),
 			wgetInputResource(t, map[string]any{"url": server.URL + "/artifact"}), creds)
 		require.NoError(t, err)
@@ -161,7 +161,7 @@ func TestProcessResource_ChecksumPolicy_HeaderVerification(t *testing.T) {
 		}))
 		defer server.Close()
 
-		method := &input.InputMethod{ChecksumConfig: peekOrFail()}
+		method := &input.InputMethod{ChecksumConfig: requireMode()}
 		_, err := method.ProcessResource(t.Context(),
 			wgetInputResource(t, map[string]any{"url": server.URL + "/artifact"}), nil)
 		require.Error(t, err)
@@ -194,7 +194,7 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
-		method := &input.InputMethod{ChecksumConfig: peekOrFail()}
+		method := &input.InputMethod{ChecksumConfig: requireMode()}
 		result, err := method.ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
 			"url": server.URL + "/artifact",
 		}), nil)
@@ -203,8 +203,8 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 	})
 
 	t.Run("host override wins over default", func(t *testing.T) {
-		// Default mode "Compute" accepts any bytes without verification; the
-		// host override for the artifact's actual host is "PeekWithHEADOrFail".
+		// Default mode "Skip" accepts any bytes without verification; the
+		// host override for the artifact's actual host is "Require".
 		// A tampered advertised digest therefore fails against the override but
 		// would go unnoticed under the default.
 		badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -215,9 +215,9 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 		host, _, _ := strings.Cut(strings.TrimPrefix(badServer.URL, "http://"), "/")
 
 		cfg := &checksumhttpv1alpha1.Config{
-			Mode: checksumhttpv1alpha1.ChecksumModeCompute,
+			Mode: checksumhttpv1alpha1.ChecksumModeSkip,
 			Hosts: map[string]*checksumhttpv1alpha1.ChecksumPolicy{
-				host: {Mode: checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail},
+				host: {Mode: checksumhttpv1alpha1.ChecksumModeRequire},
 			},
 		}
 		method := &input.InputMethod{ChecksumConfig: cfg}

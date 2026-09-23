@@ -240,10 +240,10 @@ no checksum field. The configuration selects a **mode** per host (or globally):
 type: generic.config.ocm.software/v1
 configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
-    mode: PeekWithHEADOrCompute   # default when omitted
+    mode: Prefer   # default when omitted
     hosts:
       "repo.example.com":
-        mode: PeekWithHEADOrFail
+        mode: Require
 ```
 
 - **Input side** — always downloads, always records `SHA-256` with
@@ -259,8 +259,8 @@ configurations:
   blob and re-runs the input-side rules, so every local blob is
   self-describing.
 
-For the full schema, checksum modes (`PeekWithHEADOrFail`,
-`PeekWithHEADOrCompute`, `Compute`, `Disable`), precedence rules, and
+For the full schema, checksum modes (`Require`, `Prefer`, `Skip`),
+precedence rules, and
 credential scoping, see the
 [HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}})
 reference.
