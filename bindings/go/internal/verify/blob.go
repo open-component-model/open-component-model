@@ -12,11 +12,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 )
 
-// Blob wraps a blob.ReadOnlyBlob with the digest its content is expected to
-// have, and reports that expected digest through blob.DigestAware.
+// verifyingBlob wraps a blob.ReadOnlyBlob with the digest its content is expected
+// to have, and reports that expected digest through blob.DigestAware.
 //
 // This exists because filesystem.Blob computes its own digest so verification
-// happens against itself that always passes. A Blob verifies against
+// happens against itself that always passes. A verifyingBlob verifies against
 // an independent source, which is the component descriptor.
 //
 // The check itself is [content.VerifyReader], so content is compared to the same
@@ -27,25 +27,25 @@ import (
 //
 // Verification is streaming, meaning, the target will already been downloaded by the
 // time Verification throws an error. It has to be removed by the caller if that happens.
-type Blob struct {
+type verifyingBlob struct {
 	base blob.ReadOnlyBlob
 	desc ociImageSpecV1.Descriptor
 }
 
 var (
-	_ blob.ReadOnlyBlob          = (*Blob)(nil)
-	_ blob.SizeAware             = (*Blob)(nil)
-	_ blob.DigestAware           = (*Blob)(nil)
-	_ blob.MediaTypeAware        = (*Blob)(nil)
-	_ blob.MediaTypeOverrideable = (*Blob)(nil)
-	_ io.Closer                  = (*Blob)(nil)
+	_ blob.ReadOnlyBlob          = (*verifyingBlob)(nil)
+	_ blob.SizeAware             = (*verifyingBlob)(nil)
+	_ blob.DigestAware           = (*verifyingBlob)(nil)
+	_ blob.MediaTypeAware        = (*verifyingBlob)(nil)
+	_ blob.MediaTypeOverrideable = (*verifyingBlob)(nil)
+	_ io.Closer                  = (*verifyingBlob)(nil)
 )
 
-// NewBlob returns base wrapped so that its content is compared to `expected`.
+// newVerifyingBlob returns base wrapped so that its content is compared to `expected`.
 //
 // It fails if expected is not a digest of an algorithm available at runtime, and
 // if base does not know its size.
-func NewBlob(base blob.ReadOnlyBlob, expected digest.Digest) (*Blob, error) {
+func newVerifyingBlob(base blob.ReadOnlyBlob, expected digest.Digest) (*verifyingBlob, error) {
 	if err := expected.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid expected digest %q: %w", expected, err)
 	}
@@ -62,7 +62,7 @@ func NewBlob(base blob.ReadOnlyBlob, expected digest.Digest) (*Blob, error) {
 		return nil, fmt.Errorf("cannot verify a blob of unknown size against digest %q", expected)
 	}
 
-	return &Blob{
+	return &verifyingBlob{
 		base: base,
 		desc: ociImageSpecV1.Descriptor{Digest: expected, Size: size},
 	}, nil
@@ -72,7 +72,7 @@ func NewBlob(base blob.ReadOnlyBlob, expected digest.Digest) (*Blob, error) {
 // expected digest. The mismatch surfaces from Read once the content ends, and
 // from Close in any case, so a caller that only checks one of the two still gets
 // verified.
-func (b *Blob) ReadCloser() (io.ReadCloser, error) {
+func (b *verifyingBlob) ReadCloser() (io.ReadCloser, error) {
 	rc, err := b.base.ReadCloser()
 	if err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 
 // Digest forwards to the underlying blob, so it reports what the content IS, not
 // what it is expected to be.
-func (b *Blob) Digest() (string, bool) {
+func (b *verifyingBlob) Digest() (string, bool) {
 	if digestAware, ok := b.base.(blob.DigestAware); ok {
 		return digestAware.Digest()
 	}
@@ -94,12 +94,12 @@ func (b *Blob) Digest() (string, bool) {
 }
 
 // Size returns the size the content is held to, which is always known.
-func (b *Blob) Size() int64 {
+func (b *verifyingBlob) Size() int64 {
 	return b.desc.Size
 }
 
 // MediaType returns the media type of the underlying blob if it has one.
-func (b *Blob) MediaType() (string, bool) {
+func (b *verifyingBlob) MediaType() (string, bool) {
 	if mediaTypeAware, ok := b.base.(blob.MediaTypeAware); ok {
 		return mediaTypeAware.MediaType()
 	}
@@ -108,7 +108,7 @@ func (b *Blob) MediaType() (string, bool) {
 
 // SetMediaType forwards to the underlying blob and is a no-op if it does not
 // support overriding its media type.
-func (b *Blob) SetMediaType(mediaType string) {
+func (b *verifyingBlob) SetMediaType(mediaType string) {
 	if overrideable, ok := b.base.(blob.MediaTypeOverrideable); ok {
 		overrideable.SetMediaType(mediaType)
 	}
@@ -117,7 +117,7 @@ func (b *Blob) SetMediaType(mediaType string) {
 // Close forwards to the underlying blob so that wrapping does not leak the
 // resources it owns, such as a temporary file. It is a no-op if the underlying
 // blob is not an io.Closer.
-func (b *Blob) Close() error {
+func (b *verifyingBlob) Close() error {
 	if closer, ok := b.base.(io.Closer); ok {
 		return closer.Close()
 	}

@@ -1,4 +1,4 @@
-package verify_test
+package verify
 
 import (
 	"io"
@@ -10,7 +10,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/internal/verify"
 )
 
 const verifyContent = "content the descriptor took a digest over"
@@ -31,7 +30,7 @@ func TestVerifyDownload(t *testing.T) {
 	}
 
 	t.Run("holds content to a matching digest", func(t *testing.T) {
-		verified, err := verify.Download(t.Context(), resourceWithDigest(matching),
+		verified, err := Download(t.Context(), resourceWithDigest(matching),
 			inmemory.New(strings.NewReader(verifyContent)))
 		require.NoError(t, err)
 
@@ -44,7 +43,7 @@ func TestVerifyDownload(t *testing.T) {
 	})
 
 	t.Run("reports content that does not match", func(t *testing.T) {
-		verified, err := verify.Download(t.Context(), resourceWithDigest(matching),
+		verified, err := Download(t.Context(), resourceWithDigest(matching),
 			inmemory.New(strings.NewReader("something else entirely")))
 		require.NoError(t, err)
 
@@ -61,7 +60,7 @@ func TestVerifyDownload(t *testing.T) {
 			{HashAlgorithm: descriptor.NoDigest, NormalisationAlgorithm: descriptor.ExcludeFromSignature, Value: descriptor.NoDigest},
 		} {
 			content := inmemory.New(strings.NewReader(verifyContent))
-			verified, err := verify.Download(t.Context(), resourceWithDigest(dig), content)
+			verified, err := Download(t.Context(), resourceWithDigest(dig), content)
 			require.NoError(t, err)
 			require.Same(t, content, verified, "unverifiable content must be handed back untouched")
 		}
@@ -75,7 +74,7 @@ func TestVerifyDownload(t *testing.T) {
 			{HashAlgorithm: "SHA-256"},
 			{Value: godigest.FromString(verifyContent).Encoded()},
 		} {
-			_, err := verify.Download(t.Context(), resourceWithDigest(dig),
+			_, err := Download(t.Context(), resourceWithDigest(dig),
 				inmemory.New(strings.NewReader(verifyContent)))
 			require.Error(t, err, "digest %+v must not pass as verifiable", dig)
 		}
@@ -83,7 +82,7 @@ func TestVerifyDownload(t *testing.T) {
 
 	t.Run("releases content it refuses to verify", func(t *testing.T) {
 		content := &closableBlob{Blob: inmemory.New(strings.NewReader(verifyContent))}
-		_, err := verify.Download(t.Context(), resourceWithDigest(&descriptor.Digest{HashAlgorithm: "SHA-256"}), content)
+		_, err := Download(t.Context(), resourceWithDigest(&descriptor.Digest{HashAlgorithm: "SHA-256"}), content)
 		require.Error(t, err)
 		require.True(t, content.closed, "the temporary file behind a refused download must not be left behind")
 	})

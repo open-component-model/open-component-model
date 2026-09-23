@@ -7,61 +7,47 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/opencontainers/go-digest"
-
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
-// expectedDigest resolves the digest res is to be held to.
-//
-// A resource that has no digest reports ok false with no error. A digest
-// that is present but unusable is an error. Content that cannot be checked against
-// the digest it claims must not pass as verified.
-func expectedDigest(ctx context.Context, res *descriptor.Resource) (_ digest.Digest, ok bool, err error) {
-	expected, err := parseDigest(res.Digest)
-	switch {
-	case err != nil:
-		return "", false, fmt.Errorf("cannot verify resource %q against its digest: %w", res.ToIdentity(), err)
-	case expected == "":
-		slog.WarnContext(ctx, "resource has no digest, no verification can be performed",
-			slog.Any("resource", res.ToIdentity()))
-		return "", false, nil
-	}
-
-	return expected, true, nil
-}
-
 // Download verifies content with digest `res` contains, as it is read.
 //
-// On error content is closed, because the caller is handed nothing to close it with
-// and the download has usually already put a temporary file on disk.
+// A resource that has no digest passes through unverified with a warning, but a
+// digest that is present and unusable is refused: content that cannot be checked
+// against the digest it claims must not pass as verified.
 func Download(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
-	expected, ok, err := expectedDigest(ctx, res)
+	expected, err := parseDigest(res.Digest)
 	if err != nil {
-		return nil, errors.Join(err, closeContent(content))
+		return nil, refuse(res, content, err)
 	}
-	if !ok {
+	if expected == "" {
+		slog.WarnContext(ctx, "resource has no digest, no verification can be performed",
+			slog.Any("resource", res.ToIdentity()))
 		return content, nil
 	}
 
-	verifying, err := NewBlob(content, expected)
+	verifying, err := newVerifyingBlob(content, expected)
 	if err != nil {
-		err = fmt.Errorf("cannot verify resource %q against its digest: %w", res.ToIdentity(), err)
-		return nil, errors.Join(err, closeContent(content))
+		return nil, refuse(res, content, err)
 	}
 
 	return verifying, nil
 }
 
-// closeContent releases a reader. If the blob is not a Closer, it will return nil.
-func closeContent(content blob.ReadOnlyBlob) error {
+// refuse names the failure to verify res and releases content along the way, because
+// the caller is handed nothing to close it with and the download has usually already
+// put a temporary file on disk. Content that owns nothing is left alone.
+func refuse(res *descriptor.Resource, content blob.ReadOnlyBlob, err error) error {
+	err = fmt.Errorf("cannot verify resource %q against its digest: %w", res.ToIdentity(), err)
+
 	closer, ok := content.(io.Closer)
 	if !ok {
-		return nil
+		return err
 	}
-	if err := closer.Close(); err != nil {
-		return fmt.Errorf("failed to release unverifiable content: %w", err)
+	if closeErr := closer.Close(); closeErr != nil {
+		return errors.Join(err, fmt.Errorf("failed to release unverifiable content: %w", closeErr))
 	}
-	return nil
+
+	return err
 }
