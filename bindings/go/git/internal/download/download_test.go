@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -48,36 +50,39 @@ func TestDownloadRevisions(t *testing.T) {
 			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/nested", tag)))
 
 			for _, tc := range []struct {
-				ref, commit string
-				want        plumbing.Hash
+				name, ref, commit string
+				want              plumbing.Hash
+				missingHeadError  string
 			}{
-				{"HEAD", "", fixture.Second},
-				{"main", "", fixture.Second},
-				{"refs/heads/main", "", fixture.Second},
-				{"feature", "", fixture.Second},
-				{"refs/heads/feature", "", fixture.Second},
-				{"refs/remotes/origin/feature", "", fixture.Second},
-				{"refs/tags/feature", "", fixture.First},
-				{"refs/releases/stable", "", fixture.First},
-				{"v1", "", fixture.First},
-				{"refs/tags/v1", "", fixture.First},
-				{"annotated", "", fixture.First},
-				{"refs/tags/annotated", "", fixture.First},
-				{"nested", "", fixture.First},
-				{"refs/tags/nested", "", fixture.First},
-				{"", fixture.First.String(), fixture.First},
-				{"HEAD", fixture.First.String(), fixture.First},
-				{"main", fixture.First.String(), fixture.First},
-				{"refs/heads/main", fixture.First.String(), fixture.First},
-				{"refs/heads/deleted", fixture.First.String(), fixture.First},
+				{"default HEAD", "HEAD", "", fixture.Second, "cannot fetch git repository: transport failed; check repository access and server trust: reference not found"},
+				{"short main branch", "main", "", fixture.Second, `cannot resolve git ref: reference name escapes the reference storage: "main" is not under refs/ nor a valid pseudo-ref`},
+				{"qualified main branch", "refs/heads/main", "", fixture.Second, "cannot resolve git ref: reference not found"},
+				{"branch wins over same-named tag", "feature", "", fixture.Second, ""},
+				{"qualified feature branch", "refs/heads/feature", "", fixture.Second, ""},
+				{"remote tracking branch", "refs/remotes/origin/feature", "", fixture.Second, ""},
+				{"qualified tag wins over same-named branch", "refs/tags/feature", "", fixture.First, ""},
+				{"custom ref namespace", "refs/releases/stable", "", fixture.First, ""},
+				{"short lightweight tag", "v1", "", fixture.First, ""},
+				{"qualified lightweight tag", "refs/tags/v1", "", fixture.First, ""},
+				{"short annotated tag", "annotated", "", fixture.First, ""},
+				{"qualified annotated tag", "refs/tags/annotated", "", fixture.First, ""},
+				{"short nested tag", "nested", "", fixture.First, ""},
+				{"qualified nested tag", "refs/tags/nested", "", fixture.First, ""},
+				{"pinned commit only", "", fixture.First.String(), fixture.First, ""},
+				{"pinned commit overrides HEAD", "HEAD", fixture.First.String(), fixture.First, ""},
+				{"pinned commit overrides short main", "main", fixture.First.String(), fixture.First, ""},
+				{"pinned commit overrides qualified main", "refs/heads/main", fixture.First.String(), fixture.First, ""},
+				{"pinned commit ignores deleted branch", "refs/heads/deleted", fixture.First.String(), fixture.First, ""},
 			} {
-				if head == "missing HEAD" && tc.commit == "" && (tc.ref == "HEAD" || tc.ref == "main" || tc.ref == "refs/heads/main") {
-					continue
-				}
-				t.Run(tc.ref+tc.commit, func(t *testing.T) {
+				t.Run(tc.name, func(t *testing.T) {
 					r := require.New(t)
 					spec := &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}
 					result, err := Download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+					if head == "missing HEAD" && tc.missingHeadError != "" {
+						r.ErrorContains(err, tc.missingHeadError)
+						r.Nil(result)
+						return
+					}
 					r.NoError(err)
 					r.Equal(tc.want.String(), result.Commit)
 					r.Equal(tc.commit, spec.Commit)
@@ -166,11 +171,13 @@ func TestDownloadFailureCleanup(t *testing.T) {
 		name, ref, commit string
 		limit             int64
 		cancel            bool
+		wantError         string
+		wantCause         error
 	}{
-		{name: "limit", ref: "main", limit: 1},
-		{name: "missing ref", ref: "absent"},
-		{name: "missing commit", commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-		{name: "cancel", ref: "main", cancel: true},
+		{name: "limit", ref: "main", limit: 1, wantError: "git archive exceeds the maximum size"},
+		{name: "missing ref", ref: "absent", wantError: `cannot resolve git ref: reference name escapes the reference storage: "absent" is not under refs/ nor a valid pseudo-ref`},
+		{name: "missing commit", commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", wantError: "cannot read git revision: object not found", wantCause: plumbing.ErrObjectNotFound},
+		{name: "already canceled", ref: "main", cancel: true, wantError: "cannot download git repository: context canceled", wantCause: context.Canceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -183,9 +190,67 @@ func TestDownloadFailureCleanup(t *testing.T) {
 			}
 
 			result, err := Download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{TempDir: dir, MaxArchiveSize: tc.limit})
-			r.Error(err)
+			r.ErrorContains(err, tc.wantError)
+			if tc.wantCause != nil {
+				r.ErrorIs(err, tc.wantCause)
+			}
 			r.Nil(result)
 			files, err := os.ReadDir(dir)
+			r.NoError(err)
+			r.Empty(files)
+		})
+	}
+}
+
+func TestDownloadInProgressCancellationCleanup(t *testing.T) {
+	for _, ref := range []string{"HEAD", "main"} {
+		t.Run(ref, func(t *testing.T) {
+			r := require.New(t)
+			dir := t.TempDir()
+			started := make(chan *http.Request, 1)
+			release := make(chan struct{})
+			server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
+				started <- req
+				select {
+				case <-req.Context().Done():
+				case <-release:
+				}
+			}))
+			defer server.Close()
+			defer close(release)
+
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			type outcome struct {
+				result *Result
+				err    error
+			}
+			done := make(chan outcome, 1)
+			go func() {
+				result, err := Download(ctx, &v1.Git{Repository: server.URL + "/repo.git", Ref: ref}, nil, Options{TempDir: dir})
+				done <- outcome{result: result, err: err}
+			}()
+
+			select {
+			case req := <-started:
+				r.Equal("/repo.git/info/refs", req.URL.Path)
+				r.Equal("git-upload-pack", req.URL.Query().Get("service"))
+			case got := <-done:
+				t.Fatalf("download returned before Git discovery: %v", got.err)
+			}
+			files, err := os.ReadDir(dir)
+			r.NoError(err)
+			r.Len(files, 1)
+			r.True(files[0].IsDir())
+			r.True(strings.HasPrefix(files[0].Name(), "ocm-git-repository-"))
+
+			// Cancel only once the download has allocated storage and reached the server.
+			cancel()
+			got := <-done
+			r.ErrorIs(got.err, context.Canceled)
+			r.ErrorContains(got.err, "cannot fetch git repository")
+			r.Nil(got.result)
+			files, err = os.ReadDir(dir)
 			r.NoError(err)
 			r.Empty(files)
 		})

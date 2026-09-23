@@ -30,7 +30,7 @@ import (
 )
 
 func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
-	path, _ := newRepository(t)
+	path, first := newRepository(t)
 
 	credsType := runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version)
 	authMethods := []struct {
@@ -57,65 +57,73 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 		name               string
 		invalidCredentials bool
 		trustCertificate   bool
-		wantError          bool
+		expectedError      string
 	}{
 		{name: "valid credentials", trustCertificate: true},
 		{
 			name:               "invalid credentials",
 			invalidCredentials: true,
 			trustCertificate:   true,
-			wantError:          true,
+			expectedError:      "authentication required",
 		},
-		{name: "untrusted certificate", wantError: true},
+		{name: "untrusted certificate", expectedError: "x509: certificate signed by unknown authority"},
 	}
 
 	for _, method := range authMethods {
 		t.Run(method.name, func(t *testing.T) {
 			url, ca := newHTTPSServer(t, path, method.authorization)
-			spec := &descriptor.Resource{
-				Access: &accessv1.Git{
-					Type:       runtime.NewVersionedType("Git", "v1"),
-					Repository: url,
-					Ref:        "main",
-				},
-			}
-
-			for _, scenario := range scenarios {
-				t.Run(scenario.name, func(t *testing.T) {
-					r := require.New(t)
-
-					creds := method.credentials
-					if scenario.invalidCredentials {
-						creds = method.invalidCredentials
+			for _, revision := range []struct{ name, ref, commit, content string }{
+				{"clone for ref", "HEAD", "", "second\n"},
+				{"fetch for pinned commit", "", first.String(), "first\n"},
+			} {
+				t.Run(revision.name, func(t *testing.T) {
+					spec := &descriptor.Resource{
+						Access: &accessv1.Git{
+							Type:       runtime.NewVersionedType("Git", "v1"),
+							Repository: url,
+							Ref:        revision.ref,
+							Commit:     revision.commit,
+						},
 					}
 
-					var opts []repository.Option
-					if scenario.trustCertificate {
-						opts = append(opts, repository.WithCABundle(ca))
-					}
+					for _, scenario := range scenarios {
+						t.Run(scenario.name, func(t *testing.T) {
+							r := require.New(t)
 
-					tempDir := t.TempDir()
-					repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, opts...)
-					b, downloadErr := repo.DownloadResource(t.Context(), spec, creds)
-					if !scenario.wantError {
-						r.NoError(downloadErr)
-						assertArchive(t, b, "second\n")
-					} else {
-						r.Error(downloadErr)
-						r.Nil(b)
-						r.NotContains(downloadErr.Error(), "wrong-secret")
-					}
+							creds := method.credentials
+							if scenario.invalidCredentials {
+								creds = method.invalidCredentials
+							}
 
-					pinned, digestErr := repo.ProcessResourceDigest(t.Context(), spec, creds)
-					if scenario.wantError {
-						r.Error(digestErr)
-						r.Nil(pinned)
-						r.NotContains(digestErr.Error(), "wrong-secret")
-						return
-					}
+							var opts []repository.Option
+							if scenario.trustCertificate {
+								opts = append(opts, repository.WithCABundle(ca))
+							}
 
-					r.NoError(digestErr)
-					r.NotNil(pinned.Digest)
+							tempDir := t.TempDir()
+							repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, opts...)
+							b, downloadErr := repo.DownloadResource(t.Context(), spec, creds)
+							if scenario.expectedError == "" {
+								r.NoError(downloadErr)
+								assertArchive(t, b, revision.content)
+							} else {
+								r.ErrorContains(downloadErr, scenario.expectedError)
+								r.Nil(b)
+								r.NotContains(downloadErr.Error(), "wrong-secret")
+							}
+
+							pinned, digestErr := repo.ProcessResourceDigest(t.Context(), spec, creds)
+							if scenario.expectedError != "" {
+								r.ErrorContains(digestErr, scenario.expectedError)
+								r.Nil(pinned)
+								r.NotContains(digestErr.Error(), "wrong-secret")
+								return
+							}
+
+							r.NoError(digestErr)
+							r.NotNil(pinned.Digest)
+						})
+					}
 				})
 			}
 		})
@@ -125,7 +133,7 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 func Test_Integration_GitSSHAuthentication(t *testing.T) {
 	r := require.New(t)
 
-	path, _ := newRepository(t)
+	path, first := newRepository(t)
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	r.NoError(err)
 
@@ -183,28 +191,41 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 	assertSSHAccess := func(t *testing.T, gitCreds runtime.Typed) {
 		t.Helper()
 
-		r := require.New(t)
+		for _, revision := range []struct{ name, ref, commit, content string }{
+			{"clone for ref", "HEAD", "", "second\n"},
+			{"fetch for pinned commit", "", first.String(), "first\n"},
+		} {
+			t.Run(revision.name, func(t *testing.T) {
+				r := require.New(t)
 
-		spec := &descriptor.Resource{
-			Access: &accessv1.Git{
-				Type:       runtime.NewVersionedType("Git", "v1"),
-				Repository: fmt.Sprintf("ssh://git@%s%s", net.JoinHostPort(host, port.Port()), repoPath),
-				Ref:        "main",
-			},
+				spec := &descriptor.Resource{
+					Access: &accessv1.Git{
+						Type:       runtime.NewVersionedType("Git", "v1"),
+						Repository: fmt.Sprintf("ssh://git@%s%s", net.JoinHostPort(host, port.Port()), repoPath),
+						Ref:        revision.ref,
+						Commit:     revision.commit,
+					},
+				}
+				tempDir := t.TempDir()
+				repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, repository.WithHostKeyCallback(ssh.FixedHostKey(hostKey)))
+				b, err := repo.DownloadResource(t.Context(), spec, gitCreds)
+				r.NoError(err)
+				assertArchive(t, b, revision.content)
+
+				_, err = repo.ProcessResourceDigest(t.Context(), spec, gitCreds)
+				r.NoError(err)
+
+				rejectDir := t.TempDir()
+				reject := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &rejectDir}, repository.WithHostKeyCallback(ssh.FixedHostKey(clientPublic)))
+				b, err = reject.DownloadResource(t.Context(), spec, gitCreds)
+				r.ErrorContains(err, "ssh: host key mismatch")
+				r.Nil(b)
+
+				pinned, err := reject.ProcessResourceDigest(t.Context(), spec, gitCreds)
+				r.ErrorContains(err, "ssh: host key mismatch")
+				r.Nil(pinned)
+			})
 		}
-		tempDir := t.TempDir()
-		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, repository.WithHostKeyCallback(ssh.FixedHostKey(hostKey)))
-		b, err := repo.DownloadResource(t.Context(), spec, gitCreds)
-		r.NoError(err)
-		assertArchive(t, b, "second\n")
-
-		_, err = repo.ProcessResourceDigest(t.Context(), spec, gitCreds)
-		r.NoError(err)
-
-		rejectDir := t.TempDir()
-		reject := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &rejectDir}, repository.WithHostKeyCallback(ssh.FixedHostKey(clientPublic)))
-		_, err = reject.DownloadResource(t.Context(), spec, gitCreds)
-		r.Error(err)
 	}
 
 	for _, encrypted := range []bool{false, true} {

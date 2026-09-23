@@ -100,6 +100,51 @@ func TestDownloadHTTPSRedirectDoesNotLeakCredentials(t *testing.T) {
 	}
 }
 
+func TestDownloadRedirectLimit(t *testing.T) {
+	callbackErr := errors.New("configured redirect limit reached")
+	for _, tc := range []struct {
+		name         string
+		client       *http.Client
+		wantError    string
+		wantRequests int32
+	}{
+		{name: "default", wantError: "http redirect: too many redirects", wantRequests: 10},
+		{name: "configured without callback", client: &http.Client{}, wantError: "http redirect: too many redirects", wantRequests: 10},
+		{
+			name:      "permissive callback retains transport limit",
+			client:    &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return nil }},
+			wantError: "http redirect: too many redirects", wantRequests: 10,
+		},
+		{
+			name: "configured callback imposes stricter limit",
+			client: &http.Client{CheckRedirect: func(_ *http.Request, via []*http.Request) error {
+				if len(via) >= 3 {
+					return callbackErr
+				}
+				return nil
+			}},
+			wantError: callbackErr.Error(), wantRequests: 3,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				requests.Add(1)
+				http.Redirect(w, req, req.URL.RequestURI(), http.StatusFound)
+			}))
+			t.Cleanup(server.Close)
+			installRedirectTestClient(t, tc.client)
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			_, err := Download(ctx, &accessv1.Git{Repository: server.URL + "/repo.git", Ref: "HEAD"}, nil, Options{TempDir: t.TempDir()})
+			r.ErrorContains(err, tc.wantError)
+			r.Equal(tc.wantRequests, requests.Load())
+		})
+	}
+}
+
 func TestDownloadAllowedRedirects(t *testing.T) {
 	callbackErr := errors.New("redirect rejected by configured callback")
 	for _, clientName := range []string{"default", "configured", "configured-reject"} {
