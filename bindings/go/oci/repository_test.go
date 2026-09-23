@@ -2364,6 +2364,18 @@ func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
 						Access: &v1.OCIImage{ImageReference: "test-repo:1.0.0"},
 						Digest: original.DeepCopy(),
 					}
+					targetStore, err := store.StoreForReference(ctx, "test-repo:1.0.0")
+					r.NoError(err)
+					originalManifest, err := content.FetchAll(ctx, memStore, manifest)
+					r.NoError(err)
+					// Seed a different root so rejection must preserve an existing tag.
+					existingManifest := append(bytes.Clone(originalManifest), '\n')
+					existingRoot := manifest
+					existingRoot.Digest = digest.FromBytes(existingManifest)
+					existingRoot.Size = int64(len(existingManifest))
+					r.NoError(targetStore.Push(ctx, existingRoot, bytes.NewReader(existingManifest)))
+					r.NoError(targetStore.Tag(ctx, existingRoot, "1.0.0"))
+
 					var uploaded *descriptor.Resource
 					if streaming {
 						uploaded, err = repo.UploadResourceStream(ctx, resource, stream)
@@ -2375,6 +2387,12 @@ func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
 					r.Equal(original, *resource.Digest, "input must not be mutated")
 					if mismatch && tc.normalization != "" {
 						r.ErrorContains(err, "digest value mismatch")
+						exists, err := targetStore.Exists(ctx, manifest)
+						r.NoError(err)
+						r.False(exists, "rejected upload must not copy the root")
+						taggedRoot, err := targetStore.Resolve(ctx, "1.0.0")
+						r.NoError(err)
+						r.Equal(existingRoot.Digest, taggedRoot.Digest, "rejected upload must not change the tag")
 						return
 					}
 					r.NoError(err)
@@ -2387,13 +2405,9 @@ func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
 						}
 					}
 					r.Equal(expected, *uploaded.Digest)
-					targetStore, err := store.StoreForReference(ctx, "test-repo:1.0.0")
-					r.NoError(err)
 					copiedRoot, err := targetStore.Resolve(ctx, "1.0.0")
 					r.NoError(err)
 					r.Equal(manifest.Digest, copiedRoot.Digest, "copying must preserve the OCI root digest")
-					originalManifest, err := content.FetchAll(ctx, memStore, manifest)
-					r.NoError(err)
 					copiedManifest, err := content.FetchAll(ctx, targetStore, copiedRoot)
 					r.NoError(err)
 					r.Equal(originalManifest, copiedManifest, "copying must preserve manifest bytes")
