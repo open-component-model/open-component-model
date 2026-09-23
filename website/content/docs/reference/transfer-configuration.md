@@ -110,6 +110,7 @@ The request fields map field-for-field onto the resulting
 |-----------------------|-----------------------|---------------------|----------------------------------------------------------------------------------------------------|
 | `match.accessType`    | `runtime.Type`        | —                   | Access type this uploader applies to (matched by name; omitted version = any).                     |
 | `match.name`          | string (optional)     | —                   | Restrict the match to resources with this exact name.                                              |
+| `match.version`       | string (optional)     | —                   | Restrict the match to resources with this exact version.                                           |
 | `match.extraIdentity` | `map[string]string`   | —                   | Restrict the match to resources whose identity contains these key/value pairs.                     |
 | `targetURL`           | CEL expression        | `url`               | The upload URL. See CEL Expressions below.                                                         |
 | `method`              | string                | `verb`              | HTTP method for the upload request. Defaults to PUT.                                               |
@@ -122,7 +123,7 @@ The request fields map field-for-field onto the resulting
 
 Because a rule can match on identity as well as access type, several resources of
 the **same** access type can be routed to **different** targets. List the specific
-rules first; a final rule without `name`/`extraIdentity` acts as a catch-all:
+rules first; a final rule without `name`/`version`/`extraIdentity` acts as a catch-all:
 
 ```yaml
 configurations:

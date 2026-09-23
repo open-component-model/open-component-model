@@ -427,6 +427,7 @@ func TestMatchUploader(t *testing.T) {
 
 	byAccess := rule("byAccess", transferv1alpha1.UploaderMatch{AccessType: wget})
 	byName := rule("byName", transferv1alpha1.UploaderMatch{AccessType: wget, Name: "docs"})
+	byVersion := rule("byVersion", transferv1alpha1.UploaderMatch{AccessType: wget, Version: "1.0.0"})
 	byArch := rule("byArch", transferv1alpha1.UploaderMatch{AccessType: wget, ExtraIdentity: runtime.Identity{"architecture": "arm64"}})
 	byNameAndArch := rule("byNameAndArch", transferv1alpha1.UploaderMatch{AccessType: wget, Name: "docs", ExtraIdentity: runtime.Identity{"architecture": "arm64"}})
 	byVersionedAccess := rule("byVersionedAccess", transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v2")})
@@ -465,6 +466,18 @@ func TestMatchUploader(t *testing.T) {
 			uploaders: []*transferv1alpha1.HTTPUploaderConfig{byName},
 			resource:  resourceWithIdentity("docs", "1.0.0", nil),
 			want:      "byName",
+		},
+		{
+			name:      "version constraint matches the versioned resource",
+			uploaders: []*transferv1alpha1.HTTPUploaderConfig{byVersion},
+			resource:  resourceWithIdentity("docs", "1.0.0", nil),
+			want:      "byVersion",
+		},
+		{
+			name:      "version constraint selects only the matching version",
+			uploaders: []*transferv1alpha1.HTTPUploaderConfig{byVersion},
+			resource:  resourceWithIdentity("docs", "2.0.0", nil),
+			want:      "",
 		},
 		{
 			name:      "extraIdentity must be present and equal",

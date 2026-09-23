@@ -20,9 +20,10 @@ import (
 // matchUploader returns the first uploader whose match applies to resource, or nil.
 // The access type must match: when the rule specifies a version (Wget/v1) it must
 // equal the resource access type exactly; an unversioned rule (Wget) matches any
-// version by name. The identity constraint (optional Name plus ExtraIdentity) is a
-// subset match against the resource identity via [runtime.IdentitySubset]: every
-// specified key/value must be present and equal. Declaration order is significant —
+// version by name. The identity constraint (optional Name, Version plus
+// ExtraIdentity) is a subset match against the resource identity via
+// [runtime.IdentitySubset]: every specified key/value must be present and equal.
+// Declaration order is significant —
 // the first match wins, so more specific rules should precede broader ones.
 func matchUploader(uploaders []*transferv1alpha1.HTTPUploaderConfig, resource descriptorv2.Resource) *transferv1alpha1.HTTPUploaderConfig {
 	accessType := resource.Access.Type
@@ -52,16 +53,20 @@ func accessTypeMatches(match, access runtime.Type) bool {
 	return match.GetName() == access.GetName()
 }
 
-// matchIdentity renders an uploader match's identity constraint (Name plus
-// ExtraIdentity) as a [runtime.Identity] for subset matching against a resource
-// identity. Name maps to the reserved name attribute; an empty Name is omitted.
+// matchIdentity renders an uploader match's identity constraint (Name, Version
+// plus ExtraIdentity) as a [runtime.Identity] for subset matching against a
+// resource identity. Name and Version map to the reserved name and version
+// attributes; an empty Name or Version is omitted.
 func matchIdentity(m transferv1alpha1.UploaderMatch) runtime.Identity {
-	id := make(runtime.Identity, len(m.ExtraIdentity)+1)
+	id := make(runtime.Identity, len(m.ExtraIdentity)+2)
 	for k, v := range m.ExtraIdentity {
 		id[k] = v
 	}
 	if m.Name != "" {
 		id[descriptorv2.IdentityAttributeName] = m.Name
+	}
+	if m.Version != "" {
+		id[descriptorv2.IdentityAttributeVersion] = m.Version
 	}
 	return id
 }

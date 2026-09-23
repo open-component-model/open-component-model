@@ -66,7 +66,7 @@ type HTTPUploaderConfig struct {
 
 // UploaderMatch selects resources by their access type and, optionally, their
 // identity. A resource matches when its access type matches AccessType and every
-// specified identity constraint (Name, ExtraIdentity) also matches. This lets
+// specified identity constraint (Name, Version, ExtraIdentity) also matches. This lets
 // multiple uploaders target the same access type while routing different resources
 // to different upload targets; the first matching uploader (in declaration order)
 // wins, so more specific rules should be declared before broader ones.
@@ -79,6 +79,9 @@ type UploaderMatch struct {
 	// Name optionally restricts the match to resources with this exact name.
 	// When empty, resources of any name match.
 	Name string `json:"name,omitempty"`
+	// Version optionally restricts the match to resources with this exact
+	// version. When empty, resources of any version match.
+	Version string `json:"version,omitempty"`
 	// ExtraIdentity optionally restricts the match to resources whose identity
 	// contains all of these key/value pairs. When empty, no extra-identity
 	// constraint is applied.
