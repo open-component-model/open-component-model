@@ -261,7 +261,7 @@ configurations:
 The four modes are:
 
 | Mode | Behaviour |
-|------|-----------|
+| ---- | --------- |
 | `PeekWithHEADOrFail` | HEAD-pins from advertised headers; aborts if none advertised. Input side verifies against the header, fails if none. |
 | `PeekWithHEADOrCompute` (default) | HEAD-pins; falls back to download+hash SHA-256 when nothing is advertised. Input side verifies when present, otherwise records SHA-256 unverified. |
 | `Compute` | Skip the HEAD fast path; always download and hash SHA-256, no verification. |
