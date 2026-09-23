@@ -1,6 +1,6 @@
 ---
 title: "HTTP Checksum Configuration"
-description: "Complete reference for OCM HTTP checksum verification: schema, source strategies, precedence rules, and the access-side fast path."
+description: "Complete reference for OCM HTTP checksum verification: schema, checksum modes, precedence rules, and the access-side fast path."
 icon: "🔒"
 weight: 7
 toc: true
@@ -20,16 +20,16 @@ For a task-oriented walkthrough, see
 ## Design Rationale
 
 **Verification is a deployment concern, not a descriptor concern.** The wget
-input spec has no `checksumPolicy` field, and the `Wget/v1` access carries no
+input spec has no checksum field, and the `Wget/v1` access carries no
 verification hints. Instead, operators steer verification centrally via the
 `checksum.http.config.ocm.software/v1alpha1` configuration:
 
 - **The same descriptor behaves identically wherever it is constructed.** Two
   operators pointing at two mirrors trust each mirror independently without
   editing the constructor.
-- **How a mirror is trusted is up to the operator.** RFC 9530 `Content-Digest`,
-  a `x-checksum-*` header, a Maven-style `<url>.<ext>` sidecar, a hosted-mirror
-  sidecar at a different URL — all coexist in the same configuration.
+- **How a mirror is trusted is up to the operator.** Verification is
+  header-only: RFC 9530 `Content-Digest` and the `x-checksum-*` header
+  family are understood automatically.
 - **The transport identifier is stable.** The config type is named for the
   transport (`checksum.http.config.ocm.software`), not for one input plugin, so
   a future rename of the wget package leaves the on-the-wire identifier and any
@@ -51,17 +51,10 @@ configurations:
 
   # checksum-verification knobs — how downloaded HTTP bytes are verified
   - type: checksum.http.config.ocm.software/v1alpha1
-    defaultChecksumPolicy:
-      onMissing: compute
-      sources:
-        - type: httpHeader
-        - type: externalUrl
-          algorithms: [sha256, sha1]
+    mode: PeekWithHEADOrCompute   # default when omitted
     hosts:
       "repo.example.com":
-        checksumPolicy:
-          onMissing: fail
-          sources: [{type: httpHeader}]
+        mode: PeekWithHEADOrFail
 ```
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
@@ -79,69 +72,67 @@ The schema below defines the full structure of the
 
 ---
 
-## Source Strategies
+## Checksum Modes
 
-Each entry in `sources` has a `type`. Sources are tried in order; the first
-that yields an expected checksum wins.
+The `mode` field selects how checksum verification behaves. It can be set at
+the top level (applying to all hosts) and overridden per host in the `hosts`
+map.
 
-### `httpHeader` — "Remote Included"
-
-The checksum travels in the download response headers. Both the IETF-standard
+Verification is header-only: OCM understands the IETF-standard
 [RFC 9530](https://www.rfc-editor.org/rfc/rfc9530) `Content-Digest` field and
 the non-standard `x-checksum-sha256`/`x-checksum-sha1`/`x-checksum-md5` family
-(plus the `x-goog-meta-*` and `x-amz-meta-*` variants) are understood.
+(plus `x-goog-meta-*` and `x-amz-meta-*` variants).
 
-Add extra header names with `headers: [x-my-sha256]`. The algorithm is
-inferred from a trailing token (e.g. `x-my-sha256`) unless the header is
-already known.
+### `PeekWithHEADOrFail`
 
-Restrict which algorithms this source considers with
-`algorithms: [sha256, sha1, sha512, md5]`. Empty means every supported
-algorithm is accepted, strongest-preferred first.
+- **Access side:** issues a single HEAD to the artifact URL and pins the
+  digest from the source-advertised response headers. Aborts if no checksum
+  header is advertised.
+- **Input side:** downloads the body, verifies the bytes against the
+  advertised header. Fails if no checksum header is advertised.
 
-### `externalUrl` — "Remote External"
+Use this mode when every mirror is expected to advertise a checksum.
 
-A sibling resource fetched from a separate URL. By default, the URL is
-constructed by appending the algorithm's file extension to the artifact URL
-(e.g. `<url>.sha256`, Maven's convention). Set `url` to an absolute URL to
-point the checksum request at a mirror instead.
+### `PeekWithHEADOrCompute` (default) {#mode-default}
 
-One URL per source; use multiple `externalUrl` sources for multiple algorithms
-or hosts. Empty `algorithms` falls back to the default preference list.
+This is the default when `mode` is not set.
 
-The file may be a bare hex digest or GNU coreutils format (`<hex>  <name>`).
+- **Access side:** issues a single HEAD and pins the digest from the
+  source-advertised response headers. If nothing is advertised, falls back to
+  downloading the body and hashing it as SHA-256.
+- **Input side:** downloads the body, verifies against the advertised header
+  when present. If no checksum header is advertised, records SHA-256
+  unverified.
 
-### `stream`
+### `Compute`
 
-No expected checksum; the digest is computed from the downloaded stream.
-Placing this in the list stops the search and disables verification from that
-point on. Useful when a source is trusted transport-wise but exposes no
-digest.
+- **Access side:** skips the HEAD fast path; always downloads the body and
+  hashes it as SHA-256. No verification against the source.
+- **Input side:** downloads and hashes as SHA-256 without verification.
+
+Use this mode when the source is trusted transport-wise but exposes no
+digest headers.
+
+### `Disable`
+
+- **Access side:** establishes no digest. The resource is returned unchanged
+  with no checksum processing.
+- **Input side:** records SHA-256 without verification.
 
 ## Precedence
 
-For a given wget URL, the effective policy is resolved as (tightest wins):
+For a given wget URL, the effective mode is resolved as (tightest wins):
 
-1. A `hosts.<host>.checksumPolicy` whose key matches the URL's host.
+1. A `hosts.<host>.mode` whose key matches the URL's host.
    Entries keyed `host:port` win over bare-hostname entries (case-insensitive
    host matching).
-2. `defaultChecksumPolicy` at the top level.
-3. No policy — the input path computes the storage digest from the stream
-   without external verification; the access path downloads and hashes.
+2. The top-level `mode`.
+3. No configuration — the default mode `PeekWithHEADOrCompute` applies.
 
 A pinned `digest` on the resource itself is checked against the same authority
-as the policy — the downloaded bytes on the input path, the source-advertised
-checksum on the access fast path. Pinned and policy are each verified
+as the mode — the downloaded bytes on the input path, the source-advertised
+checksum on the access fast path. Pinned and mode are each verified
 independently, never against each other.
-
-## `onMissing`
-
-Controls what happens when no source in the policy yields a checksum:
-
-| Value              | Behaviour                                                                                       |
-|--------------------|-------------------------------------------------------------------------------------------------|
-| `fail` (default)   | Abort the input or digest processor with an error.                                              |
-| `compute`          | Fall back to computing the digest from the stream without external verification.                |
 
 ## Input Side — Always Downloads, Always SHA-256
 
@@ -150,11 +141,11 @@ The wget input embeds the download as a local blob, so the resource identity
 
 - Always streams the body to disk.
 - Always records `SHA-256` with `genericBlobDigest/v1`.
-- (If a policy applies) also verifies the bytes against whatever algorithm the
-  source advertises.
+- (When the mode enables verification) also verifies the bytes against
+  whatever algorithm the source advertises in response headers.
 
 {{< callout context="note" >}}
-Verification and storage are decoupled on the input side. A policy may verify
+Verification and storage are decoupled on the input side. The mode may verify
 the transferred bytes against any supported algorithm — Maven repositories
 commonly ship SHA-1 or MD5 — but the digest recorded on the resource is
 **always SHA-256** with the `genericBlobDigest/v1` normalisation, so a
@@ -166,43 +157,36 @@ anything is stored.
 ## Access Side — Pin From Source, No Body Download {#access-digest}
 
 A `Wget/v1` **access** references bytes on a remote server that any consumer
-will re-fetch on demand. Whenever a policy applies, the access-side digest
-processor pins the resource digest from what the source advertises via a
-single HEAD (plus a small sidecar GET per `externalUrl` source) — **the
-artifact body is never fetched**.
+will re-fetch on demand. Whenever the mode enables it, the access-side digest
+processor pins the resource digest from what the source advertises in response
+headers via a single HEAD — **the artifact body is never fetched** (unless the
+mode falls back to `Compute`).
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
-    defaultChecksumPolicy:
-      onMissing: fail
-      sources:
-        - type: httpHeader
-        - type: externalUrl
-          algorithms: [sha256, sha1]
-      # Optional: restrict which algorithms the pin uses, strongest-preferred
-      # first. Empty (default) means [sha256, sha512, sha1, md5].
-      preferredAlgorithms: [sha256, sha1]
+    mode: PeekWithHEADOrFail
+    hosts:
+      "legacy-mirror.example.com":
+        mode: Compute
 ```
 
 Semantics:
 
 - The digest processor issues **one HEAD** to the artifact URL to harvest
-  response headers, plus one GET per `externalUrl` source (fetching the small
-  sidecar file). It **never fetches the artifact body**.
-- Among competing offers, the earliest algorithm in `preferredAlgorithms`
-  wins. Weaker algorithms are only used as a fallback.
+  response headers. It **never fetches the artifact body** unless the mode
+  falls through to the download-and-hash path.
+- Among competing offers, the algorithm preference is fixed at
+  `[sha256, sha512, sha1, md5]` — the strongest advertised algorithm wins.
 - The recorded digest carries the algorithm the source actually offered
   (`SHA-256`, `SHA-1`, `MD5`, `SHA-512`), still with
   `normalisationAlgorithm: genericBlobDigest/v1`. It is a legitimate pin
   because any downstream consumer re-fetches from the same source and
   re-verifies against the same authority.
-- When `preferredAlgorithms` is empty, the default preference list
-  `[sha256, sha512, sha1, md5]` is used.
-- If no source advertises an acceptable digest and `onMissing` is `fail`, the
-  processor aborts without downloading. `onMissing: compute` falls through to
-  a download-and-hash path (SHA-256).
+- If no header advertises an acceptable digest and the mode is
+  `PeekWithHEADOrFail`, the processor aborts without downloading.
+  `PeekWithHEADOrCompute` falls through to a download-and-hash path (SHA-256).
 - When the resource already carries a pinned `digest`, its algorithm and value
   MUST agree with the source-advertised digest for the same algorithm; a
   mismatch is a hard error.
@@ -211,19 +195,16 @@ Semantics:
 The fast path applies to the access-side digest processor only. Transferring
 a `Wget/v1` access resource **by value** (`--copy-resources`) promotes it to
 a `LocalBlob/v1` and re-runs the input-side rules — the bytes are streamed
-into the target and re-digested as SHA-256, regardless of this policy. This
-preserves the OCM invariant that every local blob is self-describing.
+into the target and re-digested as SHA-256, regardless of this configuration.
+This preserves the OCM invariant that every local blob is self-describing.
 {{< /callout >}}
 
 ## Credential Scoping
 
-Sibling checksum URLs (`externalUrl`) and HEAD requests reuse the artifact's
-OCM credentials only when the resolved URL matches the artifact URL's exact
-origin (scheme + host + port) and uses HTTPS. Cross-origin or plain-HTTP
-checksum URLs get an undecorated client and no `Authorization` header, so the
-credential never leaves the trust boundary the operator configured. Redirects
-on the credentialed client are hard-disabled: a 3xx cannot leak the header
-cross-origin.
+HEAD requests reuse the artifact's OCM credentials only when the resolved URL
+matches the artifact URL's exact origin (scheme + host + port) and uses HTTPS.
+Redirects on the credentialed client are hard-disabled: a 3xx cannot leak the
+header cross-origin.
 
 ## Related Documentation
 

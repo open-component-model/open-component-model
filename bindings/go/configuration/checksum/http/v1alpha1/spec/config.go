@@ -29,22 +29,13 @@ func init() {
 // both the wget input method and the wget access resource repository through
 // a single knob.
 //
-// Example:
-//
 //	type: generic.config.ocm.software/v1
 //	configurations:
 //	  - type: checksum.http.config.ocm.software/v1alpha1
-//	    defaultChecksumPolicy:
-//	      onMissing: compute
-//	      sources:
-//	        - type: httpHeader
-//	        - type: externalUrl
-//	          algorithms: [sha256, sha1]
+//	    mode: PeekWithHEADOrCompute
 //	    hosts:
 //	      "repo.example.com":
-//	        checksumPolicy:
-//	          onMissing: fail
-//	          sources: [{type: httpHeader}]
+//	        mode: PeekWithHEADOrFail
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -55,22 +46,15 @@ type Config struct {
 	// +ocm:jsonschema-gen:enum:deprecated=checksum.http.config.ocm.software
 	Type runtime.Type `json:"type"`
 
-	// DefaultChecksumPolicy applies to every wget resource whose spec carries
-	// no checksumPolicy and whose host does not match [Config.Hosts].
-	DefaultChecksumPolicy *ChecksumPolicy `json:"defaultChecksumPolicy,omitempty"`
+	// Mode is the default verification behaviour for every wget resource whose
+	// host does not match [Config.Hosts]. Defaults to
+	// "PeekWithHEADOrCompute" when unset.
+	// +ocm:jsonschema-gen:enum=PeekWithHEADOrFail,PeekWithHEADOrCompute,Compute,Disable
+	Mode ChecksumMode `json:"mode,omitempty"`
 
 	// Hosts maps "host" or "host:port" to per-host overrides; port-qualified
 	// entries win over bare hostnames.
-	Hosts map[string]*HostConfig `json:"hosts,omitempty"`
-}
-
-// HostConfig carries per-host overrides. Unset fields fall through to
-// [Config.DefaultChecksumPolicy].
-//
-// +k8s:deepcopy-gen=true
-// +ocm:jsonschema-gen=true
-type HostConfig struct {
-	ChecksumPolicy *ChecksumPolicy `json:"checksumPolicy,omitempty"`
+	Hosts map[string]*ChecksumPolicy `json:"hosts,omitempty"`
 }
 
 // Validate rejects an unknown [Config.Type]. Nested policies are validated by
@@ -117,9 +101,8 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 	return Merge(cfgs...), nil
 }
 
-// Merge folds configs left-to-right; later entries win. A non-nil
-// DefaultChecksumPolicy replaces earlier ones; Hosts maps union with later
-// keys overriding.
+// Merge folds configs left-to-right; later entries win. A non-empty Mode
+// replaces earlier ones; Hosts maps union with later keys overriding.
 func Merge(configs ...*Config) *Config {
 	var out *Config
 	for _, c := range configs {
@@ -129,12 +112,12 @@ func Merge(configs ...*Config) *Config {
 		if out == nil {
 			out = &Config{Type: c.Type}
 		}
-		if c.DefaultChecksumPolicy != nil {
-			out.DefaultChecksumPolicy = c.DefaultChecksumPolicy
+		if c.Mode != "" {
+			out.Mode = c.Mode
 		}
 		for k, v := range c.Hosts {
 			if out.Hosts == nil {
-				out.Hosts = make(map[string]*HostConfig, len(c.Hosts))
+				out.Hosts = make(map[string]*ChecksumPolicy, len(c.Hosts))
 			}
 			out.Hosts[k] = v
 		}
@@ -142,26 +125,26 @@ func Merge(configs ...*Config) *Config {
 	return out
 }
 
-// PolicyForURL returns the effective checksum policy for rawURL: host-scoped
-// wins over the default; a malformed URL yields the default. The returned
-// policy is read-only.
-func (c *Config) PolicyForURL(rawURL string) *ChecksumPolicy {
+// ModeForURL returns the effective [ChecksumMode] for rawURL: a host-scoped
+// override wins over [Config.Mode]; a malformed URL yields the default. The
+// zero value is resolved to [ChecksumModePeekWithHEADOrCompute].
+func (c *Config) ModeForURL(rawURL string) ChecksumMode {
 	if c == nil {
-		return nil
+		return ChecksumModePeekWithHEADOrCompute
 	}
 	u, err := url.Parse(rawURL)
 	if err == nil && u.Host != "" && len(c.Hosts) > 0 {
-		lower := make(map[string]*HostConfig, len(c.Hosts))
+		lower := make(map[string]*ChecksumPolicy, len(c.Hosts))
 		for k, v := range c.Hosts {
 			lower[normalizeHostKey(k)] = v
 		}
 		for _, key := range hostKeys(u.Host) {
-			if hc := lower[key]; hc != nil && hc.ChecksumPolicy != nil {
-				return hc.ChecksumPolicy
+			if hc := lower[key]; hc != nil && hc.Mode != "" {
+				return hc.Mode
 			}
 		}
 	}
-	return c.DefaultChecksumPolicy
+	return c.Mode.Normalize()
 }
 
 // hostKeys returns candidate lookup keys for host, most specific first.

@@ -239,32 +239,35 @@ whatever the server sends and records its SHA-256. If the mirror is
 compromised, that SHA-256 is the compromise.
 
 OCM closes that gap with a **source-side checksum** — an expected digest
-published by the artifact source (an RFC 9530 `Content-Digest` header, a
-Maven-style `<url>.sha256` sidecar, and so on). When the download completes,
-OCM compares what it just hashed against what the source claims. If they
-disagree, construction fails.
+published by the artifact source in response headers (RFC 9530
+`Content-Digest`, `x-checksum-sha256`, and related headers). When the download
+completes, OCM compares what it just hashed against what the source claims. If
+they disagree, construction fails.
 
-Because the same policy makes sense across dozens of resources, it lives in
-the OCM configuration, not in the constructor:
+Because the same configuration makes sense across dozens of resources, it lives
+in the OCM configuration, not in the constructor. The configuration selects a
+**mode** — globally or per host:
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
-    defaultChecksumPolicy:
-      onMissing: compute
-      sources:
-        - type: httpHeader     # "Remote Included": Content-Digest / x-checksum-*
-        - type: externalUrl    # "Remote External": <url>.<ext> sibling file
-          algorithms: [sha256, sha1]
+    mode: PeekWithHEADOrCompute   # default when omitted
     hosts:
       "repo.example.com":
-        checksumPolicy:
-          onMissing: fail
-          sources: [{type: httpHeader}]
+        mode: PeekWithHEADOrFail
 ```
 
-The wget spec itself carries no checksum policy: two operators pointing at two
+The four modes are:
+
+| Mode | Behaviour |
+|------|-----------|
+| `PeekWithHEADOrFail` | HEAD-pins from advertised headers; aborts if none advertised. Input side verifies against the header, fails if none. |
+| `PeekWithHEADOrCompute` (default) | HEAD-pins; falls back to download+hash SHA-256 when nothing is advertised. Input side verifies when present, otherwise records SHA-256 unverified. |
+| `Compute` | Skip the HEAD fast path; always download and hash SHA-256, no verification. |
+| `Disable` | Access side establishes no digest; input side records SHA-256 without verification. |
+
+The wget spec itself carries no checksum field: two operators pointing at two
 mirrors trust each mirror independently without editing anything the resource
 authored.
 
@@ -273,8 +276,9 @@ authored.
 The input embeds the bytes as a `LocalBlob/v1`, so the resource identity *is*
 those bytes. Verification is layered on top of the download — the file is
 always streamed to disk in a single pass and recorded as `SHA-256` with the
-`genericBlobDigest/v1` normalisation; the policy simultaneously verifies the
-bytes against whatever algorithm the source advertises.
+`genericBlobDigest/v1` normalisation; when the mode enables it, the bytes are
+simultaneously verified against whatever algorithm the source advertises in
+response headers.
 
 That decoupling matters: a Maven repository often ships SHA-1 or MD5 as the
 strongest checksum. Verifying against SHA-1 is fine on the wire, but the
@@ -288,55 +292,22 @@ consumer will re-fetch and re-verify from that same server, so pinning "what
 the source claims" is a legitimate identity for the descriptor — and it means
 OCM can establish the digest without transferring the body.
 
-Whenever a policy applies, the access-side digest processor pins from the
-source-advertised checksum. Just configure the policy:
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: checksum.http.config.ocm.software/v1alpha1
-    defaultChecksumPolicy:
-      onMissing: fail
-      sources:
-        - type: httpHeader
-        - type: externalUrl
-          algorithms: [sha256, sha1]
-      # Optional: override which algorithms the pin will accept from the
-      # source, strongest-preferred first. Default is [sha256, sha512, sha1,
-      # md5]. Configure this when you want to reject anything weaker than a
-      # given algorithm on the pin, or the opposite — allow a weaker algorithm
-      # your source ships for legacy reasons.
-      preferredAlgorithms: [sha256, sha1]
-```
-
-With this policy, `ocm add cv` (for an access-type resource) and every later
-descriptor refresh issue a single `HEAD` to the artifact URL — plus one small
-`GET` per `externalUrl` source to fetch the sidecar file. The artifact body
-is never downloaded. The recorded digest carries the algorithm the source
-actually offered (`SHA-256`, `SHA-1`, and so on), still with
-`genericBlobDigest/v1`.
+When the mode enables it, the access-side digest processor issues a single
+`HEAD` to the artifact URL and pins the digest from the source-advertised
+response headers. The artifact body is never downloaded (unless the mode falls
+through to the download-and-hash path). The recorded digest carries the
+algorithm the source actually offered (`SHA-256`, `SHA-1`, and so on), still
+with `genericBlobDigest/v1`.
 
 {{< callout context="caution" >}}
 The fast path applies to the access-side digest processor only. Transferring
 an access **by value** (`ocm transfer cv --copy-resources`) promotes it to a
 `LocalBlob/v1` and re-runs the input-side rules — the bytes are streamed and
-re-digested as SHA-256, regardless of this policy. Every local blob is
+re-digested as SHA-256, regardless of this configuration. Every local blob is
 self-describing.
 {{< /callout >}}
 
-### `onMissing`: what if no source yields a checksum? {#checksum-onmissing}
-
-| Value              | Behaviour                                                                                                              |
-|--------------------|------------------------------------------------------------------------------------------------------------------------|
-| `fail` (default)   | Abort construction or the digest processor. Use this when no source is trusted enough to skip verification.            |
-| `compute`          | Fall through to computing the digest from the stream, without external verification. Input records SHA-256 either way. |
-
-On the access-side fast path, `onMissing: fail` aborts **without
-downloading**; `onMissing: compute` falls through to the download-and-hash
-path.
-
-For the full schema, source strategies, precedence rules, and credential
-scoping, see
+For the full schema, precedence rules, and credential scoping, see
 [HTTP Checksum Configuration]({{< relref "docs/reference/checksum-http-configuration.md" >}}).
 
 ## Migrate from OCM v1 {#migrating-from-ocm-v1}

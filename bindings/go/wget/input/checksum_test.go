@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/wget/input"
-	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
@@ -34,7 +34,6 @@ func blobDigest(t *testing.T, b blob.ReadOnlyBlob) string {
 	return digest
 }
 
-
 // wgetResourceWithDigest builds a wget input resource carrying a provided digest.
 func wgetResourceWithDigest(t *testing.T, url, value string) *constructorruntime.Resource {
 	t.Helper()
@@ -45,6 +44,12 @@ func wgetResourceWithDigest(t *testing.T, url, value string) *constructorruntime
 		Value:                  value,
 	}
 	return r
+}
+
+// peekOrFail is the strictest reduced-config mode: verify against the
+// source-advertised checksum and fail when none is available.
+func peekOrFail() *checksumhttpv1alpha1.Config {
+	return &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail}
 }
 
 func TestProcessResource_ProvidedDigest(t *testing.T) {
@@ -62,7 +67,9 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 		server := serve(t)
 		defer server.Close()
 
-		result, err := (&input.InputMethod{}).ProcessResource(t.Context(),
+		// Disable central verification so only the provided digest is checked.
+		method := &input.InputMethod{ChecksumConfig: &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeDisable}}
+		result, err := method.ProcessResource(t.Context(),
 			wgetResourceWithDigest(t, server.URL+"/artifact", hwSHA256), nil)
 		require.NoError(t, err)
 		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
@@ -72,7 +79,8 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 		server := serve(t)
 		defer server.Close()
 
-		_, err := (&input.InputMethod{}).ProcessResource(t.Context(),
+		method := &input.InputMethod{ChecksumConfig: &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeDisable}}
+		_, err := method.ProcessResource(t.Context(),
 			wgetResourceWithDigest(t, server.URL+"/artifact", strings.Repeat("0", 64)), nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "digest mismatch")
@@ -84,7 +92,8 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 
 		r := wgetInputResource(t, map[string]any{"url": server.URL + "/artifact"})
 		r.Digest = &constructorruntime.Digest{HashAlgorithm: "SHA-1", Value: hwSHA1}
-		_, err := (&input.InputMethod{}).ProcessResource(t.Context(), r, nil)
+		method := &input.InputMethod{ChecksumConfig: &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeDisable}}
+		_, err := method.ProcessResource(t.Context(), r, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported provided hash algorithm")
 	})
@@ -96,49 +105,27 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		r := wgetResourceWithDigest(t, server.URL+"/artifact", hwSHA256)
-		r.Input = wgetInputResource(t, map[string]any{
-			"url":            server.URL + "/artifact",
-			"checksumPolicy": map[string]any{"sources": []any{map[string]any{"type": "httpHeader"}}},
-		}).Input
-		result, err := (&input.InputMethod{}).ProcessResource(t.Context(), r, nil)
+		// PeekWithHEADOrFail verifies the bytes against the source-advertised
+		// SHA-1 header, while the provided SHA-256 digest is verified
+		// independently. Both must pass.
+		method := &input.InputMethod{ChecksumConfig: peekOrFail()}
+		result, err := method.ProcessResource(t.Context(),
+			wgetResourceWithDigest(t, server.URL+"/artifact", hwSHA256), nil)
 		require.NoError(t, err)
 		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
 	})
 }
 
-// TestProcessResource_ChecksumPolicy_CredentialsForwarded confirms three
-// invariants on how OCM credentials propagate to the sibling checksum fetch
-// when a checksum.http.config.ocm.software policy is configured:
-//
-//   - Same-origin HTTPS: credentials are forwarded so authenticated Maven mirrors
-//     and registries behind a bearer token/basic auth verify checksums end-to-end.
-//   - Cross-origin (any scheme): credentials are stripped. The checksum URL is
-//     user-configured; sending Authorization to arbitrary hosts would leak
-//     credentials to attacker-controlled infrastructure.
-//   - Plain HTTP (even same host): credentials are stripped. Non-TLS transport
-//     leaks the header on the wire.
-//
-// Guards CWE-200 (sensitive-data exposure) surfaced during PR review.
-func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
+// TestProcessResource_ChecksumPolicy_HeaderVerification confirms that the
+// reduced, header-only checksum configuration verifies a downloaded blob
+// against the source-advertised x-checksum-sha256 header, and that OCM
+// credentials still reach the artifact request. No sibling checksum URL is
+// fetched, so credential leakage to a checksum host is structurally
+// impossible.
+func TestProcessResource_ChecksumPolicy_HeaderVerification(t *testing.T) {
 	t.Parallel()
 
 	content := []byte("hello world")
-
-	var mirrorAuth string
-	mirror := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mirrorAuth = r.Header.Get("Authorization")
-		_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
-	}))
-	defer mirror.Close()
-
-	var httpMirrorAuth string
-	httpMirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpMirrorAuth = r.Header.Get("Authorization")
-		_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
-	}))
-	defer httpMirror.Close()
-
 	creds := &credv1.WgetCredentials{
 		Type:          credv1.WgetCredentialsVersionedType,
 		IdentityToken: "my-token",
@@ -149,96 +136,43 @@ func TestProcessResource_ChecksumPolicy_CredentialsForwarded(t *testing.T) {
 			InsecureSkipVerify: &insecure,
 		},
 	}
-	// externalUrl policy with the default sibling URL — credentials only reach
-	// the sibling fetch when it lands on the artifact's same origin.
-	externalPolicy := &checksumhttpv1alpha1.Config{
-		DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
-			OnMissing: checksumhttpv1alpha1.OnMissingFail,
-			Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceExternalURL, Algorithms: []string{"sha256"}}},
-		},
-	}
 
-	t.Run("same-origin HTTPS forwards credentials to checksum fetch", func(t *testing.T) {
-		var (
-			artifactAuth string
-			checksumAuth string
-		)
+	t.Run("advertised header verifies and credentials reach the artifact", func(t *testing.T) {
+		var artifactAuth string
 		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case strings.HasSuffix(r.URL.Path, ".sha256"):
-				checksumAuth = r.Header.Get("Authorization")
-				_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
-			default:
-				artifactAuth = r.Header.Get("Authorization")
-				_, _ = w.Write(content)
-			}
+			artifactAuth = r.Header.Get("Authorization")
+			w.Header().Set("x-checksum-sha256", hwSHA256)
+			_, _ = w.Write(content)
 		}))
 		defer server.Close()
 
-		method := &input.InputMethod{HTTPConfig: httpConfig, WgetConfig: externalPolicy}
+		method := &input.InputMethod{HTTPConfig: httpConfig, ChecksumConfig: peekOrFail()}
 		result, err := method.ProcessResource(t.Context(),
 			wgetInputResource(t, map[string]any{"url": server.URL + "/artifact"}), creds)
 		require.NoError(t, err)
 		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
 		assert.Equal(t, "Bearer my-token", artifactAuth, "artifact fetch must carry credentials")
-		assert.Equal(t, "Bearer my-token", checksumAuth, "same-origin HTTPS checksum fetch must reuse credentials")
 	})
 
-	t.Run("cross-origin HTTPS strips credentials from checksum fetch", func(t *testing.T) {
-		mirrorAuth = ""
-		var artifactAuth string
-		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			artifactAuth = r.Header.Get("Authorization")
+	t.Run("tampered advertised header fails construction", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("x-checksum-sha256", strings.Repeat("f", 64))
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
 
-		// Point the checksum URL at the mirror on a different host via a
-		// per-host config override.
-		crossOriginPolicy := &checksumhttpv1alpha1.Config{
-			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
-				OnMissing: checksumhttpv1alpha1.OnMissingFail,
-				Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceExternalURL, URL: mirror.URL + "/artifact.sha256", Algorithms: []string{"sha256"}}},
-			},
-		}
-		method := &input.InputMethod{HTTPConfig: httpConfig, WgetConfig: crossOriginPolicy}
-		result, err := method.ProcessResource(t.Context(),
-			wgetInputResource(t, map[string]any{"url": server.URL + "/artifact"}), creds)
-		require.NoError(t, err)
-		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
-		assert.Equal(t, "Bearer my-token", artifactAuth, "artifact fetch still carries credentials")
-		assert.Empty(t, mirrorAuth, "cross-origin checksum fetch must NOT carry credentials")
-	})
-
-	t.Run("same-host plain-HTTP strips credentials from checksum fetch", func(t *testing.T) {
-		httpMirrorAuth = ""
-		var artifactAuth string
-		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			artifactAuth = r.Header.Get("Authorization")
-			_, _ = w.Write(content)
-		}))
-		defer server.Close()
-
-		httpMirrorPolicy := &checksumhttpv1alpha1.Config{
-			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
-				OnMissing: checksumhttpv1alpha1.OnMissingFail,
-				Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceExternalURL, URL: httpMirror.URL + "/artifact.sha256", Algorithms: []string{"sha256"}}},
-			},
-		}
-		method := &input.InputMethod{HTTPConfig: httpConfig, WgetConfig: httpMirrorPolicy}
-		result, err := method.ProcessResource(t.Context(),
-			wgetInputResource(t, map[string]any{"url": server.URL + "/artifact"}), creds)
-		require.NoError(t, err)
-		assert.Equal(t, "sha256:"+hwSHA256, blobDigest(t, result.ProcessedBlobData))
-		assert.Equal(t, "Bearer my-token", artifactAuth, "artifact fetch still carries credentials")
-		assert.Empty(t, httpMirrorAuth, "plain-HTTP checksum fetch must NOT carry credentials even for the same host")
+		method := &input.InputMethod{ChecksumConfig: peekOrFail()}
+		_, err := method.ProcessResource(t.Context(),
+			wgetInputResource(t, map[string]any{"url": server.URL + "/artifact"}), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "checksum mismatch")
 	})
 }
 
 // TestProcessResource_ChecksumPolicy_ConfigDriven confirms that the shared
 // checksum.http.config.ocm.software config is honored on the input side:
 //
-//   - a defaultChecksumPolicy is applied to every wget input,
+//   - the top-level mode is applied to every wget input,
 //   - a host-scoped override wins over the default.
 func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 	t.Parallel()
@@ -256,17 +190,11 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 		_, _ = w.Write(content)
 	})
 
-	t.Run("default policy applies to the resource", func(t *testing.T) {
+	t.Run("default mode applies to the resource", func(t *testing.T) {
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
-		cfg := &checksumhttpv1alpha1.Config{
-			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
-				OnMissing: checksumhttpv1alpha1.OnMissingFail,
-				Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
-			},
-		}
-		method := &input.InputMethod{WgetConfig: cfg}
+		method := &input.InputMethod{ChecksumConfig: peekOrFail()}
 		result, err := method.ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
 			"url": server.URL + "/artifact",
 		}), nil)
@@ -275,13 +203,11 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 	})
 
 	t.Run("host override wins over default", func(t *testing.T) {
-		// Two servers on different ports: default policy says "compute"
-		// (any bytes accepted), host override for the artifact's actual host
-		// says "fail". A tampered response should therefore fail against the
-		// host override but would silently succeed under the default.
+		// Default mode "Compute" accepts any bytes without verification; the
+		// host override for the artifact's actual host is "PeekWithHEADOrFail".
+		// A tampered advertised digest therefore fails against the override but
+		// would go unnoticed under the default.
 		badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			// Advertise a mismatching digest that would fail a fail-policy but
-			// go unnoticed by compute-on-missing.
 			w.Header().Set("x-checksum-sha256", strings.Repeat("f", 64))
 			_, _ = w.Write(content)
 		}))
@@ -289,20 +215,12 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 		host, _, _ := strings.Cut(strings.TrimPrefix(badServer.URL, "http://"), "/")
 
 		cfg := &checksumhttpv1alpha1.Config{
-			DefaultChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
-				OnMissing: checksumhttpv1alpha1.OnMissingCompute,
-				Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
-			},
-			Hosts: map[string]*checksumhttpv1alpha1.HostConfig{
-				host: {
-					ChecksumPolicy: &checksumhttpv1alpha1.ChecksumPolicy{
-						OnMissing: checksumhttpv1alpha1.OnMissingFail,
-						Sources:   []checksumhttpv1alpha1.ChecksumSource{{Type: checksumhttpv1alpha1.ChecksumSourceHTTPHeader}},
-					},
-				},
+			Mode: checksumhttpv1alpha1.ChecksumModeCompute,
+			Hosts: map[string]*checksumhttpv1alpha1.ChecksumPolicy{
+				host: {Mode: checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail},
 			},
 		}
-		method := &input.InputMethod{WgetConfig: cfg}
+		method := &input.InputMethod{ChecksumConfig: cfg}
 		_, err := method.ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
 			"url": badServer.URL + "/artifact",
 		}), nil)

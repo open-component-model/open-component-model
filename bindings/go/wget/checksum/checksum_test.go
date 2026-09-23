@@ -81,30 +81,6 @@ func TestFromHeaders_IgnoresMalformedValues(t *testing.T) {
 	r.Empty(FromHeaders(h, nil))
 }
 
-func TestParseChecksumFile(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		body string
-		alg  Algorithm
-		want string
-		err  bool
-	}{
-		{name: "bare hex", body: helloSHA1 + "\n", alg: SHA1, want: helloSHA1},
-		{name: "gnu coreutils", body: helloSHA256 + "  artifact.jar\n", alg: SHA256, want: helloSHA256},
-		{name: "wrong length", body: "abcd\n", alg: SHA256, err: true},
-		{name: "empty", body: "\n\n", alg: SHA256, err: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := parseChecksumFile(tc.body, tc.alg)
-			if tc.err {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, tc.want, got)
-		})
-	}
-}
 
 func TestVerify(t *testing.T) {
 	r := require.New(t)
@@ -145,26 +121,6 @@ func TestResolve_HeaderMismatchFails(t *testing.T) {
 	r.Contains(err.Error(), "checksum mismatch")
 }
 
-func TestResolve_ExternalFallbackAfterHeaderMiss(t *testing.T) {
-	r := require.New(t)
-	// No usable header; external fetch supplies a SHA-256.
-	fetch := func(_ context.Context, _ string, alg Algorithm) (Expected, bool, error) {
-		if alg.OCMName != "SHA-256" {
-			return Expected{}, false, nil
-		}
-		return Expected{Algorithm: SHA256, Value: helloSHA256}, true, nil
-	}
-	exp, verified, err := Resolve(context.Background(), Policy{
-		Sources: []Source{
-			{Type: SourceHTTPHeader},
-			{Type: SourceExternalURL},
-		},
-		OnMissing: Fail,
-	}, Input{Headers: http.Header{}, Computed: helloComputed(), FetchURL: fetch})
-	r.NoError(err)
-	r.True(verified)
-	r.Equal("SHA-256", exp.Algorithm.OCMName)
-}
 
 func TestResolve_OnMissingFail(t *testing.T) {
 	r := require.New(t)
@@ -200,80 +156,11 @@ func TestResolve_StreamSourceStops(t *testing.T) {
 
 func TestRequiredAlgorithms_AlwaysIncludesStorage(t *testing.T) {
 	r := require.New(t)
-	got := RequiredAlgorithms(Policy{Sources: []Source{{Type: SourceExternalURL, Algorithms: []Algorithm{SHA1}}}})
+	got := RequiredAlgorithms(Policy{Sources: []Source{{Type: SourceHTTPHeader, Algorithms: []Algorithm{SHA1}}}})
 	names := map[string]bool{}
 	for _, a := range got {
 		names[a.OCMName] = true
 	}
 	r.True(names["SHA-256"], "storage algorithm must always be computed")
 	r.True(names["SHA-1"], "policy algorithm must be computed")
-}
-
-
-// TestResolve_ExternalDefaultURL confirms that a Source with no explicit URL
-// falls back to `<baseURL>.<alg.Extension>` (Maven's convention) for every
-// algorithm, and that FetchURL sees exactly that URL.
-func TestResolve_ExternalDefaultURL(t *testing.T) {
-	r := require.New(t)
-	seen := map[string]string{}
-	fetch := func(_ context.Context, u string, alg Algorithm) (Expected, bool, error) {
-		seen[alg.OCMName] = u
-		if alg.OCMName == "SHA-256" {
-			return Expected{Algorithm: SHA256, Value: helloSHA256}, true, nil
-		}
-		return Expected{}, false, nil
-	}
-	_, verified, err := Resolve(context.Background(), Policy{
-		Sources: []Source{{Type: SourceExternalURL, Algorithms: []Algorithm{SHA1, SHA256}}},
-	}, Input{URL: "https://example.com/artifact.tar", Computed: helloComputed(), FetchURL: fetch})
-	r.NoError(err)
-	r.True(verified)
-	r.Equal("https://example.com/artifact.tar.sha1", seen["SHA-1"])
-	r.Equal("https://example.com/artifact.tar.sha256", seen["SHA-256"])
-}
-
-// TestResolve_ExternalDefaultURL_PreservesQuery confirms the Maven-default
-// sidecar URL is built by appending the extension to the path — not to the
-// raw string — so query parameters remain intact.
-func TestResolve_ExternalDefaultURL_PreservesQuery(t *testing.T) {
-	r := require.New(t)
-	seen := map[string]string{}
-	fetch := func(_ context.Context, u string, alg Algorithm) (Expected, bool, error) {
-		seen[alg.OCMName] = u
-		if alg.OCMName == "SHA-256" {
-			return Expected{Algorithm: SHA256, Value: helloSHA256}, true, nil
-		}
-		return Expected{}, false, nil
-	}
-	_, verified, err := Resolve(context.Background(), Policy{
-		Sources: []Source{{Type: SourceExternalURL, Algorithms: []Algorithm{SHA256}}},
-	}, Input{URL: "https://example.com/artifact.tar?download=1", Computed: helloComputed(), FetchURL: fetch})
-	r.NoError(err)
-	r.True(verified)
-	r.Equal("https://example.com/artifact.tar.sha256?download=1", seen["SHA-256"])
-}
-
-// TestResolve_ExternalExplicitURL confirms that Source.URL, when set, is used
-// verbatim: no templating, no substitution. The same URL is presented to
-// FetchURL for every algorithm the source declares.
-func TestResolve_ExternalExplicitURL(t *testing.T) {
-	r := require.New(t)
-	var seen []string
-	fetch := func(_ context.Context, u string, alg Algorithm) (Expected, bool, error) {
-		seen = append(seen, u)
-		if alg.OCMName == "SHA-256" {
-			return Expected{Algorithm: SHA256, Value: helloSHA256}, true, nil
-		}
-		return Expected{}, false, nil
-	}
-	_, verified, err := Resolve(context.Background(), Policy{
-		Sources: []Source{{
-			Type:       SourceExternalURL,
-			Algorithms: []Algorithm{SHA256},
-			URL:        "https://mirror.example/checksums/artifact.sha256",
-		}},
-	}, Input{URL: "https://example.com/artifact.tar", Computed: helloComputed(), FetchURL: fetch})
-	r.NoError(err)
-	r.True(verified)
-	r.Equal([]string{"https://mirror.example/checksums/artifact.sha256"}, seen)
 }

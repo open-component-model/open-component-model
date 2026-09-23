@@ -1,14 +1,9 @@
 // Package checksum implements the checksum-policy layer for wget-based inputs.
 //
-// A checksum policy lets the input method obtain and verify an expected
-// checksum for downloaded bytes from different sources, modelled on Maven's
-// expected-checksum strategies
-// (https://maven.apache.org/resolver/expected-checksums.html):
-//
-//   - httpHeader: checksum in the download response (RFC 9530 Content-Digest
-//     or x-checksum-*).
-//   - externalUrl: sibling checksum resource (e.g. <url>.sha256).
-//   - stream: no expected checksum; digest is computed from the stream.
+// A checksum policy lets the input method and access digest processor obtain
+// and verify an expected checksum for a resource from its HTTP response
+// headers (RFC 9530 Content-Digest and the x-checksum-* family). A stream
+// source disables verification and computes the digest from the bytes.
 //
 // Verification and storage are decoupled: a policy may verify against any
 // supported algorithm, but the OCM resource digest is always SHA-256 with the
@@ -18,7 +13,6 @@ package checksum
 
 import (
 	"crypto"
-	"fmt"
 	"hash"
 	"strings"
 
@@ -74,18 +68,6 @@ func ByRFC9530Key(key string) (Algorithm, bool) {
 	return Algorithm{}, false
 }
 
-// ByExtension returns the algorithm for a Maven checksum file extension
-// (case-insensitive, leading dot tolerated).
-func ByExtension(ext string) (Algorithm, bool) {
-	ext = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(ext, ".")))
-	for _, a := range All {
-		if a.Extension == ext {
-			return a, true
-		}
-	}
-	return Algorithm{}, false
-}
-
 // ByOCMName returns the algorithm for an OCM hash algorithm name
 // (case-insensitive).
 func ByOCMName(name string) (Algorithm, bool) {
@@ -96,18 +78,4 @@ func ByOCMName(name string) (Algorithm, bool) {
 		}
 	}
 	return Algorithm{}, false
-}
-
-// AlgorithmsFromExtensions resolves a list of file extensions to algorithms,
-// preserving order.
-func AlgorithmsFromExtensions(exts []string) ([]Algorithm, error) {
-	out := make([]Algorithm, 0, len(exts))
-	for _, ext := range exts {
-		a, ok := ByExtension(ext)
-		if !ok {
-			return nil, fmt.Errorf("unsupported checksum algorithm %q", ext)
-		}
-		out = append(out, a)
-	}
-	return out, nil
 }

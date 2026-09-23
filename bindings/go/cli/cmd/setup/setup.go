@@ -96,7 +96,12 @@ func PluginManager(cmd *cobra.Command) error {
 		return fmt.Errorf("could not get checksum-http configuration: %w", err)
 	}
 	slog.DebugContext(cmd.Context(), "checksum-http config resolved",
-		slog.Bool("hasDefaultPolicy", checksumHTTPConfig != nil && checksumHTTPConfig.DefaultChecksumPolicy != nil),
+		slog.String("mode", func() string {
+			if checksumHTTPConfig == nil {
+				return ""
+			}
+			return string(checksumHTTPConfig.Mode)
+		}()),
 		slog.Int("hosts", func() int {
 			if checksumHTTPConfig == nil {
 				return 0

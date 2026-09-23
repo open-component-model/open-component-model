@@ -234,37 +234,34 @@ HTTP downloads — both the wget input method and the `Wget/v1` access-type
 digest processor — can be tied to a source-side checksum through the central
 `checksum.http.config.ocm.software/v1alpha1` configuration. Verification is a
 *deployment* concern, not a *descriptor* concern; the wget spec itself carries
-no checksum policy.
+no checksum field. The configuration selects a **mode** per host (or globally):
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
   - type: checksum.http.config.ocm.software/v1alpha1
-    defaultChecksumPolicy:
-      onMissing: compute
-      sources:
-        - type: httpHeader
-        - type: externalUrl
-          algorithms: [sha256, sha1]
+    mode: PeekWithHEADOrCompute   # default when omitted
+    hosts:
+      "repo.example.com":
+        mode: PeekWithHEADOrFail
 ```
 
 - **Input side** — always downloads, always records `SHA-256` with
-  `genericBlobDigest/v1`. A policy additionally verifies the bytes against
-  whatever algorithm the source advertises. Verification and storage are
-  decoupled: a SHA-1/MD5 policy still records SHA-256, so weak algorithms
-  never leak into the descriptor.
+  `genericBlobDigest/v1`. When the mode enables verification, the bytes are
+  also verified against whatever algorithm the source advertises in response
+  headers. Verification and storage are decoupled: a SHA-1/MD5 header still
+  records SHA-256, so weak algorithms never leak into the descriptor.
 - **Access side** — pins the resource digest from the source-advertised
-  checksum via a HEAD (plus a small sidecar GET for `externalUrl` sources),
-  never downloading the body. See
+  response headers via a single HEAD, never downloading the body. See
   [Access side — pin from source]({{< relref "checksum-http-configuration.md" >}}#access-digest)
-  for the algorithm-preference override.
+  for details.
 - **By-value transfer** (`--copy-resources`) promotes an access to a local
   blob and re-runs the input-side rules, so every local blob is
   self-describing.
 
-For the full schema, source strategies (`httpHeader`, `externalUrl`,
-`stream`), precedence rules, `onMissing` semantics, and credential scoping,
-see the
+For the full schema, checksum modes (`PeekWithHEADOrFail`,
+`PeekWithHEADOrCompute`, `Compute`, `Disable`), precedence rules, and
+credential scoping, see the
 [HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}})
 reference.
 
@@ -549,11 +546,11 @@ Upload is not supported for this access type: a plain HTTP endpoint has no stand
 
 The same `checksum.http.config.ocm.software/v1alpha1` config that steers the
 wget input's checksum verification also drives the access-side digest
-processor. Whenever a policy applies, the processor pins the resource digest
-from the source-advertised checksum via a HEAD (plus a small sidecar GET per
-`externalUrl` source) — no body download. See
+processor. Depending on the configured mode, the processor pins the resource
+digest from the source-advertised response headers via a single HEAD — no body
+download. See
 [HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}})
-for the full schema and the algorithm-preference override.
+for the full schema and checksum modes.
 
 For guidance on choosing between the input and the access type, and for media type resolution, redirects, download
 tuning, and credential configuration, see

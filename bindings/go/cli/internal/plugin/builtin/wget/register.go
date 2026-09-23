@@ -29,9 +29,9 @@ func Register(inputRegistry *input.RepositoryRegistry,
 		tempFolder = *filesystemConfig.TempFolder
 	}
 	method := &wgetinput.InputMethod{
-		TempFolder: tempFolder,
-		HTTPConfig: httpConfig,
-		WgetConfig: checksumHTTPConfig,
+		TempFolder:     tempFolder,
+		HTTPConfig:     httpConfig,
+		ChecksumConfig: checksumHTTPConfig,
 	}
 
 	if err := credentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(method); err != nil {
@@ -45,7 +45,7 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	wgetResourceRepository := wgetrepository.NewResourceRepository(
 		filesystemConfig,
 		wgetrepository.WithHTTPClient(httpclient.New(httpclient.WithConfig(httpConfig))),
-		wgetrepository.WithWgetConfig(checksumHTTPConfig),
+		wgetrepository.WithChecksumConfig(checksumHTTPConfig),
 	)
 	if err := resourcePluginRegistry.RegisterInternalResourcePlugin(wgetResourceRepository); err != nil {
 		return fmt.Errorf("could not register wget resource repository plugin: %w", err)

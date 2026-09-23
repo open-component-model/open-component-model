@@ -15,9 +15,9 @@ const DefaultMaxDownloadSize int64 = download.DefaultMaxDownloadSize
 type Options struct {
 	Client          *http.Client
 	MaxDownloadSize *int64
-	// WgetConfig steers the digest processor's checksum policy. Nil means
+	// ChecksumConfig steers the digest processor's checksum mode. Nil means
 	// "compute SHA-256 without external verification".
-	WgetConfig *checksumhttpv1alpha1.Config
+	ChecksumConfig *checksumhttpv1alpha1.Config
 }
 
 // Option configures Options.
@@ -38,11 +38,11 @@ func WithMaxDownloadSize(size int64) Option {
 	}
 }
 
-// WithWgetConfig steers the digest processor's checksum policy. Passing the
+// WithChecksumConfig steers the digest processor's checksum mode. Passing the
 // same config to both the input method and this option keeps both paths in
 // sync.
-func WithWgetConfig(cfg *checksumhttpv1alpha1.Config) Option {
+func WithChecksumConfig(cfg *checksumhttpv1alpha1.Config) Option {
 	return func(o *Options) {
-		o.WgetConfig = cfg
+		o.ChecksumConfig = cfg
 	}
 }

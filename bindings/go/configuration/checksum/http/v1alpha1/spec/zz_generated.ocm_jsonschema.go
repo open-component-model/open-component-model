@@ -12,31 +12,15 @@ import (
 //go:embed schemas/ChecksumPolicy.schema.json
 var schemaChecksumPolicy []byte
 
-//go:embed schemas/ChecksumSource.schema.json
-var schemaChecksumSource []byte
-
 //go:embed schemas/Config.schema.json
 var schemaConfig []byte
-
-//go:embed schemas/HostConfig.schema.json
-var schemaHostConfig []byte
 
 // JSONSchema returns the JSON Schema for ChecksumPolicy.
 func (ChecksumPolicy) JSONSchema() []byte {
 	return schemaChecksumPolicy
 }
 
-// JSONSchema returns the JSON Schema for ChecksumSource.
-func (ChecksumSource) JSONSchema() []byte {
-	return schemaChecksumSource
-}
-
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
 	return schemaConfig
-}
-
-// JSONSchema returns the JSON Schema for HostConfig.
-func (HostConfig) JSONSchema() []byte {
-	return schemaHostConfig
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/url"
 )
 
 // SourceType mirrors the wget input spec's checksum source types without
@@ -12,9 +11,8 @@ import (
 type SourceType string
 
 const (
-	SourceHTTPHeader  SourceType = "httpHeader"
-	SourceExternalURL SourceType = "externalUrl"
-	SourceStream      SourceType = "stream"
+	SourceHTTPHeader SourceType = "httpHeader"
+	SourceStream     SourceType = "stream"
 )
 
 // Source is one resolved checksum strategy.
@@ -25,10 +23,6 @@ type Source struct {
 	// Algorithms restricts which algorithms this source considers, strongest
 	// first. Empty means all supported algorithms.
 	Algorithms []Algorithm
-	// URL is the absolute checksum URL (externalUrl). Empty falls back to
-	// <baseURL>.<alg.Extension>. One URL per source; add more sources to
-	// cover multiple algorithms or hosts.
-	URL string
 }
 
 // OnMissing controls behaviour when no source yields an expected checksum.
@@ -47,9 +41,19 @@ type Policy struct {
 	OnMissing OnMissing
 }
 
+// BuiltinSources is the fixed source set the reduced checksum configuration
+// resolves an enabled policy to: RFC 9530 Content-Digest and the
+// x-checksum-* response-header family, accepting every supported algorithm.
+// Returned fresh so callers may not mutate the shared slice.
+func BuiltinSources() []Source {
+	return []Source{
+		{Type: SourceHTTPHeader},
+	}
+}
+
 // Input carries what a policy needs from a completed download.
 type Input struct {
-	// URL is the artifact URL, used to build external checksum URLs.
+	// URL is the artifact URL, used only for log context.
 	URL string
 	// Headers are the download response headers.
 	Headers map[string][]string
@@ -57,10 +61,6 @@ type Input struct {
 	// downloaded bytes. MUST contain every algorithm any source may verify
 	// against; the caller pre-computes them during the download.
 	Computed map[string]string
-	// FetchURL retrieves the external checksum for a pre-resolved URL and
-	// algorithm. When nil, externalUrl sources are skipped. Typically
-	// [ExternalFetcher.FetchURL].
-	FetchURL func(ctx context.Context, checksumURL string, alg Algorithm) (Expected, bool, error)
 }
 
 // Resolve walks policy.Sources and, for the first that yields an expected
@@ -84,28 +84,6 @@ func Resolve(ctx context.Context, policy Policy, in Input) (expected Expected, v
 			}
 			slog.DebugContext(ctx, "checksum: header source yielded no candidate",
 				"url", in.URL, "index", i, "candidates", len(candidates))
-		case SourceExternalURL:
-			if in.FetchURL == nil {
-				slog.DebugContext(ctx, "checksum: external-url source skipped (no fetcher)",
-					"url", in.URL, "index", i)
-				continue
-			}
-			algs := src.Algorithms
-			if len(algs) == 0 {
-				algs = All
-			}
-			exp, ok, ferr := fetchExternal(ctx, src, in, algs)
-			if ferr != nil {
-				return Expected{}, false, ferr
-			}
-			if ok {
-				if verr := Verify(in.Computed, exp); verr != nil {
-					return Expected{}, false, verr
-				}
-				return exp, true, nil
-			}
-			slog.DebugContext(ctx, "checksum: external-url source yielded no candidate",
-				"url", in.URL, "index", i)
 		default:
 			return Expected{}, false, fmt.Errorf("unsupported checksum source type %q", src.Type)
 		}
@@ -174,27 +152,6 @@ func ResolveAdvertised(ctx context.Context, policy Policy, in Input, prefer []Al
 			}
 			slog.DebugContext(ctx, "checksum: advertised header source yielded nothing",
 				"url", in.URL, "index", i, "candidates", len(candidates))
-		case SourceExternalURL:
-			if in.FetchURL == nil {
-				slog.DebugContext(ctx, "checksum: advertised external-url source skipped (no fetcher)",
-					"url", in.URL, "index", i)
-				continue
-			}
-			algs := intersect(src.Algorithms, prefer)
-			if len(algs) == 0 {
-				slog.DebugContext(ctx, "checksum: advertised external-url source skipped (no accepted algorithms)",
-					"url", in.URL, "index", i)
-				continue
-			}
-			exp, ok, ferr := fetchExternal(ctx, src, in, algs)
-			if ferr != nil {
-				return Expected{}, false, ferr
-			}
-			if ok {
-				return exp, true, nil
-			}
-			slog.DebugContext(ctx, "checksum: advertised external-url source yielded nothing",
-				"url", in.URL, "index", i)
 		default:
 			return Expected{}, false, fmt.Errorf("unsupported checksum source type %q", src.Type)
 		}
@@ -224,41 +181,4 @@ func intersect(a []Algorithm, prefer []Algorithm) []Algorithm {
 		}
 	}
 	return out
-}
-
-// fetchExternal returns the first external checksum that resolves for src.
-// When src.URL is set the same URL is fetched for every algorithm; otherwise
-// the Maven default <baseURL>.<alg.Extension> is used per algorithm.
-func fetchExternal(ctx context.Context, src Source, in Input, algs []Algorithm) (Expected, bool, error) {
-	for _, alg := range algs {
-		u := resolveExternalURL(src, in.URL, alg)
-		exp, ok, err := in.FetchURL(ctx, u, alg)
-		if err != nil {
-			return Expected{}, false, err
-		}
-		if ok {
-			return exp, true, nil
-		}
-	}
-	return Expected{}, false, nil
-}
-
-// resolveExternalURL returns the checksum URL for src at alg. Explicit
-// [Source.URL] wins; otherwise alg.Extension is appended to baseURL's path,
-// preserving query and fragment. Unparseable URLs fall back to naive string
-// concatenation.
-func resolveExternalURL(src Source, baseURL string, alg Algorithm) string {
-	if src.URL != "" {
-		return src.URL
-	}
-	u, err := url.Parse(baseURL)
-	if err != nil || u.Path == "" && u.Opaque == "" && u.Host == "" {
-		return baseURL + "." + alg.Extension
-	}
-	if u.Opaque != "" {
-		u.Opaque += "." + alg.Extension
-	} else {
-		u.Path += "." + alg.Extension
-	}
-	return u.String()
 }

@@ -37,9 +37,9 @@ type ResourceRepository struct {
 	client           *http.Client
 	maxDownloadSize  int64
 	filesystemConfig *filesystemv1alpha1.Config
-	// wgetConfig steers the digest processor's [checksumhttpv1alpha1.ChecksumPolicy].
+	// checksumConfig steers the digest processor's [checksumhttpv1alpha1.ChecksumMode].
 	// Nil means "compute from stream without external verification".
-	wgetConfig *checksumhttpv1alpha1.Config
+	checksumConfig *checksumhttpv1alpha1.Config
 }
 
 // NewResourceRepository builds a wget resource repository. filesystemConfig's
@@ -66,7 +66,7 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 		client:           client,
 		maxDownloadSize:  maxSize,
 		filesystemConfig: filesystemConfig,
-		wgetConfig:       options.WgetConfig,
+		checksumConfig:   options.ChecksumConfig,
 	}
 }
 
@@ -166,29 +166,33 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 // ProcessResourceDigest establishes a wget access resource's digest.
 //
 // A Wget/v1 access references remote bytes, so OCM can pin the digest from
-// what the source advertises (Content-Digest, x-checksum-*, externalUrl
-// sidecar) via HEAD + tiny sidecar GETs, without fetching the body.
+// what the source advertises in its response headers (RFC 9530 Content-Digest,
+// x-checksum-*) via a single HEAD, without fetching the body.
 //
-// Modes:
-//   - Policy applies — fast path via [httpverify.Peek]. On onMissing=fail
-//     this aborts without downloading; on onMissing=compute it falls back
-//     to download-and-hash.
-//   - No policy — download the body and hash inline (SHA-256).
+// Modes (resolved from the checksum-http config for the access URL):
+//   - PeekWithHEADOrFail — HEAD-pin; abort if nothing advertised.
+//   - PeekWithHEADOrCompute — HEAD-pin; else download the body and hash SHA-256.
+//   - Compute — skip the HEAD; always download the body and hash SHA-256.
+//   - Disable — establish no digest; return the resource unchanged.
 //
-// A pinned Digest is honoured in both modes: it must agree with the
-// source-advertised digest (fast path) or the computed SHA-256 (download
-// path). Pinned and policy are each checked against the same authority,
-// never against each other.
+// A pinned Digest is honoured: it must agree with the source-advertised digest
+// (fast path) or the computed SHA-256 (download path). Pinned and policy are
+// each checked against the same authority, never against each other.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	url := policyURL(resource)
-	policySpec := r.wgetConfig.PolicyForURL(url)
-	policy, hasPolicy, err := toChecksumPolicy(policySpec)
-	if err != nil {
-		return nil, fmt.Errorf("invalid checksum policy for wget access digest: %w", err)
-	}
+	mode := r.checksumConfig.ModeForURL(url)
 
-	if hasPolicy {
-		result, done, err := r.processDigestViaPeek(ctx, resource, credentials, policy, policySpec.PreferredAlgorithms)
+	switch mode {
+	case checksumhttpv1alpha1.ChecksumModeDisable:
+		// Verification off: leave the resource (and any pinned digest) untouched.
+		slog.DebugContext(ctx, "wget: checksum processing disabled", "url", url)
+		return resource, nil
+	case checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail, checksumhttpv1alpha1.ChecksumModePeekWithHEADOrCompute:
+		policy := checksum.Policy{Sources: checksum.BuiltinSources(), OnMissing: checksum.Compute}
+		if mode == checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail {
+			policy.OnMissing = checksum.Fail
+		}
+		result, done, err := r.processDigestViaPeek(ctx, resource, credentials, policy)
 		if err != nil {
 			return nil, err
 		}
@@ -197,11 +201,17 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		}
 		slog.DebugContext(ctx, "wget: access fast path yielded nothing; falling back to download-and-hash",
 			"url", url, "onMissing", policy.OnMissing)
+	case checksumhttpv1alpha1.ChecksumModeCompute:
+		// Skip the HEAD fast path entirely; always download and hash.
 	}
 
-	// Download-and-hash path.
+	// Download-and-hash path (Compute, or a peek mode that found nothing under
+	// onMissing=compute). SHA-256 is the only algorithm required here.
 	data, wget, err := r.download(ctx, resource, credentials,
-		download.WithDigestAlgorithms(digestAlgorithms(policy)...),
+		download.WithDigestAlgorithms(download.DigestAlgorithm{
+			Name: checksum.StorageAlgorithm.OCMName,
+			New:  checksum.StorageAlgorithm.New,
+		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource for digest processing: %w", err)
@@ -257,13 +267,11 @@ func (r *ResourceRepository) processDigestViaPeek(
 	resource *descriptor.Resource,
 	credentials runtime.Typed,
 	policy checksum.Policy,
-	preferred []string,
 ) (*descriptor.Resource, bool, error) {
 	url := policyURL(resource)
-	prefer, err := preferredAlgorithms(preferred)
-	if err != nil {
-		return nil, false, fmt.Errorf("invalid checksum policy preferredAlgorithms: %w", err)
-	}
+	// The reduced configuration accepts every supported algorithm, strongest
+	// first; there is no operator-facing preference knob.
+	prefer := checksum.All
 	names := make([]string, 0, len(prefer))
 	for _, alg := range prefer {
 		names = append(names, alg.OCMName)
@@ -312,15 +320,6 @@ func (r *ResourceRepository) processDigestViaPeek(
 	return out, true, nil
 }
 
-// preferredAlgorithms adapts the policy's PreferredAlgorithms list, defaulting
-// to [checksum.All] when empty. Order is preserved: strongest-preferred first.
-func preferredAlgorithms(preferred []string) ([]checksum.Algorithm, error) {
-	if len(preferred) == 0 {
-		return checksum.All, nil
-	}
-	return checksum.AlgorithmsFromExtensions(preferred)
-}
-
 // policyURL returns the URL used for wget-config host matching, or "" for a
 // missing or non-wget access.
 func policyURL(resource *descriptor.Resource) string {
@@ -332,43 +331,4 @@ func policyURL(resource *descriptor.Resource) string {
 		return ""
 	}
 	return wget.URL
-}
-
-// toChecksumPolicy adapts a [checksumhttpv1alpha1.ChecksumPolicy] to the
-// checksum package's Policy. Returns ok=false when spec is nil.
-func toChecksumPolicy(spec *checksumhttpv1alpha1.ChecksumPolicy) (checksum.Policy, bool, error) {
-	if spec == nil {
-		return checksum.Policy{}, false, nil
-	}
-	policy := checksum.Policy{OnMissing: checksum.Fail}
-	if spec.OnMissing == checksumhttpv1alpha1.OnMissingCompute {
-		policy.OnMissing = checksum.Compute
-	}
-	for i, src := range spec.Sources {
-		algs, err := checksum.AlgorithmsFromExtensions(src.Algorithms)
-		if err != nil {
-			return checksum.Policy{}, false, fmt.Errorf("checksum policy source #%d: %w", i, err)
-		}
-		policy.Sources = append(policy.Sources, checksum.Source{
-			Type:       checksum.SourceType(src.Type),
-			Headers:    src.Headers,
-			Algorithms: algs,
-			URL:        src.URL,
-		})
-	}
-	return policy, true, nil
-}
-
-// digestAlgorithms builds the download-package algorithm list from a policy,
-// always including SHA-256 (the storage algorithm).
-func digestAlgorithms(policy checksum.Policy) []download.DigestAlgorithm {
-	required := checksum.RequiredAlgorithms(policy)
-	out := make([]download.DigestAlgorithm, 0, len(required))
-	for _, alg := range required {
-		out = append(out, download.DigestAlgorithm{
-			Name: alg.OCMName,
-			New:  alg.New,
-		})
-	}
-	return out
 }

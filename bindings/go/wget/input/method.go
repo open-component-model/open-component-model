@@ -34,10 +34,10 @@ var _ constructor.ResourceInputMethod = (*InputMethod)(nil)
 type InputMethod struct {
 	// HTTPConfig configures the HTTP client. When nil, a default client is used.
 	HTTPConfig *httpv1alpha1.Config
-	// WgetConfig steers the [checksumhttpv1alpha1.ChecksumPolicy] applied to
+	// ChecksumConfig steers the [checksumhttpv1alpha1.ChecksumMode] applied to
 	// each downloaded resource. When nil (or when no entry matches the URL),
 	// the digest is computed from the stream without verification.
-	WgetConfig *checksumhttpv1alpha1.Config
+	ChecksumConfig *checksumhttpv1alpha1.Config
 	// MaxDownloadSize limits response body bytes; zero uses the download
 	// package default, negative disables the limit.
 	MaxDownloadSize int64
@@ -98,12 +98,9 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}
 
 	// Verification behaviour is a deployment concern: the input spec carries
-	// no checksumPolicy. Operators configure it centrally via
+	// no checksum mode. Operators configure it centrally via
 	// checksum.http.config.ocm.software/v1alpha1.
-	policy, hasPolicy, err := toChecksumPolicy(i.WgetConfig.PolicyForURL(wget.URL))
-	if err != nil {
-		return nil, fmt.Errorf("invalid checksum policy for wget input from %q: %w", wget.URL, err)
-	}
+	policy, hasPolicy := checksumPolicyForMode(i.ChecksumConfig.ModeForURL(wget.URL))
 
 	opts := []download.Option{
 		download.WithClient(client),
@@ -188,33 +185,20 @@ func verifyProvidedDigest(provided *constructorruntime.Digest, data *download.Bl
 	return nil
 }
 
-// toChecksumPolicy adapts a [checksumhttpv1alpha1.ChecksumPolicy] to the
-// checksum package's Policy, defaulting OnMissing to fail. Returns ok=false
-// when spec is nil.
-func toChecksumPolicy(spec *checksumhttpv1alpha1.ChecksumPolicy) (checksum.Policy, bool, error) {
-	if spec == nil {
-		return checksum.Policy{}, false, nil
+// checksumPolicyForMode adapts a wire [checksumhttpv1alpha1.ChecksumMode] to
+// the checksum package's Policy for the input side. The peek modes verify the
+// downloaded bytes against the built-in source set; Compute and Disable skip
+// verification entirely (ok=false) — the input method still records SHA-256
+// because a local blob's identity is its bytes.
+func checksumPolicyForMode(mode checksumhttpv1alpha1.ChecksumMode) (checksum.Policy, bool) {
+	switch mode {
+	case checksumhttpv1alpha1.ChecksumModePeekWithHEADOrFail:
+		return checksum.Policy{Sources: checksum.BuiltinSources(), OnMissing: checksum.Fail}, true
+	case checksumhttpv1alpha1.ChecksumModePeekWithHEADOrCompute:
+		return checksum.Policy{Sources: checksum.BuiltinSources(), OnMissing: checksum.Compute}, true
+	default: // Compute, Disable
+		return checksum.Policy{}, false
 	}
-	policy := checksum.Policy{OnMissing: checksum.Fail}
-	if spec.OnMissing == checksumhttpv1alpha1.OnMissingCompute {
-		policy.OnMissing = checksum.Compute
-	}
-	for i, src := range spec.Sources {
-		// An unsupported algorithm extension is a hard error: silently
-		// dropping it would let Resolve fall back to the full algorithm set
-		// and verify against something the user never asked for.
-		algs, err := checksum.AlgorithmsFromExtensions(src.Algorithms)
-		if err != nil {
-			return checksum.Policy{}, false, fmt.Errorf("checksum policy source #%d: %w", i, err)
-		}
-		policy.Sources = append(policy.Sources, checksum.Source{
-			Type:       checksum.SourceType(src.Type),
-			Headers:    src.Headers,
-			Algorithms: algs,
-			URL:        src.URL,
-		})
-	}
-	return policy, true, nil
 }
 
 // digestAlgorithms maps a policy's required algorithms to download digest
