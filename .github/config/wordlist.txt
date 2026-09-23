@@ -984,6 +984,7 @@ GenTime
 SerialNumber
 SignedData
 OID
+EKU
 auditability
 encodings
 DigiCert
