@@ -1,4 +1,4 @@
-package verify
+package repository
 
 import (
 	"strings"
@@ -17,8 +17,6 @@ func TestDigest_Parse(t *testing.T) {
 		name     string
 		digest   *descruntime.Digest
 		expected digest.Digest
-		// noDigest means the resource declares nothing to verify against, which Parse
-		// reports as an empty digest and no error.
 		noDigest bool
 	}{
 		{
@@ -37,8 +35,6 @@ func TestDigest_Parse(t *testing.T) {
 			expected: digest.NewDigestFromEncoded(digest.SHA256, value),
 		},
 		{
-			// Only SHA-256 is supported, because it is the only algorithm anything
-			// in the model produces for a resource digest.
 			name:   "sha-512 is not supported",
 			digest: &descruntime.Digest{HashAlgorithm: "SHA-512", Value: digest.SHA512.FromString("content").Encoded()},
 		},

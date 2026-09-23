@@ -284,7 +284,6 @@ linters:
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
             - "ocm.software/open-component-model/bindings/go/github"
             - "ocm.software/open-component-model/bindings/go/http"
-            - "ocm.software/open-component-model/bindings/go/internal/verify"
             - "ocm.software/open-component-model/bindings/go/plugin"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/runtime"
@@ -364,16 +363,6 @@ linters:
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"
               desc: "input/utf8 must not import bindings outside its allowed set"
-        internal-verify:
-          list-mode: lax
-          files: ["**/bindings/go/internal/verify/**"]
-          allow:
-            - "ocm.software/open-component-model/bindings/go/blob"
-            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-            - "ocm.software/open-component-model/bindings/go/internal/verify"
-          deny:
-            - pkg: "ocm.software/open-component-model/bindings/go/"
-              desc: "internal/verify must not import bindings outside its allowed set"
         oci:
           list-mode: lax
           files: ["**/bindings/go/oci/**"]
@@ -451,7 +440,6 @@ linters:
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
             - "ocm.software/open-component-model/bindings/go/http"
-            - "ocm.software/open-component-model/bindings/go/internal/verify"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/runtime"
             - "ocm.software/open-component-model/bindings/go/s3"
@@ -530,7 +518,6 @@ linters:
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
             - "ocm.software/open-component-model/bindings/go/http"
-            - "ocm.software/open-component-model/bindings/go/internal/verify"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/runtime"
             - "ocm.software/open-component-model/bindings/go/wget"

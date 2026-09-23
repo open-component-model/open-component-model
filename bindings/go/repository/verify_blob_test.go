@@ -1,4 +1,4 @@
-package verify
+package repository
 
 import (
 	"io"
@@ -16,8 +16,6 @@ import (
 
 const verifyTestContent = "the content a digest was taken over"
 
-// closableBlob is a blob that owns a resource, to assert that wrapping it does not
-// hide the Close that releases it.
 type closableBlob struct {
 	*inmemory.Blob
 	closed bool
@@ -51,9 +49,6 @@ func TestVerifyingBlob_MatchingContent(t *testing.T) {
 	require.Equal(t, digest.FromString(verifyTestContent).String(), dig)
 }
 
-// Digest must report what the content IS, never the expectation. The github digest
-// processor downloads through DownloadResource and reads this back to establish the
-// digest; reporting the expectation would hand it its own input.
 func TestVerifyingBlob_DigestReportsActualContent(t *testing.T) {
 	promised := digest.FromString("what the descriptor promised")
 	b := newVerifying(t, verifyTestContent, promised)
@@ -70,9 +65,6 @@ func TestVerifyingBlob_TamperedContent(t *testing.T) {
 	rc, err := b.ReadCloser()
 	require.NoError(t, err)
 
-	// VerifyReader itself only checks in Verify, so this asserts the reader drives
-	// it at EOF: a caller that never inspects the error from Close still cannot use
-	// the content unknowingly.
 	_, err = io.ReadAll(rc)
 	require.ErrorContains(t, err, "digest mismatch")
 	require.ErrorContains(t, rc.Close(), "digest mismatch")
@@ -87,7 +79,6 @@ func TestVerifyingBlob_PartialReadFailsOnClose(t *testing.T) {
 	_, err = io.CopyN(io.Discard, rc, 4)
 	require.NoError(t, err)
 
-	// A prefix cannot be held to a digest over the whole, so it must not pass.
 	require.ErrorContains(t, rc.Close(), "digest mismatch")
 }
 
@@ -134,8 +125,6 @@ func TestVerifyingBlob_RejectsUnusableExpectedDigest(t *testing.T) {
 func TestVerifyingBlob_CopyReportsMismatch(t *testing.T) {
 	b := newVerifying(t, verifyTestContent, digest.FromString("what the descriptor promised"))
 
-	// Copy picks the expected digest up through DigestAware, so the check holds
-	// even for callers that never touch the reader themselves.
 	err := blob.Copy(io.Discard, b)
 	require.ErrorContains(t, err, "digest mismatch")
 }
@@ -147,19 +136,19 @@ func TestVerifyingBlob_CopyBlobToOSPathReportsMismatch(t *testing.T) {
 	require.ErrorContains(t, err, "digest mismatch")
 }
 
-func TestVerifyingBlob_RejectsUnknownSize(t *testing.T) {
-	// VerifyReader bounds the content by the declared size, so an unknown size would
-	// let it read nothing at all and call that verified.
-	_, err := newVerifyingBlob(plainBlob{content: verifyTestContent}, digest.FromString(verifyTestContent))
-	require.ErrorContains(t, err, "unknown size")
+func TestVerifyingBlob_VerifiesContentOfUnknownSize(t *testing.T) {
+	b, err := newVerifyingBlob(plainBlob{content: verifyTestContent}, digest.FromString(verifyTestContent))
+	require.NoError(t, err)
+	require.Equal(t, blob.SizeUnknown, b.Size())
 
-	_, err = newVerifyingBlob(sizedBlob{plainBlob{content: verifyTestContent}, blob.SizeUnknown}, digest.FromString(verifyTestContent))
-	require.ErrorContains(t, err, "unknown size")
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	_, err = io.ReadAll(rc)
+	require.NoError(t, err)
+	require.NoError(t, rc.Close())
 }
 
 func TestVerifyingBlob_RejectsTrailingContent(t *testing.T) {
-	// The size comes from the blob, the digest from the descriptor. Content longer
-	// than the size is cut off by VerifyReader before it is ever hashed.
 	b, err := newVerifyingBlob(
 		sizedBlob{plainBlob{content: verifyTestContent + " and more"}, int64(len(verifyTestContent))},
 		digest.FromString(verifyTestContent),
@@ -168,11 +157,8 @@ func TestVerifyingBlob_RejectsTrailingContent(t *testing.T) {
 
 	rc, err := b.ReadCloser()
 	require.NoError(t, err)
-	// Caught at the size boundary, before the extra bytes are read. It surfaces as
-	// a mismatch like any other, with what the verifier actually found kept as detail.
 	_, err = io.ReadAll(rc)
 	require.ErrorContains(t, err, "digest mismatch")
-	require.ErrorContains(t, err, "trailing data")
 	require.ErrorContains(t, rc.Close(), "digest mismatch")
 }
 

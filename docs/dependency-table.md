@@ -10,7 +10,6 @@
 | 2 | `http` | `configuration`, `runtime` |
 | 3 | `descriptor/normalisation` | `descriptor/runtime`, `descriptor/v2`, `runtime` |
 | 3 | `gpg`, `rsa` | `credentials`, `descriptor/runtime`, `runtime` |
-| 3 | `internal/verify` | `blob`, `descriptor/runtime` |
 | 3 | `repository` | `blob`, `configuration`, `credentials`, `descriptor/runtime`, `runtime` |
 | 3 | `transform` | `cel`, `credentials`, `dag`, `runtime` |
 | 4 | `oci` | `blob`, `configuration`, `credentials`, `ctf`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime` |
@@ -19,8 +18,8 @@
 | 5 | `sigstore` | `credentials`, `descriptor/runtime`, `runtime`, `signing` |
 | 6 | `input/dir`, `input/file`, `input/utf8` | `blob`, `constructor`, `runtime` |
 | 6 | `plugin` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `repository`, `runtime`, `signing` |
-| 6 | `s3`, `wget` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `internal/verify`, `repository`, `runtime` |
-| 7 | `github` | `blob`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `internal/verify`, `plugin`, `repository`, `runtime` |
+| 6 | `s3`, `wget` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime` |
+| 7 | `github` | `blob`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `plugin`, `repository`, `runtime` |
 | 7 | `helm` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `oci`, `plugin`, `repository`, `runtime` |
 | 8 | `transfer` | `blob`, `configuration`, `credentials`, `ctf`, `dag`, `descriptor/runtime`, `descriptor/v2`, `github`, `helm`, `http`, `oci`, `repository`, `runtime`, `s3`, `signing`, `transform`, `wget` |
 | 9 | `cli` | `blob`, `cel`, `configuration`, `constructor`, `credentials`, `ctf`, `dag`, `descriptor/normalisation`, `descriptor/runtime`, `descriptor/v2`, `github`, `gpg`, `helm`, `http`, `input/dir`, `input/file`, `input/utf8`, `oci`, `plugin`, `repository`, `rsa`, `runtime`, `s3`, `signing`, `sigstore`, `transfer`, `transform`, `wget` |
