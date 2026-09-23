@@ -186,7 +186,9 @@ Semantics:
   re-verifies against the same authority.
 - If no header advertises an acceptable digest and the mode is
   `PeekWithHEADOrFail`, the processor aborts without downloading.
-  `PeekWithHEADOrCompute` falls through to a download-and-hash path (SHA-256).
+  `PeekWithHEADOrCompute` falls through to a download-and-hash path (SHA-256)
+  and logs an info-level message noting verification was skipped for that
+  resource.
 - When the resource already carries a pinned `digest`, its algorithm and value
   MUST agree with the source-advertised digest for the same algorithm; a
   mismatch is a hard error.
