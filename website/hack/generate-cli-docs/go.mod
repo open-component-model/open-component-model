@@ -1,6 +1,8 @@
 module github.com/open-component-model/ocm-website/hack/generate-cli-docs
 
-go 1.26.5
+go 1.27.0
+
+toolchain go1.27.1
 
 require (
 	github.com/spf13/cobra v1.10.2
