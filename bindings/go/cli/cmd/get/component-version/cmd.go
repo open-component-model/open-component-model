@@ -96,7 +96,7 @@ get cvs oci::http://localhost:8080//ocm.software/cli
 	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `display mode can be used in combination with --recursive
   static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
-	cmd.Flags().String(FlagConstraint, "> 0.0.0-0", "version constraint restricting which versions to output")
+	cmd.Flags().String(FlagConstraint, "> 0.0.0-0", "version constraint restricting which versions to output, evaluated by each version's configured scheme; versions with no applicable scheme are retained")
 	// TODO(fabianburth): add concurrency limit to the dag discovery (https://github.com/open-component-model/ocm-project/issues/705)
 	// cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")

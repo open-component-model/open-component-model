@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec/schemas/Config.schema.json",
   "title": "Config",
   "type": "object",
-  "description": "Config is the OCM configuration type for teaching OCM about additional\ncomponent version schemes using ordered matchers.\n\ntype: versioning.config.ocm.software/v1alpha1\nschemes:\n- name: calver-date\npattern: '^(?P\u003cyear\u003e\\d{4})\\.(?P\u003cmonth\u003e\\d{2})\\.(?P\u003cday\u003e\\d{2})$'\ncomparisonGroups: [year, month, day]\n- name: semver          # opt the built-in loose-semver back in as a fallback\nbuiltin: loose-semver",
+  "description": "Config is the OCM configuration type for teaching OCM about additional\ncomponent version schemes using ordered matchers.\n\ntype: versioning.config.ocm.software/v1alpha1\nschemes:\n- name: calver-date\npattern: '^(?P\u003cyear\u003e\\d{4})\\.(?P\u003cmonth\u003e\\d{2})\\.(?P\u003cday\u003e\\d{2})$'\ncomparisonGroups: [year, month, day]\n- builtin: loose-semver # opt the built-in loose-semver back in as a fallback",
   "properties": {
     "schemes": {
       "type": "array",

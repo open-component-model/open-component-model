@@ -110,7 +110,7 @@ transfer component-version --transfer-spec spec.yaml
 ### Options
 
 ```
-      --constraint string      version constraint restricting which versions to transfer (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
+      --constraint string      version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
       --copy-resources         copy all resources in the component version
       --dry-run                build and validate the graph but do not execute
   -h, --help                   help for component-version

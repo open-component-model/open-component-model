@@ -36,8 +36,7 @@ func init() {
 //	- name: calver-date
 //	  pattern: '^(?P<year>\d{4})\.(?P<month>\d{2})\.(?P<day>\d{2})$'
 //	  comparisonGroups: [year, month, day]
-//	- name: semver          # opt the built-in loose-semver back in as a fallback
-//	  builtin: loose-semver
+//	- builtin: loose-semver # opt the built-in loose-semver back in as a fallback
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
