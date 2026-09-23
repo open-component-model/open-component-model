@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
@@ -61,21 +62,15 @@ func resourceNodePath(baseID string, resource descriptorv2.Resource) string {
 	for _, k := range keys {
 		switch k {
 		case descriptorv2.IdentityAttributeName:
-			predicates = append(predicates, fmt.Sprintf("%s.name == %s", resourceFilterVar, celStringLiteral(identity[k])))
+			predicates = append(predicates, fmt.Sprintf("%s.name == %s", resourceFilterVar, strconv.Quote(identity[k])))
 		case descriptorv2.IdentityAttributeVersion:
-			predicates = append(predicates, fmt.Sprintf("%s.version == %s", resourceFilterVar, celStringLiteral(identity[k])))
+			predicates = append(predicates, fmt.Sprintf("%s.version == %s", resourceFilterVar, strconv.Quote(identity[k])))
 		default:
-			predicates = append(predicates, fmt.Sprintf("%s.extraIdentity[%s] == %s", resourceFilterVar, celStringLiteral(k), celStringLiteral(identity[k])))
+			predicates = append(predicates, fmt.Sprintf("%s.extraIdentity[%s] == %s", resourceFilterVar, strconv.Quote(k), strconv.Quote(identity[k])))
 		}
 	}
 	return fmt.Sprintf("environment.%s.component.resources.filter(%s, %s)[0]",
 		baseID, resourceFilterVar, strings.Join(predicates, " && "))
-}
-
-// celStringLiteral renders s as a double-quoted CEL string literal, escaping the
-// backslash and double-quote characters so the selector parses safely.
-func celStringLiteral(s string) string {
-	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
 }
 
 // mediaTypeFromAccess extracts the source access media type (if any) from the resource
