@@ -13,6 +13,7 @@ import (
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/transform/graph/runtime/resolver"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
@@ -72,146 +73,54 @@ func mediaTypeFromAccess(resource descriptorv2.Resource) string {
 	return access.MediaType
 }
 
-// templateExpressions rewrites the `resource` alias in every ${...} string across the
-// entire JSON object held by raw, in place. It does not hardcode which fields may carry
-// expressions: any string value (a target URL, a header value, or any future field)
-// wrapped in ${...} is validated as a standalone CEL expression and rewritten to
-// reference nodePath; a plain string without ${...} is a literal and passes through
-// unchanged. This mirrors how the graph runtime discovers and evaluates expressions
-// across the whole transformation spec.
+// templateExpressions rewrites the `resource` alias in every ${...} expression across
+// the entire JSON object held by raw, in place. It does not hardcode which fields may
+// carry expressions: it reuses the graph's own expression pipeline — [celparser.ParseSchemaless]
+// discovers every expression field (standalone ${expr} and embedded "pre-${expr}"
+// templates alike), each expression's `resource` alias is rewritten to reference
+// nodePath, and [resolver.Resolver.UpsertValueAtPath] splices the result back at the
+// field's path. Strings without ${...} carry no expressions and pass through unchanged.
 func templateExpressions(raw *runtime.Raw, nodePath string) error {
-	var obj any
+	var obj map[string]any
 	if err := json.Unmarshal(raw.Data, &obj); err != nil {
 		return fmt.Errorf("cannot decode target access: %w", err)
 	}
-	rewritten, err := templateValue(obj, nodePath, "")
+
+	fields, err := celparser.ParseSchemaless(obj)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot parse target access expressions: %w", err)
 	}
-	data, err := json.Marshal(rewritten)
+
+	res := resolver.NewResolver(obj, nil, nil)
+	for _, field := range fields {
+		current, err := res.GetValueFromPath(field.Path)
+		if err != nil {
+			return fmt.Errorf("cannot read field %s: %w", field.Path, err)
+		}
+		value, ok := current.(string)
+		if !ok {
+			continue
+		}
+		// Rewrite the alias inside each discovered expression, then substitute it back
+		// into the field value. For a standalone ${expr} this replaces the whole value;
+		// for an embedded template it rewrites each ${expr} in place.
+		rewritten := value
+		for _, expr := range field.Expressions {
+			original := "${" + expr.Value + "}"
+			replaced := "${" + celparser.RewriteIdentifier(expr.Value, resourceAlias, nodePath) + "}"
+			rewritten = strings.ReplaceAll(rewritten, original, replaced)
+		}
+		if err := res.UpsertValueAtPath(field.Path, rewritten); err != nil {
+			return fmt.Errorf("cannot rewrite field %s: %w", field.Path, err)
+		}
+	}
+
+	data, err := json.Marshal(obj)
 	if err != nil {
 		return fmt.Errorf("cannot re-encode target access: %w", err)
 	}
 	raw.Data = data
 	return nil
-}
-
-// templateValue recursively rewrites every ${...} string within v. path is the JSON
-// path to v, used only for error messages.
-func templateValue(v any, nodePath, path string) (any, error) {
-	switch t := v.(type) {
-	case string:
-		if !strings.Contains(t, "${") {
-			return t, nil
-		}
-		field := path
-		if field == "" {
-			field = "value"
-		}
-		return celExpressionField(field, t, nodePath)
-	case map[string]any:
-		for k, val := range t {
-			rewritten, err := templateValue(val, nodePath, joinPath(path, k))
-			if err != nil {
-				return nil, err
-			}
-			t[k] = rewritten
-		}
-		return t, nil
-	case []any:
-		for i, val := range t {
-			rewritten, err := templateValue(val, nodePath, fmt.Sprintf("%s[%d]", path, i))
-			if err != nil {
-				return nil, err
-			}
-			t[i] = rewritten
-		}
-		return t, nil
-	default:
-		return v, nil
-	}
-}
-
-// joinPath appends a field name to a JSON path for error messages.
-func joinPath(base, field string) string {
-	if base == "" {
-		return field
-	}
-	return base + "." + field
-}
-
-// celExpressionField validates that raw is a single standalone CEL expression wrapped
-// in ${...} and rewrites the `resource` alias to the concrete environment node path.
-// fieldName is used only for error messages.
-func celExpressionField(fieldName, raw, nodePath string) (string, error) {
-	trimmed := strings.TrimSpace(raw)
-	standalone, err := celparser.IsStandaloneExpression(trimmed)
-	if err != nil {
-		return "", fmt.Errorf("invalid %s CEL expression %q: %w", fieldName, raw, err)
-	}
-	if !standalone {
-		return "", fmt.Errorf("%s must be a single CEL expression wrapped in ${...}, got %q", fieldName, raw)
-	}
-	return "${" + rewriteAlias(trimmed[len("${"):len(trimmed)-len("}")], resourceAlias, nodePath) + "}", nil
-}
-
-// rewriteAlias replaces the bare identifier alias with replacement everywhere it
-// appears as an identifier token in the CEL source expr, leaving occurrences
-// inside string literals untouched. An identifier match requires that the
-// preceding character is not part of an identifier or a member-access dot (so
-// `resource` is rewritten but `myresource` and `x.resource` are not) and that
-// the following character does not continue the identifier.
-func rewriteAlias(expr, alias, replacement string) string {
-	var b strings.Builder
-	b.Grow(len(expr))
-	var inString byte // 0 when outside a string literal, else the opening quote
-	escaped := false
-	for i := 0; i < len(expr); i++ {
-		c := expr[i]
-		if inString != 0 {
-			b.WriteByte(c)
-			switch {
-			case escaped:
-				escaped = false
-			case c == '\\':
-				escaped = true
-			case c == inString:
-				inString = 0
-			}
-			continue
-		}
-		if c == '"' || c == '\'' {
-			inString = c
-			b.WriteByte(c)
-			continue
-		}
-		if isIdentifierStart(c) && strings.HasPrefix(expr[i:], alias) {
-			end := i + len(alias)
-			prev := byte(0)
-			if i > 0 {
-				prev = expr[i-1]
-			}
-			next := byte(0)
-			if end < len(expr) {
-				next = expr[end]
-			}
-			if !isIdentifierPart(prev) && prev != '.' && !isIdentifierPart(next) {
-				b.WriteString(replacement)
-				i = end - 1
-				continue
-			}
-		}
-		b.WriteByte(c)
-	}
-	return b.String()
-}
-
-func isIdentifierStart(c byte) bool {
-	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-}
-
-func isIdentifierPart(c byte) bool {
-	return isIdentifierStart(c) || (c >= '0' && c <= '9')
 }
 
 // targetHostFromExpression best-effort extracts a display host from a raw targetURL
