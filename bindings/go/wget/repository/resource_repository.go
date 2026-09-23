@@ -199,8 +199,8 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		if done {
 			return result, nil
 		}
-		slog.DebugContext(ctx, "wget: access fast path yielded nothing; falling back to download-and-hash",
-			"url", url, "onMissing", policy.OnMissing)
+		slog.InfoContext(ctx, "wget: no source-advertised checksum; PeekWithHEADOrCompute is downloading and hashing SHA-256",
+			"url", url)
 	case checksumhttpv1alpha1.ChecksumModeCompute:
 		// Skip the HEAD fast path entirely; always download and hash.
 	}
