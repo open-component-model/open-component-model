@@ -357,8 +357,8 @@ func updateArtifactAccess(artifact descriptor.Artifact, access *v2.LocalBlob, de
 		typed.Access = access
 	case *descriptor.Resource:
 		typed.Access = access
-		// only apply a digest if it is not already set - stable digests
-		if typed.Digest == nil || typed.Digest.NormalisationAlgorithm == "" {
+		// Preserve complete digests so packing does not invalidate signatures.
+		if typed.Digest == nil || typed.Digest.HashAlgorithm == "" || typed.Digest.NormalisationAlgorithm == "" || typed.Digest.Value == "" {
 			typed.Digest = &descriptor.Digest{}
 			if err := internaldigest.Apply(typed.Digest, desc.Digest); err != nil {
 				return fmt.Errorf("failed to apply digest to artifact: %w", err)

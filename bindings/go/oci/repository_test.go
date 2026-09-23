@@ -2332,10 +2332,15 @@ func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
 			name          string
 			hashAlgorithm string
 			normalization string
+			missingValue  bool
+			recalculate   bool
 		}{
 			{name: "legacy", hashAlgorithm: "SHA-256", normalization: "ociArtifactDigest/v1"},
 			{name: "generic", hashAlgorithm: "SHA-256", normalization: "genericBlobDigest/v1"},
-			{name: "incomplete", hashAlgorithm: "sha256"},
+			{name: "incomplete", hashAlgorithm: "sha256", recalculate: true},
+			{name: "missing hash", normalization: "ociArtifactDigest/v1", recalculate: true},
+			{name: "missing value", hashAlgorithm: "SHA-256", normalization: "ociArtifactDigest/v1", missingValue: true, recalculate: true},
+			{name: "normalisation only", normalization: "ociArtifactDigest/v1", missingValue: true, recalculate: true},
 		} {
 			for _, mismatch := range []bool{false, true} {
 				t.Run(fmt.Sprintf("streaming=%t/%s/mismatch=%t", streaming, tc.name, mismatch), func(t *testing.T) {
@@ -2359,6 +2364,9 @@ func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
 					}
 					if mismatch {
 						original.Value = digest.FromString("different content").Encoded()
+					}
+					if tc.missingValue {
+						original.Value = ""
 					}
 					resource := &descriptor.Resource{
 						Access: &v1.OCIImage{ImageReference: "test-repo:1.0.0"},
@@ -2385,7 +2393,7 @@ func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
 						uploaded, err = repo.UploadResource(ctx, resource, b)
 					}
 					r.Equal(original, *resource.Digest, "input must not be mutated")
-					if mismatch && tc.normalization != "" {
+					if mismatch && !tc.recalculate {
 						r.ErrorContains(err, "digest value mismatch")
 						exists, err := targetStore.Exists(ctx, manifest)
 						r.NoError(err)
@@ -2397,7 +2405,7 @@ func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
 					}
 					r.NoError(err)
 					expected := original
-					if tc.normalization == "" {
+					if tc.recalculate {
 						expected = descriptor.Digest{
 							HashAlgorithm:          "SHA-256",
 							NormalisationAlgorithm: "genericBlobDigest/v1",
