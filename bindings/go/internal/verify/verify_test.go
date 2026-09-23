@@ -80,4 +80,11 @@ func TestVerifyDownload(t *testing.T) {
 			require.Error(t, err, "digest %+v must not pass as verifiable", dig)
 		}
 	})
+
+	t.Run("releases content it refuses to verify", func(t *testing.T) {
+		content := &closableBlob{Blob: inmemory.New(strings.NewReader(verifyContent))}
+		_, err := verify.Download(t.Context(), resourceWithDigest(&descriptor.Digest{HashAlgorithm: "SHA-256"}), content)
+		require.Error(t, err)
+		require.True(t, content.closed, "the temporary file behind a refused download must not be left behind")
+	})
 }

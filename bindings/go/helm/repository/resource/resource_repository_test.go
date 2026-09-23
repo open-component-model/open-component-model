@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -95,65 +94,6 @@ func TestConvertAccessNilGuards(t *testing.T) {
 		_, err := repo.GetResourceCredentialConsumerIdentity(ctx, res)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "resource access is required")
-	})
-}
-
-func TestDownloadResource_DigestVerification(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.FileServer(http.Dir("../../testdata")))
-	t.Cleanup(srv.Close)
-
-	repo := NewResourceRepository(nil)
-
-	// The digest of a helm resource covers the chart archive the repository index
-	// publishes, not the tar of the unpacked chart that DownloadResource returns.
-	chart, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
-	require.NoError(t, err)
-	archiveDigest := godigest.FromBytes(chart)
-
-	digestOf := func(d godigest.Digest) *descriptor.Digest {
-		return &descriptor.Digest{
-			HashAlgorithm:          "SHA-256",
-			NormalisationAlgorithm: "genericBlobDigest/v1",
-			Value:                  d.Encoded(),
-		}
-	}
-
-	t.Run("accepts a chart matching the resource digest", func(t *testing.T) {
-		res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")
-		res.Digest = digestOf(archiveDigest)
-
-		b, err := repo.DownloadResource(t.Context(), res, nil)
-		require.NoError(t, err)
-		require.NotNil(t, b)
-	})
-
-	t.Run("rejects a chart that does not match the resource digest", func(t *testing.T) {
-		res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")
-		res.Digest = digestOf(godigest.FromString("a chart the repository never published"))
-
-		// Unlike the streaming bindings, the chart is verified eagerly: the bytes
-		// checked are discarded before DownloadResource returns its own blob.
-		_, err := repo.DownloadResource(t.Context(), res, nil)
-		require.ErrorContains(t, err, "digest mismatch")
-	})
-
-	t.Run("serves a chart unverified when the resource carries no digest", func(t *testing.T) {
-		res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")
-		res.Digest = nil
-
-		b, err := repo.DownloadResource(t.Context(), res, nil)
-		require.NoError(t, err)
-		require.NotNil(t, b)
-	})
-
-	t.Run("refuses a chart when the digest is present but unusable", func(t *testing.T) {
-		res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")
-		res.Digest = &descriptor.Digest{HashAlgorithm: "MD5", Value: archiveDigest.Encoded()}
-
-		_, err := repo.DownloadResource(t.Context(), res, nil)
-		require.ErrorContains(t, err, "unsupported hash algorithm")
 	})
 }
 

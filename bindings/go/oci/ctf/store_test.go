@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/errdef"
-
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -714,3 +713,4 @@ func TestUntag_LastTag_KeepsBlob(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, blobs, manifestDigest.String(), "blob must not be deleted by untagging")
 }
+
