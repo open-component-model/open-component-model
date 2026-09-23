@@ -637,17 +637,13 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 	}()
 
 	res = res.DeepCopy()
-
-	desc, access, err := repo.uploadOCIImage(ctx, res.Access, b, res.Digest)
-	if err != nil {
-		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
+	if res.Digest == nil {
+		res.Digest = &descriptor.Digest{}
 	}
 
-	if res.Digest == nil || res.Digest.NormalisationAlgorithm == "" {
-		res.Digest = &descriptor.Digest{}
-		if err := internaldigest.Apply(res.Digest, desc.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
-			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
-		}
+	_, access, err := repo.uploadOCIImage(ctx, res.Access, b, res.Digest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
 	}
 	res.Access = access
 
@@ -675,7 +671,7 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 	return src, nil
 }
 
-func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob, expectedDigest *descriptor.Digest) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
+func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob, resourceDigest *descriptor.Digest) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
 	var access accessv1.OCIImage
 	if err := repo.scheme.Convert(newAccess, &access); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
@@ -699,8 +695,14 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("expected exactly one main artifact in OCI layout, but got %d", len(mainArtifacts))
 	}
 	main := mainArtifacts[0]
-	if expectedDigest != nil && expectedDigest.NormalisationAlgorithm != "" {
-		if err := internaldigest.VerifyOCIArtifact(expectedDigest, main.Digest); err != nil {
+	// A nil digest denotes a source. Resources must validate or generate their
+	// digest before any destination writes, including the incomplete-digest case.
+	if resourceDigest != nil {
+		if resourceDigest.NormalisationAlgorithm == "" {
+			if err := internaldigest.Apply(resourceDigest, main.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
+				return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+			}
+		} else if err := internaldigest.VerifyOCIArtifact(resourceDigest, main.Digest); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to verify resource digest: %w", err)
 		}
 	}
@@ -708,6 +710,9 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	ref, err := looseref.ParseReference(access.ImageReference)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
+	}
+	if pinned, err := ref.Digest(); err == nil && pinned != main.Digest {
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("target access digest mismatch: expected %s, got %s", pinned, main.Digest)
 	}
 
 	extendedOpts := oras.ExtendedCopyGraphOptions{
@@ -1141,6 +1146,9 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	ref, err := looseref.ParseReference(access.ImageReference)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
+	}
+	if pinned, err := ref.Digest(); err == nil && pinned != rs.Root().Digest {
+		return nil, fmt.Errorf("target access digest mismatch: expected %s, got %s", pinned, rs.Root().Digest)
 	}
 
 	store, err := repo.resolver.StoreForReference(ctx, access.ImageReference)
