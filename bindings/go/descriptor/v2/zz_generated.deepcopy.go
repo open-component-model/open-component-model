@@ -6,7 +6,7 @@
 package v2
 
 import (
-	json "encoding/json"
+	jsontext "encoding/json/jsontext"
 
 	runtime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -152,7 +152,7 @@ func (in *Label) DeepCopyInto(out *Label) {
 	*out = *in
 	if in.Value != nil {
 		in, out := &in.Value, &out.Value
-		*out = make(json.RawMessage, len(*in))
+		*out = make(jsontext.Value, len(*in))
 		copy(*out, *in)
 	}
 	return
