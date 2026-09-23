@@ -635,9 +635,11 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 
 	if res.Digest == nil {
 		res.Digest = &descriptor.Digest{}
-	}
-	if err := internaldigest.Apply(res.Digest, desc.Digest); err != nil {
-		return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		if err := internaldigest.Apply(res.Digest, desc.Digest); err != nil {
+			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		}
+	} else if err := internaldigest.Verify(res.Digest, desc.Digest); err != nil {
+		return nil, fmt.Errorf("failed to verify resource digest: %w", err)
 	}
 	res.Access = access
 
@@ -1143,9 +1145,11 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	res = res.DeepCopy()
 	if res.Digest == nil {
 		res.Digest = &descriptor.Digest{}
-	}
-	if err := internaldigest.Apply(res.Digest, rs.Root().Digest); err != nil {
-		return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		if err := internaldigest.Apply(res.Digest, rs.Root().Digest); err != nil {
+			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		}
+	} else if err := internaldigest.Verify(res.Digest, rs.Root().Digest); err != nil {
+		return nil, fmt.Errorf("failed to verify resource digest: %w", err)
 	}
 
 	// if we don't have a pinned access we can pin it now.

@@ -2326,6 +2326,67 @@ func buildTestManifestStream(t *testing.T) (*memory.Store, ociImageSpecV1.Descri
 	return store, manifestDesc
 }
 
+func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
+	for _, streaming := range []bool{false, true} {
+		for _, normalization := range []string{"ociArtifactDigest/v1", "genericBlobDigest/v1"} {
+			for _, mismatch := range []bool{false, true} {
+				t.Run(fmt.Sprintf("streaming=%t/%s/mismatch=%t", streaming, normalization, mismatch), func(t *testing.T) {
+					r := require.New(t)
+					ctx := t.Context()
+					fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+					r.NoError(err)
+					store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+					repo := Repository(t, ocictf.WithCTF(store), oci.WithScheme(testScheme))
+					memStore, manifest := buildTestManifestStream(t)
+					stream := &ocistream.OCIResourceStream{
+						ReadOnlyGraphStorage: memStore,
+						Descriptor:           manifest,
+						TempDir:              t.TempDir(),
+						Tags:                 []string{"test-repo:1.0.0"},
+					}
+					original := descriptor.Digest{
+						HashAlgorithm:          "SHA-256",
+						NormalisationAlgorithm: normalization,
+						Value:                  manifest.Digest.Encoded(),
+					}
+					if mismatch {
+						original.Value = digest.FromString("different content").Encoded()
+					}
+					resource := &descriptor.Resource{
+						Access: &v1.OCIImage{ImageReference: "test-repo:1.0.0"},
+						Digest: original.DeepCopy(),
+					}
+					var uploaded *descriptor.Resource
+					if streaming {
+						uploaded, err = repo.UploadResourceStream(ctx, resource, stream)
+					} else {
+						b, materializeErr := stream.Materialize(ctx)
+						r.NoError(materializeErr)
+						uploaded, err = repo.UploadResource(ctx, resource, b)
+					}
+					r.Equal(original, *resource.Digest, "input must not be mutated")
+					if mismatch {
+						r.ErrorContains(err, "digest value mismatch")
+						return
+					}
+					r.NoError(err)
+					r.Equal(original, *uploaded.Digest)
+					targetStore, err := store.StoreForReference(ctx, "test-repo:1.0.0")
+					r.NoError(err)
+					copiedRoot, err := targetStore.Resolve(ctx, "1.0.0")
+					r.NoError(err)
+					r.Equal(manifest.Digest, copiedRoot.Digest, "copying must preserve the OCI root digest")
+					originalManifest, err := content.FetchAll(ctx, memStore, manifest)
+					r.NoError(err)
+					copiedManifest, err := content.FetchAll(ctx, targetStore, copiedRoot)
+					r.NoError(err)
+					r.Equal(originalManifest, copiedManifest, "copying must preserve manifest bytes")
+				})
+			}
+		}
+	}
+}
+
 func TestRepository_UploadResourceStream(t *testing.T) {
 	tests := []struct {
 		name        string

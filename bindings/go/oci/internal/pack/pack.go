@@ -357,11 +357,14 @@ func updateArtifactAccess(artifact descriptor.Artifact, access *v2.LocalBlob, de
 		typed.Access = access
 	case *descriptor.Resource:
 		typed.Access = access
-		if typed.Digest == nil {
+		// Existing normalized OCM digests need not match the storage descriptor
+		// (which may be a wrapper index). Blob helpers also supply intermediate
+		// digests without a normalization algorithm; those still need finalizing.
+		if typed.Digest == nil || typed.Digest.NormalisationAlgorithm == "" {
 			typed.Digest = &descriptor.Digest{}
-		}
-		if err := internaldigest.Apply(typed.Digest, desc.Digest); err != nil {
-			return fmt.Errorf("failed to apply digest to artifact: %w", err)
+			if err := internaldigest.Apply(typed.Digest, desc.Digest); err != nil {
+				return fmt.Errorf("failed to apply digest to artifact: %w", err)
+			}
 		}
 	}
 
