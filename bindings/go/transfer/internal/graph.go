@@ -214,7 +214,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, id, val, tgd, target, copyMode, uploadType, uploaders)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, copyMode, uploadType, uploaders)
 			if err != nil {
 				return err
 			}
@@ -238,6 +238,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 func processResources(
 	ctx context.Context,
 	v2desc *descriptorv2.Descriptor,
+	baseID string,
 	id string,
 	val *discoveryValue,
 	tgd *transformv1alpha1.TransformationGraphDefinition,
@@ -265,7 +266,7 @@ func processResources(
 		if u := matchUploader(uploaders, resource); u != nil {
 			switch cfg := u.(type) {
 			case *transferv1alpha1.HTTPUploaderConfig:
-				if err := processUploader(resource, cfg, id, val, tgd, resourceTransformIDs, i); err != nil {
+				if err := processUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			default:

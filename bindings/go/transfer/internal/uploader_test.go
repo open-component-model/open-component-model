@@ -11,6 +11,7 @@ import (
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
 
@@ -98,8 +99,9 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	srcAccess := streaming.spec["resource"].(map[string]any)["access"].(map[string]any)
 	assert.Equal(t, "https://source.example/artifacts/blob.tar", srcAccess["url"])
 
-	// Target reference carries a CEL expression referencing the injected source node,
-	// resolved to the concrete URL by the graph runtime at execution time.
+	// Target reference carries a CEL expression referencing the source resource inside
+	// the shared descriptor environment node (selected by identity), resolved to the
+	// concrete URL by the graph runtime at execution time.
 	tgtResource := streaming.spec["targetResource"].(map[string]any)
 	tgtAccess := tgtResource["access"].(map[string]any)
 	assert.Equal(t, "Wget/v1", tgtAccess["type"])
@@ -107,13 +109,15 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	targetURL := tgtAccess["url"].(string)
 	assert.True(t, strings.HasPrefix(targetURL, "${") && strings.HasSuffix(targetURL, "}"),
 		"target url must be a CEL expression field, got %q", targetURL)
-	assert.Contains(t, targetURL, "environment."+"uploads"+".", "target url must reference the injected upload node")
-	assert.Contains(t, targetURL, ".access.url", "resource alias must be rewritten to the node path")
+	assert.Contains(t, targetURL, ".component.resources.filter(", "target url must select the resource from the descriptor node")
+	assert.Contains(t, targetURL, `.name == "blob"`, "the filter must select by resource identity")
+	assert.Contains(t, targetURL, ")[0].access.url", "resource alias must be rewritten to the selected node path")
 	assert.NotContains(t, targetURL, "resource.access", "the bare resource alias must not survive the rewrite")
 
-	// The injected environment node exposes the source resource for the CEL expression.
-	uploads := tgd.Environment.Data["uploads"].(map[string]any)
-	node := uploads[streaming.id].(map[string]any)
+	// No second copy of the resource is injected; the descriptor environment node the
+	// selector targets already carries it under component.resources.
+	assert.Nil(t, tgd.Environment.Data["uploads"], "uploader must not inject a separate uploads node")
+	node := findResourceInDescriptorEnv(t, tgd, "blob")
 	nodeAccess := node["access"].(map[string]any)
 	assert.Equal(t, "https://source.example/artifacts/blob.tar", nodeAccess["url"])
 	assert.Equal(t, "blob", node["name"])
@@ -175,7 +179,7 @@ func TestBuildGraphDefinition_UploaderPreservesResourceInStringLiteral(t *testin
 	// The string literal keeps the word "resource"; the identifier before ".name" is rewritten.
 	assert.Contains(t, targetURL, `"https://uploads.example/resource/"`,
 		"the literal path segment must not be rewritten")
-	assert.Contains(t, targetURL, "environment.uploads.", "the bare resource identifier must be rewritten")
+	assert.Contains(t, targetURL, ".component.resources.filter(", "the bare resource identifier must be rewritten")
 	assert.Contains(t, targetURL, ".name", "the rewritten node path must retain the field access")
 }
 
@@ -208,10 +212,8 @@ func TestBuildGraphDefinition_UploaderTemplatesHeaders(t *testing.T) {
 	r.NoError(err)
 
 	var header map[string]any
-	var streamID string
 	for i := range tgd.Transformations {
 		if tgd.Transformations[i].Type == wgetv1alpha1.HTTPStreamingV1alpha1 {
-			streamID = tgd.Transformations[i].ID
 			tgt := tgd.Transformations[i].Spec.Data["targetResource"].(map[string]any)
 			header, _ = tgt["access"].(map[string]any)["header"].(map[string]any)
 		}
@@ -221,7 +223,7 @@ func TestBuildGraphDefinition_UploaderTemplatesHeaders(t *testing.T) {
 	reprDigest := header["Repr-Digest"].([]any)[0].(string)
 	assert.True(t, strings.HasPrefix(reprDigest, "${") && strings.HasSuffix(reprDigest, "}"),
 		"templated header value must be a CEL expression field, got %q", reprDigest)
-	assert.Contains(t, reprDigest, "environment.uploads.", "the resource alias must be rewritten to the node path")
+	assert.Contains(t, reprDigest, ".component.resources.filter(", "the resource alias must be rewritten to the node path")
 	assert.Contains(t, reprDigest, ".digest.value", "the digest field access must survive the rewrite")
 	assert.NotContains(t, reprDigest, "resource.digest", "the bare resource alias must not survive the rewrite")
 
@@ -231,13 +233,13 @@ func TestBuildGraphDefinition_UploaderTemplatesHeaders(t *testing.T) {
 	assert.Contains(t, contentDigest, ".digest.hashAlgorithm", "the algorithm-name field access must survive the rewrite")
 	assert.Contains(t, contentDigest, "base64.encode(hex.decode(", "the base64/hex conversion must be preserved")
 	assert.Contains(t, contentDigest, ".digest.value", "the digest value field access must survive the rewrite")
-	assert.Contains(t, contentDigest, "environment.uploads.", "the resource alias must be rewritten to the node path")
+	assert.Contains(t, contentDigest, ".component.resources.filter(", "the resource alias must be rewritten to the node path")
 
 	xStatic := header["X-Static"].([]any)[0].(string)
 	assert.Equal(t, "literal-value", xStatic, "a literal header value must pass through unchanged")
 
-	// The injected node exposes the source digest for the header expression.
-	node := tgd.Environment.Data["uploads"].(map[string]any)[streamID].(map[string]any)
+	// The descriptor environment node the selector targets exposes the source digest.
+	node := findResourceInDescriptorEnv(t, tgd, "blob")
 	digest := node["digest"].(map[string]any)
 	assert.Equal(t, "abc123", digest["value"])
 	assert.Equal(t, "SHA-256", digest["hashAlgorithm"])
@@ -281,13 +283,14 @@ func TestBuildGraphDefinition_UploaderUsesLabelValueAndIdentityMatch(t *testing.
 	r.NotEmpty(streamID, "expected an HTTPStreaming transformation (extra-identity match must select the resource)")
 
 	// The label-value expression survived the alias rewrite to the node path.
-	assert.Contains(t, targetURL, "environment.uploads.", "the resource alias must be rewritten to the node path")
+	assert.Contains(t, targetURL, ".component.resources.filter(", "the resource alias must be rewritten to the node path")
 	assert.Contains(t, targetURL, `.labels.filter(l, l.name == "region")[0].value`,
 		"the label filter-by-name access must survive the rewrite")
 	assert.NotContains(t, targetURL, "resource.labels", "the bare resource alias must not survive the rewrite")
 
-	// The injected node exposes labels as the schema-driven array, resolvable end-to-end.
-	node := tgd.Environment.Data["uploads"].(map[string]any)[streamID].(map[string]any)
+	// The descriptor environment node the selector targets exposes labels as the
+	// schema-driven array, resolvable end-to-end.
+	node := findResourceInDescriptorEnv(t, tgd, "blob")
 	labels := node["labels"].([]any)
 	label0 := labels[0].(map[string]any)
 	assert.Equal(t, "region", label0["name"])
@@ -323,16 +326,15 @@ func TestBuildGraphDefinition_UploaderMatchesNonWgetSource(t *testing.T) {
 	}
 	r.NotEmpty(streamID, "expected an HTTPStreaming transformation for the OCI source")
 
-	// The generic access field is exposed on the injected node.
-	uploads := tgd.Environment.Data["uploads"].(map[string]any)
-	node := uploads[streamID].(map[string]any)
+	// The descriptor environment node the selector targets exposes the generic access field.
+	node := findResourceInDescriptorEnv(t, tgd, "image")
 	access := node["access"].(map[string]any)
 	assert.Equal(t, "ghcr.io/source/image:1.0.0", access["imageReference"],
 		"the OCI access field must be exposed under resource.access")
 	assert.Equal(t, "ociImage", node["type"], "the resource type must be exposed")
 
 	// The target URL expression references the rewritten node path, not the bare alias.
-	assert.Contains(t, targetURL, "environment.uploads.", "the resource alias must be rewritten to the node path")
+	assert.Contains(t, targetURL, ".component.resources.filter(", "the resource alias must be rewritten to the node path")
 	assert.Contains(t, targetURL, ".access.imageReference", "the access field access must survive the rewrite")
 	assert.NotContains(t, targetURL, "resource.access", "the bare resource alias must not survive the rewrite")
 }
@@ -414,6 +416,35 @@ func resourceWithIdentity(name, version string, extra map[string]string) descrip
 		}
 	}
 	return res
+}
+
+// findResourceInDescriptorEnv locates the source resource by name inside the shared
+// descriptor environment node (environment.<baseID>.component.resources) that the
+// uploader selector targets. It fails the test if no such resource is present.
+func findResourceInDescriptorEnv(t *testing.T, tgd *transformv1alpha1.TransformationGraphDefinition, name string) map[string]any {
+	t.Helper()
+	for _, entry := range tgd.Environment.Data {
+		node, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		component, ok := node["component"].(map[string]any)
+		if !ok {
+			continue
+		}
+		resources, ok := component["resources"].([]any)
+		if !ok {
+			continue
+		}
+		for _, r := range resources {
+			res, ok := r.(map[string]any)
+			if ok && res["name"] == name {
+				return res
+			}
+		}
+	}
+	t.Fatalf("resource %q not found in any descriptor environment node", name)
+	return nil
 }
 
 func TestMatchUploader(t *testing.T) {

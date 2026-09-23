@@ -3,7 +3,9 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
 	"strings"
 
 	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
@@ -38,34 +40,56 @@ func matchUploader(uploaders []transferv1alpha1.UploaderConfig, resource descrip
 // environment node path before the graph runtime evaluates the expression.
 const resourceAlias = "resource"
 
-// uploadsEnvKey is the environment map key under which source-resource nodes are
-// injected, addressable in CEL as environment.uploads.<uploadID>.
-const uploadsEnvKey = "uploads"
+// resourceFilterVar is the bound variable used inside the CEL filter macro that
+// selects the source resource within the descriptor environment node. It is chosen to
+// not collide with the `resource` alias a user writes in a targetURL/header expression.
+const resourceFilterVar = "__r"
 
-// buildResourceNode builds the CEL node value exposed to a targetURL/header expression
-// as `resource`. The node is the JSON representation of the v2 resource — the same
-// schema-driven approach the graph uses for the descriptor environment node (see
-// addDescriptorToEnvironment) — so every resource field is addressable under its v2
-// JSON name without hand-maintaining a field list: resource.name/version/type,
-// resource.access.<field> (e.g. resource.access.url for wget,
-// resource.access.imageReference for OCI), resource.extraIdentity.<key>, and, when the
-// source carries one, resource.digest.{hashAlgorithm,normalisationAlgorithm,value} for
-// checksum header templating (RFC 9530 Repr-Digest, x-checksum-*). A targetURL
-// expression that needs the individual URL parts (scheme/host/path/...) parses them
-// with the inbuilt url() CEL function, e.g. url(resource.access.url).path.
-func buildResourceNode(resource descriptorv2.Resource) (map[string]any, error) {
-	if resource.Access == nil {
-		return nil, fmt.Errorf("resource access is required")
+// resourceNodePath returns the CEL path the `resource` alias is rewritten to. Instead
+// of injecting a second copy of the resource into the environment, it points at the
+// resource already present in the descriptor environment node (keyed by baseID, see
+// addDescriptorToEnvironment), selecting it out of component.resources with a filter on
+// its full identity (name, version and every extraIdentity key). This keeps a single
+// source of truth and stays index-independent. Every v2 resource field is addressable
+// by appending to the returned path: <path>.access.url, <path>.digest.value,
+// <path>.extraIdentity.<key>, <path>.labels, and so on.
+func resourceNodePath(baseID string, resource descriptorv2.Resource) string {
+	identity := resource.ToIdentity()
+	keys := slices.Sorted(maps.Keys(identity))
+	predicates := make([]string, 0, len(keys))
+	for _, k := range keys {
+		switch k {
+		case descriptorv2.IdentityAttributeName:
+			predicates = append(predicates, fmt.Sprintf("%s.name == %s", resourceFilterVar, celStringLiteral(identity[k])))
+		case descriptorv2.IdentityAttributeVersion:
+			predicates = append(predicates, fmt.Sprintf("%s.version == %s", resourceFilterVar, celStringLiteral(identity[k])))
+		default:
+			predicates = append(predicates, fmt.Sprintf("%s.extraIdentity[%s] == %s", resourceFilterVar, celStringLiteral(k), celStringLiteral(identity[k])))
+		}
 	}
-	raw, err := json.Marshal(resource)
-	if err != nil {
-		return nil, fmt.Errorf("cannot marshal resource: %w", err)
+	return fmt.Sprintf("environment.%s.component.resources.filter(%s, %s)[0]",
+		baseID, resourceFilterVar, strings.Join(predicates, " && "))
+}
+
+// celStringLiteral renders s as a double-quoted CEL string literal, escaping the
+// backslash and double-quote characters so the selector parses safely.
+func celStringLiteral(s string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
+}
+
+// mediaTypeFromAccess extracts the source access media type (if any) from the resource
+// access, used as the default target media type. Returns "" when absent.
+func mediaTypeFromAccess(resource descriptorv2.Resource) string {
+	if resource.Access == nil || len(resource.Access.Data) == 0 {
+		return ""
 	}
-	node := map[string]any{}
-	if err := json.Unmarshal(raw, &node); err != nil {
-		return nil, fmt.Errorf("cannot decode resource fields: %w", err)
+	var access struct {
+		MediaType string `json:"mediaType"`
 	}
-	return node, nil
+	if err := json.Unmarshal(resource.Access.Data, &access); err != nil {
+		return ""
+	}
+	return access.MediaType
 }
 
 // celTargetURLField validates that the user-supplied targetURL is a single
@@ -211,13 +235,13 @@ func targetHostFromExpression(rawTargetURL string) string {
 	return "target"
 }
 
-// processUploader emits a single HTTPStreaming transformation for resource. It injects
-// the source resource as a CEL node into the graph environment (addressable as
-// environment.uploads.<uploadID>) and sets the target Wget access URL to a CEL
-// expression derived from the uploader's targetURL, so the graph runtime resolves the
-// final URL from the source resource. The remaining request fields map onto the target
-// Wget access field-for-field.
-func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTTPUploaderConfig, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
+// processUploader emits a single HTTPStreaming transformation for resource. It resolves
+// the target Wget access URL from a CEL expression derived from the uploader's
+// targetURL: the `resource` alias is rewritten to the resource's path inside the shared
+// descriptor environment node (see resourceNodePath), so no second copy of the resource
+// is injected. The remaining request fields map onto the target Wget access
+// field-for-field.
+func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTTPUploaderConfig, baseID, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
 	if strings.TrimSpace(u.TargetURL) == "" {
 		return fmt.Errorf("uploader targetURL is required")
 	}
@@ -229,21 +253,11 @@ func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTTPUpl
 	resourceID := identityToTransformationID(resource.ToIdentity())
 	uploadID := fmt.Sprintf("%sUpload%s", id, resourceID)
 
-	// Inject the source resource as a CEL node the targetURL expression can reference.
-	// The node exposes every access field generically under resource.access.<field>,
-	// so an uploader works with any source access type, not only wget.
-	node, err := buildResourceNode(resource)
-	if err != nil {
-		return err
-	}
-	uploads, _ := tgd.Environment.Data[uploadsEnvKey].(map[string]any)
-	if uploads == nil {
-		uploads = map[string]any{}
-		tgd.Environment.Data[uploadsEnvKey] = uploads
-	}
-	uploads[uploadID] = node
-
-	nodePath := fmt.Sprintf("environment.%s.%s", uploadsEnvKey, uploadID)
+	// Point the `resource` alias at the resource already present in the descriptor
+	// environment node, selected by identity, rather than injecting a duplicate. The
+	// node exposes every access field generically under resource.access.<field>, so an
+	// uploader works with any source access type, not only wget.
+	nodePath := resourceNodePath(baseID, resource)
 	targetURLField, err := celTargetURLField(u.TargetURL, nodePath)
 	if err != nil {
 		return err
@@ -261,11 +275,7 @@ func processUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTTPUpl
 	// source access media type when it exposes one (wget, OCI, ...).
 	mediaType := u.MediaType
 	if mediaType == "" {
-		if access, ok := node["access"].(map[string]any); ok {
-			if mt, ok := access["mediaType"].(string); ok {
-				mediaType = mt
-			}
-		}
+		mediaType = mediaTypeFromAccess(resource)
 	}
 	targetAccess := &wgetaccessv1.Wget{
 		Type:       wgetaccess.V1VersionedType,
