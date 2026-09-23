@@ -178,7 +178,7 @@ resolvers:
 ## Related Documentation
 
 - [OCM Resolvers]({{< relref "docs/concepts/pack/resolvers.md" >}}) — High-level introduction to resolvers
-- [Working with Resolvers Tutorial]({{< relref "docs/tutorials/transfer/configure-resolvers.md" >}}) — Hands-on walkthrough for
+- [Working with Resolvers Tutorial]({{< relref "docs/tutorials/pack/configure-resolvers.md" >}}) — Hands-on walkthrough for
   setting up resolvers
 - [How to Resolve Components Across Multiple Registries]({{< relref "docs/how-to/transfer/resolve-components-from-multiple-repositories.md" >}}) — Recipe for multi-registry resolution
 - [Migrate from Deprecated Resolvers]({{< relref "docs/how-to/transfer/migrate-from-deprecated-resolvers.md" >}}) — Replace

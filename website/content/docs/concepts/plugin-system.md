@@ -5,7 +5,7 @@ icon: "🔌"
 weight: 8
 toc: true
 aliases:
-  - /docs/concepts/plugin-system/
+  - /docs/concepts/pack/plugin-system/
 ---
 
 The Open Component Model (OCM) plugin system allows you to extend OCM's basic capabilities. 

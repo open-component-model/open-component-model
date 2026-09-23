@@ -6,6 +6,7 @@ weight: 37
 toc: true
 aliases:
   - /docs/how-to/replicate-component-versions-controller/
+  - /docs/how-to/transfer/replicate-component-versions-controller/
 ---
 
 ## Goal

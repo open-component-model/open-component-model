@@ -14,7 +14,7 @@ Every time OCM accesses a registry, it resolves credentials automatically. This 
 
 This tutorial focuses on OCI registry credentials. For signing credential identities (`RSA/v1alpha1`), see the [Consumer Identities Reference]({{< relref "/docs/reference/credential-consumer-identities.md" >}}).
 
-For the full concept, see [Credential System]({{< relref "/docs/concepts/pack/credential-system.md" >}}).
+For the full concept, see [Credential System]({{< relref "/docs/concepts/credential-system.md" >}}).
 
 **Estimated time:** ~10 minutes
 
@@ -353,5 +353,5 @@ Then retry the OCM command.
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "/docs/concepts/pack/credential-system.md" >}}) - Learn how the credential system automatically finds the right credentials for each operation
+- [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system automatically finds the right credentials for each operation
 - [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) — Complete reference for all identity types (OCI registries and RSA signing)

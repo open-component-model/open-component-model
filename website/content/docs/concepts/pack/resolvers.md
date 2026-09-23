@@ -78,7 +78,7 @@ For more information about OCM transfer, see the
 
 ## Next Steps
 
-- [Tutorial: Working with Resolvers]({{< relref "docs/tutorials/transfer/configure-resolvers.md" >}}) — Hands-on walkthrough for
+- [Tutorial: Working with Resolvers]({{< relref "docs/tutorials/pack/configure-resolvers.md" >}}) — Hands-on walkthrough for
   setting up resolvers
 - [How-To: Resolve Components Across Multiple Registries]
   ({{< relref "docs/how-to/transfer/resolve-components-from-multiple-repositories.md" >}}) — Recipe for

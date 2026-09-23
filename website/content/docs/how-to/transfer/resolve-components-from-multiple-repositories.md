@@ -143,7 +143,7 @@ see [Migrate from Deprecated Resolvers]({{< relref "migrate-from-deprecated-reso
 
 - [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/transfer/credential-resolution.md" >}}) — Configure
   registry credentials
-- [Tutorial: Working with Resolvers]({{< relref "docs/tutorials/transfer/configure-resolvers.md" >}}) — Hands-on tutorial for
+- [Tutorial: Working with Resolvers]({{< relref "docs/tutorials/pack/configure-resolvers.md" >}}) — Hands-on tutorial for
   building and pushing components with resolvers
 
 ## Related Documentation

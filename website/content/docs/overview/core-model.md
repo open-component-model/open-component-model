@@ -68,7 +68,7 @@ A component descriptor lists resources, but the actual artifacts (container imag
 
 OCM delegates the actual download and upload of resources to **resource repositories**, backend-specific implementations that know how to interact with a particular storage technology. For example, an `OCIImage/v1` access is handled by the OCI resource repository, while a `Helm/v1` access is handled by the Helm resource repository.
 
-This design keeps the component descriptor storage-agnostic while allowing each backend to handle its own protocols, authentication, and artifact formats. Resource repositories are extensible through the [plugin system]({{< relref "docs/concepts/pack/plugin-system.md" >}}), so new storage backends can be added without modifying OCM itself.
+This design keeps the component descriptor storage-agnostic while allowing each backend to handle its own protocols, authentication, and artifact formats. Resource repositories are extensible through the [plugin system]({{< relref "docs/concepts/plugin-system.md" >}}), so new storage backends can be added without modifying OCM itself.
 
 For more details, see [Resource Repositories]({{< relref "docs/concepts/pack/resource-repositories.md" >}}).
 

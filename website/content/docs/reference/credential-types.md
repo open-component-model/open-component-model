@@ -6,7 +6,7 @@ weight: 4
 toc: true
 ---
 
-This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:` field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/pack/credential-system.md" >}}).
+This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:` field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).
 
 ## Overview
 
@@ -499,7 +499,7 @@ External plugin credential types use a reverse-domain prefix by convention (e.g.
 `com.hashicorp.vault.VaultCredentials/v1`). This prevents name collisions between independently developed plugins.
 
 For details on how plugins declare and register credential types, see
-[Plugin System]({{< relref "docs/concepts/pack/plugin-system.md" >}}).
+[Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}).
 
 ---
 
@@ -507,7 +507,7 @@ For details on how plugins declare and register credential types, see
 
 - [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}) — identity types and
   their attributes
-- [Concept: Credential System]({{< relref "docs/concepts/pack/credential-system.md" >}}) — how credential resolution works
+- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — how credential resolution works
   end-to-end
 - [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/transfer/credential-resolution.md" >}}) — step-by-step
   matching examples

@@ -6,7 +6,7 @@ weight: 3
 toc: true
 ---
 
-This page is the technical reference for credential consumer identities — the key-value maps OCM uses to look up credentials for a given operation. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/pack/credential-system.md" >}}).
+This page is the technical reference for credential consumer identities — the key-value maps OCM uses to look up credentials for a given operation. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).
 
 For the credential types that go in the `credentials:` field of each consumer entry,
 see [Reference: Credential Types]({{< relref "credential-types.md" >}}).
@@ -666,7 +666,7 @@ added by installed plugins — and `ocm describe types credentials <type>` to in
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "docs/concepts/pack/credential-system.md" >}}) — How the credential system works
+- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — How the credential system works
 - [Reference: Credential Types]({{< relref "credential-types.md" >}}) — All built-in typed credential types and their
   fields
 - [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/transfer/credential-resolution.md" >}}) — Step-by-step

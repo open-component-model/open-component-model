@@ -101,7 +101,7 @@ Set `mediaType` explicitly here. Otherwise, OCM will default to the `Content-Typ
 **Never put credentials in `url`, `header`, or `body`.** That includes user info (`https://user:token@host/...`) and
 presigned query parameters. An access specification is stored in the component descriptor then signed and finally included in
 the transfer. An input specification lives in your constructor file, which is usually checked into version control.
-Either way the secret leaks. Use the [credential system]({{< relref "docs/concepts/pack/credential-system.md" >}}) instead, as shown in
+Either way the secret leaks. Use the [credential system]({{< relref "docs/concepts/credential-system.md" >}}) instead, as shown in
 [Authenticate against a protected server](#authenticate-against-a-protected-server).
 {{< /callout >}}
 

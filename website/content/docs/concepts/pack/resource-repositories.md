@@ -28,7 +28,7 @@ This separation exists for practical reasons:
 - **Credentials differ per backend.** Accessing an OCI registry requires OCI credentials. Accessing a Helm repository
   requires Helm-style credentials. Resource repositories resolve the correct
   [credential consumer identity]({{< relref "docs/reference/credential-consumer-identities.md" >}}) for each backend,
-  integrating with OCM's [credential system]({{< relref "docs/concepts/pack/credential-system.md" >}}).
+  integrating with OCM's [credential system]({{< relref "docs/concepts/credential-system.md" >}}).
 
 ```mermaid
 flowchart TB
@@ -74,7 +74,7 @@ the [Resource Repositories Reference]({{< relref "docs/reference/resource-reposi
 
 ## Extensibility Through Plugins
 
-Resource repositories are extensible through the [plugin system]({{< relref "docs/concepts/pack/plugin-system.md" >}}). An
+Resource repositories are extensible through the [plugin system]({{< relref "docs/concepts/plugin-system.md" >}}). An
 external plugin can add support for new access types without modifying OCM itself. The plugin declares which access
 types it supports, and OCM routes requests to it automatically.
 
@@ -100,9 +100,9 @@ repositories make self-contained, air-gappable transfers possible.
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "docs/concepts/pack/credential-system.md" >}}): how credentials are resolved for
+- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}): how credentials are resolved for
   resource access
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer/transfer-concept.md" >}}): how resource repositories
   enable artifact transfer
-- [Concept: Plugin System]({{< relref "docs/concepts/pack/plugin-system.md" >}}): how to extend OCM with custom resource
+- [Concept: Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}): how to extend OCM with custom resource
   repository plugins

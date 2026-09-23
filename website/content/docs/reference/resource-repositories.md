@@ -341,7 +341,7 @@ External plugins declare supported access types in their capability specificatio
 operations (resolve credential identity, download, upload) over the plugin protocol. Once installed, OCM routes requests
 for matching access types to the plugin automatically.
 
-See [Concept: Plugin System]({{< relref "docs/concepts/pack/plugin-system.md" >}}) for details on building and installing
+See [Concept: Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}) for details on building and installing
 plugins.
 
 ## Related Documentation

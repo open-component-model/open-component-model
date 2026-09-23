@@ -92,7 +92,7 @@ OCM v2 does **not** guess the media type from the file extension in the URL. OCM
 
 ## Authentication {#authentication}
 
-Credentials are resolved through OCM's normal [credential system]({{< relref "docs/concepts/pack/credential-system.md" >}}). Never add authentication to a URL directly. OCM
+Credentials are resolved through OCM's normal [credential system]({{< relref "docs/concepts/credential-system.md" >}}). Never add authentication to a URL directly. OCM
 builds a [consumer identity]({{< relref "docs/reference/credential-consumer-identities.md#wget" >}}) of type `Wget` from
 the URL and uses the matching consumer entry's credentials for the request. Because the input type and the access type
 build that identity the same way, one entry will work for both, building the component version, and downloading the resource.

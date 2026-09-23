@@ -6,6 +6,7 @@ weight: 80
 toc: true
 aliases:
   - /docs/tutorials/configure-resolvers/
+  - /docs/tutorials/transfer/configure-resolvers/
 ---
 
 ## Overview

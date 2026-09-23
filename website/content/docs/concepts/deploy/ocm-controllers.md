@@ -113,7 +113,7 @@ A few more things about replication:
 - The transferred version is the one recorded in the source `Component`'s *status*, meaning a version that has already been successfully reconciled (and verified, if verification is configured). It does not re-evaluate the `Component`'s semver constraint itself.
 - A successful transfer records the source digest in `status.lastTransferredDigest`. A reconciliation observing the same digest is a no-op, so re-applying or requeueing does not re-transfer unchanged content.
 - First, it walks the component's reference graph through the [resolution worker pool](#asynchronous-component-resolution), reporting `ResolutionInProgress` until every referenced descriptor is available. Then, it executes the transfer, reporting `TransferInProgress` until completion. Per-transformation failures are recorded in `status.lastFailedTransferEvents` and cleared on the next success.
-- Recursion depth, copy mode, upload type, and the credentials for the target registry are supplied as OCM configuration referenced from `spec.ocmConfig` (a `Secret` or a `ConfigMap` object carrying a `transfer.config.ocm.software` entry). See [Replicate Component Versions with the Controller]({{< relref "docs/how-to/transfer/replicate-component-versions-controller.md" >}}) for a concrete example.
+- Recursion depth, copy mode, upload type, and the credentials for the target registry are supplied as OCM configuration referenced from `spec.ocmConfig` (a `Secret` or a `ConfigMap` object carrying a `transfer.config.ocm.software` entry). See [Replicate Component Versions with the Controller]({{< relref "docs/how-to/deploy/replicate-component-versions-controller.md" >}}) for a concrete example.
 
 [API reference]({{< relref "/docs/reference/kubernetes-api/replication.md" >}})
 
@@ -182,4 +182,4 @@ deployer. Please refer to the respective installation guides for these tools:
 - [Concept: Kubernetes Deployer]({{< relref "kubernetes-deployer.md" >}}), how the Deployer applies and manages resources
 - [Getting-Started: Setup Controller Environment]({{< relref "setup-controller-environment.md" >}}), prerequisites for running the controllers
 - [How-To: Configuring Credentials for OCM Controllers]({{< relref "docs/how-to/deploy/configure-credentials-ocm-controllers.md" >}}), setting up access to private OCM repositories
-- [How-To: Replicate Component Versions with the Controller]({{< relref "docs/how-to/transfer/replicate-component-versions-controller.md" >}}), transferring component versions between repositories
+- [How-To: Replicate Component Versions with the Controller]({{< relref "docs/how-to/deploy/replicate-component-versions-controller.md" >}}), transferring component versions between repositories

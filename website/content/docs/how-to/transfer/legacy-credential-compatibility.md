@@ -171,7 +171,7 @@ entries.
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "/docs/concepts/pack/credential-system.md" >}}) - Learn how the credential system
+- [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system
   automatically finds the right credentials for each operation
 - [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}) - All built-in typed credential
   types and their fields
