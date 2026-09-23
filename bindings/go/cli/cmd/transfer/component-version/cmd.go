@@ -155,7 +155,7 @@ transfer component-version --transfer-spec spec.yaml
 	enum.VarP(cmd.Flags(), FlagUploadAs, "u", uploadAsValues,
 		"Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.")
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin)")
-	cmd.Flags().String(FlagConstraint, "", "version constraint restricting which versions to transfer (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
+	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
 
 	return cmd
