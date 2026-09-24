@@ -154,6 +154,13 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 
 	resp, err := client.Do(req)
 	if err != nil {
+		// client.Do wraps errors in a *url.Error whose URL field carries the full
+		// request URL including any query token. Redact it so the token never reaches
+		// logs or the returned error.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			urlErr.URL = safeURL.String()
+		}
 		return nil, fmt.Errorf("failed uploading to %s: %w", safeURL.String(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -192,6 +199,22 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		}
 		targetResource.Digest = srcResource.Digest.DeepCopy()
 	}
+
+	// The target Wget access encoded the upload request, including the write Verb (e.g.
+	// PUT). That access is also published as the download access on the output resource.
+	// A subsequent read (ocm download) must not re-issue the write method, which would
+	// send an empty-body request and overwrite the uploaded object. Publish a plain read
+	// access: keep the resolved URL but clear the upload-only request fields so the verb
+	// defaults to GET.
+	published := tw
+	published.Verb = ""
+	published.Body = nil
+	published.NoRedirect = false
+	publishedRaw := &runtime.Raw{}
+	if err := wgetaccess.Scheme.Convert(&published, publishedRaw); err != nil {
+		return nil, fmt.Errorf("failed building published target access: %w", err)
+	}
+	targetResource.Access = publishedRaw
 
 	v2Out, err := descriptor.ConvertToV2Resource(t.Scheme, targetResource)
 	if err != nil {

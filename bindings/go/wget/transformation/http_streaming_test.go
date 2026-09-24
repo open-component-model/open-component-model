@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -165,4 +166,58 @@ func TestHTTPStreamingTransformer_RejectsMismatchedDigest_AfterStreaming(t *test
 	// The verification happens after streaming: the server still received the full payload,
 	// proving the content was piped through rather than buffered and checked up front.
 	assert.Equal(t, payload, body)
+}
+
+// TestHTTPStreamingTransformer_PublishedAccessDropsWriteVerb asserts the published
+// download access on the output resource does not carry the upload write verb. The
+// upload streams with PUT, but a later read (ocm download) must default to GET;
+// re-issuing PUT would send an empty body and overwrite the uploaded object.
+func TestHTTPStreamingTransformer_PublishedAccessDropsWriteVerb(t *testing.T) {
+	r := require.New(t)
+	payload := []byte("published access payload")
+	var body []byte
+	var method, header, contentType string
+
+	out, err := runStreaming(t, payload, nil, &body, &method, &header, &contentType)
+	r.NoError(err)
+	assert.Equal(t, http.MethodPut, method, "the upload request must still use the configured PUT method")
+
+	result := out.(*v1alpha1.HTTPStreaming)
+	tw := wgetaccessv1.Wget{}
+	r.NoError(wgetaccess.Scheme.Convert(result.Output.Resource.Access, &tw))
+	assert.Empty(t, tw.Verb, "the published download access must not carry the upload write verb")
+	assert.False(t, tw.NoRedirect, "the published download access must not carry upload-only request fields")
+}
+
+// TestHTTPStreamingTransformer_UploadErrorRedactsQueryToken asserts a transport-level
+// upload failure does not leak the target URL's query token, which the wrapped
+// *url.Error would otherwise expose.
+func TestHTTPStreamingTransformer_UploadErrorRedactsQueryToken(t *testing.T) {
+	r := require.New(t)
+	scheme := newTransformerScheme()
+
+	// A closed listener yields a connection-refused transport error from client.Do,
+	// wrapped in a *url.Error carrying the full request URL including the query token.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	r.NoError(err)
+	addr := ln.Addr().String()
+	r.NoError(ln.Close())
+
+	const token = "supersecrettoken"
+	source := wgetResourceV2("blob", "https://source.example/blob.tar", "", "", nil, nil)
+	target := wgetResourceV2("blob", "http://"+addr+"/target/blob.tar?access_token="+token, http.MethodPut, "application/x-tar", nil, nil)
+
+	step := &v1alpha1.HTTPStreaming{
+		Type: v1alpha1.HTTPStreamingV1alpha1,
+		ID:   "upload",
+		Spec: &v1alpha1.HTTPStreamingSpec{Resource: source, TargetResource: target},
+	}
+	tr := &HTTPStreamingTransformer{
+		Scheme:             scheme,
+		ResourceRepository: &stubResourceRepository{payload: []byte("x"), mediaType: "application/x-tar"},
+	}
+
+	_, err = tr.Transform(context.Background(), step)
+	r.Error(err)
+	assert.NotContains(t, err.Error(), token, "the upload error must not leak the target URL query token")
 }

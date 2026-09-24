@@ -96,6 +96,14 @@ configurations:
       Content-Digest: ['${contentDigestAlgorithm(resource.digest.hashAlgorithm) + "=:" + base64.encode(hex.decode(resource.digest.value)) + ":"}']
 ```
 
+{{< callout context="caution" >}}
+Use the `Content-Digest` expression only when `resource.digest` was produced by a
+byte-preserving normalization such as `genericBlobDigest/v1`. The uploader streams the
+source bytes unchanged, so a digest built from a non-byte-preserving normalization does
+not describe the transmitted content and a target that validates `Content-Digest` may
+reject the upload.
+{{< /callout >}}
+
 `resource.digest` is only present when the source resource carries a digest (for
 example when it is pinned from the source via the checksum-http configuration). See
 [Templating Headers]({{< relref "docs/reference/transfer-configuration.md" >}}#templating-headers)

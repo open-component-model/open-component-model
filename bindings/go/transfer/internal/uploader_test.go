@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/transform/graph/env"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
@@ -108,9 +110,8 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	targetURL := tgtAccess["url"].(string)
 	assert.True(t, strings.HasPrefix(targetURL, "${") && strings.HasSuffix(targetURL, "}"),
 		"target url must be a CEL expression field, got %q", targetURL)
-	assert.Contains(t, targetURL, ".component.resources.filter(", "target url must select the resource from the descriptor node")
-	assert.Contains(t, targetURL, `.name == "blob"`, "the filter must select by resource identity")
-	assert.Contains(t, targetURL, ")[0].access.url", "resource alias must be rewritten to the selected node path")
+	assert.Contains(t, targetURL, ".component.resources[0]", "target url must select the resource by index from the descriptor node")
+	assert.Contains(t, targetURL, ".component.resources[0].access.url", "resource alias must be rewritten to the selected node path")
 	assert.NotContains(t, targetURL, "resource.access", "the bare resource alias must not survive the rewrite")
 
 	// No second copy of the resource is injected; the descriptor environment node the
@@ -178,7 +179,7 @@ func TestBuildGraphDefinition_UploaderPreservesResourceInStringLiteral(t *testin
 	// The string literal keeps the word "resource"; the identifier before ".name" is rewritten.
 	assert.Contains(t, targetURL, `"https://uploads.example/resource/"`,
 		"the literal path segment must not be rewritten")
-	assert.Contains(t, targetURL, ".component.resources.filter(", "the bare resource identifier must be rewritten")
+	assert.Contains(t, targetURL, ".component.resources[", "the bare resource identifier must be rewritten")
 	assert.Contains(t, targetURL, ".name", "the rewritten node path must retain the field access")
 }
 
@@ -222,7 +223,7 @@ func TestBuildGraphDefinition_UploaderTemplatesHeaders(t *testing.T) {
 	reprDigest := header["Repr-Digest"].([]any)[0].(string)
 	assert.True(t, strings.HasPrefix(reprDigest, "${") && strings.HasSuffix(reprDigest, "}"),
 		"templated header value must be a CEL expression field, got %q", reprDigest)
-	assert.Contains(t, reprDigest, ".component.resources.filter(", "the resource alias must be rewritten to the node path")
+	assert.Contains(t, reprDigest, ".component.resources[", "the resource alias must be rewritten to the node path")
 	assert.Contains(t, reprDigest, ".digest.value", "the digest field access must survive the rewrite")
 	assert.NotContains(t, reprDigest, "resource.digest", "the bare resource alias must not survive the rewrite")
 
@@ -232,7 +233,7 @@ func TestBuildGraphDefinition_UploaderTemplatesHeaders(t *testing.T) {
 	assert.Contains(t, contentDigest, ".digest.hashAlgorithm", "the algorithm-name field access must survive the rewrite")
 	assert.Contains(t, contentDigest, "base64.encode(hex.decode(", "the base64/hex conversion must be preserved")
 	assert.Contains(t, contentDigest, ".digest.value", "the digest value field access must survive the rewrite")
-	assert.Contains(t, contentDigest, ".component.resources.filter(", "the resource alias must be rewritten to the node path")
+	assert.Contains(t, contentDigest, ".component.resources[", "the resource alias must be rewritten to the node path")
 
 	xStatic := header["X-Static"].([]any)[0].(string)
 	assert.Equal(t, "literal-value", xStatic, "a literal header value must pass through unchanged")
@@ -282,7 +283,7 @@ func TestBuildGraphDefinition_UploaderUsesLabelValueAndIdentityMatch(t *testing.
 	r.NotEmpty(streamID, "expected an HTTPStreaming transformation (extra-identity match must select the resource)")
 
 	// The label-value expression survived the alias rewrite to the node path.
-	assert.Contains(t, targetURL, ".component.resources.filter(", "the resource alias must be rewritten to the node path")
+	assert.Contains(t, targetURL, ".component.resources[", "the resource alias must be rewritten to the node path")
 	assert.Contains(t, targetURL, `.labels.filter(l, l.name == "region")[0].value`,
 		"the label filter-by-name access must survive the rewrite")
 	assert.NotContains(t, targetURL, "resource.labels", "the bare resource alias must not survive the rewrite")
@@ -333,7 +334,7 @@ func TestBuildGraphDefinition_UploaderMatchesNonWgetSource(t *testing.T) {
 	assert.Equal(t, "ociImage", node["type"], "the resource type must be exposed")
 
 	// The target URL expression references the rewritten node path, not the bare alias.
-	assert.Contains(t, targetURL, ".component.resources.filter(", "the resource alias must be rewritten to the node path")
+	assert.Contains(t, targetURL, ".component.resources[", "the resource alias must be rewritten to the node path")
 	assert.Contains(t, targetURL, ".access.imageReference", "the access field access must survive the rewrite")
 	assert.NotContains(t, targetURL, "resource.access", "the bare resource alias must not survive the rewrite")
 }
@@ -433,3 +434,46 @@ func findResourceInDescriptorEnv(t *testing.T, tgd *transformv1alpha1.Transforma
 	return nil
 }
 
+// TestResourceNodePath_ExtraIdentitySelectorEvaluatesOverMixedResources reproduces the
+// CLI finding where selecting a resource by extraIdentity fails with "undefined field
+// 'extraIdentity'" during CEL type checking: the environment node's resource element
+// type is inferred from the concrete JSON, so an optional field such as extraIdentity is
+// absent from the inferred type when a sibling resource omits it. Index-based selection
+// compiles and evaluates cleanly over such a mixed resource list.
+func TestResourceNodePath_ExtraIdentitySelectorEvaluatesOverMixedResources(t *testing.T) {
+	r := require.New(t)
+
+	plain := wgetResource("plain", "1.0.0", "https://source.example/plain.tar")
+	blob := wgetResource("blob", "1.0.0", "https://source.example/blob.tar")
+	blob.ExtraIdentity = runtime.Identity{"tier": "public"}
+
+	desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{plain, blob}, nil)
+	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
+	r.NoError(err)
+
+	raw, err := json.Marshal(v2desc)
+	r.NoError(err)
+	var node map[string]any
+	r.NoError(json.Unmarshal(raw, &node))
+
+	const baseID = "root"
+	environment := map[string]any{baseID: node}
+
+	// The selector the uploader rewrites the `resource` alias to for the blob resource
+	// (index 1 in the descriptor's resource list). Index selection compiles even though
+	// the sibling "plain" resource omits extraIdentity.
+	selector := resourceNodePath(baseID, 1)
+	r.Contains(selector, "resources[1]", "the selector must address the resource by index")
+
+	builder, err := env.NewEnvBuilder(environment)
+	r.NoError(err)
+	celEnv, _, err := builder.CurrentEnv()
+	r.NoError(err)
+	ast, iss := celEnv.Compile(selector + ".name")
+	r.NoError(iss.Err(), "selector must compile without an undefined-field error")
+	prg, err := celEnv.Program(ast)
+	r.NoError(err)
+	out, _, err := prg.Eval(map[string]any{})
+	r.NoError(err, "selector must evaluate without an undefined-field error over mixed resources")
+	assert.Equal(t, "blob", out.Value(), "the index selector must resolve to the matching resource")
+}

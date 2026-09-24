@@ -29,7 +29,8 @@ const URLFunctionName = "url"
 //   - fragment  the fragment without the leading "#"
 //   - user      the username in userinfo, or "" when absent
 //
-// A value that is not a valid URL, or not a string, yields a CEL error that
+// A value that is not a string, that url.Parse rejects, or that parses as an opaque
+// URI (e.g. "host:8443/a/b", missing the "://" separator) yields a CEL error that
 // surfaces during expression evaluation.
 func URL() cel.EnvOption {
 	return cel.Function(
@@ -58,6 +59,12 @@ func bindingURL(arg ref.Val) ref.Val {
 	parsed, err := url.Parse(raw)
 	if err != nil {
 		return types.NewErr("url(%q): %s", raw, err.Error())
+	}
+	// url.Parse accepts inputs without "://" (e.g. "host:8443/a/b") as opaque URIs,
+	// leaving host and path empty. Reject them so path/host consumers do not silently
+	// drop the segment.
+	if parsed.Opaque != "" {
+		return types.NewErr("url(%q): missing scheme separator, got opaque reference", raw)
 	}
 
 	rawPath := parsed.EscapedPath()

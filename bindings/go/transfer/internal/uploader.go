@@ -3,10 +3,7 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"net/url"
-	"slices"
-	"strconv"
 	"strings"
 
 	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
@@ -26,36 +23,25 @@ import (
 // environment node path before the graph runtime evaluates the expression.
 const resourceAlias = "resource"
 
-// resourceFilterVar is the bound variable used inside the CEL filter macro that selects
-// the source resource within the descriptor environment node. It is local to the filter
-// predicate, so it cannot collide with the user's `resource` alias (already rewritten to
-// the whole selector path before the predicate is built).
-const resourceFilterVar = "r"
-
 // resourceNodePath returns the CEL path the `resource` alias is rewritten to. Instead
 // of injecting a second copy of the resource into the environment, it points at the
 // resource already present in the descriptor environment node (keyed by baseID, see
-// addDescriptorToEnvironment), selecting it out of component.resources with a filter on
-// its full identity (name, version and every extraIdentity key). This keeps a single
-// source of truth and stays index-independent. Every v2 resource field is addressable
-// by appending to the returned path: <path>.access.url, <path>.digest.value,
-// <path>.extraIdentity.<key>, <path>.labels, and so on.
-func resourceNodePath(baseID string, resource descriptorv2.Resource) string {
-	identity := resource.ToIdentity()
-	keys := slices.Sorted(maps.Keys(identity))
-	predicates := make([]string, 0, len(keys))
-	for _, k := range keys {
-		switch k {
-		case descriptorv2.IdentityAttributeName:
-			predicates = append(predicates, fmt.Sprintf("%s.name == %s", resourceFilterVar, strconv.Quote(identity[k])))
-		case descriptorv2.IdentityAttributeVersion:
-			predicates = append(predicates, fmt.Sprintf("%s.version == %s", resourceFilterVar, strconv.Quote(identity[k])))
-		default:
-			predicates = append(predicates, fmt.Sprintf("%s.extraIdentity[%s] == %s", resourceFilterVar, strconv.Quote(k), strconv.Quote(identity[k])))
-		}
-	}
-	return fmt.Sprintf("environment.%s.component.resources.filter(%s, %s)[0]",
-		baseID, resourceFilterVar, strings.Join(predicates, " && "))
+// addDescriptorToEnvironment) by its index in component.resources. The index is the
+// resource's position in the descriptor the environment node was built from, so it is
+// exact and stable for the duration of the graph build.
+//
+// Index selection avoids a CEL filter predicate over the whole resource list: the
+// environment node's element type is inferred from the concrete JSON, so an optional
+// field such as extraIdentity (omitempty) is absent from the inferred type whenever any
+// resource lacks it, and a filter predicate that reads r.extraIdentity then fails type
+// checking with "undefined field 'extraIdentity'". Selecting by index never references
+// a field that a sibling resource omits.
+//
+// Every v2 resource field is addressable by appending to the returned path:
+// <path>.access.url, <path>.digest.value, <path>.extraIdentity.<key>, <path>.labels,
+// and so on.
+func resourceNodePath(baseID string, index int) string {
+	return fmt.Sprintf("environment.%s.component.resources[%d]", baseID, index)
 }
 
 // mediaTypeFromAccess extracts the source access media type (if any) from the resource
@@ -183,11 +169,11 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 
 	// Rewrite the `resource` alias in every ${...} string across the entire target
 	// access object, rather than templating hand-picked fields. Point it at the resource
-	// already present in the descriptor environment node (selected by identity, see
+	// already present in the descriptor environment node (selected by index, see
 	// resourceNodePath) so no second copy of the resource is injected; every access field
 	// stays addressable generically under resource.access.<field>, so an uploader works
 	// with any source access type, not only wget.
-	nodePath := resourceNodePath(baseID, resource)
+	nodePath := resourceNodePath(baseID, i)
 	if err := templateExpressions(targetAccessRaw, nodePath); err != nil {
 		return fmt.Errorf("cannot template uploader target access: %w", err)
 	}

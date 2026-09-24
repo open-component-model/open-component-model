@@ -43,6 +43,11 @@ func TestURLFunction(t *testing.T) {
 			expr:    `url(42).path`,
 			wantErr: true,
 		},
+		{
+			name:    "opaque uri rejected",
+			expr:    `url("src.example:8443/a/b").path`,
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range tests {
