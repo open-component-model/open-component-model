@@ -37,6 +37,19 @@ type HTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+// RejectInsecureRedirect is an http.Client.CheckRedirect policy for TSA
+// requests. The initial request URL is left unrestricted so local development
+// TSA servers reachable only over plain HTTP keep working, but any redirect to a
+// non-HTTPS target is refused. This blocks an HTTPS-to-HTTP downgrade in which
+// net/http would forward the Authorization header (and other sensitive headers)
+// derived from URL userinfo over an unencrypted connection.
+func RejectInsecureRedirect(req *http.Request, _ []*http.Request) error {
+	if req.URL.Scheme != "https" {
+		return fmt.Errorf("tsa: refusing insecure redirect to %s", RedactURL(req.URL.String()))
+	}
+	return nil
+}
+
 // RequestTimestamp sends an RFC 3161 timestamp request to the TSA server at url.
 // The hash and digest identify the data being timestamped.
 // The client parameter specifies the HTTP client to use; if nil, http.DefaultClient is used.
@@ -282,16 +295,40 @@ func parseTSTInfo(der []byte) (Info, error) {
 }
 
 // RedactURL strips potentially sensitive components (userinfo, query, fragment)
-// from a URL so it can be safely included in error messages and logs. If the URL
-// cannot be parsed a fixed placeholder is returned, because a malformed URL may
-// still embed userinfo or query credentials that must never reach logs.
+// from a URL so it can be safely included in error messages and logs. A fixed
+// placeholder is returned when the URL cannot be parsed, or when it parses to an
+// opaque form (e.g. "user:pass@host/path", where url.Parse treats "user" as the
+// scheme and keeps "pass@host/path" in URL.Opaque): in that case URL.User is nil,
+// so URL.String would otherwise re-emit the credential-bearing input verbatim.
 func RedactURL(raw string) string {
 	u, err := url.Parse(raw)
-	if err != nil {
+	if err != nil || u.Opaque != "" {
 		return "<invalid TSA URL>"
 	}
 	u.User = nil
 	u.RawQuery = ""
 	u.Fragment = ""
 	return u.String()
+}
+
+// SanitizeURL returns raw with its sensitive components (userinfo, query,
+// fragment) removed, preserving only scheme, host, port, and path. It is used to
+// store the TSA URL as a signed descriptor label: verification derives the
+// credential-lookup identity from scheme/host/port/path only (see
+// runtime.ParseURLToIdentity), so the stripped components are never needed and
+// must not be persisted where anyone reading the component version could see
+// them. An error is returned for URLs that cannot be parsed safely (parse
+// failure or an opaque form that may still embed credentials).
+func SanitizeURL(raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("tsa: parsing TSA URL for sanitization failed")
+	}
+	if u.Opaque != "" {
+		return "", fmt.Errorf("tsa: refusing to store opaque TSA URL that may embed credentials")
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
 }

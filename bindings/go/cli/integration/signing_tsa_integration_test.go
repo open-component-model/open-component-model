@@ -90,6 +90,18 @@ func Test_Integration_Signing_TSA(t *testing.T) {
         public_key_pem: %[1]q
         private_key_pem: %[2]q`, pubPEM, privPEM)
 
+	// A second RSA credential entry bound to a differently-named signature, used
+	// to create a foreign signature that the TSA label guard must protect.
+	rsaCredsOther := fmt.Sprintf(`  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: other
+    credentials:
+    - type: Credentials/v1
+      properties:
+        public_key_pem: %[1]q
+        private_key_pem: %[2]q`, pubPEM, privPEM)
+
 	// URL-specific TSA credential entry (hostname/port/scheme set), using the
 	// typed TSACredentials/v1alpha1 credential with camelCase fields.
 	tsaCredsURL := func(rootPath string) string {
@@ -128,6 +140,11 @@ func Test_Integration_Signing_TSA(t *testing.T) {
 	cfgGenericPath := writeConfig("ocmconfig-tsa-generic.yaml", tsaCredsGeneric)
 	// Config with a URL-specific TSA entry — exercises URL-specific lookup.
 	cfgURLSpecificPath := writeConfig("ocmconfig-tsa-url.yaml", tsaCredsURL(tsaRootPath))
+	// Config with both RSA signature entries (default + other) and no TSA entry,
+	// used to exercise the foreign-signature guard.
+	cfgTwoSigsBody := "type: generic.config.ocm.software/v1\nconfigurations:\n- type: credentials.config.ocm.software\n  consumers:\n" + registryCreds + "\n" + rsaCreds + "\n" + rsaCredsOther + "\n"
+	cfgTwoSigsPath := filepath.Join(dir, "ocmconfig-two-sigs.yaml")
+	r.NoError(os.WriteFile(cfgTwoSigsPath, []byte(cfgTwoSigsBody), os.ModePerm))
 
 	client := internal.CreateAuthClient(registry.RegistryAddress, registry.User, registry.Password)
 	resolver, err := urlresolver.New(
@@ -235,6 +252,31 @@ func Test_Integration_Signing_TSA(t *testing.T) {
 		verifyCMD := cmd.New()
 		verifyCMD.SetArgs([]string{"verify", "cv", ref, "--config", cfgNoTSAPath})
 		r.Error(verifyCMD.ExecuteContext(t.Context()))
+	})
+
+	t.Run("TSA signing is refused when a foreign signature already exists", func(t *testing.T) {
+		r := require.New(t)
+
+		name, version := "ocm.software/tsa-test-foreign-sig", "v1.0.0"
+		uploadComponentVersion(t, repo, name, version, newResource("hello tsa foreign sig"))
+		ref := fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version)
+
+		before := tsaRequests.Load()
+
+		// Create a first, untimestamped signature under a different name.
+		signOther := cmd.New()
+		signOther.SetArgs([]string{"sign", "cv", ref, "--config", cfgTwoSigsPath, "--signature", "other"})
+		r.NoError(signOther.ExecuteContext(t.Context()))
+
+		// Adding a TSA-timestamped signature would store a signing-relevant label
+		// that invalidates the existing "other" signature; it must be refused
+		// before any TSA request is made.
+		signTSA := cmd.New()
+		signTSA.SetArgs([]string{"sign", "cv", ref, "--config", cfgTwoSigsPath, "--signature", "default", "--tsa-url", tsaServer.URL})
+		err := signTSA.ExecuteContext(t.Context())
+		r.Error(err)
+		r.Contains(err.Error(), "other")
+		r.Equal(before, tsaRequests.Load(), "guard must trip before contacting the TSA server")
 	})
 }
 

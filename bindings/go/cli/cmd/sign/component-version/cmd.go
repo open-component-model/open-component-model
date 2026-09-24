@@ -378,6 +378,17 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	tsaURL := tsaURLFromFlags(cmd)
 	useTSA := tsaURL != "" && !dryRun
 	if useTSA {
+		// The TSA URL is stored as a signing-relevant label so it is covered by
+		// the digest and tamper-evident. That label changes the normalized
+		// component, which would invalidate any pre-existing signature made over
+		// the descriptor without it. We cannot re-sign those foreign signatures
+		// (their keys are not available here), so refuse rather than silently
+		// corrupt them.
+		for _, sig := range desc.Signatures {
+			if sig.Name != signatureName {
+				return fmt.Errorf("cannot add a TSA timestamp: the signing-relevant TSA URL label would invalidate the existing signature %q; timestamp before adding other signatures, or omit --tsa/--tsa-url", sig.Name)
+			}
+		}
 		if err := addSignedTSALabel(desc, signatureName, tsaURL); err != nil {
 			return err
 		}
@@ -425,6 +436,9 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("resolving HTTP configuration for TSA request failed: %w", err)
 		}
 		tsaClient := ocmhttp.New(ocmhttp.WithConfig(httpConfig))
+		// Reject HTTPS-to-HTTP redirects so net/http never forwards credentials
+		// derived from the TSA URL over an unencrypted connection.
+		tsaClient.CheckRedirect = tsa.RejectInsecureRedirect
 		tsSpec, err = requestTSATimestamp(ctx, logger, tsaClient, tsaURL, unsignedDigest.HashAlgorithm, []byte(sigBytes.Value))
 		if err != nil {
 			return err
@@ -534,9 +548,16 @@ func tsaURLFromFlags(cmd *cobra.Command) string {
 // the component so it is covered by the digest and therefore tamper-evident.
 // Verifiers use it for URL-specific credential lookup of the TSA root certs. Any
 // pre-existing label for this signature (e.g. from a --force re-sign) is
-// replaced so verification always resolves credentials for the current URL.
+// replaced so verification always resolves credentials for the current URL. The
+// URL is sanitized to scheme/host/port/path before storage: verification needs
+// only those components, and userinfo or query parameters must not be persisted
+// where anyone reading the component version could see them.
 func addSignedTSALabel(desc *descruntime.Descriptor, signatureName, tsaURL string) error {
-	tsaURLJSON, err := json.Marshal(tsaURL)
+	sanitizedURL, err := tsa.SanitizeURL(tsaURL)
+	if err != nil {
+		return fmt.Errorf("sanitizing TSA URL label: %w", err)
+	}
+	tsaURLJSON, err := json.Marshal(sanitizedURL)
 	if err != nil {
 		return fmt.Errorf("marshalling TSA URL label: %w", err)
 	}

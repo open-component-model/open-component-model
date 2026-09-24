@@ -1061,3 +1061,74 @@ func newMockTSAHandler(t *testing.T, cert *x509.Certificate, key *rsa.PrivateKey
 		_, _ = w.Write(respDER)
 	})
 }
+
+func TestRedactURL(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain", "https://tsa.example/ts", "https://tsa.example/ts"},
+		{"userinfo", "https://user:token@tsa.example/ts", "https://tsa.example/ts"},
+		{"query", "https://tsa.example/ts?key=secret", "https://tsa.example/ts"},
+		{"fragment", "https://tsa.example/ts#frag", "https://tsa.example/ts"},
+		{"opaque credentials", "user:pass@tsa.example/ts", "<invalid TSA URL>"},
+		{"unparseable", "https://tsa.example/ts\x7f%zz", "<invalid TSA URL>"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			got := RedactURL(tc.in)
+			r.Equal(tc.want, got)
+			// A redacted URL must never re-expose credential-bearing input.
+			r.NotContains(got, "token")
+			r.NotContains(got, "pass")
+			r.NotContains(got, "secret")
+		})
+	}
+}
+
+func TestSanitizeURL(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{"plain", "https://tsa.example/ts", "https://tsa.example/ts", false},
+		{"port and path kept", "https://tsa.example:8443/api/ts", "https://tsa.example:8443/api/ts", false},
+		{"userinfo stripped", "https://user:token@tsa.example/ts", "https://tsa.example/ts", false},
+		{"query stripped", "https://tsa.example/ts?key=secret", "https://tsa.example/ts", false},
+		{"fragment stripped", "https://tsa.example/ts#frag", "https://tsa.example/ts", false},
+		{"http local kept", "http://127.0.0.1:1234/ts", "http://127.0.0.1:1234/ts", false},
+		{"opaque rejected", "user:pass@tsa.example/ts", "", true},
+		{"unparseable rejected", "https://tsa.example/ts\x7f%zz", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			got, err := SanitizeURL(tc.in)
+			if tc.wantErr {
+				r.Error(err)
+				r.Empty(got)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.want, got)
+			r.NotContains(got, "token")
+			r.NotContains(got, "secret")
+		})
+	}
+}
+
+func TestRejectInsecureRedirect(t *testing.T) {
+	r := require.New(t)
+
+	httpsReq, err := http.NewRequest(http.MethodPost, "https://tsa.example/ts", nil)
+	r.NoError(err)
+	r.NoError(RejectInsecureRedirect(httpsReq, nil))
+
+	httpReq, err := http.NewRequest(http.MethodPost, "http://tsa.example/ts", nil)
+	r.NoError(err)
+	err = RejectInsecureRedirect(httpReq, nil)
+	r.Error(err)
+	assert.Contains(t, err.Error(), "insecure redirect")
+}
