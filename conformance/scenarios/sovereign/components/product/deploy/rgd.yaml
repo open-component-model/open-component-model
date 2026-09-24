@@ -89,10 +89,10 @@ spec:
             name: ${repository.metadata.name}
           semver: ${schema.spec.version}
           interval: 1m
-          verify:
-            - signature: default
-              secretRef:
-                name: acme-signing-key
+          ocmConfig:
+            - apiVersion: v1
+              kind: Secret
+              name: acme-signing-key
     - id: rgdResource
       readyWhen:
         - ${rgdResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
