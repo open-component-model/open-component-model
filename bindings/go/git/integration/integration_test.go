@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/pem"
 	"io"
 	"net/http"
@@ -40,8 +42,9 @@ func Test_Integration_Git(t *testing.T) {
 
 	path, first := newRepository(t)
 	url, ca := newHTTPSServer(t, path, "")
+	trustServerCertificate(t, ca)
 	tempDir := t.TempDir()
-	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, repository.WithCABundle(ca))
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
 	resourceFor := func(t *testing.T, ref, commit string) *descriptor.Resource {
 		t.Helper()
 
@@ -77,6 +80,30 @@ func Test_Integration_Git(t *testing.T) {
 	entries, err := os.ReadDir(tempDir)
 	r.NoError(err)
 	r.Len(entries, 2)
+}
+
+// trustServerCertificate changes process-global state; callers and their ancestors must not run in parallel.
+// The shared HTTP factory clones the default transport, preserving TLS certificate verification.
+func trustServerCertificate(t *testing.T, certificatePEM []byte) {
+	t.Helper()
+
+	r := require.New(t)
+
+	original := http.DefaultTransport
+	transport, ok := original.(*http.Transport)
+	r.True(ok)
+	transport = transport.Clone()
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	roots := x509.NewCertPool()
+	r.True(roots.AppendCertsFromPEM(certificatePEM))
+	transport.TLSClientConfig.RootCAs = roots
+	http.DefaultTransport = transport
+	t.Cleanup(func() {
+		http.DefaultTransport = original
+		transport.CloseIdleConnections()
+	})
 }
 
 func newHTTPSServer(t *testing.T, path, authorization string) (url string, ca []byte) {

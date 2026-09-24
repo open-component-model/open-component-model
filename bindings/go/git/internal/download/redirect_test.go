@@ -2,7 +2,7 @@ package download
 
 import (
 	"context"
-	"encoding/pem"
+
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,11 +12,20 @@ import (
 	"time"
 
 	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/stretchr/testify/require"
 
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 )
+
+func trustRedirectServer(t *testing.T, server *httptest.Server) {
+	t.Helper()
+	previous := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = previous })
+}
 
 func installRedirectTestClient(t *testing.T, client *http.Client) {
 	t.Helper()
@@ -24,9 +33,13 @@ func installRedirectTestClient(t *testing.T, client *http.Client) {
 	t.Cleanup(func() {
 		gitclient.Protocols["http"], gitclient.Protocols["https"] = previousHTTP, previousHTTPS
 	})
-	if client != nil {
-		InstallHTTPClient(client)
+	if client == nil {
+		InstallHTTPClient(nil)
+		return
 	}
+	configured := githttp.NewClient(ocmhttp.WithHTTPSDowngradeProtection(client))
+	gitclient.InstallProtocol("http", configured)
+	gitclient.InstallProtocol("https", configured)
 }
 
 func TestDownloadHTTPSRedirectDoesNotLeakCredentials(t *testing.T) {
@@ -74,7 +87,7 @@ func TestDownloadHTTPSRedirectDoesNotLeakCredentials(t *testing.T) {
 					opts := Options{TempDir: t.TempDir()}
 					var client *http.Client
 					if clientName == "default" {
-						opts.CABundle = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: secure.Certificate().Raw})
+						trustRedirectServer(t, secure)
 					} else {
 						client = secure.Client()
 						if clientName == "configured-callback" {
@@ -174,7 +187,7 @@ func TestDownloadAllowedRedirects(t *testing.T) {
 				opts := Options{TempDir: t.TempDir()}
 				var client *http.Client
 				if clientName == "default" {
-					opts.CABundle = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: secure.Certificate().Raw})
+					trustRedirectServer(t, secure)
 				} else {
 					client = secure.Client()
 					client.CheckRedirect = func(req *http.Request, via []*http.Request) error {

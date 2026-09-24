@@ -53,6 +53,19 @@
 // context deadline (covering headers + body), so a per-host value can exceed
 // the global. http.Client.Timeout is left zero in this case.
 //
+// # Redirect protection
+//
+// HTTPS downgrade protection is opt-in; New and NewClient do not enable it:
+//
+//	client := ocmhttp.WithHTTPSDowngradeProtection(ocmhttp.New())
+//
+// WithHTTPSDowngradeProtection shallow-copies the client without modifying it,
+// sharing its transport and cookie jar. Passing nil uses New(). It rejects HTTP
+// redirect targets whenever any earlier request in the chain used HTTPS, before
+// invoking an existing CheckRedirect callback. Otherwise, the existing callback
+// is preserved, or the standard library's 10-redirect limit applies if none was
+// configured. Plain HTTP redirects and upgrades to HTTPS remain allowed.
+//
 // # Lower-level constructors
 //
 // Skip the retry layer with NewClient, or get just the transport:

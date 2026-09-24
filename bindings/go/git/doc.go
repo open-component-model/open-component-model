@@ -44,10 +44,13 @@
 // HTTPS-to-HTTP redirects are rejected before transmission.
 //
 // SSH uses the current user's known_hosts unless WithHostKeyCallback overrides it.
-// WithCABundle extends system TLS trust. The downloader installs guarded default
-// HTTP transports in go-git's process-global registry at initialization; see
+// HTTPS uses Go's system trust store and SSL_CERT_FILE / SSL_CERT_DIR overrides;
+// CA bundles are not configured through repository options.
+// Repository construction explicitly installs go-git's process-global HTTP(S)
+// adapter; importing the downloader does not change protocol registrations.
+// Clients use the shared HTTP factory and HTTPS downgrade protection. See
 // [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPConfig]
-// for custom HTTP configuration and CA-bundle restrictions.
+// for configuration and the process-global registration constraints.
 //
 // # Credential consumer identity
 //

@@ -95,13 +95,12 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 								creds = method.invalidCredentials
 							}
 
-							var opts []repository.Option
 							if scenario.trustCertificate {
-								opts = append(opts, repository.WithCABundle(ca))
+								trustServerCertificate(t, ca)
 							}
 
 							tempDir := t.TempDir()
-							repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, opts...)
+							repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
 							b, downloadErr := repo.DownloadResource(t.Context(), spec, creds)
 							if scenario.expectedError == "" {
 								r.NoError(downloadErr)

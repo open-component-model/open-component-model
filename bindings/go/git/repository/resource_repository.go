@@ -19,7 +19,6 @@ import (
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
-	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -30,8 +29,8 @@ const (
 )
 
 type ResourceRepository struct {
-	maxArchiveSize   *int64
-	caBundle         []byte
+	maxArchiveSize *int64
+
 	hostKeyCallback  ssh.HostKeyCallback
 	filesystemConfig *filesystemv1alpha1.Config
 }
@@ -53,13 +52,11 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 		opt(options)
 	}
 
-	if options.HTTPConfig != nil {
-		download.InstallHTTPClient(ocmhttp.New(ocmhttp.WithConfig(options.HTTPConfig)))
-	}
+	download.InstallHTTPClient(options.HTTPConfig)
 
 	return &ResourceRepository{
-		maxArchiveSize:   options.MaxArchiveSize,
-		caBundle:         options.CABundle,
+		maxArchiveSize: options.MaxArchiveSize,
+
 		hostKeyCallback:  options.HostKeyCallback,
 		filesystemConfig: filesystemConfig,
 	}
@@ -84,9 +81,9 @@ func (r *ResourceRepository) downloadOptions(tempDir string) download.Options {
 	}
 
 	return download.Options{
-		TempDir:         tempDir,
-		MaxArchiveSize:  maxArchiveSize,
-		CABundle:        r.caBundle,
+		TempDir:        tempDir,
+		MaxArchiveSize: maxArchiveSize,
+
 		HostKeyCallback: r.hostKeyCallback,
 	}
 }

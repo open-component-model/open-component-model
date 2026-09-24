@@ -77,16 +77,15 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 	var repo *git.Repository
 	if access.Commit == "" && access.Ref == "HEAD" {
 		repo, err = git.PlainCloneContext(ctx, dir, true, &git.CloneOptions{
-			URL:      access.Repository,
-			Auth:     auth,
-			Tags:     git.AllTags,
-			CABundle: opts.CABundle,
+			URL:  access.Repository,
+			Auth: auth,
+			Tags: git.AllTags,
 		})
 		if err != nil {
 			err = transportError(ctx, "cannot fetch git repository", err)
 		}
 	} else {
-		repo, err = fetchRepository(ctx, dir, access, auth, opts)
+		repo, err = fetchRepository(ctx, dir, access, auth)
 	}
 
 	if repo != nil {
@@ -132,7 +131,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 
 // fetchRepository fetches explicit refs or a pinned commit without depending on a valid remote HEAD.
 // The repository is returned also with a fetch error, so the caller can close its storage.
-func fetchRepository(ctx context.Context, dir string, access *accessv1.Git, auth transport.AuthMethod, opts Options) (*git.Repository, error) {
+func fetchRepository(ctx context.Context, dir string, access *accessv1.Git, auth transport.AuthMethod) (*git.Repository, error) {
 	repo, err := git.PlainInit(dir, true)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create git repository: %w", err)
@@ -149,7 +148,6 @@ func fetchRepository(ctx context.Context, dir string, access *accessv1.Git, auth
 	if access.Commit != "" {
 		err = repo.FetchContext(ctx, &git.FetchOptions{
 			Auth:     auth,
-			CABundle: opts.CABundle,
 			Tags:     git.NoTags,
 			RefSpecs: []config.RefSpec{config.RefSpec("+" + access.Commit + ":refs/ocm/commit")},
 		})
@@ -157,7 +155,6 @@ func fetchRepository(ctx context.Context, dir string, access *accessv1.Git, auth
 	if access.Commit == "" || errors.Is(err, git.ErrExactSHA1NotSupported) {
 		err = repo.FetchContext(ctx, &git.FetchOptions{
 			Auth:     auth,
-			CABundle: opts.CABundle,
 			Tags:     git.AllTags,
 			RefSpecs: []config.RefSpec{"+refs/*:refs/*", "+refs/heads/*:refs/remotes/origin/*"},
 		})
