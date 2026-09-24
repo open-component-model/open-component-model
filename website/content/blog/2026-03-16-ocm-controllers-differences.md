@@ -91,30 +91,48 @@ spec:
   component: github.com/my-org/my-app
   semver: ">=1.0.0"
   downgradePolicy: Allow
-  verify:
-    - signature: ocm.software
-      secretRef:
-        name: signing-key
-  # ocmConfig: # this is now taken from the `repositoryRef` since that object already contains this configuration.
-  #   - kind: Secret
-  #     name: registry-credentials
-  #     policy: Propagate
+  ocmConfig:
+    # Signature verification is configured here. Registry credentials are not listed
+    # because they are taken from the `repositoryRef`, which already carries them.
+    - kind: Secret
+      name: signing-config
+      policy: Propagate
   interval: 10m
 ```
 
-The verification secret contains the public key used to validate the component's signature:
+Verification is driven by the central OCM configuration rather than by a dedicated spec field, so
+the same configuration works for the CLI and the controller. The referenced Secret carries it under
+the `.ocmconfig` key: one entry naming the signature to verify, one supplying the public key.
 
 ```yaml
 apiVersion: v1
 kind: Secret
 metadata:
-  name: signing-key
+  name: signing-config
   namespace: ocm-system
-data:
-  ocm.software: <base64-encoded PEM public key>
+stringData:
+  .ocmconfig: |
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: signing.config.ocm.software/v1alpha1
+      signature: ocm.software
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: ocm.software
+        credentials:
+        - type: Credentials/v1
+          properties:
+            public_key_pem: |
+              -----BEGIN PUBLIC KEY-----
+              <PEM public key>
+              -----END PUBLIC KEY-----
 ```
 
-The key name in the Secret's `data` field must match the `signature` value in the Component's `verify` list.
+Only an entry naming a `signature` requests verification, and the consumer identity must name that
+same signature for its key to be found.
 
 **What was removed:**
 
