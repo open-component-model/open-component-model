@@ -4,16 +4,16 @@
   "$id": "ocm.software/open-component-model/bindings/go/wget/spec/input/v1/schemas/Wget.schema.json",
   "title": "Wget",
   "type": "object",
-  "description": "Wget describes an input sourced by downloading a resource from an HTTP/S URL\nduring component construction. The downloaded content is stored as a local\nblob in the component version.\n\nVerification against a source-side checksum is a deployment concern, not a\ndescriptor concern: configure it with `checksum.http.config.ocm.software/v1alpha1`\n(see `bindings/go/configuration/checksum/http/v1alpha1/spec`), which steers\nboth this input method and the wget access-type digest processor.",
+  "description": "Wget describes an input sourced by downloading a resource from an HTTP/S URL\nduring component construction. The downloaded content is stored as a local blob\nin the component version.\n\nVerification against a source-side checksum is a deployment concern, not a\ndescriptor concern: configure it with `checksum.http.config.ocm.software/v1alpha1`\n(see `bindings/go/configuration/checksum/http/v1alpha1/spec`), which steers\nboth this input method and the wget access-type digest processor.",
   "properties": {
     "body": {
       "type": "string",
-      "description": "Body is the optional request body.",
+      "description": "Body is the HTTP body to send with the request.",
       "contentEncoding": "base64"
     },
     "header": {
       "type": "object",
-      "description": "Header carries additional HTTP request headers.",
+      "description": "Header contains HTTP headers to be sent with the request.",
       "additionalProperties": {
         "type": "array",
         "items": {
@@ -23,11 +23,11 @@
     },
     "mediaType": {
       "type": "string",
-      "description": "MediaType overrides the resulting blob's media type."
+      "description": "MediaType is the media type of the resource with optional format qualifiers."
     },
     "noRedirect": {
       "type": "boolean",
-      "description": "NoRedirect disables following redirects."
+      "description": "NoRedirect disables following HTTP redirects when set to true."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
@@ -50,11 +50,11 @@
     },
     "url": {
       "type": "string",
-      "description": "URL is the HTTP endpoint to download from."
+      "description": "URL is the HTTP endpoint to download the resource from."
     },
     "verb": {
       "type": "string",
-      "description": "Verb is the HTTP method; defaults to GET."
+      "description": "Verb is the HTTP method to use (GET, POST, etc.). Defaults to GET."
     }
   },
   "required": [
