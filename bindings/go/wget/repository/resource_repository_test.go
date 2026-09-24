@@ -446,6 +446,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 	t.Parallel()
 	content := []byte("access-side pin from source")
 	sha256 := godigest.FromBytes(content).Encoded()
+	sha512 := shaHex(content, crypto.SHA512)
 	sha1 := shaHex(content, crypto.SHA1)
 
 	// noBodyGET returns 500 on GET so a fast-path bug (falling through to
@@ -481,6 +482,22 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		assert.Equal(t, "SHA-256", processed.Digest.HashAlgorithm)
 		assert.Equal(t, "genericBlobDigest/v1", processed.Digest.NormalisationAlgorithm)
 		assert.Equal(t, sha256, processed.Digest.Value)
+	})
+
+	t.Run("SHA-512 header pins the resource digest without a body download", func(t *testing.T) {
+		server := httptest.NewServer(noBodyGET(map[string]string{"x-checksum-sha512": sha512}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(nil,
+			repository.WithHTTPClient(server.Client()),
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}),
+		)
+		processed, err := repo.ProcessResourceDigest(t.Context(),
+			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
+		require.NoError(t, err)
+		require.NotNil(t, processed.Digest)
+		assert.Equal(t, "SHA-512", processed.Digest.HashAlgorithm)
+		assert.Equal(t, sha512, processed.Digest.Value)
 	})
 
 	t.Run("Require aborts when only a weak (SHA-1) digest is advertised", func(t *testing.T) {

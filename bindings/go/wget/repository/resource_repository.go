@@ -268,12 +268,12 @@ func (r *ResourceRepository) processDigestViaPeek(
 ) (*descriptor.Resource, bool, error) {
 	url := policyURL(resource)
 	// The access-side pin becomes the resource digest, which OCM/OCI storage
-	// accepts only as SHA-256. Restricting the peek to SHA-256 means a source
-	// that advertises only a weaker algorithm (MD5, SHA-1) is treated as "not
-	// advertised", so Require fails and Prefer falls through to download-and-
-	// hash SHA-256 — a weak algorithm never leaks into the descriptor.
-	prefer := []checksum.Algorithm{checksum.StorageAlgorithm}
-	slog.DebugContext(ctx, "wget: peeking source-advertised checksum", "url", url, "algorithm", checksum.StorageAlgorithm.OCMName)
+	// and signing accept only as SHA-256 or SHA-512. A source advertising only
+	// a weaker algorithm (MD5, SHA-1) is treated as "not advertised", so Require
+	// fails and Prefer falls through to download-and-hash SHA-256 — a weak
+	// algorithm never leaks into the descriptor. SHA-256 wins when both offered.
+	prefer := []checksum.Algorithm{checksum.SHA256, checksum.SHA512}
+	slog.DebugContext(ctx, "wget: peeking source-advertised checksum", "url", url, "prefer", []string{checksum.SHA256.OCMName, checksum.SHA512.OCMName})
 
 	// HEAD must mirror the download's inputs and redirect policy so it probes
 	// the same bytes and never forwards credentials across a redirect.
