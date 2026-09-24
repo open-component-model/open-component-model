@@ -6,7 +6,7 @@
 
 ## Context and Problem
 
-Converting external access to `localBlob` can lose the naming information needed to publish an artifact elsewhere. The OCM resource name/version may differ from the artifact's repository, tag, chart name, or object key.
+Changing access to `localBlob` must preserve the naming information needed to publish an artifact elsewhere. Store that information in resource labels before replacing the external access. The OCM resource name/version may differ from the artifact's repository, tag, chart name, or object key.
 
 During air-gapped transfer, the receiver has the descriptor and payload but cannot query the original source. Coordinates, also called reference hints here, must travel with the resource.
 
@@ -22,9 +22,7 @@ This ADR covers:
 - How coordinates survive local copies, conversions, and later publication
 - Three coordinate models and their trade-offs
 
-Upload configuration, routing, CEL expressions, execution, and backend protocols are outside this ADR. [PR #3643](https://github.com/open-component-model/open-component-model/pull/3643) addresses uploader configuration and HTTP streaming. Native backend extensions remain separate work.
-
-That PR exposes the current resource's metadata to upload rules. This does not recover fields lost when an earlier transfer replaced external access with `localBlob`. Coordinate production and consumption still need integration. This ADR does not change upload-rule precedence or matching behavior.
+Upload configuration, routing, CEL expressions, execution, and backend protocols are outside this ADR.
 
 ## Decision Status
 
@@ -84,20 +82,20 @@ Naming also does not establish payload compatibility. A chart downloaded through
 
 ### Persistence and Lifecycle
 
-The examples use an unsigned `ocm.software/artifact-coordinates` resource label. All options need a versioned schema. The list and object examples are alternatives, not interchangeable wire shapes.
+All options persist coordinates in resource labels, including when access is `localBlob`. The labels belong to the resource, not the access object, so replacing access must not remove them. The examples use an unsigned `ocm.software/artifact-coordinates` label with an option-specific, versioned schema.
 
-A label avoids extending `LocalBlob` and can survive changes in access type. A dedicated specification field remains possible. Graph-only storage cannot support disconnected transfers.
+Every local copy and offline export/import must preserve these labels, even when the receiver cannot interpret their type or version. A `globalAccess` reference does not replace them. No extension to `LocalBlob` is needed, and graph-only storage is insufficient.
 
-| Transition                              | Coordinate behavior                                                                     |
-| --------------------------------------- | --------------------------------------------------------------------------------------- |
-| External → local                        | Derive naming before access is replaced and retain compatible existing metadata         |
-| Local → local                           | Preserve coordinates, including unknown types or versions, without needing the source   |
-| Content-preserving external publication | Retain information that the resulting access cannot reconstruct                         |
-| Content conversion                      | Preserve, translate, or remove fields according to the resulting representation         |
-| Subsequent download                     | Reconcile current-access naming with retained identity rather than blindly replacing it |
-| Failed operation                        | Leave source coordinates and descriptor unchanged                                       |
+| Transition                              | Coordinate behavior                                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| External → local                        | Persist naming in resource labels before replacing access and retain compatible existing metadata       |
+| Local → local                           | Preserve coordinate labels unchanged, including unknown types or versions and blobs with `globalAccess` |
+| Content-preserving external publication | Retain information that the resulting access cannot reconstruct                                         |
+| Content conversion                      | Preserve, translate, or remove fields according to the resulting representation                         |
+| Subsequent download                     | Reconcile current-access naming with retained identity rather than blindly replacing it                 |
+| Failed operation                        | Leave source coordinates and descriptor unchanged                                                       |
 
-Coordinate removal is safe only after successful publication and when the resulting access preserves the information being removed. For example, an S3 access generally does not preserve a chart's semantic name/version.
+Changing storage must not lose coordinate information. Labels may be removed only after successful publication if the resulting access preserves all their naming information and it can be reconstructed without querying the source. Otherwise retain them. An S3 access, for example, generally does not preserve a chart's semantic name/version.
 
 Decide whether logical names remain stable across hops or are deliberately rebased to the new access. Never guess which part of an external path was a previous destination prefix.
 
@@ -302,7 +300,8 @@ Options 2 and 3 avoid up to N × M naming mappings for supported semantics. Opti
 
 Test the coordinate contract with the source unreachable and only the transported payload and descriptor available.
 
-- External → local → local preserves coordinates, including unknown families or versions
+- External → `localBlob` → offline export/import → local copy preserves coordinate labels with the source unreachable
+- Local copies retain unknown coordinate families or versions, including when `localBlob` has `globalAccess`
 - OCI repository, tag-only, digest-only, and tag-plus-digest naming survive offline transport
 - Helm name/version remain available after storage as an S3 object
 - HTTP paths preserve defined escaping and empty-path semantics without retaining request secrets
@@ -322,6 +321,6 @@ Test the coordinate contract with the source unreachable and only the transporte
 3. Must offline receivers interpret naming without the original source adapter?
 4. Which native details must survive exactly, and where do digest pins and source revisions belong?
 5. Should logical names remain stable across hops or be rebased after publication?
-6. Is a label the right persistent location, and what versioning and migration rules should it use?
+6. What versioning and migration rules should the coordinate label use?
 
 After discussion, record the selected model, persistence strategy, and reasons for rejecting the alternatives.
