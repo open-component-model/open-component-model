@@ -243,7 +243,7 @@ func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact(t *testing.T) {
 	assert.Nil(t, findCleanupTransformation(tgd), "streaming OCI path should produce no FileCleanup node")
 }
 
-func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact_WeakEdgeFailurePolicy(t *testing.T) {
+func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact_AllowMissingSubjects(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/test", "1.0.0",
@@ -251,52 +251,52 @@ func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact_WeakEdgeFailurePolicy(
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	t.Run("skip policy is baked into the streaming transformation", func(t *testing.T) {
+	t.Run("allowMissingSubjects is baked into the streaming transformation", func(t *testing.T) {
 		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
-			CopyMode:              transferv1alpha1.CopyModeAllResources,
-			UploadType:            transferv1alpha1.UploadAsOciArtifact,
-			WeakEdgeFailurePolicy: ociv1alpha1.WeakEdgeFailurePolicySkip,
+			CopyMode:             transferv1alpha1.CopyModeAllResources,
+			UploadType:           transferv1alpha1.UploadAsOciArtifact,
+			AllowMissingSubjects: true,
 		})
 		require.NoError(t, err)
 		require.Len(t, tgd.Transformations, 2)
-		assert.Equal(t, string(ociv1alpha1.WeakEdgeFailurePolicySkip), tgd.Transformations[0].Spec.Data["weakEdgeFailurePolicy"])
+		assert.Equal(t, true, tgd.Transformations[0].Spec.Data["allowMissingSubjects"])
 	})
 
-	t.Run("omitted policy is not baked", func(t *testing.T) {
+	t.Run("unset is not baked", func(t *testing.T) {
 		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
 			CopyMode:   transferv1alpha1.CopyModeAllResources,
 			UploadType: transferv1alpha1.UploadAsOciArtifact,
 		})
 		require.NoError(t, err)
 		require.Len(t, tgd.Transformations, 2)
-		_, found := tgd.Transformations[0].Spec.Data["weakEdgeFailurePolicy"]
-		assert.False(t, found, "policy must stay absent when not configured")
+		_, found := tgd.Transformations[0].Spec.Data["allowMissingSubjects"]
+		assert.False(t, found, "allowMissingSubjects must stay absent when not configured")
 	})
 
-	t.Run("policy is baked into the non-streaming download and upload nodes", func(t *testing.T) {
+	t.Run("allowMissingSubjects is baked into the non-streaming download and upload nodes", func(t *testing.T) {
 		ctfTarget := testCTFRepo(t.TempDir())
 		ctfRoots := testTransferRoots("ocm.software/test", "1.0.0", ctfTarget, resolver)
 		tgd, err := BuildGraphDefinition(t.Context(), ctfRoots, transferv1alpha1.Config{
-			CopyMode:              transferv1alpha1.CopyModeAllResources,
-			UploadType:            transferv1alpha1.UploadAsOciArtifact,
-			WeakEdgeFailurePolicy: ociv1alpha1.WeakEdgeFailurePolicySkip,
+			CopyMode:             transferv1alpha1.CopyModeAllResources,
+			UploadType:           transferv1alpha1.UploadAsOciArtifact,
+			AllowMissingSubjects: true,
 		})
 		require.NoError(t, err)
 
-		withPolicy := map[string]bool{
+		withAllow := map[string]bool{
 			ociv1alpha1.GetOCIArtifactType:      true,
 			ociv1alpha1.CTFAddLocalResourceType: true,
 		}
 		for _, transformation := range tgd.Transformations {
-			got, found := transformation.Spec.Data["weakEdgeFailurePolicy"]
-			if withPolicy[transformation.Type.Name] {
-				assert.Equal(t, string(ociv1alpha1.WeakEdgeFailurePolicySkip), got, "transformation %s", transformation.Type)
-				delete(withPolicy, transformation.Type.Name)
+			got, found := transformation.Spec.Data["allowMissingSubjects"]
+			if withAllow[transformation.Type.Name] {
+				assert.Equal(t, true, got, "transformation %s", transformation.Type)
+				delete(withAllow, transformation.Type.Name)
 				continue
 			}
-			assert.False(t, found, "policy must not leak into transformation %s", transformation.Type)
+			assert.False(t, found, "allowMissingSubjects must not leak into transformation %s", transformation.Type)
 		}
-		assert.Empty(t, withPolicy, "expected transformations are missing")
+		assert.Empty(t, withAllow, "expected transformations are missing")
 	})
 }
 

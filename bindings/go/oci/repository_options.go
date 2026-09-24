@@ -40,9 +40,9 @@ type RepositoryOptions struct {
 	// CopyOptions are the options for copying resources between sources and targets
 	ResourceCopyOptions *oras.CopyOptions
 
-	// WeakEdgeFailurePolicy defines how copy traversals treat missing weak-edge targets.
-	// By default (zero value), a missing target aborts the copy.
-	WeakEdgeFailurePolicy WeakEdgeFailurePolicy
+	// AllowMissingSubjects makes copy traversals skip missing subjects and
+	// referrers instead of failing. See [WithAllowMissingSubjects].
+	AllowMissingSubjects bool
 
 	// ReferrerTrackingPolicy defines how OCI referrers are used to track component versions.
 	ReferrerTrackingPolicy ReferrerTrackingPolicy
@@ -233,6 +233,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		unmarshalDescriptorFunc:     options.DescriptorUnmarshalFunc,
 		tempDir:                     options.TempDir,
 		globalAccessPolicy:          options.GlobalAccessPolicy,
-		weakEdgeFailurePolicy:       options.WeakEdgeFailurePolicy,
+		allowMissingSubjects:        options.AllowMissingSubjects,
 	}, nil
 }

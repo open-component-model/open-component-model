@@ -8,18 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
 func TestConfig_ParseYAML(t *testing.T) {
 	tests := []struct {
-		name                      string
-		yaml                      string
-		wantRecursive             spec.Recursive
-		wantCopyMode              spec.CopyMode
-		wantUploadType            spec.UploadType
-		wantWeakEdgeFailurePolicy string
+		name                     string
+		yaml                     string
+		wantRecursive            spec.Recursive
+		wantCopyMode             spec.CopyMode
+		wantUploadType           spec.UploadType
+		wantAllowMissingSubjects bool
 	}{
 		{
 			name: "all fields",
@@ -57,14 +56,14 @@ configurations:
 			wantCopyMode: spec.CopyModeLocalBlobResources,
 		},
 		{
-			name: "weakEdgeFailurePolicy",
+			name: "allowMissingSubjects",
 			yaml: `
 type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
-    weakEdgeFailurePolicy: skip
+    allowMissingSubjects: true
 `,
-			wantWeakEdgeFailurePolicy: string(ociv1alpha1.WeakEdgeFailurePolicySkip),
+			wantAllowMissingSubjects: true,
 		},
 	}
 
@@ -82,7 +81,7 @@ configurations:
 			assert.Equal(t, tt.wantRecursive, cfg.Recursive)
 			assert.Equal(t, tt.wantCopyMode, cfg.CopyMode)
 			assert.Equal(t, tt.wantUploadType, cfg.UploadType)
-			assert.Equal(t, tt.wantWeakEdgeFailurePolicy, string(cfg.WeakEdgeFailurePolicy))
+			assert.Equal(t, tt.wantAllowMissingSubjects, cfg.AllowMissingSubjects)
 		})
 	}
 }
@@ -100,9 +99,6 @@ func TestConfig_Validate(t *testing.T) {
 		{"valid uploadType localBlob", spec.Config{UploadType: spec.UploadAsLocalBlob}, ""},
 		{"invalid copyMode", spec.Config{CopyMode: "garbage"}, "invalid copyMode"},
 		{"invalid uploadType", spec.Config{UploadType: "garbage"}, "invalid uploadType"},
-		{"valid weakEdgeFailurePolicy abort", spec.Config{WeakEdgeFailurePolicy: ociv1alpha1.WeakEdgeFailurePolicyAbort}, ""},
-		{"valid weakEdgeFailurePolicy skip", spec.Config{WeakEdgeFailurePolicy: ociv1alpha1.WeakEdgeFailurePolicySkip}, ""},
-		{"invalid weakEdgeFailurePolicy", spec.Config{WeakEdgeFailurePolicy: "garbage"}, "invalid weakEdgeFailurePolicy"},
 		{"recursive depth not implemented", spec.Config{Recursive: 3}, "not implemented"},
 		{"invalid recursive below -1", spec.Config{Recursive: -5}, "invalid recursive"},
 	}
@@ -125,15 +121,15 @@ func TestMerge(t *testing.T) {
 	})
 
 	t.Run("later non-empty fields win", func(t *testing.T) {
-		a := &spec.Config{Recursive: spec.RecursiveInfinite, CopyMode: spec.CopyModeLocalBlobResources, UploadType: spec.UploadAsLocalBlob, WeakEdgeFailurePolicy: ociv1alpha1.WeakEdgeFailurePolicyAbort}
-		b := &spec.Config{CopyMode: spec.CopyModeAllResources, WeakEdgeFailurePolicy: ociv1alpha1.WeakEdgeFailurePolicySkip}
+		a := &spec.Config{Recursive: spec.RecursiveInfinite, CopyMode: spec.CopyModeLocalBlobResources, UploadType: spec.UploadAsLocalBlob}
+		b := &spec.Config{CopyMode: spec.CopyModeAllResources, AllowMissingSubjects: true}
 
 		merged := spec.Merge(a, b)
 
 		assert.Equal(t, spec.RecursiveInfinite, merged.Recursive)
 		assert.Equal(t, spec.CopyModeAllResources, merged.CopyMode)
 		assert.Equal(t, spec.UploadAsLocalBlob, merged.UploadType)
-		assert.Equal(t, ociv1alpha1.WeakEdgeFailurePolicySkip, merged.WeakEdgeFailurePolicy)
+		assert.True(t, merged.AllowMissingSubjects)
 	})
 
 	t.Run("nil element is skipped", func(t *testing.T) {

@@ -8,7 +8,6 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -18,23 +17,23 @@ import (
 )
 
 // streamingRepository is a minimal [ocistream.ResourceRepository] fake that
-// supports weak edge failure policy derivation and records the policy of the
-// repository a stream was started from into the shared seenPolicy sink.
+// supports allowing missing subjects and records into the shared seen sink
+// whether the repository a stream was started from allows them.
 type streamingRepository struct {
 	repository.ResourceRepository
 
-	policy     *oci.WeakEdgeFailurePolicy
-	seenPolicy **oci.WeakEdgeFailurePolicy
+	allow bool
+	seen  *bool
 }
 
-func (m *streamingRepository) WithWeakEdgeFailurePolicy(policy oci.WeakEdgeFailurePolicy) ocistream.ResourceRepository {
+func (m *streamingRepository) WithAllowMissingSubjects(allow bool) ocistream.ResourceRepository {
 	c := *m
-	c.policy = &policy
+	c.allow = allow
 	return &c
 }
 
 func (m *streamingRepository) DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (ocistream.ResourceStream, error) {
-	*m.seenPolicy = m.policy
+	*m.seen = m.allow
 	return &ocistream.OCIResourceStream{}, nil
 }
 
@@ -45,7 +44,7 @@ func (m *streamingRepository) UploadResourceStream(ctx context.Context, resource
 }
 
 // unconfigurableStreamingRepository supports streaming but has no
-// WithWeakEdgeFailurePolicy derivation method.
+// WithAllowMissingSubjects derivation method.
 type unconfigurableStreamingRepository struct {
 	repository.ResourceRepository
 }
@@ -60,7 +59,7 @@ func (m *unconfigurableStreamingRepository) UploadResourceStream(ctx context.Con
 	return resource, nil
 }
 
-func transferArtifactSpec(policy v1alpha1.WeakEdgeFailurePolicy) *v1alpha1.TransferOCIArtifact {
+func transferArtifactSpec(allowMissingSubjects bool) *v1alpha1.TransferOCIArtifact {
 	return &v1alpha1.TransferOCIArtifact{
 		Type: runtime.NewVersionedType(v1alpha1.TransferOCIArtifactType, v1alpha1.Version),
 		ID:   "test-transfer",
@@ -75,51 +74,31 @@ func transferArtifactSpec(policy v1alpha1.WeakEdgeFailurePolicy) *v1alpha1.Trans
 				Type:        "ociImage",
 				Relation:    "external",
 			},
-			WeakEdgeFailurePolicy: policy,
+			AllowMissingSubjects: allowMissingSubjects,
 		},
 	}
 }
 
-func TestTransferOCIArtifact_WeakEdgeFailurePolicy(t *testing.T) {
+func TestTransferOCIArtifact_AllowMissingSubjects(t *testing.T) {
 	scheme := runtime.NewScheme()
 	v2.MustAddToScheme(scheme)
 	ociaccess.MustAddToScheme(scheme)
 	scheme.MustRegisterWithAlias(&v1alpha1.TransferOCIArtifact{}, v1alpha1.TransferOCIArtifactV1alpha1)
 
-	skip := oci.WeakEdgeFailurePolicySkip
-	abort := oci.WeakEdgeFailurePolicyAbort
-
 	tests := []struct {
 		name            string
-		specPolicy      v1alpha1.WeakEdgeFailurePolicy
+		allow           bool
 		unconfigurable  bool
-		wantPolicy      *oci.WeakEdgeFailurePolicy
 		wantErrContains string
 	}{
+		{name: "unset leaves repository untouched"},
+		{name: "allowMissingSubjects is applied to the streaming repository", allow: true},
+		{name: "unset works without repository support", unconfigurable: true},
 		{
-			name:       "no policy leaves repository untouched",
-			specPolicy: "",
-		},
-		{
-			name:       "skip policy is applied to the streaming repository",
-			specPolicy: v1alpha1.WeakEdgeFailurePolicySkip,
-			wantPolicy: &skip,
-		},
-		{
-			name:       "abort policy is applied explicitly",
-			specPolicy: v1alpha1.WeakEdgeFailurePolicyAbort,
-			wantPolicy: &abort,
-		},
-		{
-			name:            "invalid policy is rejected",
-			specPolicy:      "bogus",
-			wantErrContains: "unsupported weakEdgeFailurePolicy",
-		},
-		{
-			name:            "policy without repository support fails",
-			specPolicy:      v1alpha1.WeakEdgeFailurePolicySkip,
+			name:            "allowMissingSubjects without repository support fails",
+			allow:           true,
 			unconfigurable:  true,
-			wantErrContains: "does not support configuring a weak edge failure policy",
+			wantErrContains: "does not support allowing missing subjects",
 		},
 	}
 
@@ -127,8 +106,8 @@ func TestTransferOCIArtifact_WeakEdgeFailurePolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 
-			var seen *oci.WeakEdgeFailurePolicy
-			var repo repository.ResourceRepository = &streamingRepository{seenPolicy: &seen}
+			var seen bool
+			var repo repository.ResourceRepository = &streamingRepository{seen: &seen}
 			if tc.unconfigurable {
 				repo = &unconfigurableStreamingRepository{}
 			}
@@ -138,18 +117,13 @@ func TestTransferOCIArtifact_WeakEdgeFailurePolicy(t *testing.T) {
 				Repository: repo,
 			}
 
-			_, err := transformer.Transform(t.Context(), transferArtifactSpec(tc.specPolicy))
+			_, err := transformer.Transform(t.Context(), transferArtifactSpec(tc.allow))
 			if tc.wantErrContains != "" {
 				r.ErrorContains(err, tc.wantErrContains)
 				return
 			}
 			r.NoError(err)
-			if tc.wantPolicy == nil {
-				r.Nil(seen, "no policy must have been derived")
-			} else {
-				r.NotNil(seen)
-				r.Equal(*tc.wantPolicy, *seen)
-			}
+			r.Equal(tc.allow, seen)
 		})
 	}
 }

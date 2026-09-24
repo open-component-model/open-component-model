@@ -9,7 +9,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -21,10 +20,10 @@ type GetOCIArtifact struct {
 	Scheme             *runtime.Scheme
 	Repository         repository.ResourceRepository
 	CredentialProvider credentials.Resolver
-	// PolicyRepository is used instead of Repository if a non-default weak edge
-	// failure policy is requested and Repository cannot carry it (see
+	// FallbackRepository is used instead of Repository if missing subjects are
+	// allowed and Repository cannot carry that setting (see
 	// https://github.com/open-component-model/ocm-project/issues/774).
-	PolicyRepository weakEdgeFailurePolicyConfigurable
+	FallbackRepository missingSubjectsConfigurable
 }
 
 func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -54,18 +53,13 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	targetResource := descriptor.ConvertFromV2Resource(resource)
 
 	repo := t.Repository
-	if transformation.Spec.WeakEdgeFailurePolicy != "" {
-		policy, err := parseWeakEdgeFailurePolicy(transformation.Spec.WeakEdgeFailurePolicy)
-		if err != nil {
-			return nil, err
-		}
-		if configurable, ok := repo.(weakEdgeFailurePolicyConfigurable); ok {
-			repo = configurable.WithWeakEdgeFailurePolicy(policy)
-		} else if policy != oci.WeakEdgeFailurePolicyAbort {
-			if t.PolicyRepository == nil {
-				return nil, fmt.Errorf("repository %T does not support configuring a weak edge failure policy", repo)
-			}
-			repo = t.PolicyRepository.WithWeakEdgeFailurePolicy(policy)
+	if transformation.Spec.AllowMissingSubjects {
+		if configurable, ok := repo.(missingSubjectsConfigurable); ok {
+			repo = configurable.WithAllowMissingSubjects(true)
+		} else if t.FallbackRepository != nil {
+			repo = t.FallbackRepository.WithAllowMissingSubjects(true)
+		} else {
+			return nil, fmt.Errorf("repository %T does not support allowing missing subjects", repo)
 		}
 	}
 

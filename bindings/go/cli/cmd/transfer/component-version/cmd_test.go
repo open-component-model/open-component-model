@@ -173,11 +173,11 @@ func TestTransferComponentVersionWithTransferSpecDryRun(t *testing.T) {
 	require.Equal(t, originalSpec, reRendered.String(), "re-rendered spec should match original")
 }
 
-// TestTransferComponentVersionWeakEdgePolicyFromConfig verifies that the
-// weakEdgeFailurePolicy entry of the transfer configuration is baked into the
+// TestTransferComponentVersionAllowMissingSubjectsFromConfig verifies that the
+// allowMissingSubjects entry of the transfer configuration is baked into the
 // TransferOCIArtifact transformations of the generated transfer specification.
-func TestTransferComponentVersionWeakEdgePolicyFromConfig(t *testing.T) {
-	componentName := "ocm.software/weak-edge-policy-test"
+func TestTransferComponentVersionAllowMissingSubjectsFromConfig(t *testing.T) {
+	componentName := "ocm.software/allow-missing-subjects-test"
 	componentVersion := "0.0.1"
 
 	fromDesc := createTestDescriptor(componentName, componentVersion)
@@ -203,12 +203,12 @@ func TestTransferComponentVersionWeakEdgePolicyFromConfig(t *testing.T) {
 	require.NoError(t, os.WriteFile(configPath, []byte(`type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
-    weakEdgeFailurePolicy: skip
+    allowMissingSubjects: true
 `), 0o644))
 
 	specOutput := new(bytes.Buffer)
 	_, err = test.OCM(t,
-		test.WithArgs("transfer", "component-version", ref.String(), "ghcr.io/ocm/weak-edge-policy-test",
+		test.WithArgs("transfer", "component-version", ref.String(), "ghcr.io/ocm/allow-missing-subjects-test",
 			"--copy-resources", "--upload-as", "ociArtifact", "--dry-run", "-o", "yaml"),
 		test.WithOutput(specOutput),
 		test.WithErrorOutput(test.NewJSONLogReader()),
@@ -229,7 +229,7 @@ configurations:
 	)
 	require.NoError(t, err)
 	require.Contains(t, specOutput.String(), "TransferOCIArtifact")
-	require.Contains(t, specOutput.String(), "weakEdgeFailurePolicy: skip")
+	require.Contains(t, specOutput.String(), "allowMissingSubjects: true")
 }
 
 func TestTransferComponentVersionWithTransferSpecRejectsArgs(t *testing.T) {

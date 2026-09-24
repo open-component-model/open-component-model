@@ -13,11 +13,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-func processOCIArtifact(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool, weakEdgeFailurePolicy ociv1alpha1.WeakEdgeFailurePolicy) error {
+func processOCIArtifact(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool, allowMissingSubjects bool) error {
 	if uploadAsOCIArtifact {
 		var ociTarget ocirepo.Repository
 		if err := scheme.Convert(toSpec, &ociTarget); err == nil {
-			return processOCIArtifactStreaming(resource, id, tgd, toSpec, resourceTransformIDs, i, transferLabel(&val.Descriptor.Component, resource.Name, toSpec), weakEdgeFailurePolicy)
+			return processOCIArtifactStreaming(resource, id, tgd, toSpec, resourceTransformIDs, i, transferLabel(&val.Descriptor.Component, resource.Name, toSpec), allowMissingSubjects)
 		}
 		// toSpec is not an OCI repository — fall through to the legacy Get+Add path.
 	}
@@ -46,8 +46,8 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 	spec := map[string]any{
 		"resource": resource,
 	}
-	if weakEdgeFailurePolicy != "" {
-		spec["weakEdgeFailurePolicy"] = weakEdgeFailurePolicy
+	if allowMissingSubjects {
+		spec["allowMissingSubjects"] = true
 	}
 	unstructured, err := runtime.UnstructuredFromMixedData(spec)
 	if err != nil {
@@ -69,9 +69,9 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 	if addResourceTransform, err = uploadAsLocalResource(toSpec, component, version, addResourceID, getResourceID, staticReferenceName(referenceName), addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec)); err != nil {
 		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
 	}
-	// The downloaded layout can still contain weak edges to skipped content.
-	if weakEdgeFailurePolicy != "" {
-		addResourceTransform.Spec.Data["weakEdgeFailurePolicy"] = string(weakEdgeFailurePolicy)
+	// The downloaded layout can still reference skipped subjects.
+	if allowMissingSubjects {
+		addResourceTransform.Spec.Data["allowMissingSubjects"] = true
 	}
 
 	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
@@ -111,7 +111,7 @@ func imageReferenceFromAccess(id string) referenceNameOption {
 
 // processOCIArtifactStreaming emits a single TransferOCIArtifact node that streams
 // the OCI artifact directly from source to target without tar materialization.
-func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, label string, weakEdgeFailurePolicy ociv1alpha1.WeakEdgeFailurePolicy) error {
+func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, label string, allowMissingSubjects bool) error {
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
 	transferID := fmt.Sprintf("%sTransfer%s", id, resourceID)
@@ -163,8 +163,8 @@ func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, tgd 
 		"resource":       resource,
 		"targetResource": targetResource,
 	}
-	if weakEdgeFailurePolicy != "" {
-		spec["weakEdgeFailurePolicy"] = weakEdgeFailurePolicy
+	if allowMissingSubjects {
+		spec["allowMissingSubjects"] = true
 	}
 	unstructured, err := runtime.UnstructuredFromMixedData(spec)
 	if err != nil {

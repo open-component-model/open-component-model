@@ -57,11 +57,8 @@ type OCIAddLocalResourceSpec struct {
 	// Experimental: This policy is carried over from OCM v1 for backwards compatibility.
 	// Its future availability is being evaluated by the community.
 	GlobalAccessPolicy oci.GlobalAccessPolicy `json:"globalAccessPolicy,omitempty"`
-	// WeakEdgeFailurePolicy defines how the copy treats subject and referrer
-	// references whose target does not exist in the source.
-	// "abort" (default) fails the copy. "skip" logs a warning and continues
-	// without the missing content.
+	// AllowMissingSubjects makes the copy skip subjects and referrers whose
+	// target does not exist in the source, with a warning, instead of failing.
 	// +optional
-	// +ocm:jsonschema-gen:enum=abort,skip
-	WeakEdgeFailurePolicy WeakEdgeFailurePolicy `json:"weakEdgeFailurePolicy,omitempty"`
+	AllowMissingSubjects bool `json:"allowMissingSubjects,omitempty"`
 }

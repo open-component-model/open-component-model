@@ -2422,11 +2422,11 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 	}
 }
 
-// TestRepository_UploadResourceStream_WeakEdgeFailurePolicy verifies that a
+// TestRepository_UploadResourceStream_AllowMissingSubjects verifies that a
 // streamed OCI artifact whose manifest references a subject that does not
-// exist in the source store fails the upload under the default weak edge
-// failure policy and succeeds with WeakEdgeFailurePolicySkip.
-func TestRepository_UploadResourceStream_WeakEdgeFailurePolicy(t *testing.T) {
+// exist in the source store fails the upload by default and succeeds with
+// WithAllowMissingSubjects(true).
+func TestRepository_UploadResourceStream_AllowMissingSubjects(t *testing.T) {
 	newDanglingSubjectStream := func(t *testing.T) (*memory.Store, ociImageSpecV1.Descriptor) {
 		t.Helper()
 		ctx := t.Context()
@@ -2451,11 +2451,11 @@ func TestRepository_UploadResourceStream_WeakEdgeFailurePolicy(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		policy    oci.WeakEdgeFailurePolicy
+		allow     bool
 		wantError bool
 	}{
-		{name: "default policy aborts on dangling subject", policy: oci.WeakEdgeFailurePolicyAbort, wantError: true},
-		{name: "skip policy ignores dangling subject", policy: oci.WeakEdgeFailurePolicySkip, wantError: false},
+		{name: "default fails on dangling subject", allow: false, wantError: true},
+		{name: "allowMissingSubjects ignores dangling subject", allow: true, wantError: false},
 	}
 
 	for _, tc := range tests {
@@ -2466,7 +2466,7 @@ func TestRepository_UploadResourceStream_WeakEdgeFailurePolicy(t *testing.T) {
 			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
 			r.NoError(err)
 			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
-			repo := Repository(t, ocictf.WithCTF(store), oci.WithScheme(testScheme), oci.WithWeakEdgeFailurePolicy(tc.policy))
+			repo := Repository(t, ocictf.WithCTF(store), oci.WithScheme(testScheme), oci.WithAllowMissingSubjects(tc.allow))
 
 			src, manifestDesc := newDanglingSubjectStream(t)
 			resource := &descriptor.Resource{

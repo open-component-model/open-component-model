@@ -108,9 +108,6 @@ var schemaTransferOCIArtifactOutput []byte
 //go:embed schemas/TransferOCIArtifactSpec.schema.json
 var schemaTransferOCIArtifactSpec []byte
 
-//go:embed schemas/WeakEdgeFailurePolicy.schema.json
-var schemaWeakEdgeFailurePolicy []byte
-
 // JSONSchema returns the JSON Schema for AddOCIArtifact.
 func (AddOCIArtifact) JSONSchema() []byte {
 	return schemaAddOCIArtifact
@@ -274,9 +271,4 @@ func (TransferOCIArtifactOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for TransferOCIArtifactSpec.
 func (TransferOCIArtifactSpec) JSONSchema() []byte {
 	return schemaTransferOCIArtifactSpec
-}
-
-// JSONSchema returns the JSON Schema for WeakEdgeFailurePolicy.
-func (WeakEdgeFailurePolicy) JSONSchema() []byte {
-	return schemaWeakEdgeFailurePolicy
 }

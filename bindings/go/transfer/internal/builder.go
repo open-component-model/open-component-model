@@ -84,7 +84,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		Repository:         resourceRepo,
 		CredentialProvider: credentialProvider,
-		PolicyRepository:   ociResourceRepo,
+		FallbackRepository: ociResourceRepo,
 	}
 
 	ociAddOCIArtifact := &ocitransformer.AddOCIArtifact{

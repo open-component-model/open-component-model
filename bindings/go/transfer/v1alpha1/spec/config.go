@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -61,10 +60,10 @@ type Config struct {
 	// OCI artifacts with their own repository references.
 	UploadType UploadType `json:"uploadType,omitempty"`
 
-	// WeakEdgeFailurePolicy defines how copies of OCI artifacts treat subject and
-	// referrer references whose target does not exist in the source.
-	// "abort" (default) fails the transfer. "skip" logs a warning and continues.
-	WeakEdgeFailurePolicy ociv1alpha1.WeakEdgeFailurePolicy `json:"weakEdgeFailurePolicy,omitempty"`
+	// AllowMissingSubjects makes copies of OCI artifacts skip subjects and
+	// referrers whose target does not exist in the source, with a warning,
+	// instead of failing the transfer.
+	AllowMissingSubjects bool `json:"allowMissingSubjects,omitempty"`
 }
 
 // Validate rejects a non-matching [Config.Type] and unknown enum values.
@@ -97,12 +96,6 @@ func (cfg *Config) Validate() error {
 	if cfg.CopyMode != "" && !slices.Contains([]CopyMode{CopyModeLocalBlobResources, CopyModeAllResources}, cfg.CopyMode) {
 		return fmt.Errorf("invalid copyMode %q (must be one of %q, %q)",
 			cfg.CopyMode, CopyModeLocalBlobResources, CopyModeAllResources)
-	}
-	switch cfg.WeakEdgeFailurePolicy {
-	case "", ociv1alpha1.WeakEdgeFailurePolicyAbort, ociv1alpha1.WeakEdgeFailurePolicySkip:
-	default:
-		return fmt.Errorf("invalid weakEdgeFailurePolicy %q (must be %q or %q)",
-			cfg.WeakEdgeFailurePolicy, ociv1alpha1.WeakEdgeFailurePolicyAbort, ociv1alpha1.WeakEdgeFailurePolicySkip)
 	}
 	return nil
 }
@@ -158,8 +151,8 @@ func Merge(configs ...*Config) *Config {
 		if cfg.UploadType != "" {
 			merged.UploadType = cfg.UploadType
 		}
-		if cfg.WeakEdgeFailurePolicy != "" {
-			merged.WeakEdgeFailurePolicy = cfg.WeakEdgeFailurePolicy
+		if cfg.AllowMissingSubjects {
+			merged.AllowMissingSubjects = true
 		}
 	}
 	return merged

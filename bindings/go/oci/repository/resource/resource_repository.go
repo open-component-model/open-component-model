@@ -62,17 +62,17 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 }
 
 type ResourceRepository struct {
-	filesystemConfig      *filesystemv1alpha1.Config
-	userAgent             string
-	httpClient            *http.Client
-	weakEdgeFailurePolicy oci.WeakEdgeFailurePolicy
+	filesystemConfig     *filesystemv1alpha1.Config
+	userAgent            string
+	httpClient           *http.Client
+	allowMissingSubjects bool
 }
 
-// WithWeakEdgeFailurePolicy returns a copy of the repository that uses the
-// given policy for all copy traversals.
-func (p *ResourceRepository) WithWeakEdgeFailurePolicy(policy oci.WeakEdgeFailurePolicy) ocistream.ResourceRepository {
+// WithAllowMissingSubjects returns a copy of the repository whose copy
+// traversals skip missing subjects and referrers (see [oci.WithAllowMissingSubjects]).
+func (p *ResourceRepository) WithAllowMissingSubjects(allow bool) ocistream.ResourceRepository {
 	c := *p
-	c.weakEdgeFailurePolicy = policy
+	c.allowMissingSubjects = allow
 	return &c
 }
 
@@ -222,7 +222,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 }
 
 func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *ocicredsv1.OCICredentials) (*oci.Repository, error) {
-	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient, p.weakEdgeFailurePolicy)
+	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient, p.allowMissingSubjects)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -245,7 +245,7 @@ func createRepository(
 	filesystemConfig *filesystemv1alpha1.Config,
 	userAgent string,
 	httpClient *http.Client,
-	weakEdgeFailurePolicy oci.WeakEdgeFailurePolicy,
+	allowMissingSubjects bool,
 ) (*oci.Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
@@ -273,7 +273,7 @@ func createRepository(
 		oci.WithResolver(urlResolver),
 		oci.WithCreator(userAgent),
 		oci.WithTempDir(tempDir), // the filesystem config being empty is a valid config
-		oci.WithWeakEdgeFailurePolicy(weakEdgeFailurePolicy),
+		oci.WithAllowMissingSubjects(allowMissingSubjects),
 	}
 
 	repo, err := oci.NewRepository(options...)

@@ -72,16 +72,12 @@ func (t *TransferOCIArtifact) Transform(ctx context.Context, step runtime.Typed)
 		return nil, fmt.Errorf("repository does not support streaming transfers")
 	}
 
-	if transformation.Spec.WeakEdgeFailurePolicy != "" {
-		policy, err := parseWeakEdgeFailurePolicy(transformation.Spec.WeakEdgeFailurePolicy)
-		if err != nil {
-			return nil, err
-		}
-		configurable, ok := streamingRepo.(weakEdgeFailurePolicyConfigurable)
+	if transformation.Spec.AllowMissingSubjects {
+		configurable, ok := streamingRepo.(missingSubjectsConfigurable)
 		if !ok {
-			return nil, fmt.Errorf("repository %T does not support configuring a weak edge failure policy", streamingRepo)
+			return nil, fmt.Errorf("repository %T does not support allowing missing subjects", streamingRepo)
 		}
-		streamingRepo = configurable.WithWeakEdgeFailurePolicy(policy)
+		streamingRepo = configurable.WithAllowMissingSubjects(true)
 	}
 
 	stream, err := streamingRepo.DownloadResourceStream(ctx, srcResource, srcCreds)

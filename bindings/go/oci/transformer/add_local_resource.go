@@ -41,7 +41,7 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	var resource *v2.Resource
 	var output any
 	var globalAccessPolicy ocirepospecv1.GlobalAccessPolicy
-	var weakEdgeFailurePolicy v1alpha1.WeakEdgeFailurePolicy
+	var allowMissingSubjects bool
 
 	switch tr := transformation.(type) {
 	case *v1alpha1.OCIAddLocalResource:
@@ -51,7 +51,7 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		resource = tr.Spec.Resource
 		contentSpec = tr.Spec.File
 		globalAccessPolicy = tr.Spec.GlobalAccessPolicy
-		weakEdgeFailurePolicy = tr.Spec.WeakEdgeFailurePolicy
+		allowMissingSubjects = tr.Spec.AllowMissingSubjects
 		if tr.Output == nil {
 			tr.Output = &v1alpha1.OCIAddLocalResourceOutput{}
 		}
@@ -62,7 +62,7 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		version = tr.Spec.Version
 		resource = tr.Spec.Resource
 		contentSpec = tr.Spec.File
-		weakEdgeFailurePolicy = tr.Spec.WeakEdgeFailurePolicy
+		allowMissingSubjects = tr.Spec.AllowMissingSubjects
 		if tr.Output == nil {
 			tr.Output = &v1alpha1.CTFAddLocalResourceOutput{}
 		}
@@ -105,13 +105,9 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	// Always set explicitly to avoid leaking state from prior transforms on the
 	// same cached repository instance.
 	if ociRepo, ok := repo.(*oci.Repository); ok {
-		policy, err := parseWeakEdgeFailurePolicy(weakEdgeFailurePolicy)
-		if err != nil {
-			return nil, err
-		}
-		ociRepo.SetWeakEdgeFailurePolicy(policy)
-	} else if weakEdgeFailurePolicy != "" {
-		return nil, fmt.Errorf("weakEdgeFailurePolicy is only supported for OCI and CTF repositories, got %T", repo)
+		ociRepo.SetAllowMissingSubjects(allowMissingSubjects)
+	} else if allowMissingSubjects {
+		return nil, fmt.Errorf("allowMissingSubjects is only supported for OCI and CTF repositories, got %T", repo)
 	}
 
 	// Apply global access policy from transformer spec.

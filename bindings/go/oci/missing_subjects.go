@@ -17,37 +17,25 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 )
 
-// WeakEdgeFailurePolicy defines how copy traversals treat weak edges (subject
-// and referrer references) whose target does not exist in the source.
+// WithAllowMissingSubjects configures copies to skip subjects and referrers
+// whose target does not exist in the source, instead of failing.
 // Registries accept referrers of absent subjects, and retention or mirroring
-// can remove targets later. Strong edges (config, layers, index children)
-// always fail the copy when their target is missing.
-type WeakEdgeFailurePolicy int
-
-const (
-	// WeakEdgeFailurePolicyAbort fails the copy on a missing weak-edge target
-	// (upstream ORAS behavior). This is the default.
-	WeakEdgeFailurePolicyAbort WeakEdgeFailurePolicy = iota
-	// WeakEdgeFailurePolicySkip logs a warning and drops the dangling edge.
-	// Content reachable only through the dropped edge is not copied.
-	WeakEdgeFailurePolicySkip
-)
-
-// WithWeakEdgeFailurePolicy sets the WeakEdgeFailurePolicy for the repository.
-func WithWeakEdgeFailurePolicy(policy WeakEdgeFailurePolicy) RepositoryOption {
+// can remove targets later. Content reachable only through a skipped edge is
+// not copied. Missing config, layers or index children always fail the copy.
+func WithAllowMissingSubjects(allow bool) RepositoryOption {
 	return func(o *RepositoryOptions) {
-		o.WeakEdgeFailurePolicy = policy
+		o.AllowMissingSubjects = allow
 	}
 }
 
-// SetWeakEdgeFailurePolicy overrides the weak edge failure policy for this repository.
-func (repo *Repository) SetWeakEdgeFailurePolicy(policy WeakEdgeFailurePolicy) {
-	repo.weakEdgeFailurePolicy = policy
+// SetAllowMissingSubjects overrides [WithAllowMissingSubjects] for this repository.
+func (repo *Repository) SetAllowMissingSubjects(allow bool) {
+	repo.allowMissingSubjects = allow
 }
 
 func (repo *Repository) copyGraphOptions() oras.CopyGraphOptions {
 	opts := repo.resourceCopyOptions.CopyGraphOptions
-	if repo.weakEdgeFailurePolicy == WeakEdgeFailurePolicySkip {
+	if repo.allowMissingSubjects {
 		opts.FindSuccessors = skipMissingSubject(opts.FindSuccessors)
 	}
 	return opts
@@ -55,7 +43,7 @@ func (repo *Repository) copyGraphOptions() oras.CopyGraphOptions {
 
 func (repo *Repository) extendedCopyGraphOptions() oras.ExtendedCopyGraphOptions {
 	opts := oras.ExtendedCopyGraphOptions{CopyGraphOptions: repo.copyGraphOptions()}
-	if repo.weakEdgeFailurePolicy == WeakEdgeFailurePolicySkip {
+	if repo.allowMissingSubjects {
 		opts.FindPredecessors = skipMissingReferrers
 	}
 	return opts
@@ -104,7 +92,7 @@ func skipMissingSubject(next findSuccessorsFunc) findSuccessorsFunc {
 		if exists {
 			return successors, nil
 		}
-		warnSkippedWeakEdge(ctx, "subject", *manifest.Subject)
+		warnSkippedMissing(ctx, "subject", *manifest.Subject)
 		return slices.DeleteFunc(successors, func(s ociImageSpecV1.Descriptor) bool {
 			return s.Digest == manifest.Subject.Digest
 		}), nil
@@ -125,7 +113,7 @@ func skipMissingReferrers(ctx context.Context, src content.ReadOnlyGraphStorage,
 			return nil, fmt.Errorf("failed to check referrer %s of %s: %w", p.Digest, desc.Digest, err)
 		}
 		if !exists {
-			warnSkippedWeakEdge(ctx, "referrer", p)
+			warnSkippedMissing(ctx, "referrer", p)
 			continue
 		}
 		kept = append(kept, p)
@@ -149,6 +137,6 @@ func contentExists(ctx context.Context, fetcher content.Fetcher, desc ociImageSp
 	return true, rc.Close()
 }
 
-func warnSkippedWeakEdge(ctx context.Context, edge string, desc ociImageSpecV1.Descriptor) {
-	slogcontext.FromCtx(ctx).WarnContext(ctx, "skipping missing weak edge target during OCI copy", slog.String("edge", edge), log.DescriptorLogAttr(desc))
+func warnSkippedMissing(ctx context.Context, edge string, desc ociImageSpecV1.Descriptor) {
+	slogcontext.FromCtx(ctx).WarnContext(ctx, "skipping missing subject or referrer during OCI copy", slog.String("edge", edge), log.DescriptorLogAttr(desc))
 }

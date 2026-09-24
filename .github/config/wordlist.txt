@@ -17,6 +17,7 @@ aggregative
 agpl
 algo
 allowlist
+allowMissingSubjects
 alpn
 aml
 anchore
@@ -872,7 +873,6 @@ walkthrough
 warroom
 wasm
 wasmstep
-weakEdgeFailurePolicy
 webhook
 webhooks
 webserver

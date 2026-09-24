@@ -78,8 +78,8 @@ type Repository struct {
 	// These options are used in copyResource.
 	resourceCopyOptions oras.CopyOptions
 
-	// weakEdgeFailurePolicy defines how copy traversals treat missing weak-edge targets.
-	weakEdgeFailurePolicy WeakEdgeFailurePolicy
+	// allowMissingSubjects makes copy traversals skip missing subjects and referrers.
+	allowMissingSubjects bool
 
 	// referrerTrackingPolicy defines how OCI referrers are used to track component versions.
 	referrerTrackingPolicy ReferrerTrackingPolicy

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -53,7 +54,7 @@ func (g *ghostReferrers) Predecessors(ctx context.Context, desc ociImageSpecV1.D
 	return append(predecessors, g.ghost), nil
 }
 
-func TestWeakEdgeFailurePolicy(t *testing.T) {
+func TestAllowMissingSubjects(t *testing.T) {
 	newStore := func(t *testing.T) *memory.Store {
 		store := memory.New()
 		pushTestBlob(t, store, ociImageSpecV1.MediaTypeEmptyJSON, ociImageSpecV1.DescriptorEmptyJSON.Data)
@@ -123,16 +124,16 @@ func TestWeakEdgeFailurePolicy(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		for policyName, policy := range map[string]WeakEdgeFailurePolicy{"abort": WeakEdgeFailurePolicyAbort, "skip": WeakEdgeFailurePolicySkip} {
+		for _, allow := range []bool{false, true} {
 			wantErr := tc.abortFails
-			if policy == WeakEdgeFailurePolicySkip {
+			if allow {
 				wantErr = tc.skipFails
 			}
-			t.Run(tc.name+"/"+policyName, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/allowMissingSubjects=%t", tc.name, allow), func(t *testing.T) {
 				r := require.New(t)
 				src, root := tc.setup(t)
 				dst := memory.New()
-				repo := &Repository{weakEdgeFailurePolicy: policy}
+				repo := &Repository{allowMissingSubjects: allow}
 
 				err := oras.ExtendedCopyGraph(t.Context(), src, dst, root, repo.extendedCopyGraphOptions())
 				if wantErr {

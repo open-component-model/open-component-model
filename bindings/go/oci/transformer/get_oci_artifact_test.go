@@ -15,7 +15,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
@@ -257,26 +256,24 @@ func TestGetOCIArtifact_Transform_OCI_Should_Default_No_Ext(t *testing.T) {
 	assert.Equal(t, "1.21.0", transformed.Output.Resource.Version)
 }
 
-// mockRepositoryForGetOCIConfigurable additionally supports configuring the
-// weak edge failure policy.
+// mockRepositoryForGetOCIConfigurable additionally supports allowing missing
+// subjects.
 type mockRepositoryForGetOCIConfigurable struct {
 	ocistream.ResourceRepository
-	returnBlob           blob.ReadOnlyBlob
-	policy               oci.WeakEdgeFailurePolicy
-	withPolicyConfigured bool
+	returnBlob blob.ReadOnlyBlob
+	configured bool
 }
 
 func (m *mockRepositoryForGetOCIConfigurable) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	return m.returnBlob, nil
 }
 
-func (m *mockRepositoryForGetOCIConfigurable) WithWeakEdgeFailurePolicy(policy oci.WeakEdgeFailurePolicy) ocistream.ResourceRepository {
-	m.withPolicyConfigured = true
-	m.policy = policy
+func (m *mockRepositoryForGetOCIConfigurable) WithAllowMissingSubjects(allow bool) ocistream.ResourceRepository {
+	m.configured = allow
 	return m
 }
 
-func testGetOCIArtifactSpec(weakEdgeFailurePolicy v1alpha1.WeakEdgeFailurePolicy) *v1alpha1.GetOCIArtifact {
+func testGetOCIArtifactSpec(allowMissingSubjects bool) *v1alpha1.GetOCIArtifact {
 	return &v1alpha1.GetOCIArtifact{
 		Type: runtime.NewVersionedType(v1alpha1.GetOCIArtifactType, v1alpha1.Version),
 		ID:   "test-get-oci-transform",
@@ -298,12 +295,12 @@ func testGetOCIArtifactSpec(weakEdgeFailurePolicy v1alpha1.WeakEdgeFailurePolicy
 					Data: []byte(`{ "imageReference": "ghcr.io/open-component-model/helmexample/charts/mariadb:12.2.7" }`),
 				},
 			},
-			WeakEdgeFailurePolicy: weakEdgeFailurePolicy,
+			AllowMissingSubjects: allowMissingSubjects,
 		},
 	}
 }
 
-func TestGetOCIArtifact_WeakEdgeFailurePolicy(t *testing.T) {
+func TestGetOCIArtifact_AllowMissingSubjects(t *testing.T) {
 	ctx := t.Context()
 
 	newScheme := func() *runtime.Scheme {
@@ -320,65 +317,46 @@ func TestGetOCIArtifact_WeakEdgeFailurePolicy(t *testing.T) {
 		return b
 	}
 
-	t.Run("skip policy is applied to the download repository", func(t *testing.T) {
+	t.Run("allowMissingSubjects is applied to the download repository", func(t *testing.T) {
 		mockRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
 		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo}
 
-		result, err := transformer.Transform(ctx, testGetOCIArtifactSpec(v1alpha1.WeakEdgeFailurePolicySkip))
+		result, err := transformer.Transform(ctx, testGetOCIArtifactSpec(true))
 		require.NoError(t, err)
-		require.True(t, mockRepo.withPolicyConfigured)
-		require.Equal(t, oci.WeakEdgeFailurePolicySkip, mockRepo.policy)
+		require.True(t, mockRepo.configured)
 		transformed, ok := result.(*v1alpha1.GetOCIArtifact)
 		require.True(t, ok)
 		require.NotNil(t, transformed.Output)
 	})
 
-	t.Run("unset policy leaves the repository untouched", func(t *testing.T) {
+	t.Run("unset leaves the repository untouched", func(t *testing.T) {
 		mockRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
-		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo}
+		fallbackRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
+		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo, FallbackRepository: fallbackRepo}
 
-		result, err := transformer.Transform(ctx, testGetOCIArtifactSpec(""))
+		result, err := transformer.Transform(ctx, testGetOCIArtifactSpec(false))
 		require.NoError(t, err)
-		require.False(t, mockRepo.withPolicyConfigured)
+		require.False(t, mockRepo.configured)
+		require.False(t, fallbackRepo.configured)
 		require.NotNil(t, result)
 	})
 
-	t.Run("invalid policy fails", func(t *testing.T) {
-		mockRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
-		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo}
-
-		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec("garbage"))
-		require.ErrorContains(t, err, "garbage")
-		require.False(t, mockRepo.withPolicyConfigured)
-	})
-
-	t.Run("repository without policy support uses the policy repository", func(t *testing.T) {
+	t.Run("repository without support uses the fallback repository", func(t *testing.T) {
 		mockRepo := &mockRepositoryForGetOCI{returnBlob: testBlob()}
-		policyRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
-		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo, PolicyRepository: policyRepo}
+		fallbackRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
+		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo, FallbackRepository: fallbackRepo}
 
-		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec(v1alpha1.WeakEdgeFailurePolicySkip))
+		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec(true))
 		require.NoError(t, err)
-		require.True(t, policyRepo.withPolicyConfigured)
-		require.Equal(t, oci.WeakEdgeFailurePolicySkip, policyRepo.policy)
+		require.True(t, fallbackRepo.configured)
 	})
 
-	t.Run("repository without policy support keeps the repository for abort", func(t *testing.T) {
-		mockRepo := &mockRepositoryForGetOCI{returnBlob: testBlob()}
-		policyRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
-		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo, PolicyRepository: policyRepo}
-
-		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec(v1alpha1.WeakEdgeFailurePolicyAbort))
-		require.NoError(t, err)
-		require.False(t, policyRepo.withPolicyConfigured)
-	})
-
-	t.Run("repository without policy support and no policy repository fails", func(t *testing.T) {
+	t.Run("repository without support and no fallback repository fails", func(t *testing.T) {
 		mockRepo := &mockRepositoryForGetOCI{returnBlob: testBlob()}
 		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo}
 
-		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec(v1alpha1.WeakEdgeFailurePolicySkip))
-		require.ErrorContains(t, err, "does not support configuring a weak edge failure policy")
+		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec(true))
+		require.ErrorContains(t, err, "does not support allowing missing subjects")
 	})
 }
 
