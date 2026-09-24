@@ -102,12 +102,8 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		return nil, fmt.Errorf("failed getting component version repository: %w", err)
 	}
 
-	// Always set explicitly to avoid leaking state from prior transforms on the
-	// same cached repository instance.
-	if ociRepo, ok := repo.(*oci.Repository); ok {
-		ociRepo.SetAllowMissingSubjects(allowMissingSubjects)
-	} else if allowMissingSubjects {
-		return nil, fmt.Errorf("allowMissingSubjects is only supported for OCI and CTF repositories, got %T", repo)
+	if err := setAllowMissingSubjects(repo, allowMissingSubjects); err != nil {
+		return nil, err
 	}
 
 	// Apply global access policy from transformer spec.

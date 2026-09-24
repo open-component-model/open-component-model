@@ -334,3 +334,21 @@ func TestGetLocalResource_Transform_ValidationErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestGetLocalResource_AllowMissingSubjects_UnsupportedRepository(t *testing.T) {
+	scheme := runtime.NewScheme()
+	scheme.MustRegisterWithAlias(&v1alpha1.OCIGetLocalResource{}, v1alpha1.OCIGetLocalResourceV1alpha1)
+	transformer := &GetLocalResource{Scheme: scheme, RepoProvider: &mockRepoProviderForGet{repo: &mockRepositoryForGet{}}}
+
+	_, err := transformer.Transform(t.Context(), &v1alpha1.OCIGetLocalResource{
+		Type: v1alpha1.OCIGetLocalResourceV1alpha1,
+		Spec: &v1alpha1.OCIGetLocalResourceSpec{
+			Repository:           ocispec.Repository{Type: runtime.NewVersionedType(ocispec.Type, "v1"), BaseUrl: "ghcr.io/test"},
+			Component:            "ocm.software/test-component",
+			Version:              "1.0.0",
+			ResourceIdentity:     runtime.Identity{"name": "test-resource"},
+			AllowMissingSubjects: true,
+		},
+	})
+	require.ErrorContains(t, err, "allowMissingSubjects is only supported for OCI and CTF repositories")
+}

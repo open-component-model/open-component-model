@@ -18,6 +18,9 @@ type AddOCIArtifact struct {
 	Scheme             *runtime.Scheme
 	Repository         repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// FallbackRepository is used instead of Repository if missing subjects are
+	// allowed and Repository cannot carry that setting.
+	FallbackRepository missingSubjectsConfigurable
 }
 
 func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -44,9 +47,14 @@ func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	// Convert resource to internal format
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
 
+	repo, err := withAllowMissingSubjects(t.Repository, t.FallbackRepository, transformation.Spec.AllowMissingSubjects)
+	if err != nil {
+		return nil, err
+	}
+
 	var creds runtime.Typed
 	if t.CredentialProvider != nil {
-		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
+		if consumerId, err := repo.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
 			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
 				if !errors.Is(err, credentials.ErrNotFound) {
 					return nil, fmt.Errorf("failed resolving credentials: %w", err)
@@ -62,7 +70,7 @@ func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	}
 
 	// Upload blob to repository - this will update the access spec with the oci access
-	updatedResource, err := t.Repository.UploadResource(ctx, targetResource, blobContent, creds)
+	updatedResource, err := repo.UploadResource(ctx, targetResource, blobContent, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed uploading OCI artifact %v: %w", targetResource.ToIdentity(), err)
 	}

@@ -6,6 +6,10 @@
   "type": "object",
   "description": "AddOCIArtifactSpec is the input specification for the\nAddOCIArtifact transformation.",
   "properties": {
+    "allowMissingSubjects": {
+      "type": "boolean",
+      "description": "AllowMissingSubjects makes the copy skip subjects and referrers whose\ntarget does not exist in the source, with a warning, instead of failing."
+    },
     "file": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.blob.filesystem.spec.access.v1alpha1.File",
       "description": "File is the access specification to the file that should be added"

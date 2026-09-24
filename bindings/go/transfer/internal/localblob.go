@@ -13,7 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool, allowMissingSubjects bool) error {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 	sourceRepo := val.SourceRepository
@@ -53,6 +53,9 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 			"version":          version,
 			"resourceIdentity": resourceIdentityMap,
 		}},
+	}
+	if allowMissingSubjects {
+		getResourceTransform.Spec.Data["allowMissingSubjects"] = true
 	}
 	tgd.Transformations = append(tgd.Transformations, getResourceTransform)
 
@@ -116,6 +119,9 @@ func processLocalBlob(resource descriptorv2.Resource, _ *descriptorv2.LocalBlob,
 				"file": fmt.Sprintf("${%s.output.file}", getResourceID),
 			}},
 		}
+	}
+	if allowMissingSubjects {
+		addResourceTransform.Spec.Data["allowMissingSubjects"] = true
 	}
 	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
 	// Track this resource's transformation

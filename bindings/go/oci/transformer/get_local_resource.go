@@ -34,6 +34,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	var component, version string
 	var resourceIdentity runtime.Identity
 	var outputPath string
+	var allowMissingSubjects bool
 	var output interface{}
 
 	switch tr := transformation.(type) {
@@ -43,6 +44,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		version = tr.Spec.Version
 		resourceIdentity = tr.Spec.ResourceIdentity
 		outputPath = tr.Spec.OutputPath
+		allowMissingSubjects = tr.Spec.AllowMissingSubjects
 		if tr.Output == nil {
 			tr.Output = &v1alpha1.OCIGetLocalResourceOutput{}
 		}
@@ -53,6 +55,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		version = tr.Spec.Version
 		resourceIdentity = tr.Spec.ResourceIdentity
 		outputPath = tr.Spec.OutputPath
+		allowMissingSubjects = tr.Spec.AllowMissingSubjects
 		if tr.Output == nil {
 			tr.Output = &v1alpha1.CTFGetLocalResourceOutput{}
 		}
@@ -87,6 +90,9 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, repoSpec, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting component version repository: %w", err)
+	}
+	if err := setAllowMissingSubjects(repo, allowMissingSubjects); err != nil {
+		return nil, err
 	}
 
 	// Get local resource

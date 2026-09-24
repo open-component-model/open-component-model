@@ -52,15 +52,9 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	}
 	targetResource := descriptor.ConvertFromV2Resource(resource)
 
-	repo := t.Repository
-	if transformation.Spec.AllowMissingSubjects {
-		if configurable, ok := repo.(missingSubjectsConfigurable); ok {
-			repo = configurable.WithAllowMissingSubjects(true)
-		} else if t.FallbackRepository != nil {
-			repo = t.FallbackRepository.WithAllowMissingSubjects(true)
-		} else {
-			return nil, fmt.Errorf("repository %T does not support allowing missing subjects", repo)
-		}
+	repo, err := withAllowMissingSubjects(t.Repository, t.FallbackRepository, transformation.Spec.AllowMissingSubjects)
+	if err != nil {
+		return nil, err
 	}
 
 	var creds runtime.Typed

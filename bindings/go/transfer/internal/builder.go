@@ -17,6 +17,7 @@ import (
 	s3transformer "ocm.software/open-component-model/bindings/go/s3/transformation"
 	s3v1alpha1 "ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
+	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgettransformer "ocm.software/open-component-model/bindings/go/wget/transformation"
 	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
@@ -38,6 +39,7 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(wgetv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(s3v1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(githubv1alpha1.Scheme)
+	transformerScheme.MustRegisterScheme(wgetaccess.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
 		Scheme:             transformerScheme,
@@ -91,6 +93,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		Repository:         resourceRepo,
 		CredentialProvider: credentialProvider,
+		FallbackRepository: ociResourceRepo,
 	}
 
 	// Streaming OCI-to-OCI transfer transformer
@@ -131,6 +134,14 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 	}
 
+	// HTTP streaming transformer (uploader configurations)
+	httpStreaming := &wgettransformer.HTTPStreamingTransformer{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+		HTTPConfig:         httpConfig,
+	}
+
 	// File cleanup transformer
 	transformerScheme.MustRegisterWithAlias(&FileCleanupTransformation{}, FileCleanupVersionedType)
 	fileCleanup := &FileCleanup{
@@ -154,5 +165,6 @@ func NewDefaultBuilder(
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
+		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }

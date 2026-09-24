@@ -140,7 +140,7 @@ func TestBuildGraphDefinition_SingleMapping(t *testing.T) {
 	desc := testDescriptor("ocm.software/test", "1.0.0", nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
-	tgd, err := BuildGraphDefinition(t.Context(), nil,
+	tgd, err := BuildGraphDefinition(t.Context(), nil, nil,
 		Mapping{
 			Components: []ComponentID{{Component: "ocm.software/test", Version: "1.0.0"}},
 			Target:     targetRepo,
@@ -178,7 +178,7 @@ func TestBuildGraphDefinition_MultipleComponentsSameTarget(t *testing.T) {
 		"ocm.software/b:2.0.0": {spec: sourceRepo, desc: descB},
 	})
 
-	tgd, err := BuildGraphDefinition(t.Context(), nil,
+	tgd, err := BuildGraphDefinition(t.Context(), nil, nil,
 		Mapping{
 			Components: []ComponentID{
 				{Component: "ocm.software/a", Version: "1.0.0"},
@@ -212,7 +212,7 @@ func TestBuildGraphDefinition_DifferentComponentsDifferentTargets(t *testing.T) 
 	resolverA := testResolverFor("ocm.software/a", "1.0.0", sourceA, descA)
 	resolverB := testResolverFor("ocm.software/b", "2.0.0", sourceB, descB)
 
-	tgd, err := BuildGraphDefinition(t.Context(), nil,
+	tgd, err := BuildGraphDefinition(t.Context(), nil, nil,
 		Mapping{
 			Components: []ComponentID{{Component: "ocm.software/a", Version: "1.0.0"}},
 			Target:     targetA,
@@ -245,7 +245,7 @@ func TestBuildGraphDefinition_SameComponentMultipleTargets(t *testing.T) {
 	desc := testDescriptor("ocm.software/test", "1.0.0", nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
-	tgd, err := BuildGraphDefinition(t.Context(), nil,
+	tgd, err := BuildGraphDefinition(t.Context(), nil, nil,
 		Mapping{
 			Components: []ComponentID{{Component: "ocm.software/test", Version: "1.0.0"}},
 			Target:     target1,
@@ -287,7 +287,7 @@ func TestBuildGraphDefinition_RepositoryResolver(t *testing.T) {
 		},
 	}
 
-	tgd, err := BuildGraphDefinition(t.Context(), nil,
+	tgd, err := BuildGraphDefinition(t.Context(), nil, nil,
 		Mapping{
 			Components: []ComponentID{{Component: "ocm.software/test", Version: "1.0.0"}},
 			Target:     targetRepo,
@@ -328,7 +328,7 @@ func TestBuildGraphDefinition_ComponentLister(t *testing.T) {
 		})
 	})
 
-	tgd, err := BuildGraphDefinition(t.Context(), nil,
+	tgd, err := BuildGraphDefinition(t.Context(), nil, nil,
 		Mapping{ComponentLister: lister, Target: targetRepo, Resolver: resolver},
 	)
 	require.NoError(t, err)
@@ -367,6 +367,7 @@ func TestBuildGraphDefinition_Recursive(t *testing.T) {
 
 	tgd, err := BuildGraphDefinition(t.Context(),
 		&transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite},
+		nil,
 		Mapping{
 			Components: []ComponentID{{Component: "ocm.software/parent", Version: "1.0.0"}},
 			Target:     targetRepo,
@@ -389,7 +390,7 @@ func TestBuildGraphDefinition_Recursive(t *testing.T) {
 // --- Validation error tests ---
 
 func TestBuildGraphDefinition_NoMappings(t *testing.T) {
-	_, err := BuildGraphDefinition(t.Context(), nil)
+	_, err := BuildGraphDefinition(t.Context(), nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no transfer mappings")
 }
@@ -399,7 +400,7 @@ func TestBuildGraphDefinition_MissingTarget(t *testing.T) {
 		specs: map[string]runtime.Typed{},
 		repos: map[string]repository.ComponentVersionRepository{},
 	}
-	_, err := BuildGraphDefinition(t.Context(), nil,
+	_, err := BuildGraphDefinition(t.Context(), nil, nil,
 		Mapping{
 			Components: []ComponentID{{Component: "ocm.software/test", Version: "1.0.0"}},
 			Resolver:   resolver,
@@ -411,7 +412,7 @@ func TestBuildGraphDefinition_MissingTarget(t *testing.T) {
 
 func TestBuildGraphDefinition_MissingResolver(t *testing.T) {
 	targetRepo := testOCITarget("ghcr.io/target")
-	_, err := BuildGraphDefinition(t.Context(), nil,
+	_, err := BuildGraphDefinition(t.Context(), nil, nil,
 		Mapping{
 			Components: []ComponentID{{Component: "ocm.software/test", Version: "1.0.0"}},
 			Target:     targetRepo,
@@ -427,7 +428,7 @@ func TestBuildGraphDefinition_MissingComponents(t *testing.T) {
 		specs: map[string]runtime.Typed{},
 		repos: map[string]repository.ComponentVersionRepository{},
 	}
-	_, err := BuildGraphDefinition(t.Context(), nil,
+	_, err := BuildGraphDefinition(t.Context(), nil, nil,
 		Mapping{
 			Target:   targetRepo,
 			Resolver: resolver,
@@ -477,7 +478,7 @@ func TestBuildGraphDefinition_EmptyListerResult(t *testing.T) {
 		return fn([]ComponentID{})
 	})
 
-	_, err := BuildGraphDefinition(t.Context(), nil,
+	_, err := BuildGraphDefinition(t.Context(), nil, nil,
 		Mapping{ComponentLister: lister, Target: targetRepo, Resolver: resolver},
 	)
 	require.Error(t, err)
