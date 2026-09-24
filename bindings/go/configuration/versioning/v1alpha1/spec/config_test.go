@@ -208,3 +208,18 @@ func TestRegistry_UnknownComparisonGroupFails(t *testing.T) {
 	r.Error(err)
 	r.Contains(err.Error(), "is not a named capture group")
 }
+
+func TestRegistry_DuplicateComparisonGroupFails(t *testing.T) {
+	r := require.New(t)
+	// The same capture-group name repeated across alternation branches is
+	// ambiguous: only one branch matches, so extracting "n" silently loses the
+	// value and versions that should differ compare equal. Reject it at load.
+	cfg := &versioningspec.Config{
+		Schemes: []versioningspec.VersionScheme{
+			{Name: "dup", Pattern: `^(?:v(?P<n>\d+)|r(?P<n>\d+))$`, ComparisonGroups: []string{"n"}},
+		},
+	}
+	_, err := cfg.Registry()
+	r.Error(err)
+	r.Contains(err.Error(), "declared 2 times")
+}

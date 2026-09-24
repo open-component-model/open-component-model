@@ -192,15 +192,24 @@ func (c *Config) Registry() (*versioning.Registry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("versioning scheme %q (index %d): invalid pattern: %w", s.Name, i, err)
 		}
-		names := make(map[string]struct{}, len(pattern.SubexpNames()))
+		names := make(map[string]int, len(pattern.SubexpNames()))
 		for _, name := range pattern.SubexpNames() {
 			if name != "" {
-				names[name] = struct{}{}
+				names[name]++
 			}
 		}
 		for _, group := range s.ComparisonGroups {
-			if _, ok := names[group]; !ok {
+			switch names[group] {
+			case 0:
 				return nil, fmt.Errorf("versioning scheme %q: comparison group %q is not a named capture group in the pattern", s.Name, group)
+			case 1:
+				// unique named group — extraction is unambiguous.
+			default:
+				// Go's regexp allows repeating a capture-group name across alternation
+				// branches, but only one branch matches, so the others overwrite the
+				// extracted value with an empty string and versions that should differ
+				// compare equal. Reject the ambiguity at load time.
+				return nil, fmt.Errorf("versioning scheme %q: comparison group %q is declared %d times in the pattern; a comparison group must be a single named capture group", s.Name, group, names[group])
 			}
 		}
 		name := s.Name

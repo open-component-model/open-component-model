@@ -125,7 +125,7 @@ Print the effective merged configuration to verify the CalVer scheme is loaded:
 ocm --config versioning.ocmconfig get config
 ```
 
-The output includes your `versioning.config.ocm.software/v1alpha1` entry.
+The effective configuration includes your `versioning.config.ocm.software/v1alpha1` entry with its `schemes`, confirming the CalVer scheme is active.
 
 {{< /step >}}
 {{< /steps >}}

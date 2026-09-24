@@ -236,25 +236,34 @@ func (r *Registry) Filter(versions []string, constraint string) ([]string, error
 	if constraint == "" {
 		return versions, nil
 	}
+	// Validate the constraint once against the whole registry. A constraint no
+	// scheme can parse in its own grammar is malformed and fails fast here. A
+	// constraint that is well-formed in at least one scheme's grammar (its own or
+	// a foreign scheme's) is usable; per-version evaluation below then treats a
+	// version whose own scheme cannot express the constraint as a retained,
+	// foreign history rather than an error.
+	if err := r.ValidateConstraint(constraint); err != nil {
+		return nil, err
+	}
 	filtered := make([]string, 0, len(versions))
 	for _, version := range versions {
 		// A version no scheme claims, or one whose scheme cannot express the
 		// constraint (a foreign grammar, e.g. a semver range over a calver
-		// history), is retained unchanged so a constraint never silently discards
-		// an unrecognized history. A constraint malformed in the scheme's own
-		// grammar surfaces as an error.
+		// history, or a foreign relational range over a semver history), is
+		// retained unchanged so a constraint never silently discards an
+		// unrecognized history.
 		s := r.schemeFor(version)
 		if s == nil {
 			filtered = append(filtered, version)
 			continue
 		}
 		ok, err := s.Satisfies(version, constraint)
-		if errors.Is(err, ErrConstraintNotApplicable) {
+		if err != nil {
+			// The constraint is registry-valid (checked above), so any error here
+			// means the version's own scheme cannot interpret it: a foreign
+			// grammar. Retain the version rather than aborting.
 			filtered = append(filtered, version)
 			continue
-		}
-		if err != nil {
-			return nil, err
 		}
 		if ok {
 			filtered = append(filtered, version)
@@ -276,18 +285,26 @@ func (r *Registry) Satisfies(version, constraint string) (bool, error) {
 	if constraint == "" {
 		return true, nil
 	}
+	// Validate the constraint once against the whole registry so a malformed
+	// constraint (parseable by no scheme's grammar) fails fast rather than
+	// silently gating everything out.
+	if err := r.ValidateConstraint(constraint); err != nil {
+		return false, err
+	}
 	// A version no scheme claims, or one whose scheme cannot express the
-	// constraint (a foreign grammar), never satisfies it (strict gate). A
-	// constraint malformed in the scheme's own grammar surfaces as an error.
+	// constraint (a foreign grammar), never satisfies it (strict gate).
 	s := r.schemeFor(version)
 	if s == nil {
 		return false, nil
 	}
 	ok, err := s.Satisfies(version, constraint)
-	if errors.Is(err, ErrConstraintNotApplicable) {
+	if err != nil {
+		// The constraint is registry-valid (checked above), so an error here means
+		// the version's own scheme cannot interpret it: a foreign grammar. Under a
+		// strict gate that version does not satisfy the constraint.
 		return false, nil
 	}
-	return ok, err
+	return ok, nil
 }
 
 // ValidateConstraint reports whether the constraint is well-formed for at least
@@ -460,7 +477,11 @@ func (s *regexScheme) Satisfies(version, constraint string) (bool, error) {
 	if err := s.ValidateConstraint(constraint); err != nil {
 		return false, err
 	}
-	for _, t := range parseConstraintTerms(constraint) {
+	terms, err := parseConstraintTerms(constraint)
+	if err != nil {
+		return false, err
+	}
+	for _, t := range terms {
 		c, err := s.Compare(version, t.operand)
 		if err != nil {
 			return false, err
@@ -478,7 +499,11 @@ func (s *regexScheme) ValidateConstraint(constraint string) error {
 	if constraint == "" {
 		return nil
 	}
-	for _, t := range parseConstraintTerms(constraint) {
+	terms, err := parseConstraintTerms(constraint)
+	if err != nil {
+		return err
+	}
+	for _, t := range terms {
 		if !s.pattern.MatchString(t.operand) {
 			// A regex scheme has no notion of a syntactically malformed constraint:
 			// any operand that is not one of its versions simply means the
@@ -505,9 +530,11 @@ type constraintTerm struct {
 // relational terms. Terms are separated by commas or whitespace, but whitespace
 // between an operator and its operand (for example ">= 2024.03.15") is tolerated
 // so that a spaced constraint parses identically to its unspaced form. A term
-// with no recognized operator defaults to equality ("="). Empty terms are
-// dropped.
-func parseConstraintTerms(constraint string) []constraintTerm {
+// with no recognized operator defaults to equality ("="). A relational operator
+// with no operand (for example a trailing ">=" or a bare "<") is a syntax error
+// in the scheme's own grammar and returns an error, rather than being silently
+// dropped and treated as always satisfied.
+func parseConstraintTerms(constraint string) ([]constraintTerm, error) {
 	// Commas are unambiguous conjunction separators; split on them first, then
 	// scan each chunk for operator/operand pairs so that whitespace can act both
 	// as a term separator (">=1.0.0 <2.0.0") and as padding after an operator
@@ -533,6 +560,9 @@ func parseConstraintTerms(constraint string) []constraintTerm {
 				rest = ""
 			}
 			if operand == "" {
+				if op != "" {
+					return nil, fmt.Errorf("constraint operator %q has no operand", op)
+				}
 				continue
 			}
 			if op == "" {
@@ -541,7 +571,7 @@ func parseConstraintTerms(constraint string) []constraintTerm {
 			terms = append(terms, constraintTerm{op: op, operand: operand})
 		}
 	}
-	return terms
+	return terms, nil
 }
 
 // satisfiesOp reports whether a [regexScheme.Compare] result c (negative when
@@ -576,15 +606,25 @@ func (s *regexScheme) groups(version string) map[string]string {
 	return out
 }
 
-// compareGroup compares two capture-group values, numerically when both are
-// decimal integers and lexically otherwise. Numeric comparison uses arbitrary
-// precision so arbitrarily large groups (e.g. long build numbers) never overflow
-// a machine integer and fall back to lexical ordering.
+// compareGroup compares two capture-group values with a total, transitive order.
+// When both values are decimal integers they compare numerically with arbitrary
+// precision, so arbitrarily large groups (e.g. long build numbers) never overflow
+// a machine integer. When only one value is numeric, numeric values always order
+// before non-numeric values; this fixed bucket ordering keeps the comparison
+// transitive across a mixed set (a pair-dependent numeric/lexical switch is not:
+// with values 2, 10 and "1a" it would yield 2 < 10 < "1a" < 2). Two non-numeric
+// values compare lexically.
 func compareGroup(a, b string) int {
 	na, aok := new(big.Int).SetString(a, 10)
 	nb, bok := new(big.Int).SetString(b, 10)
-	if aok && bok {
+	switch {
+	case aok && bok:
 		return na.Cmp(nb)
+	case aok:
+		return -1 // numeric a sorts before non-numeric b
+	case bok:
+		return 1 // non-numeric a sorts after numeric b
+	default:
+		return strings.Compare(a, b)
 	}
-	return strings.Compare(a, b)
 }

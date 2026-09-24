@@ -320,3 +320,96 @@ func TestVersioning_SatisfiesCalverRelationalAndUnknown(t *testing.T) {
 	r.NoError(err)
 	r.False(ok)
 }
+
+// TestVersioning_CompareMixedNumericTextIsTransitive guards against the
+// non-transitive pair-dependent numeric/lexical switch: with a single
+// alphanumeric capture group, "2", "10" and "1a" must sort deterministically
+// regardless of input permutation (numeric values before non-numeric ones).
+func TestVersioning_CompareMixedNumericTextIsTransitive(t *testing.T) {
+	r := require.New(t)
+	scheme := versioning.NewRegexScheme("alnum",
+		regexp.MustCompile(`^(?P<value>[0-9a-z]+)$`),
+		[]string{"value"})
+	reg := versioning.NewRegistry(scheme)
+
+	// numeric a < numeric b, numeric < non-numeric, and the order is total.
+	c, err := reg.Compare("10", "2")
+	r.NoError(err)
+	r.Positive(c) // 10 > 2 numerically
+	c, err = reg.Compare("1a", "10")
+	r.NoError(err)
+	r.Positive(c) // non-numeric "1a" sorts after numeric "10"
+	c, err = reg.Compare("1a", "2")
+	r.NoError(err)
+	r.Positive(c) // transitive: since 1a > 10 > 2, 1a > 2 as well
+
+	perms := [][]string{
+		{"2", "10", "1a"},
+		{"1a", "2", "10"},
+		{"10", "1a", "2"},
+		{"1a", "10", "2"},
+		{"2", "1a", "10"},
+		{"10", "2", "1a"},
+	}
+	for _, p := range perms {
+		versions := append([]string(nil), p...)
+		r.NoError(reg.SortDescending(versions))
+		// descending: non-numeric "1a" newest, then 10, then 2.
+		r.Equal([]string{"1a", "10", "2"}, versions, "input %v", p)
+	}
+}
+
+// TestVersioning_ConstraintOperatorWithoutOperandRejected guards against a
+// relational operator with no operand being silently dropped (which made ">="
+// match everything).
+func TestVersioning_ConstraintOperatorWithoutOperandRejected(t *testing.T) {
+	r := require.New(t)
+	calver := calverFull()
+
+	for _, c := range []string{">=", "<", ">=2024.03.15 <", ">= "} {
+		_, err := calver.Satisfies("2024.03.15", c)
+		r.Error(err, "constraint %q must be rejected", c)
+		r.Error(calver.ValidateConstraint(c), "constraint %q must be rejected", c)
+	}
+
+	reg := versioning.NewRegistry(calver)
+	_, err := reg.Filter([]string{"2024.03.15", "2024.10.01"}, ">=")
+	r.Error(err)
+	_, err = reg.Satisfies("2024.03.15", ">=")
+	r.Error(err)
+}
+
+// TestVersioning_ForeignConstraintHandlingIsSymmetric guards the documented
+// lenient policy in both directions: a foreign but well-formed relational
+// constraint retains the histories its scheme cannot interpret, rather than
+// aborting once a semver fallback is present.
+func TestVersioning_ForeignConstraintHandlingIsSymmetric(t *testing.T) {
+	r := require.New(t)
+	build := versioning.NewRegexScheme("build",
+		regexp.MustCompile(`^build-(?P<n>\d+)$`),
+		[]string{"n"})
+
+	// build-only history with a build-N constraint filters correctly.
+	regBuild := versioning.NewRegistry(build)
+	out, err := regBuild.Filter([]string{"build-9", "build-100"}, ">=build-100")
+	r.NoError(err)
+	r.Equal([]string{"build-100"}, out)
+
+	// Adding a semver fallback must not turn the same query into an error: the
+	// semver versions cannot interpret the build constraint, so they are retained
+	// (foreign history), while the build versions are filtered.
+	regMix := versioning.NewRegistry(build, versioning.NewLooseSemverScheme())
+	out, err = regMix.Filter([]string{"build-9", "build-100", "1.0.0", "2.0.0"}, ">=build-100")
+	r.NoError(err)
+	r.Equal([]string{"build-100", "1.0.0", "2.0.0"}, out)
+
+	// The reverse direction already worked and must keep working: a semver
+	// constraint retains the build history and filters the semver versions.
+	out, err = regMix.Filter([]string{"build-9", "1.0.0", "2.0.0"}, ">=2.0.0")
+	r.NoError(err)
+	r.Equal([]string{"build-9", "2.0.0"}, out)
+
+	// A constraint no scheme can parse is still malformed and errors.
+	_, err = regMix.Filter([]string{"1.0.0"}, "not-a-constraint")
+	r.Error(err)
+}
