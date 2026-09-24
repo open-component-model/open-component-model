@@ -9,6 +9,8 @@ import (
 )
 
 func init() {
+	// Repository construction installs a client only when HTTPConfig is supplied.
+	// Install the guarded default here so unconfigured downloads are also protected.
 	InstallHTTPClient(nil)
 }
 

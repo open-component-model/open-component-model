@@ -12,9 +12,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
+
 	"path/filepath"
-	"strings"
+
 	"testing"
 	"time"
 
@@ -1309,7 +1309,7 @@ func Test_Integration_AddComponentVersion_GitAccess(t *testing.T) {
 	r.NoError(err)
 
 	// A local repository keeps the test offline; file:// runs the same fetch and archive path as a remote.
-	repoDir, commit := createGitRepository(t)
+	repoDir, commit := internal.CreateGitRepository(t)
 
 	const componentName = "ocm.software/git-access-component"
 	const componentVersion = "v1.0.0"
@@ -1399,28 +1399,6 @@ components:
 	_, err = tr.Next()
 	r.ErrorIs(err, io.EOF)
 
-}
-
-func createGitRepository(t *testing.T) (dir, commit string) {
-	t.Helper()
-	r := require.New(t)
-	git, err := exec.LookPath("git")
-	r.NoError(err, "git binary should be available in PATH to create the git access repository")
-
-	dir = t.TempDir()
-	run := func(args ...string) string {
-		args = append([]string{"-C", dir, "-c", "user.name=ocm", "-c", "user.email=ocm@example.invalid", "-c", "commit.gpgsign=false"}, args...)
-		out, err := exec.CommandContext(t.Context(), git, args...).CombinedOutput()
-		r.NoError(err, string(out))
-		return strings.TrimSpace(string(out))
-	}
-
-	run("init", "-q", "-b", "main")
-	r.NoError(os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello from git access\n"), 0o644))
-	run("add", "README.md")
-	run("commit", "-q", "-m", "initial")
-
-	return dir, run("rev-parse", "HEAD")
 }
 
 // startS3WithObject starts RustFS holding content at bucket/key and writes an ocmconfig
