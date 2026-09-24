@@ -61,6 +61,10 @@ func (repo *Repository) extendedCopyGraphOptions() oras.ExtendedCopyGraphOptions
 	return opts
 }
 
+// mediaTypeArtifactManifest is the deprecated OCI artifact manifest, which
+// can also carry a subject.
+const mediaTypeArtifactManifest = "application/vnd.oci.artifact.manifest.v1+json"
+
 type findSuccessorsFunc func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error)
 
 // skipMissingSubject removes the subject from the successors of desc if the
@@ -74,7 +78,9 @@ func skipMissingSubject(next findSuccessorsFunc) findSuccessorsFunc {
 		if err != nil {
 			return nil, err
 		}
-		if desc.MediaType != ociImageSpecV1.MediaTypeImageManifest && desc.MediaType != ociImageSpecV1.MediaTypeImageIndex {
+		switch desc.MediaType {
+		case ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.MediaTypeImageIndex, mediaTypeArtifactManifest:
+		default:
 			return successors, nil
 		}
 		// The copy proxy caches the manifest from the call to next, so this fetch is local.

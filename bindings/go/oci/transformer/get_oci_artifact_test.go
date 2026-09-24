@@ -352,15 +352,33 @@ func TestGetOCIArtifact_WeakEdgeFailurePolicy(t *testing.T) {
 		require.False(t, mockRepo.withPolicyConfigured)
 	})
 
-	t.Run("repository without policy support falls back to a dedicated OCI repository", func(t *testing.T) {
-		// The mock repository would answer the download successfully; the
-		// fallback repository cannot resolve example.com/image:1.0.0, so the
-		// observed failure proves that the injected repository is bypassed.
+	t.Run("repository without policy support uses the policy repository", func(t *testing.T) {
+		mockRepo := &mockRepositoryForGetOCI{returnBlob: testBlob()}
+		policyRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
+		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo, PolicyRepository: policyRepo}
+
+		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec(v1alpha1.WeakEdgeFailurePolicySkip))
+		require.NoError(t, err)
+		require.True(t, policyRepo.withPolicyConfigured)
+		require.Equal(t, oci.WeakEdgeFailurePolicySkip, policyRepo.policy)
+	})
+
+	t.Run("repository without policy support keeps the repository for abort", func(t *testing.T) {
+		mockRepo := &mockRepositoryForGetOCI{returnBlob: testBlob()}
+		policyRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
+		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo, PolicyRepository: policyRepo}
+
+		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec(v1alpha1.WeakEdgeFailurePolicyAbort))
+		require.NoError(t, err)
+		require.False(t, policyRepo.withPolicyConfigured)
+	})
+
+	t.Run("repository without policy support and no policy repository fails", func(t *testing.T) {
 		mockRepo := &mockRepositoryForGetOCI{returnBlob: testBlob()}
 		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo}
 
 		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec(v1alpha1.WeakEdgeFailurePolicySkip))
-		require.Error(t, err)
+		require.ErrorContains(t, err, "does not support configuring a weak edge failure policy")
 	})
 }
 

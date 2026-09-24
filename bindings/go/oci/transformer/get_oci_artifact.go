@@ -6,11 +6,10 @@ import (
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	ociresource "ocm.software/open-component-model/bindings/go/oci/repository/resource"
+	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -22,6 +21,10 @@ type GetOCIArtifact struct {
 	Scheme             *runtime.Scheme
 	Repository         repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// PolicyRepository is used instead of Repository if a non-default weak edge
+	// failure policy is requested and Repository cannot carry it (see
+	// https://github.com/open-component-model/ocm-project/issues/774).
+	PolicyRepository weakEdgeFailurePolicyConfigurable
 }
 
 func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -58,11 +61,11 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 		}
 		if configurable, ok := repo.(weakEdgeFailurePolicyConfigurable); ok {
 			repo = configurable.WithWeakEdgeFailurePolicy(policy)
-		} else {
-			// The injected plugin registry cannot carry the policy, so use a
-			// dedicated OCI resource repository instead (see
-			// https://github.com/open-component-model/ocm-project/issues/774).
-			repo = ociresource.NewResourceRepository(&filesystemv1alpha1.Config{}).WithWeakEdgeFailurePolicy(policy)
+		} else if policy != oci.WeakEdgeFailurePolicyAbort {
+			if t.PolicyRepository == nil {
+				return nil, fmt.Errorf("repository %T does not support configuring a weak edge failure policy", repo)
+			}
+			repo = t.PolicyRepository.WithWeakEdgeFailurePolicy(policy)
 		}
 	}
 

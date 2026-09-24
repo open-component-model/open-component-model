@@ -80,6 +80,20 @@ func TestWeakEdgeFailurePolicy(t *testing.T) {
 			abortFails: true,
 		},
 		{
+			name: "missing subject of artifact manifest",
+			setup: func(t *testing.T) (oras.ReadOnlyGraphTarget, ociImageSpecV1.Descriptor) {
+				store := newStore(t)
+				data, err := json.Marshal(map[string]any{
+					"mediaType": mediaTypeArtifactManifest,
+					"blobs":     layer(t, store),
+					"subject":   missingDescriptor("subject"),
+				})
+				require.NoError(t, err)
+				return store, pushTestBlob(t, store, mediaTypeArtifactManifest, data)
+			},
+			abortFails: true,
+		},
+		{
 			name: "missing referrer",
 			setup: func(t *testing.T) (oras.ReadOnlyGraphTarget, ociImageSpecV1.Descriptor) {
 				store := newStore(t)
